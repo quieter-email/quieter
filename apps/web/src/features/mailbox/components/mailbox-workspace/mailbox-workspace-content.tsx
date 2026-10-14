@@ -487,6 +487,7 @@ const MailboxWorkspaceContentInner = ({
             activeMailbox={activeMailbox}
             activeMailboxId={selectedMailboxId}
             activeMessageId={messageId}
+            activeThreadId={chatContext?.threadId ?? null}
             mailboxes={mailboxes}
             onOpenSidebar={onOpenSidebar}
             onReconnectMailbox={onReconnectMailbox}

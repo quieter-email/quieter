@@ -368,6 +368,7 @@ export const useMailboxMessages = ({
   );
 
   return {
+    fetchNextPage,
     flattenedMessages,
     hasMessagePages:
       messagesData !== undefined && messagesData.pages.length > 0,
@@ -380,5 +381,6 @@ export const useMailboxMessages = ({
     refreshSearchResultsIfNeeded,
     selectedMessage,
     selectedThreadMessages: selectedThreadData?.messages,
+    syncError,
   };
 };

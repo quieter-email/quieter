@@ -1,98 +1,13 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
-
 import type { MessageListMailboxContext } from "#/features/message-list/components/message-list-types";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
-import type { MailboxCategory, MessageListItem } from "#/lib/mail";
-import { refreshLoadedMessagesPages } from "#/lib/mail/inbox-query";
-import { orpc } from "#/lib/orpc";
-import {
-  isGmailSandboxMailboxId,
-  isManagedSandboxMailboxId,
-} from "#/lib/sandbox-mailbox";
+import type { MessageListItem } from "#/lib/mail";
 
 import type {
   MailboxActions,
   MailboxPendingActions,
 } from "./mailbox-action-handlers";
-import { resolveMailboxActions } from "./mailbox-workspace/mailbox-messages-panel";
-import { useMailboxPendingActions } from "./mailbox-workspace/use-mailbox-pending-actions";
-
-export const useUnifiedInboxSourceActions = ({
-  activeMailbox,
-  mailboxId,
-  mailboxProvider,
-  searchQuery,
-}: {
-  activeMailbox: MailboxCategory;
-  mailboxId: string;
-  mailboxProvider: "gmail" | "managed";
-  searchQuery: string;
-}) => {
-  const queryClient = useQueryClient();
-  const {
-    isMessageActionPending,
-    isThreadActionPending,
-    pendingActions,
-    setMessageActionsPending,
-    setThreadActionsPending,
-  } = useMailboxPendingActions();
-  const { mutateAsync: unsubscribeFromMessage } = useMutation(
-    orpc.mail.unsubscribeFromMessage.mutationOptions()
-  );
-  const refreshSearchResultsIfNeeded = useCallback(async () => {
-    if (searchQuery.trim()) {
-      await refreshLoadedMessagesPages(
-        queryClient,
-        mailboxId,
-        activeMailbox,
-        searchQuery
-      );
-    }
-  }, [activeMailbox, mailboxId, queryClient, searchQuery]);
-  const mailboxActions = useMemo(
-    () =>
-      resolveMailboxActions({
-        activeMailbox,
-        isDemoMode: isGmailSandboxMailboxId(mailboxId),
-        isManagedDemoMode: isManagedSandboxMailboxId(mailboxId),
-        isMessageActionPending,
-        isThreadActionPending,
-        mailboxId,
-        mailboxProvider,
-        normalizedSearchQuery: searchQuery.trim(),
-        queryClient,
-        refreshSearchResultsIfNeeded,
-        setMessageActionPending: (id, pending) => {
-          setMessageActionsPending([id], pending);
-        },
-        setMessageActionsPending,
-        setThreadActionPending: (id, pending) => {
-          setThreadActionsPending([id], pending);
-        },
-        setThreadActionsPending,
-        unsubscribeFromMessage: async (messageId) => {
-          await unsubscribeFromMessage({ mailboxId, messageId });
-        },
-      }),
-    [
-      activeMailbox,
-      isMessageActionPending,
-      isThreadActionPending,
-      mailboxId,
-      mailboxProvider,
-      queryClient,
-      refreshSearchResultsIfNeeded,
-      searchQuery,
-      setMessageActionsPending,
-      setThreadActionsPending,
-      unsubscribeFromMessage,
-    ]
-  );
-  return { mailboxActions, pendingActions };
-};
 
 type MessageAction =
   | "archiveMessage"

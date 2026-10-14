@@ -11,12 +11,7 @@ import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
 import { toast } from "@quieter/ui/toast";
-import {
-  useInfiniteQuery,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type {
   MailboxActions,
@@ -31,11 +26,9 @@ import { buildThreadListEntries } from "#/lib/gmail/thread-list";
 import type { ThreadListEntry } from "#/lib/gmail/thread-list";
 import type { MailboxCategory, MessageListItem } from "#/lib/mail";
 import {
-  liveSyncQueryOptions,
-  messagesQueryOptions,
-} from "#/lib/mail/inbox-query";
-import { isMailboxScopeRepairRequiredError } from "#/lib/orpc-errors";
-import { isSandboxMailboxId } from "#/lib/sandbox-mailbox";
+  isGmailSandboxMailboxId,
+  isManagedSandboxMailboxId,
+} from "#/lib/sandbox-mailbox";
 
 import {
   buildUnifiedInboxEntries,
@@ -47,17 +40,15 @@ import type {
   UnifiedInboxMailbox,
   UnifiedInboxPreferences,
 } from "../domain/unified-inbox";
-import {
-  markMailboxNeedsReconnectInCache,
-  useWindowActive,
-} from "./mailbox-workspace/use-mailbox-messages";
-import {
-  createUnifiedInboxActions,
-  useUnifiedInboxSourceActions,
-} from "./unified-inbox-actions";
+import { useMailboxListController } from "./mailbox-workspace/use-mailbox-list-controller";
+import { createUnifiedInboxActions } from "./unified-inbox-actions";
 
 type SourceState = {
   messages: MessageListItem[];
+  paginationMessages: MessageListItem[];
+  retainedMessageId: string | null;
+  activateMessage: (messageId: string) => void;
+  resetSelection: () => void;
   hasNextPage: boolean;
   isPending: boolean;
   isFetchingNextPage: boolean;
@@ -88,96 +79,76 @@ type UnifiedInboxPanelProps = {
   onKeyboardOpenMessage?: () => void;
   activeMailboxId: string | null;
   activeMessageId: string | null;
+  activeThreadId: string | null;
   onReconnectMailbox?: (mailbox: UnifiedInboxMailbox) => void;
 };
 
 const UnifiedInboxSource = ({
   activeMailbox,
-  isWindowActive,
+  activeMessageId,
+  activeThreadId,
   mailbox,
   onChange,
   searchQuery,
   sourceKey,
+  selectionScopeKey,
 }: {
   activeMailbox: MailboxCategory;
-  isWindowActive: boolean;
+  activeMessageId: string | null;
+  activeThreadId: string | null;
   mailbox: ConnectedMailbox;
   onChange: (sourceKey: string, state: SourceState | null) => void;
   searchQuery: string;
   sourceKey: string;
+  selectionScopeKey: string;
 }) => {
-  const queryClient = useQueryClient();
-  const { mailboxActions, pendingActions } = useUnifiedInboxSourceActions({
+  const {
+    activateListMessage,
+    fetchNextPage,
+    flattenedMessages,
+    listState,
+    mailboxActions,
+    paginationMessages,
+    pendingActions,
+    refreshMessages,
+    resetListSelection,
+    retainedMessageId,
+    syncError,
+  } = useMailboxListController({
     activeMailbox,
+    isDemoMode: isGmailSandboxMailboxId(mailbox.id),
+    isManagedDemoMode: isManagedSandboxMailboxId(mailbox.id),
     mailboxId: mailbox.id,
     mailboxProvider: mailbox.provider,
+    messageId: activeMessageId,
     searchQuery,
+    selectionScopeKey,
+    threadId: activeThreadId,
   });
-  const {
-    data,
-    error,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isPending,
-    refetch,
-  } = useInfiniteQuery(
-    messagesQueryOptions(mailbox.id, activeMailbox, searchQuery)
-  );
-  const { error: syncError, refetch: refetchUpdates } = useQuery(
-    liveSyncQueryOptions(
-      queryClient,
-      mailbox.id,
-      activeMailbox,
-      searchQuery,
-      activeMailbox !== "drafts" &&
-        searchQuery.length === 0 &&
-        data !== undefined &&
-        isWindowActive &&
-        !isSandboxMailboxId(mailbox.id)
-    )
-  );
-  useEffect(() => {
-    const repairError = [error, syncError].find(
-      isMailboxScopeRepairRequiredError
-    );
-    if (repairError !== undefined) {
-      markMailboxNeedsReconnectInCache(queryClient, repairError);
-    }
-  }, [error, queryClient, syncError]);
+  const { error, hasNextPage, isFetchingNextPage, isPending } = listState;
   const refreshSource = useCallback(async () => {
-    const messagesResult = await refetch();
-    if (messagesResult.error !== null && messagesResult.error !== undefined) {
-      return { error: messagesResult.error };
-    }
-    if (
-      activeMailbox === "drafts" ||
-      searchQuery.length > 0 ||
-      isSandboxMailboxId(mailbox.id)
-    ) {
-      return { error: null };
-    }
-    const updatesResult = await refetchUpdates();
-    return { error: updatesResult.error };
-  }, [activeMailbox, mailbox.id, refetch, refetchUpdates, searchQuery]);
-  const messages = useMemo(
-    () => data?.pages.flatMap((page) => page.messages) ?? [],
-    [data]
-  );
+    await refreshMessages();
+    return { error: null };
+  }, [refreshMessages]);
   useEffect(() => {
     onChange(sourceKey, {
+      activateMessage: activateListMessage,
       error,
       fetchNextPage,
       hasNextPage,
       isFetchingNextPage,
       isPending,
       mailboxActions,
-      messages,
+      messages: flattenedMessages,
+      paginationMessages,
       pendingActions,
       refetch: refreshSource,
-      syncError,
+      resetSelection: resetListSelection,
+      retainedMessageId,
+      syncError: syncError ?? null,
     });
   }, [
+    activateListMessage,
     sourceKey,
     onChange,
     error,
@@ -187,9 +158,12 @@ const UnifiedInboxSource = ({
     isFetchingNextPage,
     isPending,
     mailboxActions,
-    messages,
+    flattenedMessages,
+    paginationMessages,
     pendingActions,
     refreshSource,
+    resetListSelection,
+    retainedMessageId,
   ]);
   useEffect(
     () => () => {
@@ -204,6 +178,7 @@ export const UnifiedInboxPanel = ({
   activeMailbox,
   activeMailboxId,
   activeMessageId,
+  activeThreadId,
   mailboxes,
   onDeactivateActiveMessage,
   onKeyboardOpenMessage,
@@ -215,7 +190,6 @@ export const UnifiedInboxPanel = ({
   searchQuery,
   userId,
 }: UnifiedInboxPanelProps) => {
-  const isWindowActive = useWindowActive();
   const preferences = useUnifiedInboxPreferences(userId);
   const accessibleMailboxes = mailboxes.filter(
     (mailbox): mailbox is ConnectedMailbox => mailbox.provider !== "api"
@@ -235,6 +209,12 @@ export const UnifiedInboxPanel = ({
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const normalizedSearch = searchQuery.trim();
+  const selectionScopeKey = JSON.stringify([
+    userId,
+    activeMailbox,
+    normalizedSearch,
+    selectedMailboxes.map((mailbox) => mailbox.id),
+  ]);
   const hasUnsupportedSearch = parseStructuredSearchQuery(
     normalizedSearch
   ).filters.some((filter) =>
@@ -258,6 +238,10 @@ export const UnifiedInboxPanel = ({
         if (
           previous !== undefined &&
           previous.messages === state.messages &&
+          previous.paginationMessages === state.paginationMessages &&
+          previous.retainedMessageId === state.retainedMessageId &&
+          previous.activateMessage === state.activateMessage &&
+          previous.resetSelection === state.resetSelection &&
           previous.error === state.error &&
           previous.syncError === state.syncError &&
           previous.hasNextPage === state.hasNextPage &&
@@ -296,6 +280,8 @@ export const UnifiedInboxPanel = ({
       hasNextPage: state?.error === null && (state?.hasNextPage ?? false),
       mailboxId: mailbox.id,
       messages: state?.messages ?? [],
+      paginationMessages: state?.paginationMessages ?? [],
+      retainedMessageId: state?.retainedMessageId ?? null,
     }))
   );
   const visibleEntries = pending ? [] : entries;
@@ -317,7 +303,18 @@ export const UnifiedInboxPanel = ({
     writeUnifiedInboxPreferences(userId, next, accessibleIds);
   };
   const toggleMailbox = (mailboxId: string) => {
-    const excludedIds = preferences.excludedIds.includes(mailboxId)
+    for (const { state } of connectedStates) {
+      state?.resetSelection();
+    }
+    const isExcluded = preferences.excludedIds.includes(mailboxId);
+    if (
+      !isExcluded &&
+      mailboxId === activeMailboxId &&
+      activeMessageId !== null
+    ) {
+      onDeactivateActiveMessage();
+    }
+    const excludedIds = isExcluded
       ? preferences.excludedIds.filter((id) => id !== mailboxId)
       : [...preferences.excludedIds, mailboxId];
     updatePreferences({ ...preferences, excludedIds });
@@ -331,6 +328,9 @@ export const UnifiedInboxPanel = ({
   const refresh = async () => {
     if (isRefreshing || connectedStates.length === 0 || pending) {
       return;
+    }
+    for (const { state } of connectedStates) {
+      state?.resetSelection();
     }
     setIsRefreshing(true);
     try {
@@ -502,12 +502,6 @@ export const UnifiedInboxPanel = ({
       pendingActions: adapter.pendingActions,
     });
   }
-  const selectionScopeKey = JSON.stringify([
-    userId,
-    activeMailbox,
-    normalizedSearch,
-    selectedMailboxes.map((mailbox) => mailbox.id),
-  ]);
   const searchMailbox =
     connectedMailboxes.find((mailbox) => mailbox.id === activeMailboxId) ??
     connectedMailboxes[0] ??
@@ -723,12 +717,18 @@ export const UnifiedInboxPanel = ({
         return (
           <UnifiedInboxSource
             activeMailbox={activeMailbox}
-            isWindowActive={isWindowActive}
-            key={sourceKey}
+            activeMessageId={
+              mailbox.id === activeMailboxId ? activeMessageId : null
+            }
+            activeThreadId={
+              mailbox.id === activeMailboxId ? activeThreadId : null
+            }
+            key={mailbox.id}
             mailbox={mailbox}
             onChange={onSourceChange}
             searchQuery={normalizedSearch}
             sourceKey={sourceKey}
+            selectionScopeKey={selectionScopeKey}
           />
         );
       })}
@@ -760,6 +760,12 @@ export const UnifiedInboxPanel = ({
               onOpenDraft(sourceId, original);
               return;
             }
+            const sourceKey = JSON.stringify([
+              sourceId,
+              activeMailbox,
+              normalizedSearch,
+            ]);
+            sourceStates[sourceKey]?.activateMessage(original.id);
             onSelectMessage(sourceId, original.id, original.threadId);
           }
         }}
@@ -779,7 +785,16 @@ export const UnifiedInboxPanel = ({
         onRefresh={() => {
           void refresh();
         }}
-        onSearch={onSearch}
+        onSearch={(nextQuery) => {
+          const normalizedQuery = nextQuery.trim();
+          for (const { state } of connectedStates) {
+            state?.resetSelection();
+          }
+          onSearch(normalizedQuery);
+          if (normalizedQuery === normalizedSearch) {
+            void refresh();
+          }
+        }}
         pendingActions={adapter.pendingActions}
         searchQuery={normalizedSearch}
         searchMailboxes={connectedMailboxes.map((mailbox) => ({
