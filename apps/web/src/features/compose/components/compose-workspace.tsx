@@ -340,15 +340,11 @@ export const ComposeSurface = ({
           );
         }
         compose.allowSenderRouteChange(nextMailboxId);
-        try {
-          await onSenderSwitch?.(
-            nextMailboxId,
-            drafts.currentDraft,
-            transferDraft
-          );
-        } finally {
-          compose.clearSenderRouteChange();
-        }
+        await onSenderSwitch?.(
+          nextMailboxId,
+          drafts.currentDraft,
+          transferDraft
+        );
       } else {
         setSwitchingSender(false);
       }
@@ -358,6 +354,8 @@ export const ComposeSurface = ({
         boundary: "compose-switch-sender",
         fallback: "Could not change the sending address. Please try again.",
       });
+    } finally {
+      compose.clearSenderRouteChange();
     }
   };
 

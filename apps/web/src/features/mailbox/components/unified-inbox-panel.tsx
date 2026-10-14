@@ -39,7 +39,7 @@ import { isSandboxMailboxId } from "#/lib/sandbox-mailbox";
 import {
   buildUnifiedInboxEntries,
   defaultMailboxColor,
-  readUnifiedInboxPreferences,
+  useUnifiedInboxPreferences,
   writeUnifiedInboxPreferences,
 } from "../domain/unified-inbox";
 import type {
@@ -213,14 +213,7 @@ export const UnifiedInboxPanel = ({
   userId,
 }: UnifiedInboxPanelProps) => {
   const isWindowActive = useWindowActive();
-  const [savedPreferences, setSavedPreferences] = useState(() => ({
-    userId,
-    value: readUnifiedInboxPreferences(userId),
-  }));
-  const preferences =
-    savedPreferences.userId === userId
-      ? savedPreferences.value
-      : readUnifiedInboxPreferences(userId);
+  const preferences = useUnifiedInboxPreferences(userId);
   const accessibleMailboxes = mailboxes.filter(
     (mailbox): mailbox is ConnectedMailbox => mailbox.provider !== "api"
   );
@@ -314,7 +307,6 @@ export const UnifiedInboxPanel = ({
 
   const updatePreferences = (next: UnifiedInboxPreferences) => {
     writeUnifiedInboxPreferences(userId, next, accessibleIds);
-    setSavedPreferences({ userId, value: next });
   };
   const toggleMailbox = (mailboxId: string) => {
     const excludedIds = preferences.excludedIds.includes(mailboxId)
@@ -711,6 +703,10 @@ export const UnifiedInboxPanel = ({
           const original = originalMessageById.get(uiMessageId);
           const sourceId = sourceMailboxByMessageId.get(uiMessageId);
           if (original !== undefined && sourceId !== undefined) {
+            if (activeMailbox === "drafts") {
+              onOpenDraft(sourceId, original);
+              return;
+            }
             onSelectMessage(sourceId, original.id, original.threadId);
           }
         }}

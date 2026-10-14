@@ -19,6 +19,8 @@ export type UnifiedInboxPreferences = {
   colors: Record<string, MailboxLabelColor>;
 };
 
+const volatilePreferences = new Map<string, string>();
+
 const DEFAULT_COLORS: MailboxLabelColor[] = [
   "blue",
   "cyan",
@@ -53,7 +55,8 @@ export const readUnifiedInboxPreferences = (
   try {
     const raw =
       storedValue === undefined
-        ? window.localStorage.getItem(`quieter:unified-inbox:v1:${userId}`)
+        ? (volatilePreferences.get(`quieter:unified-inbox:v1:${userId}`) ??
+          window.localStorage.getItem(`quieter:unified-inbox:v1:${userId}`))
         : storedValue;
     if (!raw) {
       return empty;
@@ -103,26 +106,34 @@ export const writeUnifiedInboxPreferences = (
   const colors = Object.fromEntries(
     Object.entries(preferences.colors).filter(([id]) => available.has(id))
   );
+  const key = `quieter:unified-inbox:v1:${userId}`;
+  const value = JSON.stringify({
+    colors,
+    excludedIds: preferences.excludedIds.filter((id) => available.has(id)),
+    version: 1,
+  });
   try {
-    window.localStorage.setItem(
-      `quieter:unified-inbox:v1:${userId}`,
-      JSON.stringify({
-        colors,
-        excludedIds: preferences.excludedIds.filter((id) => available.has(id)),
-        version: 1,
-      })
-    );
-    window.dispatchEvent(new Event("quieter:unified-inbox-change"));
+    window.localStorage.setItem(key, value);
+    volatilePreferences.delete(key);
   } catch {
-    // The panel remains usable when storage is unavailable.
+    volatilePreferences.set(key, value);
   }
+  window.dispatchEvent(new Event("quieter:unified-inbox-change"));
 };
 
 const subscribeUnifiedInboxPreferences = (onChange: () => void) => {
-  window.addEventListener("storage", onChange);
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === null) {
+      volatilePreferences.clear();
+    } else {
+      volatilePreferences.delete(event.key);
+    }
+    onChange();
+  };
+  window.addEventListener("storage", onStorage);
   window.addEventListener("quieter:unified-inbox-change", onChange);
   return () => {
-    window.removeEventListener("storage", onChange);
+    window.removeEventListener("storage", onStorage);
     window.removeEventListener("quieter:unified-inbox-change", onChange);
   };
 };
@@ -132,9 +143,8 @@ export const useUnifiedInboxPreferences = (userId: string) => {
     subscribeUnifiedInboxPreferences,
     () => {
       try {
-        return window.localStorage.getItem(
-          `quieter:unified-inbox:v1:${userId}`
-        );
+        const key = `quieter:unified-inbox:v1:${userId}`;
+        return volatilePreferences.get(key) ?? window.localStorage.getItem(key);
       } catch {
         return null;
       }

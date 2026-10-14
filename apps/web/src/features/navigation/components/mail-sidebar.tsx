@@ -382,6 +382,7 @@ const SidebarContent = ({
   embedded = false,
   groups,
   onComposeNewMail,
+  onManageLabels,
   onManageSnippets,
   onReorderMailboxSwitcher,
   onReconnectMailbox,
@@ -460,8 +461,9 @@ const SidebarContent = ({
         groups={groups}
         onComposeNewMail={onComposeNewMail}
         onManageSnippets={onManageSnippets}
-        onManageLabels={() => {
-          handleSelectView("labels");
+        onManageLabels={(sourceMailboxId) => {
+          onManageLabels(sourceMailboxId);
+          onRequestClose?.();
         }}
         onRequestClose={onRequestClose}
         onSearch={onSearch}

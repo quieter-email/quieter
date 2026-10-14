@@ -653,6 +653,8 @@ const MailboxWorkspaceContentInner = ({
               onManageLabels={(sourceMailboxId) => {
                 if (sourceMailboxId) {
                   void setMailboxSearch({
+                    chatId:
+                      sourceMailboxId === selectedMailboxId ? undefined : null,
                     mailboxId: sourceMailboxId,
                     messageId: null,
                     query: null,
