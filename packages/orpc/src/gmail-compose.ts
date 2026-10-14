@@ -239,6 +239,16 @@ const recordComposeFailure = async (
     .set({ status: rejected ? "rejected" : "unknown", updatedAt: new Date() })
     .where(eq(gmailComposeOperation.id, operation.id));
   if (rejected) {
+    if (
+      operation.draftId &&
+      isGmailServiceError(error) &&
+      error.status === 404
+    ) {
+      throw new ORPCError("CONFLICT", {
+        data: { draftConflict: true },
+        message: DRAFT_CONFLICT_MESSAGE,
+      });
+    }
     throw error;
   }
   reportError(error, { operation: "compose:gmail-uncertain-write" });
@@ -488,7 +498,15 @@ export const saveGmailDraft = async (
           accessToken,
           draft.draftId,
           requestSignal
-        );
+        ).catch((error: unknown) => {
+          if (isGmailServiceError(error) && error.status === 404) {
+            throw new ORPCError("CONFLICT", {
+              data: { draftConflict: true },
+              message: DRAFT_CONFLICT_MESSAGE,
+            });
+          }
+          throw error;
+        });
         if (current.message?.id !== baseRevision) {
           throw new ORPCError("CONFLICT", {
             data: { draftConflict: true },
@@ -683,7 +701,15 @@ export const sendGmailMessage = async (
           accessToken,
           message.draftId,
           requestSignal
-        );
+        ).catch((error: unknown) => {
+          if (isGmailServiceError(error) && error.status === 404) {
+            throw new ORPCError("CONFLICT", {
+              data: { draftConflict: true },
+              message: DRAFT_CONFLICT_MESSAGE,
+            });
+          }
+          throw error;
+        });
         if (
           current.message?.id !== (message.baseRevision ?? message.messageId)
         ) {
