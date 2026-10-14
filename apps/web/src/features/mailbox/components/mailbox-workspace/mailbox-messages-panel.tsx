@@ -2,27 +2,15 @@
 
 import { cn } from "@quieter/ui/cn";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useState } from "react";
 
 import { buildComposeDraftFromSavedDraftMessage } from "#/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { MessageList } from "#/features/message-list/components/message-list";
 import { MessageDetail } from "#/features/message-thread/components/message-detail";
-import { createDemoMailboxActions } from "#/lib/gmail/demo-mail";
 import type { MailboxCategory, MessageListItem } from "#/lib/mail";
-import { createManagedDemoMailboxActions } from "#/lib/managed-mail/demo-managed-mail";
-import { orpc } from "#/lib/orpc";
 
-import { createMailboxActionHandlers } from "../mailbox-action-handlers";
-import type { MailboxActions } from "../mailbox-action-handlers";
-import {
-  captureListMessage,
-  retainSelectedMessageInList,
-} from "./retained-list-message";
-import type { RetainedListMessage } from "./retained-list-message";
-import { useMailboxMessages } from "./use-mailbox-messages";
-import { useMailboxPendingActions } from "./use-mailbox-pending-actions";
+import { useMailboxListController } from "./use-mailbox-list-controller";
 import {
   useMailboxMessageId,
   useMailboxSearchActions,
@@ -48,104 +36,6 @@ type MailboxMessagesPanelProps = {
   signature?: { html: string | null; text: string | null };
 };
 
-const noopMailboxAction = async (): Promise<void> => {
-  await Promise.resolve();
-};
-
-const createReadOnlyMailboxActions = (): MailboxActions =>
-  ({
-    archiveMessage: noopMailboxAction,
-    archiveThread: noopMailboxAction,
-    archiveThreads: noopMailboxAction,
-    deleteDraft: noopMailboxAction,
-    deleteDrafts: noopMailboxAction,
-    markMessageAsRead: noopMailboxAction,
-    markMessageAsSpam: noopMailboxAction,
-    markMessageAsUnread: noopMailboxAction,
-    markThreadAsRead: noopMailboxAction,
-    markThreadAsSpam: noopMailboxAction,
-    markThreadAsUnread: noopMailboxAction,
-    markThreadsAsRead: noopMailboxAction,
-    markThreadsAsSpam: noopMailboxAction,
-    markThreadsAsUnread: noopMailboxAction,
-    moveMessageToTrash: noopMailboxAction,
-    moveThreadToTrash: noopMailboxAction,
-    moveThreadsToTrash: noopMailboxAction,
-    unmarkMessageAsSpam: noopMailboxAction,
-    unmarkThreadAsSpam: noopMailboxAction,
-    unmarkThreadsAsSpam: noopMailboxAction,
-    unsubscribeFromMessage: noopMailboxAction,
-    untrashMessage: noopMailboxAction,
-    untrashThread: noopMailboxAction,
-    untrashThreads: noopMailboxAction,
-    updateMessageLabels: noopMailboxAction,
-    updateThreadLabels: noopMailboxAction,
-    updateThreadsLabels: noopMailboxAction,
-  }) satisfies MailboxActions;
-
-export const resolveMailboxActions = ({
-  activeMailbox,
-  isDemoMode,
-  isManagedDemoMode,
-  isMessageActionPending,
-  isThreadActionPending,
-  mailboxId,
-  mailboxProvider,
-  normalizedSearchQuery,
-  queryClient,
-  refreshSearchResultsIfNeeded,
-  setMessageActionPending,
-  setMessageActionsPending,
-  setThreadActionPending,
-  setThreadActionsPending,
-  unsubscribeFromMessage,
-}: {
-  activeMailbox: MailboxCategory;
-  isDemoMode: boolean;
-  isManagedDemoMode: boolean;
-  isMessageActionPending: (messageId: string | null | undefined) => boolean;
-  isThreadActionPending: (threadId: string | null | undefined) => boolean;
-  mailboxId: string;
-  mailboxProvider: "api" | "gmail" | "managed";
-  normalizedSearchQuery: string;
-  queryClient: ReturnType<typeof useQueryClient>;
-  refreshSearchResultsIfNeeded: () => Promise<void>;
-  setMessageActionPending: (id: string, pending: boolean) => void;
-  setMessageActionsPending: (ids: string[], pending: boolean) => void;
-  setThreadActionPending: (id: string, pending: boolean) => void;
-  setThreadActionsPending: (ids: string[], pending: boolean) => void;
-  unsubscribeFromMessage: (targetMessageId: string) => Promise<void>;
-}): MailboxActions => {
-  if (mailboxProvider === "api") {
-    return createReadOnlyMailboxActions();
-  }
-
-  if (isManagedDemoMode) {
-    return createManagedDemoMailboxActions(queryClient);
-  }
-
-  if (isDemoMode) {
-    return createDemoMailboxActions(queryClient);
-  }
-
-  return createMailboxActionHandlers({
-    activeMailbox,
-    activeSearchQuery: normalizedSearchQuery,
-    isMessageActionPending,
-    isThreadActionPending,
-    mailboxId,
-    queryClient,
-    refreshSearchResultsIfNeeded,
-    setMessageActionPending,
-    setMessageActionsPending,
-    setThreadActionPending,
-    setThreadActionsPending,
-    unsubscribeFromMessageMutation: async (targetMessageId) => {
-      await unsubscribeFromMessage(targetMessageId);
-    },
-  });
-};
-
 export const MailboxMessagesPanel = ({
   detailOnly = false,
   activeMailbox,
@@ -167,49 +57,32 @@ export const MailboxMessagesPanel = ({
   const messageId = useMailboxMessageId() ?? null;
   const threadId = useMailboxThreadId() ?? null;
   const setMailboxSearch = useMailboxSearchActions();
-  const queryClient = useQueryClient();
   const normalizedSearchQuery = searchQuery.trim();
-  const listScopeKey = JSON.stringify([
-    mailboxId,
-    activeMailbox,
-    normalizedSearchQuery,
-  ]);
-  const [retainedListMessage, setRetainedListMessage] =
-    useState<RetainedListMessage | null>(null);
   const isMessageRouteOpen =
     activeMailbox !== "drafts" && (messageId?.trim() ?? "") !== "";
   const [shouldFocusMessageView, setShouldFocusMessageView] = useState(false);
   const {
-    isMessageActionPending,
-    isThreadActionPending,
-    pendingActions,
-    setMessageActionsPending,
-    setThreadActionsPending,
-  } = useMailboxPendingActions();
-  const { mutateAsync: unsubscribeFromMessage } = useMutation(
-    orpc.mail.unsubscribeFromMessage.mutationOptions()
-  );
-  const {
+    activateListMessage,
     flattenedMessages,
     hasMessagePages,
     isLoadingEmptyMessages,
     listState,
     loadMoreMessages,
+    mailboxActions,
     messagesPending,
+    pendingActions,
     refreshMessages,
-    refreshSearchResultsIfNeeded,
+    resetListSelection,
     selectedMessage,
-    selectedThreadMessages,
-  } = useMailboxMessages({
+  } = useMailboxListController({
     activeMailbox,
     isDemoMode,
     isManagedDemoMode,
+    mailboxId,
     mailboxProvider,
-    messageId: messageId ?? undefined,
-    queryClient,
+    messageId,
     searchQuery: normalizedSearchQuery,
-    selectedMailboxId: mailboxId,
-    threadId: threadId ?? undefined,
+    threadId,
   });
 
   useLayoutEffect(() => {
@@ -232,34 +105,6 @@ export const MailboxMessagesPanel = ({
     selectedMessage,
     setMailboxSearch,
   ]);
-
-  const setMessageActionPending = (id: string, pending: boolean) => {
-    setMessageActionsPending([id], pending);
-  };
-  const setThreadActionPending = (id: string, pending: boolean) => {
-    setThreadActionsPending([id], pending);
-  };
-  const mailboxActions = resolveMailboxActions({
-    activeMailbox,
-    isDemoMode,
-    isManagedDemoMode,
-    isMessageActionPending,
-    isThreadActionPending,
-    mailboxId,
-    mailboxProvider,
-    normalizedSearchQuery,
-    queryClient,
-    refreshSearchResultsIfNeeded: async () => {
-      await refreshSearchResultsIfNeeded();
-    },
-    setMessageActionPending,
-    setMessageActionsPending,
-    setThreadActionPending,
-    setThreadActionsPending,
-    unsubscribeFromMessage: async (targetMessageId) => {
-      await unsubscribeFromMessage({ mailboxId, messageId: targetMessageId });
-    },
-  });
 
   const openDraft = (message: MessageListItem) => {
     const draftId = message.draftId?.trim() ?? "";
@@ -288,9 +133,7 @@ export const MailboxMessagesPanel = ({
     const shouldPushMobileHistory =
       (messageId?.trim() ?? "") === "" &&
       window.matchMedia("(max-width: 1023.98px)").matches;
-    setRetainedListMessage(
-      captureListMessage(listState.messages, listScopeKey, nextMessageId)
-    );
+    activateListMessage(nextMessageId);
     void setMailboxSearch(
       { messageId: nextMessageId, threadId: nextThreadId ?? null },
       { replace: !shouldPushMobileHistory }
@@ -301,7 +144,7 @@ export const MailboxMessagesPanel = ({
     const normalizedQuery = nextQuery.trim();
 
     if (normalizedQuery === normalizedSearchQuery) {
-      setRetainedListMessage(null);
+      resetListSelection();
       void setMailboxSearch({ messageId: null, threadId: null });
       void refreshMessages();
       return;
@@ -317,7 +160,6 @@ export const MailboxMessagesPanel = ({
   };
 
   const handleRefresh = () => {
-    setRetainedListMessage(null);
     void refreshMessages();
   };
 
@@ -343,14 +185,7 @@ export const MailboxMessagesPanel = ({
             isPending={listState.isPending}
             isRefreshing={listState.isRefreshing}
             mailboxActions={mailboxActions}
-            messages={retainSelectedMessageInList({
-              messageId,
-              pages: listState.messages,
-              retainedMessage: retainedListMessage,
-              scopeKey: listScopeKey,
-              selectedMessage,
-              selectedThreadMessages,
-            })}
+            messages={listState.messages}
             onActivateMessage={activateMessage}
             onDeactivateActiveMessage={backToList}
             onLoadMore={loadMoreMessages}

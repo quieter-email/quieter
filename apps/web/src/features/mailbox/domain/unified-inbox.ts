@@ -174,14 +174,23 @@ export const buildUnifiedInboxEntries = (
   sources: readonly {
     mailboxId: string;
     messages: readonly MessageListItem[];
+    paginationMessages?: readonly MessageListItem[];
+    retainedMessageId?: string | null;
     hasNextPage: boolean;
   }[]
 ): UnifiedInboxEntry[] => {
   const openSources = sources.filter((source) => source.hasNextPage);
+  const retainedKeys = new Set(
+    sources.flatMap((source) =>
+      source.retainedMessageId
+        ? [JSON.stringify([source.mailboxId, source.retainedMessageId])]
+        : []
+    )
+  );
   let safeOldestTimestamp = 0;
   for (const source of openSources) {
     let oldest = Number.POSITIVE_INFINITY;
-    for (const message of source.messages) {
+    for (const message of source.paginationMessages ?? source.messages) {
       oldest = Math.min(oldest, messageTimestamp(message));
     }
     if (oldest !== Number.POSITIVE_INFINITY) {
@@ -197,7 +206,10 @@ export const buildUnifiedInboxEntries = (
       }))
     )
     .filter(
-      (entry) => entry.timestamp === 0 || entry.timestamp >= safeOldestTimestamp
+      (entry) =>
+        entry.timestamp === 0 ||
+        entry.timestamp >= safeOldestTimestamp ||
+        retainedKeys.has(JSON.stringify([entry.mailboxId, entry.message.id]))
     )
     .toSorted(
       (left, right) =>
