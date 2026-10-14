@@ -7,8 +7,8 @@ import {
 } from "@quieter/mail/search";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
+import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { Pill } from "@quieter/ui/pill";
 import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
 import { toast } from "@quieter/ui/toast";
 import {
@@ -23,6 +23,7 @@ import type {
   MailboxPendingActions,
 } from "#/features/mailbox/components/mailbox-action-handlers";
 import { MailboxColorPicker } from "#/features/message-labels/components/mailbox-color-picker";
+import { mailboxLabelDotClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
 import { MessageList } from "#/features/message-list/components/message-list";
 import type { MessageListMailboxContext } from "#/features/message-list/components/message-list-types";
 import { toastError } from "#/lib/error-toast";
@@ -435,18 +436,15 @@ export const UnifiedInboxPanel = ({
         preferences.colors[mailbox.id] ?? defaultMailboxColor(mailbox.id);
       realContexts.set(uiThreadId, {
         badge: (
-          <Pill
+          <span
             aria-hidden
-            shape="circle"
-            size="icon"
-            tone={color}
-            variant="outline"
-          >
-            {/[\p{L}\p{N}]/u
-              .exec(mailbox.displayName?.trim() || mailbox.emailAddress)?.[0]
-              ?.toUpperCase() ?? "?"}
-          </Pill>
+            className={cn(
+              "inline-flex size-2 shrink-0 rounded-xs",
+              mailboxLabelDotClassNameByColor[color]
+            )}
+          />
         ),
+        displayName: mailbox.displayName,
         emailAddress: mailbox.emailAddress,
         mailboxActions: state.mailboxActions,
         mailboxId: mailbox.id,
@@ -587,47 +585,37 @@ export const UnifiedInboxPanel = ({
   );
   const headerAddon = (
     <div className="flex items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <div className="flex shrink-0 items-center gap-1">
-          {selectedMailboxes.slice(0, 3).map((mailbox) => (
-            <IconButtonTooltip
-              key={mailbox.id}
-              label={`${mailbox.displayName?.trim() || mailbox.emailAddress}, ${mailbox.emailAddress}`}
-            >
-              <Pill
+      <div className="flex min-w-0 items-center gap-3 overflow-hidden">
+        {selectedMailboxes.slice(0, 3).map((mailbox) => (
+          <IconButtonTooltip
+            key={mailbox.id}
+            label={`${mailbox.displayName?.trim() || mailbox.emailAddress}, ${mailbox.emailAddress}`}
+          >
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-caption text-muted-fg">
+              <span
                 aria-hidden
-                shape="circle"
-                size="icon"
-                tone={
-                  preferences.colors[mailbox.id] ??
-                  defaultMailboxColor(mailbox.id)
-                }
-                variant="outline"
-              >
-                {/[\p{L}\p{N}]/u
-                  .exec(
-                    mailbox.displayName?.trim() || mailbox.emailAddress
-                  )?.[0]
-                  ?.toUpperCase() ?? "?"}
-              </Pill>
-            </IconButtonTooltip>
-          ))}
-          {selectedMailboxes.length > 3 && (
-            <span className="text-micro text-muted-fg">
-              +{selectedMailboxes.length - 3}
+                className={cn(
+                  "inline-flex size-2 shrink-0 rounded-xs",
+                  mailboxLabelDotClassNameByColor[
+                    preferences.colors[mailbox.id] ??
+                      defaultMailboxColor(mailbox.id)
+                  ]
+                )}
+              />
+              <span className="truncate">
+                {mailbox.displayName?.trim() || mailbox.emailAddress}
+              </span>
             </span>
-          )}
-        </div>
-        <span className="truncate text-caption text-muted-fg">
-          {selectedMailboxes.length === 0
-            ? "All inboxes"
-            : selectedMailboxes
-                .map(
-                  (mailbox) =>
-                    mailbox.displayName?.trim() || mailbox.emailAddress
-                )
-                .join(", ")}
-        </span>
+          </IconButtonTooltip>
+        ))}
+        {selectedMailboxes.length > 3 && (
+          <span className="text-micro text-muted-fg">
+            +{selectedMailboxes.length - 3}
+          </span>
+        )}
+        {selectedMailboxes.length === 0 && (
+          <span className="text-caption text-muted-fg">All inboxes</span>
+        )}
       </div>
       <Popover>
         <PopoverTrigger

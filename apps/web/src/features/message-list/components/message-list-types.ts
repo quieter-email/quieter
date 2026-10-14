@@ -23,6 +23,7 @@ export type ThreadPressGesture = {
 export type MessageListMailboxContext = {
   badge: ReactNode;
   emailAddress: string;
+  displayName?: string | null;
   mailboxActions: MailboxActions;
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";

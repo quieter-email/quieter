@@ -544,6 +544,7 @@ export const MessageListScrollPane = ({
                 key={thread.threadId}
                 mailboxActions={context?.mailboxActions ?? list.mailboxActions}
                 mailboxEmailAddress={context?.emailAddress}
+                mailboxDisplayName={context?.displayName}
                 mailboxId={context?.mailboxId ?? list.mailboxId}
                 mailboxProvider={
                   context?.mailboxProvider ?? list.mailboxProvider

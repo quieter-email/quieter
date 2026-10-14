@@ -88,7 +88,8 @@ export type ComposeSurfaceProps = {
   onSenderSwitch?: (
     mailboxId: string,
     currentDraft: ComposeDraftState,
-    transferDraft: ComposeDraftState
+    transferDraft: ComposeDraftState,
+    hasAuthoredContent: boolean
   ) => Promise<void> | void;
   persistDrafts?: boolean;
   senderEmail?: string | null;
@@ -305,6 +306,7 @@ export const ComposeSurface = ({
           (sender) => sender.id === nextMailboxId
         );
         let { transferDraft } = drafts;
+        let hasAuthoredContent = hasComposeDraftContent(transferDraft);
         const document = new DOMParser().parseFromString(
           transferDraft.bodyHtml,
           "text/html"
@@ -327,23 +329,23 @@ export const ComposeSurface = ({
           } else {
             bodyText = document.body.textContent?.trim() ?? "";
           }
-          transferDraft = appendComposeSignature(
-            {
-              ...transferDraft,
-              bodyHtml: document.body.innerHTML,
-              bodyText,
-            },
-            {
-              html: nextSender?.signatureHtml ?? null,
-              text: nextSender?.signatureText ?? null,
-            }
-          );
+          const withoutSignature = {
+            ...transferDraft,
+            bodyHtml: document.body.innerHTML,
+            bodyText,
+          };
+          hasAuthoredContent = hasComposeDraftContent(withoutSignature);
+          transferDraft = appendComposeSignature(withoutSignature, {
+            html: nextSender?.signatureHtml ?? null,
+            text: nextSender?.signatureText ?? null,
+          });
         }
         compose.allowSenderRouteChange(nextMailboxId);
         await onSenderSwitch?.(
           nextMailboxId,
           drafts.currentDraft,
-          transferDraft
+          transferDraft,
+          hasAuthoredContent
         );
       } else {
         setSwitchingSender(false);
@@ -1052,6 +1054,13 @@ export const ComposeWorkspace = ({
   const selectedSender = senderMailboxes?.find(
     (sender) => sender.id === senderSession.mailboxId
   );
+  const senderBoundToInitialDraft =
+    !!initialDraft &&
+    ((initialDraft.draftId?.trim() ?? "") !== "" ||
+      (initialDraft.messageId?.trim() ?? "") !== "" ||
+      !!initialDraft.replyContext ||
+      !!initialDraft.draftAnchor ||
+      initialDraft.recoveryEditorId !== undefined);
   const cleanupInactiveDrafts = async (): Promise<void> => {
     if (cleanupPromiseRef.current !== null) {
       await cleanupPromiseRef.current;
@@ -1117,7 +1126,7 @@ export const ComposeWorkspace = ({
         title="New message"
       />
       <ComposeSurface
-        allowSenderSwitch={!initialDraft}
+        allowSenderSwitch={!senderBoundToInitialDraft}
         beforeNavigate={cleanupInactiveDrafts}
         className="flex-1"
         demoMode={demoMode}
@@ -1136,7 +1145,12 @@ export const ComposeWorkspace = ({
               }
             : undefined
         }
-        onSenderSwitch={async (nextMailboxId, currentDraft, transferDraft) => {
+        onSenderSwitch={async (
+          nextMailboxId,
+          currentDraft,
+          transferDraft,
+          hasAuthoredContent
+        ) => {
           await onSwitchSenderMailbox?.(nextMailboxId);
           if (senderSession.mailboxId && selectedSender !== undefined) {
             savedSenderDrafts.current.set(
@@ -1162,7 +1176,7 @@ export const ComposeWorkspace = ({
               : transferDraft,
             mailboxId: nextMailboxId,
             needsSave:
-              savedDraft !== undefined || hasComposeDraftContent(transferDraft),
+              (savedDraft?.draftId?.trim() ?? "") !== "" || hasAuthoredContent,
             senderEmail:
               senderMailboxes?.find((sender) => sender.id === nextMailboxId)
                 ?.emailAddress ?? null,

@@ -137,6 +137,7 @@ type MessageRowProps = {
   gmailLabels: MailboxLabel[];
   mailboxActions: MessageListProps["mailboxActions"];
   mailboxEmailAddress?: string;
+  mailboxDisplayName?: string | null;
   mailboxId: string;
   mailboxProvider: MessageListProps["mailboxProvider"];
   offsetY: number;
@@ -751,6 +752,7 @@ const MessageRowContent = ({
   gmailLabels,
   mailboxActions,
   mailboxEmailAddress,
+  mailboxDisplayName,
   mailboxId,
   mailboxProvider,
   onOpenDraft,
@@ -802,7 +804,9 @@ const MessageRowContent = ({
     isActive,
     isDraftMailbox,
     subject,
-    mailboxEmailAddress
+    mailboxDisplayName?.trim() && mailboxEmailAddress
+      ? `${mailboxDisplayName.trim()} <${mailboxEmailAddress}>`
+      : mailboxEmailAddress
   );
   return (
     <MessageRowSurface
@@ -857,6 +861,7 @@ export const MessageRow = ({
   gmailLabels,
   mailboxActions,
   mailboxEmailAddress,
+  mailboxDisplayName,
   mailboxId,
   mailboxProvider,
   offsetY,
@@ -884,6 +889,7 @@ export const MessageRow = ({
       gmailLabels={gmailLabels}
       mailboxActions={mailboxActions}
       mailboxEmailAddress={mailboxEmailAddress}
+      mailboxDisplayName={mailboxDisplayName}
       mailboxId={mailboxId}
       mailboxProvider={mailboxProvider}
       onOpenDraft={onOpenDraft}
