@@ -72,7 +72,7 @@ const MailboxOrganizerFullPageDialog = (
 
 const MailboxOrganizerContent = (props: MailboxOrganizerContentProps) => (
   <>
-    <MailboxOrganizerSidebar {...props} />
+    {props.showTrigger !== false && <MailboxOrganizerSidebar {...props} />}
     <MailboxOrganizerFullPageDialog {...props} />
   </>
 );

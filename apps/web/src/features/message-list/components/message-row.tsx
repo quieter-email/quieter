@@ -321,24 +321,29 @@ const MessageRowDetails = ({
   <div className="pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
     <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
       <div className="flex w-full min-w-0 items-center justify-between gap-2">
-        <p className="min-w-0 truncate text-left text-body-sm/4.5 text-fg">
-          {isDraftMailbox && (
-            <span className="font-medium text-muted-fg">To </span>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          {badge !== undefined && badge !== null && (
+            <span className="shrink-0">{badge}</span>
           )}
-          <span
-            className={cn({
-              "font-medium": !unread,
-              "font-semibold": unread,
-            })}
-          >
-            {senderLabel}
-          </span>
-          {senderEmail && (
-            <span className="ml-2 hidden text-micro text-muted-fg @sm:inline">
-              {senderEmail}
+          <p className="min-w-0 truncate text-left text-body-sm/4.5 text-fg">
+            {isDraftMailbox && (
+              <span className="font-medium text-muted-fg">To </span>
+            )}
+            <span
+              className={cn({
+                "font-medium": !unread,
+                "font-semibold": unread,
+              })}
+            >
+              {senderLabel}
             </span>
-          )}
-        </p>
+            {senderEmail && (
+              <span className="ml-2 hidden text-micro text-muted-fg @sm:inline">
+                {senderEmail}
+              </span>
+            )}
+          </p>
+        </div>
 
         <div className="flex shrink-0 items-center gap-2">
           {deliveryStatus !== undefined && deliveryStatus !== null && (
@@ -382,9 +387,6 @@ const MessageRowDetails = ({
       </div>
 
       <div className="flex w-full min-w-0 items-center gap-1.5">
-        {badge !== undefined && badge !== null && (
-          <span className="shrink-0">{badge}</span>
-        )}
         <p
           className={cn("min-w-0 flex-1 truncate text-left text-body-sm/4.5", {
             "font-medium text-fg": unread,

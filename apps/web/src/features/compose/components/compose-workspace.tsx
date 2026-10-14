@@ -599,64 +599,80 @@ export const ComposeSurface = ({
                   transcribing={isTranscribingAudio}
                 >
                   <ComposerEditorFrame
-                    className={cn({
+                    className={cn("@container", {
                       "min-h-64 flex-none": isInline,
                     })}
                   >
                     <ComposerFieldGroup bare>
                       {canSwitchSender && (
                         <ComposerFieldRow label="From">
-                          <Select
-                            items={[
-                              ...(senderMailboxes?.map((sender) => ({
-                                label: sender.displayName
-                                  ? `${sender.displayName} <${sender.emailAddress}>`
-                                  : sender.emailAddress,
-                                value: sender.id,
-                              })) ?? []),
-                              ...(currentSender === undefined && mailboxId
-                                ? [
-                                    {
-                                      label: `${senderEmail ?? "Account"} (unavailable)`,
-                                      value: mailboxId,
-                                    },
-                                  ]
-                                : []),
-                            ]}
-                            onValueChange={(nextMailboxId) => {
-                              void handleSenderChange(nextMailboxId);
-                            }}
-                            value={mailboxId}
-                          >
-                            <SelectTrigger
-                              aria-label="From address"
-                              className="w-full min-w-0"
-                              disabled={
-                                !canEditBody ||
-                                audioBusy ||
-                                state.draft.saveStatus === "saving"
-                              }
-                              pending={switchingSender}
-                              size="sm"
-                              variant="ghost"
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {currentSender === undefined && mailboxId ? (
-                                <SelectItem value={mailboxId}>
-                                  {senderEmail ?? "Account"} (unavailable)
-                                </SelectItem>
-                              ) : null}
-                              {senderMailboxes?.map((sender) => (
-                                <SelectItem key={sender.id} value={sender.id}>
-                                  {sender.displayName
+                          <div className="flex h-8 min-w-0 flex-1 items-center">
+                            <Select
+                              items={[
+                                ...(senderMailboxes?.map((sender) => ({
+                                  label: sender.displayName
                                     ? `${sender.displayName} <${sender.emailAddress}>`
-                                    : sender.emailAddress}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                                    : sender.emailAddress,
+                                  value: sender.id,
+                                })) ?? []),
+                                ...(currentSender === undefined && mailboxId
+                                  ? [
+                                      {
+                                        label: `${senderEmail ?? "Account"} (unavailable)`,
+                                        value: mailboxId,
+                                      },
+                                    ]
+                                  : []),
+                              ]}
+                              onValueChange={(nextMailboxId) => {
+                                void handleSenderChange(nextMailboxId);
+                              }}
+                              value={mailboxId}
+                            >
+                              <SelectTrigger
+                                aria-label="From address"
+                                title={senderEmail ?? undefined}
+                                className="max-w-full min-w-0 shrink"
+                                disabled={
+                                  !canEditBody ||
+                                  audioBusy ||
+                                  state.draft.saveStatus === "saving"
+                                }
+                                pending={switchingSender}
+                                size="sm"
+                                variant="ghost"
+                              >
+                                <SelectValue>
+                                  {senderEmail ?? "Choose a sending address"}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent
+                                align="start"
+                                className="max-w-(--available-width)"
+                              >
+                                {currentSender === undefined && mailboxId ? (
+                                  <SelectItem value={mailboxId}>
+                                    {senderEmail ?? "Account"} (unavailable)
+                                  </SelectItem>
+                                ) : null}
+                                {senderMailboxes?.map((sender) => (
+                                  <SelectItem key={sender.id} value={sender.id}>
+                                    <span className="flex min-w-0 flex-col gap-0.5 py-1">
+                                      <span className="truncate text-body-sm font-medium">
+                                        {sender.displayName ||
+                                          sender.emailAddress}
+                                      </span>
+                                      {sender.displayName && (
+                                        <span className="text-caption break-all text-muted-fg">
+                                          {sender.emailAddress}
+                                        </span>
+                                      )}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </ComposerFieldRow>
                       )}
                       {!canSwitchSender &&
@@ -664,10 +680,8 @@ export const ComposeSurface = ({
                       senderMailboxes &&
                       senderEmail ? (
                         <ComposerFieldRow label="From">
-                          <span className="min-w-0 truncate px-2">
-                            {currentSender?.displayName
-                              ? `${currentSender.displayName} <${senderEmail}>`
-                              : senderEmail}
+                          <span className="flex h-8 min-w-0 items-center truncate px-2 text-body-sm">
+                            {senderEmail}
                           </span>
                         </ComposerFieldRow>
                       ) : null}

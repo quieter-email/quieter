@@ -7,7 +7,8 @@ import {
 } from "@quieter/mail/search";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
-import { cn } from "@quieter/ui/cn";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Pill } from "@quieter/ui/pill";
 import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
 import { toast } from "@quieter/ui/toast";
 import {
@@ -22,7 +23,6 @@ import type {
   MailboxPendingActions,
 } from "#/features/mailbox/components/mailbox-action-handlers";
 import { MailboxColorPicker } from "#/features/message-labels/components/mailbox-color-picker";
-import { mailboxLabelDotClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
 import { MessageList } from "#/features/message-list/components/message-list";
 import type { MessageListMailboxContext } from "#/features/message-list/components/message-list-types";
 import { toastError } from "#/lib/error-toast";
@@ -435,20 +435,17 @@ export const UnifiedInboxPanel = ({
         preferences.colors[mailbox.id] ?? defaultMailboxColor(mailbox.id);
       realContexts.set(uiThreadId, {
         badge: (
-          <span
-            className="inline-flex max-w-28 items-center gap-1 rounded-md bg-muted/60 px-1.5 py-0.5 text-caption text-muted-fg"
-            title={mailbox.emailAddress}
+          <Pill
+            aria-hidden
+            shape="circle"
+            size="icon"
+            tone={color}
+            variant="outline"
           >
-            <span
-              className={cn(
-                "size-1.5 shrink-0 rounded-full",
-                mailboxLabelDotClassNameByColor[color]
-              )}
-            />
-            <span className="truncate">
-              {mailbox.displayName?.trim() || mailbox.emailAddress}
-            </span>
-          </span>
+            {/[\p{L}\p{N}]/u
+              .exec(mailbox.displayName?.trim() || mailbox.emailAddress)?.[0]
+              ?.toUpperCase() ?? "?"}
+          </Pill>
         ),
         emailAddress: mailbox.emailAddress,
         mailboxActions: state.mailboxActions,
@@ -590,7 +587,48 @@ export const UnifiedInboxPanel = ({
   );
   const headerAddon = (
     <div className="flex items-center justify-between gap-2">
-      <span className="text-body-sm font-semibold text-fg">All inboxes</span>
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1">
+          {selectedMailboxes.slice(0, 3).map((mailbox) => (
+            <IconButtonTooltip
+              key={mailbox.id}
+              label={`${mailbox.displayName?.trim() || mailbox.emailAddress}, ${mailbox.emailAddress}`}
+            >
+              <Pill
+                aria-hidden
+                shape="circle"
+                size="icon"
+                tone={
+                  preferences.colors[mailbox.id] ??
+                  defaultMailboxColor(mailbox.id)
+                }
+                variant="outline"
+              >
+                {/[\p{L}\p{N}]/u
+                  .exec(
+                    mailbox.displayName?.trim() || mailbox.emailAddress
+                  )?.[0]
+                  ?.toUpperCase() ?? "?"}
+              </Pill>
+            </IconButtonTooltip>
+          ))}
+          {selectedMailboxes.length > 3 && (
+            <span className="text-micro text-muted-fg">
+              +{selectedMailboxes.length - 3}
+            </span>
+          )}
+        </div>
+        <span className="truncate text-caption text-muted-fg">
+          {selectedMailboxes.length === 0
+            ? "All inboxes"
+            : selectedMailboxes
+                .map(
+                  (mailbox) =>
+                    mailbox.displayName?.trim() || mailbox.emailAddress
+                )
+                .join(", ")}
+        </span>
+      </div>
       <Popover>
         <PopoverTrigger
           aria-label="Choose inboxes"

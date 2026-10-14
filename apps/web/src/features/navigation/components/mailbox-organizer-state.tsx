@@ -29,12 +29,18 @@ const getPendingRowActionKey = (id: string, action: PendingRowAction) =>
 export const useMailboxOrganizerState = ({
   canManage,
   mailboxId,
+  onOpenChange,
+  open,
   searchQuery,
 }: MailboxOrganizerProps) => {
   const queryClient = useQueryClient();
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = open ?? internalIsOpen;
+  const setIsOpen = onOpenChange ?? setInternalIsOpen;
   const [ruleName, setRuleName] = useState("");
-  const [ruleQueryDraft, setRuleQueryDraft] = useState<string | null>(null);
+  const [ruleQueryDraft, setRuleQueryDraft] = useState<string | null>(
+    open === true ? searchQuery : null
+  );
   const ruleQuery = ruleQueryDraft ?? searchQuery;
   const [ruleMatchMode, setRuleMatchMode] = useState<RuleMatchMode>("all");
   const ruleConditionGroupsRef = useRef<
