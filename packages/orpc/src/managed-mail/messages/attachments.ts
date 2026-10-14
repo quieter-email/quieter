@@ -48,7 +48,8 @@ export const getManagedMessageAttachment = async (input: {
       part.fileName === record.attachment.fileName &&
       part.mimeType === record.attachment.mimeType &&
       part.content.byteLength === record.attachment.size &&
-      (part.contentId ?? null) === record.attachment.contentId &&
+      (part.contentId ?? null) ===
+        (record.attachment.contentId?.replaceAll(/^<|>$/gu, "") ?? null) &&
       part.inline === record.attachment.inline
   );
   const [attachment] = matches;

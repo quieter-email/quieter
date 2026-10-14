@@ -66,6 +66,7 @@ type ManagedMessagePresentationRecord = Pick<
   | "subject"
   | "threadId"
   | "to"
+  | "updatedAt"
 > &
   Partial<
     Pick<typeof managedMailMessage.$inferSelect, "bodyHtml" | "bodyText">
@@ -120,6 +121,7 @@ const toMessageListItem = async (
   record: ManagedMessagePresentationRecord,
   options: {
     attachments?: MessageListItem["attachments"];
+    inlineImages?: MessageListItem["inlineImages"];
     attachmentCount?: number;
     labelIds?: string[];
     threadLabelIds?: string[];
@@ -127,6 +129,10 @@ const toMessageListItem = async (
   } = {}
 ): Promise<MessageListItem> => ({
   attachments: options.attachments,
+  baseRevision:
+    record.mailboxState === "draft"
+      ? record.updatedAt.toISOString()
+      : undefined,
   bcc: record.bcc ?? undefined,
   bodyHtml: record.bodyHtml ?? undefined,
   bodyText: record.bodyText ?? undefined,
@@ -140,6 +146,7 @@ const toMessageListItem = async (
   from: record.from,
   id: record.id,
   inReplyTo: record.inReplyTo ?? undefined,
+  inlineImages: options.inlineImages,
   internalDate: String(record.sentAt.getTime()),
   isUnread: !record.isRead,
   labelIds: getManagedMessageLabelIds(record, options.labelIds),
@@ -276,6 +283,7 @@ export const listManagedMessages = async (input: {
       subject: managedMailMessage.subject,
       threadId: managedMailMessage.threadId,
       to: managedMailMessage.to,
+      updatedAt: managedMailMessage.updatedAt,
     })
     .from(managedMailMessage)
     .where(where)
@@ -461,7 +469,23 @@ export const getManagedThread = async (input: {
     string,
     NonNullable<MessageListItem["attachments"]>
   >();
+  const inlineImagesByMessageId = new Map<
+    string,
+    NonNullable<MessageListItem["inlineImages"]>
+  >();
   for (const attachment of attachments) {
+    if (attachment.inline && attachment.contentId) {
+      const images = inlineImagesByMessageId.get(attachment.messageId) ?? [];
+      images.push({
+        attachmentId: attachment.id,
+        contentId: attachment.contentId.replaceAll(/^<|>$/gu, ""),
+        fileName: attachment.fileName,
+        mimeType: attachment.mimeType,
+        size: attachment.size,
+      });
+      inlineImagesByMessageId.set(attachment.messageId, images);
+      continue;
+    }
     const messageAttachments =
       attachmentsByMessageId.get(attachment.messageId) ?? [];
     messageAttachments.push({
@@ -478,6 +502,7 @@ export const getManagedThread = async (input: {
         await toMessageListItem(record, {
           attachmentCount: attachmentsByMessageId.get(record.id)?.length ?? 0,
           attachments: attachmentsByMessageId.get(record.id) ?? [],
+          inlineImages: inlineImagesByMessageId.get(record.id) ?? [],
           labelIds: labelIdsByMessageId.get(record.id) ?? [],
           threadMessageCount: records.length,
         })

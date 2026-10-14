@@ -166,8 +166,18 @@ export const sendPreparedMail = async (input: {
       )
     )
     .limit(1);
-  if (operation !== undefined && operation.requestHash !== input.requestHash) {
+  const retryContentChanged =
+    (operation?.status === "rejected" || operation?.status === "prepared") &&
+    operation.requestHash !== input.requestHash &&
+    operation.snapshot?.kind === "mailbox" &&
+    input.snapshot.kind === "mailbox";
+  if (
+    operation !== undefined &&
+    operation.requestHash !== input.requestHash &&
+    !retryContentChanged
+  ) {
     throw new ORPCError("CONFLICT", {
+      data: { deliveryUncertain: true },
       message: "Idempotency key was already used with a different message.",
     });
   }
@@ -191,6 +201,7 @@ export const sendPreparedMail = async (input: {
       ],
     });
     const rawObject =
+      !retryContentChanged &&
       operation !== undefined &&
       operation.rawObjectBucket !== null &&
       operation.rawObjectKey !== null &&
@@ -201,10 +212,48 @@ export const sendPreparedMail = async (input: {
             provider: operation.rawObjectProvider,
           }
         : await storeRawMailObject(new TextEncoder().encode(input.raw));
+    if (retryContentChanged && operation !== undefined) {
+      const [reset] = await db
+        .update(organizationMailSendIdempotency)
+        .set({
+          messageHeaderId: input.messageHeaderId,
+          rawObjectBucket: rawObject.bucket,
+          rawObjectKey: rawObject.key,
+          rawObjectProvider: rawObject.provider,
+          requestHash: input.requestHash,
+          snapshot: input.snapshot,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(organizationMailSendIdempotency.id, operation.id),
+            eq(organizationMailSendIdempotency.status, operation.status),
+            eq(
+              organizationMailSendIdempotency.requestHash,
+              operation.requestHash
+            )
+          )
+        )
+        .returning();
+      if (reset === undefined) {
+        throw new ORPCError("CONFLICT", {
+          data: { deliveryUncertain: true },
+          message: UNCERTAIN_DELIVERY_MESSAGE,
+        });
+      }
+    }
     operation = await reserveOrganizationMailSend({ ...input, rawObject });
+  }
+  if (operation.idempotencyKey !== input.idempotencyKey) {
+    throw new ORPCError("CONFLICT", {
+      data: { draftConflict: true },
+      message:
+        "This draft is being sent from another editor. Check Sent before recovering your changes as a new draft.",
+    });
   }
   if (operation.requestHash !== input.requestHash) {
     throw new ORPCError("CONFLICT", {
+      data: { deliveryUncertain: true },
       message: "Idempotency key was already used with a different message.",
     });
   }
@@ -229,12 +278,16 @@ export const sendPreparedMail = async (input: {
       .where(
         and(
           eq(organizationMailSendIdempotency.id, operation.id),
+          eq(organizationMailSendIdempotency.requestHash, input.requestHash),
           eq(organizationMailSendIdempotency.status, "prepared")
         )
       )
       .returning();
     if (claimed === undefined || claimed.snapshot === null) {
-      throw new ORPCError("CONFLICT", { message: UNCERTAIN_DELIVERY_MESSAGE });
+      throw new ORPCError("CONFLICT", {
+        data: { deliveryUncertain: true },
+        message: UNCERTAIN_DELIVERY_MESSAGE,
+      });
     }
     const { snapshot } = claimed;
     let messageId: string | undefined;
@@ -284,6 +337,7 @@ export const sendPreparedMail = async (input: {
         );
       reportError(error, { operation: "mail:send" });
       throw new ORPCError(rejected ? "BAD_GATEWAY" : "CONFLICT", {
+        data: rejected ? { sendRejected: true } : { deliveryUncertain: true },
         message: rejected
           ? "The message could not be sent. Try again."
           : UNCERTAIN_DELIVERY_MESSAGE,
@@ -299,7 +353,10 @@ export const sendPreparedMail = async (input: {
             eq(organizationMailSendIdempotency.status, "submitting")
           )
         );
-      throw new ORPCError("CONFLICT", { message: UNCERTAIN_DELIVERY_MESSAGE });
+      throw new ORPCError("CONFLICT", {
+        data: { deliveryUncertain: true },
+        message: UNCERTAIN_DELIVERY_MESSAGE,
+      });
     }
     const [accepted] = await db
       .update(organizationMailSendIdempotency)
@@ -322,6 +379,7 @@ export const sendPreparedMail = async (input: {
       .catch((error: unknown) => {
         reportError(error, { operation: "mail:persist-acceptance" });
         throw new ORPCError("CONFLICT", {
+          data: { deliveryUncertain: true },
           message: UNCERTAIN_DELIVERY_MESSAGE,
         });
       });
@@ -334,7 +392,10 @@ export const sendPreparedMail = async (input: {
             .limit(1)
         : [accepted];
     if (current === undefined) {
-      throw new ORPCError("CONFLICT", { message: UNCERTAIN_DELIVERY_MESSAGE });
+      throw new ORPCError("CONFLICT", {
+        data: { deliveryUncertain: true },
+        message: UNCERTAIN_DELIVERY_MESSAGE,
+      });
     }
     operation = current;
   }
@@ -342,7 +403,10 @@ export const sendPreparedMail = async (input: {
     (operation.status !== "accepted" && operation.status !== "completed") ||
     operation.response === null
   ) {
-    throw new ORPCError("CONFLICT", { message: UNCERTAIN_DELIVERY_MESSAGE });
+    throw new ORPCError("CONFLICT", {
+      data: { deliveryUncertain: true },
+      message: UNCERTAIN_DELIVERY_MESSAGE,
+    });
   }
   try {
     await completeMailSend(operation);

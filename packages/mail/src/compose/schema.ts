@@ -244,6 +244,7 @@ const composeAttachmentSchema = z.object({
   mimeType: mimeHeaderValueSchema,
   name: z.string(),
   size: z.number(),
+  sourceMessageId: z.string().optional(),
 });
 
 const composeInlineImageSchema = z.object({
@@ -255,10 +256,12 @@ const composeInlineImageSchema = z.object({
   mimeType: mimeHeaderValueSchema,
   name: z.string(),
   size: z.number(),
+  sourceMessageId: z.string().optional(),
 });
 
 export const composeDraftInputSchema = z.object({
   attachments: z.array(composeAttachmentSchema),
+  baseRevision: z.string().optional(),
   bodyHtml: z.string(),
   bodyText: z.string(),
   draftAnchor: composeDraftAnchorSchema.nullable().optional(),
@@ -279,6 +282,8 @@ export const composeDraftInputSchema = z.object({
     .nullable()
     .optional(),
   saveStatus: z.string(),
+  sendOperationId: z.uuid().optional(),
+  sendUncertain: z.boolean().optional(),
   subject: z.string(),
   updatedAt: z.number(),
 });

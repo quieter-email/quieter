@@ -49,7 +49,7 @@ export const useDraftRecovery = ({
     }
     const draft = getDraft();
     try {
-      if (hasComposeDraftContent(draft)) {
+      if (hasComposeDraftContent(draft) || !!draft.draftId) {
         draftRecoveryJournal.save({
           editorId: editorId.current,
           localId: draft.localId,
@@ -111,19 +111,24 @@ export const useDraftRecovery = ({
       if (mailboxId === null) {
         return;
       }
-      for (const record of draftRecoveryJournal.list(mailboxId)) {
-        if (
-          record.localId === draft.localId &&
-          (record.editorId === editorId.current ||
-            (record.editorId === draft.recoveryEditorId &&
-              record.updatedAt <= (draft.recoveryUpdatedAt ?? 0)))
-        ) {
-          draftRecoveryJournal.remove(record);
+      try {
+        for (const record of draftRecoveryJournal.list(mailboxId)) {
+          if (
+            (record.localId === draft.localId &&
+              record.editorId === editorId.current) ||
+            (record.localId === (draft.recoveryLocalId ?? draft.localId) &&
+              record.editorId === draft.recoveryEditorId &&
+              record.updatedAt <= (draft.recoveryUpdatedAt ?? 0))
+          ) {
+            draftRecoveryJournal.remove(record);
+          }
         }
+        await queryClient.invalidateQueries({
+          queryKey: ["local-draft-recovery", mailboxId],
+        });
+      } catch (error) {
+        toastError(error, { boundary: "compose-recovery-cleanup" });
       }
-      await queryClient.invalidateQueries({
-        queryKey: ["local-draft-recovery", mailboxId],
-      });
     },
   };
 };

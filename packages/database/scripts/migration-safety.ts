@@ -136,7 +136,10 @@ export const assertMigrationFilesAreDeploySafe = () => {
   for (const entry of readdirSync(migrationsDirectory, {
     withFileTypes: true,
   })) {
-    if (!entry.isDirectory()) {
+    if (
+      !entry.isDirectory() ||
+      readdirSync(path.join(migrationsDirectory, entry.name)).length === 0
+    ) {
       continue;
     }
     const sql = readFileSync(

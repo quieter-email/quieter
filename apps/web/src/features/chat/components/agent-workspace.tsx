@@ -14,18 +14,26 @@ import { AgentWorkspaceContext } from "../domain/workspace-context";
 
 type ComposeBridge = {
   applyReceipt: (receipt: {
+    attachments?: ComposeDraftState["attachments"];
+    baseRevision?: string;
     draftId: string;
     draftRevision: number;
     status: "draft_saved" | "sent";
     providerDraftId?: string;
     messageId?: string;
+    inlineImages?: ComposeDraftState["inlineImages"];
   }) => void;
   read: () => {
     attachments: ComposeDraftState["attachments"];
+    baseRevision?: string;
+    draftAnchor?: ComposeDraftState["draftAnchor"];
     inlineImages: ComposeDraftState["inlineImages"];
     draftId: string;
     draftRevision: number;
     providerDraftId?: string;
+    messageId?: string;
+    sendOperationId?: string;
+    sendUncertain?: boolean;
     replyContext?: ComposeDraftState["replyContext"];
     values: ComposeFormValues;
   };
@@ -118,11 +126,16 @@ export type WorkspaceBridge = Omit<
     draftRevision?: number;
     draft?: {
       attachments: ComposeDraftState["attachments"];
+      baseRevision?: string;
+      draftAnchor?: ComposeDraftState["draftAnchor"];
       inlineImages: ComposeDraftState["inlineImages"];
       bodyHtml: string;
       draftId: string;
       draftRevision: number;
       providerDraftId?: string;
+      messageId?: string;
+      sendOperationId?: string;
+      sendUncertain?: boolean;
       replyContext?: ComposeDraftState["replyContext"];
       to: string;
       cc: string;
@@ -283,15 +296,20 @@ export const AgentWorkspaceProvider = ({
             ? {
                 draft: {
                   attachments: draft.attachments,
+                  baseRevision: draft.baseRevision,
                   bcc: draft.values.bcc,
                   bodyHtml: draft.values.bodyHtml,
                   bodyText: draft.values.bodyText,
                   cc: draft.values.cc,
+                  draftAnchor: draft.draftAnchor,
                   draftId: draft.draftId,
                   draftRevision: draft.draftRevision,
                   inlineImages: draft.inlineImages,
+                  messageId: draft.messageId,
                   providerDraftId: draft.providerDraftId,
                   replyContext: draft.replyContext,
+                  sendOperationId: draft.sendOperationId,
+                  sendUncertain: draft.sendUncertain,
                   subject: draft.values.subject,
                   to: draft.values.to,
                 },

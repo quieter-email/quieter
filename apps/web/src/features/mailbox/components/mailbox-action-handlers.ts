@@ -217,7 +217,8 @@ export const createMailboxActionHandlers = ({
         activeMailbox,
         activeSearchQuery,
         message.id,
-        draftId
+        draftId,
+        message.baseRevision
       );
     });
   };
@@ -226,14 +227,14 @@ export const createMailboxActionHandlers = ({
     const draftsByMessageId = new Map(
       threads.flatMap((thread) => {
         const message = thread.anchorMessage;
-        return message.draftId ? [[message.id, message.draftId] as const] : [];
+        return message.draftId ? [[message.id, message] as const] : [];
       })
     );
 
     await runBulkAction({
       action: async (messageId) => {
-        const draftId = draftsByMessageId.get(messageId);
-        if (!draftId) {
+        const message = draftsByMessageId.get(messageId);
+        if (!message?.draftId) {
           return;
         }
         await deleteDraftInMailbox(
@@ -242,7 +243,8 @@ export const createMailboxActionHandlers = ({
           activeMailbox,
           activeSearchQuery,
           messageId,
-          draftId
+          message.draftId,
+          message.baseRevision
         );
       },
       ids: [...draftsByMessageId.keys()],

@@ -25,6 +25,7 @@ type ComposeAssetBase = {
   mimeType: string;
   size: number;
   gmailAttachmentId?: string;
+  sourceMessageId?: string;
 };
 
 type ComposeAttachment = ComposeAssetBase & {
@@ -39,6 +40,7 @@ type ComposeInlineImage = ComposeAssetBase & {
 export type ComposeDraftState = {
   assistantUnsaved?: boolean;
   localId: string;
+  baseRevision?: string;
   draftId?: string;
   messageId?: string;
   draftAnchor?: ComposeDraftAnchor | null;
@@ -50,9 +52,13 @@ export type ComposeDraftState = {
   attachments: ComposeAttachment[];
   inlineImages: ComposeInlineImage[];
   saveStatus: ComposeSaveStatus;
+  sendOperationId?: string;
+  sendUncertain?: boolean;
   errorMessage: string | null;
   lastSavedAt?: number;
   recoveryEditorId?: string;
+  recoveryLocalId?: string;
+  recoveryMissingFiles?: string[];
   recoveryUpdatedAt?: number;
   updatedAt: number;
 };
@@ -225,10 +231,149 @@ const rememberRuntimeFile = (id: string, file: File) => {
   });
 };
 
+export const cloneComposeDraftRuntimeFiles = (
+  draft: ComposeDraftState
+): ComposeDraftState => {
+  const assets = [...draft.attachments, ...draft.inlineImages];
+  for (const asset of assets) {
+    if (!runtimeBinaryById.has(asset.id)) {
+      throw new Error(
+        `Reattach ${asset.name} before changing the sending address.`
+      );
+    }
+  }
+  const copies = new Map<string, { id: string; objectUrl: string }>();
+  for (const asset of assets) {
+    const runtime = runtimeBinaryById.get(asset.id);
+    if (runtime) {
+      const id = crypto.randomUUID();
+      const objectUrl = URL.createObjectURL(runtime.file);
+      runtimeBinaryById.set(id, { file: runtime.file, objectUrl });
+      copies.set(asset.id, { id, objectUrl });
+    }
+  }
+  const doc = new DOMParser().parseFromString(draft.bodyHtml, "text/html");
+  for (const element of doc.querySelectorAll<HTMLImageElement>("img")) {
+    const image = draft.inlineImages.find(
+      (asset) =>
+        asset.id === element.dataset.composeInlineId ||
+        element.getAttribute("src")?.toLowerCase() ===
+          `cid:${asset.contentId.toLowerCase()}`
+    );
+    const copy = image === undefined ? undefined : copies.get(image.id);
+    if (copy) {
+      element.setAttribute("src", copy.objectUrl);
+      element.dataset.composeInlineId = copy.id;
+    }
+  }
+  return {
+    ...draft,
+    attachments: draft.attachments.map((asset) => {
+      const copy = copies.get(asset.id);
+      if (!copy) {
+        throw new Error("The draft files could not be copied.");
+      }
+      return {
+        ...asset,
+        gmailAttachmentId: undefined,
+        id: copy.id,
+        sourceMessageId: undefined,
+      };
+    }),
+    bodyHtml: doc.body.innerHTML,
+    inlineImages: draft.inlineImages.map((asset) => {
+      const copy = copies.get(asset.id);
+      if (!copy) {
+        throw new Error("The draft images could not be copied.");
+      }
+      return {
+        ...asset,
+        contentId: `${CONTENT_ID_PREFIX}-${copy.id}`,
+        gmailAttachmentId: undefined,
+        id: copy.id,
+        sourceMessageId: undefined,
+      };
+    }),
+  };
+};
+
 export const clearComposeDraftRuntimeFiles = (draft: ComposeDraftState) => {
   for (const asset of [...draft.attachments, ...draft.inlineImages]) {
     removeComposeRuntimeFile(asset.id);
   }
+};
+
+export const createRecoveredComposeCopy = (
+  draft: ComposeDraftState
+): ComposeDraftState => {
+  if (draft.sendUncertain === true) {
+    throw new Error("Check delivery before recovering this message as a copy.");
+  }
+  const missing = [...draft.attachments, ...draft.inlineImages].filter(
+    (asset) => !runtimeBinaryById.has(asset.id)
+  );
+  const recoveryMissingFiles = [
+    ...new Set([
+      ...(draft.recoveryMissingFiles ?? []),
+      ...missing.map((asset) => asset.name),
+    ]),
+  ];
+  const doc = new DOMParser().parseFromString(draft.bodyHtml, "text/html");
+  for (const element of doc.querySelectorAll<HTMLImageElement>("img")) {
+    const image = draft.inlineImages.find(
+      (asset) =>
+        asset.id === element.dataset.composeInlineId ||
+        asset.contentId ===
+          `${CONTENT_ID_PREFIX}-${element.dataset.composeInlineId ?? ""}` ||
+        element.getAttribute("src")?.toLowerCase() ===
+          `cid:${asset.contentId.toLowerCase()}`
+    );
+    if (image && !runtimeBinaryById.has(image.id)) {
+      element.remove();
+    } else if (image) {
+      const runtime = runtimeBinaryById.get(image.id);
+      if (runtime) {
+        element.setAttribute("src", runtime.objectUrl);
+        element.dataset.composeInlineId = image.id;
+      }
+    }
+  }
+  return {
+    ...draft,
+    attachments: draft.attachments
+      .filter((asset) => runtimeBinaryById.has(asset.id))
+      .map((asset) => ({
+        ...asset,
+        gmailAttachmentId: undefined,
+        sourceMessageId: undefined,
+      })),
+    baseRevision: undefined,
+    bodyHtml: doc.body.innerHTML,
+    draftId: undefined,
+    errorMessage:
+      recoveryMissingFiles.length > 0
+        ? `Your text was recovered. Reattach these files before sending: ${recoveryMissingFiles.join(", ")}.`
+        : draft.errorMessage,
+    inlineImages: draft.inlineImages
+      .filter((asset) => runtimeBinaryById.has(asset.id))
+      .map((asset) => ({
+        ...asset,
+        gmailAttachmentId: undefined,
+        sourceMessageId: undefined,
+      })),
+    lastSavedAt: undefined,
+    localId: crypto.randomUUID(),
+    messageId: undefined,
+    recoveryLocalId: draft.recoveryLocalId ?? draft.localId,
+    recoveryMissingFiles,
+    saveStatus:
+      recoveryMissingFiles.length > 0 || draft.errorMessage !== null
+        ? "error"
+        : "idle",
+    sendOperationId: crypto.randomUUID(),
+    sendUncertain: false,
+    updatedAt: Date.now(),
+  };
 };
 
 const htmlToText = (html: string): string => {
@@ -362,7 +507,8 @@ const attachRuntimeFile = async <
 ) => {
   const runtimeFile = runtimeBinaryById.get(asset.id)?.file;
   if (!runtimeFile) {
-    if (asset.gmailAttachmentId && messageId) {
+    const sourceMessageId = asset.sourceMessageId ?? messageId;
+    if (asset.gmailAttachmentId && sourceMessageId) {
       const pending = { removed: false };
       pendingRuntimeFiles.set(asset.id, pending);
       try {
@@ -371,7 +517,7 @@ const attachRuntimeFile = async <
             attachmentId: asset.gmailAttachmentId,
             fileName: asset.name,
             mailboxId,
-            messageId,
+            messageId: sourceMessageId,
             mimeType: asset.mimeType,
           },
           { signal }
@@ -533,6 +679,39 @@ const serializeDraft = async (
   };
 };
 
+export const prepareLoadedComposeDraft = async (
+  mailboxId: string,
+  draft: ComposeDraftState,
+  signal?: AbortSignal
+): Promise<ComposeDraftState> => {
+  await Promise.all(
+    [...draft.inlineImages, ...draft.attachments].map(
+      async (asset) =>
+        await attachRuntimeFile(asset, mailboxId, draft.messageId, signal)
+    )
+  );
+  signal?.throwIfAborted();
+  const doc = new DOMParser().parseFromString(draft.bodyHtml, "text/html");
+  for (const element of doc.querySelectorAll<HTMLImageElement>("img")) {
+    const image = draft.inlineImages.find(
+      (asset) =>
+        asset.id === element.dataset.composeInlineId ||
+        asset.contentId ===
+          `${CONTENT_ID_PREFIX}-${element.dataset.composeInlineId ?? ""}` ||
+        element.getAttribute("src")?.toLowerCase() ===
+          `cid:${asset.contentId.toLowerCase()}`
+    );
+    if (image) {
+      const objectUrl = getComposeRuntimeObjectUrl(image.id);
+      if (objectUrl) {
+        element.setAttribute("src", objectUrl);
+        element.dataset.composeInlineId = image.id;
+      }
+    }
+  }
+  return { ...draft, bodyHtml: doc.body.innerHTML };
+};
+
 export const saveComposeDraft = async (
   mailboxId: string,
   draft: ComposeDraftState,
@@ -542,24 +721,16 @@ export const saveComposeDraft = async (
     { draft: await serializeDraft(mailboxId, draft, signal), mailboxId },
     { signal }
   );
-  const bodyHtml = getRenderableComposeBodyHtml(
-    response.bodyHtml,
-    response.bodyText
-  );
-
   return {
     ...draft,
-    bodyHtml,
-    bodyText: response.bodyText || htmlToText(bodyHtml),
-    draftAnchor: response.draftAnchor ?? null,
+    attachments: response.attachments,
+    baseRevision: response.baseRevision,
     draftId: response.draftId,
     errorMessage: null,
+    inlineImages: response.inlineImages,
     lastSavedAt: Date.now(),
     messageId: response.messageId ?? undefined,
-    recipients: response.recipients,
-    replyContext: response.replyContext ?? null,
     saveStatus: "saved",
-    subject: response.subject,
     updatedAt: Date.now(),
   };
 };
@@ -568,11 +739,31 @@ export const sendComposeMessage = async (
   mailboxId: string,
   draft: ComposeDraftState,
   signal?: AbortSignal
-) =>
-  await rpc.mail.sendMessage(
-    { mailboxId, message: await serializeDraft(mailboxId, draft, signal) },
-    { signal }
-  );
+) => {
+  const message = await serializeDraft(mailboxId, draft, signal);
+  try {
+    return await rpc.mail.sendMessage({ mailboxId, message }, { signal });
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "status" in error &&
+      typeof error.status === "number" &&
+      error.status >= 400 &&
+      error.status < 500 &&
+      error.status !== 408
+    ) {
+      throw error;
+    }
+    throw Object.assign(
+      new Error(
+        "Delivery could not be confirmed. Check Sent before sending again.",
+        { cause: error }
+      ),
+      { data: { deliveryUncertain: true } }
+    );
+  }
+};
 
 export const deleteComposeDraft = async (
   mailboxId: string,
@@ -586,7 +777,10 @@ export const deleteComposeDraft = async (
   ) {
     return;
   }
-  await rpc.mail.deleteDraft({ draftId: draft.draftId, mailboxId }, { signal });
+  await rpc.mail.deleteDraft(
+    { baseRevision: draft.baseRevision, draftId: draft.draftId, mailboxId },
+    { signal }
+  );
 };
 
 export const attachInlineImagesToHtml = (

@@ -1,5 +1,6 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { cleanupRateLimitBuckets } from "@quieter/orpc/abuse-protection";
+import { processPendingAiMemoryEvents } from "@quieter/orpc/ai-memory";
 import { recoverMailSends } from "@quieter/orpc/mail-send";
 import { retryPendingManagedVerificationCodes } from "@quieter/orpc/managed-mail/ingestion";
 import { processManagedRuleBackfills } from "@quieter/orpc/managed-mail/rule-backfills";
@@ -14,6 +15,7 @@ export default withSentryReporting({
       await withRequestDatabaseClient(async () => {
         const results = await Promise.allSettled([
           recoverMailSends(),
+          processPendingAiMemoryEvents(),
           cleanupMailObjects(),
           cleanupRateLimitBuckets(),
           processManagedRuleBackfills(),

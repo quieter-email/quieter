@@ -56,7 +56,7 @@ The application and database boundary. It owns:
 
 No application module should bypass this package to query PostgreSQL.
 
-The mail router contains procedure registration, transport schemas and route metadata. Services under `packages/orpc/src/mail/` own queries, compose, labels and mutations, including provider selection and authorization. Shared Gmail request handling lives in `gmail-request.ts`; service modules do not import router bootstrapping. Feedback writes finish before request completion, with Gmail metadata reads processed in batches of four.
+The mail router contains procedure registration, transport schemas and route metadata. Services under `packages/orpc/src/mail/` own queries, compose, labels and mutations, including provider selection and authorization. Shared Gmail request handling lives in `gmail-request.ts`; service modules do not import router bootstrapping. Sent-message learning records durable events before responding, and the maintenance worker processes their model updates separately. Gmail feedback metadata reads run in batches of four.
 
 `vp run check:boundaries` checks imports with Oxc, including dynamic imports, re-exports, and type imports. It enforces package/application separation, application database and UI boundaries, and the AWS oRPC entrypoint allowlist. Computed dynamic imports are rejected because their targets cannot be checked. The only application database import allowed is `withRequestDatabaseClient` in the request bootstrap. CI runs this check alongside the AWS and Cloudflare handler bundles.
 
@@ -75,6 +75,10 @@ Interactive write requests use database-backed rate limits. The per-minute mail 
 Managed rule conditions store stable label IDs. Definition writes hold shared locks on referenced labels until commit. Renaming or deleting a label locks it before repairing legacy name references and updating dependent definitions in the same transaction. Deletion disables affected rules without removing predicates or actions; the organizer explains the missing reference, and saving a repaired definition clears that reason. The nullable rule reason column is an additive migration and must precede the application release.
 
 `packages/gmail` contains Gmail REST calls and Gmail-specific draft parsing. It does not own encrypted credential storage or token refresh.
+
+The composer loads an authoritative draft before mounting an editor. Saves and deletion carry the loaded revision; conflicts preserve local text and offer an explicit copy. Draft lists refresh on mount, focus, and reconnect and are excluded from browser persistence. Saved attachment references include their source message, while the editor uses temporary object URLs that MIME generation replaces with content IDs.
+
+Gmail compose operations use the additive `gmailComposeOperation` table to record draft writes and sends before contacting the provider. A send keeps the same operation ID across manual and assistant requests, recovery, and retries. An uncertain result checks Sent using its recorded Message-ID without issuing another send. Existing Gmail drafts are consumed through draft sending. Managed sends bind each draft revision within the existing billing reservation transaction. The new table migration must run through the protected production workflow before deploying the application; open editors without a loaded revision must reopen their draft.
 
 The public SDK derives send inputs from `@quieter/mail/send` and validates responses with the shared delivery schemas. Its build bundles these contracts and permits only Zod and the optional React dependencies in emitted imports. `tsconfig.sdk.json` gives declaration generation a workspace-wide root so the published types include the shared contracts. React rendering lives in `quieter/react`; the core package has no React requirement.
 

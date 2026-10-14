@@ -31,6 +31,14 @@ export const mailRouter = {
     .route({ method: "GET" })
     .input(mailInputSchemas.getAttachment)
     .handler(queriesMailOperations.getAttachment),
+  getComposeSendStatus: protectedProcedure
+    .route({ method: "GET" })
+    .input(mailInputSchemas.getComposeSendStatus)
+    .handler(composeMailOperations.getComposeSendStatus),
+  getDraft: protectedProcedure
+    .route({ method: "GET" })
+    .input(mailInputSchemas.getDraft)
+    .handler(queriesMailOperations.getDraft),
   getMessageDelivery: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.getMessageDelivery)

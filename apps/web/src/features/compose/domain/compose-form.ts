@@ -5,7 +5,6 @@ import {
   haveComposeDraftPersistedFieldsChanged,
   hasComposeDraftContent,
   getRenderableComposeBodyHtml,
-  removeComposeRuntimeFile,
   syncInlineImagesWithHtml,
 } from "./draft";
 import type { ComposeDraftState } from "./draft";
@@ -24,6 +23,7 @@ type ComposeFormWriter = {
 type ComposeDraftFormMeta = Pick<
   ComposeDraftState,
   | "localId"
+  | "baseRevision"
   | "draftId"
   | "messageId"
   | "draftAnchor"
@@ -31,9 +31,13 @@ type ComposeDraftFormMeta = Pick<
   | "attachments"
   | "inlineImages"
   | "saveStatus"
+  | "sendOperationId"
+  | "sendUncertain"
   | "errorMessage"
   | "lastSavedAt"
   | "recoveryEditorId"
+  | "recoveryLocalId"
+  | "recoveryMissingFiles"
   | "recoveryUpdatedAt"
   | "updatedAt"
 >;
@@ -75,21 +79,8 @@ export const composeFormValuesToDraft = (
     recipients: { bcc: values.bcc, cc: values.cc, to: values.to },
     subject: values.subject,
   };
-  const previousInlineImageIds = new Set(
-    meta.inlineImages.map((image) => image.id)
-  );
   const syncedDraft = syncInlineImagesWithHtml(base, values.bodyHtml);
-  const nextInlineImageIds = new Set(
-    syncedDraft.inlineImages.map((image) => image.id)
-  );
-
-  for (const id of previousInlineImageIds) {
-    if (!nextInlineImageIds.has(id)) {
-      removeComposeRuntimeFile(id);
-    }
-  }
-
-  return syncedDraft;
+  return { ...syncedDraft, bodyText: values.bodyText };
 };
 
 export const shouldPersistComposeDraft = ({
@@ -102,6 +93,7 @@ export const shouldPersistComposeDraft = ({
   values: ComposeFormValues;
 }) =>
   composeDraftFormValuesSchema.safeParse(values).success &&
-  hasComposeDraftContent(nextDraft) &&
-  (currentDraft.saveStatus === "error" ||
+  (hasComposeDraftContent(nextDraft) || !!currentDraft.draftId) &&
+  ((!currentDraft.draftId && currentDraft.lastSavedAt === undefined) ||
+    currentDraft.saveStatus === "error" ||
     haveComposeDraftPersistedFieldsChanged(currentDraft, nextDraft));

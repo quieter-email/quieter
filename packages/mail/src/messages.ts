@@ -33,6 +33,7 @@ export type MessageListItem = {
   threadMessageCount?: number;
   threadAttachmentCount?: number;
   draftId?: string;
+  baseRevision?: string;
   draftAnchor?: ComposeDraftAnchor;
   snippet?: string;
   subject?: string;
@@ -49,6 +50,7 @@ export type MessageListItem = {
   bodyHtml?: string;
   bodyText?: string;
   attachments?: MessageAttachment[];
+  inlineImages?: (MessageAttachment & { contentId: string })[];
   apiSource?: {
     canCreateMailbox: boolean;
     canManageMailbox: boolean;

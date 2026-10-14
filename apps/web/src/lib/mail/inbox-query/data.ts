@@ -78,6 +78,7 @@ export const mergeMessagePreservingLoadedDetails = (
   bodyText: syncedMessage.bodyText ?? currentMessage.bodyText,
   draftAnchor: syncedMessage.draftAnchor ?? currentMessage.draftAnchor,
   draftId: syncedMessage.draftId ?? currentMessage.draftId,
+  inlineImages: syncedMessage.inlineImages ?? currentMessage.inlineImages,
   senderAvatarUrls:
     syncedMessage.senderAvatarUrls ?? currentMessage.senderAvatarUrls,
   threadAttachmentCount:

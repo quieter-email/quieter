@@ -5,6 +5,7 @@ import {
   decodePartBody,
   decodeMimeHeaderValue,
   extractMessageAttachments,
+  extractInlineMessageAttachments,
   extractMessageContent,
   findRenderablePart,
 } from "@quieter/mail/message-content";
@@ -978,7 +979,11 @@ const toMessageListItem = async (
   return {
     attachments:
       includeBody || options.includeAttachmentMetadata === true
-        ? extractMessageAttachments(message.payload)
+        ? extractMessageAttachments(message.payload, content.html)
+        : undefined,
+    baseRevision:
+      labelIds?.includes(MAILBOX_LABELS.drafts) === true
+        ? message.id
         : undefined,
     bcc: getHeader(message, "Bcc"),
     bodyHtml: content.html,
@@ -991,6 +996,9 @@ const toMessageListItem = async (
     from,
     id: message.id,
     inReplyTo: getHeader(message, "In-Reply-To"),
+    inlineImages: includeBody
+      ? extractInlineMessageAttachments(message.payload, content.html)
+      : undefined,
     internalDate: message.internalDate,
     isUnread: hasUnreadLabel(labelIds),
     labelIds,
@@ -1230,6 +1238,41 @@ const getDraftIdForMessageHeaderId = async (
   });
 
   return list.drafts.find((draft) => draft.message?.threadId === threadId)?.id;
+};
+
+export const findGmailComposeDraft = async (
+  accessToken: string,
+  messageHeaderId: string,
+  signal?: AbortSignal
+): Promise<GmailDraft | null> => {
+  const list = await listDrafts(accessToken, {
+    maxResults: 2,
+    query: `rfc822msgid:${messageHeaderId}`,
+    signal,
+  });
+  const [draft] = list.drafts;
+  return draft === undefined
+    ? null
+    : // oxlint-disable-next-line no-use-before-define -- Service declarations initialize before requests run.
+      await getDraft(accessToken, draft.id, signal);
+};
+
+export const findGmailComposeSentMessage = async (
+  accessToken: string,
+  messageHeaderId: string,
+  signal?: AbortSignal
+): Promise<GmailMessage | null> => {
+  const list = await listMessages(accessToken, {
+    mailbox: "sent",
+    maxResults: 2,
+    query: `rfc822msgid:${messageHeaderId}`,
+    signal,
+  });
+  const [message] = list.messages;
+  return message === undefined
+    ? null
+    : // oxlint-disable-next-line no-use-before-define -- Service declarations initialize before requests run.
+      await getGmailMessageMetadata(accessToken, message.id, signal);
 };
 
 export const getGmailProfile = async (
@@ -1748,6 +1791,18 @@ export const getDraft = async (
       signal,
     }
   );
+
+export const getDraftWithContent = async (
+  accessToken: string,
+  draftId: string,
+  signal?: AbortSignal
+): Promise<{ draft: GmailDraft; bodyHtml?: string; bodyText?: string }> => {
+  const draft = await getDraft(accessToken, draftId, signal);
+  const content = draft.message
+    ? await resolveMessageContent(accessToken, draft.message, signal)
+    : undefined;
+  return { bodyHtml: content?.html, bodyText: content?.text, draft };
+};
 
 export const listDraftsWithDetails = async (
   accessToken: string,

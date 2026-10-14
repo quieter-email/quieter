@@ -318,7 +318,7 @@ describe(writeComposeFormValues, () => {
 });
 
 describe(shouldPersistComposeDraft, () => {
-  test("does not save an unchanged generated reply draft", () => {
+  test("saves a generated reply before its first provider save", () => {
     const currentDraft = buildComposeDraftFromMessageAction({
       action: "reply",
       currentUserEmail: "me@example.com",
@@ -331,7 +331,7 @@ describe(shouldPersistComposeDraft, () => {
         nextDraft: currentDraft,
         values: draftToComposeFormValues(currentDraft),
       })
-    ).toBeFalsy();
+    ).toBeTruthy();
   });
 
   test("saves a new message after the user adds content", () => {

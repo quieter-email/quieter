@@ -295,10 +295,12 @@ const normalizeContentId = (value?: string): string | undefined => {
 };
 
 const extractReferencedInlineContentIds = (
-  payload: MessagePart | undefined
+  payload: MessagePart | undefined,
+  resolvedHtml?: string
 ): ReadonlySet<string> => {
   const htmlPart = findRenderableInlinePart(payload, "text/html");
-  const html = htmlPart ? decodePartBody(htmlPart) : undefined;
+  const html =
+    resolvedHtml ?? (htmlPart ? decodePartBody(htmlPart) : undefined);
   if (html === undefined || html.length === 0) {
     return new Set();
   }
@@ -327,11 +329,15 @@ export const extractMessageContent = (
 };
 
 export const extractMessageAttachments = (
-  payload: MessagePart | undefined
+  payload: MessagePart | undefined,
+  resolvedHtml?: string
 ): MessageAttachment[] => {
   const attachments: MessageAttachment[] = [];
   const seenAttachments = new Set<string>();
-  const referencedInlineContentIds = extractReferencedInlineContentIds(payload);
+  const referencedInlineContentIds = extractReferencedInlineContentIds(
+    payload,
+    resolvedHtml
+  );
 
   for (const [index, part] of collectParts(payload).entries()) {
     const attachmentId = part.body?.attachmentId?.trim();
@@ -371,11 +377,15 @@ export const extractMessageAttachments = (
 };
 
 export const extractInlineMessageAttachments = (
-  payload: MessagePart | undefined
+  payload: MessagePart | undefined,
+  resolvedHtml?: string
 ): ExtractedInlineMessageAttachment[] => {
   const attachments: ExtractedInlineMessageAttachment[] = [];
   const seenAttachments = new Set<string>();
-  const referencedInlineContentIds = extractReferencedInlineContentIds(payload);
+  const referencedInlineContentIds = extractReferencedInlineContentIds(
+    payload,
+    resolvedHtml
+  );
 
   for (const [index, part] of collectParts(payload).entries()) {
     const attachmentId = part.body?.attachmentId?.trim();

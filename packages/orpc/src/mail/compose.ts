@@ -1,20 +1,22 @@
 import { ORPCError } from "@orpc/server";
+import { db } from "@quieter/database/client";
+import { organizationMailSendIdempotency } from "@quieter/database/schema";
 import {
-  createDraft,
-  deleteDraft,
   extractListUnsubscribeTargets,
   getGmailMessageMetadata,
-  sendDraft as sendGmailDraft,
   sendRawMessage,
 } from "@quieter/gmail";
-import {
-  buildMimeMessage,
-  buildPlainTextMessage,
-} from "@quieter/mail/compose/mime";
+import { buildPlainTextMessage } from "@quieter/mail/compose/mime";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import { reportError } from "@quieter/observability";
+import { and, eq, sql } from "drizzle-orm";
 
-import { saveGmailDraft, sendGmailMessage } from "../gmail-compose";
+import {
+  deleteGmailComposeDraft,
+  getGmailComposeSendStatus,
+  saveGmailDraft,
+  sendGmailMessage,
+} from "../gmail-compose";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
 import { assertAccessibleMailbox } from "../mailbox/service";
@@ -82,10 +84,82 @@ export const composeMailOperations = {
       });
     }
 
-    return await callGmail(context, input.mailboxId, async (accessToken) => {
-      await deleteDraft(accessToken, input.draftId);
-      return { deleted: true };
+    return await callGmail(
+      context,
+      input.mailboxId,
+      async (accessToken) =>
+        await deleteGmailComposeDraft(
+          accessToken,
+          input.mailboxId,
+          input,
+          context.signal
+        )
+    );
+  },
+  getComposeSendStatus: async ({
+    context,
+    input,
+  }: {
+    context: MailRequestContext;
+    input: {
+      mailboxId: string;
+      sendOperationId: string;
+    };
+  }) => {
+    const selectedMailbox = await assertAccessibleMailbox({
+      mailboxId: input.mailboxId,
+      userId: context.userId,
     });
+    if (selectedMailbox.provider !== "managed") {
+      return await callGmail(
+        context,
+        input.mailboxId,
+        async (accessToken) =>
+          await getGmailComposeSendStatus(
+            accessToken,
+            input.mailboxId,
+            input,
+            context.signal
+          )
+      );
+    }
+    const [operation] = await db
+      .select()
+      .from(organizationMailSendIdempotency)
+      .where(
+        and(
+          eq(
+            organizationMailSendIdempotency.organizationId,
+            selectedMailbox.organizationId ?? ""
+          ),
+          sql`${organizationMailSendIdempotency.snapshot}->>'mailboxId' = ${input.mailboxId}`,
+          eq(
+            organizationMailSendIdempotency.idempotencyKey,
+            `compose:${input.mailboxId}:${input.sendOperationId}`
+          )
+        )
+      )
+      .limit(1);
+    if (
+      operation === undefined ||
+      operation.status === "rejected" ||
+      operation.status === "prepared" ||
+      operation.status === "pending"
+    ) {
+      return { status: "rejected" as const };
+    }
+    if (
+      (operation.status === "accepted" || operation.status === "completed") &&
+      operation.response
+    ) {
+      return {
+        id: operation.id,
+        messageId: operation.response.messageId ?? undefined,
+        status: "sent" as const,
+        threadId: operation.snapshot?.threadId ?? operation.id,
+      };
+    }
+    return { status: "pending" as const };
   },
   saveDraft: async ({
     context,
@@ -109,7 +183,12 @@ export const composeMailOperations = {
       context,
       input.mailboxId,
       async (accessToken) =>
-        await saveGmailDraft(accessToken, input.draft, context.signal)
+        await saveGmailDraft(
+          accessToken,
+          input.mailboxId,
+          input.draft,
+          context.signal
+        )
     );
   },
   sendDraft: async ({
@@ -119,48 +198,9 @@ export const composeMailOperations = {
     context: MailRequestContext;
     input: MailInputs["sendDraft"];
   }) =>
-    await callGmail(context, input.mailboxId, async (accessToken) => {
-      const raw = Buffer.from(await buildMimeMessage(input.draft)).toString(
-        "base64url"
-      );
-      let draftId = input.draft.draftId ?? null;
-      if (draftId === null || draftId.length === 0) {
-        const savedDraft = await createDraft(
-          accessToken,
-          raw,
-          input.draft.replyContext?.threadId
-        );
-        draftId = savedDraft.id;
-      }
-
-      if (draftId === null || draftId.length === 0) {
-        throw new ORPCError("INTERNAL_SERVER_ERROR", {
-          message: "Draft could not be saved before send.",
-        });
-      }
-
-      const sent = await sendGmailDraft(
-        accessToken,
-        draftId,
-        raw,
-        input.draft.replyContext?.threadId
-      );
-      await learnAiMemoryFromSentMessage({
-        bodyText: input.draft.bodyText,
-        isReply: !!input.draft.replyContext,
-        mailboxId: input.mailboxId,
-        recipients: [
-          input.draft.recipients.to,
-          input.draft.recipients.cc,
-          input.draft.recipients.bcc,
-        ].join(","),
-        userId: context.userId,
-      }).catch((error: unknown) => {
-        reportError(error, {
-          operation: "Could not record sent-message learning.",
-        });
-      });
-      return sent;
+    await composeMailOperations.sendMessage({
+      context,
+      input: { mailboxId: input.mailboxId, message: input.draft },
     }),
   sendMessage: async ({
     context,
@@ -199,6 +239,7 @@ export const composeMailOperations = {
     return await callGmail(context, input.mailboxId, async (accessToken) => {
       const sent = await sendGmailMessage(
         accessToken,
+        input.mailboxId,
         input.message,
         context.signal
       );

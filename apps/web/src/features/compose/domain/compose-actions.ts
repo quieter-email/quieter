@@ -299,11 +299,23 @@ export const buildComposeDraftFromSavedDraftMessage = (
       mimeType: attachment.mimeType,
       name: attachment.fileName,
       size: attachment.size,
+      sourceMessageId: message.id,
     })),
+    baseRevision: message.baseRevision,
     bodyHtml: message.bodyHtml ?? "",
     bodyText: message.bodyText ?? message.snippet ?? "",
     draftAnchor: message.draftAnchor ?? null,
     draftId: message.draftId,
+    inlineImages: (message.inlineImages ?? []).map((image) => ({
+      contentId: image.contentId,
+      gmailAttachmentId: image.attachmentId,
+      id: crypto.randomUUID(),
+      isInline: true,
+      mimeType: image.mimeType,
+      name: image.fileName,
+      size: image.size,
+      sourceMessageId: message.id,
+    })),
     lastSavedAt: getMessageTimestamp(message) || undefined,
     messageId: message.id,
     recipients: {
@@ -391,6 +403,16 @@ export const buildComposeDraftFromMessageAction = ({
   }
 
   const draft = existingDraft ?? createEmptyComposeDraft();
+  const quotedImages = (message.inlineImages ?? []).map((image) => ({
+    contentId: image.contentId,
+    gmailAttachmentId: image.attachmentId,
+    id: crypto.randomUUID(),
+    isInline: true as const,
+    mimeType: image.mimeType,
+    name: image.fileName,
+    size: image.size,
+    sourceMessageId: message.id,
+  }));
   const replyContext = buildReplyContext(message);
   const draftAnchor = buildDraftAnchor(message, action);
 
@@ -414,6 +436,15 @@ export const buildComposeDraftFromMessageAction = ({
 
     return {
       ...draft,
+      attachments: (message.attachments ?? []).map((attachment) => ({
+        gmailAttachmentId: attachment.attachmentId,
+        id: crypto.randomUUID(),
+        isInline: false,
+        mimeType: attachment.mimeType,
+        name: attachment.fileName,
+        size: attachment.size,
+        sourceMessageId: message.id,
+      })),
       bodyHtml: `<p><br></p><p>---------- Forwarded message ---------</p>${forwardedHeaderHtml}<blockquote>${getMessageBodyHtml(message)}</blockquote>`,
       bodyText: [
         "",
@@ -424,7 +455,8 @@ export const buildComposeDraftFromMessageAction = ({
         getMessageBodyText(message),
       ].join("\n"),
       draftAnchor,
-      replyContext,
+      inlineImages: quotedImages,
+      replyContext: null,
       subject: withSubjectPrefix(message.subject, "Fwd:", /^fwd?:/iu),
     };
   }
@@ -443,6 +475,7 @@ export const buildComposeDraftFromMessageAction = ({
       "\n"
     ),
     draftAnchor,
+    inlineImages: quotedImages,
     recipients,
     replyContext,
     subject: withSubjectPrefix(message.subject, "Re:", /^re:/iu),
