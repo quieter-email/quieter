@@ -810,11 +810,12 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
 
   const composeWorkspace = useMailboxWorkspaceCompose({
     activeMailbox,
-    canComposeNew: mailboxes.some((mailbox) =>
-      (view === "all-inboxes" || mailbox.id === selectedMailboxId) &&
-      mailbox.connectionStatus === "connected" &&
-      mailbox.provider !== "api" &&
-      mailbox.grantRole !== "reader"
+    canComposeNew: mailboxes.some(
+      (mailbox) =>
+        (view === "all-inboxes" || mailbox.id === selectedMailboxId) &&
+        mailbox.connectionStatus === "connected" &&
+        mailbox.provider !== "api" &&
+        mailbox.grantRole !== "reader"
     ),
     isComposeMailbox,
     isSnippetMailbox,

@@ -209,8 +209,6 @@ export const UnifiedInboxPanel = ({
       ? searchDraftState.value
       : searchQuery;
   const normalizedSearch = searchQuery.trim();
-  const sourceKey = (mailboxId: string) =>
-    JSON.stringify([mailboxId, normalizedSearch]);
   const onSourceChange = useCallback(
     (key: string, state: SourceState | null) => {
       setSourceStates((current) => {
@@ -242,7 +240,7 @@ export const UnifiedInboxPanel = ({
   );
   const connectedStates = connectedMailboxes.map((mailbox) => ({
     mailbox,
-    state: sourceStates[sourceKey(mailbox.id)],
+    state: sourceStates[JSON.stringify([mailbox.id, normalizedSearch])],
   }));
   const pending = connectedStates.some(
     ({ state }) => state === undefined || state.isPending
@@ -362,7 +360,10 @@ export const UnifiedInboxPanel = ({
   };
   const retryMailbox = async (mailboxId: string) => {
     try {
-      const result = await sourceStates[sourceKey(mailboxId)]?.refetch();
+      const result =
+        await sourceStates[
+          JSON.stringify([mailboxId, normalizedSearch])
+        ]?.refetch();
       if (
         result !== undefined &&
         result.error !== null &&
@@ -381,7 +382,7 @@ export const UnifiedInboxPanel = ({
       className="flex h-full min-h-0 flex-col bg-bg"
     >
       {connectedMailboxes.map((mailbox) => {
-        const key = sourceKey(mailbox.id);
+        const key = JSON.stringify([mailbox.id, normalizedSearch]);
         return (
           <UnifiedInboxSource
             key={key}

@@ -88,6 +88,7 @@ export type ComposeSurfaceProps = {
   persistDrafts?: boolean;
   senderEmail?: string | null;
   senderMailboxes?: ComposeSenderMailbox[];
+  senderUnavailable?: boolean;
   signature?: { html: string | null; text: string | null };
   variant?: "inline" | "workspace";
 };
@@ -179,6 +180,7 @@ export const ComposeSurface = ({
   persistDrafts = true,
   senderEmail,
   senderMailboxes,
+  senderUnavailable = false,
   signature,
   variant = "workspace",
 }: ComposeSurfaceProps) => {
@@ -257,7 +259,7 @@ export const ComposeSurface = ({
     !switchingSender &&
     !!mailboxId;
   const audioBusy = audioRecorder.isRecording || isTranscribingAudio;
-  const canSubmitCompose = canEditBody && !audioBusy;
+  const canSubmitCompose = canEditBody && !audioBusy && !senderUnavailable;
   const isInline = variant === "inline";
   const currentSender = senderMailboxes?.find(
     (sender) => sender.id === mailboxId
@@ -466,7 +468,9 @@ export const ComposeSurface = ({
     <>
       <form
         action={async () => {
-          await form.handleSubmit();
+          if (canSubmitCompose) {
+            await form.handleSubmit();
+          }
         }}
         className={cn("flex min-h-0 flex-col", className, {
           "h-full flex-1": !isInline,
@@ -927,6 +931,12 @@ export const ComposeSurface = ({
             )}
           </form.Field>
 
+          {senderUnavailable ? (
+            <Text as="div" role="alert" tone="destructive">
+              This sending address is no longer available. You can keep editing,
+              but sending is disabled.
+            </Text>
+          ) : null}
           {state.draft.errorMessage ? (
             <Text
               as="div"
@@ -978,6 +988,11 @@ export const ComposeWorkspace = ({
     draft: initialDraft ?? null,
     mailboxId,
     needsSave: initialDraftNeedsSave,
+    senderEmail:
+      senderMailboxes?.find((sender) => sender.id === mailboxId)
+        ?.emailAddress ??
+      senderEmail ??
+      null,
   }));
   const savedSenderDrafts = useRef(new Map<string, ComposeDraftState>());
   const selectedSender = senderMailboxes?.find(
@@ -1029,11 +1044,17 @@ export const ComposeWorkspace = ({
             mailboxId: nextMailboxId,
             needsSave:
               savedDraft !== undefined || hasComposeDraftContent(transferDraft),
+            senderEmail:
+              senderMailboxes?.find((sender) => sender.id === nextMailboxId)
+                ?.emailAddress ?? null,
           });
         }}
         persistDrafts={persistDrafts}
-        senderEmail={selectedSender?.emailAddress ?? senderEmail}
+        senderEmail={selectedSender?.emailAddress ?? senderSession.senderEmail}
         senderMailboxes={senderMailboxes}
+        senderUnavailable={
+          senderMailboxes !== undefined && selectedSender === undefined
+        }
         signature={
           selectedSender
             ? {
