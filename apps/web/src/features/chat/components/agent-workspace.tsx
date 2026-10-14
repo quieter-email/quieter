@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 
 import type { ComposeFormValues } from "#/features/compose/domain/compose-form";
@@ -32,13 +32,36 @@ type ComposeBridge = {
   edit: (values: Partial<ComposeFormValues>, revision: number) => void;
 };
 
-const createWorkspaceBridge = () => {
-  const control = createForegroundControl();
+const createWorkspaceBridge = (mailboxId: string) => {
+  const foregroundControl = createForegroundControl();
+  let disposed = false;
+  const control = {
+    ...foregroundControl,
+    begin() {
+      if (disposed) {
+        throw new Error("The request was stopped.");
+      }
+      return foregroundControl.begin();
+    },
+    isCurrent(generation: number) {
+      return !disposed && foregroundControl.isCurrent(generation);
+    },
+  };
   let compose: ComposeBridge | null = null;
   let onComposeReady: (() => void) | undefined;
   return {
+    activate() {
+      disposed = false;
+    },
     control,
-    getCompose: () => compose,
+    dispose() {
+      disposed = true;
+      foregroundControl.cancel();
+      compose = null;
+      onComposeReady?.();
+    },
+    getCompose: () => (disposed ? null : compose),
+    mailboxId,
     registerCompose(bridge: ComposeBridge) {
       compose = bridge;
       onComposeReady?.();
@@ -80,8 +103,10 @@ const createWorkspaceBridge = () => {
   };
 };
 
-export type WorkspaceBridge = ReturnType<typeof createWorkspaceBridge> & {
-  mailboxId: string;
+export type WorkspaceBridge = Omit<
+  ReturnType<typeof createWorkspaceBridge>,
+  "activate" | "dispose"
+> & {
   read: () => {
     generation: number;
     mailboxId: string;
@@ -134,125 +159,151 @@ export const AgentWorkspaceProvider = ({
 }: {
   children: ReactNode;
   mailboxId: string;
-  onComposeDraftRequested: (draft: ComposeDraftState) => void;
+  onComposeDraftRequested: (
+    draft: ComposeDraftState,
+    mailboxId?: string
+  ) => void;
 }) => {
   const route = useMailboxRouteSearch();
   const current = useRef({ onComposeDraftRequested, route });
+  const activeMailboxId = useRef(mailboxId);
   useLayoutEffect(() => {
+    activeMailboxId.current = mailboxId;
     current.current = { onComposeDraftRequested, route };
   });
-  // oxlint-disable-next-line react/hook-use-state -- The mailbox owns one controller instance for its lifetime.
-  const [bridge] = useState(createWorkspaceBridge);
-  // oxlint-disable-next-line react/hook-use-state -- Keep command registrations stable across route changes.
-  const [workspace] = useState<WorkspaceBridge>(() => ({
-    ...bridge,
-    mailboxId,
-    async navigate(input, generation) {
-      if (!bridge.control.isCurrent(generation)) {
-        throw new Error("The request was stopped.");
-      }
-      const { view } = input;
-      if (
-        view !== undefined &&
-        ![
-          "inbox",
-          "unread",
-          "archive",
-          "spam",
-          "sent",
-          "trash",
-          "drafts",
-          "snippets",
-          "labels",
-        ].includes(view)
-      ) {
-        throw new Error("This view is not available.");
-      }
-      await current.current.route.setMailboxSearch({
-        ...(view === undefined
-          ? {}
-          : { view: view === "labels" ? "labels" : "inbox" }),
-        ...(view === "inbox" ||
-        view === "unread" ||
-        view === "archive" ||
-        view === "spam" ||
-        view === "sent" ||
-        view === "trash" ||
-        view === "drafts" ||
-        view === "snippets"
-          ? { mailbox: view }
-          : {}),
-        messageId: input.messageId ?? (view === undefined ? undefined : null),
-        query: input.query ?? (view === undefined ? undefined : null),
-        threadId: input.threadId ?? (view === undefined ? undefined : null),
-      });
-    },
-    async openCompose(input, generation) {
-      if (!bridge.control.isCurrent(generation)) {
-        throw new Error("The request was stopped.");
-      }
-      if (bridge.getCompose() || current.current.route.isComposeMailbox) {
-        throw new Error(
-          "A draft is already open. Edit that draft or let the user close it first."
+  const bridge = useMemo(() => createWorkspaceBridge(mailboxId), [mailboxId]);
+  useLayoutEffect(() => {
+    bridge.activate();
+    return () => {
+      bridge.dispose();
+    };
+  }, [bridge]);
+  const workspace = useMemo<WorkspaceBridge>(
+    () => ({
+      ...bridge,
+      async navigate(input, generation) {
+        if (
+          activeMailboxId.current !== mailboxId ||
+          !bridge.control.isCurrent(generation)
+        ) {
+          throw new Error("The request was stopped.");
+        }
+        const { view } = input;
+        if (
+          view !== undefined &&
+          ![
+            "inbox",
+            "unread",
+            "archive",
+            "spam",
+            "sent",
+            "trash",
+            "drafts",
+            "snippets",
+            "labels",
+          ].includes(view)
+        ) {
+          throw new Error("This view is not available.");
+        }
+        await current.current.route.setMailboxSearch({
+          ...(view === undefined
+            ? {}
+            : { view: view === "labels" ? "labels" : "inbox" }),
+          ...(view === "inbox" ||
+          view === "unread" ||
+          view === "archive" ||
+          view === "spam" ||
+          view === "sent" ||
+          view === "trash" ||
+          view === "drafts" ||
+          view === "snippets"
+            ? { mailbox: view }
+            : {}),
+          messageId: input.messageId ?? (view === undefined ? undefined : null),
+          query: input.query ?? (view === undefined ? undefined : null),
+          threadId: input.threadId ?? (view === undefined ? undefined : null),
+        });
+      },
+      async openCompose(input, generation) {
+        if (
+          activeMailboxId.current !== mailboxId ||
+          !bridge.control.isCurrent(generation)
+        ) {
+          throw new Error("The request was stopped.");
+        }
+        if (bridge.getCompose() || current.current.route.isComposeMailbox) {
+          throw new Error(
+            "A draft is already open. Edit that draft or let the user close it first."
+          );
+        }
+        const draft = createEmptyComposeDraft();
+        current.current.onComposeDraftRequested(
+          {
+            ...draft,
+            assistantUnsaved: true,
+            bodyHtml: textToComposeBodyHtml(input.bodyText ?? ""),
+            bodyText: input.bodyText ?? "",
+            recipients: {
+              bcc: input.bcc ?? "",
+              cc: input.cc ?? "",
+              to: input.to ?? "",
+            },
+            subject: input.subject ?? "",
+          },
+          mailboxId
         );
-      }
-      const draft = createEmptyComposeDraft();
-      current.current.onComposeDraftRequested({
-        ...draft,
-        assistantUnsaved: true,
-        bodyHtml: textToComposeBodyHtml(input.bodyText ?? ""),
-        bodyText: input.bodyText ?? "",
-        recipients: {
-          bcc: input.bcc ?? "",
-          cc: input.cc ?? "",
-          to: input.to ?? "",
-        },
-        subject: input.subject ?? "",
-      });
-      const mounted = await bridge.waitForCompose(draft.localId, generation);
-      return { draftId: mounted.draftId, draftRevision: mounted.draftRevision };
-    },
-    read() {
-      const selected = current.current.route;
-      const draft = bridge.getCompose()?.read();
-      let view: string = selected.activeMailbox;
-      if (selected.isComposeMailbox) {
-        view = "compose";
-      } else if (selected.isSnippetMailbox) {
-        view = "snippets";
-      } else if (selected.view === "labels") {
-        view = "labels";
-      }
-      return {
-        generation: bridge.control.state.get().generation,
-        mailboxId,
-        query: selected.query,
-        selectedMessageId: selected.messageId,
-        selectedThreadId: selected.threadId,
-        view,
-        ...(draft
-          ? {
-              draft: {
-                attachments: draft.attachments,
-                bcc: draft.values.bcc,
-                bodyHtml: draft.values.bodyHtml,
-                bodyText: draft.values.bodyText,
-                cc: draft.values.cc,
+        const mounted = await bridge.waitForCompose(draft.localId, generation);
+        return {
+          draftId: mounted.draftId,
+          draftRevision: mounted.draftRevision,
+        };
+      },
+      read() {
+        if (activeMailboxId.current !== mailboxId) {
+          throw new Error("The request was stopped.");
+        }
+        const selected = current.current.route;
+        const draft = bridge.getCompose()?.read();
+        let view: string = selected.activeMailbox;
+        if (selected.isComposeMailbox) {
+          view = "compose";
+        } else if (selected.isSnippetMailbox) {
+          view = "snippets";
+        } else if (selected.view === "labels") {
+          view = "labels";
+        }
+        return {
+          generation: bridge.control.state.get().generation,
+          mailboxId,
+          query: selected.query,
+          selectedMessageId: selected.messageId,
+          selectedThreadId: selected.threadId,
+          view,
+          ...(draft
+            ? {
+                draft: {
+                  attachments: draft.attachments,
+                  bcc: draft.values.bcc,
+                  bodyHtml: draft.values.bodyHtml,
+                  bodyText: draft.values.bodyText,
+                  cc: draft.values.cc,
+                  draftId: draft.draftId,
+                  draftRevision: draft.draftRevision,
+                  inlineImages: draft.inlineImages,
+                  providerDraftId: draft.providerDraftId,
+                  replyContext: draft.replyContext,
+                  subject: draft.values.subject,
+                  to: draft.values.to,
+                },
                 draftId: draft.draftId,
                 draftRevision: draft.draftRevision,
-                inlineImages: draft.inlineImages,
-                providerDraftId: draft.providerDraftId,
-                replyContext: draft.replyContext,
-                subject: draft.values.subject,
-                to: draft.values.to,
-              },
-              draftId: draft.draftId,
-              draftRevision: draft.draftRevision,
-            }
-          : {}),
-      };
-    },
-  }));
+              }
+            : {}),
+        };
+      },
+    }),
+    [bridge, mailboxId]
+  );
 
   useEffect(() => {
     const takeOver = (event: Event) => {

@@ -1,13 +1,10 @@
 "use client";
 
 import { parseNaturalLanguageMailSearch } from "@quieter/mail/natural-language-search";
-import {
-  getSupportedMailSearchFilterTypes,
-  isMailSearchFilterSupported,
-} from "@quieter/mail/search";
+import { isMailSearchFilterSupported } from "@quieter/mail/search";
 import { toast } from "@quieter/ui/toast";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   useEffect,
   useEffectEvent,
@@ -71,18 +68,6 @@ const initialSearchOverlayState: SearchOverlayState = {
   isDropdownOpen: false,
 };
 
-const isAvailableFilterOption = (
-  option: (typeof searchFilterOptions)[number],
-  supportedFilterTypes: ReadonlySet<string>,
-  mailboxProvider: MessageListSearchProps["mailboxProvider"]
-) =>
-  supportedFilterTypes.has(option.filter.type) &&
-  !(
-    mailboxProvider === "gmail" &&
-    option.filter.type === "is" &&
-    ["inbound", "outbound"].includes(option.filter.value)
-  );
-
 const getActiveDraftState = (
   draftState: DraftSearchState | null,
   committedSearchQuery: string,
@@ -124,6 +109,7 @@ export const useMessageListSearchController = ({
   onScrollToTop,
   onSearch,
   searchQuery,
+  searchMailboxes,
 }: MessageListSearchProps) => {
   const fieldRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
@@ -197,20 +183,66 @@ export const useMessageListSearchController = ({
     textInputIndex ?? currentState.filters.length,
     currentState.filters.length
   );
-  const {
-    data: labelsData,
-    error: labelsError,
-    isPending: isLabelsPending,
-  } = useQuery(labelsQueryOptions(mailboxId, isDropdownOpen));
-  const userLabels = getUserLabels(labelsData ?? []);
+  const labelSources = new Map<
+    string,
+    MessageListSearchProps["mailboxProvider"]
+  >();
+  if (searchMailboxes === undefined) {
+    labelSources.set(mailboxId, mailboxProvider);
+  } else {
+    for (const source of searchMailboxes) {
+      labelSources.set(source.mailboxId, source.mailboxProvider);
+    }
+  }
+  const labelSourceIds = [...labelSources]
+    .filter(
+      ([sourceMailboxId, provider]) =>
+        sourceMailboxId.trim() !== "" && provider !== "api"
+    )
+    .map(([sourceMailboxId]) => sourceMailboxId)
+    .toSorted();
+  const labelQueries = useQueries({
+    queries: labelSourceIds.map((sourceMailboxId) =>
+      labelsQueryOptions(sourceMailboxId, isDropdownOpen)
+    ),
+  });
+  const labelsError = labelQueries.find((query) => query.isError)?.error;
+  const isLabelsPending = labelQueries.some((query) => query.isPending);
+  const labelsByName = new Map<
+    string,
+    ReturnType<typeof getUserLabels>[number]
+  >();
+  for (const query of labelQueries) {
+    for (const label of getUserLabels(query.data ?? []).toSorted(
+      (left, right) => left.name.localeCompare(right.name)
+    )) {
+      const key = normalizeLabelSelectionKey(label.name);
+      if (key !== "" && !labelsByName.has(key)) {
+        labelsByName.set(
+          key,
+          searchMailboxes === undefined ? label : { ...label, id: label.name }
+        );
+      }
+    }
+  }
+  const userLabels = [...labelsByName.values()].toSorted((left, right) =>
+    left.name.localeCompare(right.name)
+  );
   const activeDateFilter =
     activeDateFilterIndex === null
       ? null
       : (currentState.filters[activeDateFilterIndex] ?? null);
-  const supportedFilterTypes =
-    getSupportedMailSearchFilterTypes(mailboxProvider);
+  const searchProviders = [
+    ...new Set(
+      searchMailboxes && searchMailboxes.length > 0
+        ? searchMailboxes.map((source) => source.mailboxProvider)
+        : [mailboxProvider]
+    ),
+  ];
   const availableFilterOptions = searchFilterOptions.filter((option) =>
-    isAvailableFilterOption(option, supportedFilterTypes, mailboxProvider)
+    searchProviders.every((provider) =>
+      isMailSearchFilterSupported(provider, option.filter)
+    )
   );
 
   const openDropdown = (preserveHighlight = false) => {
@@ -451,11 +483,30 @@ export const useMessageListSearchController = ({
     closeAfterCommit = false,
     { refreshIfUnchanged = false }: { refreshIfUnchanged?: boolean } = {}
   ) => {
+    if (
+      searchMailboxes !== undefined &&
+      parseStructuredSearchQuery(
+        serializeStructuredSearchState(nextState)
+      ).filters.some(
+        (filter) =>
+          filter.value.trim().length > 0 &&
+          searchProviders.some(
+            (provider) => !isMailSearchFilterSupported(provider, filter)
+          )
+      )
+    ) {
+      toast.message(
+        "Some search filters are unavailable for the selected inboxes."
+      );
+      return;
+    }
     const normalizedState = {
       filters: nextState.filters.filter(
         (filter) =>
           filter.value.trim().length > 0 &&
-          isMailSearchFilterSupported(mailboxProvider, filter)
+          searchProviders.every((provider) =>
+            isMailSearchFilterSupported(provider, filter)
+          )
       ),
       text: normalizeSearchText(nextState.text),
     };
@@ -582,7 +633,7 @@ export const useMessageListSearchController = ({
         handleFilterSelection(option.filter);
       },
     })),
-    ...(isLabelsPending || labelsError
+    ...(userLabels.length === 0 && (isLabelsPending || labelsError)
       ? []
       : userLabels.map((label) => ({
           key: `label:${normalizeLabelSelectionKey(label.name)}`,
@@ -1098,9 +1149,12 @@ export const useMessageListSearchController = ({
     interpretNaturalLanguage,
     isDropdownOpen,
     isInterpretingSearch: interpretMutation.isPending,
-    isLoadingLabels: isLabelsPending,
+    isLoadingLabels: isLabelsPending && userLabels.length === 0,
     isRefreshing,
-    labelsErrorMessage: isLabelsPending ? null : (labelsError?.message ?? null),
+    labelsErrorMessage:
+      isLabelsPending || userLabels.length > 0
+        ? null
+        : (labelsError?.message ?? null),
     onRefresh,
     onScrollToTop,
     openDateFilter,
@@ -1118,7 +1172,7 @@ export const useMessageListSearchController = ({
     toggleLabelToken,
     updateFilterValue,
     updateSearchText,
-    userLabels: isLabelsPending ? [] : userLabels,
+    userLabels,
   };
 };
 

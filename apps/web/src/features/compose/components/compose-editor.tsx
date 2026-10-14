@@ -663,7 +663,7 @@ export const ComposeEditorToolbar = ({
         "w-full min-w-0 shrink-0 rounded-md border-border bg-control",
         {
           // oxlint-disable-next-line shadcn/no-restyle -- Composer footer keeps its attached-bar metrics.
-          "min-h-12 gap-1.5 rounded-none border-0 border-t border-border bg-control px-3 py-2 shadow-none":
+          "min-h-12 gap-1.5 rounded-none border-0 border-t border-border bg-control px-3 py-2 shadow-none @max-2xl:flex-wrap":
             chrome === "footer",
         },
         className
@@ -672,26 +672,34 @@ export const ComposeEditorToolbar = ({
       {leading === undefined ? null : (
         <div className="flex shrink-0 items-center">{leading}</div>
       )}
-      {formattingControls}
-      <ToolbarSeparator />
-      {historyControls}
-      {onCreateSnippet && toolbarState?.selectedText.trim() ? (
-        <IconButtonTooltip label="Save selected text as a snippet">
-          <ToolbarButton
-            disabled={disabled}
-            onClick={() => {
-              onCreateSnippet(toolbarState.selectedText);
-            }}
-            onMouseDown={(event) => {
-              event.preventDefault();
-            }}
-            type="button"
-          >
-            <HugeiconsIcon icon={NoteIcon} />
-            Save snippet
-          </ToolbarButton>
-        </IconButtonTooltip>
-      ) : null}
+      <div
+        className={cn({
+          contents: chrome === "default",
+          "flex min-w-0 shrink-0 items-center gap-1 @max-2xl:order-last @max-2xl:w-full @max-2xl:overflow-x-auto [&>*]:shrink-0":
+            chrome === "footer",
+        })}
+      >
+        {formattingControls}
+        <ToolbarSeparator />
+        {historyControls}
+        {onCreateSnippet && toolbarState?.selectedText.trim() ? (
+          <IconButtonTooltip label="Save selected text as a snippet">
+            <ToolbarButton
+              disabled={disabled}
+              onClick={() => {
+                onCreateSnippet(toolbarState.selectedText);
+              }}
+              onMouseDown={(event) => {
+                event.preventDefault();
+              }}
+              type="button"
+            >
+              <HugeiconsIcon icon={NoteIcon} />
+              Save snippet
+            </ToolbarButton>
+          </IconButtonTooltip>
+        ) : null}
+      </div>
       {trailing === undefined ? null : (
         <div className="ml-auto flex min-w-0 items-center gap-1">
           {trailing}

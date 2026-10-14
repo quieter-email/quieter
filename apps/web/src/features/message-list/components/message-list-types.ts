@@ -1,4 +1,5 @@
 import type { IconSvgElement } from "@hugeicons/react";
+import type { ReactNode } from "react";
 
 import type {
   MailboxActions,
@@ -19,6 +20,18 @@ export type ThreadPressGesture = {
   range: boolean;
 };
 
+export type MessageListMailboxContext = {
+  badge: ReactNode;
+  emailAddress: string;
+  displayName?: string | null;
+  mailboxActions: MailboxActions;
+  mailboxId: string;
+  mailboxProvider: "api" | "gmail" | "managed";
+  originalMessageIds: ReadonlyMap<string, string>;
+  originalThreadId: string;
+  pendingActions: MailboxPendingActions;
+};
+
 export type MessageListProps = {
   activeMailbox: MailboxCategory;
   activeMessageId?: string | null;
@@ -26,12 +39,15 @@ export type MessageListProps = {
   mailboxProvider: "api" | "gmail" | "managed";
   error: unknown;
   hasNextPage: boolean;
+  headerAddon?: ReactNode;
   isError: boolean;
   isFetchingNextPage: boolean;
   isPending: boolean;
   isRefreshing: boolean;
   mailboxActions: MailboxActions;
+  mailboxContextsByThreadId?: ReadonlyMap<string, MessageListMailboxContext>;
   messages: ListMessagesPageResult[];
+  listNotices?: ReactNode;
   onActivateMessage: (messageId: string, threadId?: string | null) => void;
   /** Plain row click on the already-open thread closes the reading pane (same as back). */
   onDeactivateActiveMessage: () => void;
@@ -43,6 +59,11 @@ export type MessageListProps = {
   onSearch: (query: string) => void;
   pendingActions: MailboxPendingActions;
   searchQuery: string;
+  searchMailboxes?: readonly {
+    mailboxId: string;
+    mailboxProvider: "gmail" | "managed";
+  }[];
+  selectionScopeKey?: string;
 };
 
 export type MessageListBulkLabels = {

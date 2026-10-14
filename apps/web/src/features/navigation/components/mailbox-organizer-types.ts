@@ -8,7 +8,10 @@ import type {
 export type MailboxOrganizerProps = {
   canManage: boolean;
   mailboxId: string;
+  onOpenChange?: (open: boolean) => void;
+  open?: boolean;
   searchQuery: string;
+  showTrigger?: boolean;
 };
 
 export type PendingRowAction = "backfill" | "delete" | "update";

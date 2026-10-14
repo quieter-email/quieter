@@ -283,16 +283,21 @@ export const appendComposeSignature = (
 ): ComposeDraftState => {
   const html = signature.html?.trim();
   const text = signature.text?.trim();
+  const authoredHtml = draft.bodyHtml.trim()
+    ? draft.bodyHtml
+    : textToComposeBodyHtml(draft.bodyText);
   if (!html && !text) {
-    return draft;
+    return authoredHtml === draft.bodyHtml
+      ? draft
+      : { ...draft, bodyHtml: authoredHtml };
   }
   if (draft.bodyHtml.includes(COMPOSE_SIGNATURE_MARKER)) {
     return draft;
   }
 
   const signatureHtml = `<div ${COMPOSE_SIGNATURE_MARKER}="true"><br>${html || textToComposeBodyHtml(text ?? "")}</div>`;
-  const nextHtml = draft.bodyHtml.trim()
-    ? `${draft.bodyHtml}${signatureHtml}`
+  const nextHtml = authoredHtml.trim()
+    ? `${authoredHtml}${signatureHtml}`
     : signatureHtml.replace("<br>", "");
   const signatureText = text || htmlToText(html ?? "");
   const nextText = draft.bodyText.trim()

@@ -76,6 +76,8 @@ type MailboxDefaultButtonProps = {
 };
 
 type MailboxSwitcherDropdownProps = {
+  allInboxesActive?: boolean;
+  onSelectAllInboxes?: () => void;
   defaultMailboxId: string | null;
   embedded?: boolean;
   groups: MailboxSwitcherGroup[];
@@ -643,6 +645,8 @@ const getFocusedNavigationItem = (
 };
 
 export const MailboxSwitcherDropdown = ({
+  allInboxesActive = false,
+  onSelectAllInboxes,
   defaultMailboxId,
   embedded = false,
   groups,
@@ -824,10 +828,12 @@ export const MailboxSwitcherDropdown = ({
               }}
             >
               <p className="truncate text-body-sm/5 font-medium tracking-tight text-fg">
-                {primaryLabel}
+                {allInboxesActive ? "All inboxes" : primaryLabel}
               </p>
               <p className="mt-1 truncate text-caption text-muted-fg">
-                {secondaryLabel}
+                {allInboxesActive
+                  ? "Your selected inboxes, together"
+                  : secondaryLabel}
               </p>
             </m.div>
           </AnimatePresence>
@@ -849,6 +855,22 @@ export const MailboxSwitcherDropdown = ({
             >
               {mailboxes.length > 0 ? (
                 <>
+                  {onSelectAllInboxes &&
+                  mailboxes.some((mailbox) => mailbox.provider !== "api") ? (
+                    <Button
+                      aria-current={allInboxesActive ? "page" : undefined}
+                      className="w-full justify-start"
+                      data-mailbox-switcher-navigation-item
+                      onClick={() => {
+                        onSelectAllInboxes();
+                        setIsOpen(false);
+                      }}
+                      variant="ghost"
+                    >
+                      <HugeiconsIcon aria-hidden icon={Mail01Icon} />
+                      All inboxes
+                    </Button>
+                  ) : null}
                   {(mailboxes.length >= 8 || isFiltering) && (
                     <div className="sticky top-0 z-10 bg-popover p-1">
                       <Input
@@ -898,6 +920,7 @@ export const MailboxSwitcherDropdown = ({
                             >
                               {(mailbox, mailboxIndex) => {
                                 const isActive =
+                                  !allInboxesActive &&
                                   mailbox.id === selectedMailboxId;
                                 const isDefault =
                                   mailbox.id === defaultMailboxId;

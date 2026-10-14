@@ -136,23 +136,43 @@ type MailboxProvider = "api" | "gmail" | "managed" | null;
 
 const useMailboxWorkspaceCompose = ({
   activeMailbox,
+  canComposeNew,
+  newComposeMailboxId,
   selectedMailboxId,
   isComposeMailbox,
   isSnippetMailbox,
+  view,
   setMailboxSearch,
 }: {
   activeMailbox: MailboxCategory;
+  canComposeNew: boolean;
+  newComposeMailboxId: string | null;
   selectedMailboxId: string | null;
   isComposeMailbox: boolean;
   isSnippetMailbox: boolean;
+  view: MailboxWorkspaceView;
   setMailboxSearch: SetMailboxSearch;
 }) => {
   const [composeSession, setComposeSession] = useState<{
     key: number;
     draft: ComposeDraftState | null;
     mailboxId: string | null;
-  }>({ draft: null, key: 0, mailboxId: selectedMailboxId });
-  if (composeSession.mailboxId !== selectedMailboxId) {
+  }>({
+    draft: null,
+    key: 0,
+    mailboxId: selectedMailboxId,
+  });
+  const [switchingSenderTo, setSwitchingSenderTo] = useState<string | null>(
+    null
+  );
+  if (switchingSenderTo !== null && selectedMailboxId === switchingSenderTo) {
+    setSwitchingSenderTo(null);
+  }
+  if (
+    isComposeMailbox &&
+    switchingSenderTo === null &&
+    composeSession.mailboxId !== selectedMailboxId
+  ) {
     setComposeSession({
       draft: null,
       key: composeSession.key + 1,
@@ -162,8 +182,11 @@ const useMailboxWorkspaceCompose = ({
   const composeReturnMailboxRef = useRef<MailboxCategory>("inbox");
   const launchedMailtoRef = useRef<string | null>(null);
 
-  const openComposeWorkspace = (draft: ComposeDraftState | null) => {
-    if (isComposeMailbox) {
+  const openComposeWorkspace = (
+    draft: ComposeDraftState | null,
+    draftMailboxId = selectedMailboxId
+  ) => {
+    if (isComposeMailbox || (draft === null && !canComposeNew)) {
       return;
     }
     void loadComposeWorkspace();
@@ -172,17 +195,50 @@ const useMailboxWorkspaceCompose = ({
         ? composeReturnMailboxRef.current
         : activeMailbox;
     composeReturnMailboxRef.current = returnMailbox;
+    const nextMailboxId =
+      draft === null && view === "all-inboxes"
+        ? newComposeMailboxId
+        : draftMailboxId;
     setComposeSession((session) => ({
       draft,
       key: session.key + 1,
-      mailboxId: selectedMailboxId,
+      mailboxId: nextMailboxId,
     }));
     void setMailboxSearch({
       mailbox: "compose",
+      mailboxId: nextMailboxId,
       messageId: null,
       threadId: null,
-      view: "inbox",
+      view: view === "all-inboxes" ? "all-inboxes" : "inbox",
     });
+  };
+
+  const switchComposeSenderMailbox = async (nextMailboxId: string) => {
+    if (!isComposeMailbox || nextMailboxId === selectedMailboxId) {
+      return;
+    }
+    const previousMailboxId = composeSession.mailboxId;
+    setSwitchingSenderTo(nextMailboxId);
+    setComposeSession((session) => ({
+      ...session,
+      mailboxId: nextMailboxId,
+    }));
+    try {
+      await setMailboxSearch({
+        chatId: null,
+        mailboxId: nextMailboxId,
+        messageId: null,
+        query: null,
+        threadId: null,
+      });
+    } catch (error) {
+      setComposeSession((session) => ({
+        ...session,
+        mailboxId: previousMailboxId,
+      }));
+      setSwitchingSenderTo(null);
+      throw error;
+    }
   };
 
   const closeComposeWorkspace = () => {
@@ -190,7 +246,7 @@ const useMailboxWorkspaceCompose = ({
       mailbox: composeReturnMailboxRef.current,
       messageId: null,
       threadId: null,
-      view: "inbox",
+      view: view === "all-inboxes" ? "all-inboxes" : "inbox",
     });
   };
 
@@ -199,6 +255,7 @@ const useMailboxWorkspaceCompose = ({
     composeSession,
     launchedMailtoRef,
     openComposeWorkspace,
+    switchComposeSenderMailbox,
   };
 };
 
@@ -213,6 +270,7 @@ const useMailboxWorkspaceRouteEffects = ({
   isWorkspaceReady,
   launchedMailtoRef,
   mailboxId,
+  mailboxes,
   mailto,
   mailboxesPending,
   openComposeWorkspace,
@@ -220,6 +278,7 @@ const useMailboxWorkspaceRouteEffects = ({
   selectedMailboxId,
   selectedMailboxProvider,
   setMailboxSearch,
+  view,
 }: {
   activeMailbox: MailboxCategory;
   chatId: string | null | undefined;
@@ -231,6 +290,7 @@ const useMailboxWorkspaceRouteEffects = ({
   isWorkspaceReady: boolean;
   launchedMailtoRef: { current: string | null };
   mailboxId: string | null | undefined;
+  mailboxes: ReturnType<typeof useMailboxSelection>["mailboxes"];
   mailto: string | null | undefined;
   mailboxesPending: boolean;
   openComposeWorkspace: (draft: ComposeDraftState | null) => void;
@@ -238,6 +298,7 @@ const useMailboxWorkspaceRouteEffects = ({
   selectedMailboxId: string | null;
   selectedMailboxProvider: MailboxProvider;
   setMailboxSearch: SetMailboxSearch;
+  view: MailboxWorkspaceView;
 }) => {
   useEffect((): (() => void) | undefined => {
     if (!isCompletingGmailConnection) {
@@ -276,22 +337,30 @@ const useMailboxWorkspaceRouteEffects = ({
       trimmedMailboxId === undefined || trimmedMailboxId === ""
         ? null
         : trimmedMailboxId;
-    if (normalizedMailboxId === selectedMailboxId) {
+    const nextMailboxId =
+      view === "all-inboxes" && selectedMailboxProvider === "api"
+        ? (mailboxes.find((mailbox) => mailbox.provider !== "api")?.id ??
+          selectedMailboxId)
+        : selectedMailboxId;
+    if (normalizedMailboxId === nextMailboxId) {
       return;
     }
 
     void setMailboxSearch({
       chatId: null,
-      mailboxId: selectedMailboxId,
+      mailboxId: nextMailboxId,
       messageId: null,
     });
   }, [
     isCompletingGmailConnection,
     isSandboxMode,
     mailboxId,
+    mailboxes,
     mailboxesPending,
     selectedMailboxId,
+    selectedMailboxProvider,
     setMailboxSearch,
+    view,
   ]);
 
   useLayoutEffect(() => {
@@ -301,7 +370,7 @@ const useMailboxWorkspaceRouteEffects = ({
   }, [chatId, selectedMailboxProvider, setMailboxSearch]);
 
   useLayoutEffect(() => {
-    if (isComposeMailbox || isSnippetMailbox) {
+    if (isComposeMailbox || isSnippetMailbox || view === "all-inboxes") {
       return;
     }
     if (isMailboxSupportedByProvider(selectedMailboxProvider, activeMailbox)) {
@@ -318,6 +387,7 @@ const useMailboxWorkspaceRouteEffects = ({
     isSnippetMailbox,
     selectedMailboxProvider,
     setMailboxSearch,
+    view,
   ]);
 
   useLayoutEffect(() => {
@@ -425,14 +495,28 @@ const useMailboxWorkspaceActions = ({
     ) {
       return;
     }
-    void setMailboxSearch({ mailbox, messageId: null, view: "inbox" });
+    void setMailboxSearch({
+      mailbox,
+      messageId: null,
+      view: view === "all-inboxes" ? "all-inboxes" : "inbox",
+    });
   };
 
   const selectView = (nextView: MailboxWorkspaceView) => {
-    if (nextView === view) {
+    if (nextView === view && !isComposeMailbox && !isSnippetMailbox) {
       return;
     }
-    void setMailboxSearch({ view: nextView });
+    void setMailboxSearch({
+      mailbox: nextView === "all-inboxes" ? "inbox" : undefined,
+      mailboxId:
+        nextView === "all-inboxes" && selectedMailboxProvider === "api"
+          ? (mailboxes.find((mailbox) => mailbox.provider !== "api")?.id ??
+            selectedMailboxId)
+          : undefined,
+      messageId: null,
+      query: null,
+      view: nextView,
+    });
   };
 
   const selectMailboxFromHotkey = (mailbox: MailboxCategory) => {
@@ -498,20 +582,29 @@ const useMailboxWorkspaceActions = ({
   };
 
   const selectMailboxId = (nextMailboxId: string) => {
-    if (nextMailboxId === selectedMailboxId) {
+    if (nextMailboxId === selectedMailboxId && view !== "all-inboxes") {
       return;
     }
     const nextMailboxProvider = mailboxes.find(
       (availableMailbox) => availableMailbox.id === nextMailboxId
     )?.provider;
+    let nextMailboxCategory: MailboxCategory | undefined;
+    if (nextMailboxProvider === "api") {
+      nextMailboxCategory = "sent";
+    } else if (view === "all-inboxes") {
+      nextMailboxCategory = "inbox";
+    }
     setDraftChatKey(crypto.randomUUID());
     void setMailboxSearch({
       chatId: null,
-      mailbox: nextMailboxProvider === "api" ? "sent" : undefined,
+      mailbox: nextMailboxCategory,
       mailboxId: nextMailboxId,
       messageId: null,
       query: nextMailboxProvider === selectedMailboxProvider ? undefined : null,
-      view: nextMailboxProvider === "api" ? "inbox" : undefined,
+      view:
+        nextMailboxProvider === "api" || view === "all-inboxes"
+          ? "inbox"
+          : undefined,
     });
   };
 
@@ -543,6 +636,9 @@ const useMailboxWorkspaceActions = ({
     manageSnippets,
     reconnectMailbox,
     reconnectingMailboxId: startingReconnectMailboxId,
+    resetDraftChatKey: () => {
+      setDraftChatKey(crypto.randomUUID());
+    },
     selectChat,
     selectMailbox,
     selectMailboxFromHotkey,
@@ -784,13 +880,29 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
   const isWorkspaceReady =
     isSandboxMode ||
     (!mailboxesQuery.isPending && !isCompletingGmailConnection);
-
+  const writableMailboxes = mailboxes.filter(
+    (mailbox) =>
+      mailbox.connectionStatus === "connected" &&
+      mailbox.provider !== "api" &&
+      mailbox.grantRole !== "reader"
+  );
+  const newComposeMailboxId =
+    writableMailboxes.find((mailbox) => mailbox.id === selectedMailboxId)?.id ??
+    writableMailboxes[0]?.id ??
+    null;
   const composeWorkspace = useMailboxWorkspaceCompose({
     activeMailbox,
+    canComposeNew:
+      view === "all-inboxes"
+        ? writableMailboxes.length > 0
+        : newComposeMailboxId !== null &&
+          newComposeMailboxId === selectedMailboxId,
     isComposeMailbox,
     isSnippetMailbox,
+    newComposeMailboxId,
     selectedMailboxId,
     setMailboxSearch,
+    view,
   });
   const chatActions = useChatActions({
     activeChatId: chatId,
@@ -823,6 +935,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     isWorkspaceReady,
     launchedMailtoRef: composeWorkspace.launchedMailtoRef,
     mailboxId,
+    mailboxes,
     mailboxesPending: mailboxesQuery.isPending,
     mailto,
     openComposeWorkspace: composeWorkspace.openComposeWorkspace,
@@ -830,6 +943,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     selectedMailboxId,
     selectedMailboxProvider,
     setMailboxSearch,
+    view,
   });
 
   useMailboxWorkspaceHotkeys({
@@ -867,6 +981,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
 
   return (
     <MailboxWorkspaceBody
+      userId={_user.id ?? _user.email ?? "preview"}
       activeMailbox={activeMailbox}
       chatId={chatId ?? null}
       composeSession={composeWorkspace.composeSession}
@@ -882,6 +997,10 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
       mailboxGroups={mailboxGroups}
       messageId={messageId}
       onCloseCompose={handleCloseComposeWorkspace}
+      onComposeSenderSwitch={async (nextMailboxId) => {
+        await composeWorkspace.switchComposeSenderMailbox(nextMailboxId);
+        workspaceActions.resetDraftChatKey();
+      }}
       onConnectGmail={() => {
         void connectGmail();
       }}

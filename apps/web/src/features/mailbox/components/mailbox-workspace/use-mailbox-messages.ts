@@ -114,7 +114,7 @@ const getSelectedMessage = ({
 
 type MailboxesQueryData = RouterOutputs["mail"]["listMailboxes"];
 
-const markMailboxNeedsReconnectInCache = (
+export const markMailboxNeedsReconnectInCache = (
   queryClient: QueryClient,
   error: unknown
 ) => {
@@ -153,7 +153,7 @@ const markMailboxNeedsReconnectInCache = (
   void queryClient.invalidateQueries({ queryKey });
 };
 
-const useWindowActive = () => {
+export const useWindowActive = () => {
   const [isWindowActive, setIsWindowActive] = useState(
     () =>
       typeof document !== "undefined" &&

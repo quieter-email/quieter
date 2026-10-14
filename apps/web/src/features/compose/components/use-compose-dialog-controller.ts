@@ -85,8 +85,10 @@ export const getDraftStatusMessage = (
 
 export const useComposeDialogController = ({
   autosavePaused = false,
+  beforeNavigate,
   demoMode = false,
   initialDraft = null,
+  initialDraftNeedsSave = false,
   managedDemoMode = false,
   mailboxId,
   onClose,
@@ -95,8 +97,10 @@ export const useComposeDialogController = ({
   signature,
 }: {
   autosavePaused?: boolean;
+  beforeNavigate?: () => Promise<void>;
   demoMode?: boolean;
   initialDraft?: ComposeDraftState | null;
+  initialDraftNeedsSave?: boolean;
   managedDemoMode?: boolean;
   mailboxId: string | null;
   onClose?: () => void;
@@ -129,11 +133,13 @@ export const useComposeDialogController = ({
     };
   });
   const assistantUnsavedRef = useRef(state.draft.assistantUnsaved === true);
+  const needsSaveRef = useRef(initialDraftNeedsSave && persistDrafts);
   const activeDraftRef = useRef(state.draft);
   const lastSavedDraftRef = useRef(state.draft);
   const draftClosedRef = useRef(false);
   const savingRef = useRef<Promise<boolean> | null>(null);
   const finishingRef = useRef(false);
+  const senderRouteMailboxIdRef = useRef<string | null>(null);
   const setDraft = (update: ComposeDraftUpdate) => {
     const draft =
       typeof update === "function" ? update(activeDraftRef.current) : update;
@@ -426,7 +432,7 @@ export const useComposeDialogController = ({
     };
   }, [agentWorkspace, form, mailboxId]);
 
-  const persistDraftSnapshot = async () => {
+  const persistDraftSnapshot = async (hydrateAttachments = false) => {
     const { values } = form.state;
     const draft = buildDraftFromForm(values);
     if (
@@ -446,14 +452,16 @@ export const useComposeDialogController = ({
       mailboxId === null ||
       mailboxId === "" ||
       !persistDrafts ||
-      !shouldPersistComposeDraft({
-        currentDraft: {
-          ...lastSavedDraftRef.current,
-          saveStatus: activeDraftRef.current.saveStatus,
-        },
-        nextDraft: draft,
-        values,
-      })
+      (!needsSaveRef.current &&
+        !hydrateAttachments &&
+        !shouldPersistComposeDraft({
+          currentDraft: {
+            ...lastSavedDraftRef.current,
+            saveStatus: activeDraftRef.current.saveStatus,
+          },
+          nextDraft: draft,
+          values,
+        }))
     ) {
       return true;
     }
@@ -482,6 +490,7 @@ export const useComposeDialogController = ({
       return false;
     }
     lastSavedDraftRef.current = saved;
+    needsSaveRef.current = false;
     setDraft({
       ...saved,
       attachments: activeDraftRef.current.attachments,
@@ -504,7 +513,10 @@ export const useComposeDialogController = ({
     return true;
   };
 
-  const persistCurrentDraft = async (background = false): Promise<boolean> => {
+  const persistCurrentDraft = async (
+    background = false,
+    hydrateAttachments = false
+  ): Promise<boolean> => {
     while (savingRef.current !== null) {
       await savingRef.current;
     }
@@ -518,13 +530,67 @@ export const useComposeDialogController = ({
     ) {
       return true;
     }
-    const saving = persistDraftSnapshot();
+    const saving = persistDraftSnapshot(hydrateAttachments);
     savingRef.current = saving;
     try {
       return await saving;
     } finally {
       savingRef.current = null;
     }
+  };
+
+  const prepareSenderSwitch = async (
+    sourceUnavailable = false
+  ): Promise<{
+    currentDraft: ComposeDraftState;
+    transferDraft: ComposeDraftState;
+  } | null> => {
+    if (
+      finishingRef.current ||
+      activeDraftRef.current.saveStatus === "saving" ||
+      activeDraftRef.current.saveStatus === "sending"
+    ) {
+      return null;
+    }
+    const hasProviderAttachments = [
+      ...activeDraftRef.current.attachments,
+      ...activeDraftRef.current.inlineImages,
+    ].some((asset) => asset.gmailAttachmentId !== undefined);
+    if (sourceUnavailable && hasProviderAttachments) {
+      setDraft({
+        ...activeDraftRef.current,
+        errorMessage:
+          "Remove attachments from this unavailable account before changing the sending address.",
+        saveStatus: "error",
+      });
+      return null;
+    }
+    if (
+      !sourceUnavailable &&
+      !(await persistCurrentDraft(false, hasProviderAttachments))
+    ) {
+      return null;
+    }
+
+    const current = buildDraftFromForm(form.state.values);
+    void recovery.complete(activeDraftRef.current);
+    const fresh = createEmptyComposeDraft();
+    return {
+      currentDraft: current,
+      transferDraft: {
+        ...fresh,
+        attachments: current.attachments.map(
+          ({ gmailAttachmentId: _id, ...file }) => file
+        ),
+        bodyHtml: current.bodyHtml,
+        bodyText: current.bodyText,
+        inlineImages: current.inlineImages.map(
+          ({ gmailAttachmentId: _id, ...file }) => file
+        ),
+        recipients: { ...current.recipients },
+        subject: current.subject,
+      },
+    };
   };
 
   useDraftAutosave({
@@ -552,8 +618,9 @@ export const useComposeDialogController = ({
       const draft = buildDraftFromForm(values);
       return (
         !draftClosedRef.current &&
-        hasComposeDraftContent(draft) &&
+        (hasComposeDraftContent(draft) || needsSaveRef.current) &&
         (!composeDraftFormValuesSchema.safeParse(values).success ||
+          needsSaveRef.current ||
           shouldPersistComposeDraft({
             currentDraft: {
               ...lastSavedDraftRef.current,
@@ -564,7 +631,20 @@ export const useComposeDialogController = ({
           }))
       );
     },
-    shouldBlockFn: async () => {
+    shouldBlockFn: async ({ next }) => {
+      const nextSearch = next.search;
+      if (
+        senderRouteMailboxIdRef.current !== null &&
+        typeof nextSearch === "object" &&
+        nextSearch !== null &&
+        "mailbox" in nextSearch &&
+        nextSearch.mailbox === "compose" &&
+        "mailboxId" in nextSearch &&
+        nextSearch.mailboxId === senderRouteMailboxIdRef.current
+      ) {
+        senderRouteMailboxIdRef.current = null;
+        return false;
+      }
       if (draftClosedRef.current) {
         return false;
       }
@@ -577,7 +657,19 @@ export const useComposeDialogController = ({
       finishingRef.current = true;
       setState((current) => ({ ...current, isFinishing: true }));
       try {
-        return !(await persistCurrentDraft());
+        if (!(await persistCurrentDraft())) {
+          return true;
+        }
+        try {
+          await beforeNavigate?.();
+        } catch (error) {
+          toastError(error, {
+            boundary: "compose-inactive-draft-cleanup",
+            fallback:
+              "An older draft could not be removed. You can delete it from Drafts.",
+          });
+        }
+        return false;
       } finally {
         finishingRef.current = false;
         setState((current) => ({ ...current, isFinishing: false }));
@@ -781,11 +873,18 @@ export const useComposeDialogController = ({
   return {
     addAttachmentFiles,
     addInlineImageFiles,
+    allowSenderRouteChange: (nextMailboxId: string) => {
+      senderRouteMailboxIdRef.current = nextMailboxId;
+    },
+    clearSenderRouteChange: () => {
+      senderRouteMailboxIdRef.current = null;
+    },
     closeComposeDialog,
     discardActiveDraft,
     form,
     handleDialogOpenChange,
     handleUserDraftChange,
+    prepareSenderSwitch,
     removeAttachment,
     setActiveDraftError,
     state,

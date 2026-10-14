@@ -437,11 +437,16 @@ export const useMessageViewFocus = ({
 
     const frameId = requestAnimationFrame(() => {
       const view = viewRef.current;
-      const focusTarget = view?.querySelector<HTMLElement>(
-        "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])"
-      );
-      (focusTarget ?? view)?.focus({ focusVisible: true, preventScroll: true });
-      onAutoFocusCompleteRef.current?.();
+      const focusTarget = [
+        ...(view?.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])"
+        ) ?? []),
+      ].find((element) => element.getClientRects().length > 0);
+      const target = focusTarget ?? view;
+      target?.focus({ focusVisible: true, preventScroll: true });
+      if (target && document.activeElement === target) {
+        onAutoFocusCompleteRef.current?.();
+      }
     });
 
     return () => {

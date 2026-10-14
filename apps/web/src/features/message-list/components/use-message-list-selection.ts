@@ -27,6 +27,7 @@ export const useMessageListSelection = ({
   onActivateMessage,
   onDeactivateActiveMessage,
   searchQuery,
+  selectionScopeKey: selectionScopeKeyOverride,
   threadedMessages,
 }: {
   activeMailbox: MailboxCategory;
@@ -35,12 +36,14 @@ export const useMessageListSelection = ({
   onActivateMessage: (messageId: string, threadId: string) => void;
   onDeactivateActiveMessage: () => void;
   searchQuery: string;
+  selectionScopeKey?: string;
   threadedMessages: ThreadListEntry[];
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isProgrammaticScrollToTopRef = useRef(false);
   const focusRingRequestedRef = useRef(false);
-  const selectionScopeKey = `${mailboxId}:${activeMailbox}:${searchQuery}`;
+  const selectionScopeKey =
+    selectionScopeKeyOverride ?? `${mailboxId}:${activeMailbox}:${searchQuery}`;
   const loadedThreadIdSet = useMemo(
     () => new Set(threadedMessages.map((thread) => thread.threadId)),
     [threadedMessages]

@@ -6,6 +6,10 @@ export type MessageListSearchProps = {
   onScrollToTop: () => boolean | Promise<boolean>;
   onSearch: (query: string) => void;
   searchQuery: string;
+  searchMailboxes?: readonly {
+    mailboxId: string;
+    mailboxProvider: "gmail" | "managed";
+  }[];
 };
 
 export type PendingFocusTarget =
