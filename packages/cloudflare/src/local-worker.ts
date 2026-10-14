@@ -129,6 +129,10 @@ export default {
       const { cleanupRateLimitBuckets } =
         await import("@quieter/orpc/abuse-protection");
       const { recoverMailSends } = await import("@quieter/orpc/mail-send");
+      const { processPendingAiMemoryEvents } =
+        await import("@quieter/orpc/ai-memory");
+      const { cleanupGmailComposeOperations } =
+        await import("@quieter/orpc/gmail-compose-retention");
       const { cleanupMailObjects } =
         await import("@quieter/orpc/managed-mail/storage");
       const { processManagedRuleBackfills } =
@@ -140,6 +144,8 @@ export default {
       await withRequestDatabaseClient(async () => {
         const results = await Promise.allSettled([
           recoverMailSends(),
+          processPendingAiMemoryEvents(),
+          cleanupGmailComposeOperations(),
           cleanupMailObjects(),
           cleanupRateLimitBuckets(),
           processManagedRuleBackfills(),

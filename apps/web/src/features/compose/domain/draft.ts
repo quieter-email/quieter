@@ -684,12 +684,17 @@ export const prepareLoadedComposeDraft = async (
   draft: ComposeDraftState,
   signal?: AbortSignal
 ): Promise<ComposeDraftState> => {
-  await Promise.all(
+  const loaded = await Promise.allSettled(
     [...draft.inlineImages, ...draft.attachments].map(
       async (asset) =>
         await attachRuntimeFile(asset, mailboxId, draft.messageId, signal)
     )
   );
+  for (const result of loaded) {
+    if (result.status === "rejected") {
+      throw result.reason;
+    }
+  }
   signal?.throwIfAborted();
   const doc = new DOMParser().parseFromString(draft.bodyHtml, "text/html");
   for (const element of doc.querySelectorAll<HTMLImageElement>("img")) {
@@ -744,6 +749,17 @@ export const sendComposeMessage = async (
   try {
     return await rpc.mail.sendMessage({ mailboxId, message }, { signal });
   } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "data" in error &&
+      typeof error.data === "object" &&
+      error.data !== null &&
+      "sendRejected" in error.data &&
+      error.data.sendRejected === true
+    ) {
+      throw error;
+    }
     if (
       typeof error === "object" &&
       error !== null &&

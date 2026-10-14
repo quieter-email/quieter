@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
@@ -8,18 +10,110 @@ import {
 } from "@quieter/database/schema";
 import { buildMimeMessage } from "@quieter/mail/compose/mime";
 import type { composeDraftInputSchema } from "@quieter/mail/compose/schema";
-import { parseRawMailMessage } from "@quieter/mail/raw-message";
+import {
+  parseRawMailAttachments,
+  parseRawMailMessage,
+} from "@quieter/mail/raw-message";
 import { reportError } from "@quieter/observability";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
+import { hashRequest } from "../../request-hash";
 import {
   createManagedMessageSearchText,
   normalizeManagedSearchValue,
 } from "../search/normalization";
-import { deleteRawMailObject, getRawMailObjectReference } from "./raw-object";
+import {
+  deleteRawMailObject,
+  getRawMailObjectReference,
+  readRawMailObject,
+} from "./raw-object";
 import { storeRawMailObject } from "./raw-object-lifecycle";
+
+type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
+
+const hashManagedDraftContent = async (raw: Uint8Array) => {
+  const message = await parseRawMailMessage(raw);
+  const attachments = await parseRawMailAttachments(raw);
+  return hashRequest({
+    attachments: attachments.map((attachment) => ({
+      contentId: attachment.contentId,
+      fileName: attachment.fileName,
+      hash: createHash("sha256").update(attachment.content).digest("hex"),
+      inline: attachment.inline,
+      mimeType: attachment.mimeType,
+    })),
+    bcc: message.bcc,
+    bodyHtml: message.bodyHtml,
+    bodyText: message.bodyText,
+    cc: message.cc,
+    from: message.from,
+    headers: message.headers.filter(
+      (header) =>
+        ![
+          "bcc",
+          "cc",
+          "content-transfer-encoding",
+          "content-type",
+          "date",
+          "from",
+          "in-reply-to",
+          "message-id",
+          "mime-version",
+          "references",
+          "reply-to",
+          "subject",
+          "to",
+        ].includes(header.name.toLowerCase())
+    ),
+    inReplyTo: message.inReplyTo,
+    references: message.references,
+    replyTo: message.replyTo,
+    subject: message.subject,
+    to: message.to,
+  });
+};
+
+const toSavedManagedDraft = (
+  draft: ComposeDraftInput,
+  saved: { baseRevision: string; draftId: string; messageId: string },
+  assets: Pick<
+    typeof managedMailAttachment.$inferSelect,
+    "id" | "inline" | "contentId"
+  >[]
+) => ({
+  attachments: draft.attachments.map((asset, index) => ({
+    gmailAttachmentId: assets.filter((attachment) => !attachment.inline)[index]
+      ?.id,
+    id: asset.id,
+    isInline: false as const,
+    mimeType: asset.mimeType,
+    name: asset.name,
+    size: asset.size,
+    sourceMessageId: saved.messageId,
+  })),
+  ...saved,
+  bodyHtml: draft.bodyHtml,
+  bodyText: draft.bodyText,
+  draftAnchor: draft.draftAnchor ?? null,
+  inlineImages: draft.inlineImages.map((asset) => ({
+    contentId: asset.contentId,
+    gmailAttachmentId: assets.find(
+      (attachment) =>
+        attachment.inline && attachment.contentId === asset.contentId
+    )?.id,
+    id: asset.id,
+    isInline: true as const,
+    mimeType: asset.mimeType,
+    name: asset.name,
+    size: asset.size,
+    sourceMessageId: saved.messageId,
+  })),
+  recipients: draft.recipients,
+  replyContext: draft.replyContext ?? null,
+  subject: draft.subject,
+});
 
 export const saveManagedDraft = async (input: {
   draft: z.infer<typeof composeDraftInputSchema>;
@@ -78,15 +172,6 @@ export const saveManagedDraft = async (input: {
       message: "This draft is no longer available.",
     });
   }
-  if (
-    existing !== undefined &&
-    draft.baseRevision !== existing.updatedAt.toISOString()
-  ) {
-    throw new ORPCError("CONFLICT", {
-      data: { draftConflict: true },
-      message: "This draft changed elsewhere. Reopen it before saving again.",
-    });
-  }
   if (existing !== undefined) {
     const [pendingSend] = await db
       .select({ id: organizationMailSendIdempotency.id })
@@ -135,6 +220,67 @@ export const saveManagedDraft = async (input: {
       sentAt: now,
     })
   );
+  if (
+    existing !== undefined &&
+    draft.baseRevision !== existing.updatedAt.toISOString()
+  ) {
+    if (
+      !draft.draftId &&
+      draft.baseRevision === undefined &&
+      threadId === existing.threadId
+    ) {
+      const requestedHash = await hashManagedDraftContent(raw);
+      const storedHash = await hashManagedDraftContent(
+        await readRawMailObject(existing)
+      );
+      if (requestedHash === storedHash) {
+        return await db.transaction(async (tx) => {
+          const [unchanged] = await tx
+            .select({ id: managedMailMessage.id })
+            .from(managedMailMessage)
+            .where(
+              and(
+                eq(managedMailMessage.id, existing.id),
+                eq(managedMailMessage.mailboxId, mailboxId),
+                eq(managedMailMessage.mailboxState, "draft"),
+                eq(managedMailMessage.updatedAt, existing.updatedAt)
+              )
+            )
+            .for("update");
+          if (unchanged !== undefined) {
+            const assets = await tx
+              .select()
+              .from(managedMailAttachment)
+              .where(
+                and(
+                  eq(managedMailAttachment.mailboxId, mailboxId),
+                  eq(managedMailAttachment.messageId, existing.id)
+                )
+              )
+              .orderBy(asc(managedMailAttachment.partIndex));
+            return toSavedManagedDraft(
+              draft,
+              {
+                baseRevision: existing.updatedAt.toISOString(),
+                draftId,
+                messageId: existing.id,
+              },
+              assets
+            );
+          }
+          throw new ORPCError("CONFLICT", {
+            data: { draftConflict: true },
+            message:
+              "This draft changed elsewhere. Reopen it before saving again.",
+          });
+        });
+      }
+    }
+    throw new ORPCError("CONFLICT", {
+      data: { draftConflict: true },
+      message: "This draft changed elsewhere. Reopen it before saving again.",
+    });
+  }
   const parsed = await parseRawMailMessage(raw);
   const object = await storeRawMailObject(raw);
   const savedAttachments = parsed.attachments.map((attachment, partIndex) => ({
@@ -240,41 +386,11 @@ export const saveManagedDraft = async (input: {
       });
     }
   }
-  return {
-    attachments: draft.attachments.map((asset, index) => ({
-      gmailAttachmentId: savedAttachments.filter(
-        (attachment) => !attachment.inline
-      )[index]?.id,
-      id: asset.id,
-      isInline: false as const,
-      mimeType: asset.mimeType,
-      name: asset.name,
-      size: asset.size,
-      sourceMessageId: messageId,
-    })),
-    baseRevision: now.toISOString(),
-    bodyHtml: draft.bodyHtml,
-    bodyText: draft.bodyText,
-    draftAnchor: draft.draftAnchor ?? null,
-    draftId,
-    inlineImages: draft.inlineImages.map((asset) => ({
-      contentId: asset.contentId,
-      gmailAttachmentId: savedAttachments.find(
-        (attachment) =>
-          attachment.inline && attachment.contentId === asset.contentId
-      )?.id,
-      id: asset.id,
-      isInline: true as const,
-      mimeType: asset.mimeType,
-      name: asset.name,
-      size: asset.size,
-      sourceMessageId: messageId,
-    })),
-    messageId,
-    recipients: draft.recipients,
-    replyContext: draft.replyContext ?? null,
-    subject: draft.subject,
-  };
+  return toSavedManagedDraft(
+    draft,
+    { baseRevision: now.toISOString(), draftId, messageId },
+    savedAttachments
+  );
 };
 
 export const deleteManagedDraft = async (input: {

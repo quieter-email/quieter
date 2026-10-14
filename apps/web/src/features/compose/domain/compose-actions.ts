@@ -7,6 +7,7 @@ import type { ComposeDraftAnchor } from "@quieter/mail/compose/schema";
 import { formatMessageDate, parseSender } from "#/lib/gmail/message-utils";
 import type { MessageListItem } from "#/lib/mail";
 
+import type { ComposeActionDraft } from "./compose-action-quote";
 import {
   createEmptyComposeDraft,
   escapeComposeHtml,
@@ -361,7 +362,54 @@ export const buildComposeDraftFromMessageAction = ({
   currentUserEmail: string | null | undefined;
   existingDraftMessage?: MessageListItem | null;
   message: MessageListItem;
-}): ComposeDraftState => {
+}): ComposeActionDraft => {
+  const quotedImages = (message.inlineImages ?? []).map((image) => ({
+    contentId: image.contentId,
+    gmailAttachmentId: image.attachmentId,
+    id: crypto.randomUUID(),
+    isInline: true as const,
+    mimeType: image.mimeType,
+    name: image.fileName,
+    size: image.size,
+    sourceMessageId: message.id,
+  }));
+  const forwardedAttachments = (message.attachments ?? []).map(
+    (attachment) => ({
+      gmailAttachmentId: attachment.attachmentId,
+      id: crypto.randomUUID(),
+      isInline: false as const,
+      mimeType: attachment.mimeType,
+      name: attachment.fileName,
+      size: attachment.size,
+      sourceMessageId: message.id,
+    })
+  );
+  const lead = buildReplyLead(message);
+  const forwardedHeaderLines = buildForwardHeaderLines(message);
+  const forwardedHeaderHtml =
+    forwardedHeaderLines.length > 0
+      ? `<p data-compose-quote="headers">${forwardedHeaderLines
+          .map((line) => {
+            const separatorIndex = line.indexOf(":");
+            if (separatorIndex === -1) {
+              return escapeComposeHtml(line);
+            }
+            const label = line.slice(0, separatorIndex + 1);
+            const value = line.slice(separatorIndex + 1).trim();
+            return `<strong>${escapeComposeHtml(label)}</strong> ${escapeComposeHtml(value)}`;
+          })
+          .join("<br>")}</p>`
+      : "";
+  const quotedBody = `<blockquote data-compose-quote="body">${getMessageBodyHtml(message)}</blockquote>`;
+  const replyHtml = `<p data-compose-quote="lead">${escapeComposeHtml(lead)}</p>${quotedBody}`;
+  const forwardHtml = `<p data-compose-quote="forward">---------- Forwarded message ---------</p>${forwardedHeaderHtml}${quotedBody}`;
+  const actionQuote = {
+    attachments: action === "forward" ? forwardedAttachments : [],
+    forwardHtml,
+    html: action === "forward" ? forwardHtml : replyHtml,
+    inlineImages: quotedImages,
+    replyHtml,
+  };
   const existingDraftId = existingDraftMessage?.draftId?.trim() ?? "";
   const existingDraft =
     existingDraftId !== "" &&
@@ -382,6 +430,7 @@ export const buildComposeDraftFromMessageAction = ({
 
     return {
       ...existingDraft,
+      actionQuote,
       draftAnchor: buildDraftAnchor(message, action),
       recipients: {
         bcc:
@@ -403,49 +452,15 @@ export const buildComposeDraftFromMessageAction = ({
   }
 
   const draft = existingDraft ?? createEmptyComposeDraft();
-  const quotedImages = (message.inlineImages ?? []).map((image) => ({
-    contentId: image.contentId,
-    gmailAttachmentId: image.attachmentId,
-    id: crypto.randomUUID(),
-    isInline: true as const,
-    mimeType: image.mimeType,
-    name: image.fileName,
-    size: image.size,
-    sourceMessageId: message.id,
-  }));
   const replyContext = buildReplyContext(message);
   const draftAnchor = buildDraftAnchor(message, action);
 
   if (action === "forward") {
-    const forwardedHeaderLines = buildForwardHeaderLines(message);
-    const forwardedHeaderHtml =
-      forwardedHeaderLines.length > 0
-        ? `<p>${forwardedHeaderLines
-            .map((line) => {
-              const separatorIndex = line.indexOf(":");
-              if (separatorIndex === -1) {
-                return escapeComposeHtml(line);
-              }
-
-              const label = line.slice(0, separatorIndex + 1);
-              const value = line.slice(separatorIndex + 1).trim();
-              return `<strong>${escapeComposeHtml(label)}</strong> ${escapeComposeHtml(value)}`;
-            })
-            .join("<br>")}</p>`
-        : "";
-
     return {
       ...draft,
-      attachments: (message.attachments ?? []).map((attachment) => ({
-        gmailAttachmentId: attachment.attachmentId,
-        id: crypto.randomUUID(),
-        isInline: false,
-        mimeType: attachment.mimeType,
-        name: attachment.fileName,
-        size: attachment.size,
-        sourceMessageId: message.id,
-      })),
-      bodyHtml: `<p><br></p><p>---------- Forwarded message ---------</p>${forwardedHeaderHtml}<blockquote>${getMessageBodyHtml(message)}</blockquote>`,
+      actionQuote,
+      attachments: forwardedAttachments,
+      bodyHtml: `<p><br></p>${forwardHtml}`,
       bodyText: [
         "",
         "",
@@ -466,11 +481,11 @@ export const buildComposeDraftFromMessageAction = ({
     currentUserEmail,
     action === "reply-all"
   );
-  const lead = buildReplyLead(message);
 
   return {
     ...draft,
-    bodyHtml: `<p><br></p><p>${escapeComposeHtml(lead)}</p><blockquote>${getMessageBodyHtml(message)}</blockquote>`,
+    actionQuote,
+    bodyHtml: `<p><br></p>${replyHtml}`,
     bodyText: ["", "", lead, quotePlainText(getMessageBodyText(message))].join(
       "\n"
     ),

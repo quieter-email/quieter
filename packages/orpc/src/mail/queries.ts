@@ -5,6 +5,7 @@ import {
   getDraftWithContent,
   getMessageInspector,
   getThreadWithDetails,
+  isGmailServiceError,
   listDraftsWithDetails,
   listMessagesWithDetails,
 } from "@quieter/gmail";
@@ -103,7 +104,14 @@ export const queriesMailOperations = {
           accessToken,
           input.draftId,
           signal
-        );
+        ).catch((error: unknown) => {
+          if (isGmailServiceError(error) && error.status === 404) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "This draft is no longer available.",
+            });
+          }
+          throw error;
+        });
         if (!draft.message) {
           throw new ORPCError("NOT_FOUND", {
             message: "This draft is no longer available.",

@@ -33,6 +33,7 @@ const UNCERTAIN_SEND_MESSAGE =
   "The delivery result is still being confirmed. Check Sent before sending again.";
 const DRAFT_CONFLICT_MESSAGE =
   "This draft changed elsewhere. Reopen it before saving or sending again.";
+const DRAFT_RECONCILIATION_WINDOW_MS = 120_000;
 
 const hashComposeRequest = async (draft: ComposeDraftInput) => {
   const files = await Promise.all(
@@ -469,10 +470,18 @@ export const saveGmailDraft = async (
             requestSignal
           );
         }
-        throw new ORPCError("CONFLICT", {
-          message:
-            "The draft save result is still being confirmed. Reopen Drafts before saving again.",
-        });
+        const reconciliationExpired =
+          Date.now() - operation.updatedAt.getTime() >=
+          DRAFT_RECONCILIATION_WINDOW_MS;
+        throw new ORPCError(
+          reconciliationExpired ? "CONFLICT" : "SERVICE_UNAVAILABLE",
+          {
+            data: reconciliationExpired ? { draftConflict: true } : undefined,
+            message: reconciliationExpired
+              ? "The draft save could not be confirmed. Reopen Drafts or recover your edits as a new draft."
+              : "The draft save is still being confirmed. Please try again shortly.",
+          }
+        );
       }
       if (draft.draftId) {
         const current = await getDraft(
@@ -575,10 +584,21 @@ export const sendGmailMessage = async (
         requestSignal
       );
       if (!recovered) {
-        throw new ORPCError("CONFLICT", {
-          message:
-            "The draft save result is still being confirmed. Reopen Drafts before sending.",
-        });
+        const reconciliationExpired =
+          Date.now() - created.updatedAt.getTime() >=
+          DRAFT_RECONCILIATION_WINDOW_MS;
+        throw new ORPCError(
+          reconciliationExpired ? "CONFLICT" : "SERVICE_UNAVAILABLE",
+          {
+            data: {
+              ...(reconciliationExpired ? { draftConflict: true } : {}),
+              sendRejected: true,
+            },
+            message: reconciliationExpired
+              ? "The draft save could not be confirmed. Reopen Drafts or recover your edits as a new draft."
+              : "The draft save is still being confirmed. Please try again shortly.",
+          }
+        );
       }
       await acceptComposeOperation(created, {
         id: recovered.id,

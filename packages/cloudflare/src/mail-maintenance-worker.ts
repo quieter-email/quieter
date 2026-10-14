@@ -1,6 +1,7 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { cleanupRateLimitBuckets } from "@quieter/orpc/abuse-protection";
 import { processPendingAiMemoryEvents } from "@quieter/orpc/ai-memory";
+import { cleanupGmailComposeOperations } from "@quieter/orpc/gmail-compose-retention";
 import { recoverMailSends } from "@quieter/orpc/mail-send";
 import { retryPendingManagedVerificationCodes } from "@quieter/orpc/managed-mail/ingestion";
 import { processManagedRuleBackfills } from "@quieter/orpc/managed-mail/rule-backfills";
@@ -16,6 +17,7 @@ export default withSentryReporting({
         const results = await Promise.allSettled([
           recoverMailSends(),
           processPendingAiMemoryEvents(),
+          cleanupGmailComposeOperations(),
           cleanupMailObjects(),
           cleanupRateLimitBuckets(),
           processManagedRuleBackfills(),

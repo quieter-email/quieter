@@ -36,6 +36,11 @@ import {
   ToolbarGroup,
   ToolbarSeparator,
 } from "@quieter/ui/toolbar";
+import {
+  createNodeFromContent,
+  Extension,
+  getHTMLFromFragment,
+} from "@tiptap/core";
 import type { Editor, Range } from "@tiptap/core";
 import { FileHandler } from "@tiptap/extension-file-handler";
 import { Image } from "@tiptap/extension-image";
@@ -68,6 +73,20 @@ const ComposeImage = Image.extend({
       },
     };
   },
+});
+
+const ComposeQuote = Extension.create({
+  addGlobalAttributes() {
+    return [
+      {
+        attributes: {
+          "data-compose-quote": { default: null },
+        },
+        types: ["paragraph", "blockquote"],
+      },
+    ];
+  },
+  name: "composeQuote",
 });
 
 const audioWaveBars = [
@@ -107,6 +126,8 @@ type ComposeEditorProps = {
 
 export type ComposeEditorHandle = {
   getDocument: () => unknown;
+  normalizeHtml: (html: string) => string;
+  getTextFromHtml: (html: string) => string;
   insertHtml: (html: string) => void;
 };
 
@@ -191,6 +212,7 @@ export const ComposeEditor = ({
       },
     },
     extensions: [
+      ComposeQuote,
       StarterKit.configure({
         heading: false,
         link: false,
@@ -256,8 +278,31 @@ export const ComposeEditor = ({
   useImperativeHandle(ref, () => ({
     getDocument: () =>
       editor ? { content: editor.getJSON(), version: 1 } : null,
+    getTextFromHtml: (value) => {
+      if (!editor) {
+        return (
+          new DOMParser().parseFromString(value, "text/html").body
+            .textContent ?? ""
+        );
+      }
+      const content = createNodeFromContent(value, editor.schema, {
+        slice: false,
+      });
+      const size = "type" in content ? content.content.size : content.size;
+      return content.textBetween(0, size, "\n\n");
+    },
     insertHtml: (nextHtml) => {
       editor?.chain().focus().insertContent(nextHtml).run();
+    },
+    normalizeHtml: (value) => {
+      if (!editor) {
+        return value;
+      }
+      const content = createNodeFromContent(value, editor.schema);
+      return getHTMLFromFragment(
+        "type" in content ? content.content : content,
+        editor.schema
+      );
     },
   }));
 

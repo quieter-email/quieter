@@ -80,6 +80,8 @@ The composer loads an authoritative draft before mounting an editor. Saves and d
 
 Gmail compose operations use the additive `gmailComposeOperation` table to record draft writes and sends before contacting the provider. A send keeps the same operation ID across manual and assistant requests, recovery, and retries. An uncertain result checks Sent using its recorded Message-ID without issuing another send. Existing Gmail drafts are consumed through draft sending. Managed sends bind each draft revision within the existing billing reservation transaction. The new table migration must run through the protected production workflow before deploying the application; open editors without a loaded revision must reopen their draft.
 
+Maintenance removes obsolete revision-save receipts, definitive rejections, and released locks after 30 days. The latest saved revision, accepted send/create receipts, and unresolved operations remain as recovery and deduplication evidence. Local mail recovery runs the same cleanup and deferred learning processor; model updates remain opt-in locally.
+
 The public SDK derives send inputs from `@quieter/mail/send` and validates responses with the shared delivery schemas. Its build bundles these contracts and permits only Zod and the optional React dependencies in emitted imports. `tsconfig.sdk.json` gives declaration generation a workspace-wide root so the published types include the shared contracts. React rendering lives in `quieter/react`; the core package has no React requirement.
 
 ### Other Packages

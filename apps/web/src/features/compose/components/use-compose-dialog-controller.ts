@@ -33,6 +33,11 @@ import {
 } from "#/lib/orpc-errors";
 
 import {
+  prepareComposeActionQuote,
+  replaceComposeActionQuote,
+} from "../domain/compose-action-quote";
+import type { ComposeActionDraft } from "../domain/compose-action-quote";
+import {
   composeFormValuesToDraft,
   draftToComposeFormValues,
   shouldPersistComposeDraft,
@@ -98,6 +103,8 @@ export const useComposeDialogController = ({
   initialDraftNeedsSave = false,
   managedDemoMode = false,
   mailboxId,
+  normalizeHtml,
+  getTextFromHtml,
   onClose,
   onRecipientProblem,
   persistDrafts = true,
@@ -106,10 +113,12 @@ export const useComposeDialogController = ({
   autosavePaused?: boolean;
   beforeNavigate?: () => Promise<void>;
   demoMode?: boolean;
-  initialDraft?: ComposeDraftState | null;
+  initialDraft?: ComposeActionDraft | null;
   initialDraftNeedsSave?: boolean;
   managedDemoMode?: boolean;
   mailboxId: string | null;
+  normalizeHtml: (html: string) => string;
+  getTextFromHtml: (html: string) => string;
   onClose?: () => void;
   onRecipientProblem?: () => void;
   persistDrafts?: boolean;
@@ -176,6 +185,17 @@ export const useComposeDialogController = ({
   const saveErrorReportedRef = useRef(false);
   const saveConflictRef = useRef(false);
   const [canSaveDraftCopy, setCanSaveDraftCopy] = useState(false);
+  const previousActionRef = useRef({
+    attachments: state.draft.draftId
+      ? []
+      : (initialDraft?.actionQuote?.attachments ?? []),
+    html: initialDraft?.actionQuote?.html ?? state.draft.bodyHtml,
+    inlineImages: state.draft.inlineImages,
+    seededBy: state.draft.draftAnchor?.seededBy,
+    sourceMessageId: state.draft.draftAnchor?.sourceMessageId,
+  });
+  const actionRunningRef = useRef(false);
+  const queuedActionRef = useRef<ComposeActionDraft | null>(null);
   const setDraft = (update: ComposeDraftUpdate) => {
     let draft =
       typeof update === "function" ? update(activeDraftRef.current) : update;
@@ -1192,7 +1212,14 @@ export const useComposeDialogController = ({
     }));
   };
 
-  const changeComposeAction = (next: ComposeDraftState) => {
+  const changeComposeAction = async (next: ComposeActionDraft) => {
+    if (!mountedRef.current || draftClosedRef.current) {
+      return;
+    }
+    if (actionRunningRef.current) {
+      queuedActionRef.current = next;
+      return;
+    }
     if (
       finishingRef.current ||
       activeDraftRef.current.sendUncertain === true ||
@@ -1200,37 +1227,153 @@ export const useComposeDialogController = ({
     ) {
       return;
     }
-    handleUserDraftChange();
-    draftRevisionRef.current += 1;
-    setDraft((current) => ({
-      ...current,
-      attachments: [
-        ...current.attachments,
-        ...next.attachments.filter(
-          (asset) =>
-            !current.attachments.some(
-              (existing) =>
-                existing.id === asset.id ||
-                (existing.gmailAttachmentId !== undefined &&
-                  existing.gmailAttachmentId === asset.gmailAttachmentId &&
-                  existing.sourceMessageId === asset.sourceMessageId)
-            )
-        ),
-      ],
-      draftAnchor: next.draftAnchor,
-      replyContext: next.replyContext,
-      updatedAt: Date.now(),
-    }));
-    form.setFieldValue("to", next.recipients.to);
-    form.setFieldValue("cc", next.recipients.cc);
-    form.setFieldValue("bcc", next.recipients.bcc);
-    form.setFieldValue("subject", next.subject);
-    setState((current) => ({
-      ...current,
-      showBcc: next.recipients.bcc.trim() !== "",
-      showCc: next.recipients.cc.trim() !== "",
-    }));
-    recovery.checkpoint();
+    finishingRef.current = true;
+    actionRunningRef.current = true;
+    setState((current) => ({ ...current, isFinishing: true }));
+    let prepared: ComposeDraftState | null = null;
+    try {
+      await savingRef.current;
+      const previous = previousActionRef.current;
+      const quote = next.actionQuote;
+      const replaceQuote =
+        quote !== undefined &&
+        (previous.sourceMessageId !== next.draftAnchor?.sourceMessageId ||
+          (previous.seededBy === "forward") !==
+            (next.draftAnchor?.seededBy === "forward"));
+      if (replaceQuote && mailboxId) {
+        prepared = {
+          ...next,
+          attachments: quote.attachments,
+          ...prepareComposeActionQuote({
+            inlineImages: activeDraftRef.current.inlineImages,
+            quote,
+            sameSource:
+              previous.sourceMessageId === next.draftAnchor?.sourceMessageId,
+          }),
+        };
+        if (!demoMode && !managedDemoMode) {
+          prepared = await prepareLoadedComposeDraft(mailboxId, prepared);
+        }
+      }
+      if (
+        !mountedRef.current ||
+        draftClosedRef.current ||
+        Object.is(activeDraftRef.current.sendUncertain, true) ||
+        queuedActionRef.current
+      ) {
+        return;
+      }
+      handleUserDraftChange();
+      draftRevisionRef.current += 1;
+      const { current } = activeDraftRef;
+      let { bodyHtml } = form.state.values;
+      let { attachments } = current;
+      let { inlineImages } = current;
+      if (prepared && quote) {
+        let previousHtml = previous.html;
+        if (
+          previous.sourceMessageId === next.draftAnchor?.sourceMessageId &&
+          !previous.html.includes("data-compose-quote")
+        ) {
+          previousHtml =
+            previous.seededBy === "forward"
+              ? quote.forwardHtml
+              : quote.replyHtml;
+        }
+        bodyHtml = replaceComposeActionQuote({
+          currentHtml: normalizeHtml(bodyHtml),
+          inlineImages: [
+            ...previous.inlineImages,
+            ...current.inlineImages,
+            ...prepared.inlineImages,
+          ],
+          nextHtml: normalizeHtml(prepared.bodyHtml),
+          previousHtml: normalizeHtml(previousHtml),
+        });
+        attachments = [
+          ...current.attachments.filter(
+            (asset) =>
+              !previous.attachments.some(
+                (generated) => generated.id === asset.id
+              )
+          ),
+          ...prepared.attachments,
+        ];
+        inlineImages = [
+          ...current.inlineImages,
+          ...prepared.inlineImages.filter(
+            (asset) =>
+              !current.inlineImages.some((existing) => existing.id === asset.id)
+          ),
+        ];
+        previousActionRef.current = {
+          attachments: prepared.attachments,
+          html: prepared.bodyHtml,
+          inlineImages: prepared.inlineImages,
+          seededBy: next.draftAnchor?.seededBy,
+          sourceMessageId: next.draftAnchor?.sourceMessageId,
+        };
+      }
+      setDraft({
+        ...current,
+        attachments,
+        bodyHtml,
+        bodyText: prepared
+          ? getTextFromHtml(bodyHtml)
+          : form.state.values.bodyText,
+        draftAnchor: next.draftAnchor,
+        inlineImages,
+        replyContext: next.replyContext,
+        updatedAt: Date.now(),
+      });
+      form.setFieldValue("to", next.recipients.to);
+      form.setFieldValue("cc", next.recipients.cc);
+      form.setFieldValue("bcc", next.recipients.bcc);
+      form.setFieldValue("subject", next.subject);
+      if (prepared) {
+        form.setFieldValue("bodyHtml", bodyHtml);
+        form.setFieldValue("bodyText", getTextFromHtml(bodyHtml));
+      }
+      setState((value) => ({
+        ...value,
+        showBcc: next.recipients.bcc.trim() !== "",
+        showCc: next.recipients.cc.trim() !== "",
+      }));
+      recovery.checkpoint();
+      prepared = null;
+    } catch (error) {
+      if (!queuedActionRef.current) {
+        toastError(error, {
+          boundary: "compose-change-action",
+          fallback:
+            "Could not prepare this reply or forward. Please try again.",
+        });
+      }
+    } finally {
+      if (prepared) {
+        const owned = runtimeDraftRef.current;
+        const ownedIds = new Set(
+          [...owned.attachments, ...owned.inlineImages].map((asset) => asset.id)
+        );
+        clearComposeDraftRuntimeFiles({
+          ...prepared,
+          attachments: prepared.attachments.filter(
+            (asset) => !ownedIds.has(asset.id)
+          ),
+          inlineImages: prepared.inlineImages.filter(
+            (asset) => !ownedIds.has(asset.id)
+          ),
+        });
+      }
+      finishingRef.current = false;
+      actionRunningRef.current = false;
+      setState((value) => ({ ...value, isFinishing: false }));
+      const queued = queuedActionRef.current;
+      queuedActionRef.current = null;
+      if (queued && mountedRef.current) {
+        void changeComposeAction(queued);
+      }
+    }
   };
 
   const addInlineImageFiles = (files: File[]) => {

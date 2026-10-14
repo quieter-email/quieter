@@ -235,17 +235,23 @@ const ReadyComposeSurface = ({
     autosavePaused: slashMenuOpen || switchingSender,
     beforeNavigate,
     demoMode,
+    getTextFromHtml: (html) =>
+      composeEditorRef.current?.getTextFromHtml(html) ??
+      new DOMParser().parseFromString(html, "text/html").body.textContent ??
+      "",
     initialDraft,
     initialDraftNeedsSave,
     mailboxId,
     managedDemoMode,
+    normalizeHtml: (html) =>
+      composeEditorRef.current?.normalizeHtml(html) ?? html,
     onClose,
     onRecipientProblem: focusComposeRecipientField,
     persistDrafts,
     signature,
   });
   const changeAction = useEffectEvent((next: ComposeDraftState) => {
-    compose.changeComposeAction(next);
+    void compose.changeComposeAction(next);
   });
   useEffect(() => {
     if (actionDraft) {

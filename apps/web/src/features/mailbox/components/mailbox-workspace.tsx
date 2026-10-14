@@ -1,8 +1,11 @@
 "use client";
 
 import type { RouterOutputs } from "@quieter/orpc";
+import { Button, LinkButton } from "@quieter/ui/button";
+import { Text } from "@quieter/ui/text";
 import { useHotkey, useHotkeySequence } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -18,6 +21,7 @@ import {
   getChatQueryKey,
   getChatsQueryKey,
 } from "#/lib/chat-query";
+import { toastError } from "#/lib/error-toast";
 import { openGoogleAccountLink } from "#/lib/google-account-link";
 import type { MailboxCategory } from "#/lib/mail";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
@@ -829,9 +833,18 @@ const MailboxWorkspaceBody = ({
   );
 };
 
-export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
+export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const queryClient = useQueryClient();
   const session = authClient.useSession();
+  const returnTo = useLocation({ select: (location) => location.href });
+  useEffect(() => {
+    if (session.error && !session.isPending && !session.isRefetching) {
+      toastError(session.error, {
+        boundary: "mailbox-session",
+        fallback: "Could not load your account. Please try again.",
+      });
+    }
+  }, [session.error, session.isPending, session.isRefetching]);
   const {
     activeMailbox,
     chatId,
@@ -885,12 +898,14 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
   );
   const isCompletingGmailConnection =
     gmailLink === "complete" && !isSandboxMode;
+  const sessionMatchesUser =
+    !!session.data &&
+    (session.data.user.id === user.id ||
+      (!user.id && session.data.user.email === user.email));
   const isWorkspaceReady =
     browserPreferencesReady &&
     !session.isPending &&
-    !!session.data &&
-    (session.data.user.id === _user.id ||
-      (!_user.id && session.data.user.email === _user.email)) &&
+    sessionMatchesUser &&
     (isSandboxMode ||
       (!mailboxesQuery.isPending && !isCompletingGmailConnection));
   const writableMailboxes = mailboxes.filter(
@@ -988,13 +1003,38 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     closeComposeWorkspace: handleCloseComposeWorkspace,
     openComposeWorkspace: handleComposeDraftRequested,
   } = composeWorkspace;
+  if (!session.isPending && !session.isRefetching && !sessionMatchesUser) {
+    const sessionFailed = !!session.error && session.error.status !== 401;
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 p-6">
+        <Text role="alert">
+          {sessionFailed
+            ? "Could not load your account. Please try again."
+            : "Sign in to continue."}
+        </Text>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => {
+              void session.refetch();
+            }}
+            type="button"
+          >
+            Try again
+          </Button>
+          <LinkButton search={{ returnTo }} to="/auth" variant="outline">
+            Sign in
+          </LinkButton>
+        </div>
+      </main>
+    );
+  }
   if (!isWorkspaceReady) {
     return <LoadingPage />;
   }
 
   return (
     <MailboxWorkspaceBody
-      userId={_user.id ?? _user.email ?? "preview"}
+      userId={user.id ?? user.email ?? "preview"}
       activeMailbox={activeMailbox}
       chatId={chatId ?? null}
       composeSession={composeWorkspace.composeSession}

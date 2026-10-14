@@ -108,8 +108,8 @@ describe(buildComposeDraftFromMessageAction, () => {
       },
       subject: "Re: Project update",
     });
-    expect(draft.bodyHtml).toContain(
-      "<blockquote><p>Hello from Alex.</p></blockquote>"
+    expect(draft.bodyHtml).toMatch(
+      /<blockquote[^>]*><p>Hello from Alex\.<\/p><\/blockquote>/u
     );
     const formValues = draftToComposeFormValues(draft);
     expect(formValues).toMatchObject({
@@ -180,8 +180,8 @@ describe(buildComposeDraftFromMessageAction, () => {
       draftId: "draft-empty",
       messageId: "draft-message-empty",
     });
-    expect(draft.bodyHtml).toContain(
-      "<blockquote><p>Hello from Alex.</p></blockquote>"
+    expect(draft.bodyHtml).toMatch(
+      /<blockquote[^>]*><p>Hello from Alex\.<\/p><\/blockquote>/u
     );
     expect(draft.recipients.to).toBe("Alex Sender <alex@example.com>");
   });
