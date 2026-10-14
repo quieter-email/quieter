@@ -63,6 +63,7 @@ type RuntimeBinary = {
 };
 
 const runtimeBinaryById = new Map<string, RuntimeBinary>();
+const pendingRuntimeFiles = new Map<string, { removed: boolean }>();
 
 const normalizeString = (value: string): string =>
   value.replaceAll("​", "").trim();
@@ -206,6 +207,10 @@ const revokeRuntimeBinary = (id: string) => {
 };
 
 export const removeComposeRuntimeFile = (id: string) => {
+  const pending = pendingRuntimeFiles.get(id);
+  if (pending) {
+    pending.removed = true;
+  }
   revokeRuntimeBinary(id);
 };
 
@@ -222,7 +227,7 @@ const rememberRuntimeFile = (id: string, file: File) => {
 
 export const clearComposeDraftRuntimeFiles = (draft: ComposeDraftState) => {
   for (const asset of [...draft.attachments, ...draft.inlineImages]) {
-    revokeRuntimeBinary(asset.id);
+    removeComposeRuntimeFile(asset.id);
   }
 };
 
@@ -353,17 +358,28 @@ const attachRuntimeFile = async <
   const runtimeFile = runtimeBinaryById.get(asset.id)?.file;
   if (!runtimeFile) {
     if (asset.gmailAttachmentId && messageId) {
-      const { file } = await rpc.mail.getAttachment(
-        {
-          attachmentId: asset.gmailAttachmentId,
-          fileName: asset.name,
-          mailboxId,
-          messageId,
-          mimeType: asset.mimeType,
-        },
-        { signal }
-      );
-      return { ...asset, file };
+      const pending = { removed: false };
+      pendingRuntimeFiles.set(asset.id, pending);
+      try {
+        const { file } = await rpc.mail.getAttachment(
+          {
+            attachmentId: asset.gmailAttachmentId,
+            fileName: asset.name,
+            mailboxId,
+            messageId,
+            mimeType: asset.mimeType,
+          },
+          { signal }
+        );
+        if (!pending.removed) {
+          rememberRuntimeFile(asset.id, file);
+        }
+        return { ...asset, file };
+      } finally {
+        if (pendingRuntimeFiles.get(asset.id) === pending) {
+          pendingRuntimeFiles.delete(asset.id);
+        }
+      }
     }
     throw new Error(`Missing file payload for ${asset.name}.`);
   }

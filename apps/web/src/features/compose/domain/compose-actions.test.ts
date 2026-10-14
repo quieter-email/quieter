@@ -35,6 +35,30 @@ const sourceMessage = {
 } satisfies MessageListItem;
 
 describe(buildComposeDraftFromMessageAction, () => {
+  test("refreshes reply headers when resuming a draft from an earlier message", () => {
+    const draft = buildComposeDraftFromMessageAction({
+      action: "reply",
+      currentUserEmail: "me@example.com",
+      existingDraftMessage: {
+        bodyText: "Unfinished reply",
+        draftId: "saved-reply",
+        id: "saved-message",
+        inReplyTo: "<old@example.com>",
+        references: "<old@example.com>",
+        threadId: sourceMessage.threadId,
+      },
+      message: sourceMessage,
+    });
+    expect(draft.replyContext?.messageHeaderId).toBe(
+      sourceMessage.messageHeaderId
+    );
+    expect(draft.replyContext?.references).toContain(
+      sourceMessage.messageHeaderId
+    );
+    expect(draft.replyContext?.references).not.toContain("<old@example.com>");
+    expect(draft.bodyText).toContain("Unfinished reply");
+  });
+
   test("preserves reply metadata when saving edited inline form values on navigation", () => {
     const draft = buildComposeDraftFromMessageAction({
       action: "reply",

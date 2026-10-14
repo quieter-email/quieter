@@ -294,7 +294,7 @@ export const buildComposeDraftFromSavedDraftMessage = (
     ...draft,
     attachments: (message.attachments ?? []).map((attachment) => ({
       gmailAttachmentId: attachment.attachmentId,
-      id: attachment.attachmentId,
+      id: crypto.randomUUID(),
       isInline: false,
       mimeType: attachment.mimeType,
       name: attachment.fileName,
@@ -385,6 +385,7 @@ export const buildComposeDraftFromMessageAction = ({
             ? fallbackRecipients.to
             : existingDraft.recipients.to,
       },
+      replyContext: action === "forward" ? null : buildReplyContext(message),
       updatedAt: Date.now(),
     };
   }

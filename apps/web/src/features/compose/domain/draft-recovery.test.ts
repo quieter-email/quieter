@@ -200,4 +200,31 @@ describe("draft recovery selection", () => {
     ).toBeNull();
     expect(draftRecoveryJournal.list("mailbox")).toHaveLength(1);
   });
+
+  it("does not attach an unrelated ID-less thread copy to a saved draft", () => {
+    const current = restoreComposeDraft(
+      JSON.stringify({
+        ...draft,
+        draftId: "saved-draft",
+        localId: "saved-local",
+        replyContext: { references: [], threadId: "shared-thread" },
+      }),
+      "saved-editor"
+    );
+    draftRecoveryJournal.save({
+      editorId: "other-editor",
+      localId: "other-local",
+      mailboxId: "mailbox",
+      payload: JSON.stringify({
+        ...draft,
+        localId: "other-local",
+        replyContext: { references: [], threadId: "shared-thread" },
+      }),
+      updatedAt: 20,
+    });
+    expect(findRecoverableComposeDraft("mailbox", current)).toBeNull();
+    expect(
+      findRecoverableComposeDraft("mailbox", { ...current, draftId: undefined })
+    ).toMatchObject({ localId: "other-local" });
+  });
 });

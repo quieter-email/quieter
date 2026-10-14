@@ -113,6 +113,7 @@ export const findRecoverableComposeDraft = (
       record.localId === draft.localId ||
       (draftId !== "" && recoveredDraftId === draftId);
     const matchesThread =
+      draftId === "" &&
       (threadId?.trim() ?? "") !== "" &&
       recoveredThreadId === threadId &&
       (draft.draftAnchor?.seededBy === "forward") ===
