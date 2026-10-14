@@ -1,7 +1,12 @@
 "use client";
 
 import { Modifier } from "@dnd-kit/abstract";
-import { PointerActivationConstraints, PointerSensor } from "@dnd-kit/dom";
+import {
+  defaultPreset,
+  Feedback,
+  PointerActivationConstraints,
+  PointerSensor,
+} from "@dnd-kit/dom";
 import { DragDropProvider } from "@dnd-kit/react";
 import type { DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
@@ -195,6 +200,15 @@ const GROUP_DRAG_SENSORS = [
     ],
   }),
 ];
+
+const SWITCHER_DRAG_PLUGINS = defaultPreset.plugins.map((plugin) =>
+  plugin === Feedback
+    ? Feedback.configure({
+        dropAnimation: null,
+        rootElement: () => document.body,
+      })
+    : plugin
+);
 
 class RestrictToVerticalAxis extends Modifier {
   override apply({ transform }: Parameters<Modifier["apply"]>[0]) {
@@ -422,13 +436,13 @@ const SortableGroup = ({
   onToggle,
 }: SortableGroupProps) => {
   const sectionRef = useRef<HTMLElement>(null);
-  const dragHandleRef = useRef<HTMLButtonElement>(null);
+  const headerRef = useRef<HTMLButtonElement>(null);
   const shouldReduceMotion = useReducedMotion();
-  const { isDragSource } = useSortable({
+  const { isDragSource, sourceRef } = useSortable({
     accept: GROUP_SORTABLE_TYPE,
     disabled,
     element: sectionRef,
-    handle: dragHandleRef,
+    handle: headerRef,
     id: getGroupSortableId(group.id),
     index,
     modifiers: VERTICAL_AXIS_MODIFIERS,
@@ -453,6 +467,7 @@ const SortableGroup = ({
             { "bg-muted/60 dark:bg-muted/40": highlighted }
           )}
           data-mailbox-switcher-navigation-row
+          ref={sourceRef}
           onBlur={(event) => {
             if (event.currentTarget.contains(event.relatedTarget)) {
               return;
@@ -469,33 +484,16 @@ const SortableGroup = ({
             onHighlightChange(false);
           }}
         >
-          <div hidden={!sortingTeams}>
-            <IconButtonTooltip
-              label={`Drag ${group.name} to reorder, or use Alt + Up or Down`}
-            >
-              <Button
-                aria-describedby="mailbox-order-help"
-                aria-label={`Reorder ${group.name}`}
-                // oxlint-disable-next-line shadcn/no-restyle -- Compact team drag handle.
-                className="ml-1 size-5 cursor-grab touch-none text-muted-fg active:cursor-grabbing"
-                ref={dragHandleRef}
-                size="icon-sm"
-                tabIndex={-1}
-                variant="ghost"
-              >
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-3.5"
-                  icon={DragDropVerticalIcon}
-                />
-              </Button>
-            </IconButtonTooltip>
-          </div>
           <button
             aria-describedby={disabled ? undefined : "mailbox-order-help"}
             aria-expanded={!sortingTeams && !collapsed}
             aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
-            className="relative z-10 flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
+            className={cn(
+              "relative z-10 flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
+              {
+                "cursor-grab touch-none active:cursor-grabbing": !disabled,
+              }
+            )}
             data-mailbox-switcher-group={group.id}
             data-mailbox-switcher-navigation-item
             onClick={() => {
@@ -503,6 +501,7 @@ const SortableGroup = ({
                 onToggle(group.id);
               }
             }}
+            ref={headerRef}
             type="button"
           >
             <m.span
@@ -624,7 +623,10 @@ const MailboxRows = ({
   };
 
   return (
-    <DragDropProvider onDragEnd={handleMailboxDragEnd}>
+    <DragDropProvider
+      onDragEnd={handleMailboxDragEnd}
+      plugins={SWITCHER_DRAG_PLUGINS}
+    >
       {group.mailboxes.map((mailbox, mailboxIndex) =>
         children(mailbox, mailboxIndex)
       )}
@@ -664,13 +666,16 @@ const SortableMailboxRow = ({
       tabIndex={-1}
     >
       {children}
-      <div hidden={disabled}>
+      <div
+        className="absolute inset-y-0 right-1 z-30 flex items-center"
+        hidden={disabled}
+      >
         <IconButtonTooltip label="Drag to reorder mailbox, or use Alt + Up or Down">
           <Button
             aria-describedby="mailbox-order-help"
             aria-label={`Reorder ${mailbox.displayName ?? mailbox.emailAddress}`}
             // oxlint-disable-next-line shadcn/no-restyle -- Compact drag handle beside mailbox actions.
-            className="absolute inset-y-0 right-1 z-30 my-auto size-5 cursor-grab touch-none text-muted-fg opacity-0 group-focus-within/mailbox:opacity-100 group-hover/mailbox:opacity-100 focus-visible:opacity-100 active:cursor-grabbing"
+            className="size-5 cursor-grab touch-none text-muted-fg opacity-0 group-focus-within/mailbox:opacity-100 group-hover/mailbox:opacity-100 focus-visible:opacity-100 active:cursor-grabbing"
             ref={handleRef}
             size="icon-sm"
             tabIndex={-1}
@@ -748,12 +753,6 @@ export const MailboxSwitcherDropdown = ({
       searchRef.current?.focus();
       return;
     }
-    if (event.key === "Escape" && sortingTeams) {
-      event.preventDefault();
-      event.stopPropagation();
-      setSortingTeams(false);
-      return;
-    }
     if (
       event.altKey &&
       (event.key === "ArrowDown" || event.key === "ArrowUp")
@@ -792,7 +791,6 @@ export const MailboxSwitcherDropdown = ({
           `Mailbox moved to position ${toIndex + 1} of ${items.length} in ${group.name}.`
         );
       } else {
-        setSortingTeams(true);
         onReorderMailboxSwitcher(
           getMailboxSwitcherOrder(moveItem(groups, fromIndex, toIndex))
         );
@@ -900,6 +898,7 @@ export const MailboxSwitcherDropdown = ({
     });
   };
   const handleGroupDragEnd = (event: DragEndEvent) => {
+    setSortingTeams(false);
     if (event.canceled || !isSortableOperation(event.operation)) {
       return;
     }
@@ -982,7 +981,15 @@ export const MailboxSwitcherDropdown = ({
         side={side}
         sideOffset={10}
       >
-        <DragDropProvider onDragEnd={handleGroupDragEnd}>
+        <DragDropProvider
+          plugins={SWITCHER_DRAG_PLUGINS}
+          onDragEnd={handleGroupDragEnd}
+          onDragStart={(event) => {
+            if (event.operation.source?.type === GROUP_SORTABLE_TYPE) {
+              setSortingTeams(true);
+            }
+          }}
+        >
           <LayoutGroup id="mailbox-switcher-rows">
             <div
               className="flex max-h-96 flex-col gap-1 overflow-y-auto p-1"
@@ -990,24 +997,6 @@ export const MailboxSwitcherDropdown = ({
             >
               {groups.length > 0 ? (
                 <>
-                  {groups.length > 1 && (
-                    <div className="flex items-center justify-between gap-2 px-1">
-                      <span className="text-caption text-muted-fg">
-                        {sortingTeams ? "Drag teams to reorder" : "Mailboxes"}
-                      </span>
-                      <Button
-                        aria-pressed={sortingTeams}
-                        disabled={isFiltering}
-                        onClick={() => {
-                          setSortingTeams((current) => !current);
-                        }}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        {sortingTeams ? "Done" : "Reorder teams"}
-                      </Button>
-                    </div>
-                  )}
                   {onSelectAllInboxes &&
                   mailboxes.some((mailbox) => mailbox.provider !== "api") ? (
                     <Button
@@ -1024,24 +1013,21 @@ export const MailboxSwitcherDropdown = ({
                       All inboxes
                     </Button>
                   ) : null}
-                  {!sortingTeams &&
-                    (mailboxes.length > 1 ||
-                      groups.length > 1 ||
-                      isFiltering) && (
-                      <div className="sticky top-0 z-10 bg-popover p-1">
-                        <Input
-                          aria-label="Search mailboxes"
-                          className="h-8"
-                          onChange={(event) => {
-                            setSearchQuery(event.currentTarget.value);
-                          }}
-                          placeholder="Search mailboxes"
-                          ref={searchRef}
-                          size="sm"
-                          value={searchQuery}
-                        />
-                      </div>
-                    )}
+                  {(mailboxes.length >= 8 || isFiltering) && (
+                    <div className="sticky top-0 z-10 bg-popover p-1">
+                      <Input
+                        aria-label="Search mailboxes"
+                        className="h-8"
+                        onChange={(event) => {
+                          setSearchQuery(event.currentTarget.value);
+                        }}
+                        placeholder="Search mailboxes"
+                        ref={searchRef}
+                        size="sm"
+                        value={searchQuery}
+                      />
+                    </div>
+                  )}
                   {(isFiltering ? filteredGroups : groups).map(
                     (group, groupIndex) => {
                       const isCollapsed =
@@ -1052,7 +1038,7 @@ export const MailboxSwitcherDropdown = ({
                       return (
                         <SortableGroup
                           collapsed={isCollapsed}
-                          disabled={!canReorderGroups || !sortingTeams}
+                          disabled={!canReorderGroups}
                           embedded={embedded}
                           group={group}
                           highlighted={highlightedGroupId === group.id}
@@ -1197,13 +1183,8 @@ export const MailboxSwitcherDropdown = ({
                       );
                     }
                   )}
-                  <p
-                    className="px-2 py-1 text-caption text-muted-fg"
-                    id="mailbox-order-help"
-                  >
-                    {sortingTeams
-                      ? "Alt + ↑/↓ to reorder teams. Esc to finish."
-                      : "Drag mailboxes to reorder, or use Alt + ↑/↓. / to search."}
+                  <p className="sr-only" id="mailbox-order-help">
+                    Alt + Up or Down to reorder the focused team or mailbox.
                   </p>
                   {isFiltering && filteredGroups.length === 0 && (
                     <p className="px-2 py-3 text-body-sm text-muted-fg">
