@@ -5,6 +5,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import type { MailboxSwitcherOrder } from "#/features/navigation/components/mailbox-switcher";
+import { toastError } from "#/lib/error-toast";
 import { getDemoMailboxes } from "#/lib/gmail/demo-mail";
 import {
   getMailboxesQueryKey,
@@ -82,6 +83,7 @@ const toMailboxGroup = (
   mailboxes: group.mailboxes.map((mailbox) => ({
     connectionStatus: mailbox.connectionStatus,
     displayName: mailbox.displayName,
+    divisionName: "divisionName" in mailbox ? mailbox.divisionName : null,
     emailAddress: mailbox.emailAddress,
     grantRole: mailbox.grantRole,
     groupName: mailbox.groupName,
@@ -230,11 +232,18 @@ export const useMailboxSelection = ({
   >({
     mutationFn: updateMailboxSwitcherOrderOptions.mutationFn,
     mutationKey: updateMailboxSwitcherOrderOptions.mutationKey,
-    onError: (_error, _order, context) => {
-      if (context !== null && context !== undefined) {
+    onError: (error, _order, context) => {
+      if (
+        queryClient.isMutating({
+          mutationKey: updateMailboxSwitcherOrderOptions.mutationKey,
+        }) === 1 &&
+        context !== null &&
+        context !== undefined
+      ) {
         const queryKey = getMailboxesQueryKey();
         queryClient.setQueryData(queryKey, context.previousData);
       }
+      toastError(error, { boundary: "mailbox-order" });
     },
     onMutate: async (order) => {
       const queryKey = getMailboxesQueryKey();
@@ -252,10 +261,23 @@ export const useMailboxSelection = ({
       return { previousData };
     },
     onSettled: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: getMailboxesQueryKey(),
-      });
+      if (
+        queryClient.isMutating({
+          mutationKey: updateMailboxSwitcherOrderOptions.mutationKey,
+        }) !== 1
+      ) {
+        return;
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: getMailboxesQueryKey(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: orpc.mail.listManagedMailboxAdministration.key(),
+        }),
+      ]);
     },
+    scope: { id: "mailbox-switcher-order" },
   });
 
   return {

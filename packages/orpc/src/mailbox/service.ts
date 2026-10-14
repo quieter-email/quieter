@@ -562,7 +562,12 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
     (left, right) => left.emailAddress.localeCompare(right.emailAddress)
   );
 
-  const groups: MailboxGroup[] = organizations.flatMap((organizationRecord) => {
+  const groups: MailboxGroup[] = organizations.map((organizationRecord) => {
+    const group = {
+      groupId: organizationRecord.id,
+      groupKind: "organization" as const,
+      groupName: organizationRecord.name,
+    };
     const organizationGmailMailboxes = gmailMailboxes
       .filter((record) => record.organizationId === organizationRecord.id)
       .map((record) =>
@@ -573,54 +578,11 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
             grantRole: null,
             unreadNonSpamCount: 0,
           },
-          {
-            groupId: organizationRecord.id,
-            groupKind: "organization",
-            groupName: organizationRecord.name,
-          }
+          group
         )
       );
-    const organizationManagedMailboxes = managedMailboxes.filter(
-      (record) => record.organizationId === organizationRecord.id
-    );
-    const divisionIds = [
-      ...new Set(
-        organizationManagedMailboxes.flatMap((record) =>
-          record.divisionId && record.divisionName ? [record.divisionId] : []
-        )
-      ),
-    ];
-    const managedGroups = divisionIds.map((divisionId) => {
-      const divisionName =
-        organizationManagedMailboxes.find(
-          (record) => record.divisionId === divisionId
-        )?.divisionName ?? "Division";
-      return {
-        id: `division:${divisionId}`,
-        kind: "division" as const,
-        mailboxes: organizationManagedMailboxes
-          .filter((record) => record.divisionId === divisionId)
-          .map((record) =>
-            toMailboxListItem(
-              {
-                ...record,
-                unreadNonSpamCount:
-                  managedUnreadCountsByMailboxId.get(record.id) ?? 0,
-              },
-              {
-                groupId: `division:${divisionId}`,
-                groupKind: "division",
-                groupName: divisionName,
-              }
-            )
-          ),
-        name: divisionName,
-        organizationId: organizationRecord.id,
-        slug: organizationRecord.slug,
-      };
-    });
-    const unassignedMailboxes = organizationManagedMailboxes
-      .filter((record) => !record.divisionId)
+    const organizationManagedMailboxes = managedMailboxes
+      .filter((record) => record.organizationId === organizationRecord.id)
       .map((record) =>
         toMailboxListItem(
           {
@@ -628,11 +590,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
             unreadNonSpamCount:
               managedUnreadCountsByMailboxId.get(record.id) ?? 0,
           },
-          {
-            groupId: `team:${organizationRecord.id}:unassigned`,
-            groupKind: "unassigned",
-            groupName: "Unassigned",
-          }
+          group
         )
       );
     const apiMailboxes =
@@ -650,42 +608,23 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
                 provider: "api",
                 status: "connected",
               },
-              {
-                groupId: organizationRecord.id,
-                groupKind: "organization",
-                groupName: organizationRecord.name,
-              }
+              group
             ),
           ]
         : [];
 
-    return [
-      ...(organizationGmailMailboxes.length || apiMailboxes.length
-        ? [
-            {
-              id: organizationRecord.id,
-              kind: "organization" as const,
-              mailboxes: [...apiMailboxes, ...organizationGmailMailboxes],
-              name: organizationRecord.name,
-              organizationId: organizationRecord.id,
-              slug: organizationRecord.slug,
-            },
-          ]
-        : []),
-      ...managedGroups,
-      ...(unassignedMailboxes.length
-        ? [
-            {
-              id: `team:${organizationRecord.id}:unassigned`,
-              kind: "unassigned" as const,
-              mailboxes: unassignedMailboxes,
-              name: "Unassigned",
-              organizationId: organizationRecord.id,
-              slug: organizationRecord.slug,
-            },
-          ]
-        : []),
-    ];
+    return {
+      id: organizationRecord.id,
+      kind: "organization",
+      mailboxes: [
+        ...apiMailboxes,
+        ...organizationGmailMailboxes,
+        ...organizationManagedMailboxes,
+      ],
+      name: organizationRecord.name,
+      organizationId: organizationRecord.id,
+      slug: organizationRecord.slug,
+    };
   });
 
   return { groups };

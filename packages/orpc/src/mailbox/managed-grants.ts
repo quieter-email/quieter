@@ -23,6 +23,10 @@ import {
   getAuthorizedManagedMailbox,
   MAILBOX_PROVIDER_MANAGED,
 } from "./access";
+import {
+  canonicalizeMailboxSwitcherOrder,
+  getUserMailboxPreferences,
+} from "./preferences";
 
 const normalizeEmailAddress = (emailAddress: string) =>
   emailAddress.trim().toLowerCase();
@@ -263,40 +267,43 @@ export const listManagedMailboxAdministration = async (input: {
   userId: string;
 }) => {
   await assertOrganizationManager(input);
-  const rows = await db
-    .select({
-      accessMode: mailbox.accessMode,
-      catchAllDomain: mailDomain.domain,
-      directRole: mailboxGrant.role,
-      directUserId: mailboxGrant.userId,
-      displayName: mailbox.displayName,
-      divisionGrantDivisionId: mailboxDivisionGrant.divisionId,
-      divisionGrantRole: mailboxDivisionGrant.role,
-      divisionId: mailbox.divisionId,
-      divisionName: organizationDivision.name,
-      emailAddress: mailbox.emailAddress,
-      id: mailbox.id,
-      includeApiSentMessages: mailbox.includeApiSentMessages,
-      ownerUserId: mailbox.managedOwnerUserId,
-      status: mailbox.status,
-    })
-    .from(mailbox)
-    .leftJoin(
-      organizationDivision,
-      eq(organizationDivision.id, mailbox.divisionId)
-    )
-    .leftJoin(mailboxGrant, eq(mailboxGrant.mailboxId, mailbox.id))
-    .leftJoin(
-      mailboxDivisionGrant,
-      eq(mailboxDivisionGrant.mailboxId, mailbox.id)
-    )
-    .leftJoin(mailDomain, eq(mailDomain.catchAllMailboxId, mailbox.id))
-    .where(
-      and(
-        eq(mailbox.organizationId, input.organizationId),
-        eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED)
+  const [rows, preferences] = await Promise.all([
+    db
+      .select({
+        accessMode: mailbox.accessMode,
+        catchAllDomain: mailDomain.domain,
+        directRole: mailboxGrant.role,
+        directUserId: mailboxGrant.userId,
+        displayName: mailbox.displayName,
+        divisionGrantDivisionId: mailboxDivisionGrant.divisionId,
+        divisionGrantRole: mailboxDivisionGrant.role,
+        divisionId: mailbox.divisionId,
+        divisionName: organizationDivision.name,
+        emailAddress: mailbox.emailAddress,
+        id: mailbox.id,
+        includeApiSentMessages: mailbox.includeApiSentMessages,
+        ownerUserId: mailbox.managedOwnerUserId,
+        status: mailbox.status,
+      })
+      .from(mailbox)
+      .leftJoin(
+        organizationDivision,
+        eq(organizationDivision.id, mailbox.divisionId)
       )
-    );
+      .leftJoin(mailboxGrant, eq(mailboxGrant.mailboxId, mailbox.id))
+      .leftJoin(
+        mailboxDivisionGrant,
+        eq(mailboxDivisionGrant.mailboxId, mailbox.id)
+      )
+      .leftJoin(mailDomain, eq(mailDomain.catchAllMailboxId, mailbox.id))
+      .where(
+        and(
+          eq(mailbox.organizationId, input.organizationId),
+          eq(mailbox.provider, MAILBOX_PROVIDER_MANAGED)
+        )
+      ),
+    getUserMailboxPreferences(input.userId),
+  ]);
 
   const mailboxes = new Map<
     string,
@@ -366,14 +373,35 @@ export const listManagedMailboxAdministration = async (input: {
     mailboxes.set(row.id, record);
   }
 
+  const records = [...mailboxes.values()].toSorted((left, right) =>
+    left.emailAddress.localeCompare(right.emailAddress)
+  );
+  const order = canonicalizeMailboxSwitcherOrder(
+    [
+      {
+        id: input.organizationId,
+        mailboxes: records,
+        organizationId: input.organizationId,
+      },
+    ],
+    preferences.mailboxSwitcherOrder
+  );
+
   return {
-    mailboxes: [...mailboxes.values()].map(
-      ({
-        directGrantIds: _directGrantIds,
-        divisionGrantIds: _divisionGrantIds,
-        managerGrantIds: _managerGrantIds,
-        ...record
-      }) => record
+    mailboxes: order.mailboxIdsByGroupId[input.organizationId].flatMap(
+      (mailboxId) => {
+        const record = mailboxes.get(mailboxId);
+        if (!record) {
+          return [];
+        }
+        const {
+          directGrantIds: _directGrantIds,
+          divisionGrantIds: _divisionGrantIds,
+          managerGrantIds: _managerGrantIds,
+          ...details
+        } = record;
+        return [details];
+      }
     ),
   };
 };

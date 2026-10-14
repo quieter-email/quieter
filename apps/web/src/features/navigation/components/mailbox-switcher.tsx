@@ -7,6 +7,7 @@ import type { DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import {
   ArrowRight01Icon,
+  DragDropVerticalIcon,
   Loading03Icon,
   Mail01Icon,
   PinIcon,
@@ -135,7 +136,8 @@ const filterMailboxGroups = (
         )
         .some((value) => value.toLowerCase().includes(normalizedSearchQuery))
     );
-    return matchingMailboxes.length > 0
+    return matchingMailboxes.length > 0 ||
+      group.name.toLowerCase().includes(normalizedSearchQuery)
       ? [{ ...group, mailboxes: matchingMailboxes }]
       : [];
   });
@@ -148,6 +150,7 @@ type SortableGroupProps = {
   group: MailboxSwitcherGroup;
   highlighted: boolean;
   index: number;
+  sortingTeams: boolean;
   onHighlightChange: (highlighted: boolean) => void;
   onToggle: (groupId: string) => void;
 };
@@ -290,9 +293,10 @@ const MailboxMenuItem = ({
   >
     <Button
       aria-current={isActive ? "page" : undefined}
+      aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
       className={cn(
         // oxlint-disable-next-line shadcn/no-restyle -- Switcher items keep their bespoke metrics.
-        "relative z-10 h-auto min-h-12 w-full justify-start rounded-xs px-2.5 py-2 pr-10 text-left hover:bg-transparent active:scale-[0.985]",
+        "relative z-10 h-auto min-h-12 w-full justify-start rounded-xs px-2.5 py-2 pr-16 text-left hover:bg-transparent active:scale-[0.985]",
         // oxlint-disable-next-line shadcn/no-restyle -- Active item uses semibold.
         { "font-medium": isActive }
       )}
@@ -304,7 +308,7 @@ const MailboxMenuItem = ({
       {children}
     </Button>
     {action !== null && action !== undefined && action !== false && (
-      <div className="absolute inset-y-0 right-2 z-20 flex items-center">
+      <div className="absolute inset-y-0 right-7 z-20 flex items-center">
         {action}
       </div>
     )}
@@ -413,17 +417,18 @@ const SortableGroup = ({
   group,
   highlighted,
   index,
+  sortingTeams,
   onHighlightChange,
   onToggle,
 }: SortableGroupProps) => {
   const sectionRef = useRef<HTMLElement>(null);
-  const headerRef = useRef<HTMLButtonElement>(null);
+  const dragHandleRef = useRef<HTMLButtonElement>(null);
   const shouldReduceMotion = useReducedMotion();
   const { isDragSource } = useSortable({
     accept: GROUP_SORTABLE_TYPE,
     disabled,
     element: sectionRef,
-    handle: headerRef,
+    handle: dragHandleRef,
     id: getGroupSortableId(group.id),
     index,
     modifiers: VERTICAL_AXIS_MODIFIERS,
@@ -440,6 +445,7 @@ const SortableGroup = ({
           "opacity-70": isDragSource,
         })}
         ref={sectionRef}
+        data-mailbox-switcher-group={group.id}
       >
         <div
           className={cn(
@@ -463,19 +469,46 @@ const SortableGroup = ({
             onHighlightChange(false);
           }}
         >
+          <div hidden={!sortingTeams}>
+            <IconButtonTooltip
+              label={`Drag ${group.name} to reorder, or use Alt + Up or Down`}
+            >
+              <Button
+                aria-describedby="mailbox-order-help"
+                aria-label={`Reorder ${group.name}`}
+                // oxlint-disable-next-line shadcn/no-restyle -- Compact team drag handle.
+                className="ml-1 size-5 cursor-grab touch-none text-muted-fg active:cursor-grabbing"
+                ref={dragHandleRef}
+                size="icon-sm"
+                tabIndex={-1}
+                variant="ghost"
+              >
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-3.5"
+                  icon={DragDropVerticalIcon}
+                />
+              </Button>
+            </IconButtonTooltip>
+          </div>
           <button
-            aria-expanded={!collapsed}
+            aria-describedby={disabled ? undefined : "mailbox-order-help"}
+            aria-expanded={!sortingTeams && !collapsed}
+            aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
             className="relative z-10 flex min-w-0 flex-1 items-center gap-2 rounded-xs px-2 py-1 text-left squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
+            data-mailbox-switcher-group={group.id}
             data-mailbox-switcher-navigation-item
             onClick={() => {
-              onToggle(group.id);
+              if (!sortingTeams) {
+                onToggle(group.id);
+              }
             }}
-            ref={headerRef}
             type="button"
           >
             <m.span
               animate={{
-                transform: collapsed ? "rotate(0deg)" : "rotate(90deg)",
+                transform:
+                  collapsed || sortingTeams ? "rotate(0deg)" : "rotate(90deg)",
               }}
               className="flex size-3 shrink-0 items-center justify-center text-muted-fg/70"
               initial={false}
@@ -518,32 +551,34 @@ const SortableGroup = ({
           )}
         </div>
 
-        <AnimatePresence initial={false}>
-          {!collapsed && (
-            <m.div
-              animate={{ height: "auto", opacity: 1 }}
-              className="overflow-hidden"
-              exit={{
-                height: shouldReduceMotion === true ? "auto" : 0,
-                opacity: 0,
-              }}
-              initial={{
-                height: shouldReduceMotion === true ? "auto" : 0,
-                opacity: 0,
-              }}
-              transition={
-                shouldReduceMotion === true
-                  ? { duration: 0.1 }
-                  : {
-                      height: { duration: 0.18, ease: [0.23, 1, 0.32, 1] },
-                      opacity: { duration: 0.12, ease: [0.23, 1, 0.32, 1] },
-                    }
-              }
-            >
-              <div className="space-y-1 pt-1">{children}</div>
-            </m.div>
-          )}
-        </AnimatePresence>
+        <div hidden={sortingTeams}>
+          <AnimatePresence initial={false}>
+            {!collapsed && (
+              <m.div
+                animate={{ height: "auto", opacity: 1 }}
+                className="overflow-hidden"
+                exit={{
+                  height: shouldReduceMotion === true ? "auto" : 0,
+                  opacity: 0,
+                }}
+                initial={{
+                  height: shouldReduceMotion === true ? "auto" : 0,
+                  opacity: 0,
+                }}
+                transition={
+                  shouldReduceMotion === true
+                    ? { duration: 0.1 }
+                    : {
+                        height: { duration: 0.18, ease: [0.23, 1, 0.32, 1] },
+                        opacity: { duration: 0.12, ease: [0.23, 1, 0.32, 1] },
+                      }
+                }
+              >
+                <div className="space-y-1 pt-1">{children}</div>
+              </m.div>
+            )}
+          </AnimatePresence>
+        </div>
       </section>
     </LazyMotion>
   );
@@ -604,11 +639,13 @@ const SortableMailboxRow = ({
   index,
   mailbox,
 }: SortableMailboxRowProps) => {
+  const handleRef = useRef<HTMLButtonElement>(null);
   const mailboxSortableType = getMailboxSortableType(groupId);
   const { isDragSource, ref } = useSortable({
     accept: mailboxSortableType,
     disabled,
     group: groupId,
+    handle: handleRef,
     id: getMailboxSortableId(groupId, mailbox.id),
     index,
     modifiers: VERTICAL_AXIS_MODIFIERS,
@@ -618,13 +655,35 @@ const SortableMailboxRow = ({
 
   return (
     <div
-      className={cn("rounded-xs", {
+      className={cn("group/mailbox relative rounded-xs", {
         "opacity-70": isDragSource,
       })}
       ref={ref}
+      data-mailbox-switcher-group={groupId}
+      data-mailbox-switcher-mailbox={mailbox.id}
       tabIndex={-1}
     >
       {children}
+      <div hidden={disabled}>
+        <IconButtonTooltip label="Drag to reorder mailbox, or use Alt + Up or Down">
+          <Button
+            aria-describedby="mailbox-order-help"
+            aria-label={`Reorder ${mailbox.displayName ?? mailbox.emailAddress}`}
+            // oxlint-disable-next-line shadcn/no-restyle -- Compact drag handle beside mailbox actions.
+            className="absolute inset-y-0 right-1 z-30 my-auto size-5 cursor-grab touch-none text-muted-fg opacity-0 group-focus-within/mailbox:opacity-100 group-hover/mailbox:opacity-100 focus-visible:opacity-100 active:cursor-grabbing"
+            ref={handleRef}
+            size="icon-sm"
+            tabIndex={-1}
+            variant="ghost"
+          >
+            <HugeiconsIcon
+              aria-hidden
+              className="size-3.5"
+              icon={DragDropVerticalIcon}
+            />
+          </Button>
+        </IconButtonTooltip>
+      </div>
     </div>
   );
 };
@@ -671,22 +730,81 @@ export const MailboxSwitcherDropdown = ({
     string | null
   >(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [sortingTeams, setSortingTeams] = useState(false);
+  const [orderAnnouncement, setOrderAnnouncement] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const isFiltering = normalizedSearchQuery.length > 0;
+  const canReorderGroups = !isFiltering && groups.length > 1;
   const handleArrowNavigation = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (!event.key.startsWith("Arrow")) {
-      return;
-    }
-
-    if (event.target instanceof HTMLInputElement) {
-      return;
-    }
-
     if (!(event.target instanceof HTMLElement)) {
       return;
     }
 
     const { target } = event;
+    if (event.key === "/" && !(target instanceof HTMLInputElement)) {
+      event.preventDefault();
+      searchRef.current?.focus();
+      return;
+    }
+    if (event.key === "Escape" && sortingTeams) {
+      event.preventDefault();
+      event.stopPropagation();
+      setSortingTeams(false);
+      return;
+    }
+    if (
+      event.altKey &&
+      (event.key === "ArrowDown" || event.key === "ArrowUp")
+    ) {
+      const groupId = target.closest<HTMLElement>(
+        "[data-mailbox-switcher-group]"
+      )?.dataset.mailboxSwitcherGroup;
+      const mailboxId = target.closest<HTMLElement>(
+        "[data-mailbox-switcher-mailbox]"
+      )?.dataset.mailboxSwitcherMailbox;
+      const groupIndex = groups.findIndex((group) => group.id === groupId);
+      const group = groups[groupIndex];
+      if (isFiltering || groupIndex === -1) {
+        return;
+      }
+      event.preventDefault();
+      const items = mailboxId ? group.mailboxes : groups;
+      const fromIndex = mailboxId
+        ? group.mailboxes.findIndex((mailbox) => mailbox.id === mailboxId)
+        : groupIndex;
+      const toIndex = fromIndex + (event.key === "ArrowDown" ? 1 : -1);
+      if (fromIndex < 0 || toIndex < 0 || toIndex >= items.length) {
+        return;
+      }
+      if (mailboxId) {
+        const nextGroups = groups.map((candidate) =>
+          candidate.id === group.id
+            ? {
+                ...candidate,
+                mailboxes: moveItem(candidate.mailboxes, fromIndex, toIndex),
+              }
+            : candidate
+        );
+        onReorderMailboxSwitcher(getMailboxSwitcherOrder(nextGroups));
+        setOrderAnnouncement(
+          `Mailbox moved to position ${toIndex + 1} of ${items.length} in ${group.name}.`
+        );
+      } else {
+        setSortingTeams(true);
+        onReorderMailboxSwitcher(
+          getMailboxSwitcherOrder(moveItem(groups, fromIndex, toIndex))
+        );
+        setOrderAnnouncement(
+          `${group.name} moved to position ${toIndex + 1} of ${groups.length}.`
+        );
+      }
+      return;
+    }
+    if (target instanceof HTMLInputElement && event.key !== "ArrowDown") {
+      return;
+    }
     const row = target.closest<HTMLElement>(
       "[data-mailbox-switcher-navigation-row]"
     );
@@ -719,7 +837,7 @@ export const MailboxSwitcherDropdown = ({
       return;
     }
 
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
       return;
     }
 
@@ -727,7 +845,12 @@ export const MailboxSwitcherDropdown = ({
       ...event.currentTarget.querySelectorAll<HTMLElement>(
         "[data-mailbox-switcher-navigation-item]"
       ),
-    ].filter((item) => !item.matches(":disabled"));
+    ].filter((item) => !item.matches(":disabled") && item.checkVisibility());
+    if (target instanceof HTMLInputElement) {
+      event.preventDefault();
+      items[0]?.focus();
+      return;
+    }
     const focusedItem = getFocusedNavigationItem(target, primaryItem);
     if (focusedItem === null) {
       return;
@@ -739,17 +862,20 @@ export const MailboxSwitcherDropdown = ({
     }
 
     event.preventDefault();
-    const nextIndex = Math.max(
+    let nextIndex = Math.max(
       0,
       Math.min(
         items.length - 1,
         currentIndex + (event.key === "ArrowDown" ? 1 : -1)
       )
     );
+    if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = items.length - 1;
+    }
     items[nextIndex]?.focus();
   };
-  const isFiltering = normalizedSearchQuery.length > 0;
-  const canReorderGroups = !isFiltering && groups.length > 1;
   const mailboxEntranceIds = new Set<string>();
   if (isOpen) {
     for (const mailbox of mailboxes) {
@@ -808,7 +934,16 @@ export const MailboxSwitcherDropdown = ({
   }, [isOpen, mailboxes]);
 
   return (
-    <Popover onOpenChange={setIsOpen} open={isOpen}>
+    <Popover
+      onOpenChange={(open) => {
+        setIsOpen(open);
+        if (!open) {
+          setSortingTeams(false);
+          setSearchQuery("");
+        }
+      }}
+      open={isOpen}
+    >
       <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
         <PopoverTrigger
           aria-label="Switch mailbox"
@@ -853,8 +988,26 @@ export const MailboxSwitcherDropdown = ({
               className="flex max-h-96 flex-col gap-1 overflow-y-auto p-1"
               onKeyDown={handleArrowNavigation}
             >
-              {mailboxes.length > 0 ? (
+              {groups.length > 0 ? (
                 <>
+                  {groups.length > 1 && (
+                    <div className="flex items-center justify-between gap-2 px-1">
+                      <span className="text-caption text-muted-fg">
+                        {sortingTeams ? "Drag teams to reorder" : "Mailboxes"}
+                      </span>
+                      <Button
+                        aria-pressed={sortingTeams}
+                        disabled={isFiltering}
+                        onClick={() => {
+                          setSortingTeams((current) => !current);
+                        }}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        {sortingTeams ? "Done" : "Reorder teams"}
+                      </Button>
+                    </div>
+                  )}
                   {onSelectAllInboxes &&
                   mailboxes.some((mailbox) => mailbox.provider !== "api") ? (
                     <Button
@@ -871,30 +1024,35 @@ export const MailboxSwitcherDropdown = ({
                       All inboxes
                     </Button>
                   ) : null}
-                  {(mailboxes.length >= 8 || isFiltering) && (
-                    <div className="sticky top-0 z-10 bg-popover p-1">
-                      <Input
-                        aria-label="Search mailboxes"
-                        className="h-8"
-                        onChange={(event) => {
-                          setSearchQuery(event.currentTarget.value);
-                        }}
-                        placeholder="Search mailboxes"
-                        size="sm"
-                        value={searchQuery}
-                      />
-                    </div>
-                  )}
+                  {!sortingTeams &&
+                    (mailboxes.length > 1 ||
+                      groups.length > 1 ||
+                      isFiltering) && (
+                      <div className="sticky top-0 z-10 bg-popover p-1">
+                        <Input
+                          aria-label="Search mailboxes"
+                          className="h-8"
+                          onChange={(event) => {
+                            setSearchQuery(event.currentTarget.value);
+                          }}
+                          placeholder="Search mailboxes"
+                          ref={searchRef}
+                          size="sm"
+                          value={searchQuery}
+                        />
+                      </div>
+                    )}
                   {(isFiltering ? filteredGroups : groups).map(
                     (group, groupIndex) => {
-                      const isCollapsed = collapsedGroupIds.has(group.id);
+                      const isCollapsed =
+                        !isFiltering && collapsedGroupIds.has(group.id);
                       const canReorderMailboxes =
                         !isFiltering && group.mailboxes.length > 1;
 
                       return (
                         <SortableGroup
                           collapsed={isCollapsed}
-                          disabled={!canReorderGroups}
+                          disabled={!canReorderGroups || !sortingTeams}
                           embedded={embedded}
                           group={group}
                           highlighted={highlightedGroupId === group.id}
@@ -909,6 +1067,7 @@ export const MailboxSwitcherDropdown = ({
                             });
                           }}
                           onToggle={toggleGroup}
+                          sortingTeams={sortingTeams}
                         >
                           {group.mailboxes.length > 0 ? (
                             <MailboxRows
@@ -1038,6 +1197,22 @@ export const MailboxSwitcherDropdown = ({
                       );
                     }
                   )}
+                  <p
+                    className="px-2 py-1 text-caption text-muted-fg"
+                    id="mailbox-order-help"
+                  >
+                    {sortingTeams
+                      ? "Alt + ↑/↓ to reorder teams. Esc to finish."
+                      : "Drag mailboxes to reorder, or use Alt + ↑/↓. / to search."}
+                  </p>
+                  {isFiltering && filteredGroups.length === 0 && (
+                    <p className="px-2 py-3 text-body-sm text-muted-fg">
+                      No matching mailboxes
+                    </p>
+                  )}
+                  <output aria-live="polite" className="sr-only">
+                    {orderAnnouncement}
+                  </output>
                   {!embedded && (
                     <div className="mt-1">
                       <LinkButton

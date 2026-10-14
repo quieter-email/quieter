@@ -13,6 +13,7 @@ import {
 } from "#/features/settings/domain/billing";
 import { authClient } from "#/lib/auth";
 import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
+import { useOrderedOrganizations } from "#/lib/use-ordered-organizations";
 
 const findMailboxGroup = (
   groups: { mailboxes: { id: string }[]; name: string }[],
@@ -57,7 +58,7 @@ const useManagedMailboxManagerData = (
 };
 
 export const useMailboxDetailViewState = (mailboxId: string) => {
-  const organizations = authClient.useListOrganizations().data ?? [];
+  const organizations = useOrderedOrganizations().data ?? [];
   const session = authClient.useSession().data;
   const placementItems = organizations.map((organization) => ({
     label: organization.name,
