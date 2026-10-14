@@ -38,6 +38,7 @@ import { SidebarEntrance } from "#/features/navigation/components/sidebar-surfac
 import type { MailboxCategory } from "#/lib/mail";
 
 type MailSidebarProps = {
+  allInboxesActive?: boolean;
   defaultMailboxId: string | null;
   embedded?: boolean;
   groups: {
@@ -50,6 +51,8 @@ type MailSidebarProps = {
       id: string;
       emailAddress: string;
       displayName: string | null;
+      signatureHtml?: string | null;
+      signatureText?: string | null;
       groupName: string;
       provider: "api" | "gmail" | "managed";
       unreadNonSpamCount: number;
@@ -160,6 +163,7 @@ const SidebarHelpMenu = ({
 };
 
 const SidebarInboxSection = ({
+  allInboxesActive = false,
   animateEntrance,
   embedded,
   groups,
@@ -177,6 +181,7 @@ const SidebarInboxSection = ({
 }: Pick<
   SidebarContentProps,
   | "animateEntrance"
+  | "allInboxesActive"
   | "embedded"
   | "groups"
   | "onComposeNewMail"
@@ -216,7 +221,17 @@ const SidebarInboxSection = ({
           disabled={
             !selectedMailboxId ||
             embedded === true ||
-            selectedMailboxProvider === "api"
+            selectedMailboxProvider === "api" ||
+            (allInboxesActive
+              ? !groups.some((group) =>
+                  group.mailboxes.some(
+                    (mailbox) =>
+                      mailbox.provider !== "api" &&
+                      mailbox.connectionStatus === "connected" &&
+                      mailbox.grantRole !== "reader"
+                  )
+                )
+              : selectedMailboxGrantRole === "reader")
           }
           onClick={handleComposeNewMail}
           onFocus={() => void loadComposeWorkspace()}
@@ -238,7 +253,7 @@ const SidebarInboxSection = ({
           animateEntrance={animateEntrance}
           mailboxProvider={selectedMailboxProvider}
           onSelectMailbox={handleSelectMailbox}
-          selectedMailbox={selectedMailbox}
+          selectedMailbox={allInboxesActive ? null : selectedMailbox}
         />
         {embedded !== true && selectedMailboxId !== null ? (
           <SidebarEntrance
@@ -275,14 +290,16 @@ const SidebarInboxSection = ({
             </SidebarNavItem>
           </SidebarEntrance>
         ) : null}
-        {selectedMailboxProvider === "managed" && selectedMailboxId ? (
+        {!allInboxesActive &&
+        selectedMailboxProvider === "managed" &&
+        selectedMailboxId ? (
           <MailboxOrganizer
             canManage={selectedMailboxGrantRole === "manager"}
             mailboxId={selectedMailboxId}
             searchQuery={searchQuery}
           />
         ) : null}
-        {selectedMailboxProvider !== "api" && (
+        {!allInboxesActive && selectedMailboxProvider !== "api" && (
           <SidebarLabelNav
             animateEntrance={animateEntrance}
             canManage={
@@ -341,6 +358,7 @@ const SidebarFooter = ({
 );
 
 const SidebarContent = ({
+  allInboxesActive,
   animateEntrance,
   defaultMailboxId,
   embedded = false,
@@ -380,6 +398,14 @@ const SidebarContent = ({
         className="flex min-w-0 items-start gap-2 rounded-md px-1"
       >
         <MailboxSwitcherDropdown
+          allInboxesActive={allInboxesActive}
+          onSelectAllInboxes={
+            embedded
+              ? undefined
+              : () => {
+                  handleSelectView("all-inboxes");
+                }
+          }
           defaultMailboxId={defaultMailboxId}
           embedded={embedded}
           groups={groups}
@@ -409,6 +435,7 @@ const SidebarContent = ({
       </SidebarEntrance>
 
       <SidebarInboxSection
+        allInboxesActive={allInboxesActive}
         animateEntrance={animateEntrance}
         embedded={embedded}
         groups={groups}

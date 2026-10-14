@@ -37,8 +37,13 @@ import { MailSidebar } from "#/features/navigation/components/mail-sidebar";
 import type { MailboxSwitcherOrder } from "#/features/navigation/components/mailbox-switcher";
 import type { MailboxCategory } from "#/lib/mail";
 
+import { UnifiedInboxPanel } from "../unified-inbox-panel";
 import { FirstRunManagedMailSetup } from "./first-run-managed-mail-setup";
 import { MailboxMessagesPanel } from "./mailbox-messages-panel";
+import {
+  useMailboxMessageId,
+  useMailboxSearchActions,
+} from "./use-mailbox-route-search";
 import {
   loadChatView,
   loadComposeWorkspace,
@@ -59,6 +64,7 @@ type MailboxWorkspaceLayoutState = {
 };
 
 type MailboxWorkspaceContentProps = {
+  userId: string;
   activeMailbox: MailboxCategory | null;
   chatContext?: {
     messageId?: string;
@@ -275,6 +281,7 @@ const NoMailboxWorkspace = ({
 };
 
 const MailboxWorkspaceContentInner = ({
+  userId,
   activeMailbox,
   chatContext,
   chatId,
@@ -319,6 +326,27 @@ const MailboxWorkspaceContentInner = ({
   selectedView,
   signature,
 }: MailboxWorkspaceContentProps) => {
+  const messageId = useMailboxMessageId() ?? null;
+  const setMailboxSearch = useMailboxSearchActions();
+  const allInboxesActive = selectedView === "all-inboxes";
+  const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);
+  const senderMailboxes = mailboxes
+    .filter(
+      (mailbox) =>
+        mailbox.provider !== "api" &&
+        mailbox.connectionStatus === "connected" &&
+        mailbox.grantRole !== "reader"
+    )
+    .map((mailbox) => ({
+      ...mailbox,
+      signatureHtml: mailbox.signatureHtml ?? null,
+      signatureText: mailbox.signatureText ?? null,
+    }));
+  const composeMailbox =
+    allInboxesActive && composeSession.draft === null
+      ? (senderMailboxes.find((mailbox) => mailbox.id === selectedMailboxId) ??
+        senderMailboxes[0])
+      : mailboxes.find((mailbox) => mailbox.id === selectedMailboxId);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantOpened, setAssistantOpened] = useState(false);
   const [assistantFocusRequest, setAssistantFocusRequest] = useState(0);
@@ -391,13 +419,21 @@ const MailboxWorkspaceContentInner = ({
           }
           demoMode={isDemoMode}
           managedDemoMode={isManagedDemoMode}
-          mailboxId={selectedMailboxId}
+          mailboxId={composeMailbox?.id ?? null}
           onClose={onCloseCompose}
           onManageSnippets={onManageSnippets}
           onOpenSidebar={onOpenSidebar}
           persistDrafts={persistComposeDrafts}
-          senderEmail={currentUserEmail}
-          signature={signature}
+          senderEmail={composeMailbox?.emailAddress ?? currentUserEmail}
+          senderMailboxes={allInboxesActive ? senderMailboxes : undefined}
+          signature={
+            composeMailbox
+              ? {
+                  html: composeMailbox.signatureHtml ?? null,
+                  text: composeMailbox.signatureText ?? null,
+                }
+              : signature
+          }
         />
       </Suspense>
     );
@@ -428,6 +464,68 @@ const MailboxWorkspaceContentInner = ({
             onOpenSidebar={onOpenSidebar}
           />
         </Suspense>
+      </div>
+    );
+  } else if (allInboxesActive) {
+    mailboxContent = (
+      <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,max(34%,405px))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-2">
+        <WorkspaceSection
+          className={cn({ flex: !messageId, hidden: !!messageId })}
+          layout="cell"
+        >
+          <UnifiedInboxPanel
+            activeMailboxId={selectedMailboxId}
+            activeMessageId={messageId}
+            mailboxes={mailboxes}
+            onOpenSidebar={onOpenSidebar}
+            onReconnectMailbox={onReconnectMailbox}
+            onSearch={onSearch}
+            onSelectMessage={(sourceMailboxId, nextMessageId, threadId) => {
+              void setMailboxSearch(
+                {
+                  mailboxId: sourceMailboxId,
+                  messageId: nextMessageId,
+                  threadId,
+                },
+                {
+                  replace:
+                    !!messageId ||
+                    !window.matchMedia("(max-width: 1023.98px)").matches,
+                }
+              );
+            }}
+            searchQuery={searchQuery}
+            userId={userId}
+          />
+        </WorkspaceSection>
+        {messageId ? (
+          <MailboxMessagesPanel
+            detailOnly
+            activeMailbox="inbox"
+            currentUserEmail={currentUserEmail}
+            isDemoMode={isDemoMode}
+            isManagedDemoMode={isManagedDemoMode}
+            key={selectedMailboxId}
+            mailboxId={selectedMailboxId}
+            mailboxProvider={selectedMailboxProvider ?? "gmail"}
+            onComposeDraftRequested={onComposeDraftRequested}
+            onManageSnippets={onManageSnippets}
+            onOpenSidebar={onOpenSidebar}
+            onSearchQueryChange={onSearch}
+            persistComposeDrafts={persistComposeDrafts}
+            searchQuery={searchQuery}
+            signature={signature}
+          />
+        ) : (
+          <WorkspaceSection centered className="hidden" layout="cell">
+            <HugeiconsIcon
+              aria-hidden
+              className="mb-3 size-5 text-muted-fg"
+              icon={Mail01Icon}
+            />
+            <p className="text-body text-muted-fg">Select a conversation</p>
+          </WorkspaceSection>
+        )}
       </div>
     );
   } else if (selectedMailboxNeedsReconnect) {
@@ -526,6 +624,7 @@ const MailboxWorkspaceContentInner = ({
         <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
           {selectedMailboxId ? (
             <MailSidebar
+              allInboxesActive={allInboxesActive}
               defaultMailboxId={defaultMailboxId}
               groups={mailboxGroups}
               onComposeNewMail={onComposeNewMail}
@@ -553,7 +652,8 @@ const MailboxWorkspaceContentInner = ({
 
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
             <div className="relative min-h-0 flex-1">{mailboxContent}</div>
-            {!isComposeMailbox &&
+            {!allInboxesActive &&
+            !isComposeMailbox &&
             !isDemoMode &&
             !isManagedDemoMode &&
             selectedMailboxId !== null ? (
@@ -563,7 +663,9 @@ const MailboxWorkspaceContentInner = ({
               />
             ) : null}
           </div>
-          {selectedMailboxId && selectedMailboxProvider !== "api" ? (
+          {!allInboxesActive &&
+          selectedMailboxId &&
+          selectedMailboxProvider !== "api" ? (
             <FloatingAssistant
               sidebar={assistantSidebar}
               narrow={assistantNarrow}

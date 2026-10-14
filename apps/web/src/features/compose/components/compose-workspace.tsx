@@ -19,6 +19,13 @@ import {
 } from "@quieter/ui/composer-chrome";
 import { FieldControl, FieldError } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@quieter/ui/select";
 import { Text } from "@quieter/ui/text";
 import { ToolbarButton } from "@quieter/ui/toolbar";
 import { useHotkey } from "@tanstack/react-hotkeys";
@@ -35,6 +42,8 @@ import { orpc } from "#/lib/orpc";
 
 import type { ComposeFormValues } from "../domain/compose-form";
 import {
+  appendComposeSignature,
+  hasComposeDraftContent,
   normalizeComposeBodyHtml,
   textToComposeBodyHtml,
 } from "../domain/draft";
@@ -53,16 +62,32 @@ import {
 } from "./use-compose-dialog-controller";
 import type { ComposeDialogController } from "./use-compose-dialog-controller";
 
+export type ComposeSenderMailbox = {
+  id: string;
+  emailAddress: string;
+  displayName: string | null;
+  signatureHtml?: string | null;
+  signatureText?: string | null;
+};
+
 export type ComposeSurfaceProps = {
+  allowSenderSwitch?: boolean;
   className?: string;
   demoMode?: boolean;
   initialDraft?: ComposeDraftState | null;
+  initialDraftNeedsSave?: boolean;
   managedDemoMode?: boolean;
   mailboxId: string | null;
   onClose: () => void;
   onManageSnippets?: () => void;
+  onSenderSwitch?: (
+    mailboxId: string,
+    currentDraft: ComposeDraftState,
+    transferDraft: ComposeDraftState
+  ) => void;
   persistDrafts?: boolean;
   senderEmail?: string | null;
+  senderMailboxes?: ComposeSenderMailbox[];
   signature?: { html: string | null; text: string | null };
   variant?: "inline" | "workspace";
 };
@@ -141,15 +166,19 @@ const ComposeFormField = ({
 );
 
 export const ComposeSurface = ({
+  allowSenderSwitch = false,
   className,
   demoMode = false,
   initialDraft = null,
+  initialDraftNeedsSave = false,
   managedDemoMode = false,
   mailboxId,
   onClose,
   onManageSnippets,
+  onSenderSwitch,
   persistDrafts = true,
   senderEmail,
+  senderMailboxes,
   signature,
   variant = "workspace",
 }: ComposeSurfaceProps) => {
@@ -169,6 +198,7 @@ export const ComposeSurface = ({
     };
   }, []);
   const [snippetDraft, setSnippetDraft] = useState<string | null>(null);
+  const [switchingSender, setSwitchingSender] = useState(false);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
@@ -189,6 +219,7 @@ export const ComposeSurface = ({
     autosavePaused: slashMenuOpen,
     demoMode,
     initialDraft,
+    initialDraftNeedsSave,
     mailboxId,
     managedDemoMode,
     onClose,
@@ -221,15 +252,93 @@ export const ComposeSurface = ({
     isPreparingAudio || transcribeAudioMutation.isPending;
 
   const canEditBody =
-    state.draft.saveStatus !== "sending" && !state.isFinishing && !!mailboxId;
+    state.draft.saveStatus !== "sending" &&
+    !state.isFinishing &&
+    !switchingSender &&
+    !!mailboxId;
   const audioBusy = audioRecorder.isRecording || isTranscribingAudio;
   const canSubmitCompose = canEditBody && !audioBusy;
   const isInline = variant === "inline";
+  const currentSender = senderMailboxes?.find(
+    (sender) => sender.id === mailboxId
+  );
+  const canSwitchSender =
+    !isInline &&
+    allowSenderSwitch &&
+    !!onSenderSwitch &&
+    !!mailboxId &&
+    senderMailboxes !== undefined &&
+    currentSender !== undefined &&
+    senderMailboxes.length > 1;
   const showSubject =
     !isInline || state.draft.draftAnchor?.seededBy === "forward";
   const [showQuotedContent, setShowQuotedContent] = useState(false);
   const hasQuotedContent =
     isInline && state.draft.bodyHtml.includes("<blockquote");
+
+  const handleSenderChange = async (nextMailboxId: string | null) => {
+    if (
+      !nextMailboxId ||
+      nextMailboxId === mailboxId ||
+      senderMailboxes?.some((sender) => sender.id === nextMailboxId) !== true ||
+      switchingSender
+    ) {
+      return;
+    }
+    setSwitchingSender(true);
+    try {
+      const drafts = await compose.prepareSenderSwitch();
+      if (drafts) {
+        const nextSender = senderMailboxes?.find(
+          (sender) => sender.id === nextMailboxId
+        );
+        let { transferDraft } = drafts;
+        const document = new DOMParser().parseFromString(
+          transferDraft.bodyHtml,
+          "text/html"
+        );
+        const automaticSignature = document.body.querySelector(
+          '[data-quieter-signature="true"]'
+        );
+        if (automaticSignature) {
+          const signatureCandidates = [
+            signature?.text?.trim(),
+            automaticSignature.textContent?.trim(),
+          ].filter((value): value is string => !!value);
+          automaticSignature.remove();
+          let bodyText = transferDraft.bodyText.trimEnd();
+          const matchedSignature = signatureCandidates.find((candidate) =>
+            bodyText.endsWith(candidate)
+          );
+          if (matchedSignature) {
+            bodyText = bodyText.slice(0, -matchedSignature.length).trimEnd();
+          } else {
+            bodyText = document.body.textContent?.trim() ?? "";
+          }
+          transferDraft = appendComposeSignature(
+            {
+              ...transferDraft,
+              bodyHtml: document.body.innerHTML,
+              bodyText,
+            },
+            {
+              html: nextSender?.signatureHtml ?? null,
+              text: nextSender?.signatureText ?? null,
+            }
+          );
+        }
+        onSenderSwitch?.(nextMailboxId, drafts.currentDraft, transferDraft);
+      } else {
+        setSwitchingSender(false);
+      }
+    } catch (error) {
+      setSwitchingSender(false);
+      toastError(error, {
+        boundary: "compose-switch-sender",
+        fallback: "Could not change the sending address. Please try again.",
+      });
+    }
+  };
 
   const handleRecordingStart = () => {
     if (!canEditBody || isTranscribingAudio) {
@@ -339,6 +448,7 @@ export const ComposeSurface = ({
         event.defaultPrevented ||
         document.querySelector('[role="listbox"][id^="compose-commands-"]') ||
         snippetDraft !== null ||
+        switchingSender ||
         (event.target instanceof Element &&
           !!event.target.closest('[role="dialog"]'))
       ) {
@@ -347,7 +457,7 @@ export const ComposeSurface = ({
       void closeComposeDialog();
     },
     {
-      enabled: state.draft.saveStatus !== "sending",
+      enabled: state.draft.saveStatus !== "sending" && !switchingSender,
       ignoreInputs: false,
     }
   );
@@ -473,6 +583,58 @@ export const ComposeSurface = ({
                     })}
                   >
                     <ComposerFieldGroup bare>
+                      {canSwitchSender && (
+                        <ComposerFieldRow label="From">
+                          <Select
+                            items={senderMailboxes?.map((sender) => ({
+                              label: sender.displayName
+                                ? `${sender.displayName} <${sender.emailAddress}>`
+                                : sender.emailAddress,
+                              value: sender.id,
+                            }))}
+                            onValueChange={(nextMailboxId) => {
+                              void handleSenderChange(nextMailboxId);
+                            }}
+                            value={mailboxId}
+                          >
+                            <SelectTrigger
+                              aria-label="From address"
+                              className="w-full min-w-0"
+                              disabled={
+                                !canEditBody ||
+                                audioBusy ||
+                                state.draft.saveStatus === "saving"
+                              }
+                              pending={switchingSender}
+                              size="sm"
+                              variant="ghost"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {senderMailboxes?.map((sender) => (
+                                <SelectItem key={sender.id} value={sender.id}>
+                                  {sender.displayName
+                                    ? `${sender.displayName} <${sender.emailAddress}>`
+                                    : sender.emailAddress}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </ComposerFieldRow>
+                      )}
+                      {!canSwitchSender &&
+                      !isInline &&
+                      senderMailboxes &&
+                      senderEmail ? (
+                        <ComposerFieldRow label="From">
+                          <span className="min-w-0 truncate px-2">
+                            {currentSender?.displayName
+                              ? `${currentSender.displayName} <${senderEmail}>`
+                              : senderEmail}
+                          </span>
+                        </ComposerFieldRow>
+                      ) : null}
                       <form.Field name="to">
                         {(recipientField) => {
                           const [error] = recipientField.state.meta.errors;
@@ -719,7 +881,10 @@ export const ComposeSurface = ({
                                   ? "Discard draft"
                                   : "Discard"
                               }
-                              disabled={state.draft.saveStatus === "sending"}
+                              disabled={
+                                state.draft.saveStatus === "sending" ||
+                                switchingSender
+                              }
                               onClick={() => {
                                 void discardActiveDraft();
                               }}
@@ -732,7 +897,10 @@ export const ComposeSurface = ({
                           <IconButtonTooltip label="Close composer">
                             <ToolbarButton
                               aria-label="Close composer"
-                              disabled={state.draft.saveStatus === "sending"}
+                              disabled={
+                                state.draft.saveStatus === "sending" ||
+                                switchingSender
+                              }
                               onClick={() => {
                                 void closeComposeDialog();
                               }}
@@ -795,6 +963,7 @@ export const ComposeSurface = ({
 export const ComposeWorkspace = ({
   demoMode,
   initialDraft,
+  initialDraftNeedsSave = false,
   mailboxId,
   managedDemoMode,
   onClose,
@@ -802,26 +971,78 @@ export const ComposeWorkspace = ({
   onOpenSidebar,
   persistDrafts,
   senderEmail,
+  senderMailboxes,
   signature,
-}: ComposeWorkspaceProps) => (
-  <div className="flex h-full min-h-0 flex-col" data-compose-workspace>
-    <MobileHeader
-      className="px-4 sm:px-6"
-      leading="sidebar"
-      onLeadingClick={onOpenSidebar}
-      title="New message"
-    />
-    <ComposeSurface
-      className="flex-1"
-      demoMode={demoMode}
-      initialDraft={initialDraft}
-      mailboxId={mailboxId}
-      managedDemoMode={managedDemoMode}
-      onClose={onClose}
-      onManageSnippets={onManageSnippets}
-      persistDrafts={persistDrafts}
-      senderEmail={senderEmail}
-      signature={signature}
-    />
-  </div>
-);
+}: ComposeWorkspaceProps) => {
+  const [senderSession, setSenderSession] = useState(() => ({
+    draft: initialDraft ?? null,
+    mailboxId,
+    needsSave: initialDraftNeedsSave,
+  }));
+  const savedSenderDrafts = useRef(new Map<string, ComposeDraftState>());
+  const selectedSender = senderMailboxes?.find(
+    (sender) => sender.id === senderSession.mailboxId
+  );
+
+  return (
+    <div className="flex h-full min-h-0 flex-col" data-compose-workspace>
+      <MobileHeader
+        className="px-4 sm:px-6"
+        leading="sidebar"
+        onLeadingClick={onOpenSidebar}
+        title="New message"
+      />
+      <ComposeSurface
+        allowSenderSwitch={!initialDraft}
+        className="flex-1"
+        demoMode={demoMode}
+        initialDraft={senderSession.draft}
+        initialDraftNeedsSave={senderSession.needsSave}
+        key={senderSession.mailboxId ?? "none"}
+        mailboxId={senderSession.mailboxId}
+        managedDemoMode={managedDemoMode}
+        onClose={onClose}
+        onManageSnippets={onManageSnippets}
+        onSenderSwitch={(nextMailboxId, currentDraft, transferDraft) => {
+          if (senderSession.mailboxId) {
+            savedSenderDrafts.current.set(
+              senderSession.mailboxId,
+              currentDraft
+            );
+          }
+          const savedDraft = savedSenderDrafts.current.get(nextMailboxId);
+          setSenderSession({
+            draft: savedDraft
+              ? {
+                  ...savedDraft,
+                  attachments: transferDraft.attachments,
+                  bodyHtml: transferDraft.bodyHtml,
+                  bodyText: transferDraft.bodyText,
+                  errorMessage: null,
+                  inlineImages: transferDraft.inlineImages,
+                  recipients: transferDraft.recipients,
+                  saveStatus: "idle",
+                  subject: transferDraft.subject,
+                  updatedAt: Date.now(),
+                }
+              : transferDraft,
+            mailboxId: nextMailboxId,
+            needsSave:
+              savedDraft !== undefined || hasComposeDraftContent(transferDraft),
+          });
+        }}
+        persistDrafts={persistDrafts}
+        senderEmail={selectedSender?.emailAddress ?? senderEmail}
+        senderMailboxes={senderMailboxes}
+        signature={
+          selectedSender
+            ? {
+                html: selectedSender.signatureHtml ?? null,
+                text: selectedSender.signatureText ?? null,
+              }
+            : signature
+        }
+      />
+    </div>
+  );
+};

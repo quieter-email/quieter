@@ -30,6 +30,7 @@ import {
 } from "./use-mailbox-route-search";
 
 type MailboxMessagesPanelProps = {
+  detailOnly?: boolean;
   activeMailbox: MailboxCategory;
   currentUserEmail: string | null;
   isDemoMode: boolean;
@@ -144,6 +145,7 @@ const resolveMailboxActions = ({
 };
 
 export const MailboxMessagesPanel = ({
+  detailOnly = false,
   activeMailbox,
   currentUserEmail,
   isDemoMode,
@@ -316,47 +318,49 @@ export const MailboxMessagesPanel = ({
 
   return (
     <>
-      <WorkspaceSection
-        className={cn({
-          flex: !isMessageRouteOpen,
-          hidden: isMessageRouteOpen,
-        })}
-        layout="cell"
-      >
-        <MessageList
-          activeMailbox={activeMailbox}
-          activeMessageId={messageId}
-          mailboxId={mailboxId}
-          mailboxProvider={mailboxProvider}
-          error={listState.error}
-          hasNextPage={listState.hasNextPage}
-          isError={listState.isError}
-          isFetchingNextPage={listState.isFetchingNextPage}
-          isPending={listState.isPending}
-          isRefreshing={listState.isRefreshing}
-          mailboxActions={mailboxActions}
-          messages={retainSelectedMessageInList({
-            messageId,
-            pages: listState.messages,
-            retainedMessage: retainedListMessage,
-            scopeKey: listScopeKey,
-            selectedMessage,
-            selectedThreadMessages,
+      {!detailOnly && (
+        <WorkspaceSection
+          className={cn({
+            flex: !isMessageRouteOpen,
+            hidden: isMessageRouteOpen,
           })}
-          onActivateMessage={activateMessage}
-          onDeactivateActiveMessage={backToList}
-          onLoadMore={loadMoreMessages}
-          onKeyboardOpenMessage={() => {
-            setShouldFocusMessageView(true);
-          }}
-          onOpenDraft={openDraft}
-          onOpenSidebar={onOpenSidebar}
-          onRefresh={handleRefresh}
-          onSearch={applySearch}
-          pendingActions={pendingActions}
-          searchQuery={normalizedSearchQuery}
-        />
-      </WorkspaceSection>
+          layout="cell"
+        >
+          <MessageList
+            activeMailbox={activeMailbox}
+            activeMessageId={messageId}
+            mailboxId={mailboxId}
+            mailboxProvider={mailboxProvider}
+            error={listState.error}
+            hasNextPage={listState.hasNextPage}
+            isError={listState.isError}
+            isFetchingNextPage={listState.isFetchingNextPage}
+            isPending={listState.isPending}
+            isRefreshing={listState.isRefreshing}
+            mailboxActions={mailboxActions}
+            messages={retainSelectedMessageInList({
+              messageId,
+              pages: listState.messages,
+              retainedMessage: retainedListMessage,
+              scopeKey: listScopeKey,
+              selectedMessage,
+              selectedThreadMessages,
+            })}
+            onActivateMessage={activateMessage}
+            onDeactivateActiveMessage={backToList}
+            onLoadMore={loadMoreMessages}
+            onKeyboardOpenMessage={() => {
+              setShouldFocusMessageView(true);
+            }}
+            onOpenDraft={openDraft}
+            onOpenSidebar={onOpenSidebar}
+            onRefresh={handleRefresh}
+            onSearch={applySearch}
+            pendingActions={pendingActions}
+            searchQuery={normalizedSearchQuery}
+          />
+        </WorkspaceSection>
+      )}
 
       <WorkspaceSection
         className={cn({
