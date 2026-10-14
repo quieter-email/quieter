@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { LegalDocumentPage } from "#/features/legal/components/legal-document-page";
 
-export const Route = createFileRoute("/about")({
+export const Route = createFileRoute("/_public/about")({
   component: AboutPage,
   head: () => ({
     links: [

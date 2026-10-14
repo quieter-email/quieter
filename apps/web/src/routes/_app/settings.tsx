@@ -13,7 +13,7 @@ const SettingsPendingPage = () => {
   return <SettingsLoadingPage tab={tab} />;
 };
 
-export const Route = createFileRoute("/settings")({
+export const Route = createFileRoute("/_app/settings")({
   validateSearch: zodValidator(
     z.object({
       billing: z.enum(["canceled", "success"]).optional(),

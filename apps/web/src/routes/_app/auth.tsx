@@ -6,7 +6,7 @@ import { LoadingPage } from "#/components/loading-page";
 import { getSessionUser } from "#/lib/auth.functions";
 import { getSafeAuthReturnTo } from "#/lib/return-to";
 
-export const Route = createFileRoute("/auth")({
+export const Route = createFileRoute("/_app/auth")({
   validateSearch: zodValidator(
     z.object({
       error: z.string().optional(),

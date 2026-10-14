@@ -79,7 +79,7 @@ const searchQueryParam = () =>
     z.string().default("")
   );
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/_app/")({
   validateSearch: zodValidator(
     z.object({
       chatId: optionalMinLengthSearchString(),

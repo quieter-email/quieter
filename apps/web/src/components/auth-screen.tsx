@@ -26,7 +26,7 @@ import {
 import type { PreviewPersona } from "#/lib/preview-personas";
 import { queryPersister } from "#/lib/query-persister";
 
-const authRouteApi = getRouteApi("/auth");
+const authRouteApi = getRouteApi("/_app/auth");
 const AUTHENTICATION_ERROR_MESSAGE =
   "Unable to authenticate. Please check your credentials or try again.";
 

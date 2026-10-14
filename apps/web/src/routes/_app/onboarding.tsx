@@ -7,7 +7,7 @@ import { OnboardingScreen } from "#/features/onboarding/components/onboarding-sc
 import { getSessionUser } from "#/lib/auth.functions";
 import { getSafeAuthReturnTo } from "#/lib/return-to";
 
-export const Route = createFileRoute("/onboarding")({
+export const Route = createFileRoute("/_app/onboarding")({
   component: OnboardingScreen,
   validateSearch: zodValidator(
     z.object({
