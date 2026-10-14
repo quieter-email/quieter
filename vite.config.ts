@@ -159,9 +159,9 @@ export default defineConfig({
       },
       {
         files: [
-          "apps/web/src/routes/auth.tsx",
-          "apps/web/src/routes/settings.tsx",
-          "apps/web/src/routes/site-password.tsx",
+          "apps/web/src/routes/_app/auth.tsx",
+          "apps/web/src/routes/_app/settings.tsx",
+          "apps/web/src/routes/_app/site-password.tsx",
         ],
         rules: {
           // Zod's schema fallback method is named catch(), but it is not a promise chain.

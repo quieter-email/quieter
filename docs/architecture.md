@@ -26,6 +26,10 @@ Behavior-producing AI agents share the scoped dynamic knowledge boundary in [`do
 
 ### `apps/web`
 
+Public content lives under the pathless `_public` route layout: `/home`, `/about`, `/contact`, `/privacy`, `/cookies`, `/terms`, and `/imprint`. These pages share theme, consent, opt-in telemetry, and toast feedback, but do not mount the application session, query cache, mail subscriptions, or keyboard shortcuts. Their URLs are unchanged.
+
+The pathless `_app` layout loads application providers through its lazy route component. Inbox, settings, onboarding, authentication, the access gate, and the design system live under this layout. Its query client remains keyed by user identity, preserving cache isolation and cleanup across account changes without remounting public content when a session resolves.
+
 TanStack Start application containing:
 
 - file-based routes and request handlers

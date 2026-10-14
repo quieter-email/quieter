@@ -9,19 +9,21 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AboutRouteImport } from './routes/about'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as ContactRouteImport } from './routes/contact'
-import { Route as CookiesRouteImport } from './routes/cookies'
-import { Route as DesignSystemRouteImport } from './routes/design-system'
-import { Route as HomeRouteImport } from './routes/home'
-import { Route as ImprintRouteImport } from './routes/imprint'
-import { Route as OnboardingRouteImport } from './routes/onboarding'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as SitePasswordRouteImport } from './routes/site-password'
-import { Route as TermsRouteImport } from './routes/terms'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as PublicRouteImport } from './routes/_public'
+import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppAuthRouteImport } from './routes/_app/auth'
+import { Route as AppDesignSystemRouteImport } from './routes/_app/design-system'
+import { Route as AppOnboardingRouteImport } from './routes/_app/onboarding'
+import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppSitePasswordRouteImport } from './routes/_app/site-password'
+import { Route as PublicAboutRouteImport } from './routes/_public/about'
+import { Route as PublicContactRouteImport } from './routes/_public/contact'
+import { Route as PublicCookiesRouteImport } from './routes/_public/cookies'
+import { Route as PublicHomeRouteImport } from './routes/_public/home'
+import { Route as PublicImprintRouteImport } from './routes/_public/imprint'
+import { Route as PublicPrivacyRouteImport } from './routes/_public/privacy'
+import { Route as PublicTermsRouteImport } from './routes/_public/terms'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiPreviewPersonaRouteImport } from './routes/api/preview-persona'
@@ -40,70 +42,80 @@ import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/
 import { Route as ApiV1MessagesMessageIdRouteImport } from './routes/api/v1/messages.$messageId'
 import { Route as ApiV1OTokenRouteImport } from './routes/api/v1/o.$token'
 
-const IndexRoute = IndexRouteImport.update({
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any).lazy(() => import('./routes/_app.lazy').then((d) => d.Route))
+const PublicRoute = PublicRouteImport.update({
+  id: '/_public',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./routes/index.lazy').then((d) => d.Route))
-const AboutRoute = AboutRouteImport.update({
-  id: '/about',
-  path: '/about',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthRoute = AuthRouteImport.update({
+  getParentRoute: () => AppRoute,
+} as any).lazy(() => import('./routes/_app/index.lazy').then((d) => d.Route))
+const AppAuthRoute = AppAuthRouteImport.update({
   id: '/auth',
   path: '/auth',
-  getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./routes/auth.lazy').then((d) => d.Route))
-const ContactRoute = ContactRouteImport.update({
-  id: '/contact',
-  path: '/contact',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CookiesRoute = CookiesRouteImport.update({
-  id: '/cookies',
-  path: '/cookies',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DesignSystemRoute = DesignSystemRouteImport.update({
+  getParentRoute: () => AppRoute,
+} as any).lazy(() => import('./routes/_app/auth.lazy').then((d) => d.Route))
+const AppDesignSystemRoute = AppDesignSystemRouteImport.update({
   id: '/design-system',
   path: '/design-system',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const HomeRoute = HomeRouteImport.update({
-  id: '/home',
-  path: '/home',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ImprintRoute = ImprintRouteImport.update({
-  id: '/imprint',
-  path: '/imprint',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OnboardingRoute = OnboardingRouteImport.update({
+const AppOnboardingRoute = AppOnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SettingsRoute = SettingsRouteImport.update({
+const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./routes/settings.lazy').then((d) => d.Route))
-const SitePasswordRoute = SitePasswordRouteImport.update({
+  getParentRoute: () => AppRoute,
+} as any).lazy(() => import('./routes/_app/settings.lazy').then((d) => d.Route))
+const AppSitePasswordRoute = AppSitePasswordRouteImport.update({
   id: '/site-password',
   path: '/site-password',
-  getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./routes/site-password.lazy').then((d) => d.Route))
-const TermsRoute = TermsRouteImport.update({
+  getParentRoute: () => AppRoute,
+} as any).lazy(() =>
+  import('./routes/_app/site-password.lazy').then((d) => d.Route),
+)
+const PublicAboutRoute = PublicAboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => PublicRoute,
+} as any)
+const PublicContactRoute = PublicContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => PublicRoute,
+} as any)
+const PublicCookiesRoute = PublicCookiesRouteImport.update({
+  id: '/cookies',
+  path: '/cookies',
+  getParentRoute: () => PublicRoute,
+} as any)
+const PublicHomeRoute = PublicHomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => PublicRoute,
+} as any)
+const PublicImprintRoute = PublicImprintRouteImport.update({
+  id: '/imprint',
+  path: '/imprint',
+  getParentRoute: () => PublicRoute,
+} as any)
+const PublicPrivacyRoute = PublicPrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => PublicRoute,
+} as any)
+const PublicTermsRoute = PublicTermsRouteImport.update({
   id: '/terms',
   path: '/terms',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => PublicRoute,
 } as any)
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
@@ -195,19 +207,19 @@ const ApiV1OTokenRoute = ApiV1OTokenRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/about': typeof AboutRoute
-  '/auth': typeof AuthRoute
-  '/contact': typeof ContactRoute
-  '/cookies': typeof CookiesRoute
-  '/design-system': typeof DesignSystemRoute
-  '/home': typeof HomeRoute
-  '/imprint': typeof ImprintRoute
-  '/onboarding': typeof OnboardingRoute
-  '/privacy': typeof PrivacyRoute
-  '/settings': typeof SettingsRoute
-  '/site-password': typeof SitePasswordRoute
-  '/terms': typeof TermsRoute
+  '/': typeof AppIndexRoute
+  '/auth': typeof AppAuthRoute
+  '/design-system': typeof AppDesignSystemRoute
+  '/onboarding': typeof AppOnboardingRoute
+  '/settings': typeof AppSettingsRoute
+  '/site-password': typeof AppSitePasswordRoute
+  '/about': typeof PublicAboutRoute
+  '/contact': typeof PublicContactRoute
+  '/cookies': typeof PublicCookiesRoute
+  '/home': typeof PublicHomeRoute
+  '/imprint': typeof PublicImprintRoute
+  '/privacy': typeof PublicPrivacyRoute
+  '/terms': typeof PublicTermsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
@@ -227,19 +239,19 @@ export interface FileRoutesByFullPath {
   '/api/v1/o/$token': typeof ApiV1OTokenRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/about': typeof AboutRoute
-  '/auth': typeof AuthRoute
-  '/contact': typeof ContactRoute
-  '/cookies': typeof CookiesRoute
-  '/design-system': typeof DesignSystemRoute
-  '/home': typeof HomeRoute
-  '/imprint': typeof ImprintRoute
-  '/onboarding': typeof OnboardingRoute
-  '/privacy': typeof PrivacyRoute
-  '/settings': typeof SettingsRoute
-  '/site-password': typeof SitePasswordRoute
-  '/terms': typeof TermsRoute
+  '/': typeof AppIndexRoute
+  '/auth': typeof AppAuthRoute
+  '/design-system': typeof AppDesignSystemRoute
+  '/onboarding': typeof AppOnboardingRoute
+  '/settings': typeof AppSettingsRoute
+  '/site-password': typeof AppSitePasswordRoute
+  '/about': typeof PublicAboutRoute
+  '/contact': typeof PublicContactRoute
+  '/cookies': typeof PublicCookiesRoute
+  '/home': typeof PublicHomeRoute
+  '/imprint': typeof PublicImprintRoute
+  '/privacy': typeof PublicPrivacyRoute
+  '/terms': typeof PublicTermsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
@@ -260,24 +272,26 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/about': typeof AboutRoute
-  '/auth': typeof AuthRoute
-  '/contact': typeof ContactRoute
-  '/cookies': typeof CookiesRoute
-  '/design-system': typeof DesignSystemRoute
-  '/home': typeof HomeRoute
-  '/imprint': typeof ImprintRoute
-  '/onboarding': typeof OnboardingRoute
-  '/privacy': typeof PrivacyRoute
-  '/settings': typeof SettingsRoute
-  '/site-password': typeof SitePasswordRoute
-  '/terms': typeof TermsRoute
+  '/_app': typeof AppRouteWithChildren
+  '/_public': typeof PublicRouteWithChildren
+  '/_app/auth': typeof AppAuthRoute
+  '/_app/design-system': typeof AppDesignSystemRoute
+  '/_app/onboarding': typeof AppOnboardingRoute
+  '/_app/settings': typeof AppSettingsRoute
+  '/_app/site-password': typeof AppSitePasswordRoute
+  '/_public/about': typeof PublicAboutRoute
+  '/_public/contact': typeof PublicContactRoute
+  '/_public/cookies': typeof PublicCookiesRoute
+  '/_public/home': typeof PublicHomeRoute
+  '/_public/imprint': typeof PublicImprintRoute
+  '/_public/privacy': typeof PublicPrivacyRoute
+  '/_public/terms': typeof PublicTermsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
+  '/_app/': typeof AppIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
@@ -295,17 +309,17 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/about'
     | '/auth'
-    | '/contact'
-    | '/cookies'
     | '/design-system'
-    | '/home'
-    | '/imprint'
     | '/onboarding'
-    | '/privacy'
     | '/settings'
     | '/site-password'
+    | '/about'
+    | '/contact'
+    | '/cookies'
+    | '/home'
+    | '/imprint'
+    | '/privacy'
     | '/terms'
     | '/api/chat'
     | '/api/openapi'
@@ -327,17 +341,17 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/about'
     | '/auth'
-    | '/contact'
-    | '/cookies'
     | '/design-system'
-    | '/home'
-    | '/imprint'
     | '/onboarding'
-    | '/privacy'
     | '/settings'
     | '/site-password'
+    | '/about'
+    | '/contact'
+    | '/cookies'
+    | '/home'
+    | '/imprint'
+    | '/privacy'
     | '/terms'
     | '/api/chat'
     | '/api/openapi'
@@ -358,24 +372,26 @@ export interface FileRouteTypes {
     | '/api/v1/o/$token'
   id:
     | '__root__'
-    | '/'
-    | '/about'
-    | '/auth'
-    | '/contact'
-    | '/cookies'
-    | '/design-system'
-    | '/home'
-    | '/imprint'
-    | '/onboarding'
-    | '/privacy'
-    | '/settings'
-    | '/site-password'
-    | '/terms'
+    | '/_app'
+    | '/_public'
+    | '/_app/auth'
+    | '/_app/design-system'
+    | '/_app/onboarding'
+    | '/_app/settings'
+    | '/_app/site-password'
+    | '/_public/about'
+    | '/_public/contact'
+    | '/_public/cookies'
+    | '/_public/home'
+    | '/_public/imprint'
+    | '/_public/privacy'
+    | '/_public/terms'
     | '/api/chat'
     | '/api/openapi'
     | '/api/preview-persona'
     | '/api/site-password'
     | '/api/waitlist'
+    | '/_app/'
     | '/api/auth/$'
     | '/api/connectors/callback'
     | '/api/domain-connect/callback'
@@ -391,19 +407,8 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  AboutRoute: typeof AboutRoute
-  AuthRoute: typeof AuthRoute
-  ContactRoute: typeof ContactRoute
-  CookiesRoute: typeof CookiesRoute
-  DesignSystemRoute: typeof DesignSystemRoute
-  HomeRoute: typeof HomeRoute
-  ImprintRoute: typeof ImprintRoute
-  OnboardingRoute: typeof OnboardingRoute
-  PrivacyRoute: typeof PrivacyRoute
-  SettingsRoute: typeof SettingsRoute
-  SitePasswordRoute: typeof SitePasswordRoute
-  TermsRoute: typeof TermsRoute
+  AppRoute: typeof AppRouteWithChildren
+  PublicRoute: typeof PublicRouteWithChildren
   ApiChatRoute: typeof ApiChatRoute
   ApiOpenapiRoute: typeof ApiOpenapiRoute
   ApiPreviewPersonaRoute: typeof ApiPreviewPersonaRoute
@@ -425,96 +430,110 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_public': {
+      id: '/_public'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof PublicRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/': {
+      id: '/_app/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/about': {
-      id: '/about'
-      path: '/about'
-      fullPath: '/about'
-      preLoaderRoute: typeof AboutRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth': {
-      id: '/auth'
+    '/_app/auth': {
+      id: '/_app/auth'
       path: '/auth'
       fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppAuthRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/contact': {
-      id: '/contact'
-      path: '/contact'
-      fullPath: '/contact'
-      preLoaderRoute: typeof ContactRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/cookies': {
-      id: '/cookies'
-      path: '/cookies'
-      fullPath: '/cookies'
-      preLoaderRoute: typeof CookiesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/design-system': {
-      id: '/design-system'
+    '/_app/design-system': {
+      id: '/_app/design-system'
       path: '/design-system'
       fullPath: '/design-system'
-      preLoaderRoute: typeof DesignSystemRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppDesignSystemRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/home': {
-      id: '/home'
-      path: '/home'
-      fullPath: '/home'
-      preLoaderRoute: typeof HomeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/imprint': {
-      id: '/imprint'
-      path: '/imprint'
-      fullPath: '/imprint'
-      preLoaderRoute: typeof ImprintRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/onboarding': {
-      id: '/onboarding'
+    '/_app/onboarding': {
+      id: '/_app/onboarding'
       path: '/onboarding'
       fullPath: '/onboarding'
-      preLoaderRoute: typeof OnboardingRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppOnboardingRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/settings': {
-      id: '/settings'
+    '/_app/settings': {
+      id: '/_app/settings'
       path: '/settings'
       fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/site-password': {
-      id: '/site-password'
+    '/_app/site-password': {
+      id: '/_app/site-password'
       path: '/site-password'
       fullPath: '/site-password'
-      preLoaderRoute: typeof SitePasswordRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppSitePasswordRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/terms': {
-      id: '/terms'
+    '/_public/about': {
+      id: '/_public/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof PublicAboutRouteImport
+      parentRoute: typeof PublicRoute
+    }
+    '/_public/contact': {
+      id: '/_public/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof PublicContactRouteImport
+      parentRoute: typeof PublicRoute
+    }
+    '/_public/cookies': {
+      id: '/_public/cookies'
+      path: '/cookies'
+      fullPath: '/cookies'
+      preLoaderRoute: typeof PublicCookiesRouteImport
+      parentRoute: typeof PublicRoute
+    }
+    '/_public/home': {
+      id: '/_public/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof PublicHomeRouteImport
+      parentRoute: typeof PublicRoute
+    }
+    '/_public/imprint': {
+      id: '/_public/imprint'
+      path: '/imprint'
+      fullPath: '/imprint'
+      preLoaderRoute: typeof PublicImprintRouteImport
+      parentRoute: typeof PublicRoute
+    }
+    '/_public/privacy': {
+      id: '/_public/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PublicPrivacyRouteImport
+      parentRoute: typeof PublicRoute
+    }
+    '/_public/terms': {
+      id: '/_public/terms'
       path: '/terms'
       fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof PublicTermsRouteImport
+      parentRoute: typeof PublicRoute
     }
     '/api/chat': {
       id: '/api/chat'
@@ -638,20 +657,52 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppRouteChildren {
+  AppAuthRoute: typeof AppAuthRoute
+  AppDesignSystemRoute: typeof AppDesignSystemRoute
+  AppOnboardingRoute: typeof AppOnboardingRoute
+  AppSettingsRoute: typeof AppSettingsRoute
+  AppSitePasswordRoute: typeof AppSitePasswordRoute
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppAuthRoute: AppAuthRoute,
+  AppDesignSystemRoute: AppDesignSystemRoute,
+  AppOnboardingRoute: AppOnboardingRoute,
+  AppSettingsRoute: AppSettingsRoute,
+  AppSitePasswordRoute: AppSitePasswordRoute,
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
+interface PublicRouteChildren {
+  PublicAboutRoute: typeof PublicAboutRoute
+  PublicContactRoute: typeof PublicContactRoute
+  PublicCookiesRoute: typeof PublicCookiesRoute
+  PublicHomeRoute: typeof PublicHomeRoute
+  PublicImprintRoute: typeof PublicImprintRoute
+  PublicPrivacyRoute: typeof PublicPrivacyRoute
+  PublicTermsRoute: typeof PublicTermsRoute
+}
+
+const PublicRouteChildren: PublicRouteChildren = {
+  PublicAboutRoute: PublicAboutRoute,
+  PublicContactRoute: PublicContactRoute,
+  PublicCookiesRoute: PublicCookiesRoute,
+  PublicHomeRoute: PublicHomeRoute,
+  PublicImprintRoute: PublicImprintRoute,
+  PublicPrivacyRoute: PublicPrivacyRoute,
+  PublicTermsRoute: PublicTermsRoute,
+}
+
+const PublicRouteWithChildren =
+  PublicRoute._addFileChildren(PublicRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  AboutRoute: AboutRoute,
-  AuthRoute: AuthRoute,
-  ContactRoute: ContactRoute,
-  CookiesRoute: CookiesRoute,
-  DesignSystemRoute: DesignSystemRoute,
-  HomeRoute: HomeRoute,
-  ImprintRoute: ImprintRoute,
-  OnboardingRoute: OnboardingRoute,
-  PrivacyRoute: PrivacyRoute,
-  SettingsRoute: SettingsRoute,
-  SitePasswordRoute: SitePasswordRoute,
-  TermsRoute: TermsRoute,
+  AppRoute: AppRouteWithChildren,
+  PublicRoute: PublicRouteWithChildren,
   ApiChatRoute: ApiChatRoute,
   ApiOpenapiRoute: ApiOpenapiRoute,
   ApiPreviewPersonaRoute: ApiPreviewPersonaRoute,

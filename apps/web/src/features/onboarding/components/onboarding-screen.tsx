@@ -64,7 +64,7 @@ import { openGoogleAccountLink } from "#/lib/google-account-link";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
-const onboardingRouteApi = getRouteApi("/onboarding");
+const onboardingRouteApi = getRouteApi("/_app/onboarding");
 
 // Deferred: the welcome should paint before the shader compiles.
 const AtmosphericBackground = lazy(

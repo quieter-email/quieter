@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { LoadingPage } from "#/components/loading-page";
 
-export const Route = createFileRoute("/site-password")({
+export const Route = createFileRoute("/_app/site-password")({
   pendingComponent: LoadingPage,
   validateSearch: zodValidator(
     z.object({
