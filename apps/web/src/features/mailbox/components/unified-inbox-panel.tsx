@@ -62,6 +62,7 @@ type SourceState = {
   isPending: boolean;
   isFetchingNextPage: boolean;
   error: unknown;
+  syncError: unknown;
   fetchNextPage: () => Promise<{ error: unknown }>;
   refetch: () => Promise<{ error: unknown }>;
   mailboxActions: MailboxActions;
@@ -165,7 +166,7 @@ const UnifiedInboxSource = ({
   );
   useEffect(() => {
     onChange(sourceKey, {
-      error: error ?? syncError,
+      error,
       fetchNextPage,
       hasNextPage,
       isFetchingNextPage,
@@ -174,6 +175,7 @@ const UnifiedInboxSource = ({
       messages,
       pendingActions,
       refetch: refreshSource,
+      syncError,
     });
   }, [
     sourceKey,
@@ -257,6 +259,7 @@ export const UnifiedInboxPanel = ({
           previous !== undefined &&
           previous.messages === state.messages &&
           previous.error === state.error &&
+          previous.syncError === state.syncError &&
           previous.hasNextPage === state.hasNextPage &&
           previous.isPending === state.isPending &&
           previous.isFetchingNextPage === state.isFetchingNextPage &&
@@ -298,6 +301,10 @@ export const UnifiedInboxPanel = ({
   const visibleEntries = pending ? [] : entries;
   const failedSources = connectedStates.filter(
     ({ state }) => state !== undefined && state.error !== null
+  );
+  const failedUpdateSources = connectedStates.filter(
+    ({ state }) =>
+      state !== undefined && state.error === null && state.syncError !== null
   );
   const hasNextPage = connectedStates.some(
     ({ state }) => state?.hasNextPage && state.error === null
@@ -569,6 +576,26 @@ export const UnifiedInboxPanel = ({
           <span>
             {mailbox.displayName?.trim() || mailbox.emailAddress} could not
             load.
+          </span>
+          <Button
+            onClick={() => {
+              void retryMailbox(mailbox.id);
+            }}
+            size="sm"
+            variant="outline"
+          >
+            Retry
+          </Button>
+        </div>
+      ))}
+      {failedUpdateSources.map(({ mailbox }) => (
+        <div
+          className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-body-sm"
+          key={mailbox.id}
+        >
+          <span>
+            Updates for {mailbox.displayName?.trim() || mailbox.emailAddress}{" "}
+            could not load. You can still browse its messages.
           </span>
           <Button
             onClick={() => {
