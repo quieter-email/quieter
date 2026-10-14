@@ -241,28 +241,24 @@ export const OrganizationsListView = ({
           if (organizations.length > 0) {
             return (
               <SettingsRows>
-                {organizations
-                  .toSorted((left, right) =>
-                    left.name.localeCompare(right.name)
-                  )
-                  .map((organization) => (
-                    <SettingsNavigationRow
-                      description={organization.slug}
-                      key={organization.id}
-                      onClick={() => {
-                        onSelectOrganization(organization.id);
-                      }}
-                      onIntent={() => {
-                        runDetached(async () => {
-                          await prefetchOrganizationSettingsDetail(
-                            queryClient,
-                            organization.id
-                          );
-                        });
-                      }}
-                      title={organization.name}
-                    />
-                  ))}
+                {organizations.map((organization) => (
+                  <SettingsNavigationRow
+                    description={organization.slug}
+                    key={organization.id}
+                    onClick={() => {
+                      onSelectOrganization(organization.id);
+                    }}
+                    onIntent={() => {
+                      runDetached(async () => {
+                        await prefetchOrganizationSettingsDetail(
+                          queryClient,
+                          organization.id
+                        );
+                      });
+                    }}
+                    title={organization.name}
+                  />
+                ))}
               </SettingsRows>
             );
           }

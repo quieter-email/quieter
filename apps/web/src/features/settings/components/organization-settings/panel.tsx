@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 
 import { authClient } from "#/lib/auth";
 import { settingsRouteApi } from "#/lib/route-apis";
+import { useOrderedOrganizations } from "#/lib/use-ordered-organizations";
 
 import { SettingsBackButton, SettingsLoadingState } from "../settings-layout";
 import { OrganizationDetailView } from "./organization-detail-view";
@@ -20,7 +21,7 @@ export const OrganizationSettingsPanel = () => {
   const { domainId, organizationId, organizationView } =
     settingsRouteApi.useSearch();
   const sessionState = authClient.useSession();
-  const organizationsState = authClient.useListOrganizations();
+  const organizationsState = useOrderedOrganizations();
   const organizations = organizationsState.data ?? [];
   const userId = sessionState.data?.user.id ?? "";
   const loadError = organizationsState.error ?? sessionState.error;

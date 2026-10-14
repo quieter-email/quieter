@@ -55,8 +55,7 @@ export const AddMailboxSettingsView = ({
   const navigate = useNavigate({ from: "/settings" });
   const queryClient = useQueryClient();
   const session = authClient.useSession().data;
-  const organizations = authClient.useListOrganizations().data ?? [];
-  const { teamId } = useSettingsTeam();
+  const { organizations, teamId } = useSettingsTeam();
   const workflowStore = useAddMailboxSettingsStore();
   const {
     direction,

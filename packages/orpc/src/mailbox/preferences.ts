@@ -29,17 +29,33 @@ export const resolveDefaultMailboxId = (
     : null;
 
 export const canonicalizeMailboxSwitcherOrder = (
-  groups: MailboxGroup[],
+  groups: {
+    id: string;
+    organizationId: string;
+    mailboxes: { id: string; divisionId: string | null }[];
+  }[],
   order: MailboxSwitcherOrder | null
 ): MailboxSwitcherOrder => {
   const groupIds = groups.map((group) => group.id);
-  const groupIdSet = new Set(groupIds);
+  const groupIdByLegacyId = new Map<string, string>();
+  for (const group of groups) {
+    groupIdByLegacyId.set(group.id, group.id);
+    groupIdByLegacyId.set(`team:${group.organizationId}:unassigned`, group.id);
+    for (const mailbox of group.mailboxes) {
+      if (mailbox.divisionId) {
+        groupIdByLegacyId.set(`division:${mailbox.divisionId}`, group.id);
+      }
+    }
+  }
   const seenGroupIds = new Set<string>();
   const orderedGroupIds = [
-    ...(order?.groupIds.filter((groupId) => groupIdSet.has(groupId)) ?? []),
+    ...(order?.groupIds.flatMap((groupId) => {
+      const currentGroupId = groupIdByLegacyId.get(groupId);
+      return currentGroupId ? [currentGroupId] : [];
+    }) ?? []),
     ...groupIds,
   ].filter((groupId) => {
-    if (seenGroupIds.has(groupId) || !groupIdSet.has(groupId)) {
+    if (seenGroupIds.has(groupId)) {
       return false;
     }
     seenGroupIds.add(groupId);
@@ -51,8 +67,16 @@ export const canonicalizeMailboxSwitcherOrder = (
     const mailboxIds = group.mailboxes.map((record) => record.id);
     const mailboxIdSet = new Set(mailboxIds);
     const seenMailboxIds = new Set<string>();
+    const savedGroupIds = [
+      ...(order?.groupIds ?? []),
+      ...Object.keys(order?.mailboxIdsByGroupId ?? {}),
+    ];
     mailboxIdsByGroupId[group.id] = [
-      ...(order?.mailboxIdsByGroupId[group.id] ?? []),
+      ...savedGroupIds.flatMap((groupId) =>
+        groupIdByLegacyId.get(groupId) === group.id
+          ? (order?.mailboxIdsByGroupId[groupId] ?? [])
+          : []
+      ),
       ...mailboxIds,
     ].filter((mailboxId) => {
       if (seenMailboxIds.has(mailboxId) || !mailboxIdSet.has(mailboxId)) {

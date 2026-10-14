@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { authClient } from "#/lib/auth";
 import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 import { settingsRouteApi } from "#/lib/route-apis";
+import { useOrderedOrganizations } from "#/lib/use-ordered-organizations";
 
 export const useSettingsTeam = () => {
   const { organizationId, mailboxId, from } = settingsRouteApi.useSearch();
-  const organizationsState = authClient.useListOrganizations();
+  const organizationsState = useOrderedOrganizations();
   const { data } = useQuery(mailboxesQueryOptions());
   const organizations = organizationsState.data ?? [];
   const mailbox = data?.groups

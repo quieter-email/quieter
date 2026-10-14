@@ -193,4 +193,67 @@ describe("mailbox switcher order", () => {
       "gmail-two-id",
     ]);
   });
+
+  test("merges saved division and unassigned ordering into its team", () => {
+    const [gmailGroup, divisionGroup, otherGroup] = mailboxGroups;
+    const [firstMailbox, secondMailbox] = divisionGroup.mailboxes;
+    const [unassignedMailbox] = otherGroup.mailboxes;
+    const groups: MailboxGroup[] = [
+      gmailGroup,
+      {
+        ...divisionGroup,
+        id: "team-a",
+        mailboxes: [
+          { ...firstMailbox, divisionId: "division-a" },
+          { ...secondMailbox, divisionId: "division-a" },
+          { ...unassignedMailbox, divisionId: null },
+        ],
+        organizationId: "team-a",
+      },
+    ];
+    const order = canonicalizeMailboxSwitcherOrder(groups, {
+      groupIds: [
+        "team:team-a:unassigned",
+        "org_default",
+        "division:division-a",
+      ],
+      mailboxIdsByGroupId: {
+        "division:division-a": ["a2", "a1", "gmail-one-id"],
+        "team:team-a:unassigned": ["b1"],
+      },
+    });
+
+    expect(order.groupIds).toStrictEqual(["team-a", "org_default"]);
+    expect(order.mailboxIdsByGroupId["team-a"]).toStrictEqual([
+      "b1",
+      "a2",
+      "a1",
+    ]);
+    expect(order.mailboxIdsByGroupId.org_default).toContain("gmail-one-id");
+  });
+
+  test("retains empty teams and drops stale duplicate saved entries", () => {
+    const [gmailGroup, otherGroup] = mailboxGroups;
+    const emptyTeam = {
+      ...otherGroup,
+      mailboxes: [],
+    };
+    const groups = applyMailboxSwitcherOrder([gmailGroup, emptyTeam], {
+      groupIds: ["org_a", "removed-team", "org_a"],
+      mailboxIdsByGroupId: {
+        org_a: ["removed-mailbox"],
+        org_default: ["gmail-two-id", "gmail-two-id"],
+      },
+    });
+
+    expect(groups.map((group) => group.id)).toStrictEqual([
+      "org_a",
+      "org_default",
+    ]);
+    expect(groups[0]?.mailboxes).toHaveLength(0);
+    expect(groups[1]?.mailboxes.map((mailbox) => mailbox.id)).toStrictEqual([
+      "gmail-two-id",
+      "gmail-one-id",
+    ]);
+  });
 });
