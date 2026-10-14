@@ -31,7 +31,7 @@ import { ToolbarButton } from "@quieter/ui/toolbar";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { MobileHeader } from "#/components/mobile-header";
 import { USER_BILLING_QUERY_KEY } from "#/features/settings/domain/billing";
@@ -41,7 +41,7 @@ import { toastError } from "#/lib/error-toast";
 import { deleteDemoDraft } from "#/lib/gmail/demo-mail";
 import { refreshCachedMailboxQueries } from "#/lib/mail/inbox-query";
 import { deleteManagedDemoDraft } from "#/lib/managed-mail/demo-managed-mail";
-import { orpc } from "#/lib/orpc";
+import { orpc, rpc } from "#/lib/orpc";
 
 import type { ComposeFormValues } from "../domain/compose-form";
 import {
@@ -49,9 +49,13 @@ import {
   deleteComposeDraft,
   hasComposeDraftContent,
   normalizeComposeBodyHtml,
+  prepareLoadedComposeDraft,
+  clearComposeDraftRuntimeFiles,
+  createRecoveredComposeCopy,
   textToComposeBodyHtml,
 } from "../domain/draft";
 import type { ComposeDraftState } from "../domain/draft";
+import { findRecoverableComposeDraft } from "../domain/draft-recovery";
 import {
   ComposeEditor,
   ComposeEditorBody,
@@ -77,6 +81,7 @@ export type ComposeSenderMailbox = {
 export type ComposeSurfaceProps = {
   allowSenderSwitch?: boolean;
   beforeNavigate?: () => Promise<void>;
+  actionDraft?: ComposeDraftState | null;
   className?: string;
   demoMode?: boolean;
   initialDraft?: ComposeDraftState | null;
@@ -173,9 +178,10 @@ const ComposeFormField = ({
   </form.Field>
 );
 
-export const ComposeSurface = ({
+const ReadyComposeSurface = ({
   allowSenderSwitch = false,
   beforeNavigate,
+  actionDraft,
   className,
   demoMode = false,
   initialDraft = null,
@@ -226,18 +232,32 @@ export const ComposeSurface = ({
     snippetStatus = "Loading snippets…";
   }
   const compose = useComposeDialogController({
-    autosavePaused: slashMenuOpen,
+    autosavePaused: slashMenuOpen || switchingSender,
     beforeNavigate,
     demoMode,
+    getTextFromHtml: (html) =>
+      composeEditorRef.current?.getTextFromHtml(html) ??
+      new DOMParser().parseFromString(html, "text/html").body.textContent ??
+      "",
     initialDraft,
     initialDraftNeedsSave,
     mailboxId,
     managedDemoMode,
+    normalizeHtml: (html) =>
+      composeEditorRef.current?.normalizeHtml(html) ?? html,
     onClose,
     onRecipientProblem: focusComposeRecipientField,
     persistDrafts,
     signature,
   });
+  const changeAction = useEffectEvent((next: ComposeDraftState) => {
+    void compose.changeComposeAction(next);
+  });
+  useEffect(() => {
+    if (actionDraft) {
+      changeAction(actionDraft);
+    }
+  }, [actionDraft]);
   const {
     state,
     addInlineImageFiles,
@@ -265,11 +285,20 @@ export const ComposeSurface = ({
   const canEditBody =
     state.open &&
     state.draft.saveStatus !== "sending" &&
+    state.draft.sendUncertain !== true &&
     !state.isFinishing &&
     !switchingSender &&
     !!mailboxId;
   const audioBusy = audioRecorder.isRecording || isTranscribingAudio;
-  const canSubmitCompose = canEditBody && !audioBusy && !senderUnavailable;
+  const canSubmitCompose =
+    ((canEditBody && !senderUnavailable) ||
+      (state.open &&
+        state.draft.sendUncertain === true &&
+        state.draft.saveStatus !== "sending" &&
+        !state.isFinishing &&
+        !switchingSender &&
+        !!mailboxId)) &&
+    !audioBusy;
   const isInline = variant === "inline";
   const currentSender = senderMailboxes?.find(
     (sender) => sender.id === mailboxId
@@ -299,9 +328,12 @@ export const ComposeSurface = ({
       return;
     }
     setSwitchingSender(true);
+    let preparedTransfer: ComposeDraftState | null = null;
+    let senderTransferred = false;
     try {
       const drafts = await compose.prepareSenderSwitch(senderUnavailable);
       if (drafts) {
+        preparedTransfer = drafts.transferDraft;
         const nextSender = senderMailboxes?.find(
           (sender) => sender.id === nextMailboxId
         );
@@ -348,10 +380,15 @@ export const ComposeSurface = ({
           transferDraft,
           hasAuthoredContent
         );
+        senderTransferred = true;
+        await compose.completeSenderSwitch();
       } else {
         setSwitchingSender(false);
       }
     } catch (error) {
+      if (!senderTransferred && preparedTransfer) {
+        clearComposeDraftRuntimeFiles(preparedTransfer);
+      }
       setSwitchingSender(false);
       toastError(error, {
         boundary: "compose-switch-sender",
@@ -455,7 +492,11 @@ export const ComposeSurface = ({
         return;
       }
 
-      void form.handleSubmit();
+      if (state.draft.sendUncertain === true) {
+        void compose.checkSendDelivery();
+      } else {
+        void form.handleSubmit();
+      }
     },
     {
       enabled: canSubmitCompose,
@@ -890,7 +931,18 @@ export const ComposeSurface = ({
                       leading={
                         <ToolbarButton
                           disabled={!canSubmitCompose}
-                          type="submit"
+                          onClick={
+                            state.draft.sendUncertain === true
+                              ? () => {
+                                  void compose.checkSendDelivery();
+                                }
+                              : undefined
+                          }
+                          type={
+                            state.draft.sendUncertain === true
+                              ? "button"
+                              : "submit"
+                          }
                           variant="primary"
                         >
                           {state.draft.saveStatus === "sending" ? (
@@ -901,7 +953,9 @@ export const ComposeSurface = ({
                           ) : (
                             <HugeiconsIcon icon={MailSend02Icon} />
                           )}
-                          Send
+                          {state.draft.sendUncertain === true
+                            ? "Check delivery"
+                            : "Send"}
                           <span className="text-caption text-primary-fg/60">
                             {modKeyLabel}↵
                           </span>
@@ -938,7 +992,8 @@ export const ComposeSurface = ({
                                 !state.open ||
                                 state.isFinishing ||
                                 state.draft.saveStatus === "sending" ||
-                                switchingSender
+                                switchingSender ||
+                                state.draft.sendUncertain === true
                               }
                               onClick={() => {
                                 void discardActiveDraft();
@@ -1004,6 +1059,18 @@ export const ComposeSurface = ({
               />
               <span className="min-w-0 wrap-break-word">
                 {state.draft.errorMessage}
+                {compose.canSaveDraftCopy ? (
+                  <Button
+                    disabled={state.isFinishing}
+                    onClick={() => {
+                      void compose.saveDraftCopy();
+                    }}
+                    size="sm"
+                    variant="outline"
+                  >
+                    Save a copy and close
+                  </Button>
+                ) : null}
               </span>
             </Text>
           ) : null}
@@ -1020,6 +1087,185 @@ export const ComposeSurface = ({
         />
       ) : null}
     </>
+  );
+};
+
+export const ComposeSurface = (props: ComposeSurfaceProps) => {
+  const { initialDraft, mailboxId, demoMode, managedDemoMode } = props;
+  const needsLoading =
+    !!mailboxId &&
+    !!initialDraft &&
+    demoMode !== true &&
+    managedDemoMode !== true &&
+    props.initialDraftNeedsSave !== true &&
+    (!!initialDraft.draftId ||
+      [...initialDraft.attachments, ...initialDraft.inlineImages].some(
+        (asset) => !!asset.gmailAttachmentId
+      ));
+  const seedRef = useRef(initialDraft);
+  const [recoverableSeed, setRecoverableSeed] =
+    useState<ComposeDraftState | null>(null);
+  const [recoveredCopy, setRecoveredCopy] = useState<ComposeDraftState | null>(
+    null
+  );
+  const loadedRuntimeRef = useRef<ComposeDraftState | null>(null);
+  useEffect(
+    () => () => {
+      if (loadedRuntimeRef.current) {
+        clearComposeDraftRuntimeFiles(loadedRuntimeRef.current);
+      }
+    },
+    []
+  );
+  const {
+    data: loadedDraft,
+    error,
+    isError,
+    refetch,
+  } = useQuery({
+    enabled: needsLoading && recoveredCopy === null,
+    gcTime: 0,
+    queryFn: async ({ signal }) => {
+      const seed = seedRef.current;
+      if (!seed || !mailboxId) {
+        throw new Error("Select a draft to open.");
+      }
+      const recovered = findRecoverableComposeDraft(mailboxId, seed);
+      setRecoverableSeed(recovered);
+      let draft = recovered ?? seed;
+      if (draft.sendUncertain === true) {
+        return draft;
+      }
+      if (seed.draftId) {
+        const saved = await rpc.mail.getDraft(
+          { draftId: seed.draftId, mailboxId },
+          { signal }
+        );
+        draft = {
+          ...seed,
+          ...saved,
+          draftAnchor: saved.draftAnchor ?? null,
+          errorMessage: null,
+          lastSavedAt: saved.lastSavedAt,
+          messageId: saved.messageId ?? undefined,
+          saveStatus: "saved",
+        };
+        if (
+          seed.draftAnchor &&
+          (seed.draftAnchor.seededBy !== saved.draftAnchor?.seededBy ||
+            seed.draftAnchor.sourceMessageId !==
+              saved.draftAnchor?.sourceMessageId)
+        ) {
+          draft = {
+            ...draft,
+            draftAnchor: seed.draftAnchor,
+            recipients: seed.recipients,
+            replyContext: seed.replyContext,
+            saveStatus: "idle",
+            subject: seed.subject,
+          };
+        }
+      }
+      draft = findRecoverableComposeDraft(mailboxId, draft) ?? draft;
+      if (draft.sendUncertain === true) {
+        return draft;
+      }
+      try {
+        const prepared = await prepareLoadedComposeDraft(
+          mailboxId,
+          draft,
+          signal
+        );
+        loadedRuntimeRef.current = prepared;
+        return prepared;
+      } catch (loadError) {
+        clearComposeDraftRuntimeFiles(draft);
+        throw loadError;
+      }
+    },
+    queryKey: ["compose-draft", mailboxId, initialDraft?.localId],
+    retry: false,
+    staleTime: Infinity,
+  });
+  const reportLoadError = useEffectEvent(() => {
+    toastError(error, {
+      boundary: "compose-load",
+      fallback: "Could not load your draft. Please try again.",
+    });
+  });
+  useEffect(() => {
+    if (isError) {
+      reportLoadError();
+    }
+  }, [isError]);
+  if (recoveredCopy) {
+    return (
+      <ReadyComposeSurface
+        {...props}
+        initialDraft={recoveredCopy}
+        key={recoveredCopy.localId}
+      />
+    );
+  }
+  if (needsLoading && !loadedDraft) {
+    const canRecoverCopy =
+      recoverableSeed !== null &&
+      error !== null &&
+      typeof error === "object" &&
+      (Reflect.get(error, "code") === "NOT_FOUND" ||
+        Reflect.get(error, "status") === 404);
+    return (
+      <output className="flex flex-col items-center justify-center gap-3 p-6">
+        {isError ? (
+          <>
+            <Text>Could not load your draft.</Text>
+            {canRecoverCopy ? (
+              <>
+                <Text>
+                  Your saved draft is no longer available. Recover your text as
+                  a new draft.
+                </Text>
+                <Button
+                  onClick={() => {
+                    setRecoveredCopy(
+                      createRecoveredComposeCopy(recoverableSeed)
+                    );
+                  }}
+                >
+                  Recover as copy
+                </Button>
+              </>
+            ) : null}
+            <Button
+              onClick={() => {
+                void refetch();
+              }}
+              variant="outline"
+            >
+              Try again
+            </Button>
+            <Button onClick={props.onClose} variant="ghost">
+              Close
+            </Button>
+          </>
+        ) : (
+          <>
+            <HugeiconsIcon
+              aria-hidden
+              className="animate-spin"
+              icon={Loading03Icon}
+            />
+            <Text>Loading draft…</Text>
+          </>
+        )}
+      </output>
+    );
+  }
+  return (
+    <ReadyComposeSurface
+      {...props}
+      initialDraft={needsLoading ? loadedDraft : initialDraft}
+    />
   );
 };
 

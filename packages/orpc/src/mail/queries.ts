@@ -2,17 +2,21 @@ import { ORPCError } from "@orpc/server";
 import {
   getMailboxSyncDelta,
   getMessageAttachment,
+  getDraftWithContent,
   getMessageInspector,
   getThreadWithDetails,
+  isGmailServiceError,
   listDraftsWithDetails,
   listMessagesWithDetails,
 } from "@quieter/gmail";
+import { parseDraftMessage } from "@quieter/gmail/compose";
 
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
 import { assertUserOrganizationMember } from "../mail-domain/service";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { getManagedMessageAttachment } from "../managed-mail/messages/attachments";
+import { getManagedDraft } from "../managed-mail/messages/get-draft";
 import {
   getManagedMessageDelivery,
   getManagedMessageInspector,
@@ -74,6 +78,76 @@ export const queriesMailOperations = {
             type: input.mimeType,
           }),
           size: attachment.size ?? bytes.byteLength,
+        };
+      }
+    );
+  },
+  getDraft: async ({
+    context,
+    input,
+  }: {
+    context: MailRequestContext;
+    input: MailInputs["getDraft"];
+  }) => {
+    const selectedMailbox = await assertAccessibleMailbox({
+      mailboxId: input.mailboxId,
+      userId: context.userId,
+    });
+    if (selectedMailbox.provider === "managed") {
+      return await getManagedDraft({ ...input, userId: context.userId });
+    }
+    return await callGmail(
+      context,
+      input.mailboxId,
+      async (accessToken, signal) => {
+        const { draft, bodyHtml, bodyText } = await getDraftWithContent(
+          accessToken,
+          input.draftId,
+          signal
+        ).catch((error: unknown) => {
+          if (isGmailServiceError(error) && error.status === 404) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "This draft is no longer available.",
+            });
+          }
+          throw error;
+        });
+        if (!draft.message) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "This draft is no longer available.",
+          });
+        }
+        const parsed = parseDraftMessage(draft, { bodyHtml, bodyText });
+        return {
+          ...parsed,
+          attachments: parsed.attachments.map((asset) => ({
+            gmailAttachmentId: asset.attachmentId,
+            id: crypto.randomUUID(),
+            isInline: false as const,
+            mimeType: asset.mimeType,
+            name: asset.fileName,
+            size: asset.size,
+            sourceMessageId: draft.message?.id,
+          })),
+          baseRevision: draft.message.id,
+          bodyHtml: bodyHtml ?? parsed.bodyHtml,
+          bodyText: bodyText ?? parsed.bodyText,
+          draftId: draft.id,
+          inlineImages: parsed.inlineImages.map((asset) => ({
+            contentId: asset.contentId,
+            gmailAttachmentId: asset.attachmentId,
+            id: crypto.randomUUID(),
+            isInline: true as const,
+            mimeType: asset.mimeType,
+            name: asset.fileName,
+            size: asset.size,
+            sourceMessageId: draft.message?.id,
+          })),
+          lastSavedAt: Number(draft.message.internalDate) || undefined,
+          replyContext:
+            parsed.draftAnchor?.seededBy !== "forward" && parsed.inReplyTo
+              ? parsed.replyContext
+              : null,
         };
       }
     );

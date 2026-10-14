@@ -489,6 +489,7 @@ export const deleteDraftInMailbox = async (
   searchQuery: string | null | undefined,
   messageId: string,
   draftId: string,
+  baseRevision?: string,
   signal?: AbortSignal
 ) => {
   await runOptimisticMessageRemoval({
@@ -497,7 +498,7 @@ export const deleteDraftInMailbox = async (
     messageId,
     mutation: async (mutationSignal) => {
       await rpc.mail.deleteDraft(
-        { draftId, mailboxId },
+        { baseRevision, draftId, mailboxId },
         { signal: mutationSignal }
       );
     },

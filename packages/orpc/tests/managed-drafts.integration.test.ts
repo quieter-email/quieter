@@ -188,12 +188,21 @@ describe.skipIf(state.databaseUrl === undefined)(
           userId,
         })
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
-      await deleteManagedDraft({ draftId: saved.draftId, mailboxId, userId });
+      await deleteManagedDraft({
+        baseRevision: saved.baseRevision,
+        draftId: saved.draftId,
+        mailboxId,
+        userId,
+      });
       expect(state.objects.size).toBe(0);
       await expect(
         saveManagedDraft({
           ...input,
-          draft: { ...draft, draftId: saved.draftId },
+          draft: {
+            ...draft,
+            baseRevision: saved.baseRevision,
+            draftId: saved.draftId,
+          },
         })
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
@@ -205,7 +214,12 @@ describe.skipIf(state.databaseUrl === undefined)(
         await expect(
           saveManagedDraft({
             ...input,
-            draft: { ...draft, draftId: saved.draftId, subject: "Changed" },
+            draft: {
+              ...draft,
+              baseRevision: saved.baseRevision,
+              draftId: saved.draftId,
+              subject: "Changed",
+            },
           })
         ).rejects.toThrow("Storage unavailable");
       } finally {
@@ -217,7 +231,12 @@ describe.skipIf(state.databaseUrl === undefined)(
         .where(eq(managedMailMessage.id, saved.messageId));
       expect(record?.subject).toBe("Original");
       expect(state.objects.has(record?.rawObjectKey ?? "")).toBeTruthy();
-      await deleteManagedDraft({ draftId: saved.draftId, mailboxId, userId });
+      await deleteManagedDraft({
+        baseRevision: saved.baseRevision,
+        draftId: saved.draftId,
+        mailboxId,
+        userId,
+      });
     });
 
     test("thread archive excludes drafts while read changes and single-message archive include them", async () => {
@@ -352,7 +371,12 @@ describe.skipIf(state.databaseUrl === undefined)(
           async (subject) =>
             await saveManagedDraft({
               ...input,
-              draft: { ...draft, draftId: saved.draftId, subject },
+              draft: {
+                ...draft,
+                baseRevision: saved.baseRevision,
+                draftId: saved.draftId,
+                subject,
+              },
             })
         )
       );
@@ -375,7 +399,12 @@ describe.skipIf(state.databaseUrl === undefined)(
       expect(record?.subject).toBe(
         results.find((result) => result.status === "fulfilled")?.value.subject
       );
-      await deleteManagedDraft({ draftId: saved.draftId, mailboxId, userId });
+      await deleteManagedDraft({
+        baseRevision: record?.updatedAt.toISOString(),
+        draftId: saved.draftId,
+        mailboxId,
+        userId,
+      });
     });
   }
 );

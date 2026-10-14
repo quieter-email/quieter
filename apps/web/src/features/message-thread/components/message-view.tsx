@@ -104,12 +104,22 @@ const MessageViewContent = (props: MessageViewContentProps) => {
   const [inlineDraft, setInlineDraft] = useState<ComposeDraftState | null>(
     null
   );
+  const [actionDraft, setActionDraft] = useState<ComposeDraftState | null>(
+    null
+  );
   const inlineComposerRef = useRef<HTMLDivElement | null>(null);
   const composeRevisionRef = useRef(0);
   const queryClient = useQueryClient();
   const openInlineCompose = (draft: ComposeDraftState) => {
+    if (!draft.draftId && isBodyRefreshPending) {
+      return;
+    }
     composeRevisionRef.current += 1;
-    setInlineDraft((current) => current ?? draft);
+    if (inlineDraft) {
+      setActionDraft(draft);
+    } else {
+      setInlineDraft(draft);
+    }
     requestAnimationFrame(() => {
       inlineComposerRef.current?.scrollIntoView({
         behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -188,7 +198,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
   );
   useMessageViewHotkeys({
     activeMailbox,
-    canComposeFromMailbox,
+    canComposeFromMailbox: canComposeFromMailbox && !isBodyRefreshPending,
     currentUserEmail,
     hotkeyLinkedDraftMessage,
     hotkeyMessage,
@@ -357,6 +367,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                     }
                   >
                     <InlineComposeSurface
+                      actionDraft={actionDraft}
                       demoMode={composeDemoMode}
                       initialDraft={inlineDraft}
                       key={inlineDraft.localId}
@@ -364,6 +375,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                       managedDemoMode={composeManagedDemoMode}
                       onClose={() => {
                         setInlineDraft(null);
+                        setActionDraft(null);
                       }}
                       onManageSnippets={onManageSnippets}
                       persistDrafts={composePersistDrafts}
@@ -383,6 +395,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                   transition={inlineComposeFadeTransition}
                 >
                   <Button
+                    disabled={!hotkeyLinkedDraftMessage && isBodyRefreshPending}
                     // oxlint-disable-next-line shadcn/no-restyle -- Inline reply bar keeps its input-like metrics.
                     className="min-w-44 flex-1 justify-start px-3"
                     onClick={() => {
@@ -415,6 +428,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                   {showReplyAll ? (
                     <Button
                       aria-label="Reply all"
+                      disabled={isBodyRefreshPending}
                       onClick={() => {
                         openInlineCompose(
                           buildComposeDraftFromMessageAction({
@@ -465,6 +479,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                   ) : null}
                   <Button
                     aria-label="Forward"
+                    disabled={isBodyRefreshPending}
                     onClick={() => {
                       openInlineCompose(
                         buildComposeDraftFromMessageAction({

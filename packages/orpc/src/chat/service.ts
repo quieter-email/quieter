@@ -382,13 +382,15 @@ export const toForegroundComposeMessage = (
   localId: string
 ) => ({
   attachments: draft.attachments,
+  baseRevision: draft.baseRevision,
   bodyHtml: draft.bodyHtml,
   bodyText: draft.bodyText ?? "",
+  draftAnchor: draft.draftAnchor ?? null,
   draftId: draft.providerDraftId ?? null,
   errorMessage: null,
   inlineImages: draft.inlineImages,
   localId,
-  messageId: null,
+  messageId: draft.messageId ?? null,
   recipients: {
     bcc: draft.bcc ?? "",
     cc: draft.cc ?? "",
@@ -396,6 +398,8 @@ export const toForegroundComposeMessage = (
   },
   replyContext: draft.replyContext ?? null,
   saveStatus: "saved",
+  sendOperationId: draft.sendOperationId,
+  sendUncertain: draft.sendUncertain,
   subject: draft.subject ?? "",
   updatedAt: draft.draftRevision,
 });
@@ -754,6 +758,15 @@ export const resolveForegroundComposeDraftForPersistence = (input: {
     throw new ChatRequestError(
       409,
       "The visible draft changed. Read it again before saving or sending it."
+    );
+  }
+  if (
+    workspaceDraft.sendUncertain === true &&
+    workspaceDraft.sendOperationId === undefined
+  ) {
+    throw new ChatRequestError(
+      409,
+      "Check Sent manually before sending this recovered message again."
     );
   }
   if (
@@ -1284,7 +1297,7 @@ export const createAiChatResponse = async (input: {
   const tools = {
     ...createForegroundClientTools(),
     ...createForegroundServerTools({
-      saveComposeDraft: async ({ draft, toolCallId }, signal) => {
+      saveComposeDraft: async ({ draft }, signal) => {
         await assertForegroundExchangeActive({
           assistantMessageId,
           chatId: threadId,
@@ -1304,15 +1317,18 @@ export const createAiChatResponse = async (input: {
               input: {
                 draft: toForegroundComposeMessage(
                   reviewedDraft,
-                  `chat:${threadId}:${assistantMessageId}:${toolCallId}`
+                  reviewedDraft.draftId
                 ),
                 mailboxId,
               },
             })
         );
         return saveComposeDraftOutputSchema.parse({
+          attachments: saved.attachments,
+          baseRevision: saved.baseRevision,
           draftId: draft.draftId,
           draftRevision: draft.draftRevision,
+          inlineImages: saved.inlineImages,
           ...(saved.messageId === undefined
             ? {}
             : { messageId: saved.messageId }),
@@ -1320,7 +1336,7 @@ export const createAiChatResponse = async (input: {
           status: "draft_saved" as const,
         });
       },
-      sendMail: async ({ draft, toolCallId }, signal) => {
+      sendMail: async ({ draft }, signal) => {
         await assertForegroundExchangeActive({
           assistantMessageId,
           chatId: threadId,
@@ -1341,7 +1357,7 @@ export const createAiChatResponse = async (input: {
                 mailboxId,
                 message: toForegroundComposeMessage(
                   reviewedDraft,
-                  `chat:${threadId}:${assistantMessageId}:${toolCallId}`
+                  reviewedDraft.draftId
                 ),
               },
             })

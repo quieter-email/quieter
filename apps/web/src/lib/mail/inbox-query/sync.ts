@@ -431,9 +431,10 @@ export const messagesQueryOptions = (
           ],
         }
       : undefined;
-  const persister = normalizeSearchQuery(searchQuery)
-    ? undefined
-    : messagesQueryPersister;
+  const persister =
+    mailbox === "drafts" || normalizeSearchQuery(searchQuery)
+      ? undefined
+      : messagesQueryPersister;
 
   return infiniteQueryOptions<
     ListMessagesPageResult,
@@ -458,9 +459,9 @@ export const messagesQueryOptions = (
         signal
       ),
     queryKey: getMessagesQueryKey(mailboxId, mailbox, searchQuery),
-    refetchOnMount: false,
-    refetchOnReconnect: false,
-    refetchOnWindowFocus: false,
+    refetchOnMount: mailbox === "drafts" ? "always" : false,
+    refetchOnReconnect: mailbox === "drafts" ? "always" : false,
+    refetchOnWindowFocus: mailbox === "drafts" ? "always" : false,
     retry: shouldRetryOrpcError,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
   });

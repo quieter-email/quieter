@@ -6,6 +6,48 @@ import { QUIETER_DRAFT_HEADER_NAMES, splitMailAddressList } from "./schema";
 
 type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
 
+export const normalizeComposeBodyHtml = (
+  draft: Pick<ComposeDraftInput, "bodyHtml" | "inlineImages">
+): string =>
+  (draft.bodyHtml || "<p></p>").replaceAll(
+    /<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/giu,
+    (tag) => {
+      const imageId =
+        /\sdata-compose-inline-id\s*=\s*["'](?<id>[^"']+)["']/iu.exec(tag)
+          ?.groups?.id;
+      const sourceMatch =
+        /\ssrc\s*=\s*(?:"(?<double>[^"]*)"|'(?<single>[^']*)'|(?<bare>[^\s>]+))/iu.exec(
+          tag
+        );
+      const source =
+        sourceMatch?.groups?.double ??
+        sourceMatch?.groups?.single ??
+        sourceMatch?.groups?.bare;
+      const image = draft.inlineImages.find(
+        (asset) =>
+          asset.id === imageId ||
+          source?.toLowerCase() === `cid:${asset.contentId.toLowerCase()}`
+      );
+      if (image) {
+        const cid = `cid:${image.contentId.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}`;
+        const withoutId = tag.replaceAll(
+          /\s+data-compose-inline-id\s*=\s*["'][^"']*["']/giu,
+          ""
+        );
+        return /\ssrc\s*=/iu.test(withoutId)
+          ? withoutId.replace(
+              /\ssrc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/iu,
+              ` src="${cid}"`
+            )
+          : withoutId.replace(/<img\b/iu, `<img src="${cid}"`);
+      }
+      if (source?.startsWith("blob:") === true) {
+        throw new Error("An inline image is missing its file content.");
+      }
+      return tag;
+    }
+  );
+
 export const buildMimeMessage = async (
   draft: ComposeDraftInput,
   options?: {
@@ -68,7 +110,7 @@ export const buildMimeMessage = async (
       )
     ),
   ];
-  const html = draft.bodyHtml || "<p></p>";
+  const html = normalizeComposeBodyHtml(draft);
   const message = new MailComposer({
     attachments,
     bcc: splitMailAddressList(draft.recipients.bcc),

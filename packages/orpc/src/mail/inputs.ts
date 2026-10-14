@@ -53,6 +53,7 @@ export const mailInputSchemas = {
     name: z.string().trim().min(1).max(225),
   }),
   deleteDraft: z.object({
+    baseRevision: z.string().optional(),
     draftId: z.string(),
     mailboxId: z.string().trim().min(1),
   }),
@@ -66,6 +67,14 @@ export const mailInputSchemas = {
     mailboxId: z.string().trim().min(1),
     messageId: z.string(),
     mimeType: z.string().min(1),
+  }),
+  getComposeSendStatus: z.object({
+    mailboxId: z.string().trim().min(1),
+    sendOperationId: z.string().trim().min(1),
+  }),
+  getDraft: z.object({
+    draftId: z.string().trim().min(1),
+    mailboxId: z.string().trim().min(1),
   }),
   getMessageDelivery: z.object({
     mailboxId: z.string().trim().min(1),

@@ -10,13 +10,14 @@ export const useDraftAutosave = ({
   attachments: readonly { id: string }[];
   mailboxId: string | null;
   enabled: boolean;
-  save: () => Promise<void>;
+  save: () => Promise<boolean>;
   subscribe: (changed: () => void) => { unsubscribe: () => void };
 }) => {
   const persist = useEffectEvent(async () => {
     if (mailboxId !== null && navigator.onLine) {
-      await save();
+      return await save();
     }
+    return false;
   });
   const observe = useEffectEvent(subscribe);
   useEffect((): (() => void) | undefined => {
@@ -27,6 +28,7 @@ export const useDraftAutosave = ({
     let dirty = false;
     let running = false;
     let disposed = false;
+    let retryDelay = 1500;
     const flush = async () => {
       if (running || disposed || !dirty) {
         return;
@@ -34,14 +36,19 @@ export const useDraftAutosave = ({
       dirty = false;
       running = true;
       try {
-        await persist();
+        if (await persist()) {
+          retryDelay = 1500;
+        } else {
+          dirty = true;
+          retryDelay = Math.min(retryDelay * 2, 30_000);
+        }
       } finally {
         running = false;
         if (dirty && !disposed) {
           clearTimeout(timer);
           timer = setTimeout(() => {
             void flush();
-          }, 1500);
+          }, retryDelay);
         }
       }
     };

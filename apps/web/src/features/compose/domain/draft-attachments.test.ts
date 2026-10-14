@@ -64,10 +64,17 @@ describe("compose attachments", () => {
       size: 13,
     });
     saveDraft.mockResolvedValue({
+      attachments: draft.attachments.map((asset) => ({
+        ...asset,
+        gmailAttachmentId: "saved-attachment",
+        sourceMessageId: "saved-message",
+      })),
+      baseRevision: "saved-message",
       bodyHtml: "",
       bodyText: "",
       draftAnchor: null,
       draftId: "saved-draft",
+      inlineImages: [],
       messageId: "saved-message",
       recipients: draft.recipients,
       replyContext: null,

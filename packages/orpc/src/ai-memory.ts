@@ -33,6 +33,7 @@ import type {
   AiMemorySource,
   UserAiContextEventKind,
 } from "@quieter/database/schema";
+import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
 import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 
@@ -1463,20 +1464,46 @@ export const learnAiMemoryFromSentMessage = async ({
   if (updates.length === 0) {
     return { status: "skipped" as const };
   }
-  const events = await Promise.all(updates);
-  await Promise.all(
-    events.map(async (event) => {
-      if (event === null) {
-        return;
-      }
-      try {
-        await refreshAiMemoryFromEvent({ eventId: event.id });
-      } catch (error: unknown) {
-        reportError(error, { operation: "ai-memory:learn-from-sent-message" });
-      }
-    })
-  );
+  await Promise.all(updates);
   return { status: "recorded" as const };
+};
+
+export const processPendingAiMemoryEvents = async () => {
+  if (
+    serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+    serverEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED !== true
+  ) {
+    return;
+  }
+  const cutoff = new Date(Date.now() - 120_000);
+  const pending = await db
+    .select({ id: userAiContextEvent.id })
+    .from(userAiContextEvent)
+    .where(
+      and(
+        isNull(userAiContextEvent.mergedAt),
+        isNull(userAiContextEvent.skippedAt),
+        or(
+          isNull(userAiContextEvent.processingAt),
+          lt(userAiContextEvent.processingAt, cutoff)
+        ),
+        lt(userAiContextEvent.updatedAt, cutoff)
+      )
+    )
+    .orderBy(userAiContextEvent.updatedAt)
+    .limit(4);
+  const results = await Promise.allSettled(
+    pending.map(
+      async (event) => await refreshAiMemoryFromEvent({ eventId: event.id })
+    )
+  );
+  for (const result of results) {
+    if (result.status === "rejected") {
+      reportError(result.reason, {
+        operation: "ai-memory:process-pending-event",
+      });
+    }
+  }
 };
 
 export const learnAiMemoryFromMailAction = async ({

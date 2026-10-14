@@ -1,3 +1,4 @@
+import { composeDraftAnchorSchema } from "@quieter/mail/compose/schema";
 import { tool } from "ai";
 import type { ToolSet } from "ai";
 import { z } from "zod";
@@ -43,6 +44,7 @@ const foregroundComposeAssetSchema = z
       .int()
       .nonnegative()
       .max(24 * 1024 * 1024),
+    sourceMessageId: optionalIdentifier,
   })
   .strict();
 
@@ -79,13 +81,16 @@ export type ForegroundSnapshot = z.infer<typeof foregroundSnapshotSchema>;
 export const foregroundComposeDraftSchema = z
   .object({
     attachments: z.array(foregroundComposeAttachmentSchema).max(100),
+    baseRevision: optionalIdentifier,
     bcc: optionalText,
     bodyHtml: z.string().max(100_000),
     bodyText: optionalText,
     cc: optionalText,
+    draftAnchor: composeDraftAnchorSchema.nullable().optional(),
     draftId: z.string().trim().min(1).max(256),
     draftRevision: z.number().int().nonnegative(),
     inlineImages: z.array(foregroundComposeInlineImageSchema).max(100),
+    messageId: optionalIdentifier,
     providerDraftId: z.string().trim().min(1).max(256).optional(),
     replyContext: z
       .object({
@@ -96,6 +101,8 @@ export const foregroundComposeDraftSchema = z
       .strict()
       .nullable()
       .optional(),
+    sendOperationId: z.uuid().optional(),
+    sendUncertain: z.boolean().optional(),
     subject: optionalText,
     to: optionalText,
   })
@@ -166,8 +173,11 @@ export const saveComposeDraftInputSchema = z
   .strict();
 export const saveComposeDraftOutputSchema = z
   .object({
+    attachments: z.array(foregroundComposeAttachmentSchema).optional(),
+    baseRevision: optionalIdentifier,
     draftId: z.string().trim().min(1).max(256),
     draftRevision: z.number().int().nonnegative(),
+    inlineImages: z.array(foregroundComposeInlineImageSchema).optional(),
     messageId: z.string().trim().min(1).max(256).optional(),
     providerDraftId: z.string().trim().min(1).max(256),
     status: z.literal("draft_saved"),

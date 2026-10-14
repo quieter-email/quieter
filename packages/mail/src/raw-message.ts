@@ -98,7 +98,10 @@ export const parseRawMailMessage = async (
 
   return {
     attachments: email.attachments.map((attachment, index) => ({
-      contentId: toOptionalTrimmed(attachment.contentId),
+      contentId: toOptionalTrimmed(attachment.contentId)?.replaceAll(
+        /^<|>$/gu,
+        ""
+      ),
       fileName:
         toOptionalTrimmed(attachment.filename ?? undefined) ??
         `attachment-${index + 1}`,
@@ -142,7 +145,10 @@ export const parseRawMailAttachments = async (
       typeof attachment.content === "string"
         ? new TextEncoder().encode(attachment.content)
         : new Uint8Array(attachment.content),
-    contentId: toOptionalTrimmed(attachment.contentId),
+    contentId: toOptionalTrimmed(attachment.contentId)?.replaceAll(
+      /^<|>$/gu,
+      ""
+    ),
     fileName:
       toOptionalTrimmed(attachment.filename ?? undefined) ??
       `attachment-${index + 1}`,

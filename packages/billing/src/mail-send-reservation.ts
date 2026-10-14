@@ -77,6 +77,39 @@ export const reserveOrganizationMailSend = async (input: {
       )
       .limit(1);
     if (
+      existing === undefined &&
+      input.snapshot.kind === "mailbox" &&
+      input.snapshot.mailboxId !== undefined &&
+      input.snapshot.draftId !== undefined &&
+      input.snapshot.draftUpdatedAt !== undefined
+    ) {
+      const [boundSend] = await tx
+        .select()
+        .from(organizationMailSendIdempotency)
+        .where(
+          and(
+            eq(
+              organizationMailSendIdempotency.organizationId,
+              input.organizationId
+            ),
+            sql`${organizationMailSendIdempotency.snapshot}->>'mailboxId' = ${input.snapshot.mailboxId}`,
+            sql`${organizationMailSendIdempotency.snapshot}->>'draftId' = ${input.snapshot.draftId}`,
+            sql`${organizationMailSendIdempotency.snapshot}->>'draftUpdatedAt' = ${input.snapshot.draftUpdatedAt}`,
+            inArray(organizationMailSendIdempotency.status, [
+              "prepared",
+              "submitting",
+              "unknown",
+              "accepted",
+              "completed",
+            ])
+          )
+        )
+        .limit(1);
+      if (boundSend !== undefined) {
+        return boundSend;
+      }
+    }
+    if (
       existing !== undefined &&
       ((existing.status !== "rejected" && existing.status !== "prepared") ||
         existing.requestHash !== input.requestHash)

@@ -8,7 +8,10 @@ import {
 
 import type { GmailDraft } from "../service";
 
-export const parseDraftMessage = (draft: GmailDraft) => {
+export const parseDraftMessage = (
+  draft: GmailDraft,
+  resolvedContent?: { bodyHtml?: string; bodyText?: string }
+) => {
   const { message } = draft;
   if (!message) {
     return {
@@ -30,6 +33,8 @@ export const parseDraftMessage = (draft: GmailDraft) => {
   }
 
   const content = extractMessageContent(message.payload);
+  const bodyHtml = resolvedContent?.bodyHtml ?? content.html ?? "";
+  const bodyText = resolvedContent?.bodyText ?? content.text ?? "";
   const headers = message.payload?.headers ?? [];
   const readHeader = (name: string) =>
     headers.find((header) => header.name.toLowerCase() === name.toLowerCase())
@@ -40,12 +45,12 @@ export const parseDraftMessage = (draft: GmailDraft) => {
   const references = referenceMatches ? [...new Set(referenceMatches)] : [];
 
   return {
-    attachments: extractMessageAttachments(message.payload),
-    bodyHtml: content.html ?? "",
-    bodyText: content.text ?? "",
+    attachments: extractMessageAttachments(message.payload, bodyHtml),
+    bodyHtml,
+    bodyText,
     draftAnchor,
     inReplyTo: inReplyTo || null,
-    inlineImages: extractInlineMessageAttachments(message.payload),
+    inlineImages: extractInlineMessageAttachments(message.payload, bodyHtml),
     messageId: message.id,
     recipients: {
       bcc: decodeMimeHeaderValue(readHeader("Bcc")) ?? "",

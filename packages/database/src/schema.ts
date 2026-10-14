@@ -2564,6 +2564,46 @@ export const organizationMailUsageEvent = pgTable(
   ]
 );
 
+export const gmailComposeOperation = pgTable(
+  "gmailComposeOperation",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    draftId: text("draftId"),
+    id: text("id").primaryKey(),
+    kind: text("kind").$type<"save" | "send">().notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    messageHeaderId: text("messageHeaderId").notNull(),
+    operationKey: text("operationKey").notNull(),
+    requestHash: text("requestHash").notNull(),
+    response: jsonb("response").$type<{
+      id: string;
+      messageId?: string;
+      threadId?: string;
+    }>(),
+    status: text("status")
+      .$type<"prepared" | "submitting" | "accepted" | "unknown" | "rejected">()
+      .notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    unique("gmail_compose_operation_mailbox_key_unique").on(
+      table.mailboxId,
+      table.operationKey
+    ),
+    index("gmail_compose_operation_status_updated_idx").on(
+      table.status,
+      table.updatedAt
+    ),
+    uniqueIndex("gmail_compose_operation_active_draft_send_unique")
+      .on(table.mailboxId, table.draftId)
+      .where(
+        sql`${table.kind} = 'send' and ${table.status} in ('submitting', 'unknown', 'accepted')`
+      ),
+  ]
+);
+
 export const organizationMailSendIdempotency = pgTable(
   "organizationMailSendIdempotency",
   {

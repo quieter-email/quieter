@@ -1,8 +1,11 @@
 "use client";
 
 import type { RouterOutputs } from "@quieter/orpc";
+import { Button, LinkButton } from "@quieter/ui/button";
+import { Text } from "@quieter/ui/text";
 import { useHotkey, useHotkeySequence } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -12,11 +15,13 @@ import { parseMailtoComposeDraft } from "#/features/compose/domain/mailto";
 import { shouldIgnoreAppShortcut } from "#/features/hotkeys/domain/hotkey-guards";
 import { useDemoModeEnabled } from "#/features/settings/domain/demo-mode-setting";
 import { useManagedDemoModeEnabled } from "#/features/settings/domain/managed-demo-mode-setting";
+import { authClient } from "#/lib/auth";
 import {
   chatsQueryOptions,
   getChatQueryKey,
   getChatsQueryKey,
 } from "#/lib/chat-query";
+import { toastError } from "#/lib/error-toast";
 import { openGoogleAccountLink } from "#/lib/google-account-link";
 import type { MailboxCategory } from "#/lib/mail";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
@@ -184,7 +189,8 @@ const useMailboxWorkspaceCompose = ({
 
   const openComposeWorkspace = (
     draft: ComposeDraftState | null,
-    draftMailboxId = selectedMailboxId
+    draftMailboxId = selectedMailboxId,
+    consumeMailto = false
   ) => {
     if (isComposeMailbox || (draft === null && !canComposeNew)) {
       return;
@@ -205,8 +211,10 @@ const useMailboxWorkspaceCompose = ({
       mailboxId: nextMailboxId,
     }));
     void setMailboxSearch({
+      compose: consumeMailto ? null : undefined,
       mailbox: "compose",
       mailboxId: nextMailboxId,
+      mailto: consumeMailto ? null : undefined,
       messageId: null,
       threadId: null,
       view: view === "all-inboxes" ? "all-inboxes" : "inbox",
@@ -293,7 +301,11 @@ const useMailboxWorkspaceRouteEffects = ({
   mailboxes: ReturnType<typeof useMailboxSelection>["mailboxes"];
   mailto: string | null | undefined;
   mailboxesPending: boolean;
-  openComposeWorkspace: (draft: ComposeDraftState | null) => void;
+  openComposeWorkspace: (
+    draft: ComposeDraftState | null,
+    draftMailboxId?: string | null,
+    consumeMailto?: boolean
+  ) => void;
   queryClient: ReturnType<typeof useQueryClient>;
   selectedMailboxId: string | null;
   selectedMailboxProvider: MailboxProvider;
@@ -328,7 +340,14 @@ const useMailboxWorkspaceRouteEffects = ({
   }, [isCompletingGmailConnection, mailboxId, queryClient, setMailboxSearch]);
 
   useLayoutEffect(() => {
-    if (isCompletingGmailConnection || (!isSandboxMode && mailboxesPending)) {
+    if (
+      !isWorkspaceReady ||
+      isCompletingGmailConnection ||
+      (!isSandboxMode && mailboxesPending)
+    ) {
+      return;
+    }
+    if (compose === "mailto" && mailto) {
       return;
     }
 
@@ -352,11 +371,14 @@ const useMailboxWorkspaceRouteEffects = ({
       messageId: null,
     });
   }, [
+    compose,
     isCompletingGmailConnection,
     isSandboxMode,
+    isWorkspaceReady,
     mailboxId,
     mailboxes,
     mailboxesPending,
+    mailto,
     selectedMailboxId,
     selectedMailboxProvider,
     setMailboxSearch,
@@ -398,33 +420,17 @@ const useMailboxWorkspaceRouteEffects = ({
       mailto === ""
     ) {
       launchedMailtoRef.current = null;
-      return;
-    }
-
-    if (!isWorkspaceReady) {
-      return;
-    }
-
-    if (
-      selectedMailboxId === null ||
-      selectedMailboxId === undefined ||
-      selectedMailboxId === ""
-    ) {
+    } else if (isWorkspaceReady && launchedMailtoRef.current !== mailto) {
       launchedMailtoRef.current = mailto;
-      void setMailboxSearch({ compose: null, mailto: null }, { replace: true });
-      return;
-    }
-
-    if (launchedMailtoRef.current === mailto) {
-      return;
-    }
-
-    launchedMailtoRef.current = mailto;
-    const draft = parseMailtoComposeDraft(mailto);
-    void setMailboxSearch({ compose: null, mailto: null }, { replace: true });
-
-    if (draft) {
-      openComposeWorkspace(draft);
+      const draft = parseMailtoComposeDraft(mailto);
+      if (draft && selectedMailboxId) {
+        openComposeWorkspace(draft, selectedMailboxId, true);
+      } else {
+        void setMailboxSearch(
+          { compose: null, mailto: null },
+          { replace: true }
+        );
+      }
     }
   }, [
     compose,
@@ -827,8 +833,18 @@ const MailboxWorkspaceBody = ({
   );
 };
 
-export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
+export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const queryClient = useQueryClient();
+  const session = authClient.useSession();
+  const returnTo = useLocation({ select: (location) => location.href });
+  useEffect(() => {
+    if (session.error && !session.isPending && !session.isRefetching) {
+      toastError(session.error, {
+        boundary: "mailbox-session",
+        fallback: "Could not load your account. Please try again.",
+      });
+    }
+  }, [session.error, session.isPending, session.isRefetching]);
   const {
     activeMailbox,
     chatId,
@@ -848,6 +864,11 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
   const isDemoMode = useDemoModeEnabled();
   const isManagedDemoMode = useManagedDemoModeEnabled();
   const previewPersona = usePreviewPersona();
+  const [browserPreferencesReady, setBrowserPreferencesReady] = useState(false);
+  useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- Browser-backed mailbox preferences must hydrate before consuming a mailto request.
+    setBrowserPreferencesReady(true);
+  }, []);
   const isEmptyPreviewPersona = previewPersona === "empty";
   const isSandboxMode =
     isDemoMode || isManagedDemoMode || isEmptyPreviewPersona;
@@ -877,9 +898,16 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
   );
   const isCompletingGmailConnection =
     gmailLink === "complete" && !isSandboxMode;
+  const sessionMatchesUser =
+    !!session.data &&
+    (session.data.user.id === user.id ||
+      (!user.id && session.data.user.email === user.email));
   const isWorkspaceReady =
-    isSandboxMode ||
-    (!mailboxesQuery.isPending && !isCompletingGmailConnection);
+    browserPreferencesReady &&
+    !session.isPending &&
+    sessionMatchesUser &&
+    (isSandboxMode ||
+      (!mailboxesQuery.isPending && !isCompletingGmailConnection));
   const writableMailboxes = mailboxes.filter(
     (mailbox) =>
       mailbox.connectionStatus === "connected" &&
@@ -975,13 +1003,38 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     closeComposeWorkspace: handleCloseComposeWorkspace,
     openComposeWorkspace: handleComposeDraftRequested,
   } = composeWorkspace;
+  if (!session.isPending && !session.isRefetching && !sessionMatchesUser) {
+    const sessionFailed = !!session.error && session.error.status !== 401;
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 p-6">
+        <Text role="alert">
+          {sessionFailed
+            ? "Could not load your account. Please try again."
+            : "Sign in to continue."}
+        </Text>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => {
+              void session.refetch();
+            }}
+            type="button"
+          >
+            Try again
+          </Button>
+          <LinkButton search={{ returnTo }} to="/auth" variant="outline">
+            Sign in
+          </LinkButton>
+        </div>
+      </main>
+    );
+  }
   if (!isWorkspaceReady) {
     return <LoadingPage />;
   }
 
   return (
     <MailboxWorkspaceBody
-      userId={_user.id ?? _user.email ?? "preview"}
+      userId={user.id ?? user.email ?? "preview"}
       activeMailbox={activeMailbox}
       chatId={chatId ?? null}
       composeSession={composeWorkspace.composeSession}

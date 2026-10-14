@@ -2,15 +2,21 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
-import { managedMailMessage } from "@quieter/database/schema";
-import { buildMimeMessage } from "@quieter/mail/compose/mime";
+import {
+  managedMailMessage,
+  organizationMailSendIdempotency,
+} from "@quieter/database/schema";
+import {
+  buildMimeMessage,
+  normalizeComposeBodyHtml,
+} from "@quieter/mail/compose/mime";
 import {
   extractMailAddress,
   splitMailAddressList,
 } from "@quieter/mail/compose/schema";
 import type { composeMessageInputSchema } from "@quieter/mail/compose/schema";
 import { parseRawMailMessage } from "@quieter/mail/raw-message";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { sendPreparedMail } from "../../mail-send";
@@ -39,6 +45,17 @@ export const sendManagedMailboxMessage = async (input: {
     });
   }
   const { message } = input;
+  const idempotencyKey = `compose:${input.mailboxId}:${message.sendOperationId ?? message.localId}`;
+  const [prior] = await db
+    .select({ status: organizationMailSendIdempotency.status })
+    .from(organizationMailSendIdempotency)
+    .where(
+      and(
+        eq(organizationMailSendIdempotency.organizationId, organizationId),
+        eq(organizationMailSendIdempotency.idempotencyKey, idempotencyKey)
+      )
+    )
+    .limit(1);
   const draftId = message.draftId ?? `draft:${message.localId}`;
   const [draft] = await db
     .select({
@@ -76,7 +93,7 @@ export const sendManagedMailboxMessage = async (input: {
     })
   );
   const requestHash = hashRequest({
-    bodyHtml: message.bodyHtml,
+    bodyHtml: normalizeComposeBodyHtml(message),
     bodyText: message.bodyText,
     files,
     headers: message.headers,
@@ -84,6 +101,48 @@ export const sendManagedMailboxMessage = async (input: {
     replyContext: message.replyContext,
     subject: message.subject,
   });
+  if (draft !== undefined) {
+    const [boundSend] = await db
+      .select()
+      .from(organizationMailSendIdempotency)
+      .where(
+        and(
+          eq(organizationMailSendIdempotency.organizationId, organizationId),
+          sql`${organizationMailSendIdempotency.snapshot}->>'draftId' = ${draft.id}`,
+          sql`${organizationMailSendIdempotency.snapshot}->>'draftUpdatedAt' = ${draft.updatedAt.toISOString()}`,
+          inArray(organizationMailSendIdempotency.status, [
+            "submitting",
+            "unknown",
+            "accepted",
+            "completed",
+          ])
+        )
+      )
+      .limit(1);
+    if (
+      boundSend !== undefined &&
+      boundSend.idempotencyKey !== idempotencyKey
+    ) {
+      throw new ORPCError("CONFLICT", {
+        data: { draftConflict: true },
+        message:
+          "This draft already has a send attempt from another editor. Check Sent before recovering your changes as a new draft.",
+      });
+    }
+  }
+  if (
+    (prior === undefined ||
+      prior.status === "prepared" ||
+      prior.status === "rejected") &&
+    ((draft !== undefined &&
+      message.baseRevision !== draft.updatedAt.toISOString()) ||
+      (draft === undefined && !!message.draftId))
+  ) {
+    throw new ORPCError("CONFLICT", {
+      data: { draftConflict: true },
+      message: "This draft changed elsewhere. Reopen it before sending again.",
+    });
+  }
   const id = randomUUID();
   const sentAt = new Date();
   const messageHeaderId = `<${id}@${selectedMailbox.emailAddress.split("@").at(1)}>`;
@@ -101,7 +160,7 @@ export const sendManagedMailboxMessage = async (input: {
   try {
     const result = await sendPreparedMail({
       id,
-      idempotencyKey: `compose:${input.mailboxId}:${draftId}:${requestHash}`,
+      idempotencyKey,
       messageHeaderId,
       organizationId,
       raw,
@@ -114,8 +173,8 @@ export const sendManagedMailboxMessage = async (input: {
         bcc: splitMailAddressList(message.recipients.bcc).map(
           extractMailAddress
         ),
-        bodyHtml: message.bodyHtml,
-        bodyText: message.bodyText,
+        bodyHtml: parsed.bodyHtml ?? "",
+        bodyText: parsed.bodyText ?? "",
         cc: splitMailAddressList(message.recipients.cc).map(extractMailAddress),
         draftId: draft?.id,
         draftUpdatedAt: draft?.updatedAt.toISOString(),
@@ -135,6 +194,7 @@ export const sendManagedMailboxMessage = async (input: {
     return {
       draftCleanupHandled: true,
       id: result.id,
+      idempotent: result.idempotent,
       messageId: result.messageId,
       threadId: result.threadId,
     };
