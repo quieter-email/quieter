@@ -5,6 +5,7 @@ import type { MessageListItem } from "#/lib/mail";
 import {
   buildComposeDraftFromMessageAction,
   buildComposeDraftFromSavedDraftMessage,
+  findLinkedDraftForMessage,
 } from "./compose-actions";
 import {
   composeFormValuesToDraft,
@@ -34,6 +35,30 @@ const sourceMessage = {
 } satisfies MessageListItem;
 
 describe(buildComposeDraftFromMessageAction, () => {
+  test("refreshes reply headers when resuming a draft from an earlier message", () => {
+    const draft = buildComposeDraftFromMessageAction({
+      action: "reply",
+      currentUserEmail: "me@example.com",
+      existingDraftMessage: {
+        bodyText: "Unfinished reply",
+        draftId: "saved-reply",
+        id: "saved-message",
+        inReplyTo: "<old@example.com>",
+        references: "<old@example.com>",
+        threadId: sourceMessage.threadId,
+      },
+      message: sourceMessage,
+    });
+    expect(draft.replyContext?.messageHeaderId).toBe(
+      sourceMessage.messageHeaderId
+    );
+    expect(draft.replyContext?.references).toContain(
+      sourceMessage.messageHeaderId
+    );
+    expect(draft.replyContext?.references).not.toContain("<old@example.com>");
+    expect(draft.bodyText).toContain("Unfinished reply");
+  });
+
   test("preserves reply metadata when saving edited inline form values on navigation", () => {
     const draft = buildComposeDraftFromMessageAction({
       action: "reply",
@@ -151,11 +176,65 @@ describe(buildComposeDraftFromMessageAction, () => {
       message: sourceMessage,
     });
 
-    expect(draft.draftId).toBeUndefined();
+    expect(draft).toMatchObject({
+      draftId: "draft-empty",
+      messageId: "draft-message-empty",
+    });
     expect(draft.bodyHtml).toContain(
       "<blockquote><p>Hello from Alex.</p></blockquote>"
     );
     expect(draft.recipients.to).toBe("Alex Sender <alex@example.com>");
+  });
+
+  test("continues a thread draft anchored to an earlier message", () => {
+    const savedMessage: MessageListItem = {
+      bodyText: "My unfinished response",
+      draftAnchor: {
+        seededBy: "reply",
+        sourceMessageId: "earlier-message",
+        sourceThreadId: sourceMessage.threadId,
+      },
+      draftId: "existing-draft",
+      id: "draft-message",
+      threadId: sourceMessage.threadId,
+    };
+    const linked = findLinkedDraftForMessage([savedMessage], sourceMessage);
+    expect(
+      buildComposeDraftFromMessageAction({
+        action: "reply",
+        currentUserEmail: "me@example.com",
+        existingDraftMessage: linked,
+        message: sourceMessage,
+      })
+    ).toMatchObject({
+      bodyText: "My unfinished response",
+      draftId: "existing-draft",
+    });
+  });
+
+  test("resumes unanchored thread drafts without reusing reply drafts for forwards", () => {
+    const savedMessage: MessageListItem = {
+      bodyText: "My unfinished response",
+      draftId: "existing-draft",
+      id: "draft-message",
+      threadId: sourceMessage.threadId,
+    };
+    const linked = findLinkedDraftForMessage([savedMessage], sourceMessage);
+    expect(linked?.draftId).toBe(savedMessage.draftId);
+    const forward = buildComposeDraftFromMessageAction({
+      action: "forward",
+      currentUserEmail: "me@example.com",
+      existingDraftMessage: linked,
+      message: sourceMessage,
+    });
+    expect(forward.draftId).toBeUndefined();
+    expect(forward.bodyText).toContain("Forwarded message");
+    expect(
+      findLinkedDraftForMessage(
+        [{ ...savedMessage, draftAnchor: forward.draftAnchor ?? undefined }],
+        sourceMessage
+      )
+    ).toBeNull();
   });
 });
 

@@ -1,6 +1,8 @@
 import { composeDraftAnchorSchema } from "@quieter/mail/compose/schema";
 import { z } from "zod";
 
+import { draftRecoveryJournal } from "#/lib/draft-recovery-journal";
+
 import type { ComposeDraftState } from "./draft";
 
 const assetSchema = z.object({
@@ -12,6 +14,7 @@ const assetSchema = z.object({
 });
 
 export const recoverableDraftSchema = z.object({
+  assistantUnsaved: z.boolean().optional(),
   attachments: z.array(assetSchema.extend({ isInline: z.literal(false) })),
   bodyHtml: z.string(),
   bodyText: z.string(),
@@ -72,4 +75,63 @@ export const restoreComposeDraft = (
     recoveryUpdatedAt: updatedAt,
     saveStatus: "error",
   };
+};
+
+export const findRecoverableComposeDraft = (
+  mailboxId: string,
+  draft: ComposeDraftState
+): ComposeDraftState | null => {
+  const draftId = draft.draftId?.trim() ?? "";
+  const threadId =
+    draft.draftAnchor?.sourceThreadId ?? draft.replyContext?.threadId;
+  let threadRecovery: ComposeDraftState | null = null;
+  for (const record of draftRecoveryJournal.listRecoverable(mailboxId)) {
+    if (record.updatedAt <= (draft.lastSavedAt ?? 0)) {
+      continue;
+    }
+    let recovered: ComposeDraftState;
+    try {
+      recovered = restoreComposeDraft(
+        record.payload,
+        record.editorId,
+        record.updatedAt
+      );
+    } catch {
+      continue;
+    }
+    const recoveredDraftId = recovered.draftId?.trim() ?? "";
+    if (
+      draftId !== "" &&
+      recoveredDraftId !== "" &&
+      recoveredDraftId !== draftId
+    ) {
+      continue;
+    }
+    const recoveredThreadId =
+      recovered.draftAnchor?.sourceThreadId ?? recovered.replyContext?.threadId;
+    const matchesIdentity =
+      record.localId === draft.localId ||
+      (draftId !== "" && recoveredDraftId === draftId);
+    const matchesThread =
+      draftId === "" &&
+      (threadId?.trim() ?? "") !== "" &&
+      recoveredThreadId === threadId &&
+      (draft.draftAnchor?.seededBy === "forward") ===
+        (recovered.draftAnchor?.seededBy === "forward");
+    if (matchesIdentity) {
+      return {
+        ...recovered,
+        draftId: recovered.draftId ?? draft.draftId,
+        messageId: recovered.messageId ?? draft.messageId,
+      };
+    }
+    if (matchesThread && threadRecovery === null) {
+      threadRecovery = {
+        ...recovered,
+        draftId: recovered.draftId ?? draft.draftId,
+        messageId: recovered.messageId ?? draft.messageId,
+      };
+    }
+  }
+  return threadRecovery;
 };

@@ -205,6 +205,12 @@ export const createDemoComposeActions = (
       draft.messageId ?? `${store.prefix}-draft-message-${draft.localId}`;
     const draftId = draft.draftId ?? `${store.prefix}-draft-${draft.localId}`;
     const message: MessageListItem = {
+      attachments: draft.attachments.map((attachment) => ({
+        attachmentId: attachment.gmailAttachmentId ?? attachment.id,
+        fileName: attachment.name,
+        mimeType: attachment.mimeType,
+        size: attachment.size,
+      })),
       bodyHtml: draft.bodyHtml,
       bodyText: draft.bodyText,
       date: new Date(now).toISOString(),
@@ -235,6 +241,12 @@ export const createDemoComposeActions = (
   sendDraft: (draft: ComposeDraftState) => {
     const id = `${store.prefix}-sent-${crypto.randomUUID()}`;
     const message: MessageListItem = {
+      attachments: draft.attachments.map((attachment) => ({
+        attachmentId: attachment.gmailAttachmentId ?? attachment.id,
+        fileName: attachment.name,
+        mimeType: attachment.mimeType,
+        size: attachment.size,
+      })),
       bodyHtml: draft.bodyHtml,
       bodyText: draft.bodyText,
       date: new Date().toISOString(),

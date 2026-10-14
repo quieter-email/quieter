@@ -1,11 +1,13 @@
 import { useEffect, useEffectEvent } from "react";
 
 export const useDraftAutosave = ({
+  attachments,
   mailboxId,
   enabled,
   save,
   subscribe,
 }: {
+  attachments: readonly { id: string }[];
   mailboxId: string | null;
   enabled: boolean;
   save: () => Promise<void>;
@@ -16,25 +18,48 @@ export const useDraftAutosave = ({
       await save();
     }
   });
+  const observe = useEffectEvent(subscribe);
   useEffect((): (() => void) | undefined => {
     if (!enabled) {
       return undefined;
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let dirty = false;
+    let running = false;
+    let disposed = false;
+    const flush = async () => {
+      if (running || disposed || !dirty) {
+        return;
+      }
+      dirty = false;
+      running = true;
+      try {
+        await persist();
+      } finally {
+        running = false;
+        if (dirty && !disposed) {
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            void flush();
+          }, 1500);
+        }
+      }
+    };
     const changed = () => {
+      dirty = true;
       clearTimeout(timer);
       timer = setTimeout(() => {
-        void persist();
+        void flush();
       }, 1500);
     };
-    const subscription = subscribe(changed);
+    const subscription = observe(changed);
     changed();
-    // A change during an in-flight save must be reconsidered after that save finishes.
-    const retry = setInterval(changed, 10_000);
+    window.addEventListener("online", changed);
     return () => {
+      disposed = true;
       clearTimeout(timer);
-      clearInterval(retry);
+      window.removeEventListener("online", changed);
       subscription.unsubscribe();
     };
-  }, [enabled, subscribe]);
+  }, [attachments, enabled, mailboxId]);
 };

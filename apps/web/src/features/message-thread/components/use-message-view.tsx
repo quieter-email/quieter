@@ -151,7 +151,7 @@ export const useMessageViewData = ({
   });
   const threadMessages =
     threadData?.messages !== undefined && threadData.messages.length > 0
-      ? threadData.messages.toReversed()
+      ? threadData.messages
       : [message];
   const threadLabelIds = getThreadLabelIds(threadMessages);
   const messages = threadMessages.filter(
@@ -202,7 +202,7 @@ export const useMessageViewData = ({
   const isActionPending =
     pendingActions.isMessageActionPending(message.id) ||
     pendingActions.isThreadActionPending(message.threadId);
-  const hotkeyMessage = visibleMessages[0] ?? message;
+  const hotkeyMessage = visibleMessages.at(-1) ?? message;
   const hotkeyLinkedDraftMessage =
     findLinkedDraftForMessage(threadMessages, hotkeyMessage) ?? undefined;
 

@@ -2,6 +2,7 @@
 
 import {
   AlertCircleIcon,
+  Attachment01Icon,
   Cancel01Icon,
   Delete02Icon,
   Loading03Icon,
@@ -169,6 +170,9 @@ export const ComposeSurface = ({
   }, []);
   const [snippetDraft, setSnippetDraft] = useState<string | null>(null);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const dragDepthRef = useRef(0);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const snippetsQuery = useQuery({
     ...orpc.mailSnippets.list.queryOptions({
       input: { mailboxId: mailboxId ?? "" },
@@ -195,6 +199,8 @@ export const ComposeSurface = ({
   const {
     state,
     addInlineImageFiles,
+    addAttachmentFiles,
+    removeAttachment,
     handleUserDraftChange,
     closeComposeDialog,
     discardActiveDraft,
@@ -215,9 +221,7 @@ export const ComposeSurface = ({
     isPreparingAudio || transcribeAudioMutation.isPending;
 
   const canEditBody =
-    state.draft.saveStatus !== "sending" &&
-    state.draft.saveStatus !== "saving" &&
-    !!mailboxId;
+    state.draft.saveStatus !== "sending" && !state.isFinishing && !!mailboxId;
   const audioBusy = audioRecorder.isRecording || isTranscribingAudio;
   const canSubmitCompose = canEditBody && !audioBusy;
   const isInline = variant === "inline";
@@ -359,7 +363,51 @@ export const ComposeSurface = ({
           "w-full": isInline,
         })}
         data-compose-surface
+        onDragEnterCapture={(event) => {
+          if (event.dataTransfer.types.includes("Files")) {
+            dragDepthRef.current += 1;
+            setIsDraggingFiles(true);
+          }
+        }}
+        onDragLeaveCapture={(event) => {
+          if (event.dataTransfer.types.includes("Files")) {
+            dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+            if (dragDepthRef.current === 0) {
+              setIsDraggingFiles(false);
+            }
+          }
+        }}
+        onDragOverCapture={(event) => {
+          if (event.dataTransfer.types.includes("Files")) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = canEditBody ? "copy" : "none";
+          }
+        }}
+        onDropCapture={(event) => {
+          if (!event.dataTransfer.types.includes("Files")) {
+            return;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          dragDepthRef.current = 0;
+          setIsDraggingFiles(false);
+          if (canEditBody) {
+            addAttachmentFiles([...event.dataTransfer.files]);
+          }
+        }}
       >
+        <input
+          aria-label="Choose attachments"
+          className="hidden"
+          disabled={!canEditBody}
+          multiple
+          onChange={(event) => {
+            addAttachmentFiles([...(event.currentTarget.files ?? [])]);
+            event.currentTarget.value = "";
+          }}
+          ref={attachmentInputRef}
+          type="file"
+        />
         <ComposerFrame
           className={cn(
             // oxlint-disable-next-line shadcn/no-restyle -- Composer frame keeps its padded canvas.
@@ -573,6 +621,55 @@ export const ComposeSurface = ({
                       </div>
                     ) : null}
 
+                    {isDraggingFiles ? (
+                      <output className="mx-3 rounded-lg border border-dashed border-primary bg-primary/5 p-3 text-body-sm text-fg">
+                        {canEditBody
+                          ? "Drop files to attach"
+                          : "Wait for this message to finish"}
+                      </output>
+                    ) : null}
+                    {state.draft.attachments.length > 0 ? (
+                      <ul
+                        aria-label="Attachments"
+                        className="flex flex-wrap gap-2 px-3 pb-2"
+                      >
+                        {state.draft.attachments.map((attachment) => (
+                          <li
+                            className="flex max-w-full min-w-0 items-center gap-2 rounded-lg border border-border bg-control px-2 py-1 text-body-sm"
+                            key={attachment.id}
+                          >
+                            <HugeiconsIcon
+                              aria-hidden
+                              className="size-4 shrink-0"
+                              icon={Attachment01Icon}
+                            />
+                            <span className="truncate">{attachment.name}</span>
+                            <span className="shrink-0 text-caption text-muted-fg">
+                              {Math.ceil(
+                                attachment.size / 1024
+                              ).toLocaleString()}{" "}
+                              KB
+                            </span>
+                            <IconButtonTooltip
+                              label={`Remove ${attachment.name}`}
+                            >
+                              <Button
+                                aria-label={`Remove ${attachment.name}`}
+                                disabled={!canEditBody}
+                                onClick={() => {
+                                  removeAttachment(attachment.id);
+                                }}
+                                size="icon-xs"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <HugeiconsIcon icon={Cancel01Icon} />
+                              </Button>
+                            </IconButtonTooltip>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                     <ComposeEditorToolbar
                       chrome="footer"
                       leading={
@@ -597,6 +694,19 @@ export const ComposeSurface = ({
                       }
                       trailing={
                         <>
+                          <IconButtonTooltip label="Attach files">
+                            <ToolbarButton
+                              aria-label="Attach files"
+                              disabled={!canEditBody}
+                              onClick={() =>
+                                attachmentInputRef.current?.click()
+                              }
+                              size="icon"
+                              type="button"
+                            >
+                              <HugeiconsIcon icon={Attachment01Icon} />
+                            </ToolbarButton>
+                          </IconButtonTooltip>
                           <ComposeEditorDictationButton />
                           <IconButtonTooltip
                             label={
