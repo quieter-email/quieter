@@ -270,6 +270,7 @@ const useMailboxWorkspaceRouteEffects = ({
   isWorkspaceReady,
   launchedMailtoRef,
   mailboxId,
+  mailboxes,
   mailto,
   mailboxesPending,
   openComposeWorkspace,
@@ -277,6 +278,7 @@ const useMailboxWorkspaceRouteEffects = ({
   selectedMailboxId,
   selectedMailboxProvider,
   setMailboxSearch,
+  view,
 }: {
   activeMailbox: MailboxCategory;
   chatId: string | null | undefined;
@@ -288,6 +290,7 @@ const useMailboxWorkspaceRouteEffects = ({
   isWorkspaceReady: boolean;
   launchedMailtoRef: { current: string | null };
   mailboxId: string | null | undefined;
+  mailboxes: ReturnType<typeof useMailboxSelection>["mailboxes"];
   mailto: string | null | undefined;
   mailboxesPending: boolean;
   openComposeWorkspace: (draft: ComposeDraftState | null) => void;
@@ -295,6 +298,7 @@ const useMailboxWorkspaceRouteEffects = ({
   selectedMailboxId: string | null;
   selectedMailboxProvider: MailboxProvider;
   setMailboxSearch: SetMailboxSearch;
+  view: MailboxWorkspaceView;
 }) => {
   useEffect((): (() => void) | undefined => {
     if (!isCompletingGmailConnection) {
@@ -333,22 +337,30 @@ const useMailboxWorkspaceRouteEffects = ({
       trimmedMailboxId === undefined || trimmedMailboxId === ""
         ? null
         : trimmedMailboxId;
-    if (normalizedMailboxId === selectedMailboxId) {
+    const nextMailboxId =
+      view === "all-inboxes" && selectedMailboxProvider === "api"
+        ? (mailboxes.find((mailbox) => mailbox.provider !== "api")?.id ??
+          selectedMailboxId)
+        : selectedMailboxId;
+    if (normalizedMailboxId === nextMailboxId) {
       return;
     }
 
     void setMailboxSearch({
       chatId: null,
-      mailboxId: selectedMailboxId,
+      mailboxId: nextMailboxId,
       messageId: null,
     });
   }, [
     isCompletingGmailConnection,
     isSandboxMode,
     mailboxId,
+    mailboxes,
     mailboxesPending,
     selectedMailboxId,
+    selectedMailboxProvider,
     setMailboxSearch,
+    view,
   ]);
 
   useLayoutEffect(() => {
@@ -358,7 +370,7 @@ const useMailboxWorkspaceRouteEffects = ({
   }, [chatId, selectedMailboxProvider, setMailboxSearch]);
 
   useLayoutEffect(() => {
-    if (isComposeMailbox || isSnippetMailbox) {
+    if (isComposeMailbox || isSnippetMailbox || view === "all-inboxes") {
       return;
     }
     if (isMailboxSupportedByProvider(selectedMailboxProvider, activeMailbox)) {
@@ -375,6 +387,7 @@ const useMailboxWorkspaceRouteEffects = ({
     isSnippetMailbox,
     selectedMailboxProvider,
     setMailboxSearch,
+    view,
   ]);
 
   useLayoutEffect(() => {
@@ -922,6 +935,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     isWorkspaceReady,
     launchedMailtoRef: composeWorkspace.launchedMailtoRef,
     mailboxId,
+    mailboxes,
     mailboxesPending: mailboxesQuery.isPending,
     mailto,
     openComposeWorkspace: composeWorkspace.openComposeWorkspace,
@@ -929,6 +943,7 @@ export const MailboxWorkspace = ({ user: _user }: MailboxWorkspaceProps) => {
     selectedMailboxId,
     selectedMailboxProvider,
     setMailboxSearch,
+    view,
   });
 
   useMailboxWorkspaceHotkeys({
