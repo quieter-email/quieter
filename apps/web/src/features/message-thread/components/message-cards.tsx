@@ -484,10 +484,7 @@ const ThreadMessageCard = ({
         <div id={`message-body-${message.id}`}>
           {verificationCode && (
             <div className="px-4 pb-3 @sm:px-5">
-              <CopyVerificationCode
-                className="text-body"
-                code={verificationCode}
-              />
+              <CopyVerificationCode code={verificationCode} size="default" />
             </div>
           )}
           <ThreadMessageBody
@@ -576,10 +573,7 @@ export const SingleMessageCard = ({
       <div className="mx-auto w-full max-w-3xl px-4 pb-4 @sm:px-5 @sm:pb-5">
         {verificationCode && (
           <div className="pb-3">
-            <CopyVerificationCode
-              className="text-body"
-              code={verificationCode}
-            />
+            <CopyVerificationCode code={verificationCode} size="default" />
           </div>
         )}
         <MessageBody
