@@ -57,6 +57,12 @@ const ComposeWorkspace = lazy(loadComposeWorkspace);
 
 const SnippetWorkspace = lazy(loadSnippetWorkspace);
 
+const DailyBriefPanel = lazy(async () => {
+  const { DailyBriefPanel: Panel } =
+    await import("#/features/daily-brief/components/daily-brief-panel");
+  return { default: Panel };
+});
+
 type MailboxSidebarGroups = ComponentProps<typeof MailSidebar>["groups"];
 type MailboxSidebarChats = { id: string; title: string | null }[];
 
@@ -476,6 +482,33 @@ const MailboxWorkspaceContentInner = ({
         </Suspense>
       </div>
     );
+  } else if (selectedView === "daily-brief") {
+    mailboxContent = (
+      <Suspense
+        fallback={
+          <WorkspaceSection>
+            <p className="p-6 text-body text-muted-fg">Loading Daily Brief…</p>
+          </WorkspaceSection>
+        }
+      >
+        <DailyBriefPanel
+          mailboxes={mailboxes}
+          onOpenSidebar={onOpenSidebar}
+          onComposeDraftRequested={onComposeDraftRequested}
+          onOpenSource={(sourceMailboxId, sourceMessageId, sourceThreadId) => {
+            void setMailboxSearch({
+              chatId: null,
+              mailbox: "inbox",
+              mailboxId: sourceMailboxId,
+              messageId: sourceMessageId,
+              query: null,
+              threadId: sourceThreadId,
+              view: "inbox",
+            });
+          }}
+        />
+      </Suspense>
+    );
   } else if (allInboxesActive) {
     mailboxContent = (
       <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,max(34%,405px))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-2">
@@ -670,6 +703,7 @@ const MailboxWorkspaceContentInner = ({
             <MailSidebar
               userId={userId}
               allInboxesActive={allInboxesActive}
+              dailyBriefActive={selectedView === "daily-brief"}
               defaultMailboxId={defaultMailboxId}
               groups={mailboxGroups}
               onComposeNewMail={onComposeNewMail}
@@ -699,7 +733,9 @@ const MailboxWorkspaceContentInner = ({
               onSetDefaultMailbox={onSetDefaultMailbox}
               reconnectingMailboxId={reconnectingMailboxId}
               searchQuery={searchQuery}
-              selectedMailbox={activeMailbox}
+              selectedMailbox={
+                selectedView === "daily-brief" ? null : activeMailbox
+              }
               isSnippetMailbox={isSnippetMailbox}
               selectedMailboxId={selectedMailboxId}
               selectedMailboxProvider={selectedMailboxProvider}

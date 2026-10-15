@@ -1,0 +1,1 @@
+ALTER TABLE "dailyBriefSettings" ADD COLUMN "urgentGenerationsToday" integer;

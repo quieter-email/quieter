@@ -11,6 +11,7 @@ import {
 } from "@quieter/database/schema";
 import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
+import { reportError } from "@quieter/observability";
 import {
   and,
   desc,
@@ -25,6 +26,7 @@ import {
   sql,
 } from "drizzle-orm";
 
+import { markDailyBriefUrgentPending } from "../../daily-brief";
 import { publishMailUpdate } from "../../mail-updates";
 import {
   processMailVerificationCode,
@@ -139,6 +141,11 @@ const runPostIngestionProcessing = async (input: {
         messageId: input.messageId,
       }),
     ]);
+    try {
+      await markDailyBriefUrgentPending({ mailboxId: input.mailboxId });
+    } catch (error) {
+      reportError(error, { operation: "managed-mail:daily-brief-pending" });
+    }
     const failed = results.find((result) => result.status === "rejected");
     if (failed) {
       throw failed.reason;

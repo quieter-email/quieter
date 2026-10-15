@@ -108,10 +108,13 @@ vp run dev:pubsub
 # Explicit scheduled-handler invocations:
 vp run dev:trigger health
 vp run dev:trigger maintenance
-vp run dev:trigger actions
+vp run dev:trigger mail-recovery
+vp run dev:trigger briefs
 ```
 
-The local Worker runs Gmail notifications directly, alongside the action consumer, maintenance handler, dispatcher and realtime Durable Object. Development combines these handlers in one process; production deploys separate Workers. Maintenance and dispatch are manual triggers, not an automatically running cron. The Pub/Sub bridge uses `gcloud auth print-access-token`, pulls one message at a time from its own subscription, extends the acknowledgment deadline during processing, and acknowledges only after the local Worker finishes.
+The local Worker handles Gmail notifications, realtime updates, managed-mail fixtures, and maintenance in one process. Production deploys separate Workers. Local maintenance uses manual triggers, not an automatically running cron. The Pub/Sub bridge uses `gcloud auth print-access-token`, pulls one message at a time from its own subscription, extends the acknowledgment deadline during processing, and acknowledges only after the local Worker finishes.
+
+Daily Brief has a separate manual maintenance trigger. Enable it for a mailbox in the app, then use `vp run dev:trigger briefs` to process due editions and pending urgent updates. It uses the development model credentials and billing controls. See [Daily Brief](daily-brief.md) for the source limits, privacy rules, rollout checks, and a manual verification walkthrough. The trigger reads mail without changing Gmail watch ownership or provider data.
 
 Shared Gmail accounts default to `QUIETER_LOCAL_PROVIDER_MODE=observe` and `QUIETER_LOCAL_GMAIL_WATCH_OWNER=production`. Mail reads and AI results stored in `quieter_dev` work in this mode. Gmail, Calendar and Linear writes are rejected server-side. Auto-label classification is saved without applying labels. Write tests require a dedicated mailbox or a verified ownership handoff, plus the explicit Gmail account allowlist. Never start a competing consumer on the production subscription.
 

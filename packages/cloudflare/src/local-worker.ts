@@ -53,7 +53,11 @@ export default {
     if (url.pathname === "/__dev/mail/seed") {
       try {
         const input = z
-          .object({ fresh: z.boolean().optional(), ownerEmail: z.email() })
+          .object({
+            dailyBrief: z.boolean().optional(),
+            fresh: z.boolean().optional(),
+            ownerEmail: z.email(),
+          })
           .safeParse(await readBoundedJson(request, 4096));
         if (!input.success) {
           return new Response(null, { status: 400 });
@@ -64,6 +68,7 @@ export default {
           await withRequestDatabaseClient(
             async () =>
               await seedLocalManagedMail(input.data.ownerEmail, {
+                dailyBrief: input.data.dailyBrief,
                 fresh: input.data.fresh,
               })
           )
@@ -123,6 +128,18 @@ export default {
         return Response.json(await runGmailMaintenance(env));
       } catch (error) {
         return requestErrorResponse(error, "local-maintenance");
+      }
+    }
+    if (url.pathname === "/__dev/briefs") {
+      try {
+        const { runDueDailyBriefs } = await import("@quieter/orpc/daily-brief");
+        return Response.json(
+          await withRequestDatabaseClient(
+            async () => await runDueDailyBriefs({ limit: 1 })
+          )
+        );
+      } catch (error) {
+        return requestErrorResponse(error, "local-daily-briefs");
       }
     }
     if (url.pathname === "/__dev/mail-recovery") {

@@ -48,6 +48,7 @@ import {
   serializeAiAgentContext,
 } from "../ai-memory";
 import type { AiAgentMemoryCandidates } from "../ai-memory";
+import { markDailyBriefUrgentPending } from "../daily-brief";
 import { syncGmailLabels } from "../gmail-labels";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
@@ -458,6 +459,7 @@ const processMessageIds = async ({
   automationRuntime,
   autoLabelEnabled,
   extractCodes,
+  markUrgent = true,
   mailboxId,
   messageIds,
   organizationId,
@@ -467,6 +469,7 @@ const processMessageIds = async ({
   automationRuntime: MailAutomationRuntime;
   autoLabelEnabled: boolean;
   extractCodes: boolean;
+  markUrgent?: boolean;
   mailboxId: string;
   messageIds: string[];
   organizationId: string | null;
@@ -477,6 +480,7 @@ const processMessageIds = async ({
   }
 
   const uniqueMessageIds = [...new Set(messageIds)];
+  const eligibleInboxMessageIds = new Set<string>();
   let nextIndex = 0;
   await Promise.all(
     Array.from({ length: Math.min(4, uniqueMessageIds.length) }, async () => {
@@ -491,7 +495,17 @@ const processMessageIds = async ({
         const loadMessage = async () => {
           messagePromise ??= getMessageWithDetails(accessToken, messageId);
           try {
-            return await messagePromise;
+            const message = await messagePromise;
+            if (
+              !message.draftId &&
+              message.labelIds?.includes(MAILBOX_LABELS.inbox) === true &&
+              !message.labelIds.some((label) =>
+                AUTO_LABEL_EXCLUDED_LABELS.has(label)
+              )
+            ) {
+              eligibleInboxMessageIds.add(message.id);
+            }
+            return message;
           } catch (error) {
             if (isGmailServiceError(error) && error.status === 404) {
               return null;
@@ -525,6 +539,13 @@ const processMessageIds = async ({
       }
     })
   );
+  if (extractCodes && markUrgent && eligibleInboxMessageIds.size > 0) {
+    try {
+      await markDailyBriefUrgentPending({ mailboxId });
+    } catch (error) {
+      reportError(error, { operation: "gmail-sync:daily-brief-pending" });
+    }
+  }
 };
 
 export const retryPendingAutomationMessages = async ({
@@ -588,6 +609,7 @@ export const retryPendingAutomationMessages = async ({
     automationRuntime,
     extractCodes: true,
     mailboxId,
+    markUrgent: false,
     messageIds: pendingCodeMessageIds,
     organizationId,
     userId,

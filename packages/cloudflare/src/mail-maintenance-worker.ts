@@ -1,6 +1,7 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { cleanupRateLimitBuckets } from "@quieter/orpc/abuse-protection";
 import { processPendingAiMemoryEvents } from "@quieter/orpc/ai-memory";
+import { runDueDailyBriefs } from "@quieter/orpc/daily-brief";
 import { cleanupGmailComposeOperations } from "@quieter/orpc/gmail-compose-retention";
 import { recoverMailSends } from "@quieter/orpc/mail-send";
 import { retryPendingManagedVerificationCodes } from "@quieter/orpc/managed-mail/ingestion";
@@ -23,6 +24,7 @@ export default withSentryReporting({
           processManagedRuleBackfills(),
           retryPendingManagedVerificationCodes(),
           cleanupMailboxVerificationCodes(),
+          runDueDailyBriefs({ limit: 2 }),
         ]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed !== undefined) {

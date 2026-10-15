@@ -217,7 +217,7 @@ const useMailboxWorkspaceCompose = ({
       mailto: consumeMailto ? null : undefined,
       messageId: null,
       threadId: null,
-      view: view === "all-inboxes" ? "all-inboxes" : "inbox",
+      view: view === "all-inboxes" || view === "daily-brief" ? view : "inbox",
     });
   };
 
@@ -254,7 +254,7 @@ const useMailboxWorkspaceCompose = ({
       mailbox: composeReturnMailboxRef.current,
       messageId: null,
       threadId: null,
-      view: view === "all-inboxes" ? "all-inboxes" : "inbox",
+      view: view === "all-inboxes" || view === "daily-brief" ? view : "inbox",
     });
   };
 
@@ -513,7 +513,10 @@ const useMailboxWorkspaceActions = ({
       return;
     }
     void setMailboxSearch({
-      mailbox: nextView === "all-inboxes" ? "inbox" : undefined,
+      mailbox:
+        nextView === "all-inboxes" || nextView === "daily-brief"
+          ? "inbox"
+          : undefined,
       mailboxId:
         nextView === "all-inboxes" && selectedMailboxProvider === "api"
           ? (mailboxes.find((mailbox) => mailbox.provider !== "api")?.id ??

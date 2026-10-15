@@ -240,7 +240,14 @@ export const queriesMailOperations = {
       input.mailboxId,
       async (accessToken, signal) =>
         await getThreadWithDetails(accessToken, input.threadId, signal)
-    );
+    ).catch((error: unknown) => {
+      if (isGmailServiceError(error) && error.status === 404) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Message thread not found.",
+        });
+      }
+      throw error;
+    });
   },
   listMessageDeliveryStatuses: async ({
     context,

@@ -6,6 +6,7 @@ import {
   Edit01Icon,
   HelpCircleIcon,
   NoteEditIcon,
+  News01Icon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -42,6 +43,7 @@ import { UnifiedSidebarLabelNav } from "./unified-sidebar-label-nav";
 type MailSidebarProps = {
   userId?: string;
   allInboxesActive?: boolean;
+  dailyBriefActive?: boolean;
   defaultMailboxId: string | null;
   embedded?: boolean;
   groups: {
@@ -167,6 +169,7 @@ const SidebarHelpMenu = ({
 
 const SidebarInboxSection = ({
   allInboxesActive = false,
+  dailyBriefActive = false,
   userId = "preview",
   animateEntrance,
   embedded,
@@ -177,6 +180,7 @@ const SidebarInboxSection = ({
   onRequestClose,
   onSearch,
   onSelectMailbox,
+  onSelectView,
   isSnippetMailbox,
   searchQuery,
   selectedMailbox,
@@ -186,6 +190,7 @@ const SidebarInboxSection = ({
   SidebarContentProps,
   | "animateEntrance"
   | "allInboxesActive"
+  | "dailyBriefActive"
   | "userId"
   | "embedded"
   | "groups"
@@ -195,6 +200,7 @@ const SidebarInboxSection = ({
   | "onRequestClose"
   | "onSearch"
   | "onSelectMailbox"
+  | "onSelectView"
   | "isSnippetMailbox"
   | "searchQuery"
   | "selectedMailbox"
@@ -254,6 +260,26 @@ const SidebarInboxSection = ({
       </SidebarEntrance>
 
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto p-1">
+        {embedded !== true &&
+        groups.some((group) =>
+          group.mailboxes.some((mailbox) => mailbox.provider !== "api")
+        ) ? (
+          <SidebarNavItem
+            active={dailyBriefActive}
+            aria-current={dailyBriefActive ? "page" : undefined}
+            // oxlint-disable-next-line shadcn/no-restyle -- Match the existing sidebar navigation spacing.
+            className="w-full justify-start gap-3 px-3 text-left"
+            onClick={() => {
+              onSelectView("daily-brief");
+              onRequestClose?.();
+            }}
+            size="sm"
+            variant="ghost"
+          >
+            <HugeiconsIcon aria-hidden icon={News01Icon} strokeWidth={1.5} />
+            Daily Brief
+          </SidebarNavItem>
+        ) : null}
         <SidebarMailboxNav
           animateEntrance={animateEntrance}
           mailboxProvider={selectedMailboxProvider}
@@ -376,6 +402,7 @@ const SidebarFooter = ({
 
 const SidebarContent = ({
   allInboxesActive,
+  dailyBriefActive,
   userId,
   animateEntrance,
   defaultMailboxId,
@@ -456,6 +483,7 @@ const SidebarContent = ({
       <SidebarInboxSection
         userId={userId}
         allInboxesActive={allInboxesActive}
+        dailyBriefActive={dailyBriefActive}
         animateEntrance={animateEntrance}
         embedded={embedded}
         groups={groups}
@@ -468,6 +496,7 @@ const SidebarContent = ({
         onRequestClose={onRequestClose}
         onSearch={onSearch}
         onSelectMailbox={onSelectMailbox}
+        onSelectView={onSelectView}
         isSnippetMailbox={isSnippetMailbox}
         searchQuery={searchQuery}
         selectedMailbox={selectedMailbox}

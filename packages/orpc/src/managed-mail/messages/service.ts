@@ -51,6 +51,7 @@ type ManagedMessagePresentationRecord = Pick<
   typeof managedMailMessage.$inferSelect,
   | "bcc"
   | "cc"
+  | "createdAt"
   | "direction"
   | "from"
   | "headers"
@@ -152,6 +153,7 @@ const toMessageListItem = async (
   isUnread: !record.isRead,
   labelIds: getManagedMessageLabelIds(record, options.labelIds),
   messageHeaderId: record.messageHeaderId ?? undefined,
+  receivedAt: record.createdAt.toISOString(),
   references: record.references ?? undefined,
   replyTo: record.replyTo ?? undefined,
   senderAvatarUrls: await getSenderAvatarUrls(record.from, {
@@ -268,6 +270,7 @@ export const listManagedMessages = async (input: {
     .selectDistinctOn([managedMailMessage.threadId], {
       bcc: managedMailMessage.bcc,
       cc: managedMailMessage.cc,
+      createdAt: managedMailMessage.createdAt,
       direction: managedMailMessage.direction,
       from: managedMailMessage.from,
       headers: managedMailMessage.headers,
