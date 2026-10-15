@@ -824,33 +824,5 @@ export const runDueDailyBriefs = async ({
       }
     }
   }
-  return {
-    nextCursor: null,
-    processed,
-  };
-};
-
-export const refreshUrgentDailyBriefs = async ({
-  mailboxId,
-}: {
-  mailboxId: string;
-}) => {
-  const settings = await db
-    .select()
-    .from(dailyBriefSettings)
-    .where(
-      and(
-        eq(dailyBriefSettings.mailboxId, mailboxId),
-        eq(dailyBriefSettings.enabled, true),
-        isNotNull(dailyBriefSettings.editionId)
-      )
-    )
-    .limit(10);
-  for (const entry of settings) {
-    await generateEdition({
-      context: { userId: entry.userId },
-      settings: entry,
-      urgentOnly: true,
-    });
-  }
+  return { processed };
 };
