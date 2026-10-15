@@ -4,12 +4,18 @@ import type { generateDailyBrief } from "@quieter/ai/daily-brief";
 import { db } from "@quieter/database/client";
 import {
   dailyBriefEdition,
+  dailyBriefFeedback,
   dailyBriefSettings,
+  gmailWatchState,
   mailbox,
   member,
   organization,
   user,
 } from "@quieter/database/schema";
+import type {
+  getMessageWithDetails,
+  listGmailAddedMessageHistoryPage,
+} from "@quieter/gmail";
 import type { MessageListItem } from "@quieter/mail/messages";
 import { eq } from "drizzle-orm";
 import {
@@ -28,11 +34,15 @@ import {
   refreshDailyBrief,
   runDueDailyBriefs,
 } from "../src/daily-brief";
+import { processGmailPubSubNotification } from "../src/gmail-sync/service";
 import type { queriesMailOperations } from "../src/mail/queries";
+import type { processMailVerificationCode } from "../src/verification-codes";
 
 const state = vi.hoisted(() => ({
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
   generate: vi.fn<typeof generateDailyBrief>(),
+  gmailMessage: vi.fn<typeof getMessageWithDetails>(),
+  history: vi.fn<typeof listGmailAddedMessageHistoryPage>(),
   page: vi.fn<(typeof queriesMailOperations)["listThreads"]>(),
 }));
 const received = (id: string): MessageListItem => ({
@@ -63,6 +73,26 @@ vi.mock(import("../src/ai-memory"), async (original) => ({
 vi.mock(import("@quieter/ai/daily-brief"), async (original) => ({
   ...(await original()),
   generateDailyBrief: state.generate,
+}));
+vi.mock(import("@quieter/gmail"), async (original) => ({
+  ...(await original()),
+  getMessageWithDetails: state.gmailMessage,
+  listGmailAddedMessageHistoryPage: state.history,
+}));
+vi.mock(import("../src/gmail-mailbox-access"), async (original) => ({
+  ...(await original()),
+  runAuthorizedGmailMailbox: async <Value>(
+    _input: { mailboxId: string; userId: string },
+    runner: (accessToken: string) => Promise<Value>
+  ): Promise<Value> => await runner("fixture-token"),
+}));
+vi.mock(import("../src/verification-codes"), async (original) => ({
+  ...(await original()),
+  processMailVerificationCode: async ({
+    loadMessage,
+  }: Parameters<typeof processMailVerificationCode>[0]) => {
+    await loadMessage();
+  },
 }));
 vi.mock(import("../src/mail/queries"), async (original) => {
   const actual = await original();
@@ -197,6 +227,144 @@ describe.skipIf(state.databaseUrl === undefined)(
       expect(
         evaluated.some((candidate) => candidate.messageId === "routine")
       ).toBeFalsy();
+    });
+
+    test("retains older suppressions and preferences after more recent feedback", async () => {
+      const older = new Date(Date.now() - 86_400_000);
+      const preference = "Prioritize personal requests over automated updates.";
+      await db.insert(dailyBriefFeedback).values([
+        ...(["dismiss", "not_important", "defer"] as const).map((action) => ({
+          action,
+          createdAt: older,
+          deferUntil: action === "defer" ? new Date(Date.now() + 60_000) : null,
+          id: randomUUID(),
+          itemId: `older-${action}`,
+          preference: action === "not_important" ? preference : null,
+          settingsId,
+          sourceMessageIds: [`older-${action}`],
+          updatedAt: older,
+        })),
+        ...Array.from({ length: 240 }, (_, index) => ({
+          action: "dismiss" as const,
+          createdAt: new Date(),
+          id: randomUUID(),
+          itemId: `later-${index}`,
+          settingsId,
+          sourceMessageIds: [`later-${index}`],
+          updatedAt: new Date(),
+        })),
+      ]);
+      state.page.mockResolvedValue({
+        messages: [
+          received("older-dismiss"),
+          received("older-not_important"),
+          received("older-defer"),
+          received("fresh"),
+        ],
+      });
+      await refreshDailyBrief({ context, input });
+      const evaluated = state.generate.mock.calls.at(-1)?.[0];
+      expect(
+        evaluated?.candidates.some(
+          (candidate) => candidate.messageId === "fresh"
+        )
+      ).toBeTruthy();
+      expect(
+        evaluated?.candidates.some((candidate) =>
+          candidate.messageId.startsWith("older-")
+        )
+      ).toBeFalsy();
+      expect(evaluated?.preferences).toContain(preference);
+      await db
+        .update(dailyBriefFeedback)
+        .set({ deferUntil: older })
+        .where(eq(dailyBriefFeedback.itemId, "older-defer"));
+      await db
+        .update(dailyBriefSettings)
+        .set({ lastAttemptAt: null })
+        .where(eq(dailyBriefSettings.id, settingsId));
+      await refreshDailyBrief({ context, input });
+      expect(
+        state.generate.mock.calls
+          .at(-1)?.[0]
+          .candidates.some((candidate) => candidate.messageId === "older-defer")
+      ).toBeTruthy();
+    });
+
+    test("only schedules urgent Gmail work when history loads eligible inbox mail", async () => {
+      const gmailMailboxId = randomUUID();
+      const emailAddress = `${gmailMailboxId}@example.test`;
+      const now = new Date();
+      await db.insert(mailbox).values({
+        createdAt: now,
+        emailAddress,
+        id: gmailMailboxId,
+        organizationId,
+        ownerUserId: userId,
+        provider: "gmail",
+        status: "connected",
+        updatedAt: now,
+      });
+      await db.insert(dailyBriefSettings).values({
+        createdAt: now,
+        editionId: "existing-edition",
+        enabled: true,
+        id: randomUUID(),
+        mailboxId: gmailMailboxId,
+        updatedAt: now,
+        userId,
+      });
+      await db.insert(gmailWatchState).values({
+        createdAt: now,
+        historyId: "1",
+        mailboxId: gmailMailboxId,
+        updatedAt: now,
+      });
+      state.gmailMessage.mockImplementation(async (_token, id) => {
+        if (id === "deleted") {
+          throw Object.assign(new Error("Deleted"), { status: 404 });
+        }
+        const message = received(id);
+        if (id === "archived") {
+          message.labelIds = [];
+        } else if (id !== "eligible") {
+          message.labelIds = ["INBOX", id];
+        }
+        return await Promise.resolve(message);
+      });
+      state.history.mockResolvedValue({
+        hasMore: false,
+        historyExpired: false,
+        historyId: "2",
+        messageIds: ["SENT", "DRAFT", "SPAM", "TRASH", "archived", "deleted"],
+      });
+      await processGmailPubSubNotification({
+        emailAddress,
+        historyId: "2",
+        pubSubMessageId: randomUUID(),
+      });
+      const [ignored] = await db
+        .select()
+        .from(dailyBriefSettings)
+        .where(eq(dailyBriefSettings.mailboxId, gmailMailboxId));
+      expect(ignored.urgentPending).toBeFalsy();
+      state.history.mockResolvedValue({
+        hasMore: false,
+        historyExpired: false,
+        historyId: "3",
+        messageIds: ["eligible", "SENT"],
+      });
+      await processGmailPubSubNotification({
+        emailAddress,
+        historyId: "3",
+        pubSubMessageId: randomUUID(),
+      });
+      const [pending] = await db
+        .select()
+        .from(dailyBriefSettings)
+        .where(eq(dailyBriefSettings.mailboxId, gmailMailboxId));
+      expect(pending.urgentPending).toBeTruthy();
+      await db.delete(mailbox).where(eq(mailbox.id, gmailMailboxId));
     });
 
     test("retains unevaluated mail after failure for a later retry", async () => {

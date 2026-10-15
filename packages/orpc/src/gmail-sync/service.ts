@@ -480,6 +480,7 @@ const processMessageIds = async ({
   }
 
   const uniqueMessageIds = [...new Set(messageIds)];
+  const eligibleInboxMessageIds = new Set<string>();
   let nextIndex = 0;
   await Promise.all(
     Array.from({ length: Math.min(4, uniqueMessageIds.length) }, async () => {
@@ -494,7 +495,17 @@ const processMessageIds = async ({
         const loadMessage = async () => {
           messagePromise ??= getMessageWithDetails(accessToken, messageId);
           try {
-            return await messagePromise;
+            const message = await messagePromise;
+            if (
+              !message.draftId &&
+              message.labelIds?.includes(MAILBOX_LABELS.inbox) === true &&
+              !message.labelIds.some((label) =>
+                AUTO_LABEL_EXCLUDED_LABELS.has(label)
+              )
+            ) {
+              eligibleInboxMessageIds.add(message.id);
+            }
+            return message;
           } catch (error) {
             if (isGmailServiceError(error) && error.status === 404) {
               return null;
@@ -528,7 +539,7 @@ const processMessageIds = async ({
       }
     })
   );
-  if (extractCodes && markUrgent) {
+  if (extractCodes && markUrgent && eligibleInboxMessageIds.size > 0) {
     try {
       await markDailyBriefUrgentPending({ mailboxId });
     } catch (error) {

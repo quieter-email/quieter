@@ -19,6 +19,7 @@ import {
   desc,
   eq,
   gt,
+  inArray,
   isNotNull,
   isNull,
   lt,
@@ -140,13 +141,34 @@ const loadEdition = async (settings: Settings) => {
   return edition;
 };
 
-const loadFeedback = async (settingsId: string) =>
-  await db
+const loadFeedback = async (
+  settingsId: string,
+  itemIds: string[],
+  sourceMessageIds: string[] = []
+) => {
+  if (itemIds.length === 0 && sourceMessageIds.length === 0) {
+    return [];
+  }
+  return await db
     .select()
     .from(dailyBriefFeedback)
-    .where(eq(dailyBriefFeedback.settingsId, settingsId))
-    .orderBy(desc(dailyBriefFeedback.updatedAt))
-    .limit(200);
+    .where(
+      and(
+        eq(dailyBriefFeedback.settingsId, settingsId),
+        or(
+          itemIds.length > 0
+            ? inArray(dailyBriefFeedback.itemId, itemIds)
+            : undefined,
+          sourceMessageIds.length > 0
+            ? sql`${dailyBriefFeedback.sourceMessageIds} ?| array[${sql.join(
+                sourceMessageIds.map((id) => sql`${id}`),
+                sql`, `
+              )}]::text[]`
+            : undefined
+        )
+      )
+    );
+};
 
 export const getDailyBrief = async ({
   context,
@@ -174,7 +196,12 @@ export const getDailyBrief = async ({
     };
   }
   const edition = settings.enabled ? await loadEdition(settings) : undefined;
-  const feedback = edition ? await loadFeedback(settings.id) : [];
+  const feedback = edition
+    ? await loadFeedback(
+        settings.id,
+        edition.items.map((item) => item.id)
+      )
+    : [];
   const byItem = new Map(feedback.map((entry) => [entry.itemId, entry]));
   const items = (edition?.items ?? []).flatMap((item) => {
     const entry = byItem.get(item.id);
@@ -417,16 +444,6 @@ const generateEdition = async ({
     if (urgentOnly && !previous) {
       return;
     }
-    const feedback = await loadFeedback(claimed.id);
-    const suppressed = new Set(
-      feedback
-        .filter(
-          (entry) =>
-            entry.action !== "defer" ||
-            (entry.deferUntil !== null && entry.deferUntil > now)
-        )
-        .flatMap((entry) => entry.sourceMessageIds)
-    );
     const existingSources = new Set(
       urgentOnly
         ? [
@@ -445,6 +462,20 @@ const generateEdition = async ({
         maxResults: 24,
       },
     });
+    const feedback = await loadFeedback(
+      claimed.id,
+      previous?.items.map((item) => item.id) ?? [],
+      page.messages.map((message) => message.id)
+    );
+    const suppressed = new Set(
+      feedback
+        .filter(
+          (entry) =>
+            entry.action !== "defer" ||
+            (entry.deferUntil !== null && entry.deferUntil > now)
+        )
+        .flatMap((entry) => entry.sourceMessageIds)
+    );
     const candidates = page.messages
       .filter(
         (message) =>
@@ -491,6 +522,20 @@ const generateEdition = async ({
         })
       : null;
     const model = resolveBackgroundModel();
+    const preferences = candidates.length
+      ? await db
+          .select({ preference: dailyBriefFeedback.preference })
+          .from(dailyBriefFeedback)
+          .where(
+            and(
+              eq(dailyBriefFeedback.settingsId, claimed.id),
+              isNotNull(dailyBriefFeedback.preference),
+              ne(dailyBriefFeedback.preference, "")
+            )
+          )
+          .orderBy(desc(dailyBriefFeedback.updatedAt))
+          .limit(8)
+      : [];
     const generated = candidates.length
       ? await generateDailyBrief({
           abortSignal: generationSignal,
@@ -518,9 +563,8 @@ const generateEdition = async ({
             });
           },
           preferences:
-            feedback
+            preferences
               .flatMap((entry) => (entry.preference ? [entry.preference] : []))
-              .slice(0, 8)
               .join("\n") || null,
           urgentOnly,
         })
