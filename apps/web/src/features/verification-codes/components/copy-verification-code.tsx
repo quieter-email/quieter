@@ -30,7 +30,7 @@ export const CopyVerificationCode = ({
   return (
     <Button
       aria-label={`Copy verification code ${code}`}
-      className="pointer-events-auto relative z-20 cursor-pointer"
+      className="pointer-events-auto relative z-20"
       data-verification-code-copy
       onClick={(event) => {
         event.stopPropagation();
