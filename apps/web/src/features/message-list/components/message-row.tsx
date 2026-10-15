@@ -632,9 +632,12 @@ const MessageRowSurface = ({
       initial={false}
       onBlurCapture={handleRowBlurCapture}
       onFocusCapture={handleRowFocusCapture}
-      onMouseEnter={() => {
-        setIsHovered(true);
-        onThreadIntent(thread.threadId);
+      onMouseOver={(event) => {
+        const isCopyButton =
+          event.target instanceof Element &&
+          event.target.closest("[data-verification-code-copy]") !== null;
+        setIsHovered(!isCopyButton);
+        onThreadIntent(isCopyButton ? null : thread.threadId);
       }}
       onMouseLeave={() => {
         setIsHovered(false);
