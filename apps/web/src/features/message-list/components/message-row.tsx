@@ -406,14 +406,13 @@ const MessageRowDetails = ({
           )}
         </p>
         {verificationCode && <CopyVerificationCode code={verificationCode} />}
-        <div className="hidden shrink-0 @sm:block">
-          <MessageLabels
-            compact
-            labelIds={thread.threadLabelIds}
-            labels={gmailLabels}
-            limit={2}
-          />
-        </div>
+        <MessageLabels
+          className="hidden shrink-0 @sm:flex"
+          compact
+          labelIds={thread.threadLabelIds}
+          labels={gmailLabels}
+          limit={2}
+        />
       </div>
     </div>
   </div>
