@@ -3,17 +3,17 @@
 import { Copy01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
+import type { ButtonProps } from "@quieter/ui/button";
 import { toast } from "@quieter/ui/toast";
 
 import { toastError } from "#/lib/error-toast";
 
 export const CopyVerificationCode = ({
-  className,
   code,
+  size = "compact",
 }: {
-  className?: string;
   code: string;
+  size?: ButtonProps["size"];
 }) => {
   const copyCode = async () => {
     try {
@@ -30,10 +30,7 @@ export const CopyVerificationCode = ({
   return (
     <Button
       aria-label={`Copy verification code ${code}`}
-      className={cn(
-        "pointer-events-auto relative z-20 cursor-pointer",
-        className
-      )}
+      className="pointer-events-auto relative z-20 cursor-pointer"
       data-verification-code-copy
       onClick={(event) => {
         event.stopPropagation();
@@ -42,7 +39,7 @@ export const CopyVerificationCode = ({
       onPointerDown={(event) => {
         event.stopPropagation();
       }}
-      size="compact"
+      size={size}
       type="button"
       variant="outline"
     >
