@@ -932,6 +932,7 @@ export const dailyBriefSettings = pgTable(
     scheduleEnabled: boolean("scheduleEnabled").notNull().default(false),
     timeZone: text("timeZone").notNull().default("UTC"),
     updatedAt: timestamp("updatedAt").notNull(),
+    urgentGenerationsToday: integer("urgentGenerationsToday"),
     urgentPending: boolean("urgentPending").notNull().default(false),
     urgentRevision: integer("urgentRevision"),
     userId: text("userId")

@@ -24,6 +24,7 @@ import {
   lt,
   lte,
   ne,
+  not,
   or,
   sql,
 } from "drizzle-orm";
@@ -79,6 +80,8 @@ export const dailyBriefInputs = {
 type Settings = typeof dailyBriefSettings.$inferSelect;
 type Scope = { mailboxId: string; userId: string };
 const GENERATION_COOLDOWN_MS = 15 * 60_000;
+const DAILY_EDITION_ATTEMPT_LIMIT = 12;
+const DAILY_URGENT_ATTEMPT_LIMIT = 12;
 const LEASE_MS = 120_000;
 
 export const loadDailyBriefMemoryContext = async ({
@@ -250,6 +253,7 @@ export const configureDailyBrief = async ({
       createdAt: now,
       id: randomUUID(),
       mailboxId: input.mailboxId,
+      urgentGenerationsToday: 0,
       urgentRevision: 0,
       userId: context.userId,
     })
@@ -358,10 +362,11 @@ const generateEdition = async ({
     .update(dailyBriefSettings)
     .set({
       generationDay,
-      generationsToday: sql`case when ${dailyBriefSettings.generationDay} = ${generationDay} then ${dailyBriefSettings.generationsToday} + 1 else 1 end`,
+      generationsToday: sql`case when ${dailyBriefSettings.generationDay} = ${generationDay} then ${dailyBriefSettings.generationsToday} + ${urgentOnly ? 0 : 1} else ${urgentOnly ? 0 : 1} end`,
       lastAttemptAt: now,
       leaseExpiresAt: new Date(now.getTime() + LEASE_MS),
       leaseToken,
+      urgentGenerationsToday: sql`case when ${dailyBriefSettings.generationDay} = ${generationDay} then coalesce(${dailyBriefSettings.urgentGenerationsToday}, 0) + ${urgentOnly ? 1 : 0} else ${urgentOnly ? 1 : 0} end`,
     })
     .where(
       and(
@@ -371,7 +376,12 @@ const generateEdition = async ({
         or(
           isNull(dailyBriefSettings.generationDay),
           lt(dailyBriefSettings.generationDay, generationDay),
-          lt(dailyBriefSettings.generationsToday, 12)
+          urgentOnly
+            ? sql`coalesce(${dailyBriefSettings.urgentGenerationsToday}, 0) < ${DAILY_URGENT_ATTEMPT_LIMIT}`
+            : lt(
+                dailyBriefSettings.generationsToday,
+                DAILY_EDITION_ATTEMPT_LIMIT
+              )
         ),
         or(
           isNull(dailyBriefSettings.leaseExpiresAt),
@@ -631,9 +641,7 @@ const generateEdition = async ({
             seenUrgentMessageIds: [
               ...new Set([
                 ...(previous.seenUrgentMessageIds ?? []),
-                ...additions.flatMap((item) =>
-                  item.sources.map((source) => source.messageId)
-                ),
+                ...candidates.map((candidate) => candidate.messageId),
               ]),
             ].slice(-512),
             updatedAt: completedAt,
@@ -718,7 +726,7 @@ export const refreshDailyBrief = async ({
   }
   if (
     settings.generationDay === new Date().toISOString().slice(0, 10) &&
-    settings.generationsToday >= 12
+    settings.generationsToday >= DAILY_EDITION_ATTEMPT_LIMIT
   ) {
     throw new ORPCError("TOO_MANY_REQUESTS", {
       message:
@@ -766,6 +774,16 @@ export const runDueDailyBriefs = async ({
 }: { limit?: number } = {}) => {
   const now = new Date();
   const batchSize = Math.min(10, Math.max(1, limit));
+  const fullDue = and(
+    eq(dailyBriefSettings.scheduleEnabled, true),
+    isNotNull(dailyBriefSettings.nextRunAt),
+    lte(dailyBriefSettings.nextRunAt, now)
+  );
+  const fullEditionNeeded = or(isNull(dailyBriefSettings.editionId), fullDue);
+  const newGenerationDay = or(
+    isNull(dailyBriefSettings.generationDay),
+    lt(dailyBriefSettings.generationDay, now.toISOString().slice(0, 10))
+  );
   const settings = await db
     .select()
     .from(dailyBriefSettings)
@@ -773,16 +791,25 @@ export const runDueDailyBriefs = async ({
       and(
         eq(dailyBriefSettings.enabled, true),
         or(
-          isNull(dailyBriefSettings.generationDay),
-          lt(dailyBriefSettings.generationDay, now.toISOString().slice(0, 10)),
-          lt(dailyBriefSettings.generationsToday, 12)
-        ),
-        or(
           and(
-            eq(dailyBriefSettings.scheduleEnabled, true),
-            lte(dailyBriefSettings.nextRunAt, now)
+            fullEditionNeeded,
+            or(fullDue, eq(dailyBriefSettings.urgentPending, true)),
+            or(
+              newGenerationDay,
+              lt(
+                dailyBriefSettings.generationsToday,
+                DAILY_EDITION_ATTEMPT_LIMIT
+              )
+            )
           ),
-          eq(dailyBriefSettings.urgentPending, true)
+          and(
+            not(fullEditionNeeded),
+            eq(dailyBriefSettings.urgentPending, true),
+            or(
+              newGenerationDay,
+              sql`coalesce(${dailyBriefSettings.urgentGenerationsToday}, 0) < ${DAILY_URGENT_ATTEMPT_LIMIT}`
+            )
+          )
         ),
         or(
           isNull(dailyBriefSettings.lastAttemptAt),

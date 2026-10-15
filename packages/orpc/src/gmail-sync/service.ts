@@ -459,6 +459,7 @@ const processMessageIds = async ({
   automationRuntime,
   autoLabelEnabled,
   extractCodes,
+  markUrgent = true,
   mailboxId,
   messageIds,
   organizationId,
@@ -468,6 +469,7 @@ const processMessageIds = async ({
   automationRuntime: MailAutomationRuntime;
   autoLabelEnabled: boolean;
   extractCodes: boolean;
+  markUrgent?: boolean;
   mailboxId: string;
   messageIds: string[];
   organizationId: string | null;
@@ -526,7 +528,7 @@ const processMessageIds = async ({
       }
     })
   );
-  if (extractCodes) {
+  if (extractCodes && markUrgent) {
     try {
       await markDailyBriefUrgentPending({ mailboxId });
     } catch (error) {
@@ -596,6 +598,7 @@ export const retryPendingAutomationMessages = async ({
     automationRuntime,
     extractCodes: true,
     mailboxId,
+    markUrgent: false,
     messageIds: pendingCodeMessageIds,
     organizationId,
     userId,

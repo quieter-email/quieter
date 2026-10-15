@@ -19,6 +19,7 @@ import { textToComposeBodyHtml } from "#/features/compose/domain/draft";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import type { UnifiedInboxMailbox } from "#/features/mailbox/domain/unified-inbox";
 import { toastError } from "#/lib/error-toast";
+import type { MessageListItem } from "#/lib/mail";
 import { orpc, rpc } from "#/lib/orpc";
 
 import { DailyBriefCard } from "./daily-brief-card";
@@ -52,6 +53,7 @@ const DailyBriefScheduleForm = ({
   onSave: (settings: Brief["settings"]) => Promise<void>;
 }) => {
   const formId = useId();
+  const needsReconnect = mailbox.connectionStatus === "needs_reconnect";
   const [enabled, setEnabled] = useState(settings.enabled);
   const [scheduleEnabled, setScheduleEnabled] = useState(
     settings.scheduleEnabled
@@ -79,6 +81,12 @@ const DailyBriefScheduleForm = ({
           <p className="text-caption text-muted-fg">{mailbox.emailAddress}</p>
         ) : null}
       </div>
+      {needsReconnect ? (
+        <p className="text-caption text-muted-fg">
+          Reconnect this inbox to prepare editions. You can still turn off Daily
+          Brief here.
+        </p>
+      ) : null}
       <label
         className="flex items-center gap-3 text-body text-fg"
         htmlFor={`${formId}-enabled`}
@@ -86,7 +94,7 @@ const DailyBriefScheduleForm = ({
         <Checkbox
           id={`${formId}-enabled`}
           checked={enabled}
-          disabled={pending}
+          disabled={pending || (needsReconnect && !settings.enabled)}
           onCheckedChange={setEnabled}
         >
           <CheckboxIndicator />
@@ -100,7 +108,7 @@ const DailyBriefScheduleForm = ({
         <Checkbox
           id={`${formId}-schedule`}
           checked={scheduleEnabled}
-          disabled={!enabled || pending}
+          disabled={!enabled || needsReconnect || pending}
           onCheckedChange={setScheduleEnabled}
         >
           <CheckboxIndicator />
@@ -115,7 +123,7 @@ const DailyBriefScheduleForm = ({
           Local time
           <Input
             id={`${formId}-time`}
-            disabled={!enabled || !scheduleEnabled || pending}
+            disabled={!enabled || !scheduleEnabled || needsReconnect || pending}
             onChange={(event) => {
               setLocalTime(event.target.value);
             }}
@@ -132,7 +140,7 @@ const DailyBriefScheduleForm = ({
           <Input
             id={`${formId}-zone`}
             autoComplete="off"
-            disabled={!enabled || !scheduleEnabled || pending}
+            disabled={!enabled || !scheduleEnabled || needsReconnect || pending}
             onChange={(event) => {
               setTimeZone(event.target.value);
             }}
@@ -158,8 +166,7 @@ export const DailyBriefPanel = ({
   onComposeDraftRequested,
 }: DailyBriefPanelProps) => {
   const availableMailboxes = mailboxes.filter(
-    (mailbox) =>
-      mailbox.provider !== "api" && mailbox.connectionStatus === "connected"
+    (mailbox) => mailbox.provider !== "api"
   );
   const [excludedIds, setExcludedIds] = useState<string[]>([]);
   const [mode, setMode] = useState<"presentation" | "list">("presentation");
@@ -223,18 +230,33 @@ export const DailyBriefPanel = ({
       mailbox: UnifiedInboxMailbox;
       item: BriefItem;
     }) => {
-      const [source] = item.sources;
-      if (source === undefined) {
-        throw new Error("Daily Brief item has no source.");
+      let message: MessageListItem | undefined;
+      for (const source of item.sources) {
+        try {
+          const thread = await rpc.mail.getThread({
+            mailboxId: mailbox.id,
+            threadId: source.threadId,
+          });
+          message = thread.messages.find(
+            (candidate) =>
+              candidate.id === source.messageId &&
+              candidate.threadId === source.threadId
+          );
+          if (message !== undefined) {
+            break;
+          }
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            "status" in error &&
+            error.status === 404
+          ) {
+            continue;
+          }
+          throw error;
+        }
       }
-      const thread = await rpc.mail.getThread({
-        mailboxId: mailbox.id,
-        threadId: source.threadId,
-      });
-      const message = thread.messages.find(
-        (candidate) => candidate.id === source.messageId
-      );
-      if (!message) {
+      if (message === undefined) {
         toast.info(
           "This source mail is no longer available. Refresh your Daily Brief."
         );
@@ -242,8 +264,8 @@ export const DailyBriefPanel = ({
       }
       const suggestion = await rpc.ai.suggestReply({
         mailboxId: mailbox.id,
-        messageId: source.messageId,
-        threadId: source.threadId,
+        messageId: message.id,
+        threadId: message.threadId,
       });
       if (suggestion.status === "not_needed") {
         toast.info(suggestion.reason);
@@ -282,7 +304,9 @@ export const DailyBriefPanel = ({
     return query === undefined ? [] : [{ mailbox, query }];
   });
   const selectedSources = sources.filter(
-    ({ mailbox }) => !excludedIds.includes(mailbox.id)
+    ({ mailbox }) =>
+      !excludedIds.includes(mailbox.id) &&
+      mailbox.connectionStatus === "connected"
   );
   const items = selectedSources.flatMap(({ mailbox, query }) =>
     !query.isError && query.data?.settings.enabled === true
@@ -406,6 +430,9 @@ export const DailyBriefPanel = ({
                         key={mailbox.id}
                       >
                         <Checkbox
+                          disabled={
+                            mailbox.connectionStatus === "needs_reconnect"
+                          }
                           checked={!excludedIds.includes(mailbox.id)}
                           onCheckedChange={(checked) => {
                             setExcludedIds((ids) =>
@@ -431,7 +458,7 @@ export const DailyBriefPanel = ({
                       try {
                         await refresh.mutateAsync({ mailboxId: mailbox.id });
                       } catch {
-                        break;
+                        // The mutation surfaces this inbox's failure; other inboxes can still refresh.
                       }
                     }
                   })();

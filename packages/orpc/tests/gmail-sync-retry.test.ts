@@ -9,6 +9,7 @@ import {
 } from "../src/gmail-sync/service";
 import type { getMailAutomationAiBudgetStatus } from "../src/mail-automation/ai-budget";
 import { MAIL_AUTOMATION_AI_PAUSED_MESSAGE } from "../src/mail-automation/ai-budget";
+import type { processMailVerificationCode } from "../src/verification-codes";
 
 type Row = Record<string, unknown>;
 type Predicate = (row: Row, outerRow?: Row) => boolean;
@@ -17,6 +18,9 @@ type BudgetStatus = Awaited<ReturnType<typeof getMailAutomationAiBudgetStatus>>;
 const fixtures = vi.hoisted(() => ({
   budget: vi.fn<() => Promise<BudgetStatus>>(),
   mailboxes: [] as Row[],
+  markUrgent: vi.fn<() => Promise<void>>(),
+  pendingCodeMessageIds: [] as string[],
+  processCode: vi.fn<typeof processMailVerificationCode>(),
   rows: [] as Row[],
 }));
 
@@ -138,9 +142,13 @@ vi.mock("@quieter/database/client", () => {
 });
 
 vi.mock(import("../src/verification-codes"), () => ({
-  listPendingMailboxVerificationCodeMessageIds: async () => [],
-  processMailVerificationCode: vi.fn<() => Promise<void>>(),
+  listPendingMailboxVerificationCodeMessageIds: async () =>
+    fixtures.pendingCodeMessageIds,
+  processMailVerificationCode: fixtures.processCode,
   reportPendingMailboxVerificationCodeUsage: vi.fn<() => Promise<void>>(),
+}));
+vi.mock(import("../src/daily-brief"), () => ({
+  markDailyBriefUrgentPending: fixtures.markUrgent,
 }));
 
 const input = {
@@ -164,6 +172,9 @@ describe("Gmail automation retry recovery", () => {
   beforeEach(() => {
     fixtures.rows.length = 0;
     fixtures.mailboxes.length = 0;
+    fixtures.pendingCodeMessageIds.length = 0;
+    fixtures.markUrgent.mockReset().mockResolvedValue();
+    fixtures.processCode.mockReset().mockResolvedValue();
     fixtures.budget.mockReset().mockResolvedValue({
       allowed: true,
       reason: "allowed",
@@ -223,6 +234,15 @@ describe("Gmail automation retry recovery", () => {
     expect(failed.appliedAt).toBeNull();
     expect(classified.appliedAt).toBeNull();
     expect(otherMailbox.appliedAt).toBeNull();
+  });
+
+  test("retries code extraction without scheduling another urgent mail evaluation", async () => {
+    fixtures.pendingCodeMessageIds.push("previously-received-message");
+    await retryPendingAutomationMessages({ ...input, autoLabelEnabled: false });
+    expect(fixtures.processCode).toHaveBeenCalledWith(
+      expect.objectContaining({ messageId: "previously-received-message" })
+    );
+    expect(fixtures.markUrgent).not.toHaveBeenCalled();
   });
 
   test("keeps future deferrals pending while budget remains denied", async () => {
