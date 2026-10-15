@@ -32,12 +32,8 @@ import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
-import {
-  AnimatePresence,
-  LayoutGroup,
-  m,
-  useReducedMotion,
-} from "motion/react";
+import { AnimatePresence, m, useReducedMotion, useSpring } from "motion/react";
+import type { MotionValue } from "motion/react";
 import { useRef, useState } from "react";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
@@ -157,6 +153,7 @@ type SwitcherDragData = {
   mailboxId?: string;
   index: number;
   label: string;
+  offset: MotionValue<number>;
 };
 
 const SWITCHER_SENSORS = [
@@ -194,6 +191,42 @@ const switcherCollision: CollisionDetector = ({ droppable, dragOperation }) => {
     type: CollisionType.Collision,
     value: -Math.abs(y - (rect.top + rect.height / 2)),
   };
+};
+
+// Move only the row contents so collision targets stay stable while the preview changes.
+const updateDragPreview = (manager: DragDropManager<SwitcherDragData>) => {
+  const { source } = manager.dragOperation;
+  const [collision] = manager.collisionObserver.computeCollisions();
+  const target =
+    collision === undefined
+      ? null
+      : manager.registry.droppables.get(collision.id);
+  const sourceRect = source?.element?.getBoundingClientRect();
+  const targetRect = target?.element?.getBoundingClientRect();
+  for (const row of manager.registry.droppables) {
+    let offset = 0;
+    if (
+      source &&
+      target &&
+      sourceRect &&
+      targetRect &&
+      row.type === source.type
+    ) {
+      const from = source.data.index;
+      const to = target.data.index;
+      if (row.id === source.id) {
+        offset =
+          to > from
+            ? targetRect.bottom - sourceRect.bottom
+            : targetRect.top - sourceRect.top;
+      } else if (row.data.index > from && row.data.index <= to) {
+        offset = -sourceRect.height - 4;
+      } else if (row.data.index < from && row.data.index >= to) {
+        offset = sourceRect.height + 4;
+      }
+    }
+    row.data.offset.set(offset);
+  }
 };
 
 class RestrictToVerticalAxis extends Modifier {
@@ -241,15 +274,21 @@ const ReorderRow = ({
   disabled,
 }: {
   children: (handleRef: Ref<HTMLButtonElement>) => ReactNode;
-  data: SwitcherDragData;
+  data: Omit<SwitcherDragData, "offset">;
   disabled: boolean;
 }) => {
   const elementRef = useRef<HTMLDivElement>(null);
+  const reducedMotion = useReducedMotion();
+  const offset = useSpring(0, {
+    bounce: 0,
+    duration: reducedMotion === true ? 0 : 0.2,
+  });
+  const dragData = { ...data, offset };
   const handleRef = useRef<HTMLButtonElement>(null);
   const id = JSON.stringify([data.groupId, data.mailboxId ?? null]);
   const type = data.mailboxId ? `mailboxes:${data.groupId}` : "teams";
   const { isDragSource } = useDraggable<SwitcherDragData>({
-    data,
+    data: dragData,
     disabled,
     element: elementRef,
     handle: handleRef,
@@ -258,51 +297,37 @@ const ReorderRow = ({
     sensors: SWITCHER_SENSORS,
     type,
   });
-  const { isDropTarget } = useDroppable({
+  useDroppable({
     accept: type,
     collisionDetector: switcherCollision,
-    data,
+    data: dragData,
     disabled,
     element: elementRef,
     id,
     type,
   });
   const { source } = useDragOperation<SwitcherDragData>();
-  const reducedMotion = useReducedMotion();
-  const showDrop = isDropTarget && source?.id !== id;
   return (
-    <m.div
-      className={cn("relative rounded-xs", { "opacity-35": isDragSource })}
+    <div
+      className="relative rounded-xs"
       data-mailbox-switcher-group={data.groupId}
       data-mailbox-switcher-mailbox={data.mailboxId}
       data-mailbox-switcher-navigation-row
-      layout="position"
       ref={elementRef}
-      transition={{
-        duration: reducedMotion === true ? 0 : 0.2,
-        ease: appEaseOut,
-      }}
     >
-      {showDrop && (
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute inset-x-1 z-20 h-0.5 rounded-full bg-primary",
-            {
-              "-bottom-0.5":
-                source !== null &&
-                source !== undefined &&
-                source.data.index < data.index,
-              "-top-0.5":
-                source !== null &&
-                source !== undefined &&
-                source.data.index > data.index,
-            }
-          )}
-        />
-      )}
-      {children(handleRef)}
-    </m.div>
+      <m.div
+        aria-hidden={isDragSource ? true : undefined}
+        className={cn("rounded-xs", {
+          "bg-muted/60 opacity-35 ring-1 ring-border": isDragSource,
+          "pointer-events-none": source !== null && source !== undefined,
+        })}
+        data-mailbox-switcher-ghost={isDragSource ? true : undefined}
+        // oxlint-disable-next-line shadcn/no-inline-styles -- Motion value previews row positions without moving the collision targets.
+        style={{ y: offset }}
+      >
+        {children(handleRef)}
+      </m.div>
+    </div>
   );
 };
 
@@ -468,16 +493,9 @@ const MailboxTeam = ({
 }) => {
   const reducedMotion = useReducedMotion();
   const closed = collapsed || sortingTeams;
-  const dragManager = useDragDropManager();
+  const dragManager = useDragDropManager<SwitcherDragData>();
   return (
-    <m.section
-      data-mailbox-switcher-team={group.id}
-      layout="position"
-      transition={{
-        duration: reducedMotion === true ? 0 : 0.22,
-        ease: appEaseOut,
-      }}
-    >
+    <section data-mailbox-switcher-team={group.id}>
       <ReorderRow
         data={{ groupId: group.id, index, label: group.name }}
         disabled={disabled}
@@ -549,6 +567,9 @@ const MailboxTeam = ({
         onUpdate={() => {
           if (sortingTeams) {
             dragManager?.collisionObserver.forceUpdate(true);
+            if (dragManager) {
+              updateDragPreview(dragManager);
+            }
           }
         }}
         onAnimationComplete={() => {
@@ -567,7 +588,7 @@ const MailboxTeam = ({
       >
         <div className="space-y-1 pt-1">{children}</div>
       </m.div>
-    </m.section>
+    </section>
   );
 };
 
@@ -782,6 +803,9 @@ export const MailboxSwitcherDropdown = ({
     event,
     manager
   ) => {
+    for (const row of manager.registry.droppables) {
+      row.data.offset.jump(0);
+    }
     dragManagerRef.current = null;
     setIsDragging(false);
     setDraggingTeam(false);
@@ -881,6 +905,12 @@ export const MailboxSwitcherDropdown = ({
           plugins={defaultPreset.plugins.filter(
             (plugin) => plugin !== Accessibility
           )}
+          onDragMove={(_event, manager) => {
+            updateDragPreview(manager);
+          }}
+          onDragOver={(_event, manager) => {
+            updateDragPreview(manager);
+          }}
           onDragEnd={handleDragEnd}
           onDragStart={(event, manager) => {
             dragManagerRef.current = manager;
@@ -889,211 +919,207 @@ export const MailboxSwitcherDropdown = ({
             setDraggingTeam(event.operation.source?.type === "teams");
           }}
         >
-          <LayoutGroup id="mailbox-switcher-rows">
-            <div
-              className="flex max-h-96 flex-col gap-1 overflow-y-auto p-1"
-              data-mailbox-switcher-list
-              onKeyDown={handleArrowNavigation}
-              ref={listRef}
-              // oxlint-disable-next-line shadcn/no-inline-styles -- Freeze measured panel height while dragging to keep the popover anchored.
-              style={{ minHeight: dragPanelHeight }}
-            >
-              {groups.length > 0 ? (
-                <>
-                  {onSelectAllInboxes &&
-                  mailboxes.some((mailbox) => mailbox.provider !== "api") ? (
-                    <Button
-                      aria-current={allInboxesActive ? "page" : undefined}
-                      className="w-full justify-start"
-                      data-mailbox-switcher-navigation-item
-                      onClick={() => {
-                        onSelectAllInboxes();
-                        setIsOpen(false);
+          <div
+            className="flex max-h-96 flex-col gap-1 overflow-y-auto p-1"
+            data-mailbox-switcher-list
+            onKeyDown={handleArrowNavigation}
+            ref={listRef}
+            // oxlint-disable-next-line shadcn/no-inline-styles -- Freeze measured panel height while dragging to keep the popover anchored.
+            style={{ minHeight: dragPanelHeight }}
+          >
+            {groups.length > 0 ? (
+              <>
+                {onSelectAllInboxes &&
+                mailboxes.some((mailbox) => mailbox.provider !== "api") ? (
+                  <Button
+                    aria-current={allInboxesActive ? "page" : undefined}
+                    className="w-full justify-start"
+                    data-mailbox-switcher-navigation-item
+                    onClick={() => {
+                      onSelectAllInboxes();
+                      setIsOpen(false);
+                    }}
+                    variant="ghost"
+                  >
+                    <HugeiconsIcon aria-hidden icon={Mail01Icon} />
+                    All inboxes
+                  </Button>
+                ) : null}
+                {(mailboxes.length >= 8 || isFiltering) && (
+                  <div className="sticky top-0 z-10 bg-popover">
+                    <Input
+                      aria-label="Search mailboxes"
+                      className="h-8"
+                      onChange={(event) => {
+                        setSearchQuery(event.currentTarget.value);
                       }}
-                      variant="ghost"
-                    >
-                      <HugeiconsIcon aria-hidden icon={Mail01Icon} />
-                      All inboxes
-                    </Button>
-                  ) : null}
-                  {(mailboxes.length >= 8 || isFiltering) && (
-                    <div className="sticky top-0 z-10 bg-popover">
-                      <Input
-                        aria-label="Search mailboxes"
-                        className="h-8"
-                        onChange={(event) => {
-                          setSearchQuery(event.currentTarget.value);
+                      placeholder="Search mailboxes"
+                      ref={searchRef}
+                      size="sm"
+                      value={searchQuery}
+                    />
+                  </div>
+                )}
+                {(isFiltering ? filteredGroups : groups).map(
+                  (group, groupIndex) => {
+                    const isCollapsed =
+                      !isFiltering && collapsedGroupIds.has(group.id);
+                    const canReorderMailboxes =
+                      !isFiltering && group.mailboxes.length > 1;
+
+                    return (
+                      <MailboxTeam
+                        collapsed={isCollapsed}
+                        disabled={!canReorderGroups}
+                        embedded={embedded}
+                        group={group}
+                        index={groupIndex}
+                        key={group.id}
+                        onRestored={() => {
+                          setDragPanelHeight(undefined);
                         }}
-                        placeholder="Search mailboxes"
-                        ref={searchRef}
-                        size="sm"
-                        value={searchQuery}
-                      />
-                    </div>
-                  )}
-                  {(isFiltering ? filteredGroups : groups).map(
-                    (group, groupIndex) => {
-                      const isCollapsed =
-                        !isFiltering && collapsedGroupIds.has(group.id);
-                      const canReorderMailboxes =
-                        !isFiltering && group.mailboxes.length > 1;
+                        onToggle={toggleGroup}
+                        sortingTeams={draggingTeam}
+                      >
+                        {group.mailboxes.length > 0 ? (
+                          group.mailboxes.map((mailbox, mailboxIndex) => {
+                            const isActive =
+                              !allInboxesActive &&
+                              mailbox.id === selectedMailboxId;
+                            const isDefault = mailbox.id === defaultMailboxId;
+                            const needsReconnect =
+                              mailbox.connectionStatus === "needs_reconnect";
+                            const isReconnecting =
+                              reconnectingMailboxId === mailbox.id;
+                            const canSetDefault = mailbox.provider !== "api";
+                            const defaultMailboxLabel = isDefault
+                              ? "Unset default mailbox"
+                              : "Set as default mailbox";
 
-                      return (
-                        <MailboxTeam
-                          collapsed={isCollapsed}
-                          disabled={!canReorderGroups}
-                          embedded={embedded}
-                          group={group}
-                          index={groupIndex}
-                          key={group.id}
-                          onRestored={() => {
-                            setDragPanelHeight(undefined);
-                          }}
-                          onToggle={toggleGroup}
-                          sortingTeams={draggingTeam}
-                        >
-                          {group.mailboxes.length > 0 ? (
-                            group.mailboxes.map((mailbox, mailboxIndex) => {
-                              const isActive =
-                                !allInboxesActive &&
-                                mailbox.id === selectedMailboxId;
-                              const isDefault = mailbox.id === defaultMailboxId;
-                              const needsReconnect =
-                                mailbox.connectionStatus === "needs_reconnect";
-                              const isReconnecting =
-                                reconnectingMailboxId === mailbox.id;
-                              const canSetDefault = mailbox.provider !== "api";
-                              const defaultMailboxLabel = isDefault
-                                ? "Unset default mailbox"
-                                : "Set as default mailbox";
-
-                              return (
-                                <ReorderRow
-                                  disabled={
-                                    !canReorderMailboxes ||
-                                    isCollapsed ||
-                                    draggingTeam
-                                  }
-                                  data={{
-                                    groupId: group.id,
-                                    index: mailboxIndex,
-                                    label:
-                                      mailbox.displayName ??
-                                      mailbox.emailAddress,
-                                    mailboxId: mailbox.id,
-                                  }}
-                                  key={mailbox.id}
-                                >
-                                  {(handleRef) => (
-                                    <MailboxMenuItem
-                                      handleRef={handleRef}
-                                      action={
-                                        <div className="flex items-center gap-1">
-                                          {needsReconnect && (
-                                            <button
-                                              aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
-                                              // oxlint-disable-next-line shadcn/no-arbitrary-values -- Explicit transition properties for the reconnect affordance.
-                                              className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-1.5 text-caption font-medium text-destructive transition-[color,transform] duration-100 hover:text-destructive/80 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:scale-100"
-                                              data-mailbox-switcher-navigation-action
-                                              disabled={isReconnecting}
-                                              onClick={(event) => {
-                                                event.stopPropagation();
-                                                onReconnectMailbox(mailbox);
-                                              }}
-                                              type="button"
-                                            >
-                                              <HugeiconsIcon
-                                                aria-hidden
-                                                className={cn("size-3.5", {
-                                                  "animate-spin":
-                                                    isReconnecting,
-                                                })}
-                                                icon={
-                                                  isReconnecting
-                                                    ? Loading03Icon
-                                                    : Mail01Icon
-                                                }
-                                              />
-                                              Reconnect
-                                            </button>
-                                          )}
-                                          {canSetDefault && (
-                                            <MailboxDefaultButton
-                                              defaultMailboxLabel={
-                                                defaultMailboxLabel
-                                              }
-                                              isDefault={isDefault}
-                                              mailboxId={mailbox.id}
-                                              onSetDefaultMailbox={
-                                                onSetDefaultMailbox
+                            return (
+                              <ReorderRow
+                                disabled={
+                                  !canReorderMailboxes ||
+                                  isCollapsed ||
+                                  draggingTeam
+                                }
+                                data={{
+                                  groupId: group.id,
+                                  index: mailboxIndex,
+                                  label:
+                                    mailbox.displayName ?? mailbox.emailAddress,
+                                  mailboxId: mailbox.id,
+                                }}
+                                key={mailbox.id}
+                              >
+                                {(handleRef) => (
+                                  <MailboxMenuItem
+                                    handleRef={handleRef}
+                                    action={
+                                      <div className="flex items-center gap-1">
+                                        {needsReconnect && (
+                                          <button
+                                            aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
+                                            // oxlint-disable-next-line shadcn/no-arbitrary-values -- Explicit transition properties for the reconnect affordance.
+                                            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-1.5 text-caption font-medium text-destructive transition-[color,transform] duration-100 hover:text-destructive/80 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:scale-100"
+                                            data-mailbox-switcher-navigation-action
+                                            disabled={isReconnecting}
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              onReconnectMailbox(mailbox);
+                                            }}
+                                            type="button"
+                                          >
+                                            <HugeiconsIcon
+                                              aria-hidden
+                                              className={cn("size-3.5", {
+                                                "animate-spin": isReconnecting,
+                                              })}
+                                              icon={
+                                                isReconnecting
+                                                  ? Loading03Icon
+                                                  : Mail01Icon
                                               }
                                             />
-                                          )}
-                                        </div>
-                                      }
-                                      isActive={isActive}
-                                      onSelect={() => {
-                                        onSelectMailboxId(mailbox.id);
-                                        setIsOpen(false);
-                                      }}
-                                    >
-                                      <MailboxSummary
-                                        className="w-full"
-                                        mailbox={mailbox}
-                                      />
-                                    </MailboxMenuItem>
-                                  )}
-                                </ReorderRow>
-                              );
-                            })
-                          ) : (
-                            <p className="px-2 py-1 text-body text-muted-fg">
-                              No Mailbox
-                            </p>
-                          )}
-                        </MailboxTeam>
-                      );
-                    }
-                  )}
-                  <p className="sr-only" id="mailbox-order-help">
-                    Alt + Up or Down to reorder the focused team or mailbox.
+                                            Reconnect
+                                          </button>
+                                        )}
+                                        {canSetDefault && (
+                                          <MailboxDefaultButton
+                                            defaultMailboxLabel={
+                                              defaultMailboxLabel
+                                            }
+                                            isDefault={isDefault}
+                                            mailboxId={mailbox.id}
+                                            onSetDefaultMailbox={
+                                              onSetDefaultMailbox
+                                            }
+                                          />
+                                        )}
+                                      </div>
+                                    }
+                                    isActive={isActive}
+                                    onSelect={() => {
+                                      onSelectMailboxId(mailbox.id);
+                                      setIsOpen(false);
+                                    }}
+                                  >
+                                    <MailboxSummary
+                                      className="w-full"
+                                      mailbox={mailbox}
+                                    />
+                                  </MailboxMenuItem>
+                                )}
+                              </ReorderRow>
+                            );
+                          })
+                        ) : (
+                          <p className="px-2 py-1 text-body text-muted-fg">
+                            No Mailbox
+                          </p>
+                        )}
+                      </MailboxTeam>
+                    );
+                  }
+                )}
+                <p className="sr-only" id="mailbox-order-help">
+                  Alt + Up or Down to reorder the focused team or mailbox.
+                </p>
+                {isFiltering && filteredGroups.length === 0 && (
+                  <p className="px-2 py-3 text-body-sm text-muted-fg">
+                    No matching mailboxes
                   </p>
-                  {isFiltering && filteredGroups.length === 0 && (
-                    <p className="px-2 py-3 text-body-sm text-muted-fg">
-                      No matching mailboxes
-                    </p>
-                  )}
-                  <output aria-live="polite" className="sr-only">
-                    {orderAnnouncement}
-                  </output>
-                  {!embedded && (
-                    <div className="mt-1">
-                      <LinkButton
-                        // oxlint-disable-next-line shadcn/no-restyle -- Manage row keeps its compact nav metrics.
-                        className="h-auto min-h-7 w-full justify-between rounded-xs px-2.5 py-1 squircle"
-                        data-mailbox-switcher-navigation-item
-                        search={{ from: "/", mailboxId: "", tab: "mailboxes" }}
-                        size="sm"
-                        to="/settings"
-                        variant="ghost"
-                      >
-                        Manage mailboxes
-                        <HugeiconsIcon
-                          aria-hidden
-                          className="size-4"
-                          icon={Settings01Icon}
-                        />
-                      </LinkButton>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="rounded-md px-2.5 py-2 text-body text-muted-fg">
-                  No Mailbox
-                </div>
-              )}
-            </div>
-          </LayoutGroup>
+                )}
+                <output aria-live="polite" className="sr-only">
+                  {orderAnnouncement}
+                </output>
+                {!embedded && (
+                  <div className="mt-1">
+                    <LinkButton
+                      // oxlint-disable-next-line shadcn/no-restyle -- Manage row keeps its compact nav metrics.
+                      className="h-auto min-h-7 w-full justify-between rounded-xs px-2.5 py-1 squircle"
+                      data-mailbox-switcher-navigation-item
+                      search={{ from: "/", mailboxId: "", tab: "mailboxes" }}
+                      size="sm"
+                      to="/settings"
+                      variant="ghost"
+                    >
+                      Manage mailboxes
+                      <HugeiconsIcon
+                        aria-hidden
+                        className="size-4"
+                        icon={Settings01Icon}
+                      />
+                    </LinkButton>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="rounded-md px-2.5 py-2 text-body text-muted-fg">
+                No Mailbox
+              </div>
+            )}
+          </div>
           {isOpen &&
             createPortal(
               <DragOverlay<SwitcherDragData, Draggable<SwitcherDragData>>
