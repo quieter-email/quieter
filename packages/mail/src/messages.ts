@@ -27,6 +27,7 @@ export type MessagePart = {
 };
 
 export type MessageListItem = {
+  receivedAt?: string;
   id: string;
   threadId: string;
   threadLabelIds?: string[];

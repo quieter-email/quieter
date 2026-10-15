@@ -1,3 +1,4 @@
+import type { DailyBriefItem } from "@quieter/mail/daily-brief";
 import type {
   DeliveryEvent,
   DeliveryStatus,
@@ -906,6 +907,96 @@ export const aiMemoryScopeConfig = pgTable(
       sql`char_length(${table.learningPrompt}) <= 6000`
     ),
     unique("ai_memory_scope_config_scope_key_unique").on(table.scopeKey),
+  ]
+);
+
+export const dailyBriefSettings = pgTable(
+  "dailyBriefSettings",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    editionId: text("editionId"),
+    enabled: boolean("enabled").notNull().default(false),
+    generationDay: text("generationDay"),
+    generationsToday: integer("generationsToday").notNull().default(0),
+    id: text("id").primaryKey(),
+    lastAttemptAt: timestamp("lastAttemptAt"),
+    lastError: text("lastError"),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    leaseToken: text("leaseToken"),
+    localTime: text("localTime").notNull().default("06:00"),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    nextRunAt: timestamp("nextRunAt"),
+    revision: integer("revision").notNull().default(0),
+    scheduleEnabled: boolean("scheduleEnabled").notNull().default(false),
+    timeZone: text("timeZone").notNull().default("UTC"),
+    updatedAt: timestamp("updatedAt").notNull(),
+    urgentPending: boolean("urgentPending").notNull().default(false),
+    urgentRevision: integer("urgentRevision"),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    unique("daily_brief_settings_mailbox_user_unique").on(
+      table.mailboxId,
+      table.userId
+    ),
+    index("daily_brief_settings_due_idx").on(
+      table.enabled,
+      table.scheduleEnabled,
+      table.nextRunAt
+    ),
+  ]
+);
+
+export const dailyBriefEdition = pgTable(
+  "dailyBriefEdition",
+  {
+    generatedAt: timestamp("generatedAt").notNull(),
+    id: text("id").primaryKey(),
+    items: jsonb("items").$type<DailyBriefItem[]>().notNull(),
+    localDate: text("localDate").notNull(),
+    seenUrgentMessageIds: jsonb("seenUrgentMessageIds").$type<string[]>(),
+    settingsId: text("settingsId")
+      .notNull()
+      .references(() => dailyBriefSettings.id, { onDelete: "cascade" }),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [index("daily_brief_edition_settings_idx").on(table.settingsId)]
+);
+
+export const dailyBriefFeedback = pgTable(
+  "dailyBriefFeedback",
+  {
+    action: text("action")
+      .$type<"not_important" | "dismiss" | "defer">()
+      .notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    deferUntil: timestamp("deferUntil"),
+    id: text("id").primaryKey(),
+    itemId: text("itemId").notNull(),
+    preference: text("preference"),
+    settingsId: text("settingsId")
+      .notNull()
+      .references(() => dailyBriefSettings.id, { onDelete: "cascade" }),
+    sourceMessageIds: jsonb("sourceMessageIds").$type<string[]>().notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    unique("daily_brief_feedback_settings_item_unique").on(
+      table.settingsId,
+      table.itemId
+    ),
+    index("daily_brief_feedback_settings_updated_idx").on(
+      table.settingsId,
+      table.updatedAt
+    ),
+    check(
+      "daily_brief_feedback_action_check",
+      sql`${table.action} in ('not_important', 'dismiss', 'defer')`
+    ),
   ]
 );
 
@@ -2897,6 +2988,9 @@ export const tables = {
   chatMessage,
   connectorCredential,
   connectorOAuthState,
+  dailyBriefEdition,
+  dailyBriefFeedback,
+  dailyBriefSettings,
   gmailAutoLabelEvent,
   gmailAutoLabelSettings,
   gmailCredential,

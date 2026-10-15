@@ -10,7 +10,7 @@ import { recordInboundManagedMessage } from "./messages/ingestion";
 
 export const seedLocalManagedMail = async (
   ownerEmail: string,
-  options: { fresh?: boolean } = {}
+  options: { fresh?: boolean; dailyBrief?: boolean } = {}
 ) => {
   if (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local") {
     throw new Error("Mail fixtures are only available in local development.");
@@ -84,16 +84,27 @@ export const seedLocalManagedMail = async (
       "The existing fixture mailbox no longer matches this local account."
     );
   }
-  const messageKey =
-    options.fresh === true ? crypto.randomUUID() : "welcome-v1";
+  let messageKey =
+    options.dailyBrief === true ? "daily-brief-v1" : "welcome-v1";
+  if (options.fresh === true) {
+    messageKey = crypto.randomUUID();
+  }
+  let subject = "Local mail fixture with attachment";
+  let body =
+    "This message was created locally. It was never sent through an email provider.";
+  if (options.dailyBrief === true) {
+    subject = "Please review the launch plan before tomorrow";
+    body =
+      "Could you review the launch plan and reply with your approval or requested changes before tomorrow? The launch is waiting for your review. This is local sample mail, created for Daily Brief verification.";
+  } else if (options.fresh === true) {
+    subject = `Live mail update ${now.toISOString()}`;
+  }
   const key = `fixtures/${suffix}/${messageKey}.eml`;
   const raw = new TextEncoder().encode(
     [
       "From: Local fixture <sender@example.test>",
       `To: ${address}`,
-      options.fresh === true
-        ? `Subject: Live mail update ${now.toISOString()}`
-        : "Subject: Local mail fixture with attachment",
+      `Subject: ${subject}`,
       `Message-ID: <${messageKey}.${suffix}@quieter.test>`,
       `Date: ${now.toUTCString()}`,
       "MIME-Version: 1.0",
@@ -102,7 +113,7 @@ export const seedLocalManagedMail = async (
       "--quieter-local-fixture",
       'Content-Type: text/plain; charset="utf-8"',
       "",
-      "This message was created locally. It was never sent through an email provider.",
+      body,
       "",
       "--quieter-local-fixture",
       'Content-Type: text/plain; name="local-note.txt"',

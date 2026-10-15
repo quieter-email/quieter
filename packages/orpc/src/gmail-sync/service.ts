@@ -48,6 +48,7 @@ import {
   serializeAiAgentContext,
 } from "../ai-memory";
 import type { AiAgentMemoryCandidates } from "../ai-memory";
+import { markDailyBriefUrgentPending } from "../daily-brief";
 import { syncGmailLabels } from "../gmail-labels";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
@@ -525,6 +526,13 @@ const processMessageIds = async ({
       }
     })
   );
+  if (extractCodes) {
+    try {
+      await markDailyBriefUrgentPending({ mailboxId });
+    } catch (error) {
+      reportError(error, { operation: "gmail-sync:daily-brief-pending" });
+    }
+  }
 };
 
 export const retryPendingAutomationMessages = async ({

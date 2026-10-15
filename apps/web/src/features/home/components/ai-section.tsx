@@ -29,10 +29,10 @@ export const AiSection = () => (
       <section aria-labelledby="home-brief-title">
         <Reveal className="home-paired-feature" stagger={0.18}>
           <RevealChild as="h2" className="home-heading" id="home-brief-title">
-            Your daily brief.
+            Your Daily Brief.
           </RevealChild>
           <RevealChild as="p" className="home-description">
-            A daily brief of what needs your attention.
+            Coming soon. A Daily Brief of what needs your attention.
             <br />
             Catch up without opening every email.
           </RevealChild>

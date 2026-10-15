@@ -7,7 +7,11 @@ if (ownerEmail === undefined || !ownerEmail.includes("@")) {
   throw new Error("Use dev:fixtures <email-of-your-local-login>.");
 }
 const response = await fetch("http://127.0.0.1:8787/__dev/mail/seed", {
-  body: JSON.stringify({ fresh: mode === "--fresh", ownerEmail }),
+  body: JSON.stringify({
+    dailyBrief: mode === "--brief",
+    fresh: mode === "--fresh",
+    ownerEmail,
+  }),
   headers: {
     authorization: `Bearer ${requireServerEnv("QUIETER_LOCAL_WORKER_TOKEN")}`,
     "content-type": "application/json",

@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./daily-brief": "./src/daily-brief.ts",
     "./action-specification": "./src/action-specification.ts",
     "./ai-memory": "./src/ai-memory.ts",
     "./chat-agent": "./src/chat-agent.ts",

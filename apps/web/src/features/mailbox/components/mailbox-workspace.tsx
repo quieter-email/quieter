@@ -513,7 +513,10 @@ const useMailboxWorkspaceActions = ({
       return;
     }
     void setMailboxSearch({
-      mailbox: nextView === "all-inboxes" ? "inbox" : undefined,
+      mailbox:
+        nextView === "all-inboxes" || nextView === "daily-brief"
+          ? "inbox"
+          : undefined,
       mailboxId:
         nextView === "all-inboxes" && selectedMailboxProvider === "api"
           ? (mailboxes.find((mailbox) => mailbox.provider !== "api")?.id ??
