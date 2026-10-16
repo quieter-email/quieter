@@ -186,6 +186,8 @@ const useMailboxWorkspaceCompose = ({
   }
   const composeReturnMailboxRef = useRef<MailboxCategory>("inbox");
   const launchedMailtoRef = useRef<string | null>(null);
+  const allInboxesActive =
+    view === "all-inboxes" || view === "all-inboxes-brief";
 
   const openComposeWorkspace = (
     draft: ComposeDraftState | null,
@@ -202,9 +204,7 @@ const useMailboxWorkspaceCompose = ({
         : activeMailbox;
     composeReturnMailboxRef.current = returnMailbox;
     const nextMailboxId =
-      draft === null && view === "all-inboxes"
-        ? newComposeMailboxId
-        : draftMailboxId;
+      draft === null && allInboxesActive ? newComposeMailboxId : draftMailboxId;
     setComposeSession((session) => ({
       draft,
       key: session.key + 1,
@@ -217,7 +217,7 @@ const useMailboxWorkspaceCompose = ({
       mailto: consumeMailto ? null : undefined,
       messageId: null,
       threadId: null,
-      view: view === "all-inboxes" || view === "daily-brief" ? view : "inbox",
+      view: allInboxesActive || view === "daily-brief" ? view : "inbox",
     });
   };
 
@@ -254,7 +254,7 @@ const useMailboxWorkspaceCompose = ({
       mailbox: composeReturnMailboxRef.current,
       messageId: null,
       threadId: null,
-      view: view === "all-inboxes" || view === "daily-brief" ? view : "inbox",
+      view: allInboxesActive || view === "daily-brief" ? view : "inbox",
     });
   };
 
@@ -357,7 +357,10 @@ const useMailboxWorkspaceRouteEffects = ({
         ? null
         : trimmedMailboxId;
     const nextMailboxId =
-      view === "all-inboxes" && selectedMailboxProvider === "api"
+      (view === "all-inboxes" ||
+        view === "all-inboxes-brief" ||
+        view === "daily-brief") &&
+      selectedMailboxProvider === "api"
         ? (mailboxes.find((mailbox) => mailbox.provider !== "api")?.id ??
           selectedMailboxId)
         : selectedMailboxId;
@@ -392,7 +395,12 @@ const useMailboxWorkspaceRouteEffects = ({
   }, [chatId, selectedMailboxProvider, setMailboxSearch]);
 
   useLayoutEffect(() => {
-    if (isComposeMailbox || isSnippetMailbox || view === "all-inboxes") {
+    if (
+      isComposeMailbox ||
+      isSnippetMailbox ||
+      view === "all-inboxes" ||
+      view === "all-inboxes-brief"
+    ) {
       return;
     }
     if (isMailboxSupportedByProvider(selectedMailboxProvider, activeMailbox)) {
@@ -477,6 +485,8 @@ const useMailboxWorkspaceActions = ({
   const [startingReconnectMailboxId, setStartingReconnectMailboxId] = useState<
     string | null
   >(null);
+  const allInboxesActive =
+    view === "all-inboxes" || view === "all-inboxes-brief";
 
   const applySearch = (nextQuery: string) => {
     const normalizedQuery = nextQuery.trim();
@@ -504,27 +514,38 @@ const useMailboxWorkspaceActions = ({
     void setMailboxSearch({
       mailbox,
       messageId: null,
-      view: view === "all-inboxes" ? "all-inboxes" : "inbox",
+      view: allInboxesActive ? "all-inboxes" : "inbox",
     });
   };
 
   const selectView = (nextView: MailboxWorkspaceView) => {
-    if (nextView === view && !isComposeMailbox && !isSnippetMailbox) {
+    const briefActive = view === "daily-brief" || view === "all-inboxes-brief";
+    const resolvedView =
+      (nextView === "daily-brief" && allInboxesActive) ||
+      (nextView === "all-inboxes" && briefActive)
+        ? "all-inboxes-brief"
+        : nextView;
+    if (resolvedView === view && !isComposeMailbox && !isSnippetMailbox) {
       return;
     }
     void setMailboxSearch({
       mailbox:
-        nextView === "all-inboxes" || nextView === "daily-brief"
+        resolvedView === "all-inboxes" ||
+        resolvedView === "all-inboxes-brief" ||
+        resolvedView === "daily-brief"
           ? "inbox"
           : undefined,
       mailboxId:
-        nextView === "all-inboxes" && selectedMailboxProvider === "api"
+        (resolvedView === "all-inboxes" ||
+          resolvedView === "all-inboxes-brief" ||
+          resolvedView === "daily-brief") &&
+        selectedMailboxProvider === "api"
           ? (mailboxes.find((mailbox) => mailbox.provider !== "api")?.id ??
             selectedMailboxId)
           : undefined,
       messageId: null,
       query: null,
-      view: nextView,
+      view: resolvedView,
     });
   };
 
@@ -591,7 +612,7 @@ const useMailboxWorkspaceActions = ({
   };
 
   const selectMailboxId = (nextMailboxId: string) => {
-    if (nextMailboxId === selectedMailboxId && view !== "all-inboxes") {
+    if (nextMailboxId === selectedMailboxId && !allInboxesActive) {
       return;
     }
     const nextMailboxProvider = mailboxes.find(
@@ -600,8 +621,14 @@ const useMailboxWorkspaceActions = ({
     let nextMailboxCategory: MailboxCategory | undefined;
     if (nextMailboxProvider === "api") {
       nextMailboxCategory = "sent";
-    } else if (view === "all-inboxes") {
+    } else if (allInboxesActive) {
       nextMailboxCategory = "inbox";
+    }
+    let nextView: MailboxWorkspaceView | undefined;
+    if (nextMailboxProvider === "api" || view === "all-inboxes") {
+      nextView = "inbox";
+    } else if (view === "all-inboxes-brief") {
+      nextView = "daily-brief";
     }
     setDraftChatKey(crypto.randomUUID());
     void setMailboxSearch({
@@ -610,10 +637,7 @@ const useMailboxWorkspaceActions = ({
       mailboxId: nextMailboxId,
       messageId: null,
       query: nextMailboxProvider === selectedMailboxProvider ? undefined : null,
-      view:
-        nextMailboxProvider === "api" || view === "all-inboxes"
-          ? "inbox"
-          : undefined,
+      view: nextView,
     });
   };
 
@@ -924,7 +948,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const composeWorkspace = useMailboxWorkspaceCompose({
     activeMailbox,
     canComposeNew:
-      view === "all-inboxes"
+      view === "all-inboxes" || view === "all-inboxes-brief"
         ? writableMailboxes.length > 0
         : newComposeMailboxId !== null &&
           newComposeMailboxId === selectedMailboxId,

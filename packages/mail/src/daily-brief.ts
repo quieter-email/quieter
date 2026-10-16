@@ -20,10 +20,13 @@ export type DailyBriefItem = {
 
 export type DailyBriefView = {
   settings: {
+    cadence: "daily" | "weekly";
     enabled: boolean;
+    lastUsedAt: string | null;
     scheduleEnabled: boolean;
     localTime: string;
     timeZone: string;
+    weekday: number;
   };
   edition: {
     id: string;

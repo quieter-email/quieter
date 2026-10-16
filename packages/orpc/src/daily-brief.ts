@@ -48,25 +48,29 @@ import { assertAccessibleMailbox } from "./mailbox/service";
 const mailboxInput = z.strictObject({
   mailboxId: z.string().trim().min(1).max(500),
 });
+const timeZoneInput = z
+  .string()
+  .min(1)
+  .max(100)
+  .refine((value) => {
+    try {
+      return (
+        new Intl.DateTimeFormat("en", { timeZone: value }).resolvedOptions()
+          .timeZone.length > 0
+      );
+    } catch {
+      return false;
+    }
+  }, "Choose a valid timezone.");
 export const dailyBriefInputs = {
+  activity: mailboxInput.extend({ timeZone: timeZoneInput.optional() }),
   configure: mailboxInput.extend({
+    cadence: z.enum(["daily", "weekly"]).optional(),
     enabled: z.boolean(),
     localTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/u),
     scheduleEnabled: z.boolean(),
-    timeZone: z
-      .string()
-      .min(1)
-      .max(100)
-      .refine((value) => {
-        try {
-          return (
-            new Intl.DateTimeFormat("en", { timeZone: value }).resolvedOptions()
-              .timeZone.length > 0
-          );
-        } catch {
-          return false;
-        }
-      }, "Choose a valid timezone."),
+    timeZone: timeZoneInput,
+    weekday: z.number().int().min(0).max(6).optional(),
   }),
   feedback: mailboxInput.extend({
     action: z.enum(["not_important", "dismiss", "defer"]),
@@ -75,6 +79,10 @@ export const dailyBriefInputs = {
     preference: z.string().trim().max(1000).optional(),
   }),
   get: mailboxInput,
+  prepare: mailboxInput.extend({
+    onlyIfActive: z.boolean().optional(),
+    timeZone: timeZoneInput.optional(),
+  }),
   refresh: mailboxInput,
 };
 
@@ -84,6 +92,8 @@ const GENERATION_COOLDOWN_MS = 15 * 60_000;
 const DAILY_EDITION_ATTEMPT_LIMIT = 12;
 const DAILY_URGENT_ATTEMPT_LIMIT = 12;
 const LEASE_MS = 120_000;
+const ACTIVITY_WINDOW_MS = 7 * 86_400_000;
+const ACTIVITY_WRITE_INTERVAL_MS = 60 * 60_000;
 
 export const loadDailyBriefMemoryContext = async ({
   mailboxId,
@@ -122,6 +132,51 @@ const loadSettings = async ({ mailboxId, userId }: Scope) => {
     )
     .limit(1);
   return settings.at(0);
+};
+
+export const recordDailyBriefActivity = async ({
+  context,
+  input,
+}: {
+  context: MailRequestContext;
+  input: z.infer<typeof dailyBriefInputs.activity>;
+}) => {
+  await assertAccessibleMailbox({
+    mailboxId: input.mailboxId,
+    userId: context.userId,
+  });
+  const now = new Date();
+  await db
+    .insert(dailyBriefSettings)
+    .values({
+      createdAt: now,
+      enabled: true,
+      id: randomUUID(),
+      lastUsedAt: now,
+      mailboxId: input.mailboxId,
+      nextRunAt: nextDailyBriefRun({
+        localTime: "06:00",
+        now,
+        timeZone: input.timeZone ?? "UTC",
+      }),
+      scheduleEnabled: true,
+      timeZone: input.timeZone ?? "UTC",
+      updatedAt: now,
+      urgentPending: true,
+      userId: context.userId,
+    })
+    .onConflictDoUpdate({
+      set: { lastUsedAt: now },
+      setWhere: or(
+        isNull(dailyBriefSettings.lastUsedAt),
+        lte(
+          dailyBriefSettings.lastUsedAt,
+          new Date(now.getTime() - ACTIVITY_WRITE_INTERVAL_MS)
+        )
+      ),
+      target: [dailyBriefSettings.mailboxId, dailyBriefSettings.userId],
+    });
+  return { recorded: true };
 };
 
 const loadEdition = async (settings: Settings) => {
@@ -187,10 +242,13 @@ export const getDailyBrief = async ({
       items: [],
       lastError: null,
       settings: {
-        enabled: false,
+        cadence: "daily",
+        enabled: true,
+        lastUsedAt: null,
         localTime: "06:00",
-        scheduleEnabled: false,
+        scheduleEnabled: true,
         timeZone: "UTC",
+        weekday: 1,
       },
       stale: false,
     };
@@ -232,14 +290,20 @@ export const getDailyBrief = async ({
     items,
     lastError: settings.lastError,
     settings: {
+      cadence: settings.cadence ?? "daily",
       enabled: settings.enabled,
+      lastUsedAt: settings.lastUsedAt?.toISOString() ?? null,
       localTime: settings.localTime,
       scheduleEnabled: settings.scheduleEnabled,
       timeZone: settings.timeZone,
+      weekday: settings.weekday ?? 1,
     },
     stale:
       !!edition &&
-      (edition.localDate < dailyBriefLocalClock(now, settings.timeZone).date ||
+      ((settings.cadence === "weekly"
+        ? now.getTime() - edition.generatedAt.getTime() >= ACTIVITY_WINDOW_MS
+        : edition.localDate <
+          dailyBriefLocalClock(now, settings.timeZone).date) ||
         settings.lastError !== null),
   };
 };
@@ -263,7 +327,9 @@ export const configureDailyBrief = async ({
   }
   const now = new Date();
   const values = {
+    cadence: input.cadence ?? "daily",
     enabled: input.enabled,
+    lastUsedAt: now,
     localTime: input.localTime,
     nextRunAt:
       input.enabled && input.scheduleEnabled
@@ -272,6 +338,7 @@ export const configureDailyBrief = async ({
     scheduleEnabled: input.scheduleEnabled,
     timeZone: input.timeZone,
     updatedAt: now,
+    weekday: input.weekday ?? 1,
   };
   await db
     .insert(dailyBriefSettings)
@@ -400,6 +467,10 @@ const generateEdition = async ({
         eq(dailyBriefSettings.id, settings.id),
         eq(dailyBriefSettings.enabled, true),
         eq(dailyBriefSettings.revision, settings.revision),
+        gt(
+          dailyBriefSettings.lastUsedAt,
+          new Date(now.getTime() - ACTIVITY_WINDOW_MS)
+        ),
         or(
           isNull(dailyBriefSettings.generationDay),
           lt(dailyBriefSettings.generationDay, generationDay),
@@ -646,9 +717,11 @@ const generateEdition = async ({
                   ).date,
                 }
               : {}),
+            cadence: claimed.cadence ?? "daily",
             localTime: claimed.localTime,
             now: completedAt,
             timeZone: claimed.timeZone,
+            weekday: claimed.weekday ?? 1,
           })
         : null;
     }
@@ -762,6 +835,7 @@ export const refreshDailyBrief = async ({
   input: z.infer<typeof mailboxInput>;
 }) => {
   await assertAccessibleMailbox({ ...input, userId: context.userId });
+  await recordDailyBriefActivity({ context, input });
   const settings = await loadSettings({ ...input, userId: context.userId });
   if (settings?.enabled !== true) {
     throw new ORPCError("BAD_REQUEST", {
@@ -790,6 +864,61 @@ export const refreshDailyBrief = async ({
   return await getDailyBrief({ context, input });
 };
 
+export const prepareDailyBrief = async ({
+  context,
+  input,
+}: {
+  context: MailRequestContext;
+  input: z.infer<typeof dailyBriefInputs.prepare>;
+}) => {
+  if (input.onlyIfActive === true) {
+    await assertAccessibleMailbox({
+      mailboxId: input.mailboxId,
+      userId: context.userId,
+    });
+  } else {
+    await recordDailyBriefActivity({ context, input });
+  }
+  const settings = await loadSettings({
+    mailboxId: input.mailboxId,
+    userId: context.userId,
+  });
+  const view = await getDailyBrief({ context, input });
+  const needsShorterBrief = view.items.some(
+    (item) => item.summary.length > 180 || item.title.length > 80
+  );
+  if (
+    settings?.enabled !== true ||
+    settings.lastUsedAt === null ||
+    settings.lastUsedAt.getTime() <= Date.now() - ACTIVITY_WINDOW_MS ||
+    (view.edition !== null &&
+      !view.stale &&
+      !needsShorterBrief &&
+      !settings.urgentPending &&
+      !(
+        settings.scheduleEnabled &&
+        settings.nextRunAt &&
+        settings.nextRunAt <= new Date()
+      ))
+  ) {
+    return view;
+  }
+  await generateEdition({
+    context,
+    settings,
+    urgentOnly:
+      view.edition !== null &&
+      !view.stale &&
+      !needsShorterBrief &&
+      !(
+        settings.scheduleEnabled &&
+        settings.nextRunAt &&
+        settings.nextRunAt <= new Date()
+      ),
+  });
+  return await getDailyBrief({ context, input });
+};
+
 export const markDailyBriefUrgentPending = async ({
   mailboxId,
 }: {
@@ -805,6 +934,10 @@ export const markDailyBriefUrgentPending = async ({
       and(
         eq(dailyBriefSettings.mailboxId, mailboxId),
         eq(dailyBriefSettings.enabled, true),
+        gt(
+          dailyBriefSettings.lastUsedAt,
+          new Date(Date.now() - ACTIVITY_WINDOW_MS)
+        ),
         or(
           isNotNull(dailyBriefSettings.editionId),
           isNotNull(dailyBriefSettings.leaseToken)
@@ -834,6 +967,10 @@ export const runDueDailyBriefs = async ({
     .where(
       and(
         eq(dailyBriefSettings.enabled, true),
+        gt(
+          dailyBriefSettings.lastUsedAt,
+          new Date(now.getTime() - ACTIVITY_WINDOW_MS)
+        ),
         or(
           and(
             fullEditionNeeded,

@@ -188,6 +188,16 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     tab: "mailboxes",
     title: "Mailbox intelligence",
   },
+  {
+    description: "Mailboxes / Brief",
+    id: "brief",
+    keywords:
+      "summary digest daily weekly schedule time timezone enable disable",
+    scope: "mailbox",
+    section: "brief",
+    tab: "mailboxes",
+    title: "Brief",
+  },
 ];
 
 const editDistance = (left: string, right: string) => {

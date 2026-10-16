@@ -19,22 +19,33 @@ export const dailyBriefLocalClock = (now: Date, timeZone: string) => {
 
 export const nextDailyBriefRun = ({
   afterLocalDate,
+  cadence = "daily",
   now,
   localTime,
   timeZone,
+  weekday = 1,
 }: {
   afterLocalDate?: string;
+  cadence?: "daily" | "weekly";
   now: Date;
   localTime: string;
   timeZone: string;
+  weekday?: number;
 }) => {
   const current = dailyBriefLocalClock(now, timeZone);
-  const targetDate =
+  let targetDate =
     current.time < localTime && current.date !== afterLocalDate
       ? current.date
       : new Date(Date.parse(`${current.date}T12:00:00Z`) + 86_400_000)
           .toISOString()
           .slice(0, 10);
+  if (cadence === "weekly") {
+    const targetDay = new Date(`${targetDate}T12:00:00Z`);
+    targetDay.setUTCDate(
+      targetDay.getUTCDate() + ((weekday - targetDay.getUTCDay() + 7) % 7)
+    );
+    targetDate = targetDay.toISOString().slice(0, 10);
+  }
   const formatter = new Intl.DateTimeFormat("en-CA", {
     day: "2-digit",
     hour: "2-digit",
@@ -46,10 +57,12 @@ export const nextDailyBriefRun = ({
   });
   // Minute scanning chooses the first occurrence on fall-back days and the first
   // valid wall-clock minute after a missing spring-forward time.
-  for (let minute = 1; minute <= 2880; minute += 1) {
-    const candidate = new Date(
-      Math.floor(now.getTime() / 60_000) * 60_000 + minute * 60_000
-    );
+  const searchStart = Math.max(
+    Math.floor(now.getTime() / 60_000) * 60_000,
+    Date.parse(`${targetDate}T00:00:00Z`) - 14 * 60 * 60_000 - 60_000
+  );
+  for (let minute = 1; minute <= 4320; minute += 1) {
+    const candidate = new Date(searchStart + minute * 60_000);
     const values = Object.fromEntries(
       formatter.formatToParts(candidate).map((part) => [part.type, part.value])
     );

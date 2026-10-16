@@ -42,6 +42,7 @@ import type {
 } from "../domain/unified-inbox";
 import { useMailboxListController } from "./mailbox-workspace/use-mailbox-list-controller";
 import { createUnifiedInboxActions } from "./unified-inbox-actions";
+import { useBriefMailboxActivity } from "./use-brief-mailbox-activity";
 
 type SourceState = {
   messages: MessageListItem[];
@@ -285,6 +286,12 @@ export const UnifiedInboxPanel = ({
     }))
   );
   const visibleEntries = pending ? [] : entries;
+  useBriefMailboxActivity(
+    visibleEntries,
+    activeMessageId === null ||
+      (typeof window !== "undefined" &&
+        window.matchMedia("(min-width: 1024px)").matches)
+  );
   const failedSources = connectedStates.filter(
     ({ state }) => state !== undefined && state.error !== null
   );

@@ -1,18 +1,35 @@
 "use client";
 
+import { MoreHorizontalIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import type { DailyBriefItem } from "@quieter/mail/daily-brief";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
-import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@quieter/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@quieter/ui/dropdown-menu";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Textarea } from "@quieter/ui/textarea";
 import { useId, useState } from "react";
 
 import type { UnifiedInboxMailbox } from "#/features/mailbox/domain/unified-inbox";
+import { parseSender } from "#/lib/gmail/message-utils";
 
 export const DailyBriefCard = ({
   item,
   mailbox,
-  compact,
+  showMailbox,
   busy,
   onOpenSource,
   onFeedback,
@@ -20,7 +37,7 @@ export const DailyBriefCard = ({
 }: {
   item: DailyBriefItem;
   mailbox: UnifiedInboxMailbox;
-  compact: boolean;
+  showMailbox: boolean;
   busy: boolean;
   onOpenSource: (
     mailboxId: string,
@@ -38,119 +55,158 @@ export const DailyBriefCard = ({
 
   return (
     <article
-      className={cn("border-b border-border last:border-b-0", {
-        "py-4": compact,
-        "py-8 sm:py-10": !compact,
-      })}
+      aria-label={item.title}
+      className="group relative grid grid-cols-[6px_minmax(0,1fr)] gap-x-4 sm:gap-x-5"
     >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-fg">
-        <span>{mailbox.displayName || mailbox.emailAddress}</span>
-        <span className="border-l border-border pl-3">{item.group}</span>
+      <span
+        aria-hidden
+        className="mt-2 size-1.5 rounded-sm bg-q-blue/80 group-[:nth-child(3n)]:bg-q-yellow/75 group-[:nth-child(3n+2)]:bg-q-cyan/75"
+      />
+      <div className="min-w-0">
+        <h2 className="pr-7 text-body-lg leading-snug font-medium tracking-tight text-fg">
+          {item.title}
+        </h2>
+        <p className="mt-1.5 text-body leading-relaxed text-muted-fg">
+          {item.summary}
+        </p>
+        <nav
+          aria-label={`Emails for ${item.title}`}
+          className="mt-3 grid gap-0.5 border-l border-border-strong/45 pl-3"
+        >
+          {item.sources.map((source) => {
+            const sender = source.fromName
+              ? parseSender(source.fromName)
+              : null;
+            const senderLabel =
+              sender?.name || sender?.email || sender?.display;
+            return (
+              <div className="min-w-0" key={source.messageId}>
+                <Button
+                  aria-label={`Read ${source.subject || "email"}`}
+                  // oxlint-disable-next-line shadcn/no-restyle -- Source emails are plain text links within the brief, without button backgrounds.
+                  className="group/source h-auto min-h-8 w-full justify-start rounded-sm px-0 py-1 text-left text-caption font-normal hover:bg-transparent"
+                  onClick={() => {
+                    onOpenSource(mailbox.id, source.messageId, source.threadId);
+                  }}
+                  size="sm"
+                  variant="ghost"
+                >
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
+                    <span className="min-w-0 flex-1 truncate text-fg/80 decoration-border-strong underline-offset-4 group-hover/source:underline group-focus-visible/source:underline">
+                      {source.subject || "Email"}
+                    </span>
+                    {senderLabel ? (
+                      <span className="max-w-full truncate text-muted-fg sm:max-w-32">
+                        {senderLabel}
+                      </span>
+                    ) : null}
+                  </span>
+                </Button>
+              </div>
+            );
+          })}
+        </nav>
+        {showMailbox ? (
+          <p className="mt-2 text-caption text-muted-fg">
+            {mailbox.displayName || mailbox.emailAddress}
+          </p>
+        ) : null}
       </div>
-      <h2
-        className={cn("mt-2 font-medium tracking-tight text-fg", {
-          "text-body-lg": compact,
-          "text-xl sm:text-2xl": !compact,
-        })}
-      >
-        {item.title}
-      </h2>
-      <p className="mt-3 max-w-2xl text-body leading-relaxed text-fg">
-        {item.summary}
-      </p>
-      <p className="mt-3 text-caption leading-relaxed text-muted-fg">
-        Why it matters: {item.reason}
-      </p>
-      <nav aria-label="Source mail" className="mt-4 flex flex-wrap gap-2">
-        {item.sources.map((source) => (
-          <Button
-            className="max-w-full"
-            key={source.messageId}
-            onClick={() => {
-              onOpenSource(mailbox.id, source.messageId, source.threadId);
-            }}
-            size="sm"
-            variant="secondary"
-          >
-            <span className="truncate">
-              Open {source.subject || "source mail"}
-            </span>
-          </Button>
-        ))}
-      </nav>
-      <div className="mt-3 flex flex-wrap items-center gap-1">
-        {mailbox.grantRole === "reader" ? null : (
-          <Button
+      <DropdownMenu>
+        <IconButtonTooltip label="Item actions">
+          <DropdownMenuTrigger
+            appearance="icon"
+            aria-label={`Actions for ${item.title}`}
+            // oxlint-disable-next-line shadcn/no-restyle -- Keep secondary actions quiet until hover or keyboard focus.
+            className="absolute -top-1 -right-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 data-popup-open:opacity-100 max-sm:opacity-100"
             disabled={busy}
-            onClick={onPrepareDraft}
-            size="sm"
-            variant="ghost"
           >
-            Prepare a draft
-          </Button>
-        )}
-        <Button
-          disabled={busy}
-          onClick={() => {
-            onFeedback("dismiss");
-          }}
-          size="sm"
-          variant="ghost"
-        >
-          Dismiss
-        </Button>
-        <Button
-          disabled={busy}
-          onClick={() => {
-            onFeedback("defer");
-          }}
-          size="sm"
-          variant="ghost"
-        >
-          In one hour
-        </Button>
-        <Popover onOpenChange={setFeedbackOpen} open={feedbackOpen}>
-          <PopoverTrigger
-            render={<Button disabled={busy} size="sm" variant="ghost" />}
+            <HugeiconsIcon
+              aria-hidden
+              icon={MoreHorizontalIcon}
+              className="size-4"
+            />
+          </DropdownMenuTrigger>
+        </IconButtonTooltip>
+        <DropdownMenuContent align="end" size="compact">
+          {mailbox.grantRole === "reader" ? null : (
+            <DropdownMenuItem onSelect={onPrepareDraft}>
+              Prepare a reply
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem
+            onSelect={() => {
+              onFeedback("dismiss");
+            }}
           >
-            Not important
-          </PopoverTrigger>
-          <PopoverContent>
-            <form
-              className="grid gap-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const preference = new FormData(event.currentTarget).get(
-                  "preference"
-                );
-                onFeedback(
-                  "not_important",
-                  typeof preference === "string" ? preference.trim() : undefined
-                );
-                setFeedbackOpen(false);
-              }}
-            >
-              <label className="text-body font-medium" htmlFor={preferenceId}>
-                What should future briefs focus on?
+            Dismiss
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              onFeedback("defer");
+            }}
+          >
+            Hide for an hour
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              setFeedbackOpen(true);
+            }}
+          >
+            Less like this
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Dialog open={feedbackOpen} onOpenChange={setFeedbackOpen}>
+        <DialogContent>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const preference = new FormData(event.currentTarget).get(
+                "preference"
+              );
+              onFeedback(
+                "not_important",
+                typeof preference === "string" ? preference.trim() : undefined
+              );
+              setFeedbackOpen(false);
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Less like this</DialogTitle>
+            </DialogHeader>
+            <DialogBody>
+              <label
+                className="mb-2 block text-body text-muted-fg"
+                htmlFor={preferenceId}
+              >
+                What should your brief focus on instead?
               </label>
               <Textarea
                 id={preferenceId}
-                maxLength={1000}
                 name="preference"
-                placeholder="Optional, for this inbox only"
+                maxLength={1000}
+                placeholder="Optional"
                 rows={3}
               />
-              <p className="text-caption text-muted-fg">
-                This item stays out of future briefs. Your original mail stays
-                in your inbox.
-              </p>
-              <Button disabled={busy} size="sm" type="submit">
-                Mark not important
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                onClick={() => {
+                  setFeedbackOpen(false);
+                }}
+                variant="ghost"
+              >
+                Cancel
               </Button>
-            </form>
-          </PopoverContent>
-        </Popover>
-      </div>
+              <Button type="submit" disabled={busy}>
+                Save feedback
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </article>
   );
 };

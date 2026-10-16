@@ -13,6 +13,8 @@ import {
   getDailyBrief,
   giveDailyBriefFeedback,
   loadDailyBriefMemoryContext,
+  prepareDailyBrief,
+  recordDailyBriefActivity,
   refreshDailyBrief,
 } from "../src/daily-brief";
 import type { assertAccessibleMailbox } from "../src/mailbox/service";
@@ -97,6 +99,12 @@ describe("Daily Brief authorization", () => {
     await expect(refreshDailyBrief({ context, input })).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
+    await expect(prepareDailyBrief({ context, input })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    await expect(
+      recordDailyBriefActivity({ context, input })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(
       configureDailyBrief({
         context,
