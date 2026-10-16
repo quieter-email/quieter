@@ -31,6 +31,8 @@ import {
 import {
   configureDailyBrief,
   markDailyBriefUrgentPending,
+  prepareDailyBrief,
+  recordDailyBriefActivity,
   refreshDailyBrief,
   runDueDailyBriefs,
 } from "../src/daily-brief";
@@ -227,6 +229,73 @@ describe.skipIf(state.databaseUrl === undefined)(
       expect(
         evaluated.some((candidate) => candidate.messageId === "routine")
       ).toBeFalsy();
+    });
+
+    test("pauses overdue and urgent work after inactivity and resumes on actual mailbox use", async () => {
+      const idleSince = new Date(Date.now() - 8 * 86_400_000);
+      await db
+        .update(dailyBriefSettings)
+        .set({
+          lastUsedAt: idleSince,
+          nextRunAt: new Date(Date.now() - 60_000),
+          scheduleEnabled: true,
+          urgentPending: true,
+        })
+        .where(eq(dailyBriefSettings.id, settingsId));
+      state.page.mockClear();
+      await expect(runDueDailyBriefs({ limit: 1 })).resolves.toMatchObject({
+        processed: 0,
+      });
+      expect(state.page).not.toHaveBeenCalled();
+      const inactive = await prepareDailyBrief({
+        context,
+        input: { ...input, onlyIfActive: true },
+      });
+      expect(inactive.settings.lastUsedAt).toBe(idleSince.toISOString());
+      expect(state.page).not.toHaveBeenCalled();
+      await recordDailyBriefActivity({ context, input });
+      await expect(runDueDailyBriefs({ limit: 1 })).resolves.toMatchObject({
+        processed: 1,
+      });
+      expect(state.page.mock.calls.at(-1)?.[0].input.mailboxId).toBe(mailboxId);
+    });
+
+    test("records use without re-enabling an explicit opt-out", async () => {
+      await db
+        .update(dailyBriefSettings)
+        .set({ enabled: false, lastUsedAt: null })
+        .where(eq(dailyBriefSettings.id, settingsId));
+      state.page.mockClear();
+      const view = await prepareDailyBrief({ context, input });
+      expect(view.settings.enabled).toBeFalsy();
+      expect(view.settings.lastUsedAt).not.toBeNull();
+      expect(state.page).not.toHaveBeenCalled();
+    });
+
+    test("does not enroll a mailbox through an all-inboxes Brief read", async () => {
+      await db
+        .delete(dailyBriefSettings)
+        .where(eq(dailyBriefSettings.id, settingsId));
+      state.page.mockClear();
+      const view = await prepareDailyBrief({
+        context,
+        input: { ...input, onlyIfActive: true },
+      });
+      expect(view.edition).toBeNull();
+      expect(view.settings.lastUsedAt).toBeNull();
+      const rows = await db
+        .select()
+        .from(dailyBriefSettings)
+        .where(eq(dailyBriefSettings.mailboxId, mailboxId));
+      expect(rows).toHaveLength(0);
+      expect(state.page).not.toHaveBeenCalled();
+      await recordDailyBriefActivity({ context, input });
+      const active = await prepareDailyBrief({
+        context,
+        input: { ...input, onlyIfActive: true },
+      });
+      expect(active.settings.enabled).toBeTruthy();
+      expect(active.edition).not.toBeNull();
     });
 
     test("retains older suppressions and preferences after more recent feedback", async () => {

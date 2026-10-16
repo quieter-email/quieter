@@ -277,7 +277,7 @@ const SidebarInboxSection = ({
             variant="ghost"
           >
             <HugeiconsIcon aria-hidden icon={News01Icon} strokeWidth={1.5} />
-            Daily Brief
+            Brief
           </SidebarNavItem>
         ) : null}
         <SidebarMailboxNav

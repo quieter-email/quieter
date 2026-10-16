@@ -57,4 +57,58 @@ describe("Daily Brief timezone transitions", () => {
       time: "02:30",
     });
   });
+
+  test("resolves a weekly local schedule across a daylight-saving gap", () => {
+    const run = nextDailyBriefRun({
+      cadence: "weekly",
+      localTime: "02:30",
+      now: new Date("2026-03-23T12:00:00Z"),
+      timeZone: "Europe/Berlin",
+      weekday: 0,
+    });
+    expect(dailyBriefLocalClock(run, "Europe/Berlin")).toMatchObject({
+      date: "2026-03-29",
+      time: "03:00",
+    });
+    const following = nextDailyBriefRun({
+      afterLocalDate: "2026-03-29",
+      cadence: "weekly",
+      localTime: "02:30",
+      now: run,
+      timeZone: "Europe/Berlin",
+      weekday: 0,
+    });
+    expect(dailyBriefLocalClock(following, "Europe/Berlin")).toMatchObject({
+      date: "2026-04-05",
+      time: "02:30",
+    });
+  });
+
+  test("chooses the next weekly occurrence after today's scheduled time", () => {
+    const run = nextDailyBriefRun({
+      cadence: "weekly",
+      localTime: "06:00",
+      now: new Date("2026-10-12T06:00:00Z"),
+      timeZone: "Pacific/Honolulu",
+      weekday: 0,
+    });
+    expect(dailyBriefLocalClock(run, "Pacific/Honolulu")).toMatchObject({
+      date: "2026-10-18",
+      time: "06:00",
+    });
+  });
+
+  test("includes midnight in the earliest timezone when the weekly run is several days away", () => {
+    const run = nextDailyBriefRun({
+      cadence: "weekly",
+      localTime: "00:00",
+      now: new Date("2026-10-12T06:00:00Z"),
+      timeZone: "Pacific/Kiritimati",
+      weekday: 0,
+    });
+    expect(dailyBriefLocalClock(run, "Pacific/Kiritimati")).toMatchObject({
+      date: "2026-10-18",
+      time: "00:00",
+    });
+  });
 });

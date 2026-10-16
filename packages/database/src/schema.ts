@@ -913,6 +913,7 @@ export const aiMemoryScopeConfig = pgTable(
 export const dailyBriefSettings = pgTable(
   "dailyBriefSettings",
   {
+    cadence: text("cadence").$type<"daily" | "weekly">(),
     createdAt: timestamp("createdAt").notNull(),
     editionId: text("editionId"),
     enabled: boolean("enabled").notNull().default(false),
@@ -921,6 +922,7 @@ export const dailyBriefSettings = pgTable(
     id: text("id").primaryKey(),
     lastAttemptAt: timestamp("lastAttemptAt"),
     lastError: text("lastError"),
+    lastUsedAt: timestamp("lastUsedAt"),
     leaseExpiresAt: timestamp("leaseExpiresAt"),
     leaseToken: text("leaseToken"),
     localTime: text("localTime").notNull().default("06:00"),
@@ -938,6 +940,7 @@ export const dailyBriefSettings = pgTable(
     userId: text("userId")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    weekday: integer("weekday"),
   },
   (table) => [
     unique("daily_brief_settings_mailbox_user_unique").on(

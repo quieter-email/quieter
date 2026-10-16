@@ -9,6 +9,7 @@ import { useNavigate } from "@tanstack/react-router";
 
 import { GmailMailboxDetailSections } from "#/features/settings/components/gmail-mailbox-detail-sections";
 import { GmailMailboxNameSettings } from "#/features/settings/components/gmail-mailbox-name-settings";
+import { MailboxBriefSettings } from "#/features/settings/components/mailbox-brief-settings";
 import { MailboxDetailGeneralSection } from "#/features/settings/components/mailbox-detail-general-section";
 import type {
   ManagedMailboxAccessModeInput,
@@ -124,6 +125,7 @@ export const MailboxDetailSettingsContent = ({
   const sections = [
     "general",
     ...(isGmail || isManagedManager ? ["signature", "intelligence"] : []),
+    ...(isGmail || mailbox.provider === "managed" ? ["brief"] : []),
     ...(isGmail ? ["connection"] : []),
     ...(isManagedManager ? ["access"] : []),
   ];
@@ -187,6 +189,10 @@ export const MailboxDetailSettingsContent = ({
             <MailboxSignatureSettings key={mailbox.id} mailbox={mailbox} />
           )}
 
+          {activeSection === "brief" && (
+            <MailboxBriefSettings key={mailbox.id} mailbox={mailbox} />
+          )}
+
           {isGmail &&
             (activeSection === "intelligence" ||
               activeSection === "connection") && (
@@ -220,7 +226,7 @@ export const MailboxDetailSettingsContent = ({
               />
             )}
 
-          {isManagedNonManager && (
+          {isManagedNonManager && activeSection === "general" && (
             <SettingsSection title="Mailbox settings">
               <SettingsCard className="p-6">
                 <p className="text-body text-fg">Manager access required</p>
@@ -233,33 +239,35 @@ export const MailboxDetailSettingsContent = ({
             </SettingsSection>
           )}
 
-          {isManagedManager && activeSection !== "signature" && (
-            <ManagedMailboxManagerSettingsSection
-              canMakePrivate={canMakePrivate}
-              detailManagedDivisions={detailManagedDivisions}
-              detailManagedMembers={detailManagedMembers}
-              emailAddress={mailbox.emailAddress}
-              hasAutomationAccess={hasAutomationAccess}
-              includeApiMessagesSwitchId={includeApiMessagesSwitchId}
-              mailboxId={mailbox.id}
-              managedMailboxQuery={managedMailboxQuery}
-              removeManagedMailboxDivisionGrantMutation={
-                removeManagedMailboxDivisionGrantMutation
-              }
-              removeManagedMailboxGrantMutation={
-                removeManagedMailboxGrantMutation
-              }
-              setGmailAutoLabelingMutation={setGmailAutoLabelingMutation}
-              setManagedMailboxAccessModeMutation={
-                setManagedMailboxAccessModeMutation
-              }
-              setManagedMailboxDivisionGrantMutation={
-                setManagedMailboxDivisionGrantMutation
-              }
-              setManagedMailboxGrantMutation={setManagedMailboxGrantMutation}
-              updateManagedMailboxMutation={updateManagedMailboxMutation}
-            />
-          )}
+          {isManagedManager &&
+            activeSection !== "signature" &&
+            activeSection !== "brief" && (
+              <ManagedMailboxManagerSettingsSection
+                canMakePrivate={canMakePrivate}
+                detailManagedDivisions={detailManagedDivisions}
+                detailManagedMembers={detailManagedMembers}
+                emailAddress={mailbox.emailAddress}
+                hasAutomationAccess={hasAutomationAccess}
+                includeApiMessagesSwitchId={includeApiMessagesSwitchId}
+                mailboxId={mailbox.id}
+                managedMailboxQuery={managedMailboxQuery}
+                removeManagedMailboxDivisionGrantMutation={
+                  removeManagedMailboxDivisionGrantMutation
+                }
+                removeManagedMailboxGrantMutation={
+                  removeManagedMailboxGrantMutation
+                }
+                setGmailAutoLabelingMutation={setGmailAutoLabelingMutation}
+                setManagedMailboxAccessModeMutation={
+                  setManagedMailboxAccessModeMutation
+                }
+                setManagedMailboxDivisionGrantMutation={
+                  setManagedMailboxDivisionGrantMutation
+                }
+                setManagedMailboxGrantMutation={setManagedMailboxGrantMutation}
+                updateManagedMailboxMutation={updateManagedMailboxMutation}
+              />
+            )}
 
           {isApi && (
             <SettingsSection title="Mailbox capabilities">

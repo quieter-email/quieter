@@ -3,11 +3,16 @@ import {
   dailyBriefInputs,
   getDailyBrief,
   giveDailyBriefFeedback,
+  prepareDailyBrief,
+  recordDailyBriefActivity,
   refreshDailyBrief,
 } from "../daily-brief";
 import { protectedProcedure } from "./base";
 
 export const dailyBriefRouter = {
+  activity: protectedProcedure
+    .input(dailyBriefInputs.activity)
+    .handler(recordDailyBriefActivity),
   configure: protectedProcedure
     .input(dailyBriefInputs.configure)
     .handler(configureDailyBrief),
@@ -18,6 +23,9 @@ export const dailyBriefRouter = {
     .route({ method: "GET" })
     .input(dailyBriefInputs.get)
     .handler(getDailyBrief),
+  prepare: protectedProcedure
+    .input(dailyBriefInputs.prepare)
+    .handler(prepareDailyBrief),
   refresh: protectedProcedure
     .input(dailyBriefInputs.refresh)
     .handler(refreshDailyBrief),
