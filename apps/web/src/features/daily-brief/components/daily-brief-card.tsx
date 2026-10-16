@@ -1,6 +1,10 @@
 "use client";
 
-import { MoreHorizontalIcon } from "@hugeicons/core-free-icons";
+import {
+  ArrowUpRight01Icon,
+  Mail01Icon,
+  MoreHorizontalIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { DailyBriefItem } from "@quieter/mail/daily-brief";
 import { Button } from "@quieter/ui/button";
@@ -56,19 +60,22 @@ export const DailyBriefCard = ({
   return (
     <article
       aria-label={item.title}
-      className="group relative grid grid-cols-[6px_minmax(0,1fr)_28px] gap-x-4 py-4 sm:gap-x-5"
+      className="group relative grid grid-cols-[8px_minmax(0,1fr)] gap-x-3.5 sm:gap-x-5 [&:nth-child(3n)]:text-q-orange [&:nth-child(3n+1)]:text-q-blue [&:nth-child(3n+2)]:text-q-cyan"
     >
-      <span aria-hidden className="mt-2 size-1.5 rounded-sm bg-fg/55" />
+      <span
+        aria-hidden
+        className="mt-2 size-2 rounded-sm bg-current ring-4 ring-current/10"
+      />
       <div className="min-w-0">
-        <h2 className="text-body leading-relaxed font-medium text-fg">
+        <h2 className="pr-7 text-body-lg leading-snug font-medium tracking-tight text-fg">
           {item.title}
         </h2>
-        <p className="mt-1 text-body leading-relaxed text-muted-fg">
+        <p className="mt-1.5 text-body leading-relaxed text-muted-fg">
           {item.summary}
         </p>
         <nav
           aria-label={`Emails for ${item.title}`}
-          className="mt-3 grid gap-0.5 border-l border-border/70 pl-3"
+          className="mt-3 overflow-hidden rounded-lg border border-current/15 bg-current/5"
         >
           {item.sources.map((source) => {
             const sender = source.fromName
@@ -78,34 +85,46 @@ export const DailyBriefCard = ({
               sender?.name || sender?.email || sender?.display;
             return (
               <div
-                className="relative min-w-0 before:absolute before:top-3.5 before:-left-3 before:w-2 before:border-t before:border-border/70"
+                className="min-w-0 border-t border-current/10 first:border-t-0"
                 key={source.messageId}
               >
                 <Button
                   aria-label={`Read ${source.subject || "email"}`}
-                  // oxlint-disable-next-line shadcn/no-restyle -- Source emails are compact text rows, without pill styling.
-                  className="h-auto min-h-7 w-full justify-start gap-x-3 rounded-sm px-1 py-1 text-left text-caption font-normal"
+                  // oxlint-disable-next-line shadcn/no-restyle -- Source emails share the topic accent and read as rows within one linked list.
+                  className="group/source h-auto min-h-9 w-full justify-start gap-x-2.5 rounded-none px-3 py-2 text-left text-caption font-normal text-inherit hover:bg-current/10 hover:text-inherit sm:gap-x-3"
                   onClick={() => {
                     onOpenSource(mailbox.id, source.messageId, source.threadId);
                   }}
                   size="sm"
                   variant="ghost"
                 >
-                  <span className="min-w-0 flex-1 truncate">
-                    {source.subject || "Email"}
-                  </span>
-                  {senderLabel ? (
-                    <span className="max-w-24 truncate text-muted-fg sm:max-w-36">
-                      {senderLabel}
+                  <HugeiconsIcon
+                    aria-hidden
+                    icon={Mail01Icon}
+                    className="size-3.5 opacity-70"
+                  />
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
+                    <span className="min-w-0 flex-1 truncate">
+                      {source.subject || "Email"}
                     </span>
-                  ) : null}
+                    {senderLabel ? (
+                      <span className="max-w-full truncate text-muted-fg sm:max-w-32">
+                        {senderLabel}
+                      </span>
+                    ) : null}
+                  </span>
+                  <HugeiconsIcon
+                    aria-hidden
+                    icon={ArrowUpRight01Icon}
+                    className="size-3.5 opacity-40 transition-opacity group-hover/source:opacity-100 group-focus-visible/source:opacity-100"
+                  />
                 </Button>
               </div>
             );
           })}
         </nav>
         {showMailbox ? (
-          <p className="mt-1.5 pl-4 text-caption text-muted-fg">
+          <p className="mt-2 text-caption text-muted-fg">
             {mailbox.displayName || mailbox.emailAddress}
           </p>
         ) : null}
@@ -116,7 +135,7 @@ export const DailyBriefCard = ({
             appearance="icon"
             aria-label={`Actions for ${item.title}`}
             // oxlint-disable-next-line shadcn/no-restyle -- Keep secondary actions quiet until hover or keyboard focus.
-            className="-mt-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 data-popup-open:opacity-100 max-sm:opacity-100"
+            className="absolute -top-1 -right-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 data-popup-open:opacity-100 max-sm:opacity-100"
             disabled={busy}
           >
             <HugeiconsIcon

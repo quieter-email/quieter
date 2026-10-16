@@ -7,6 +7,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { RouterOutputs } from "@quieter/orpc";
+import { Brand } from "@quieter/ui/brand";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -237,173 +238,193 @@ export const DailyBriefPanel = ({
         title="Brief"
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-3xl px-6 py-8 sm:px-12 sm:py-12">
-          <header className="mb-5 flex items-start justify-between gap-5 sm:mb-7">
-            <div>
-              <p className="text-caption text-muted-fg">
-                {combined
-                  ? "All inboxes"
-                  : source?.mailbox.displayName ||
-                    source?.mailbox.emailAddress ||
-                    "Inbox"}
-              </p>
-              <h1 className="mt-1 text-xl font-medium tracking-tight text-fg">
-                Your brief
-              </h1>
-            </div>
-            <div className="flex items-center gap-0.5">
-              <IconButtonTooltip label="Refresh brief">
-                <Button
-                  aria-label="Refresh brief"
-                  disabled={busy || enabledSources.length === 0}
-                  onClick={() => {
-                    void (async () => {
-                      for (const { mailbox } of enabledSources) {
-                        try {
-                          await refresh.mutateAsync({ mailboxId: mailbox.id });
-                        } catch {
-                          /* Each inbox surfaces its own error. */
-                        }
-                      }
-                    })();
-                  }}
-                  size="icon-sm"
-                  variant="ghost"
-                >
-                  <HugeiconsIcon
-                    aria-hidden
-                    icon={refresh.isPending ? Loading03Icon : RefreshIcon}
-                    className={cn({ "animate-spin": refresh.isPending })}
-                  />
-                </Button>
-              </IconButtonTooltip>
-              <DropdownMenu>
-                <IconButtonTooltip label="Brief options">
-                  <DropdownMenuTrigger
-                    appearance="icon"
-                    aria-label="Brief options"
-                  >
-                    <HugeiconsIcon
-                      aria-hidden
-                      icon={MoreHorizontalIcon}
-                      className="size-4"
-                    />
-                  </DropdownMenuTrigger>
-                </IconButtonTooltip>
-                <DropdownMenuContent align="end" size="compact">
-                  <DropdownMenuItem
-                    render={<Link to="/settings" search={settingsSearch} />}
-                  >
-                    Brief settings
-                  </DropdownMenuItem>
-                  {!combined &&
-                  source?.query.data?.settings.enabled === true ? (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        disabled={busy}
-                        onSelect={() => {
-                          const settings = source.query.data?.settings;
-                          if (settings) {
-                            configure.mutate({
-                              cadence: settings.cadence,
-                              enabled: false,
-                              localTime: settings.localTime,
-                              mailboxId: source.mailbox.id,
-                              scheduleEnabled: settings.scheduleEnabled,
-                              timeZone: settings.timeZone,
-                              weekday: settings.weekday,
-                            });
+        <div className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-8 sm:py-14">
+          <div className="overflow-hidden rounded-3xl border border-border-strong/45 bg-linear-to-br from-q-blue/8 via-bg-surface to-bg-surface p-5 shadow-elevation sm:p-9">
+            <header className="mb-6 sm:mb-9">
+              <div className="flex items-center justify-between gap-3">
+                <p className="flex min-w-0 items-center gap-2.5 text-caption text-muted-fg">
+                  <span aria-hidden className="size-4 shrink-0 text-q-cyan">
+                    <Brand />
+                  </span>
+                  <span className="truncate">
+                    {combined
+                      ? "All inboxes"
+                      : source?.mailbox.displayName ||
+                        source?.mailbox.emailAddress ||
+                        "Inbox"}
+                  </span>
+                </p>
+                <div className="flex items-center gap-0.5">
+                  <IconButtonTooltip label="Refresh brief">
+                    <Button
+                      aria-label="Refresh brief"
+                      disabled={busy || enabledSources.length === 0}
+                      onClick={() => {
+                        void (async () => {
+                          for (const { mailbox } of enabledSources) {
+                            try {
+                              await refresh.mutateAsync({
+                                mailboxId: mailbox.id,
+                              });
+                            } catch {
+                              /* Each inbox surfaces its own error. */
+                            }
                           }
-                        }}
+                        })();
+                      }}
+                      size="icon-sm"
+                      variant="ghost"
+                    >
+                      <HugeiconsIcon
+                        aria-hidden
+                        icon={refresh.isPending ? Loading03Icon : RefreshIcon}
+                        className={cn({ "animate-spin": refresh.isPending })}
+                      />
+                    </Button>
+                  </IconButtonTooltip>
+                  <DropdownMenu>
+                    <IconButtonTooltip label="Brief options">
+                      <DropdownMenuTrigger
+                        appearance="icon"
+                        aria-label="Brief options"
                       >
-                        Disable Brief for this mailbox
+                        <HugeiconsIcon
+                          aria-hidden
+                          icon={MoreHorizontalIcon}
+                          className="size-4"
+                        />
+                      </DropdownMenuTrigger>
+                    </IconButtonTooltip>
+                    <DropdownMenuContent align="end" size="compact">
+                      <DropdownMenuItem
+                        render={<Link to="/settings" search={settingsSearch} />}
+                      >
+                        Brief settings
                       </DropdownMenuItem>
-                    </>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </header>
-          {disabled ? (
-            <div className="py-10">
-              <p className="text-body text-muted-fg">
-                Brief is off for this mailbox.
+                      {!combined &&
+                      source?.query.data?.settings.enabled === true ? (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            disabled={busy}
+                            onSelect={() => {
+                              const settings = source.query.data?.settings;
+                              if (settings) {
+                                configure.mutate({
+                                  cadence: settings.cadence,
+                                  enabled: false,
+                                  localTime: settings.localTime,
+                                  mailboxId: source.mailbox.id,
+                                  scheduleEnabled: settings.scheduleEnabled,
+                                  timeZone: settings.timeZone,
+                                  weekday: settings.weekday,
+                                });
+                              }
+                            }}
+                          >
+                            Disable Brief for this mailbox
+                          </DropdownMenuItem>
+                        </>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <h1 className="text-title-md font-medium text-fg">
+                  Your brief
+                </h1>
+                {lastUpdated ? (
+                  <p className="text-caption text-muted-fg">
+                    {new Intl.DateTimeFormat(undefined, {
+                      day: "numeric",
+                      month: "long",
+                      weekday: "long",
+                    }).format(new Date(lastUpdated))}
+                  </p>
+                ) : null}
+              </div>
+            </header>
+            {disabled ? (
+              <div className="py-10">
+                <p className="text-body text-muted-fg">
+                  Brief is off for this mailbox.
+                </p>
+                <LinkButton
+                  className="mt-3"
+                  to="/settings"
+                  search={settingsSearch}
+                  size="sm"
+                  variant="secondary"
+                >
+                  Enable in settings
+                </LinkButton>
+              </div>
+            ) : null}
+            {!disabled && loading && items.length === 0 ? (
+              <output className="block py-10 text-body text-muted-fg">
+                Preparing your brief…
+              </output>
+            ) : null}
+            {failed ? (
+              <p className="mb-4 text-caption text-muted-fg">
+                Couldn’t update your brief. Try again in a moment.
               </p>
-              <LinkButton
-                className="mt-3"
-                to="/settings"
-                search={settingsSearch}
-                size="sm"
-                variant="secondary"
-              >
-                Enable in settings
-              </LinkButton>
+            ) : null}
+            {!disabled && !loading && !failed && items.length === 0 ? (
+              <p className="py-10 text-body text-muted-fg">
+                Nothing needs your attention right now.
+              </p>
+            ) : null}
+            <div className="grid gap-6 sm:gap-8">
+              {items.map(({ item, mailbox }) => (
+                <DailyBriefCard
+                  key={`${mailbox.id}:${item.id}`}
+                  item={item}
+                  mailbox={mailbox}
+                  showMailbox={combined}
+                  busy={busy}
+                  onOpenSource={onOpenSource}
+                  onFeedback={(action, preference) => {
+                    feedback.mutate({
+                      action,
+                      itemId: item.id,
+                      mailboxId: mailbox.id,
+                      preference,
+                      ...(action === "defer"
+                        ? {
+                            deferUntil: new Date(
+                              Date.now() + 3_600_000
+                            ).toISOString(),
+                          }
+                        : {}),
+                    });
+                  }}
+                  onPrepareDraft={() => {
+                    prepareDraft.mutate(
+                      { item, mailbox },
+                      {
+                        onSuccess: (draft) => {
+                          if (draft !== null) {
+                            onComposeDraftRequested(draft, mailbox.id);
+                          }
+                        },
+                      }
+                    );
+                  }}
+                />
+              ))}
             </div>
-          ) : null}
-          {!disabled && loading && items.length === 0 ? (
-            <output className="block py-10 text-body text-muted-fg">
-              Preparing your brief…
-            </output>
-          ) : null}
-          {failed ? (
-            <p className="mb-4 text-caption text-muted-fg">
-              Couldn’t update your brief. Try again in a moment.
-            </p>
-          ) : null}
-          {!disabled && !loading && !failed && items.length === 0 ? (
-            <p className="py-10 text-body text-muted-fg">
-              Nothing needs your attention right now.
-            </p>
-          ) : null}
-          <div className="divide-y divide-border/40">
-            {items.map(({ item, mailbox }) => (
-              <DailyBriefCard
-                key={`${mailbox.id}:${item.id}`}
-                item={item}
-                mailbox={mailbox}
-                showMailbox={combined}
-                busy={busy}
-                onOpenSource={onOpenSource}
-                onFeedback={(action, preference) => {
-                  feedback.mutate({
-                    action,
-                    itemId: item.id,
-                    mailboxId: mailbox.id,
-                    preference,
-                    ...(action === "defer"
-                      ? {
-                          deferUntil: new Date(
-                            Date.now() + 3_600_000
-                          ).toISOString(),
-                        }
-                      : {}),
-                  });
-                }}
-                onPrepareDraft={() => {
-                  prepareDraft.mutate(
-                    { item, mailbox },
-                    {
-                      onSuccess: (draft) => {
-                        if (draft !== null) {
-                          onComposeDraftRequested(draft, mailbox.id);
-                        }
-                      },
-                    }
-                  );
-                }}
-              />
-            ))}
+            {lastUpdated && !disabled ? (
+              <p className="mt-6 border-t border-border/60 pt-4 text-caption text-muted-fg sm:mt-8">
+                Updated{" "}
+                {new Intl.DateTimeFormat(undefined, {
+                  hour: "numeric",
+                  minute: "2-digit",
+                }).format(new Date(lastUpdated))}
+              </p>
+            ) : null}
           </div>
-          {lastUpdated && !disabled ? (
-            <p className="mt-6 text-caption text-muted-fg">
-              Updated{" "}
-              {new Intl.DateTimeFormat(undefined, {
-                hour: "numeric",
-                minute: "2-digit",
-              }).format(new Date(lastUpdated))}
-            </p>
-          ) : null}
         </div>
       </div>
     </WorkspaceSection>

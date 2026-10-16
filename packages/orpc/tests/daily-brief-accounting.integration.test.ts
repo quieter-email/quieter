@@ -379,6 +379,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         editionId: "existing-edition",
         enabled: true,
         id: randomUUID(),
+        lastUsedAt: now,
         mailboxId: gmailMailboxId,
         updatedAt: now,
         userId,
