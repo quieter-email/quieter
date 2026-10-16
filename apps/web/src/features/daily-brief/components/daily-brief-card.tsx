@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  ArrowUpRight01Icon,
-  Mail01Icon,
-  MoreHorizontalIcon,
-} from "@hugeicons/core-free-icons";
+import { MoreHorizontalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { DailyBriefItem } from "@quieter/mail/daily-brief";
 import { Button } from "@quieter/ui/button";
@@ -60,11 +56,11 @@ export const DailyBriefCard = ({
   return (
     <article
       aria-label={item.title}
-      className="group relative grid grid-cols-[8px_minmax(0,1fr)] gap-x-3.5 sm:gap-x-5 [&:nth-child(3n)]:text-q-orange [&:nth-child(3n+1)]:text-q-blue [&:nth-child(3n+2)]:text-q-cyan"
+      className="group relative grid grid-cols-[6px_minmax(0,1fr)] gap-x-4 sm:gap-x-5"
     >
       <span
         aria-hidden
-        className="mt-2 size-2 rounded-sm bg-current ring-4 ring-current/10"
+        className="mt-2 size-1.5 rounded-sm bg-q-blue/80 group-[:nth-child(3n)]:bg-q-yellow/75 group-[:nth-child(3n+2)]:bg-q-cyan/75"
       />
       <div className="min-w-0">
         <h2 className="pr-7 text-body-lg leading-snug font-medium tracking-tight text-fg">
@@ -75,7 +71,7 @@ export const DailyBriefCard = ({
         </p>
         <nav
           aria-label={`Emails for ${item.title}`}
-          className="mt-3 overflow-hidden rounded-lg border border-current/15 bg-current/5"
+          className="mt-3 grid gap-0.5 border-l border-border-strong/45 pl-3"
         >
           {item.sources.map((source) => {
             const sender = source.fromName
@@ -84,27 +80,19 @@ export const DailyBriefCard = ({
             const senderLabel =
               sender?.name || sender?.email || sender?.display;
             return (
-              <div
-                className="min-w-0 border-t border-current/10 first:border-t-0"
-                key={source.messageId}
-              >
+              <div className="min-w-0" key={source.messageId}>
                 <Button
                   aria-label={`Read ${source.subject || "email"}`}
-                  // oxlint-disable-next-line shadcn/no-restyle -- Source emails share the topic accent and read as rows within one linked list.
-                  className="group/source h-auto min-h-9 w-full justify-start gap-x-2.5 rounded-none px-3 py-2 text-left text-caption font-normal text-inherit hover:bg-current/10 hover:text-inherit sm:gap-x-3"
+                  // oxlint-disable-next-line shadcn/no-restyle -- Source emails are plain text links within the brief, without button backgrounds.
+                  className="group/source h-auto min-h-8 w-full justify-start rounded-sm px-0 py-1 text-left text-caption font-normal hover:bg-transparent"
                   onClick={() => {
                     onOpenSource(mailbox.id, source.messageId, source.threadId);
                   }}
                   size="sm"
                   variant="ghost"
                 >
-                  <HugeiconsIcon
-                    aria-hidden
-                    icon={Mail01Icon}
-                    className="size-3.5 opacity-70"
-                  />
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
-                    <span className="min-w-0 flex-1 truncate">
+                    <span className="min-w-0 flex-1 truncate text-fg/80 decoration-border-strong underline-offset-4 group-hover/source:underline group-focus-visible/source:underline">
                       {source.subject || "Email"}
                     </span>
                     {senderLabel ? (
@@ -113,11 +101,6 @@ export const DailyBriefCard = ({
                       </span>
                     ) : null}
                   </span>
-                  <HugeiconsIcon
-                    aria-hidden
-                    icon={ArrowUpRight01Icon}
-                    className="size-3.5 opacity-40 transition-opacity group-hover/source:opacity-100 group-focus-visible/source:opacity-100"
-                  />
                 </Button>
               </div>
             );
