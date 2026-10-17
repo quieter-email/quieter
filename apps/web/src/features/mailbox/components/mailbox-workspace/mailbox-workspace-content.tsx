@@ -475,7 +475,7 @@ const MailboxWorkspaceContentInner = ({
     );
   } else if (activeMailbox === null) {
     mailboxContent = (
-      <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+      <div className="absolute inset-0 min-h-0 min-w-0 overflow-hidden">
         <Suspense
           fallback={
             <WorkspaceSection centered className="lg:col-span-2">

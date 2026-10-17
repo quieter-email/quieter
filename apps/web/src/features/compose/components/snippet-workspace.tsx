@@ -2,7 +2,6 @@
 
 import {
   Add01Icon,
-  ArrowLeft01Icon,
   Delete02Icon,
   Loading03Icon,
   Search01Icon,
@@ -21,14 +20,20 @@ import {
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@quieter/ui/dialog";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
-import {
-  WorkspaceSection,
-  workspaceSectionVariants,
-} from "@quieter/ui/workspace-section";
+import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -65,7 +70,7 @@ export const SnippetWorkspace = ({
   const [search, setSearch] = useState("");
   const [name, setName] = useState("");
   const [bodyText, setBodyText] = useState("");
-  const [mobileEditorOpen, setMobileEditorOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const refreshSnippets = async () => {
     await queryClient.invalidateQueries({ queryKey: queryOptions.queryKey });
   };
@@ -80,6 +85,7 @@ export const SnippetWorkspace = ({
     onSuccess: async (snippet) => {
       await refreshSnippets();
       setEditingId(snippet.id);
+      setEditorOpen(false);
       toast.success("Snippet saved.");
     },
   });
@@ -93,6 +99,7 @@ export const SnippetWorkspace = ({
     },
     onSuccess: async () => {
       await refreshSnippets();
+      setEditorOpen(false);
       toast.success("Snippet updated.");
     },
   });
@@ -108,7 +115,7 @@ export const SnippetWorkspace = ({
       await refreshSnippets();
       setDeleteSnippet(null);
       setEditingId(null);
-      setMobileEditorOpen(false);
+      setEditorOpen(false);
       setName("");
       setBodyText("");
       toast.success("Snippet deleted.");
@@ -118,7 +125,9 @@ export const SnippetWorkspace = ({
   const normalizedSearch = search.trim().toLowerCase();
   const filteredSnippets = normalizedSearch
     ? snippets.filter((snippet) =>
-        snippet.name.toLowerCase().includes(normalizedSearch)
+        `${snippet.name} ${snippet.bodyText}`
+          .toLowerCase()
+          .includes(normalizedSearch)
       )
     : snippets;
   const currentSnippet =
@@ -155,14 +164,8 @@ export const SnippetWorkspace = ({
 
   return (
     <>
-      <WorkspaceSection
-        className={cn("lg:flex", {
-          flex: !mobileEditorOpen,
-          hidden: mobileEditorOpen,
-        })}
-        layout="cell"
-      >
-        <header className="@container p-4 sm:p-5">
+      <WorkspaceSection className="lg:inset-2">
+        <header className="@container border-b border-border p-3 sm:px-4">
           <div className="flex items-center gap-2">
             <IconButtonTooltip label="Open sidebar">
               <Button
@@ -184,7 +187,7 @@ export const SnippetWorkspace = ({
                 setEditingId(null);
                 setName("");
                 setBodyText("");
-                setMobileEditorOpen(true);
+                setEditorOpen(true);
               }}
               size="sm"
               type="button"
@@ -194,7 +197,7 @@ export const SnippetWorkspace = ({
             </Button>
           </div>
           <label
-            className="relative mt-4 block"
+            className="relative mt-3 block"
             htmlFor="snippet-workspace-search"
           >
             <span className="sr-only" id="snippet-workspace-search-label">
@@ -217,13 +220,13 @@ export const SnippetWorkspace = ({
             />
           </label>
         </header>
-        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-4 sm:px-4 sm:pb-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {filteredSnippets.map((snippet) => (
             <button
               aria-label={`Edit snippet ${snippet.name}`}
               aria-current={editingId === snippet.id ? "true" : undefined}
               className={cn(
-                "group flex w-full items-start gap-3 rounded-lg p-3 text-left transition-colors",
+                "group flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors",
                 {
                   "bg-muted text-fg": editingId === snippet.id,
                   "text-muted-fg hover:bg-muted/55 hover:text-fg":
@@ -235,24 +238,15 @@ export const SnippetWorkspace = ({
                 setEditingId(snippet.id);
                 setName(snippet.name);
                 setBodyText(snippet.bodyText);
-                setMobileEditorOpen(true);
+                setEditorOpen(true);
               }}
               type="button"
             >
-              <span
-                className={cn(
-                  "mt-1.5 size-1.5 shrink-0 rounded-full bg-muted-fg/30 transition-colors",
-                  {
-                    "bg-primary": editingId === snippet.id,
-                    "group-hover:bg-muted-fg/60": editingId !== snippet.id,
-                  }
-                )}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-body font-medium">
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-4">
+                <span className="block shrink-0 truncate text-body-sm font-medium sm:w-44">
                   {snippet.name}
                 </span>
-                <span className="mt-1 block truncate text-micro text-muted-fg">
+                <span className="block min-w-0 flex-1 truncate text-caption text-muted-fg">
                   {snippet.bodyText}
                 </span>
               </span>
@@ -262,83 +256,77 @@ export const SnippetWorkspace = ({
         </div>
       </WorkspaceSection>
 
-      <form
-        className={cn(workspaceSectionVariants({ layout: "cell" }), "lg:flex", {
-          flex: mobileEditorOpen,
-          hidden: !mobileEditorOpen,
-        })}
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!name.trim()) {
-            toast.error("Give this snippet a name.");
-            return;
-          }
-          if (!bodyText.trim()) {
-            toast.error("Add snippet text before saving.");
-            return;
-          }
-          const input = { bodyText, mailboxId, name: name.trim() };
-          if (editingId) {
-            updateMutation.mutate({ ...input, id: editingId });
-          } else {
-            createMutation.mutate(input);
-          }
-        }}
-      >
-        <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:gap-5 sm:p-5">
-          <div className="-mx-4 -mt-4 flex shrink-0 items-center gap-2 border-b border-border px-4 py-3 sm:-mx-5 sm:-mt-5 sm:px-5 lg:hidden">
-            <IconButtonTooltip label="Back to snippets">
-              <Button
-                aria-label="Back to snippets"
-                onClick={() => {
-                  setMobileEditorOpen(false);
-                }}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
+      <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
+        <DialogContent>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (isSaving) {
+                return;
+              }
+              if (!name.trim()) {
+                toast.error("Give this snippet a name.");
+                return;
+              }
+              if (!bodyText.trim()) {
+                toast.error("Add snippet text before saving.");
+                return;
+              }
+              const input = { bodyText, mailboxId, name: name.trim() };
+              if (editingId) {
+                updateMutation.mutate({ ...input, id: editingId });
+              } else {
+                createMutation.mutate(input);
+              }
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>
+                {editingId ? "Edit snippet" : "New snippet"}
+              </DialogTitle>
+            </DialogHeader>
+            <DialogBody spacing="3">
+              <label
+                className="flex flex-col gap-2 text-caption font-medium text-fg"
+                htmlFor="snippet-workspace-name"
               >
-                <HugeiconsIcon icon={ArrowLeft01Icon} />
-              </Button>
-            </IconButtonTooltip>
-            <p className="text-body font-medium tracking-tight text-fg">
-              {editingId ? "Edit snippet" : "New snippet"}
-            </p>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-4">
-            <label
-              className="flex flex-col gap-2 text-caption font-medium text-fg"
-              htmlFor="snippet-workspace-name"
-            >
-              Name
-              <Input
-                id="snippet-workspace-name"
-                onChange={(event) => {
-                  setName(event.currentTarget.value);
-                }}
-                placeholder="Snippet name"
-                value={name}
-              />
-            </label>
-            <label
-              className="flex min-h-0 flex-1 flex-col gap-2 text-caption font-medium text-fg"
-              htmlFor="snippet-workspace-text"
-            >
-              Text
-              <Textarea
-                id="snippet-workspace-text"
-                // oxlint-disable-next-line shadcn/no-restyle -- The text field fills the workspace panel.
-                className="min-h-48 flex-1 resize-none"
-                onChange={(event) => {
-                  setBodyText(event.currentTarget.value);
-                }}
-                placeholder="Write text to reuse in a message"
-                value={bodyText}
-              />
-            </label>
-            <div className="flex justify-end gap-2">
+                Name
+                <Input
+                  id="snippet-workspace-name"
+                  maxLength={120}
+                  required
+                  onChange={(event) => {
+                    setName(event.currentTarget.value);
+                  }}
+                  placeholder="Snippet name"
+                  value={name}
+                />
+              </label>
+              <label
+                className="flex flex-col gap-2 text-caption font-medium text-fg"
+                htmlFor="snippet-workspace-text"
+              >
+                Text
+                <Textarea
+                  id="snippet-workspace-text"
+                  maxLength={100_000}
+                  required
+                  rows={3}
+                  variant="composer"
+                  onChange={(event) => {
+                    setBodyText(event.currentTarget.value);
+                  }}
+                  placeholder="Write text to reuse in a message"
+                  value={bodyText}
+                />
+              </label>
+            </DialogBody>
+            <DialogFooter>
+              <DialogCloseButton>Cancel</DialogCloseButton>
               {currentSnippet ? (
                 <Button
                   onClick={() => {
+                    setEditorOpen(false);
                     setDeleteSnippet(currentSnippet);
                   }}
                   type="button"
@@ -348,7 +336,10 @@ export const SnippetWorkspace = ({
                   Delete
                 </Button>
               ) : null}
-              <Button disabled={isSaving} type="submit">
+              <Button
+                disabled={isSaving || !name.trim() || !bodyText.trim()}
+                type="submit"
+              >
                 {isSaving ? (
                   <HugeiconsIcon
                     className="animate-spin"
@@ -357,10 +348,10 @@ export const SnippetWorkspace = ({
                 ) : null}
                 Save
               </Button>
-            </div>
-          </div>
-        </div>
-      </form>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         onOpenChange={(nextOpen) => {
