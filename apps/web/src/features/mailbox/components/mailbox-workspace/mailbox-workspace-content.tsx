@@ -399,8 +399,8 @@ const MailboxWorkspaceContentInner = ({
       return;
     }
     const wide = window.matchMedia("(min-width: 80rem)").matches;
-    // oxlint-disable-next-line react/set-state-in-effect -- Keep the existing chat mounted when restoring sidebar mode.
-    setAssistantOpened(true);
+    // oxlint-disable-next-line react/set-state-in-effect -- Load the chat only when the restored sidebar is visible.
+    setAssistantOpened(wide && !closed);
     // oxlint-disable-next-line react/set-state-in-effect -- Restore the sidebar's initial visibility for the current viewport.
     setAssistantOpen(wide && !closed);
     assistantAutoCollapsedRef.current = !wide && !closed;
@@ -413,6 +413,7 @@ const MailboxWorkspaceContentInner = ({
         setAssistantOpen(false);
       } else if (wide && assistantAutoCollapsedRef.current) {
         assistantAutoCollapsedRef.current = false;
+        setAssistantOpened(true);
         setAssistantOpen(true);
       }
     }
