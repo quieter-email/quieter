@@ -11,6 +11,10 @@ import {
 } from "react";
 import type { PropsWithChildren } from "react";
 
+import { BRAND_THEMES } from "../../lib/brand-themes";
+
+export { BRAND_THEMES } from "../../lib/brand-themes";
+
 export const COLOR_MODE_STORAGE_KEY = "quieter-color-mode";
 
 export type ColorMode = "light" | "dark";
@@ -28,6 +32,8 @@ type ColorModeContextValue = {
   forcedTheme?: ColorMode;
   isMounted: boolean;
   setColorMode: (value: ConfigColorMode) => void;
+  themes: Record<ColorMode, string>;
+  setTheme: (name: string) => void;
 };
 
 const ColorModeContext = createContext<ColorModeContextValue | null>(null);
@@ -94,11 +100,25 @@ const getNextColorMode = (
   return "light";
 };
 
+const readStoredTheme = (mode: ColorMode) => {
+  const fallback = mode === "dark" ? "01-obsidian" : "02-paper";
+  try {
+    const stored = localStorage.getItem(`quieter-theme-${mode}`);
+    return (
+      BRAND_THEMES.find(
+        (theme) => theme.name === stored && theme.colorMode === mode
+      )?.name ?? fallback
+    );
+  } catch {
+    return fallback;
+  }
+};
+
 const colorModeScript = (
   initialColorMode: ConfigColorMode,
   forcedTheme?: ColorMode
 ) =>
-  `try{const stored=localStorage.getItem("${COLOR_MODE_STORAGE_KEY}");const configured=stored==="light"||stored==="dark"||stored==="system"?stored:"${initialColorMode}";const mode=${forcedTheme === undefined ? "false" : "true"}?"${forcedTheme ?? "light"}":configured==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):configured;document.documentElement.classList.add(mode);document.documentElement.style.colorScheme=mode}catch{}`;
+  `try{const stored=localStorage.getItem("${COLOR_MODE_STORAGE_KEY}");const configured=stored==="light"||stored==="dark"||stored==="system"?stored:"${initialColorMode}";const mode=${forcedTheme === undefined ? "false" : "true"}?"${forcedTheme ?? "light"}":configured==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):configured;document.documentElement.classList.add(mode);document.documentElement.style.colorScheme=mode;const themes=${JSON.stringify(BRAND_THEMES.map(({ name, colorMode }) => ({ colorMode, name })))};const saved=localStorage.getItem("quieter-theme-"+mode);if(!${forcedTheme !== undefined})document.documentElement.dataset.colorTheme=themes.find(t=>t.name===saved&&t.colorMode===mode)?.name||(mode==="dark"?"01-obsidian":"02-paper")}catch{}`;
 
 export const ColorModeProvider = ({
   children,
@@ -108,6 +128,10 @@ export const ColorModeProvider = ({
   const [configColorMode, setConfigColorMode] = useState<ConfigColorMode>(() =>
     readStoredColorMode(initialColorMode)
   );
+  const [themes, setThemes] = useState(() => ({
+    dark: readStoredTheme("dark"),
+    light: readStoredTheme("light"),
+  }));
   const isMounted = useSyncExternalStore(
     subscribeToHydration,
     getClientHydrationSnapshot,
@@ -123,6 +147,16 @@ export const ColorModeProvider = ({
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key === null ||
+        event.key === "quieter-theme-light" ||
+        event.key === "quieter-theme-dark"
+      ) {
+        setThemes({
+          dark: readStoredTheme("dark"),
+          light: readStoredTheme("light"),
+        });
+      }
       if (
         event.key === COLOR_MODE_STORAGE_KEY &&
         isConfigColorMode(event.newValue)
@@ -140,7 +174,12 @@ export const ColorModeProvider = ({
     document.documentElement.classList.remove("light", "dark");
     document.documentElement.classList.add(colorMode);
     document.documentElement.style.colorScheme = colorMode;
-  }, [colorMode]);
+    if (forcedTheme) {
+      delete document.documentElement.dataset.colorTheme;
+    } else {
+      document.documentElement.dataset.colorTheme = themes[colorMode];
+    }
+  }, [colorMode, forcedTheme, themes]);
 
   const setColorMode = useCallback((value: ConfigColorMode) => {
     try {
@@ -150,6 +189,23 @@ export const ColorModeProvider = ({
     }
     setConfigColorMode(value);
   }, []);
+
+  const setTheme = useCallback(
+    (name: string) => {
+      const theme = BRAND_THEMES.find((option) => option.name === name);
+      if (!theme) {
+        return;
+      }
+      try {
+        localStorage.setItem(`quieter-theme-${theme.colorMode}`, name);
+      } catch {
+        /* The preference remains available for this session. */
+      }
+      setThemes((current) => ({ ...current, [theme.colorMode]: name }));
+      setColorMode(theme.colorMode);
+    },
+    [setColorMode]
+  );
 
   const cycleColorMode = useCallback(() => {
     const next = getNextColorMode(configColorMode);
@@ -164,6 +220,8 @@ export const ColorModeProvider = ({
       forcedTheme,
       isMounted,
       setColorMode,
+      setTheme,
+      themes,
     }),
     [
       colorMode,
@@ -172,6 +230,8 @@ export const ColorModeProvider = ({
       forcedTheme,
       isMounted,
       setColorMode,
+      themes,
+      setTheme,
     ]
   );
 

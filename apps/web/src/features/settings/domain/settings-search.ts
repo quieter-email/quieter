@@ -19,9 +19,10 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Account",
   },
   {
-    description: "Preferences / Color mode",
+    description: "Preferences / Appearance",
     id: "theme",
-    keywords: "dark mode light theme colors",
+    keywords:
+      "dark mode light theme colors obsidian paper atmosphere porcelain blue hour aurora ember lilac haze silver sand caustic eclipse",
     scope: "personal",
     section: "color-mode",
     tab: "appearance",
