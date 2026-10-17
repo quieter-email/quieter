@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@quieter/ui/select";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
+import { ThemePicker } from "@quieter/ui/theme-picker";
 
 import { ConsentPreferencesLink } from "#/components/consent-preferences-link";
 import { useKeyboardShortcuts } from "#/features/hotkeys/components/keyboard-shortcuts-context";
@@ -49,7 +50,7 @@ export const PreferencesSettingsPanel = () => {
   const { openKeyboardShortcuts } = useKeyboardShortcuts();
   return (
     <div className="space-y-10">
-      <SettingsSection title="Interface">
+      <SettingsSection title="Appearance">
         <SettingsRows>
           <SettingsRow
             action={
@@ -88,6 +89,10 @@ export const PreferencesSettingsPanel = () => {
             title="Color mode"
           >
             Choose how Quieter looks on this device.
+          </SettingsRow>
+          <SettingsRow action={<ThemePicker />} title="Theme">
+            Pick a color palette. Your light and dark choices are remembered on
+            this device.
           </SettingsRow>
           <SettingsRow
             action={

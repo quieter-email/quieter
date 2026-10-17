@@ -207,6 +207,164 @@
   );
 }
 
+.theme-swatch[data-color-theme="dark"] {
+  --theme-base: oklch(0.155 0.003 264);
+  --theme-light: oklch(0.24 0.003 264);
+  --theme-accent: oklch(0.29 0.003 264);
+  --theme-ink: oklch(1 0.002 264);
+}
+
+.theme-swatch[data-color-theme="light"] {
+  --theme-base: oklch(0.91 0.002 264);
+  --theme-light: oklch(0.975 0.002 264);
+  --theme-accent: oklch(0.85 0.002 264);
+  --theme-ink: oklch(0.15 0.002 264);
+}
+
+/* Brand palettes share the source colors used by the logo treatments. */
+:root[data-color-theme],
+.theme-swatch[data-color-theme] {
+  --brand-bg: var(--theme-base);
+  --auth-visual-bg: var(--theme-base);
+  --bg: var(--theme-base);
+  --fg: var(--theme-ink);
+  --bg-raised: color-mix(in srgb, var(--theme-base), var(--theme-ink) 5%);
+  --bg-surface: color-mix(in srgb, var(--theme-base), var(--theme-ink) 8%);
+  --control: var(--bg-raised);
+  --control-hover: color-mix(in srgb, var(--theme-base), var(--theme-ink) 12%);
+  --control-active: color-mix(in srgb, var(--theme-base), var(--theme-ink) 18%);
+  --switch-track: var(--control-active);
+  --switch-thumb: var(--primary);
+  --card: var(--bg-surface);
+  --card-fg: var(--fg);
+  --popover: var(--bg-raised);
+  --popover-fg: var(--fg);
+  --primary: var(--theme-ink);
+  --primary-fg: var(--theme-base);
+  --secondary: var(--control-hover);
+  --secondary-fg: var(--fg);
+  --muted: var(--control-hover);
+  --muted-fg: color-mix(in srgb, var(--theme-ink) 65%, var(--theme-base));
+  --accent: var(--control-hover);
+  --accent-fg: var(--fg);
+  --border: color-mix(in srgb, var(--theme-ink) 14%, var(--theme-base));
+  --border-strong: color-mix(in srgb, var(--theme-ink) 25%, var(--theme-base));
+  --input: var(--control);
+  --ring: color-mix(in srgb, var(--theme-ink) 60%, var(--theme-base));
+  --scrollbar-thumb: var(--control-active);
+  --chart-1: var(--theme-ink);
+  --chart-2: color-mix(in srgb, var(--theme-ink), var(--theme-base) 15%);
+  --chart-3: color-mix(in srgb, var(--theme-ink), var(--theme-base) 30%);
+  --chart-4: color-mix(in srgb, var(--theme-ink), var(--theme-base) 45%);
+  --chart-5: color-mix(in srgb, var(--theme-ink), var(--theme-base) 60%);
+  --canvas-glow: radial-gradient(
+    ellipse at 6% 110%,
+    color-mix(in srgb, var(--theme-accent) 12%, transparent),
+    transparent 70%
+  );
+  --panel-gradient: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--theme-base), var(--theme-ink) 6%),
+    color-mix(in srgb, var(--theme-base), var(--theme-ink) 3%)
+  );
+}
+
+:root[data-color-theme="01-obsidian"],
+.theme-swatch[data-color-theme="01-obsidian"] {
+  --theme-base: rgb(14 15 16);
+  --theme-light: rgb(14 15 16);
+  --theme-accent: rgb(14 15 16);
+  --theme-ink: #eeeef0;
+}
+
+:root[data-color-theme="02-paper"],
+.theme-swatch[data-color-theme="02-paper"] {
+  --theme-base: rgb(238 238 240);
+  --theme-light: rgb(238 238 240);
+  --theme-accent: rgb(238 238 240);
+  --theme-ink: #0e0f10;
+}
+
+:root[data-color-theme="03-atmosphere"],
+.theme-swatch[data-color-theme="03-atmosphere"] {
+  --theme-base: rgb(9 12 17);
+  --theme-light: rgb(128 146 164);
+  --theme-accent: rgb(29 55 97);
+  --theme-ink: #eeeef0;
+}
+
+:root[data-color-theme="04-porcelain"],
+.theme-swatch[data-color-theme="04-porcelain"] {
+  --theme-base: rgb(230 231 233);
+  --theme-light: rgb(254 254 252);
+  --theme-accent: rgb(154 169 186);
+  --theme-ink: #0e0f10;
+}
+
+:root[data-color-theme="05-blue-hour"],
+.theme-swatch[data-color-theme="05-blue-hour"] {
+  --theme-base: rgb(5 13 35);
+  --theme-light: rgb(85 148 218);
+  --theme-accent: rgb(18 53 132);
+  --theme-ink: #eeeef0;
+}
+
+:root[data-color-theme="06-aurora"],
+.theme-swatch[data-color-theme="06-aurora"] {
+  --theme-base: rgb(5 19 22);
+  --theme-light: rgb(108 192 167);
+  --theme-accent: rgb(26 72 107);
+  --theme-ink: #eeeef0;
+}
+
+:root[data-color-theme="07-ember"],
+.theme-swatch[data-color-theme="07-ember"] {
+  --theme-base: rgb(22 11 12);
+  --theme-light: rgb(193 130 96);
+  --theme-accent: rgb(97 35 31);
+  --theme-ink: #eeeef0;
+}
+
+:root[data-color-theme="08-lilac"],
+.theme-swatch[data-color-theme="08-lilac"] {
+  --theme-base: rgb(224 222 233);
+  --theme-light: rgb(254 246 240);
+  --theme-accent: rgb(160 149 187);
+  --theme-ink: #0e0f10;
+}
+
+:root[data-color-theme="09-silver"],
+.theme-swatch[data-color-theme="09-silver"] {
+  --theme-base: rgb(12 15 19);
+  --theme-light: rgb(131 141 151);
+  --theme-accent: rgb(40 49 62);
+  --theme-ink: #eeeef0;
+}
+
+:root[data-color-theme="10-sand"],
+.theme-swatch[data-color-theme="10-sand"] {
+  --theme-base: rgb(229 222 210);
+  --theme-light: rgb(253 248 236);
+  --theme-accent: rgb(177 153 130);
+  --theme-ink: #28231f;
+}
+
+:root[data-color-theme="11-caustic"],
+.theme-swatch[data-color-theme="11-caustic"] {
+  --theme-base: rgb(6 18 30);
+  --theme-light: rgb(108 182 207);
+  --theme-accent: rgb(21 54 74);
+  --theme-ink: #eeeef0;
+}
+
+:root[data-color-theme="12-eclipse"],
+.theme-swatch[data-color-theme="12-eclipse"] {
+  --theme-base: rgb(10 11 14);
+  --theme-light: rgb(155 164 190);
+  --theme-accent: rgb(40 45 68);
+  --theme-ink: #eeeef0;
+}
+
 @theme inline {
   --color-brand-bg: var(--brand-bg);
   --color-auth-visual-bg: var(--auth-visual-bg);
