@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
+import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -35,21 +35,6 @@ export const settingsSurfaceVariants = cva("", {
     },
   },
 });
-
-export const SettingsBackButton = ({
-  children,
-  className,
-  onClick,
-}: {
-  children: ReactNode;
-  className?: string;
-  onClick: () => void;
-}) => (
-  <Button className={className} onClick={onClick} size="sm" variant="ghost">
-    <HugeiconsIcon aria-hidden className="size-4" icon={ArrowLeft01Icon} />
-    {children}
-  </Button>
-);
 
 export const SettingsPageHeader = ({
   action,
@@ -88,14 +73,9 @@ export const SettingsSection = ({
   description?: ReactNode;
   title?: string;
 }) => {
-  const { ref, selected } = useSettingsAnchor(title ?? "");
+  const { ref } = useSettingsAnchor(title ?? "");
   return (
-    <section
-      ref={ref}
-      className={cn("space-y-4", {
-        "rounded-lg ring-2 ring-ring ring-offset-4 ring-offset-bg": selected,
-      })}
-    >
+    <section ref={ref} className="space-y-4">
       {((title ?? "") !== "" ||
         (description !== undefined && description !== null)) && (
         <div>

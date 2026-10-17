@@ -48,6 +48,7 @@ import { Link } from "@tiptap/extension-link";
 import { Placeholder } from "@tiptap/extension-placeholder";
 import { Underline } from "@tiptap/extension-underline";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
+import { BubbleMenu } from "@tiptap/react/menus";
 import { StarterKit } from "@tiptap/starter-kit";
 import {
   createContext,
@@ -361,6 +362,18 @@ export const ComposeEditor = ({
   return (
     <ComposeEditorContext value={contextValue}>
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+      {editor && disabled !== true && !recording && !transcribing ? (
+        <BubbleMenu
+          editor={editor}
+          appendTo={() => window.document.body}
+          className="z-50"
+          options={{ offset: 6, placement: "top", shift: { padding: 8 } }}
+          updateDelay={0}
+        >
+          {/* oxlint-disable-next-line no-use-before-define -- The toolbar renders after module initialization. */}
+          <ComposeEditorToolbar chrome="selection" />
+        </BubbleMenu>
+      ) : null}
       <input
         accept="image/*"
         aria-label="Insert image"
@@ -539,7 +552,7 @@ export const ComposeEditorToolbar = ({
   trailing,
 }: {
   /** `footer` seats the toolbar as the composer sheet's own band, not a floating bar. */
-  chrome?: "default" | "footer";
+  chrome?: "default" | "footer" | "selection";
   className?: string;
   leading?: ReactNode;
   trailing?: ReactNode;
@@ -641,26 +654,32 @@ export const ComposeEditorToolbar = ({
 
   const formattingControls = (
     <ToolbarGroup>
-      {formatActions.map((action) => (
-        <IconButtonTooltip key={action.id} label={action.label}>
-          <ToolbarButton
-            aria-label={action.label}
-            aria-pressed={action.active}
-            disabled={disabled || action.disabled}
-            onClick={() => {
-              action.onClick();
-            }}
-            onMouseDown={(event) => {
-              event.preventDefault();
-            }}
-            size="icon"
-            type="button"
-            variant={action.active ? "selected" : undefined}
-          >
-            <HugeiconsIcon className="size-4" icon={action.icon} />
-          </ToolbarButton>
-        </IconButtonTooltip>
-      ))}
+      {formatActions
+        .filter(
+          (action) =>
+            chrome !== "selection" ||
+            ["bold", "italic", "underline", "bullet-list"].includes(action.id)
+        )
+        .map((action) => (
+          <IconButtonTooltip key={action.id} label={action.label}>
+            <ToolbarButton
+              aria-label={action.label}
+              aria-pressed={action.active}
+              disabled={disabled || action.disabled}
+              onClick={() => {
+                action.onClick();
+              }}
+              onMouseDown={(event) => {
+                event.preventDefault();
+              }}
+              size={chrome === "selection" ? "icon-sm" : "icon"}
+              type="button"
+              variant={action.active ? "selected" : undefined}
+            >
+              <HugeiconsIcon className="size-4" icon={action.icon} />
+            </ToolbarButton>
+          </IconButtonTooltip>
+        ))}
     </ToolbarGroup>
   );
 
@@ -703,13 +722,15 @@ export const ComposeEditorToolbar = ({
 
   return (
     <Toolbar
+      size={chrome === "selection" ? "compact" : "default"}
       className={cn(
         // oxlint-disable-next-line shadcn/no-restyle -- Composer bar keeps its control-surface metrics.
-        "w-full min-w-0 shrink-0 rounded-md border-border bg-control",
+        "min-w-0 shrink-0 rounded-md border-border bg-control",
         {
           // oxlint-disable-next-line shadcn/no-restyle -- Composer footer keeps its attached-bar metrics.
           "min-h-12 gap-1.5 rounded-none border-0 border-t border-border bg-control px-3 py-2 shadow-none @max-2xl:flex-wrap":
             chrome === "footer",
+          "w-full": chrome !== "selection",
         },
         className
       )}
@@ -719,18 +740,20 @@ export const ComposeEditorToolbar = ({
       )}
       <div
         className={cn({
-          contents: chrome === "default",
+          contents: chrome !== "footer",
           "flex min-w-0 shrink-0 items-center gap-1 @max-2xl:order-last @max-2xl:w-full @max-2xl:overflow-x-auto [&>*]:shrink-0":
             chrome === "footer",
         })}
       >
         {formattingControls}
-        <ToolbarSeparator />
-        {historyControls}
+        {chrome === "selection" ? null : <ToolbarSeparator />}
+        {chrome === "selection" ? null : historyControls}
         {onCreateSnippet && toolbarState?.selectedText.trim() ? (
           <IconButtonTooltip label="Save selected text as a snippet">
             <ToolbarButton
+              aria-label="Save selected text as a snippet"
               disabled={disabled}
+              size={chrome === "selection" ? "icon-sm" : "default"}
               onClick={() => {
                 onCreateSnippet(toolbarState.selectedText);
               }}
@@ -740,7 +763,7 @@ export const ComposeEditorToolbar = ({
               type="button"
             >
               <HugeiconsIcon icon={NoteIcon} />
-              Save snippet
+              {chrome === "selection" ? null : "Save snippet"}
             </ToolbarButton>
           </IconButtonTooltip>
         ) : null}

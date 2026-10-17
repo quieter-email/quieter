@@ -13,8 +13,11 @@ import type { MailUpdate } from "@quieter/mail/updates";
 import { reportError } from "@quieter/observability";
 import { and, eq, isNull } from "drizzle-orm";
 
-export const listMailUpdateRecipients = async (mailboxId: string) => {
-  const [selected] = await db
+export const listMailUpdateRecipients = async (
+  mailboxId: string,
+  database: Pick<typeof db, "select"> = db
+) => {
+  const [selected] = await database
     .select()
     .from(mailbox)
     .where(eq(mailbox.id, mailboxId))
@@ -31,7 +34,7 @@ export const listMailUpdateRecipients = async (mailboxId: string) => {
     return [];
   }
   const [direct, division, owners] = await Promise.all([
-    db
+    database
       .select({ userId: member.userId })
       .from(mailboxGrant)
       .innerJoin(
@@ -42,7 +45,7 @@ export const listMailUpdateRecipients = async (mailboxId: string) => {
         )
       )
       .where(eq(mailboxGrant.mailboxId, mailboxId)),
-    db
+    database
       .select({ userId: member.userId })
       .from(mailboxDivisionGrant)
       .innerJoin(mailbox, eq(mailbox.id, mailboxDivisionGrant.mailboxId))
@@ -64,7 +67,7 @@ export const listMailUpdateRecipients = async (mailboxId: string) => {
         )
       ),
     selected.managedOwnerUserId
-      ? db
+      ? database
           .select({ userId: member.userId })
           .from(member)
           .where(
@@ -102,7 +105,10 @@ export const createMailUpdateConnection = async (userId: string) => {
 };
 
 // Delivery is a hint. A committed mail operation remains successful if broadcasting fails.
-export const publishMailUpdate = async (input: Omit<MailUpdate, "eventId">) => {
+export const publishMailUpdate = async (
+  input: Omit<MailUpdate, "eventId">,
+  options?: { recipientUserIds: readonly string[] }
+) => {
   const base = serverEnv.MAIL_UPDATES_URL ?? serverEnv.GMAIL_LIVE_SYNC_URL;
   const secret = serverEnv.GMAIL_LIVE_SYNC_TOKEN_SECRET;
   if (!base || !secret) {
@@ -113,22 +119,34 @@ export const publishMailUpdate = async (input: Omit<MailUpdate, "eventId">) => {
     url.protocol = url.protocol === "wss:" ? "https:" : "http:";
     url.pathname = "/mail/events";
     url.search = "";
-    const body = JSON.stringify({
-      event: { ...input, eventId: crypto.randomUUID() },
-      expiresAt: Date.now() + 30_000,
-      purpose: "mail-event",
-    });
-    const response = await fetch(url, {
-      body,
-      headers: {
-        "content-type": "application/json",
-        "x-mail-signature": await signMailPayload(body, secret),
-      },
-      method: "POST",
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!response.ok) {
-      throw new Error("Mail update delivery failed.");
+    const event = { ...input, eventId: crypto.randomUUID() };
+    const recipients =
+      options === undefined
+        ? undefined
+        : [...new Set(options.recipientUserIds)];
+    for (let offset = 0; offset < (recipients?.length ?? 1); offset += 100) {
+      try {
+        const body = JSON.stringify({
+          event,
+          expiresAt: Date.now() + 30_000,
+          purpose: "mail-event",
+          recipientUserIds: recipients?.slice(offset, offset + 100),
+        });
+        const response = await fetch(url, {
+          body,
+          headers: {
+            "content-type": "application/json",
+            "x-mail-signature": await signMailPayload(body, secret),
+          },
+          method: "POST",
+          signal: AbortSignal.timeout(3000),
+        });
+        if (!response.ok) {
+          throw new Error("Mail update delivery failed.");
+        }
+      } catch (error) {
+        reportError(error, { boundary: "mail-updates" });
+      }
     }
   } catch (error) {
     reportError(error, { boundary: "mail-updates" });

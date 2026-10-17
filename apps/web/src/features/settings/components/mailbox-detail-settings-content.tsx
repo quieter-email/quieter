@@ -18,6 +18,7 @@ import type {
   ManagedMailboxUpdateInput,
   SettingsMutation,
 } from "#/features/settings/components/mailbox-detail-mutation-types";
+import { MailboxRemovalSettings } from "#/features/settings/components/mailbox-removal-settings";
 import { MailboxSignatureSettings } from "#/features/settings/components/mailbox-signature-settings";
 import {
   getMailboxDisplayTitle,
@@ -44,6 +45,7 @@ type ManagedMailboxQuery = {
 export const MailboxDetailSettingsContent = ({
   canMakePrivate,
   defaultMailboxId,
+  deleteManagedMailboxMutation,
   detailGroupName,
   detailManagedDivisions,
   detailManagedMembers,
@@ -68,6 +70,7 @@ export const MailboxDetailSettingsContent = ({
 }: {
   canMakePrivate: boolean;
   defaultMailboxId: string | null;
+  deleteManagedMailboxMutation: SettingsMutation<{ mailboxId: string }>;
   detailGroupName: string | undefined;
   detailManagedDivisions: { id: string; name: string }[];
   detailManagedMembers: {
@@ -227,6 +230,28 @@ export const MailboxDetailSettingsContent = ({
           }
           setManagedMailboxGrantMutation={setManagedMailboxGrantMutation}
           updateManagedMailboxMutation={updateManagedMailboxMutation}
+        />
+      )}
+
+      {isManagedManager && (
+        <MailboxRemovalSettings
+          key={mailbox.id}
+          emailAddress={mailbox.emailAddress}
+          isPending={deleteManagedMailboxMutation.isPending}
+          kind="managed"
+          onRemove={() => {
+            deleteManagedMailboxMutation.mutate(
+              { mailboxId: mailbox.id },
+              {
+                onError: (error) => {
+                  toastError(error, {
+                    boundary: "mailbox-settings",
+                    fallback: "Could not delete mailbox.",
+                  });
+                },
+              }
+            );
+          }}
         />
       )}
 

@@ -380,26 +380,30 @@ const MailboxWorkspaceContentInner = ({
     messageId: string;
   } | null>(null);
   const pendingKeyboardOpenRef = useRef(false);
-  const [assistantSidebar, setAssistantSidebar] = useState(false);
+  const [assistantSidebar, setAssistantSidebar] = useState(true);
   const [assistantNarrow, setAssistantNarrow] = useState(false);
   const assistantAutoCollapsedRef = useRef(false);
   useLayoutEffect(() => {
+    let floating = false;
+    let closed = false;
     try {
-      if (localStorage.getItem("quieter:assistant-mode") === "sidebar") {
-        const closed =
-          localStorage.getItem("quieter:assistant-sidebar-closed") === "true";
-        const wide = window.matchMedia("(min-width: 80rem)").matches;
-        // oxlint-disable-next-line react/set-state-in-effect -- Restore the optional browser preference before paint.
-        setAssistantSidebar(true);
-        // oxlint-disable-next-line react/set-state-in-effect -- Keep the existing chat mounted when restoring sidebar mode.
-        setAssistantOpened(true);
-        // oxlint-disable-next-line react/set-state-in-effect -- Restore the sidebar's initial visibility for the current viewport.
-        setAssistantOpen(wide && !closed);
-        assistantAutoCollapsedRef.current = !wide && !closed;
-      }
+      floating = localStorage.getItem("quieter:assistant-mode") === "floating";
+      closed =
+        localStorage.getItem("quieter:assistant-sidebar-closed") === "true";
     } catch {
-      // Floating mode remains available when storage is disabled.
+      // Use the default sidebar layout when storage is unavailable.
     }
+    if (floating) {
+      // oxlint-disable-next-line react/set-state-in-effect -- Restore the optional browser preference before paint.
+      setAssistantSidebar(false);
+      return;
+    }
+    const wide = window.matchMedia("(min-width: 80rem)").matches;
+    // oxlint-disable-next-line react/set-state-in-effect -- Load the chat only when the restored sidebar is visible.
+    setAssistantOpened(wide && !closed);
+    // oxlint-disable-next-line react/set-state-in-effect -- Restore the sidebar's initial visibility for the current viewport.
+    setAssistantOpen(wide && !closed);
+    assistantAutoCollapsedRef.current = !wide && !closed;
   }, []);
   const updateAssistantViewport = useEffectEvent((wide: boolean) => {
     setAssistantNarrow(!wide);
@@ -409,6 +413,7 @@ const MailboxWorkspaceContentInner = ({
         setAssistantOpen(false);
       } else if (wide && assistantAutoCollapsedRef.current) {
         assistantAutoCollapsedRef.current = false;
+        setAssistantOpened(true);
         setAssistantOpen(true);
       }
     }
@@ -470,7 +475,7 @@ const MailboxWorkspaceContentInner = ({
     );
   } else if (activeMailbox === null) {
     mailboxContent = (
-      <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,34%)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+      <div className="absolute inset-0 min-h-0 min-w-0 overflow-hidden">
         <Suspense
           fallback={
             <WorkspaceSection centered className="lg:col-span-2">

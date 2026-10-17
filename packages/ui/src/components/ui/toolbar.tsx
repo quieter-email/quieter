@@ -9,11 +9,18 @@ import { cn } from "../../lib/cn";
 
 export const Toolbar = ({
   className,
+  size = "default",
   ...props
-}: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Root>) => (
+}: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Root> & {
+  size?: "default" | "compact";
+}) => (
   <ToolbarPrimitive.Root
     className={cn(
-      "inline-flex min-h-10 items-center gap-1 rounded-lg border border-border bg-bg p-1 shadow-sm squircle",
+      "inline-flex items-center rounded-lg border border-border bg-bg shadow-sm squircle",
+      {
+        "min-h-10 gap-1 p-1": size === "default",
+        "min-h-8 gap-0.5 p-0.5": size === "compact",
+      },
       className
     )}
     {...props}
@@ -41,6 +48,7 @@ const toolbarButtonVariants = cva(
       size: {
         default: "",
         icon: "size-8 p-0",
+        "icon-sm": "size-7 p-0",
       },
       variant: {
         default: "",

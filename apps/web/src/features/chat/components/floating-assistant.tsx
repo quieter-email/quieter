@@ -263,7 +263,7 @@ export const FloatingAssistant = ({
           !sidebar,
         "relative flex min-h-0 shrink-0 flex-col p-1.5": sidebar,
         "w-12": sidebar && (!open || narrow),
-        "w-[400px]": sidebar && open && !narrow,
+        "w-[clamp(20rem,26vw,25rem)]": sidebar && open && !narrow,
       })}
       ref={boundsRef}
     >
@@ -507,7 +507,7 @@ export const FloatingAssistant = ({
                     aria-label="Move assistant"
                     data-assistant-drag-handle
                     // oxlint-disable-next-line shadcn/no-restyle -- Dedicated grip keeps drag gestures away from conversation controls.
-                    className="cursor-grab touch-none active:cursor-grabbing"
+                    className="touch-none active:cursor-grabbing"
                     size="icon"
                     variant="ghost"
                     onPointerDown={startDrag}
@@ -733,7 +733,7 @@ export const FloatingAssistant = ({
                 layout="position"
                 initial={false}
                 transition={surfaceTransition}
-                className="absolute right-0 bottom-0 flex size-12 cursor-grab touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing"
+                className="absolute right-0 bottom-0 flex size-12 touch-none items-center justify-center rounded-lg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:cursor-grabbing"
                 data-assistant-launcher
                 onPointerDown={startDrag}
                 onPointerMove={moveDrag}

@@ -5,7 +5,7 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { BILLING_PRODUCTS } from "@quieter/billing/plans";
+import { BILLING_PRODUCTS, GMAIL_MAILBOX_LIMITS } from "@quieter/billing/plans";
 import type { BillingProductId } from "@quieter/billing/plans";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -23,12 +23,14 @@ const moneyFormatter = new Intl.NumberFormat("en-US", {
 export const BillingProductCard = ({
   canChoose = true,
   currentProduct,
+  compact = false,
   isAnyCheckoutPending,
   isStartingCheckout,
   onCheckout,
   productId,
 }: {
   canChoose?: boolean;
+  compact?: boolean;
   currentProduct: BillingProductId | null;
   isAnyCheckoutPending: boolean;
   isStartingCheckout: boolean;
@@ -37,6 +39,58 @@ export const BillingProductCard = ({
 }) => {
   const product = BILLING_PRODUCTS[productId];
   const isCurrent = currentProduct === productId;
+
+  const checkoutButton = (
+    <Button
+      className={cn("shrink-0", { "w-full sm:w-auto": !compact })}
+      disabled={!canChoose || isCurrent || isAnyCheckoutPending}
+      onClick={onCheckout}
+      size="sm"
+      variant={product.highlight ? "default" : "outline"}
+    >
+      {isStartingCheckout && (
+        <HugeiconsIcon
+          aria-hidden
+          className="size-4 animate-spin"
+          icon={Loading03Icon}
+        />
+      )}
+      {(() => {
+        if (isCurrent) {
+          return "Current billing";
+        }
+        if (canChoose) {
+          return "Choose";
+        }
+        return "Owner or admin required";
+      })()}
+    </Button>
+  );
+
+  if (compact) {
+    return (
+      <article className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
+        <div className="min-w-0 flex-1 basis-48">
+          <div className="flex items-center gap-2">
+            <h3 className="text-body-sm font-medium text-fg">{product.name}</h3>
+            {isCurrent && (
+              <span className="text-caption text-muted-fg">Current</span>
+            )}
+          </div>
+          <p className="mt-0.5 text-caption text-muted-fg">
+            {moneyFormatter.format(product.creditAmountCents / 100)} monthly
+            balance, {GMAIL_MAILBOX_LIMITS[productId]} Gmail accounts
+            {productId === "pro" ? ", includes AI" : ", domains & API keys"}
+          </p>
+        </div>
+        <p className="shrink-0 text-body-sm font-medium text-fg">
+          {moneyFormatter.format(product.monthlyPriceCents / 100)}
+          <span className="font-normal text-muted-fg">/mo</span>
+        </p>
+        {isCurrent ? null : checkoutButton}
+      </article>
+    );
+  }
 
   return (
     <article
@@ -68,30 +122,7 @@ export const BillingProductCard = ({
               /mo
             </span>
           </p>
-          <Button
-            className="w-full sm:w-auto"
-            disabled={!canChoose || isCurrent || isAnyCheckoutPending}
-            onClick={onCheckout}
-            size="sm"
-            variant={product.highlight ? "default" : "outline"}
-          >
-            {isStartingCheckout && (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 animate-spin"
-                icon={Loading03Icon}
-              />
-            )}
-            {(() => {
-              if (isCurrent) {
-                return "Current billing";
-              }
-              if (canChoose) {
-                return "Choose";
-              }
-              return "Owner or admin required";
-            })()}
-          </Button>
+          {checkoutButton}
         </div>
       </div>
       <ul className="mt-4 flex flex-col gap-2 text-body text-muted-fg">

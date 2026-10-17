@@ -2,7 +2,7 @@
 
 import type { UserBillingOverview } from "#/features/settings/domain/billing";
 
-import { SettingsCard, SettingsSection } from "../settings-layout";
+import { useSettingsAnchor } from "../use-settings-anchor";
 import { OrganizationBillingSettings } from "./organization-billing-settings";
 import { OrganizationMailUsageSettings } from "./organization-mail-usage-settings";
 
@@ -22,35 +22,31 @@ export const OrganizationBillingView = ({
   onBack: () => void;
   organizationId: string;
   organizationName: string;
-}) => (
-  <section className="space-y-6">
-    <div>
-      <h1 className="text-body-lg font-semibold text-fg">Billing</h1>
-      <p className="mt-1 text-body text-muted-fg">
-        Plans, usage balance, and overage controls.
-      </p>
-    </div>
+}) => {
+  const { ref: usageRef } = useSettingsAnchor("usage");
+  return (
+    <section className="space-y-6">
+      <div>
+        <h1 className="text-body-lg font-semibold text-fg">Billing</h1>
+      </div>
 
-    <SettingsSection title="Plan & credits">
-      <SettingsCard>
-        <OrganizationBillingSettings
-          billing={billing}
-          billingAccessUnknown={billingAccessUnknown}
-          billingPending={billingPending}
-          organizationId={organizationId}
-        />
-      </SettingsCard>
-    </SettingsSection>
-    <SettingsSection title="Mail usage">
-      <SettingsCard>
-        <OrganizationMailUsageSettings
-          billingAccessUnknown={billingAccessUnknown}
-          billingPending={billingPending}
-          canManageOrganizationMailUsage={canManageOrganizationMailUsage}
-          canUseOrganizationMail={canUseOrganizationMail}
-          organizationId={organizationId}
-        />
-      </SettingsCard>
-    </SettingsSection>
-  </section>
-);
+      <OrganizationBillingSettings
+        billing={billing}
+        billingAccessUnknown={billingAccessUnknown}
+        billingPending={billingPending}
+        organizationId={organizationId}
+      />
+      <div className="@container border-t border-border/70 pt-4" ref={usageRef}>
+        <div className="-mx-4 md:-mx-6">
+          <OrganizationMailUsageSettings
+            billingAccessUnknown={billingAccessUnknown}
+            billingPending={billingPending}
+            canManageOrganizationMailUsage={canManageOrganizationMailUsage}
+            canUseOrganizationMail={canUseOrganizationMail}
+            organizationId={organizationId}
+          />
+        </div>
+      </div>
+    </section>
+  );
+};
