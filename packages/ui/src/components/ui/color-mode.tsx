@@ -202,9 +202,11 @@ export const ColorModeProvider = ({
         /* The preference remains available for this session. */
       }
       setThemes((current) => ({ ...current, [theme.colorMode]: name }));
-      setColorMode(theme.colorMode);
+      if (configColorMode !== "system" || theme.colorMode !== colorMode) {
+        setColorMode(theme.colorMode);
+      }
     },
-    [setColorMode]
+    [colorMode, configColorMode, setColorMode]
   );
 
   const cycleColorMode = useCallback(() => {
