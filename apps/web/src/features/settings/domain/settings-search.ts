@@ -99,7 +99,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Team details",
   },
   {
-    description: "Members & access",
+    description: "Members & invitations",
     id: "members",
     keywords: "invite teammate people invitation role",
     organizationView: "members",
@@ -135,7 +135,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Delivery",
   },
   {
-    description: "Delivery / Blocked recipients",
+    description: "Blocked recipients",
     id: "blocked",
     keywords: "bounces complaints spam suppressions",
     organizationView: "suppressions",
@@ -158,7 +158,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords: "sending usage limits overage",
     organizationView: "billing",
     scope: "team",
-    section: "usage",
+    section: "mail-usage",
     tab: "organization",
     title: "Mail usage",
   },

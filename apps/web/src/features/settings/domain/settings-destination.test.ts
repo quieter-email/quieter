@@ -45,8 +45,7 @@ describe("settings navigation", () => {
     ).toBe("");
   });
 
-  test("keeps related subsections under the same sidebar item", () => {
-    expect(settingsTeamSection("suppressions")).toBe("delivery");
+  test("keeps only team danger settings under general", () => {
     expect(settingsTeamSection("danger")).toBe("overview");
   });
 });

@@ -58,6 +58,7 @@ const SETTINGS_ICONS: Record<string, typeof Settings01Icon> = {
   "API keys": Key01Icon,
   Account: UserIcon,
   "Billing & usage": CreditCardIcon,
+  "Blocked recipients": MailSend02Icon,
   "Connected apps": Plug01Icon,
   Delivery: MailSend02Icon,
   Development: CodeIcon,
@@ -65,7 +66,7 @@ const SETTINGS_ICONS: Record<string, typeof Settings01Icon> = {
   Domains: GlobeIcon,
   General: Settings01Icon,
   Mailboxes: Mail01Icon,
-  "Members & access": UserGroupIcon,
+  "Members & invitations": UserGroupIcon,
   Preferences: Settings01Icon,
 };
 
@@ -305,7 +306,8 @@ export const SettingsSidebar = ({
             {team && (
               <>
                 {TEAM_SETTINGS_NAV.flatMap((item) =>
-                  item.view === "delivery" && !canManage ? (
+                  (item.view === "delivery" || item.view === "suppressions") &&
+                  !canManage ? (
                     []
                   ) : (
                     <div key={item.view}>
