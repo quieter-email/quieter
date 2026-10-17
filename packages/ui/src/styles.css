@@ -207,6 +207,20 @@
   );
 }
 
+.theme-swatch[data-color-theme="dark"] {
+  --theme-base: oklch(0.155 0.003 264);
+  --theme-light: oklch(0.24 0.003 264);
+  --theme-accent: oklch(0.29 0.003 264);
+  --theme-ink: oklch(1 0.002 264);
+}
+
+.theme-swatch[data-color-theme="light"] {
+  --theme-base: oklch(0.91 0.002 264);
+  --theme-light: oklch(0.975 0.002 264);
+  --theme-accent: oklch(0.85 0.002 264);
+  --theme-ink: oklch(0.15 0.002 264);
+}
+
 /* Brand palettes share the source colors used by the logo treatments. */
 :root[data-color-theme],
 .theme-swatch[data-color-theme] {

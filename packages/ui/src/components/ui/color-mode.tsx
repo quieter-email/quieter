@@ -13,12 +13,20 @@ import type { PropsWithChildren } from "react";
 
 import { BRAND_THEMES } from "../../lib/brand-themes";
 
-export { BRAND_THEMES } from "../../lib/brand-themes";
-
 export const COLOR_MODE_STORAGE_KEY = "quieter-color-mode";
 
 export type ColorMode = "light" | "dark";
 export type ConfigColorMode = ColorMode | "system";
+
+export const COLOR_THEMES: {
+  colorMode: ColorMode;
+  label: string;
+  name: string;
+}[] = [
+  { colorMode: "dark", label: "Dark", name: "dark" },
+  { colorMode: "light", label: "Light", name: "light" },
+  ...BRAND_THEMES,
+];
 
 export type ColorModeProviderProps = PropsWithChildren<{
   forcedTheme?: ColorMode;
@@ -101,16 +109,15 @@ const getNextColorMode = (
 };
 
 const readStoredTheme = (mode: ColorMode) => {
-  const fallback = mode === "dark" ? "01-obsidian" : "02-paper";
   try {
     const stored = localStorage.getItem(`quieter-theme-${mode}`);
     return (
-      BRAND_THEMES.find(
+      COLOR_THEMES.find(
         (theme) => theme.name === stored && theme.colorMode === mode
-      )?.name ?? fallback
+      )?.name ?? mode
     );
   } catch {
-    return fallback;
+    return mode;
   }
 };
 
@@ -118,7 +125,7 @@ const colorModeScript = (
   initialColorMode: ConfigColorMode,
   forcedTheme?: ColorMode
 ) =>
-  `try{const stored=localStorage.getItem("${COLOR_MODE_STORAGE_KEY}");const configured=stored==="light"||stored==="dark"||stored==="system"?stored:"${initialColorMode}";const mode=${forcedTheme === undefined ? "false" : "true"}?"${forcedTheme ?? "light"}":configured==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):configured;document.documentElement.classList.add(mode);document.documentElement.style.colorScheme=mode;const themes=${JSON.stringify(BRAND_THEMES.map(({ name, colorMode }) => ({ colorMode, name })))};const saved=localStorage.getItem("quieter-theme-"+mode);if(!${forcedTheme !== undefined})document.documentElement.dataset.colorTheme=themes.find(t=>t.name===saved&&t.colorMode===mode)?.name||(mode==="dark"?"01-obsidian":"02-paper")}catch{}`;
+  `try{const stored=localStorage.getItem("${COLOR_MODE_STORAGE_KEY}");const configured=stored==="light"||stored==="dark"||stored==="system"?stored:"${initialColorMode}";const mode=${forcedTheme === undefined ? "false" : "true"}?"${forcedTheme ?? "light"}":configured==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):configured;document.documentElement.classList.add(mode);document.documentElement.style.colorScheme=mode;const themes=${JSON.stringify(COLOR_THEMES.map(({ name, colorMode }) => ({ colorMode, name })))};const saved=localStorage.getItem("quieter-theme-"+mode);const theme=themes.find(t=>t.name===saved&&t.colorMode===mode)?.name||mode;if(${forcedTheme !== undefined}||theme===mode)delete document.documentElement.dataset.colorTheme;else document.documentElement.dataset.colorTheme=theme}catch{}`;
 
 export const ColorModeProvider = ({
   children,
@@ -174,7 +181,7 @@ export const ColorModeProvider = ({
     document.documentElement.classList.remove("light", "dark");
     document.documentElement.classList.add(colorMode);
     document.documentElement.style.colorScheme = colorMode;
-    if (forcedTheme) {
+    if (forcedTheme || themes[colorMode] === colorMode) {
       delete document.documentElement.dataset.colorTheme;
     } else {
       document.documentElement.dataset.colorTheme = themes[colorMode];
@@ -192,7 +199,7 @@ export const ColorModeProvider = ({
 
   const setTheme = useCallback(
     (name: string) => {
-      const theme = BRAND_THEMES.find((option) => option.name === name);
+      const theme = COLOR_THEMES.find((option) => option.name === name);
       if (!theme) {
         return;
       }

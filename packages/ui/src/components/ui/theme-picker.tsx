@@ -1,6 +1,6 @@
 "use client";
 
-import { BRAND_THEMES, useColorMode } from "./color-mode";
+import { COLOR_THEMES, useColorMode } from "./color-mode";
 import {
   Select,
   SelectContent,
@@ -18,7 +18,7 @@ export const ThemePicker = () => {
 
   return (
     <Select
-      items={BRAND_THEMES.map((theme) => ({
+      items={COLOR_THEMES.map((theme) => ({
         label: theme.label,
         value: theme.name,
       }))}
@@ -46,7 +46,7 @@ export const ThemePicker = () => {
               <SelectGroupLabel>
                 {mode === "dark" ? "Dark themes" : "Light themes"}
               </SelectGroupLabel>
-              {BRAND_THEMES.filter((theme) => theme.colorMode === mode).map(
+              {COLOR_THEMES.filter((theme) => theme.colorMode === mode).map(
                 (theme) => (
                   <SelectItem key={theme.name} value={theme.name}>
                     <span className="flex items-center gap-2">
