@@ -56,6 +56,7 @@ const SETTINGS_ICONS: Record<string, typeof Settings01Icon> = {
   "Connected apps": Plug01Icon,
   Delivery: MailSend02Icon,
   Development: CodeIcon,
+  Divisions: UserGroupIcon,
   Domains: GlobeIcon,
   General: Settings01Icon,
   Mailboxes: Mail01Icon,
