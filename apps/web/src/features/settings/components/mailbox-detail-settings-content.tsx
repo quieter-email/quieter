@@ -143,15 +143,21 @@ export const MailboxDetailSettingsContent = ({
       />
 
       {isGmail && (
-        <GmailMailboxNameSettings key={mailbox.id} mailbox={mailbox} />
+        <GmailMailboxNameSettings
+          key={`name-${mailbox.id}`}
+          mailbox={mailbox}
+        />
       )}
 
       {(isGmail || isManagedManager) && (
-        <MailboxSignatureSettings key={mailbox.id} mailbox={mailbox} />
+        <MailboxSignatureSettings
+          key={`signature-${mailbox.id}`}
+          mailbox={mailbox}
+        />
       )}
 
       {(isGmail || mailbox.provider === "managed") && (
-        <MailboxBriefSettings key={mailbox.id} mailbox={mailbox} />
+        <MailboxBriefSettings key={`brief-${mailbox.id}`} mailbox={mailbox} />
       )}
 
       {isGmail && (
