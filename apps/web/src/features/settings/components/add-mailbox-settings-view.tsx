@@ -21,7 +21,6 @@ import { Text } from "@quieter/ui/text";
 import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { useSelector } from "@tanstack/react-store";
 
 import { GuidedFlow } from "#/features/guided-flow/components/guided-flow";
@@ -52,7 +51,6 @@ export const AddMailboxSettingsView = ({
 }: {
   onNavigateToMailbox: (mailboxId: string) => Promise<void>;
 }) => {
-  const navigate = useNavigate({ from: "/settings" });
   const queryClient = useQueryClient();
   const session = authClient.useSession().data;
   const { organizations, teamId } = useSettingsTeam();
@@ -187,17 +185,6 @@ export const AddMailboxSettingsView = ({
         }));
       }
     : resetMailboxType;
-  const exitFlow = () => {
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        mailboxId: "",
-        mailboxView: "list",
-        tab: "mailboxes",
-      }),
-      to: ".",
-    });
-  };
 
   return (
     <GuidedFlow
@@ -216,12 +203,6 @@ export const AddMailboxSettingsView = ({
             value={currentStep}
           />
         </div>
-      }
-      headerStart={
-        <Button className="-ml-2" onClick={exitFlow} size="sm" variant="ghost">
-          <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
-          Back to mailboxes
-        </Button>
       }
       previous={
         mailboxType === undefined ? null : (

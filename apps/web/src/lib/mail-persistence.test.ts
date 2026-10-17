@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
   afterEach,
   beforeEach,
@@ -110,6 +110,76 @@ describe("mail content persistence", () => {
     expect(restored?.messages[0].bodyText).toBe("Cached body");
     await mailCache.removeItem('body-["mailbox","message"]');
     await expect(queryPersister.retrieveQuery(hash)).resolves.toBeUndefined();
+  });
+
+  test("settles writes when a restored thread refresh is cancelled and preserves the next refresh", async () => {
+    const client = new QueryClient();
+    setQueryPersistenceUser(crypto.randomUUID(), client);
+    const key = ["message-thread", 3, "mailbox", "thread"];
+    const before = {
+      messages: [{ bodyText: "Cached body", id: "message", isUnread: true }],
+    };
+    const confirmed = {
+      messages: [{ ...before.messages[0], isUnread: false }],
+    };
+    client.setQueryData(key, before, { updatedAt: Date.now() - 60_000 });
+    await queryPersister.persistQueryByKey(key, client);
+    await vi.waitFor(async () => {
+      await expect(
+        queryPersister.retrieveQuery(JSON.stringify(key))
+      ).resolves.toMatchObject(before);
+    });
+    client.removeQueries({ exact: true, queryKey: key });
+    const interrupted = Promise.withResolvers<typeof before>();
+    const fetchThread = vi
+      .fn<() => Promise<typeof before>>()
+      .mockReturnValueOnce(interrupted.promise)
+      .mockResolvedValue({
+        messages: [
+          ...confirmed.messages,
+          { bodyText: "Incoming body", id: "incoming", isUnread: true },
+        ],
+      });
+    const thread = new QueryObserver(client, {
+      persister: queryPersister.persisterFn,
+      queryFn: fetchThread,
+      queryKey: key,
+      retry: false,
+    });
+    const unsubscribe = thread.subscribe(() => {});
+    try {
+      await vi.waitFor(() => {
+        expect(fetchThread).toHaveBeenCalledOnce();
+      });
+      const refreshing = thread.refetch({ cancelRefetch: false });
+      await runMailMutation(client, {
+        apply: () => {
+          client.setQueryData(key, confirmed);
+        },
+        execute: async () =>
+          await Promise.resolve(() => {
+            client.setQueryData(key, confirmed);
+          }),
+        mailboxId: "mailbox",
+        targets: ["thread"],
+      });
+      const refreshed = await refreshing;
+      expect(refreshed.isError).toBeFalsy();
+      interrupted.resolve(before);
+      await vi.waitFor(() => {
+        const messages = client.getQueryData<typeof before>(key)?.messages;
+        expect(messages).toContainEqual(
+          expect.objectContaining({ id: "message", isUnread: false })
+        );
+        expect(messages).toContainEqual(
+          expect.objectContaining({ id: "incoming" })
+        );
+      });
+      expect(pendingMailMutations.get(client)?.has("mailbox")).toBeFalsy();
+    } finally {
+      unsubscribe();
+      client.clear();
+    }
   });
 
   test("does not persist optimistic state and purges a revoked mailbox without evicting another mailbox", async () => {

@@ -6,7 +6,6 @@ import {
   Edit01Icon,
   HelpCircleIcon,
   NoteEditIcon,
-  News01Icon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -260,28 +259,22 @@ const SidebarInboxSection = ({
       </SidebarEntrance>
 
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto p-1">
-        {embedded !== true &&
-        groups.some((group) =>
-          group.mailboxes.some((mailbox) => mailbox.provider !== "api")
-        ) ? (
-          <SidebarNavItem
-            active={dailyBriefActive}
-            aria-current={dailyBriefActive ? "page" : undefined}
-            // oxlint-disable-next-line shadcn/no-restyle -- Match the existing sidebar navigation spacing.
-            className="w-full justify-start gap-3 px-3 text-left"
-            onClick={() => {
-              onSelectView("daily-brief");
-              onRequestClose?.();
-            }}
-            size="sm"
-            variant="ghost"
-          >
-            <HugeiconsIcon aria-hidden icon={News01Icon} strokeWidth={1.5} />
-            Brief
-          </SidebarNavItem>
-        ) : null}
         <SidebarMailboxNav
           animateEntrance={animateEntrance}
+          brief={
+            embedded !== true &&
+            groups.some((group) =>
+              group.mailboxes.some((mailbox) => mailbox.provider !== "api")
+            )
+              ? {
+                  active: dailyBriefActive,
+                  onSelect: () => {
+                    onSelectView("daily-brief");
+                    onRequestClose?.();
+                  },
+                }
+              : undefined
+          }
           mailboxProvider={selectedMailboxProvider}
           onSelectMailbox={handleSelectMailbox}
           selectedMailbox={selectedMailbox}

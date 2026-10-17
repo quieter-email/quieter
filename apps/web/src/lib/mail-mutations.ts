@@ -139,7 +139,7 @@ const createCoordinator = (client: QueryClient) => {
               (queryKey[0] === "message-thread" &&
                 queryKey[2] === intent.mailboxId),
           },
-          { revert: false }
+          { revert: true }
         );
         if (disposed) {
           return;

@@ -1,5 +1,6 @@
 import type { ComponentPropsWithoutRef } from "react";
 
+import brandIcon from "../../assets/brand-icon.svg?url";
 import { brand } from "../../lib/brand-geometry";
 
 type BrandProps = ComponentPropsWithoutRef<"svg"> & {
@@ -16,7 +17,11 @@ export const Brand = ({ variant = "mark", ...props }: BrandProps) => {
       viewBox={`0 0 ${artwork.width} ${artwork.height}`}
       {...props}
     >
-      <path d={artwork.path} />
+      {variant === "mark" ? (
+        <image height={artwork.height} href={brandIcon} width={artwork.width} />
+      ) : (
+        <path d={artwork.path} />
+      )}
     </svg>
   );
 };

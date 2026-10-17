@@ -1,15 +1,12 @@
 "use client";
 
-import { Delete02Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 
+import { MailboxRemovalSettings } from "#/features/settings/components/mailbox-removal-settings";
 import {
   SettingsCard,
   SettingsInsetRows,
-  SettingsRow,
   SettingsSection,
   settingsSurfaceVariants,
 } from "#/features/settings/components/settings-layout";
@@ -79,35 +76,13 @@ export const GmailMailboxDetailSections = ({
         </SettingsSection>
       )}
       {section === "connection" && (
-        <SettingsSection title="Remove mailbox">
-          <SettingsCard>
-            <SettingsRow
-              action={
-                <Button
-                  // oxlint-disable-next-line shadcn/no-restyle -- Disconnect action keeps its destructive ghost text.
-                  className="text-destructive hover:text-destructive"
-                  disabled={disconnectPending}
-                  onClick={onDisconnect}
-                  pending={disconnectPending}
-                  pendingLabel="Removing…"
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Delete02Icon}
-                  />
-                  Remove
-                </Button>
-              }
-              title="Disconnect Gmail"
-            >
-              Remove this account and its saved credentials from Quieter.
-            </SettingsRow>
-          </SettingsCard>
-        </SettingsSection>
+        <MailboxRemovalSettings
+          key={emailAddress}
+          emailAddress={emailAddress}
+          isPending={disconnectPending}
+          kind="gmail"
+          onRemove={onDisconnect}
+        />
       )}
     </>
   );

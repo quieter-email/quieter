@@ -99,7 +99,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Team details",
   },
   {
-    description: "Members & access / Members & invitations",
+    description: "Members & access",
     id: "members",
     keywords: "invite teammate people invitation role",
     organizationView: "members",
@@ -108,13 +108,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Members and invitations",
   },
   {
-    description: "Members & access / Access groups",
-    id: "groups",
-    keywords: "division groups permissions",
+    description: "Shared mailbox access",
+    id: "divisions",
+    keywords: "division groups permissions mailbox members",
     organizationView: "divisions",
     scope: "team",
     tab: "organization",
-    title: "Access groups",
+    title: "Divisions",
   },
   {
     description: "Domains / Mail routing and setup",

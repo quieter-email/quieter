@@ -42,7 +42,7 @@ export const createMailUpdateResources = (
     url: true,
   });
   return {
-    url: `wss://${domain}/mail/live`,
+    url: worker.url.apply(() => `wss://${domain}/mail/live`),
     user,
     worker,
   };
