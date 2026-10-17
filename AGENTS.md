@@ -42,6 +42,8 @@
 
 ## Local development and debugging
 
+- If a worktree lacks the development credentials or local env file needed to run the app, copy the existing development env file from the main checkout into the corresponding ignored location in the worktree. Verify that it uses approved development resources, never production credentials, keep secret values out of output, and run `vp run env:doctor` afterward.
+- Other agents may be running local services at the same time. Check for occupied ports before starting a server and choose an unused port. Configure any required local URLs for that port, record the process PID, and stop only your own process tree after verification.
 - Keep a runnable, debuggable development experience whenever adding a service or changing application behavior, background processing, configuration, or infrastructure. Include the required startup, bindings, secrets, test data, failure reporting, and verification in the change; do not leave a feature dependent on an undocumented manual setup.
 - Research and prefer each provider's supported local tools, development stages, sandboxes, and inspection tools. Verify the installed versions and actual runtime behavior before adding custom replacements or declaring a feature locally testable.
 - Use the allowlisted PlanetScale `quieter_dev` logical database on the existing cluster for normal development. Do not provision a paid branch/cluster or require a persistent local PostgreSQL installation. Keep connection/concurrency limits modest because development shares cluster resources with production. Use disposable databases only for tests that require them; never run destructive test resets against the shared development or production database.
@@ -85,6 +87,7 @@
 - Do not automatically run full builds, full test suites, React Doctor, browser audits, or extra review tools for routine edits. This rule overrides generic skill recommendations to run those tools after every change. Existing commit hooks may run normally; do not bypass them or repeat their checks without a reason.
 - Once relevant checks pass, stop validating unless a new failure, change, or concrete concern justifies more work. Avoid repetitive status polling and unnecessary progress narration.
 - Update documentation only when architecture, tooling, or operations change, or when explicitly requested.
+- When creating or updating a pull request that includes visual changes, include screenshots of the changed UI in the PR description whenever capture and upload are possible. Prefer before-and-after screenshots when useful. Keep secrets and private user data out of screenshots. If screenshots cannot be included, briefly explain why in the PR description.
 
 - Use Conventional Commits when committing. Commit unrelated work too unless it seems to be currently changing, incomplete, or the user specified otherwise.
 
