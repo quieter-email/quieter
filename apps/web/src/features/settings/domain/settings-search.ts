@@ -57,6 +57,15 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   },
   {
     description: "AI & personalization / Personalization",
+    id: "view-memory",
+    keywords: "view saved memories knowledge context personalization",
+    scope: "personal",
+    section: "what-quieter-remembers",
+    tab: "ai",
+    title: "What Quieter remembers",
+  },
+  {
+    description: "AI & personalization / Personalization",
     id: "memory",
     keywords: "forget memory knowledge reset personalization",
     scope: "personal",
@@ -91,7 +100,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Team details",
   },
   {
-    description: "Members & access / Members & invitations",
+    description: "Members & access",
     id: "members",
     keywords: "invite teammate people invitation role",
     organizationView: "members",
@@ -100,13 +109,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Members and invitations",
   },
   {
-    description: "Members & access / Access groups",
-    id: "groups",
-    keywords: "division groups permissions",
+    description: "Shared mailbox access",
+    id: "divisions",
+    keywords: "division groups permissions mailbox members",
     organizationView: "divisions",
     scope: "team",
     tab: "organization",
-    title: "Access groups",
+    title: "Divisions",
   },
   {
     description: "Domains / Mail routing and setup",

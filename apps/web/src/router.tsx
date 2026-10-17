@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/react";
-import { createRouter } from "@tanstack/react-router";
+import { createRouter, defaultStringifySearch } from "@tanstack/react-router";
 
 import { RootErrorComponent } from "./components/root/root-error-component";
 import { RootNotFoundComponent } from "./components/root/root-not-found-component";
@@ -22,6 +22,14 @@ export const getRouter = () => {
     defaultPendingMinMs: 0,
     routeTree,
     scrollRestoration: true,
+    stringifySearch: (search) =>
+      defaultStringifySearch(
+        Object.fromEntries(
+          Object.entries(search).filter(
+            ([, value]) => value !== undefined && value !== null && value !== ""
+          )
+        )
+      ),
   });
 
   if (!router.isServer) {

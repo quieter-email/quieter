@@ -35,7 +35,18 @@ import type {
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
-import { and, desc, eq, inArray, isNull, like, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  like,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { assertCanUseAi } from "./ai-access";
 import {
@@ -548,7 +559,7 @@ const listScopeMemories = async (scopeKey: string) =>
     .select()
     .from(aiMemory)
     .where(eq(aiMemory.scopeKey, scopeKey))
-    .orderBy(desc(aiMemory.status), desc(aiMemory.updatedAt))
+    .orderBy(asc(aiMemory.status), desc(aiMemory.updatedAt))
     .limit(MEMORY_CANDIDATE_LIMIT);
 
 const buildMemoryValues = ({

@@ -30,7 +30,9 @@ export const SaveSnippetDialog = ({
   onClose: () => void;
 }) => {
   const id = useId();
-  const [name, setName] = useState("");
+  const [name, setName] = useState(
+    initialText.trim().split("\n")[0]?.slice(0, 60) ?? ""
+  );
   const [bodyText, setBodyText] = useState(initialText);
   const queryClient = useQueryClient();
   const mutation = useMutation({
@@ -108,7 +110,8 @@ export const SaveSnippetDialog = ({
                   setBodyText(event.currentTarget.value);
                 }}
                 required
-                rows={6}
+                rows={3}
+                variant="composer"
                 value={bodyText}
               />
             </div>

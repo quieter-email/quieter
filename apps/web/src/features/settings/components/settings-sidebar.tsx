@@ -2,6 +2,8 @@
 
 import {
   ArrowLeft01Icon,
+  ArrowDown01Icon,
+  Add01Icon,
   Cancel01Icon,
   Settings01Icon,
   UserIcon,
@@ -18,16 +20,18 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@quieter/ui/select";
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@quieter/ui/dropdown-menu";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { SidebarNavItem } from "#/features/navigation/components/sidebar-nav-item";
@@ -46,6 +50,7 @@ import {
   hasOrganizationPermission,
   normalizeOrganizationRole,
 } from "./organization-settings/domain";
+import { OrganizationFormDialog } from "./organization-settings/organization-form-dialog";
 import { useSettingsTeam } from "./use-settings-team";
 
 const SETTINGS_ICONS: Record<string, typeof Settings01Icon> = {
@@ -56,10 +61,10 @@ const SETTINGS_ICONS: Record<string, typeof Settings01Icon> = {
   "Connected apps": Plug01Icon,
   Delivery: MailSend02Icon,
   Development: CodeIcon,
+  Divisions: UserGroupIcon,
   Domains: GlobeIcon,
   General: Settings01Icon,
   Mailboxes: Mail01Icon,
-  "Manage teams": UserGroupIcon,
   "Members & access": UserGroupIcon,
   Preferences: Settings01Icon,
 };
@@ -80,6 +85,7 @@ export const SettingsSidebar = ({
   searchInput: ReactNode;
   searchResults?: ReactNode;
 }) => {
+  const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
   const navigate = useNavigate({ from: "/settings" });
   const { tab, from, organizationView, organizationId } =
     settingsRouteApi.useSearch();
@@ -203,60 +209,94 @@ export const SettingsSidebar = ({
             <p className="px-2 py-1 text-caption text-muted-fg">
               Team settings
             </p>
-            <Select
-              items={organizations.map((item) => ({
-                label: item.name,
-                value: item.id,
-              }))}
-              value={team?.id ?? null}
-              onValueChange={(value) => {
-                if (!value) {
-                  return;
-                }
-                onRequestClose?.();
-                void navigate({
-                  search: (previous) => ({
-                    ...previous,
-                    domainId: "",
-                    mailboxId: "",
-                    mailboxView: "list",
-                    organizationId: value,
-                    section:
-                      previous.mailboxId !== "" || previous.domainId !== ""
-                        ? ""
-                        : previous.section,
-                  }),
-                  to: ".",
-                });
-              }}
-            >
-              <SelectTrigger
+            <DropdownMenu>
+              <DropdownMenuTrigger
                 aria-label="Team settings"
-                // oxlint-disable-next-line shadcn/no-restyle -- Team switcher keeps its caption metrics.
-                className="mb-2 w-full gap-2 text-caption"
-                size="sm"
+                render={
+                  <Button
+                    // oxlint-disable-next-line shadcn/no-restyle -- Preserve the existing team switcher spacing and caption metrics.
+                    className="mb-2 w-full gap-2 text-caption font-normal"
+                    size="sm"
+                    variant="outline"
+                  />
+                }
               >
                 <HugeiconsIcon
                   icon={UserGroupIcon}
                   strokeWidth={1.5}
                   className="size-3.5 shrink-0"
                 />
-                <SelectValue
-                  placeholder={
-                    organizationsState.isPending
+                <span className="min-w-0 flex-1 truncate text-left">
+                  {team?.name ??
+                    (organizationsState.isPending
                       ? "Loading teams"
-                      : "Choose a team"
-                  }
+                      : "Choose a team")}
+                </span>
+                <HugeiconsIcon
+                  icon={ArrowDown01Icon}
+                  strokeWidth={1.5}
+                  className="size-3.5 shrink-0 text-muted-fg"
                 />
-              </SelectTrigger>
-              <SelectContent>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" size="compact">
                 {organizations.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
+                  <DropdownMenuCheckboxItem
+                    checked={item.id === team?.id}
+                    closeOnSelect
+                    key={item.id}
+                    onCheckedChange={() => {
+                      onRequestClose?.();
+                      void navigate({
+                        search: (previous) => ({
+                          ...previous,
+                          domainId: "",
+                          mailboxId: "",
+                          mailboxView: "list",
+                          organizationId: item.id,
+                          section:
+                            previous.mailboxId !== "" ||
+                            previous.domainId !== ""
+                              ? ""
+                              : previous.section,
+                        }),
+                        to: ".",
+                      });
+                    }}
+                  >
                     {item.name}
-                  </SelectItem>
+                  </DropdownMenuCheckboxItem>
                 ))}
-              </SelectContent>
-            </Select>
+                {organizations.length > 0 && <DropdownMenuSeparator />}
+                <DropdownMenuItem
+                  onSelect={() => {
+                    open({ organizationId: "", tab: "organization" });
+                  }}
+                >
+                  <HugeiconsIcon
+                    icon={UserGroupIcon}
+                    strokeWidth={1.5}
+                    className="size-3.5"
+                  />
+                  Teams & invitations
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setIsCreateTeamOpen(true);
+                  }}
+                >
+                  <HugeiconsIcon
+                    icon={Add01Icon}
+                    strokeWidth={1.5}
+                    className="size-3.5"
+                  />
+                  Create team
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <OrganizationFormDialog
+              open={isCreateTeamOpen}
+              onOpenChange={setIsCreateTeamOpen}
+            />
             {organizationsState.error && (
               <p role="alert" className="px-3 text-caption text-destructive">
                 Could not load teams.
@@ -286,11 +326,6 @@ export const SettingsSidebar = ({
                   )
                 )}
               </>
-            )}
-            {navigationButton(
-              "Manage teams",
-              { organizationId: "", tab: "organization" },
-              tab === "organization" && organizationId === ""
             )}
           </div>
         </nav>

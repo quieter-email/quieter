@@ -15,10 +15,16 @@ import { readBoundedJson } from "./bounded-json";
 import { retryMailBroadcast } from "./retry-mail-broadcast";
 import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
 
-export const broadcastMailUpdate = async (env: Env, event: MailUpdate) => {
-  const recipients = await withRequestDatabaseClient(
-    async () => await listMailUpdateRecipients(event.mailboxId)
-  );
+export const broadcastMailUpdate = async (
+  env: Env,
+  event: MailUpdate,
+  recipientUserIds?: readonly string[]
+) => {
+  const recipients =
+    recipientUserIds ??
+    (await withRequestDatabaseClient(
+      async () => await listMailUpdateRecipients(event.mailboxId)
+    ));
   // Bounded fan-out also limits pressure from large shared mailboxes.
   const failures: unknown[] = [];
   for (let offset = 0; offset < recipients.length; offset += 10) {
@@ -97,6 +103,7 @@ export const handleMailUpdates = async (request: Request, env: Env) => {
       event: mailUpdateSchema,
       expiresAt: z.number(),
       purpose: z.literal("mail-event"),
+      recipientUserIds: z.array(z.string().min(1)).max(100).optional(),
     })
     .parse(value);
   if (
@@ -105,7 +112,7 @@ export const handleMailUpdates = async (request: Request, env: Env) => {
   ) {
     return new Response(null, { status: 401 });
   }
-  await broadcastMailUpdate(env, payload.event);
+  await broadcastMailUpdate(env, payload.event, payload.recipientUserIds);
   return new Response(null, { status: 204 });
 };
 
