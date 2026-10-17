@@ -21,6 +21,7 @@ import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 import { persistQueryByKey } from "#/lib/query-persister";
 
+import { PersonalizationMemories } from "./personalization-memories";
 import { SettingsRow, SettingsRows, SettingsSection } from "./settings-layout";
 
 type AiSettings = RouterOutputs["ai"]["settings"];
@@ -118,6 +119,13 @@ const AiPersonalizationSection = ({
             Learn useful patterns from conversations and the way you handle
             mail. Ask Quieter in chat what it knows, or tell it to forget or
             correct something.
+          </SettingsRow>
+          <SettingsRow
+            action={<PersonalizationMemories />}
+            title="What Quieter remembers"
+          >
+            Review the personal context saved from your conversations and the
+            way you handle mail.
           </SettingsRow>
           <SettingsRow
             action={

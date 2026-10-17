@@ -56,6 +56,15 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   },
   {
     description: "AI & personalization / Personalization",
+    id: "view-memory",
+    keywords: "view saved memories knowledge context personalization",
+    scope: "personal",
+    section: "what-quieter-remembers",
+    tab: "ai",
+    title: "What Quieter remembers",
+  },
+  {
+    description: "AI & personalization / Personalization",
     id: "memory",
     keywords: "forget memory knowledge reset personalization",
     scope: "personal",
