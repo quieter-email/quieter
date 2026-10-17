@@ -15,6 +15,7 @@ import { settingsRouteApi } from "#/lib/route-apis";
 import { BillingCheckoutResult } from "./billing-checkout-result";
 import { ConnectorConnectionResult } from "./connector-connection-result";
 import { GmailConnectionResult } from "./gmail-connection-result";
+import { SettingsBreadcrumbs } from "./settings-breadcrumbs";
 import { SettingsDataPrefetch } from "./settings-data-prefetch";
 import { SettingsLoadingState } from "./settings-layout";
 import { SettingsSearch } from "./settings-search";
@@ -111,7 +112,7 @@ export const SettingsScreen = ({
   const title = SETTINGS_TITLES[tab];
   return (
     <SettingsSearch
-      key={`${tab}-${routeSearch.organizationId}-${routeSearch.mailboxId}-${routeSearch.organizationView}`}
+      key={`${tab}-${routeSearch.organizationId}-${routeSearch.mailboxId}`}
       onSelect={() => {
         setIsMobileOpen(false);
       }}
@@ -159,6 +160,7 @@ export const SettingsScreen = ({
                 <div className="mx-auto w-full max-w-180 space-y-10 px-5 py-8 md:px-8 md:py-14">
                   {!isMobileOpen && results}
                   <div hidden={searching} className="space-y-10">
+                    <SettingsBreadcrumbs />
                     {tab !== "organization" && tab !== "mailboxes" && (
                       <h1 className="text-title-sm font-normal tracking-tight">
                         {title}

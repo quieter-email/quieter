@@ -1,6 +1,7 @@
 import { once } from "node:events";
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { signMailPayload } from "@quieter/mail/updates";
 import type { maintainGmailPubSubMailbox } from "@quieter/orpc/gmail-pubsub";
 import type { findGmailUpdateMailboxIds } from "@quieter/orpc/mail-updates";
 import { listMailUpdateRecipients } from "@quieter/orpc/mail-updates";
@@ -18,7 +19,7 @@ import {
 } from "vite-plus/test";
 
 import { runGmailMaintenance } from "../src/gmail-maintenance-worker";
-import { broadcastMailUpdate } from "../src/mail-updates";
+import { broadcastMailUpdate, handleMailUpdates } from "../src/mail-updates";
 import worker, { signaturesMatch } from "../src/worker";
 import { handlePubSub, requestErrorResponse } from "../src/worker-utils";
 
@@ -43,6 +44,70 @@ vi.mock(import("@quieter/database/client"), async (importOriginal) => {
 const serviceAccount = "gmail-push@example.invalid";
 
 describe("mail update fan-out", () => {
+  test("delivers deleted mailbox updates only to the signed recipient snapshot", async () => {
+    const recipientUserIds = [crypto.randomUUID(), crypto.randomUUID()];
+    const body = JSON.stringify({
+      event: {
+        eventId: crypto.randomUUID(),
+        mailboxId: "deleted-mailbox",
+        type: "mailbox.changed",
+      },
+      expiresAt: Date.now() + 30_000,
+      purpose: "mail-event",
+      recipientUserIds,
+    });
+    const names = vi.spyOn(env.MailLiveUser, "idFromName");
+    const response = await handleMailUpdates(
+      new Request("https://worker.invalid/mail/events", {
+        body,
+        headers: {
+          "x-mail-signature": await signMailPayload(body, "live-sync-secret"),
+        },
+        method: "POST",
+      }),
+      env
+    );
+
+    expect(response.status).toBe(204);
+    expect(new Set(names.mock.calls.flat())).toStrictEqual(
+      new Set(recipientUserIds)
+    );
+    names.mockRestore();
+  });
+
+  test("rejects recipient changes that are not covered by the signature", async () => {
+    const payload = {
+      event: {
+        eventId: crypto.randomUUID(),
+        mailboxId: "private-deleted-mailbox",
+        type: "mailbox.changed",
+      },
+      expiresAt: Date.now() + 30_000,
+      purpose: "mail-event",
+      recipientUserIds: [crypto.randomUUID()],
+    };
+    const signature = await signMailPayload(
+      JSON.stringify(payload),
+      "live-sync-secret"
+    );
+    const names = vi.spyOn(env.MailLiveUser, "idFromName");
+    const response = await handleMailUpdates(
+      new Request("https://worker.invalid/mail/events", {
+        body: JSON.stringify({
+          ...payload,
+          recipientUserIds: [...payload.recipientUserIds, crypto.randomUUID()],
+        }),
+        headers: { "x-mail-signature": signature },
+        method: "POST",
+      }),
+      env
+    );
+
+    expect(response.status).toBe(401);
+    expect(names).not.toHaveBeenCalled();
+    names.mockRestore();
+  });
+
   test("recreates a failed recipient stub and delivers the update", async () => {
     const userId = crypto.randomUUID();
     vi.mocked(listMailUpdateRecipients).mockResolvedValueOnce([userId]);

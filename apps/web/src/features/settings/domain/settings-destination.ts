@@ -12,6 +12,7 @@ export type SettingsDestination = {
 export const TEAM_SETTINGS_NAV = [
   { title: "General", view: "overview" },
   { title: "Members & access", view: "members" },
+  { title: "Divisions", view: "divisions" },
   { title: "Domains", view: "domains" },
   { title: "Delivery", view: "delivery" },
   { title: "Billing & usage", view: "billing" },
@@ -22,9 +23,6 @@ export const TEAM_SETTINGS_NAV = [
 }[];
 
 export const settingsTeamSection = (view: OrganizationSettingsView) => {
-  if (view === "divisions") {
-    return "members";
-  }
   if (view === "suppressions") {
     return "delivery";
   }

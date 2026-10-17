@@ -1,24 +1,34 @@
 "use client";
 
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
+import { domMax, LayoutGroup, LazyMotion } from "motion/react";
+import { useId } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
+import { SelectionIndicator } from "./selection-indicator";
 
 export const Tabs = TabsPrimitive.Root;
 
 export const TabsList = ({
   className,
   ...props
-}: ComponentPropsWithoutRef<typeof TabsPrimitive.List>) => (
-  <TabsPrimitive.List
-    className={cn(
-      "inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-bg p-1 shadow-sm squircle",
-      className
-    )}
-    {...props}
-  />
-);
+}: ComponentPropsWithoutRef<typeof TabsPrimitive.List>) => {
+  const id = useId();
+  return (
+    <LazyMotion features={domMax}>
+      <LayoutGroup id={id}>
+        <TabsPrimitive.List
+          className={cn(
+            "inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-bg p-1 shadow-sm squircle",
+            className
+          )}
+          {...props}
+        />
+      </LayoutGroup>
+    </LazyMotion>
+  );
+};
 
 export const TabsTab = ({
   className,
@@ -26,10 +36,16 @@ export const TabsTab = ({
 }: ComponentPropsWithoutRef<typeof TabsPrimitive.Tab>) => (
   <TabsPrimitive.Tab
     className={cn(
-      "inline-flex min-h-7 min-w-0 items-center justify-center rounded-md px-2.5 text-body-sm font-medium text-muted-fg transition-transform duration-100 ease-out squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-active:bg-bg-surface data-active:text-fg data-active:shadow-sm data-disabled:pointer-events-none data-disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100",
+      "relative isolate inline-flex min-h-7 min-w-0 items-center justify-center rounded-md px-2.5 text-body-sm font-medium text-muted-fg squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none data-active:text-fg data-disabled:pointer-events-none data-disabled:opacity-50",
       className
     )}
     {...props}
+    render={(tabProps, state) => (
+      <button {...tabProps} type="button">
+        {state.active && <SelectionIndicator />}
+        {tabProps.children}
+      </button>
+    )}
   />
 );
 

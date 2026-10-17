@@ -3,6 +3,7 @@
 import { cn } from "@quieter/ui/cn";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Text } from "@quieter/ui/text";
+import { Toggle, ToggleGroup } from "@quieter/ui/toggle";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -51,31 +52,6 @@ const MetricRow = ({
   </div>
 );
 
-const ToggleButton = ({
-  active,
-  label,
-  onSelect,
-}: {
-  active: boolean;
-  label: string;
-  onSelect: () => void;
-}) => (
-  <button
-    aria-pressed={active}
-    className={cn(
-      "max-w-40 truncate rounded-md px-2.5 py-1 text-caption font-medium transition-colors",
-      {
-        "bg-bg text-fg shadow-xs": active,
-        "text-muted-fg hover:text-fg": !active,
-      }
-    )}
-    onClick={onSelect}
-    type="button"
-  >
-    {label}
-  </button>
-);
-
 const RangeToggle = ({
   range,
   setRange,
@@ -83,18 +59,24 @@ const RangeToggle = ({
   range: MailDeliveryMetricsRange;
   setRange: (range: MailDeliveryMetricsRange) => void;
 }) => (
-  <div className="flex shrink-0 gap-1 rounded-lg border border-border p-0.5">
+  <ToggleGroup
+    aria-label="Activity period"
+    className="shrink-0"
+    size="compact"
+    value={[range]}
+    onValueChange={(values) => {
+      const [value] = values;
+      if (value === "7d" || value === "30d") {
+        setRange(value);
+      }
+    }}
+  >
     {(["7d", "30d"] as const).map((candidate) => (
-      <ToggleButton
-        active={range === candidate}
-        key={candidate}
-        label={candidate === "7d" ? "7 days" : "30 days"}
-        onSelect={() => {
-          setRange(candidate);
-        }}
-      />
+      <Toggle size="compact" key={candidate} value={candidate}>
+        {candidate === "7d" ? "7 days" : "30 days"}
+      </Toggle>
     ))}
-  </div>
+  </ToggleGroup>
 );
 
 export const MailDeliveryView = ({
@@ -336,7 +318,14 @@ export const MailDeliveryView = ({
         </div>
 
         {managedMailboxes.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-1.5">
+          <ToggleGroup
+            aria-label="Mail activity scope"
+            // oxlint-disable-next-line shadcn/no-restyle -- Mailbox filters keep their wrapping pill layout.
+            className="mb-3 flex-wrap gap-1.5"
+            size="flush"
+            value={[mailboxId]}
+            variant="plain"
+          >
             {[
               { id: "", label: "All team mail" },
               ...managedMailboxes.map((mailbox) => ({
@@ -344,30 +333,20 @@ export const MailDeliveryView = ({
                 label:
                   mailbox.displayName ?? mailbox.emailAddress ?? mailbox.id,
               })),
-            ].map((scope) => {
-              const active =
-                scope.id === "" ? mailboxId === "" : scope.id === mailboxId;
-              return (
-                <button
-                  aria-pressed={active}
-                  className={cn(
-                    "max-w-48 truncate rounded-full border px-3 py-1 text-caption font-medium transition-colors",
-                    {
-                      "border-border text-muted-fg hover:text-fg": !active,
-                      "border-primary bg-primary text-primary-fg": active,
-                    }
-                  )}
-                  key={scope.id || "all"}
-                  onClick={() => {
-                    setMailboxId(scope.id);
-                  }}
-                  type="button"
-                >
-                  {scope.label}
-                </button>
-              );
-            })}
-          </div>
+            ].map((scope) => (
+              <Toggle
+                key={scope.id || "all"}
+                onClick={() => {
+                  setMailboxId(scope.id);
+                }}
+                size="sm"
+                value={scope.id}
+                variant="pill"
+              >
+                <span className="max-w-48 truncate">{scope.label}</span>
+              </Toggle>
+            ))}
+          </ToggleGroup>
         )}
 
         {metricsSection}

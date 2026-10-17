@@ -16,7 +16,7 @@ type SelectDensity = "default" | "compact";
 const SelectDensityContext = createContext<SelectDensity>("default");
 
 const selectTriggerVariants = cva(
-  "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     defaultVariants: {
       size: "default",
@@ -29,7 +29,7 @@ const selectTriggerVariants = cva(
       },
       variant: {
         attached:
-          "h-full w-auto rounded-l-none bg-transparent pr-2.5 pl-1.5 text-muted-fg shadow-none hover:bg-muted hover:text-fg active:scale-100 active:bg-muted/80 active:text-fg",
+          "h-full w-auto rounded-l-none bg-transparent pr-2.5 pl-1.5 text-muted-fg shadow-none hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg",
         default:
           "w-full border border-border bg-control text-fg hover:bg-control-hover active:bg-control-active",
         ghost:
