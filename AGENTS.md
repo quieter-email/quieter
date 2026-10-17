@@ -85,6 +85,7 @@
 - Do not automatically run full builds, full test suites, React Doctor, browser audits, or extra review tools for routine edits. This rule overrides generic skill recommendations to run those tools after every change. Existing commit hooks may run normally; do not bypass them or repeat their checks without a reason.
 - Once relevant checks pass, stop validating unless a new failure, change, or concrete concern justifies more work. Avoid repetitive status polling and unnecessary progress narration.
 - Update documentation only when architecture, tooling, or operations change, or when explicitly requested.
+- When creating or updating a pull request that includes visual changes, include screenshots of the changed UI in the PR description whenever capture and upload are possible. Prefer before-and-after screenshots when useful. Keep secrets and private user data out of screenshots. If screenshots cannot be included, briefly explain why in the PR description.
 
 - Use Conventional Commits when committing. Commit unrelated work too unless it seems to be currently changing, incomplete, or the user specified otherwise.
 
