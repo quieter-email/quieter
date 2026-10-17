@@ -269,6 +269,18 @@ export const SettingsSidebar = ({
                 {organizations.length > 0 && <DropdownMenuSeparator />}
                 <DropdownMenuItem
                   onSelect={() => {
+                    open({ organizationId: "", tab: "organization" });
+                  }}
+                >
+                  <HugeiconsIcon
+                    icon={UserGroupIcon}
+                    strokeWidth={1.5}
+                    className="size-3.5"
+                  />
+                  Teams & invitations
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
                     setIsCreateTeamOpen(true);
                   }}
                 >
