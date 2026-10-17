@@ -46,7 +46,6 @@ describe("settings navigation", () => {
   });
 
   test("keeps related subsections under the same sidebar item", () => {
-    expect(settingsTeamSection("divisions")).toBe("members");
     expect(settingsTeamSection("suppressions")).toBe("delivery");
     expect(settingsTeamSection("danger")).toBe("overview");
   });

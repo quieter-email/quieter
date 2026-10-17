@@ -8,12 +8,6 @@ export const OrganizationSectionTabs = () => {
   const { organizationView } = settingsRouteApi.useSearch();
   const navigate = useNavigate({ from: "/settings" });
   let items: { label: string; value: OrganizationSettingsView }[] = [];
-  if (organizationView === "members" || organizationView === "divisions") {
-    items = [
-      { label: "Members & invitations", value: "members" },
-      { label: "Access groups", value: "divisions" },
-    ];
-  }
   if (organizationView === "delivery" || organizationView === "suppressions") {
     items = [
       { label: "Tracking & metrics", value: "delivery" },
