@@ -109,14 +109,9 @@ export const OrganizationBillingSettings = ({
   const statusMessage = getBillingStatusMessage(billing);
 
   return (
-    <section
-      className={cn(
-        settingsSurfaceVariants({ variant: "divider" }),
-        "px-4 py-6 md:px-6"
-      )}
-    >
+    <section className="@container">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <SettingsRowText title="Billing">
+        <SettingsRowText title="Plan & balance">
           <BillingCreditSummary
             creditAmountCents={billing.creditAmountCents}
             product={currentProduct}
@@ -158,9 +153,10 @@ export const OrganizationBillingSettings = ({
         </p>
       )}
 
-      <div className="mt-4 grid gap-3 xl:grid-cols-2">
+      <div className="mt-3 divide-y divide-border/70 border-t border-border/70">
         {(["managed", "pro"] as const).map((product) => (
           <BillingProductCard
+            compact
             canChoose={
               billing.canManageBilling &&
               (billing.hasAccess ||

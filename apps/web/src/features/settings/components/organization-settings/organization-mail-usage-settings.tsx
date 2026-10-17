@@ -89,7 +89,7 @@ const createInitialMilestones = (percents: number[]): Milestone[] =>
 
 const ManagedUsageLoading = ({ message }: { message: string }) => (
   <section className={settingsSurfaceVariants({ variant: "insetSection" })}>
-    <SettingsRowText title="Usage balance">
+    <SettingsRowText title="Usage">
       <span className="inline-flex items-center gap-2">
         <HugeiconsIcon
           aria-hidden
@@ -104,7 +104,7 @@ const ManagedUsageLoading = ({ message }: { message: string }) => (
 
 const ManagedUsageUnavailable = ({ message }: { message: string }) => (
   <section className={settingsSurfaceVariants({ variant: "insetSection" })}>
-    <SettingsRowText title="Usage balance">{message}</SettingsRowText>
+    <SettingsRowText title="Usage">{message}</SettingsRowText>
   </section>
 );
 
@@ -392,10 +392,7 @@ const ManagedUsageSettingsControls = ({
           className="max-w-xl"
           title={<label htmlFor="managed-overage-toggle">Allow overage</label>}
         >
-          <span>
-            When disabled, new paid usage stops after the monthly balance is
-            used.
-          </span>
+          <span>Continue paid usage after the balance runs out.</span>
         </SettingsRowText>
         <Switch
           checked={overageEnabled}
@@ -410,7 +407,7 @@ const ManagedUsageSettingsControls = ({
 
       <SettingsInsetFieldRow>
         <SettingsRowText className="max-w-xl" title="Monthly overage limit">
-          <span>Maximum usage billed above the monthly usage balance.</span>
+          <span>Maximum extra spend per month.</span>
         </SettingsRowText>
 
         <div className="flex items-center gap-2">
@@ -457,10 +454,7 @@ const ManagedUsageSettingsControls = ({
 
       <SettingsInsetRow className="justify-between gap-4">
         <SettingsRowText className="max-w-xl" title="Alert milestones">
-          <span>
-            Alerts are recorded once per billing period when usage crosses each
-            threshold.
-          </span>
+          <span>Recorded once per threshold each billing period.</span>
         </SettingsRowText>
 
         {canManageOrganizationMailUsage && (
@@ -649,7 +643,7 @@ const ManagedUsageSettingsForm = ({
     return (
       <section className={settingsSurfaceVariants({ variant: "insetSection" })}>
         <SettingsInsetRow className="justify-between gap-4">
-          <SettingsRowText title="Usage balance">
+          <SettingsRowText title="Usage">
             {formatMoney(managedUsageCostCents)} tracked this period
           </SettingsRowText>
           <Pill tone="green">Unlimited</Pill>
@@ -660,13 +654,12 @@ const ManagedUsageSettingsForm = ({
 
   return (
     <section className={settingsSurfaceVariants({ variant: "divider" })}>
-      <div className="flex flex-col gap-4 px-4 pt-6 md:flex-row md:items-start md:justify-between md:px-6">
-        <SettingsRowText title="Usage balance">
+      <div className="flex flex-col gap-4 px-4 pt-0 md:flex-row md:items-start md:justify-between md:px-6">
+        <SettingsRowText title="Usage">
           <div className="flex flex-wrap gap-x-3 gap-y-1">
-            <span>Managed mail rates</span>
             {periodStart !== null && periodEnd !== null ? (
               <span>
-                Usage period {periodStart} to {periodEnd}
+                {periodStart} to {periodEnd}
               </span>
             ) : null}
           </div>
@@ -679,9 +672,7 @@ const ManagedUsageSettingsForm = ({
             <p className="font-mono text-title-sm font-semibold text-fg">
               {formatMoney(managedUsageCostCents)}
             </p>
-            <p className="mt-1 text-caption text-muted-fg">
-              used across team features
-            </p>
+            <p className="mt-1 text-caption text-muted-fg">used this period</p>
           </div>
           <p className="text-right text-caption text-muted-fg">
             {formatMoney(includedUsageCents)} monthly usage balance
