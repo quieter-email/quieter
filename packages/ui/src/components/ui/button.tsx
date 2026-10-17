@@ -39,7 +39,7 @@ const buttonVariants = cva(
         card: "group h-auto min-h-32 w-full flex-col items-start justify-start rounded-lg border-border bg-bg-raised p-5 text-left text-fg whitespace-normal hover:border-border-strong hover:bg-control-hover active:bg-control-active",
         // Compact toggle chip, e.g. the Cc/Bcc switches. The pressed look
         // follows aria-pressed so callers only pass the state.
-        chip: "h-7 px-1.5 text-caption text-muted-fg aria-pressed:bg-control-active aria-pressed:text-fg",
+        chip: "h-7 px-1.5 text-caption text-muted-fg active:scale-100 aria-pressed:bg-control-active aria-pressed:text-fg",
         default:
           "bg-primary text-primary-fg shadow-sm hover:bg-primary/90 active:bg-primary/85",
         destructive:
@@ -49,7 +49,7 @@ const buttonVariants = cva(
         // Segmented option, e.g. the rule-builder choices. The selected look
         // follows aria-pressed so callers only pass the state.
         option:
-          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-control-active active:text-fg aria-pressed:bg-bg-surface aria-pressed:text-fg aria-pressed:shadow-sm",
+          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:scale-100 active:bg-control-active active:text-fg aria-pressed:bg-bg-surface aria-pressed:text-fg aria-pressed:shadow-sm",
         outline:
           "border-border bg-control text-fg hover:bg-control-hover active:bg-control-active",
         // Outline treatment for dark backdrops, e.g. the status screens.
