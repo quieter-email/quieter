@@ -30,13 +30,19 @@ import type { OrganizationSummary } from "./domain";
 
 export const OrganizationFormDialog = ({
   organization,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   organization?: OrganizationSummary;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) => {
   const queryClient = useQueryClient();
   const organizationsState = authClient.useListOrganizations();
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const isEditing = !!organization;
   const defaultValues = {
     name: organization?.name ?? "",
@@ -124,21 +130,23 @@ export const OrganizationFormDialog = ({
 
   return (
     <>
-      <Button
-        onClick={() => {
-          resetDialog();
-          setOpen(true);
-        }}
-        size="sm"
-        variant={isEditing ? "outline" : "default"}
-      >
-        <HugeiconsIcon
-          aria-hidden
-          className="size-4"
-          icon={isEditing ? Edit01Icon : UserGroupIcon}
-        />
-        {isEditing ? "Edit" : "Create"}
-      </Button>
+      {controlledOpen === undefined && (
+        <Button
+          onClick={() => {
+            resetDialog();
+            setOpen(true);
+          }}
+          size="sm"
+          variant={isEditing ? "outline" : "default"}
+        >
+          <HugeiconsIcon
+            aria-hidden
+            className="size-4"
+            icon={isEditing ? Edit01Icon : UserGroupIcon}
+          />
+          {isEditing ? "Edit" : "Create"}
+        </Button>
+      )}
 
       <Dialog
         onOpenChange={(nextOpen) => {
