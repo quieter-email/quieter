@@ -57,7 +57,11 @@ export const useAssistantPosition = ({
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
   const previousOpenRef = useRef(open);
-  const [position, setPosition] = useState<Position>({ mode: "dock" });
+  const [position, setPosition] = useState<Position>({
+    mode: "free",
+    x: 1,
+    y: 1,
+  });
   const [revealed, setRevealed] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [hasDock, setHasDock] = useState(false);
