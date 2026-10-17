@@ -86,7 +86,16 @@ const renderPasskeyList = (
   onRemovePasskey: (passkeyId: string) => void
 ) => {
   if (isPasskeysPending) {
-    return <p className="text-body text-muted-fg">Loading passkeys…</p>;
+    return (
+      <p
+        className={cn(
+          settingsSurfaceVariants({ variant: "padding" }),
+          settingsSurfaceVariants({ variant: "value" })
+        )}
+      >
+        Loading passkeys…
+      </p>
+    );
   }
 
   if (passkeys.length === 0) {
