@@ -79,79 +79,73 @@ export const InviteMemberForm = ({
 
   return (
     <form
-      className={cn(className)}
+      className={cn(
+        settingsSurfaceVariants({ variant: "form" }),
+        settingsSurfaceVariants({ variant: "padding" }),
+        className
+      )}
       action={async () => {
         await form.handleSubmit();
       }}
     >
-      <div
-        className={cn(
-          settingsSurfaceVariants({ variant: "form" }),
-          settingsSurfaceVariants({ variant: "padding" })
-        )}
-      >
-        <form.Field name="email">
-          {(field) => {
-            const hasErrors = field.state.meta.errors.length > 0;
+      <form.Field name="email">
+        {(field) => {
+          const hasErrors = field.state.meta.errors.length > 0;
 
-            return (
-              <TextField className="min-w-0 flex-1">
-                <TextFieldInput
-                  aria-describedby={hasErrors ? emailErrorId : undefined}
-                  aria-invalid={hasErrors}
-                  name={field.name}
-                  onBlur={() => {
-                    field.handleBlur();
-                  }}
-                  onChange={(event) => {
-                    setSubmitError(null);
-                    field.handleChange(event.target.value);
-                  }}
-                  placeholder="member@example.com"
-                  value={field.state.value}
-                />
-                {hasErrors && (
-                  <div id={emailErrorId} role="alert">
-                    {field.state.meta.errors.map((error) => (
+          return (
+            <TextField className="min-w-0">
+              <TextFieldInput
+                aria-describedby={emailErrorId}
+                aria-invalid={hasErrors}
+                aria-label="Email address"
+                autoComplete="email"
+                className="min-w-0"
+                name={field.name}
+                onBlur={() => {
+                  field.handleBlur();
+                }}
+                onChange={(event) => {
+                  setSubmitError(null);
+                  field.handleChange(event.target.value);
+                }}
+                placeholder="member@example.com"
+                value={field.state.value}
+              />
+              <div
+                aria-live="polite"
+                className="min-h-lh text-body"
+                id={emailErrorId}
+              >
+                {hasErrors
+                  ? field.state.meta.errors.map((error) => (
                       <Text key={error?.message} tone="destructive">
                         {error?.message}
                       </Text>
-                    ))}
-                  </div>
-                )}
-              </TextField>
-            );
-          }}
-        </form.Field>
-
-        <Button disabled={inviteMemberMutation.isPending} type="submit">
-          {inviteMemberMutation.isPending ? (
-            <HugeiconsIcon
-              aria-hidden
-              className="size-4 animate-spin"
-              icon={Loading03Icon}
-            />
-          ) : (
-            <HugeiconsIcon
-              aria-hidden
-              className="size-4"
-              icon={UserAdd01Icon}
-            />
-          )}
-          Invite
-        </Button>
-      </div>
-
-      {submitError !== null &&
-      submitError !== undefined &&
-      submitError !== "" ? (
-        <p
-          className="px-4 pb-3 text-body text-destructive @md:px-6"
-          role="alert"
-        >
-          {submitError}
-        </p>
-      ) : null}
+                    ))
+                  : submitError && (
+                      <Text tone="destructive">{submitError}</Text>
+                    )}
+              </div>
+            </TextField>
+          );
+        }}
+      </form.Field>
+      <Button
+        className="shrink-0 @md:w-24"
+        disabled={inviteMemberMutation.isPending}
+        type="submit"
+      >
+        {inviteMemberMutation.isPending ? (
+          <HugeiconsIcon
+            aria-hidden
+            className="size-4 animate-spin"
+            icon={Loading03Icon}
+          />
+        ) : (
+          <HugeiconsIcon aria-hidden className="size-4" icon={UserAdd01Icon} />
+        )}
+        Invite
+      </Button>
     </form>
   );
 };

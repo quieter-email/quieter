@@ -73,6 +73,9 @@ export const MailboxDetailSettingsView = ({
     <MailboxDetailSettingsContent
       canMakePrivate={canMakeMailboxPrivate}
       defaultMailboxId={defaultMailboxId}
+      deleteManagedMailboxMutation={asSettingsMutation(
+        mutations.deleteManagedMailboxMutation
+      )}
       detailGroupName={detailGroup?.name}
       detailManagedDivisions={detailManagedDivisions}
       detailManagedMembers={detailManagedMembers}

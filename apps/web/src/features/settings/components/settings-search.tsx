@@ -16,6 +16,7 @@ import {
 } from "#/features/settings/domain/settings-search";
 import type { SettingsSearchEntry } from "#/features/settings/domain/settings-search";
 import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
+import { settingsRouteApi } from "#/lib/route-apis";
 
 import { SettingsPageHeader } from "./settings-layout";
 import { useSettingsTeam } from "./use-settings-team";
@@ -31,12 +32,21 @@ export const SettingsSearch = ({
   }) => ReactNode;
   onSelect: () => void;
 }) => {
+  const { organizationView } = settingsRouteApi.useSearch();
+  const [previousOrganizationView, setPreviousOrganizationView] =
+    useState(organizationView);
   const [query, setQuery] = useState("");
   const [includeOtherTeams, setIncludeOtherTeams] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const navigate = useNavigate({ from: "/settings" });
   const { teamId, organizations } = useSettingsTeam();
   const { data } = useQuery(mailboxesQueryOptions());
+  if (previousOrganizationView !== organizationView) {
+    setPreviousOrganizationView(organizationView);
+    setQuery("");
+    setIncludeOtherTeams(false);
+    setActiveIndex(0);
+  }
   const teams = organizations.filter(
     (team) => includeOtherTeams || team.id === teamId
   );

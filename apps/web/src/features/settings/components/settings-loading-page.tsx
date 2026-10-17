@@ -32,6 +32,7 @@ export const SettingsLoadingPage = ({
           "General",
           "Members & access",
           "Mailboxes",
+          "Divisions",
           "Domains",
           "Delivery",
           "Billing & usage",

@@ -106,7 +106,7 @@ const CreateDivisionDialog = ({
         onCreated(result.divisionId);
       } catch (error) {
         setSubmitError(
-          getMutationErrorMessage(error, "Could not create access group.")
+          getMutationErrorMessage(error, "Could not create division.")
         );
       }
     },
@@ -143,10 +143,8 @@ const CreateDivisionDialog = ({
       >
         <DialogContent className="w-[min(92vw,28rem)]">
           <DialogHeader>
-            <DialogTitle>Add access group</DialogTitle>
-            <DialogDescription>
-              Group members who should share the same mailbox access.
-            </DialogDescription>
+            <DialogTitle>Add division</DialogTitle>
+            <DialogDescription>Shared mailbox access</DialogDescription>
           </DialogHeader>
 
           <form
@@ -160,7 +158,7 @@ const CreateDivisionDialog = ({
                   <TextField>
                     <TextFieldInput
                       aria-invalid={field.state.meta.errors.length > 0}
-                      aria-label="Access group name"
+                      aria-label="Division name"
                       name={field.name}
                       onBlur={() => {
                         field.handleBlur();
@@ -185,7 +183,7 @@ const CreateDivisionDialog = ({
                 {(field) => (
                   <TextField>
                     <TextFieldInput
-                      aria-label="Access group description"
+                      aria-label="Division description"
                       name={field.name}
                       onBlur={() => {
                         field.handleBlur();
@@ -274,7 +272,7 @@ const EditDivisionFieldDialog = ({
         setOpen(false);
       } catch (error) {
         setSubmitError(
-          getMutationErrorMessage(error, "Could not update access group.")
+          getMutationErrorMessage(error, "Could not update division.")
         );
       }
     },
@@ -404,7 +402,7 @@ const DeleteDivisionDialog = ({
     onError: (error) => {
       toastError(error, {
         boundary: "organization-divisions",
-        fallback: "Could not delete access group.",
+        fallback: "Could not delete division.",
       });
     },
     onSuccess: async () => {
@@ -412,7 +410,7 @@ const DeleteDivisionDialog = ({
       await queryClient.invalidateQueries({
         queryKey: getOrganizationDivisionsQueryKey(organizationId),
       });
-      toast.success("Access group removed.");
+      toast.success("Division removed.");
       onDeleted();
     },
   });
@@ -432,10 +430,10 @@ const DeleteDivisionDialog = ({
 
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete access group</AlertDialogTitle>
+          <AlertDialogTitle>Delete division</AlertDialogTitle>
           <AlertDialogDescription>
             Removes {division.name} and its member assignments. Mailbox access
-            granted through this access group will no longer apply.
+            granted through this division will no longer apply.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -508,7 +506,7 @@ const DivisionDetailView = ({
   return (
     <div className={settingsSurfaceVariants({ variant: "page" })}>
       <Button onClick={onBack} variant="ghost" size="sm">
-        ← Access groups
+        ← Divisions
       </Button>
       <SettingsPageHeader title={division.name}>
         {formatCount(division.members.length, "Member")},{" "}
@@ -550,10 +548,7 @@ const DivisionDetailView = ({
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection
-        description="Members inherit mailbox roles granted to this access group."
-        title="Members"
-      >
+      <SettingsSection description="Shared mailbox access" title="Members">
         <SettingsCard>
           {members.length > 0 ? (
             <SettingsInsetRows>
@@ -635,7 +630,7 @@ const DivisionDetailView = ({
                   organizationId={organization.id}
                 />
               }
-              label="Delete access group"
+              label="Delete division"
               value="Permanent"
             />
           </SettingsCard>
@@ -685,7 +680,7 @@ export const DivisionsView = ({
 
   let divisionsContent: ReactNode;
   if (isDivisionsPending) {
-    divisionsContent = <SettingsLoadingState label="Loading access groups" />;
+    divisionsContent = <SettingsLoadingState label="Loading divisions" />;
   } else if (isDivisionsError) {
     divisionsContent = (
       <p
@@ -694,7 +689,7 @@ export const DivisionsView = ({
           settingsSurfaceVariants({ variant: "padding" })
         )}
       >
-        {divisionsError?.message ?? "Could not load access groups."}
+        {divisionsError?.message ?? "Could not load divisions."}
       </p>
     );
   } else if (divisions.length > 0) {
@@ -721,7 +716,7 @@ export const DivisionsView = ({
           settingsSurfaceVariants({ variant: "padding" })
         )}
       >
-        No access groups yet.
+        No divisions yet.
       </p>
     );
   }
@@ -739,9 +734,9 @@ export const DivisionsView = ({
             />
           ) : null
         }
-        title="Access groups"
+        title="Divisions"
       >
-        {formatCount(divisions.length, "Access group")}
+        {formatCount(divisions.length, "Division")}
       </SettingsPageHeader>
 
       {divisionsContent}

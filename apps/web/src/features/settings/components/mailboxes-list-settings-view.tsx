@@ -27,7 +27,6 @@ import {
 import { prefetchMailboxSettingsDetail } from "#/features/settings/components/settings-prefetch";
 import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 
-import { ManagedMailboxAdministrationSettings } from "./managed-mailbox-administration-settings";
 import { useSettingsTeam } from "./use-settings-team";
 
 type MailboxGroup = RouterOutputs["mail"]["listMailboxes"]["groups"][number];
@@ -214,7 +213,6 @@ export const MailboxesListSettingsView = ({
       <SettingsSection title="Your mailboxes">
         {renderMailboxSection()}
       </SettingsSection>
-      <ManagedMailboxAdministrationSettings />
     </div>
   );
 };

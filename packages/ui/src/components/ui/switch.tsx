@@ -5,6 +5,7 @@ import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
+import { domMax, LazyMotion, m, useReducedMotion } from "motion/react";
 import { createContext, use } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 
@@ -22,13 +23,13 @@ const switchVariants = cva(
 );
 
 const switchThumbVariants = cva(
-  "squircle block shrink-0 rounded-full bg-switch-thumb shadow-sm transition-transform duration-150 ease-out data-checked:bg-primary-fg",
+  "squircle block shrink-0 rounded-full bg-switch-thumb shadow-sm data-checked:ml-auto data-checked:bg-primary-fg",
   {
     defaultVariants: { size: "default" },
     variants: {
       size: {
-        default: "size-4.5 data-checked:translate-x-5",
-        sm: "size-3.5 data-checked:translate-x-4",
+        default: "size-4.5",
+        sm: "size-3.5",
       },
     },
   }
@@ -53,35 +54,44 @@ export const Switch = ({
   size = "default",
   ...props
 }: SwitchProps) => (
-  <SwitchSizeContext value={size}>
-    <SwitchPrimitive.Root
-      {...props}
-      aria-busy={pending || undefined}
-      className={cn(switchVariants({ size }), className)}
-      disabled={pending || props.disabled}
-    >
-      {pending ? (
-        <HugeiconsIcon
-          aria-hidden
-          className="mx-auto size-3.5 animate-spin text-muted-fg"
-          icon={Loading03Icon}
-        />
-      ) : (
-        children
-      )}
-    </SwitchPrimitive.Root>
-  </SwitchSizeContext>
+  <LazyMotion features={domMax}>
+    <SwitchSizeContext value={size}>
+      <SwitchPrimitive.Root
+        {...props}
+        aria-busy={pending || undefined}
+        className={cn(switchVariants({ size }), className)}
+        disabled={pending || props.disabled}
+      >
+        {pending ? (
+          <HugeiconsIcon
+            aria-hidden
+            className="mx-auto size-3.5 animate-spin text-muted-fg"
+            icon={Loading03Icon}
+          />
+        ) : (
+          children
+        )}
+      </SwitchPrimitive.Root>
+    </SwitchSizeContext>
+  </LazyMotion>
 );
 
 export const SwitchThumb = ({
   className,
   ...props
-}: ComponentPropsWithoutRef<typeof SwitchPrimitive.Thumb>) => (
-  <SwitchPrimitive.Thumb
-    className={cn(
-      switchThumbVariants({ size: use(SwitchSizeContext) }),
-      className
-    )}
-    {...props}
-  />
-);
+}: ComponentPropsWithoutRef<typeof SwitchPrimitive.Thumb>) => {
+  const reducedMotion = useReducedMotion() === true;
+  const size = use(SwitchSizeContext);
+  return (
+    <SwitchPrimitive.Thumb
+      className={cn(switchThumbVariants({ size }), className)}
+      render={
+        <m.span
+          layout={reducedMotion ? false : "position"}
+          transition={{ layout: { bounce: 0, duration: 0.2, type: "spring" } }}
+        />
+      }
+      {...props}
+    />
+  );
+};

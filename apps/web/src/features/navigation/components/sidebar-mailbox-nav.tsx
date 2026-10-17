@@ -8,6 +8,7 @@ import {
   InboxIcon,
   Mail01Icon,
   MailSend02Icon,
+  News01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { IconSvgElement } from "@hugeicons/react";
@@ -36,6 +37,10 @@ const API_MAILBOX_ITEMS = SIDEBAR_MAILBOX_ITEMS.filter(
 
 type SidebarMailboxNavProps = {
   animateEntrance: boolean;
+  brief?: {
+    active: boolean;
+    onSelect: () => void;
+  };
   mailboxProvider: "api" | "gmail" | "managed" | null;
   selectedMailbox: MailboxCategory | null;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
@@ -43,49 +48,65 @@ type SidebarMailboxNavProps = {
 
 export const SidebarMailboxNav = ({
   animateEntrance,
+  brief,
   mailboxProvider,
   onSelectMailbox,
   selectedMailbox,
-}: SidebarMailboxNavProps) => (
-  <nav aria-label="Mailboxes" className="flex flex-col">
-    {(mailboxProvider === "api"
-      ? API_MAILBOX_ITEMS
-      : SIDEBAR_MAILBOX_ITEMS
-    ).map((item, index) => {
-      const isActive = selectedMailbox === item.id;
+}: SidebarMailboxNavProps) => {
+  const mailboxItems =
+    mailboxProvider === "api" ? API_MAILBOX_ITEMS : SIDEBAR_MAILBOX_ITEMS;
+  const items = brief
+    ? [
+        { icon: News01Icon, id: "daily-brief" as const, label: "Brief" },
+        ...mailboxItems,
+      ]
+    : mailboxItems;
 
-      return (
-        <SidebarEntrance
-          key={item.id}
-          animateEntrance={animateEntrance}
-          className="w-full"
-          index={index + 3}
-        >
-          <SidebarNavItem
-            active={isActive}
-            aria-current={isActive ? "page" : undefined}
-            // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom row spacing.
-            className={cn("w-full justify-start gap-3 px-3 text-left", {
-              "text-fg": isActive,
-              "text-muted-fg": !isActive,
-            })}
-            // oxlint-enable shadcn/no-restyle
-            onClick={() => {
-              onSelectMailbox(item.id);
-            }}
-            size="sm"
-            type="button"
-            variant="ghost"
+  return (
+    <nav aria-label="Mailboxes" className="flex flex-col">
+      {items.map((item, index) => {
+        const isActive =
+          item.id === "daily-brief"
+            ? brief?.active === true
+            : selectedMailbox === item.id;
+
+        return (
+          <SidebarEntrance
+            key={item.id}
+            animateEntrance={animateEntrance}
+            className="w-full"
+            index={index + 3}
           >
-            <HugeiconsIcon
-              strokeWidth={1.5}
-              className="shrink-0 text-fg"
-              icon={item.icon}
-            />
-            {item.label}
-          </SidebarNavItem>
-        </SidebarEntrance>
-      );
-    })}
-  </nav>
-);
+            <SidebarNavItem
+              active={isActive}
+              aria-current={isActive ? "page" : undefined}
+              // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom row spacing.
+              className={cn("w-full justify-start gap-3 px-3 text-left", {
+                "text-fg": isActive,
+                "text-muted-fg": !isActive,
+              })}
+              // oxlint-enable shadcn/no-restyle
+              onClick={() => {
+                if (item.id === "daily-brief") {
+                  brief?.onSelect();
+                } else {
+                  onSelectMailbox(item.id);
+                }
+              }}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <HugeiconsIcon
+                strokeWidth={1.5}
+                className="shrink-0 text-fg"
+                icon={item.icon}
+              />
+              {item.label}
+            </SidebarNavItem>
+          </SidebarEntrance>
+        );
+      })}
+    </nav>
+  );
+};

@@ -9,9 +9,8 @@ import { authClient } from "#/lib/auth";
 import { settingsRouteApi } from "#/lib/route-apis";
 import { useOrderedOrganizations } from "#/lib/use-ordered-organizations";
 
-import { SettingsBackButton, SettingsLoadingState } from "../settings-layout";
+import { SettingsLoadingState } from "../settings-layout";
 import { OrganizationDetailView } from "./organization-detail-view";
-import { OrganizationSectionTabs } from "./organization-section-tabs";
 import { OrganizationsListView } from "./organizations-list-view";
 
 export const OrganizationSettingsPanel = () => {
@@ -102,23 +101,13 @@ export const OrganizationSettingsPanel = () => {
     );
   } else if (organizationsState.isPending || sessionState.isPending) {
     panelContent = (
-      <>
-        <SettingsBackButton onClick={navigateToOrganizationsList}>
-          Teams
-        </SettingsBackButton>
-        <SettingsLoadingState className="min-h-48" label="Loading teams" />
-      </>
+      <SettingsLoadingState className="min-h-48" label="Loading teams" />
     );
   } else if (loadError) {
     panelContent = (
-      <>
-        <SettingsBackButton onClick={navigateToOrganizationsList}>
-          Teams
-        </SettingsBackButton>
-        <Text tone="destructive">
-          {loadError.message ?? "Could not load teams."}
-        </Text>
-      </>
+      <Text tone="destructive">
+        {loadError.message ?? "Could not load teams."}
+      </Text>
     );
   } else if (selectedOrganization) {
     panelContent = (
@@ -138,17 +127,7 @@ export const OrganizationSettingsPanel = () => {
 
   return (
     <TooltipGroup>
-      <div className="space-y-6">
-        {selectedOrganization && (
-          <>
-            <p className="text-caption text-muted-fg">
-              {selectedOrganization.name}
-            </p>
-            <OrganizationSectionTabs />
-          </>
-        )}
-        {panelContent}
-      </div>
+      <div className="space-y-6">{panelContent}</div>
     </TooltipGroup>
   );
 };

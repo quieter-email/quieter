@@ -9,7 +9,6 @@ import {
 import type { OrganizationSettingsView } from "#/features/settings/domain/organization-settings-view";
 
 import {
-  SettingsBackButton,
   SettingsErrorState,
   SettingsLoadingState,
   SettingsPageHeader,
@@ -92,35 +91,22 @@ export const OrganizationDetailView = ({
     isBillingSuccess && teamBilling?.hasAccess === true;
 
   if (isFullOrganizationPending) {
-    return (
-      <>
-        <SettingsBackButton onClick={onBackToList}>Teams</SettingsBackButton>
-        <SettingsLoadingState className="min-h-64" label="Loading team" />
-      </>
-    );
+    return <SettingsLoadingState className="min-h-64" label="Loading team" />;
   }
 
   if (isFullOrganizationError) {
     return (
-      <>
-        <SettingsBackButton onClick={onBackToList}>Teams</SettingsBackButton>
-        <SettingsErrorState
-          message={fullOrganizationError.message ?? "Could not load team."}
-          onRetry={() => {
-            void refetchFullOrganization();
-          }}
-        />
-      </>
+      <SettingsErrorState
+        message={fullOrganizationError.message ?? "Could not load team."}
+        onRetry={() => {
+          void refetchFullOrganization();
+        }}
+      />
     );
   }
 
   if (!fullOrganization) {
-    return (
-      <>
-        <SettingsBackButton onClick={onBackToList}>Teams</SettingsBackButton>
-        <p className="text-body text-muted-fg">Team not found.</p>
-      </>
-    );
+    return <p className="text-body text-muted-fg">Team not found.</p>;
   }
 
   if (view === "members") {
@@ -142,20 +128,15 @@ export const OrganizationDetailView = ({
   if (view === "domains") {
     if (domainId) {
       return (
-        <>
-          <SettingsBackButton onClick={onOpenDomains}>
-            Domains
-          </SettingsBackButton>
-          <DomainDetailView
-            billingAccessUnknown={isBillingError}
-            billingPending={isBillingPending}
-            canManageDomains={canUpdateOrganization}
-            canUseOrganizationDomains={canUseTeamFeatures}
-            domainId={domainId}
-            onBack={onOpenDomains}
-            organization={fullOrganization}
-          />
-        </>
+        <DomainDetailView
+          billingAccessUnknown={isBillingError}
+          billingPending={isBillingPending}
+          canManageDomains={canUpdateOrganization}
+          canUseOrganizationDomains={canUseTeamFeatures}
+          domainId={domainId}
+          onBack={onOpenDomains}
+          organization={fullOrganization}
+        />
       );
     }
     return (
