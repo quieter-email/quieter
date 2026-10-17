@@ -117,7 +117,7 @@ const Price = ({
   suffix: string;
   value: number;
 }) => (
-  <div className="min-w-0 py-3 md:px-4 md:first:pl-0 md:last:pr-0">
+  <div className="min-w-0 py-3 @md:px-4 @md:first:pl-0 @md:last:pr-0">
     <p className="text-caption text-muted-fg">{label}</p>
     <p className="mt-1 font-mono text-body font-medium text-fg">
       {rateFormatter.format(value)}
@@ -693,7 +693,7 @@ const ManagedUsageSettingsForm = ({
         </Progress>
       </div>
 
-      <div className="mx-4 mt-5 mb-1 grid divide-y divide-border/70 border-y border-border md:mx-6 md:grid-cols-3 md:divide-x md:divide-y-0">
+      <div className="mx-4 mt-5 mb-1 grid divide-y divide-border/70 border-y border-border @md:mx-6 @md:grid-cols-3 @md:divide-x @md:divide-y-0">
         <Price
           label="Messages"
           suffix="/ 1K"
