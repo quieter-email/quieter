@@ -4,9 +4,14 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { getSettingsReturnTo } from "#/features/settings/components/mailboxes-settings-shared";
+import { getOrganizationMailDomainsQueryKey } from "#/features/settings/components/organization-settings/mail-domains";
 import { toastError } from "#/lib/error-toast";
 import { openGoogleAccountLink } from "#/lib/google-account-link";
-import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
+import { mailCache } from "#/lib/mail-cache";
+import {
+  getGmailUnreadCountsQueryKey,
+  getMailboxesQueryKey,
+} from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
 type MailboxesQueryData = RouterOutputs["mail"]["listMailboxes"];
@@ -125,16 +130,80 @@ export const useMailboxDetailMutations = (
     });
   };
 
+  const afterMailboxRemoval = async (mailboxId: string) => {
+    const mailboxQueries = {
+      predicate: ({ queryKey }: { queryKey: readonly unknown[] }) =>
+        queryKey.includes(mailboxId) ||
+        queryKey.some(
+          (part) =>
+            typeof part === "object" &&
+            part !== null &&
+            "input" in part &&
+            typeof part.input === "object" &&
+            part.input !== null &&
+            "mailboxId" in part.input &&
+            part.input.mailboxId === mailboxId
+        ),
+    };
+    await Promise.all([
+      queryClient.cancelQueries(mailboxQueries),
+      queryClient.cancelQueries({ queryKey: getMailboxesQueryKey() }),
+    ]);
+    queryClient.removeQueries(mailboxQueries);
+    queryClient.setQueryData<MailboxesQueryData>(
+      getMailboxesQueryKey(),
+      (current) =>
+        current === undefined
+          ? current
+          : {
+              ...current,
+              defaultMailboxId:
+                current.defaultMailboxId === mailboxId
+                  ? null
+                  : current.defaultMailboxId,
+              groups: current.groups.map((group) => ({
+                ...group,
+                mailboxes: group.mailboxes.filter(
+                  (mailbox) => mailbox.id !== mailboxId
+                ),
+              })),
+            }
+    );
+    await Promise.all([
+      mailCache.removeMailbox(mailboxId),
+      invalidateMailboxes(),
+      queryClient.invalidateQueries({
+        queryKey: getGmailUnreadCountsQueryKey(),
+      }),
+      navigate({
+        replace: true,
+        search: (previous) => ({ ...previous, mailboxId: "", section: "" }),
+        to: ".",
+      }),
+    ]);
+  };
+  const deleteManagedMailboxMutation = useMutation({
+    ...orpc.mail.deleteManagedMailbox.mutationOptions(),
+    mutationKey: ["mail", "delete-managed-mailbox", selectedMailboxId],
+    onSuccess: async (result, input) => {
+      await Promise.all([
+        afterMailboxRemoval(input.mailboxId),
+        queryClient.invalidateQueries({
+          queryKey: getOrganizationMailDomainsQueryKey(result.organizationId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: orpc.mail.listManagedMailboxAdministration.queryOptions({
+            input: { organizationId: result.organizationId },
+          }).queryKey,
+        }),
+      ]);
+    },
+  });
   const disconnectMailboxMutation = useMutation({
     ...orpc.mail.disconnectMailbox.mutationOptions(),
-    mutationKey: ["mail", "disconnect-mailbox"],
-    onSuccess: async () => {
-      await invalidateMailboxes();
-      await navigate({
-        replace: true,
-        search: (previous) => ({ ...previous, mailboxId: "" }),
-        to: ".",
-      });
+    mutationKey: ["mail", "disconnect-mailbox", selectedMailboxId],
+    onSuccess: async (_result, input) => {
+      await afterMailboxRemoval(input.mailboxId);
     },
   });
   const moveGmailMailboxMutation = useMutation({
@@ -257,6 +326,7 @@ export const useMailboxDetailMutations = (
   };
 
   return {
+    deleteManagedMailboxMutation,
     disconnectMailboxMutation,
     isStartingGmail,
     moveGmailMailboxMutation,

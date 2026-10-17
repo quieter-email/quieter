@@ -29,6 +29,7 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { toast } from "@quieter/ui/toast";
+import { Toggle, ToggleGroup } from "@quieter/ui/toggle";
 
 import type {
   RuleActionKind,
@@ -121,7 +122,13 @@ const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
   return (
     <div className="space-y-2 rounded-lg bg-secondary/40 p-3 squircle">
       <p className="text-caption font-medium text-muted-fg">Then</p>
-      <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+      <ToggleGroup
+        aria-label="Rule action"
+        className="grid grid-cols-2 sm:grid-cols-4"
+        size="flush"
+        variant="plain"
+        value={[ruleActionKind]}
+      >
         {(
           [
             ["set-labels", "Apply labels"],
@@ -130,59 +137,68 @@ const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
             ["forward", "Forward"],
           ] as const
         ).map(([kind, label]) => (
-          <Button
-            aria-pressed={ruleActionKind === kind}
+          <Toggle
+            size="sm"
             key={kind}
             onClick={() => {
               setRuleActionKind(kind);
             }}
-            size="sm"
             type="button"
-            variant="option"
+            value={kind}
           >
             {label}
-          </Button>
+          </Toggle>
         ))}
-      </div>
+      </ToggleGroup>
       {ruleActionKind === "set-read" ? (
-        <div className="grid grid-cols-2 gap-1">
+        <ToggleGroup
+          aria-label="Read state"
+          className="grid grid-cols-2"
+          size="flush"
+          variant="plain"
+          value={[String(ruleReadState)]}
+        >
           {[true, false].map((read) => (
-            <Button
-              aria-pressed={ruleReadState === read}
+            <Toggle
+              size="sm"
               key={String(read)}
               onClick={() => {
                 setRuleReadState(read);
               }}
-              size="sm"
               type="button"
-              variant="option"
+              value={String(read)}
             >
               {read ? "Mark read" : "Mark unread"}
-            </Button>
+            </Toggle>
           ))}
-        </div>
+        </ToggleGroup>
       ) : null}
       {ruleActionKind === "move" ? (
-        <div className="grid grid-cols-2 gap-1">
+        <ToggleGroup
+          aria-label="Move destination"
+          className="grid grid-cols-2"
+          size="flush"
+          variant="plain"
+          value={[ruleMoveDestination]}
+        >
           {(["archive", "inbox", "spam", "trash"] as const).map(
             (destination) => (
-              <Button
-                aria-pressed={ruleMoveDestination === destination}
+              <Toggle
+                size="sm"
                 key={destination}
                 onClick={() => {
                   setRuleMoveDestination(destination);
                 }}
-                size="sm"
                 type="button"
-                variant="option"
+                value={destination}
               >
                 {destination === "inbox"
                   ? "Move to Inbox"
                   : `Move to ${destination[0]?.toUpperCase()}${destination.slice(1)}`}
-              </Button>
+              </Toggle>
             )
           )}
-        </div>
+        </ToggleGroup>
       ) : null}
       {ruleActionKind === "forward" ? (
         <div className="space-y-2">
@@ -371,22 +387,27 @@ const ManagedRuleBuilder = (props: MailboxOrganizerContentProps) => {
         size="sm"
         value={ruleQuery}
       />
-      <div className="grid grid-cols-2 rounded-lg bg-muted/40 p-0.5">
+      <ToggleGroup
+        aria-label="Rule match"
+        className="grid grid-cols-2"
+        size="compact"
+        variant="subtle"
+        value={[ruleMatchMode]}
+      >
         {(["all", "any"] as const).map((mode) => (
-          <Button
-            aria-pressed={ruleMatchMode === mode}
+          <Toggle
+            size="sm"
             key={mode}
             onClick={() => {
               setRuleMatchMode(mode);
             }}
-            size="sm"
             type="button"
-            variant="option"
+            value={mode}
           >
             Match {mode}
-          </Button>
+          </Toggle>
         ))}
-      </div>
+      </ToggleGroup>
       <ManagedRuleActionEditor {...props} />
       <ManagedRuleLabelsEditor {...props} />
       <ManagedRulePreviewActions {...props} />
