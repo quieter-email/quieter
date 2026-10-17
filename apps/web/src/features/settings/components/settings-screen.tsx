@@ -16,7 +16,7 @@ import { BillingCheckoutResult } from "./billing-checkout-result";
 import { ConnectorConnectionResult } from "./connector-connection-result";
 import { GmailConnectionResult } from "./gmail-connection-result";
 import { SettingsDataPrefetch } from "./settings-data-prefetch";
-import { SettingsLoadingState } from "./settings-layout";
+import { SettingsLoadingState, SettingsPageHeader } from "./settings-layout";
 import { SettingsSearch } from "./settings-search";
 import { SettingsSidebar } from "./settings-sidebar";
 
@@ -156,13 +156,11 @@ export const SettingsScreen = ({
                 </IconButtonTooltip>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className="mx-auto w-full max-w-180 space-y-10 px-5 py-8 md:px-8 md:py-14">
+                <div className="mx-auto w-full max-w-180 space-y-8 px-5 py-8 md:px-8 md:py-14">
                   {!isMobileOpen && results}
-                  <div hidden={searching} className="space-y-10">
+                  <div hidden={searching} className="space-y-8">
                     {tab !== "organization" && tab !== "mailboxes" && (
-                      <h1 className="text-title-sm font-normal tracking-tight">
-                        {title}
-                      </h1>
+                      <SettingsPageHeader title={title} />
                     )}
                     <Suspense
                       fallback={

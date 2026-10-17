@@ -10,6 +10,7 @@ import {
   SettingsCard,
   SettingsLoadingState,
   SettingsPageHeader,
+  settingsSurfaceVariants,
 } from "#/features/settings/components/settings-layout";
 import { useMailboxDetailViewState } from "#/features/settings/components/use-mailbox-detail-view-state";
 
@@ -42,11 +43,11 @@ export const MailboxDetailSettingsView = ({
 
   if (selectedMailbox === null) {
     return (
-      <div className="space-y-8">
+      <div className={settingsSurfaceVariants({ variant: "page" })}>
         <SettingsPageHeader title="Mailbox unavailable">
           This mailbox is no longer available to your account.
         </SettingsPageHeader>
-        <SettingsCard className="p-6">
+        <SettingsCard className={settingsSurfaceVariants({ variant: "body" })}>
           <Button
             onClick={() => {
               runDetached(async () => {

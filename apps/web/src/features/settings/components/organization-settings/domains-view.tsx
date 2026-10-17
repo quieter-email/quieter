@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import {
   SettingsLoadingState,
   SettingsNavigationRow,
+  SettingsPageHeader,
   SettingsRows,
   settingsSurfaceVariants,
 } from "../settings-layout";
@@ -154,36 +155,34 @@ export const DomainsView = ({
   }
 
   return (
-    <div className="@container space-y-6">
-      <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
-        <div>
-          <h1 className="text-body-lg font-semibold text-fg">Domains</h1>
-          <p className="mt-1 text-body text-muted-fg">
-            {formatCount(domains.length, "Domain", "Domains")}
-          </p>
-        </div>
-
-        {manageDomainsReason === null ? (
-          <RegisterDomainDialog
-            onCreated={(domainId) => {
-              onOpenDomain(domainId);
-            }}
-            organizationId={organization.id}
-          />
-        ) : (
-          <MutedActionButton
-            icon={
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4"
-                icon={Globe02Icon}
-              />
-            }
-            label="Register"
-            reason={manageDomainsReason}
-          />
-        )}
-      </div>
+    <div className={settingsSurfaceVariants({ variant: "page" })}>
+      <SettingsPageHeader
+        action={
+          manageDomainsReason === null ? (
+            <RegisterDomainDialog
+              onCreated={(domainId) => {
+                onOpenDomain(domainId);
+              }}
+              organizationId={organization.id}
+            />
+          ) : (
+            <MutedActionButton
+              icon={
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-4"
+                  icon={Globe02Icon}
+                />
+              }
+              label="Register"
+              reason={manageDomainsReason}
+            />
+          )
+        }
+        title="Domains"
+      >
+        {formatCount(domains.length, "Domain", "Domains")}
+      </SettingsPageHeader>
 
       {isSendingPaused && domains.length > 0 && (
         <BillingAccessNotice organizationId={organization.id} />

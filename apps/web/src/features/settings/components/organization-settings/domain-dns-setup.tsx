@@ -12,7 +12,13 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { toast } from "@quieter/ui/toast";
 
-import { SettingsCard, SettingsSection } from "../settings-layout";
+import {
+  SettingsCard,
+  SettingsFieldRow,
+  SettingsRowText,
+  SettingsSection,
+  settingsSurfaceVariants,
+} from "../settings-layout";
 import { RecordState } from "./domain-status";
 import type {
   getDomainVerificationStatus,
@@ -142,38 +148,48 @@ export const DomainStatusSummary = ({
   status: ReturnType<typeof getDomainVerificationStatus>;
   totalRecords: number;
 }) => (
-  <section
-    className={cn(
-      "relative overflow-hidden rounded-xl border p-5 squircle",
-      getStatusSectionClass(status.tone)
-    )}
-  >
-    <div className="@container relative grid gap-6 @lg:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(7rem,0.7fr))] @lg:items-center">
-      <div>
-        <div className="flex items-center gap-2">
-          <HugeiconsIcon
-            aria-hidden
-            className={cn("size-5", getStatusIconClass(status.tone))}
-            icon={getStatusIcon(status.tone)}
-          />
-          <h2 className="text-body-lg font-medium text-fg">{status.label}</h2>
-        </div>
-        <p className="mt-2 max-w-lg text-body/6 text-muted-fg">
-          {status.description}
-        </p>
-      </div>
+  <SettingsCard className={getStatusSectionClass(status.tone)}>
+    <div
+      className={cn(
+        settingsSurfaceVariants({ variant: "padding" }),
+        "grid gap-4 @lg:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(7rem,0.7fr))] @lg:items-center"
+      )}
+    >
+      <SettingsRowText
+        title={
+          <span className="flex items-center gap-2">
+            <HugeiconsIcon
+              aria-hidden
+              className={cn("size-4", getStatusIconClass(status.tone))}
+              icon={getStatusIcon(status.tone)}
+            />
+            {status.label}
+          </span>
+        }
+      >
+        {status.description}
+      </SettingsRowText>
       {[
         ["DNS records", `${passingRecords}/${totalRecords}`],
         ["Sending", sendingReady ? "Ready" : "Checking"],
         ["Incoming mail", domain.mode === "send_only" ? "Off" : "Enabled"],
       ].map(([label, value]) => (
         <div className="border-l border-border pl-4" key={label}>
-          <p className="text-caption text-muted-fg">{label}</p>
-          <p className="mt-1 text-body font-medium text-fg">{value}</p>
+          <p className={settingsSurfaceVariants({ variant: "value" })}>
+            {label}
+          </p>
+          <p
+            className={cn(
+              "mt-1",
+              settingsSurfaceVariants({ variant: "title" })
+            )}
+          >
+            {value}
+          </p>
         </div>
       ))}
     </div>
-  </section>
+  </SettingsCard>
 );
 
 const DomainConnectCard = ({
@@ -194,22 +210,10 @@ const DomainConnectCard = ({
   }
 
   return (
-    <SettingsCard className="@container p-3.5 @md:px-4">
-      <div className="flex flex-col gap-3 @md:flex-row @md:items-center @md:justify-between">
-        <div className="min-w-0">
-          <p className="text-body font-medium text-fg">
-            {availability?.available === true
-              ? `Connect with ${availability.provider.displayName}`
-              : "Checking your DNS provider…"}
-          </p>
-          {availability?.available === true ? (
-            <p className="mt-0.5 text-caption text-muted-fg">
-              Authorize the exact records, then Quieter verifies DNS when you
-              return.
-            </p>
-          ) : null}
-        </div>
-        {availability?.available === true &&
+    <SettingsCard>
+      <SettingsFieldRow
+        action={
+          availability?.available === true &&
           (manageReason === null ? (
             <Button disabled={startPending} onClick={onStart} size="sm">
               <HugeiconsIcon
@@ -231,8 +235,22 @@ const DomainConnectCard = ({
               label="Connect DNS"
               reason={manageReason}
             />
-          ))}
-      </div>
+          ))
+        }
+        label={
+          availability?.available === true
+            ? `Connect with ${availability.provider.displayName}`
+            : "Checking your DNS provider…"
+        }
+        value={
+          availability?.available === true ? (
+            <>
+              Authorize the exact records, then Quieter verifies DNS when you
+              return.
+            </>
+          ) : null
+        }
+      />
     </SettingsCard>
   );
 };

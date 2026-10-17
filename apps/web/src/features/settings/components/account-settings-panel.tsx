@@ -9,6 +9,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   Dialog,
   DialogBody,
@@ -41,6 +42,7 @@ import {
   SettingsCard,
   SettingsFieldRow,
   SettingsSection,
+  settingsSurfaceVariants,
 } from "./settings-layout";
 
 const getMutationErrorMessage = (error: unknown, fallback: string) =>
@@ -88,34 +90,41 @@ const renderPasskeyList = (
   }
 
   if (passkeys.length === 0) {
-    return <p className="text-body text-muted-fg">No passkeys.</p>;
+    return (
+      <p
+        className={cn(
+          settingsSurfaceVariants({ variant: "padding" }),
+          settingsSurfaceVariants({ variant: "value" })
+        )}
+      >
+        No passkeys.
+      </p>
+    );
   }
 
   return passkeys.map((passkey) => (
-    <div className="flex items-center justify-between gap-4" key={passkey.id}>
-      <div className="min-w-0">
-        <p className="text-body text-fg">{getPasskeyLabel(passkey)}</p>
-        <p className="mt-1 text-body text-muted-fg">
-          {formatPasskeyDate(passkey.createdAt)}
-        </p>
-      </div>
-
-      <Button
-        disabled={removingPasskeyId === passkey.id}
-        onClick={() => {
-          onRemovePasskey(passkey.id);
-        }}
-        size="sm"
-        variant="outline"
-      >
-        {removingPasskeyId === passkey.id ? (
-          <SpinnerIcon />
-        ) : (
-          <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
-        )}
-        Remove
-      </Button>
-    </div>
+    <SettingsFieldRow
+      key={passkey.id}
+      label={getPasskeyLabel(passkey)}
+      value={formatPasskeyDate(passkey.createdAt)}
+      action={
+        <Button
+          disabled={removingPasskeyId === passkey.id}
+          onClick={() => {
+            onRemovePasskey(passkey.id);
+          }}
+          size="sm"
+          variant="outline"
+        >
+          {removingPasskeyId === passkey.id ? (
+            <SpinnerIcon />
+          ) : (
+            <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+          )}
+          Remove
+        </Button>
+      }
+    />
   ));
 };
 
@@ -186,9 +195,9 @@ const AccountNameSettings = ({
   });
 
   return (
-    <div className="min-w-0">
+    <div className="w-full min-w-0 @md:w-72">
       <form
-        className="flex flex-wrap items-start gap-2"
+        className={settingsSurfaceVariants({ variant: "form" })}
         action={async () => {
           await form.handleSubmit();
         }}
@@ -228,7 +237,6 @@ const AccountNameSettings = ({
           <Button
             aria-label="Save name"
             disabled={updateUserMutation.isPending}
-            size="sm"
             type="submit"
           >
             {updateUserMutation.isPending ? (
@@ -317,9 +325,9 @@ const AccountEmailSettings = ({ currentEmail }: { currentEmail: string }) => {
   });
 
   return (
-    <div className="min-w-0">
+    <div className="w-full min-w-0 @md:w-72">
       <form
-        className="flex flex-wrap items-start gap-2"
+        className={settingsSurfaceVariants({ variant: "form" })}
         action={async () => {
           await form.handleSubmit();
         }}
@@ -362,7 +370,6 @@ const AccountEmailSettings = ({ currentEmail }: { currentEmail: string }) => {
           <Button
             aria-label="Change email"
             disabled={changeEmailMutation.isPending}
-            size="sm"
             type="submit"
           >
             {changeEmailMutation.isPending ? (
@@ -510,62 +517,69 @@ const PasskeySettings = ({
   };
 
   return (
-    <div className="min-w-0 space-y-4 p-4">
-      <div className="space-y-4">
-        <form
-          className="space-y-3"
-          action={async () => {
-            await form.handleSubmit();
-          }}
-        >
-          <form.Field name="label">
-            {(field) => (
-              <TextField>
-                <TextFieldInput
-                  aria-label="Passkey label"
-                  name={field.name}
-                  onBlur={() => {
-                    field.handleBlur();
-                  }}
-                  onChange={(event) => {
-                    setSubmitError(null);
-                    field.handleChange(event.target.value);
-                  }}
-                  placeholder="Passkey label"
-                  value={field.state.value}
-                />
-              </TextField>
-            )}
-          </form.Field>
+    <>
+      <SettingsFieldRow
+        label="Passkeys"
+        value={null}
+        action={
+          <div className="w-full min-w-0 @md:w-72">
+            <form
+              className={settingsSurfaceVariants({ variant: "form" })}
+              action={async () => {
+                await form.handleSubmit();
+              }}
+            >
+              <form.Field name="label">
+                {(field) => (
+                  <TextField>
+                    <TextFieldInput
+                      aria-label="Passkey label"
+                      name={field.name}
+                      onBlur={() => {
+                        field.handleBlur();
+                      }}
+                      onChange={(event) => {
+                        setSubmitError(null);
+                        field.handleChange(event.target.value);
+                      }}
+                      placeholder="Passkey label"
+                      value={field.state.value}
+                    />
+                  </TextField>
+                )}
+              </form.Field>
 
-          <Button
-            disabled={addPasskeyMutation.isPending || !supportsPasskeys}
-            size="sm"
-            type="submit"
-          >
-            {addPasskeyMutation.isPending ? (
-              <SpinnerIcon />
-            ) : (
-              <HugeiconsIcon aria-hidden className="size-4" icon={Key02Icon} />
-            )}
-            Add passkey
-          </Button>
-        </form>
-
-        <div className="space-y-3">
-          {renderPasskeyList(
-            isPasskeysPending,
-            passkeys,
-            removingPasskeyId,
-            handleRemovePasskeyClick
-          )}
-        </div>
-
-        {submitError === null ? null : (
+              <Button
+                disabled={addPasskeyMutation.isPending || !supportsPasskeys}
+                type="submit"
+              >
+                {addPasskeyMutation.isPending ? (
+                  <SpinnerIcon />
+                ) : (
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Key02Icon}
+                  />
+                )}
+                Add passkey
+              </Button>
+            </form>
+          </div>
+        }
+      />
+      {submitError === null ? null : (
+        <div className={settingsSurfaceVariants({ variant: "padding" })}>
           <Text tone="destructive">{submitError}</Text>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+      {renderPasskeyList(
+        isPasskeysPending,
+        passkeys,
+        removingPasskeyId,
+        handleRemovePasskeyClick
+      )}
+    </>
   );
 };
 
@@ -783,7 +797,7 @@ export const AccountSettingsPanel = ({
   };
 
   return (
-    <div className="space-y-12">
+    <div className={settingsSurfaceVariants({ variant: "page" })}>
       <SettingsSection title="Profile">
         <SettingsCard>
           <SettingsFieldRow

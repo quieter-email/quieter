@@ -29,6 +29,7 @@ import { ManagedMailboxManagerSettingsSection } from "#/features/settings/compon
 import {
   SettingsCard,
   SettingsPageHeader,
+  settingsSurfaceVariants,
   SettingsSection,
 } from "#/features/settings/components/settings-layout";
 import { toastError } from "#/lib/error-toast";
@@ -132,7 +133,7 @@ export const MailboxDetailSettingsContent = ({
   const activeSection = sections.includes(section) ? section : "general";
 
   return (
-    <div className="space-y-8">
+    <div className={settingsSurfaceVariants({ variant: "page" })}>
       <SettingsPageHeader title={title}>
         {hasTrimmedDisplayName(mailbox.displayName) && (
           <span>{mailbox.emailAddress}, </span>
@@ -228,7 +229,9 @@ export const MailboxDetailSettingsContent = ({
 
           {isManagedNonManager && activeSection === "general" && (
             <SettingsSection title="Mailbox settings">
-              <SettingsCard className="p-6">
+              <SettingsCard
+                className={settingsSurfaceVariants({ variant: "body" })}
+              >
                 <p className="text-body text-fg">Manager access required</p>
                 <p className="mt-1 max-w-2xl text-body/6 text-muted-fg">
                   A mailbox manager can change inbox features, routing, and
@@ -271,7 +274,9 @@ export const MailboxDetailSettingsContent = ({
 
           {isApi && (
             <SettingsSection title="Mailbox capabilities">
-              <SettingsCard className="p-6">
+              <SettingsCard
+                className={settingsSurfaceVariants({ variant: "body" })}
+              >
                 <p className="text-body text-fg">Send-only mailbox</p>
                 <p className="mt-1 max-w-2xl text-body/6 text-muted-fg">
                   This address sends through your team API. Its domain and

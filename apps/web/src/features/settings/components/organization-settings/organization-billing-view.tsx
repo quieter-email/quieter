@@ -5,7 +5,11 @@ import { Tabs, TabsList, TabsTab, TabsPanel } from "@quieter/ui/tabs";
 import type { UserBillingOverview } from "#/features/settings/domain/billing";
 import { settingsRouteApi } from "#/lib/route-apis";
 
-import { SettingsCard } from "../settings-layout";
+import {
+  SettingsCard,
+  SettingsPageHeader,
+  settingsSurfaceVariants,
+} from "../settings-layout";
 import { OrganizationBillingSettings } from "./organization-billing-settings";
 import { OrganizationMailUsageSettings } from "./organization-mail-usage-settings";
 
@@ -29,13 +33,10 @@ export const OrganizationBillingView = ({
   const { section } = settingsRouteApi.useSearch();
   const navigate = settingsRouteApi.useNavigate();
   return (
-    <section className="space-y-6">
-      <div>
-        <h1 className="text-body-lg font-semibold text-fg">Billing</h1>
-        <p className="mt-1 text-body text-muted-fg">
-          Plans, usage balance, and overage controls.
-        </p>
-      </div>
+    <section className={settingsSurfaceVariants({ variant: "page" })}>
+      <SettingsPageHeader title="Billing">
+        Plans, usage balance, and overage controls.
+      </SettingsPageHeader>
 
       <Tabs
         value={section === "usage" ? "usage" : "plan"}

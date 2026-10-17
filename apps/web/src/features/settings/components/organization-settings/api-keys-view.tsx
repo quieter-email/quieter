@@ -59,6 +59,7 @@ import { rethrowClassified } from "#/lib/orpc-errors";
 
 import {
   SettingsLoadingState,
+  SettingsPageHeader,
   SettingsRow,
   SettingsRows,
   settingsSurfaceVariants,
@@ -900,27 +901,29 @@ export const ApiKeysView = ({
   }
 
   return (
-    <div className="@container space-y-6">
-      <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
-        <div>
-          <h1 className="text-body-lg font-semibold text-fg">API keys</h1>
-          <p className="mt-1 text-body text-muted-fg">
-            {formatCount(apiKeys.length, "Key", "Keys")}
-          </p>
-        </div>
-
-        {manageApiKeysReason === null ? (
-          <CreateApiKeyDialog organizationId={organization.id} />
-        ) : (
-          <MutedActionButton
-            icon={
-              <HugeiconsIcon aria-hidden className="size-4" icon={Key02Icon} />
-            }
-            label="Create"
-            reason={manageApiKeysReason}
-          />
-        )}
-      </div>
+    <div className={settingsSurfaceVariants({ variant: "page" })}>
+      <SettingsPageHeader
+        action={
+          manageApiKeysReason === null ? (
+            <CreateApiKeyDialog organizationId={organization.id} />
+          ) : (
+            <MutedActionButton
+              icon={
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-4"
+                  icon={Key02Icon}
+                />
+              }
+              label="Create"
+              reason={manageApiKeysReason}
+            />
+          )
+        }
+        title="API keys"
+      >
+        {formatCount(apiKeys.length, "Key", "Keys")}
+      </SettingsPageHeader>
 
       {!billingPending &&
         !billingAccessUnknown &&

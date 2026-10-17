@@ -17,7 +17,11 @@ import {
 } from "@quieter/ui/dialog";
 import type { UseMutationResult } from "@tanstack/react-query";
 
-import { SettingsCard, SettingsSection } from "../settings-layout";
+import {
+  SettingsCard,
+  SettingsFieldRow,
+  SettingsSection,
+} from "../settings-layout";
 import type { DomainDetail } from "./domain-status";
 import { MutedActionButton } from "./settings-row";
 
@@ -52,51 +56,51 @@ export const DomainDangerSection = ({
       description="Removal releases the domain from this team. DNS records are not removed at your provider."
       title="Danger zone"
     >
-      <SettingsCard className="p-5">
-        <div className="@container flex flex-col gap-4 @md:flex-row @md:items-center @md:justify-between">
-          <div>
-            <p className="text-body font-medium text-fg">Remove domain</p>
-            <p className="mt-1 text-caption/5 text-muted-fg">
-              {data.managedMailboxCount > 0
-                ? `Remove or migrate ${data.managedMailboxCount} shared ${data.managedMailboxCount === 1 ? "inbox" : "inboxes"} first.`
-                : "This stops Quieter from sending or receiving mail for the domain."}
-            </p>
-          </div>
-          {showRemoveDomainMutedAction(
-            manageReason,
-            data.managedMailboxCount
-          ) ? (
-            <MutedActionButton
-              icon={
+      <SettingsCard>
+        <SettingsFieldRow
+          action={
+            showRemoveDomainMutedAction(
+              manageReason,
+              data.managedMailboxCount
+            ) ? (
+              <MutedActionButton
+                icon={
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={Delete02Icon}
+                  />
+                }
+                label="Remove"
+                reason={
+                  manageReason ??
+                  "Shared inboxes must be removed or migrated before removing this domain."
+                }
+              />
+            ) : (
+              <Button
+                onClick={() => {
+                  setRemoveOpen(true);
+                }}
+                size="sm"
+                variant="destructive"
+              >
                 <HugeiconsIcon
                   aria-hidden
                   className="size-4"
                   icon={Delete02Icon}
                 />
-              }
-              label="Remove"
-              reason={
-                manageReason ??
-                "Shared inboxes must be removed or migrated before removing this domain."
-              }
-            />
-          ) : (
-            <Button
-              onClick={() => {
-                setRemoveOpen(true);
-              }}
-              size="sm"
-              variant="destructive"
-            >
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4"
-                icon={Delete02Icon}
-              />
-              Remove
-            </Button>
-          )}
-        </div>
+                Remove
+              </Button>
+            )
+          }
+          label="Remove domain"
+          value={
+            data.managedMailboxCount > 0
+              ? `Remove or migrate ${data.managedMailboxCount} shared ${data.managedMailboxCount === 1 ? "inbox" : "inboxes"} first.`
+              : "This stops Quieter from sending or receiving mail for the domain."
+          }
+        />
       </SettingsCard>
     </SettingsSection>
 

@@ -23,6 +23,7 @@ import {
   SettingsLoadingState,
   SettingsRow,
   SettingsSection,
+  settingsSurfaceVariants,
 } from "#/features/settings/components/settings-layout";
 import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
@@ -230,7 +231,7 @@ const MailboxBriefForm = ({
           label="Timezone"
           value="The schedule follows daylight saving changes."
         />
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 @md:px-6">
+        <div className={settingsSurfaceVariants({ variant: "footer" })}>
           <p className="text-caption text-muted-fg">
             {needsReconnect
               ? "Reconnect this mailbox to prepare new editions."

@@ -86,8 +86,8 @@ export const InviteMemberForm = ({
     >
       <div
         className={cn(
-          settingsSurfaceVariants({ variant: "insetFieldRow" }),
-          "gap-3"
+          settingsSurfaceVariants({ variant: "form" }),
+          settingsSurfaceVariants({ variant: "padding" })
         )}
       >
         <form.Field name="email">
@@ -99,9 +99,6 @@ export const InviteMemberForm = ({
                 <TextFieldInput
                   aria-describedby={hasErrors ? emailErrorId : undefined}
                   aria-invalid={hasErrors}
-                  chrome="ghost"
-                  // oxlint-disable-next-line shadcn/no-restyle -- Ghost input fills its row.
-                  className="h-8 px-0"
                   name={field.name}
                   onBlur={() => {
                     field.handleBlur();
@@ -127,11 +124,7 @@ export const InviteMemberForm = ({
           }}
         </form.Field>
 
-        <Button
-          className="shrink-0 @md:w-24"
-          disabled={inviteMemberMutation.isPending}
-          type="submit"
-        >
+        <Button disabled={inviteMemberMutation.isPending} type="submit">
           {inviteMemberMutation.isPending ? (
             <HugeiconsIcon
               aria-hidden

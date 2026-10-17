@@ -35,6 +35,7 @@ import {
   SettingsRow,
   SettingsRows,
   SettingsSection,
+  settingsSurfaceVariants,
 } from "./settings-layout";
 
 const COLOR_MODE_OPTIONS: { label: string; value: ConfigColorMode }[] = [
@@ -48,7 +49,7 @@ export const PreferencesSettingsPanel = () => {
   const externalImagesEnabled = useExternalImagesEnabled();
   const { openKeyboardShortcuts } = useKeyboardShortcuts();
   return (
-    <div className="space-y-10">
+    <div className={settingsSurfaceVariants({ variant: "page" })}>
       <SettingsSection title="Interface">
         <SettingsRows>
           <SettingsRow
@@ -196,7 +197,7 @@ export const DevelopmentSettingsPanel = () => {
 
 export const DevelopmentSettingsUnavailable = () => (
   <SettingsSection title="Development">
-    <SettingsCard className="p-6">
+    <SettingsCard className={settingsSurfaceVariants({ variant: "body" })}>
       <div className="flex items-start gap-3">
         <HugeiconsIcon
           aria-hidden

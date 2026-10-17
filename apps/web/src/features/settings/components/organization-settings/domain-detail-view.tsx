@@ -18,6 +18,7 @@ import {
   SettingsCard,
   SettingsLoadingState,
   SettingsPageHeader,
+  settingsSurfaceVariants,
 } from "../settings-layout";
 import { BillingAccessNotice } from "./billing-access-notice";
 import type { FullOrganization } from "./domain";
@@ -284,7 +285,12 @@ export const DomainDetailView = ({
   }
   if (isError || !domain) {
     return (
-      <SettingsCard className="p-6 text-body text-destructive">
+      <SettingsCard
+        className={cn(
+          settingsSurfaceVariants({ variant: "body" }),
+          "text-body text-destructive"
+        )}
+      >
         {error?.message ?? "Domain not found."}
       </SettingsCard>
     );
@@ -390,7 +396,7 @@ export const DomainDetailView = ({
   };
 
   return (
-    <div className="@container space-y-8">
+    <div className={settingsSurfaceVariants({ variant: "page" })}>
       {!billingPending &&
         !billingAccessUnknown &&
         !canUseOrganizationDomains && (

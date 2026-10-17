@@ -5,7 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 
 import { authClient } from "#/lib/auth";
 
-import { SettingsCard } from "../settings-layout";
+import { SettingsCard, SettingsSection } from "../settings-layout";
 import { formatRoleLabel, hasOrganizationRole } from "./domain";
 import type { FullOrganization, OrganizationRoleOption } from "./domain";
 import {
@@ -45,14 +45,10 @@ export const OrganizationDangerView = ({
     null;
 
   return (
-    <section className="space-y-6">
-      <div>
-        <h2 className="text-body-lg font-semibold text-fg">Membership</h2>
-        <p className="mt-1 text-body text-muted-fg">
-          Leave this team or delete it permanently.
-        </p>
-      </div>
-
+    <SettingsSection
+      description="Leave this team or delete it permanently."
+      title="Membership"
+    >
       <SettingsCard>
         <SettingsRow
           action={
@@ -105,6 +101,6 @@ export const OrganizationDangerView = ({
           value="Permanent"
         />
       </SettingsCard>
-    </section>
+    </SettingsSection>
   );
 };

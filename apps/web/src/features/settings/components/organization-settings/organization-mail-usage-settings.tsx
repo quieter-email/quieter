@@ -660,7 +660,7 @@ const ManagedUsageSettingsForm = ({
 
   return (
     <section className={settingsSurfaceVariants({ variant: "divider" })}>
-      <div className="flex flex-col gap-4 px-4 pt-6 md:flex-row md:items-start md:justify-between md:px-6">
+      <div className="flex flex-col gap-4 px-4 pt-6 @md:flex-row @md:items-start @md:justify-between @md:px-6">
         <SettingsRowText title="Usage balance">
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             <span>Managed mail rates</span>
@@ -673,7 +673,7 @@ const ManagedUsageSettingsForm = ({
         </SettingsRowText>
       </div>
 
-      <div className="mt-5 px-4 md:px-6">
+      <div className="mt-5 px-4 @md:px-6">
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className="font-mono text-title-sm font-semibold text-fg">
@@ -743,7 +743,7 @@ const ManagedUsageSettingsForm = ({
       />
 
       {!canManageOrganizationMailUsage && (
-        <p className="px-4 pt-1 pb-3 text-caption text-muted-fg md:px-6">
+        <p className="px-4 pt-1 pb-3 text-caption text-muted-fg @md:px-6">
           Only admins and owners can change team credit settings.
         </p>
       )}

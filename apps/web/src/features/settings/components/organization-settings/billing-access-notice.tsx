@@ -1,19 +1,18 @@
 import { Button } from "@quieter/ui/button";
 import { Link } from "@tanstack/react-router";
 
+import { SettingsCard, settingsSurfaceVariants } from "../settings-layout";
+
 export const BillingAccessNotice = ({
   organizationId,
 }: {
   organizationId: string;
 }) => (
-  <section
-    className="space-y-3 rounded-lg border border-border p-4"
-    aria-label="Subscription required"
-  >
-    <p className="text-body font-medium text-fg">
+  <SettingsCard className={settingsSurfaceVariants({ variant: "body" })}>
+    <p className={settingsSurfaceVariants({ variant: "title" })}>
       Sending and API access are paused
     </p>
-    <p className="text-body text-muted-fg">
+    <p className={settingsSurfaceVariants({ variant: "value" })}>
       This team needs an active subscription. Your domains, keys, and existing
       mail are kept. Incoming mail continues for configured inboxes. You can
       remove domains and keys below.
@@ -34,5 +33,5 @@ export const BillingAccessNotice = ({
     >
       View billing
     </Button>
-  </section>
+  </SettingsCard>
 );

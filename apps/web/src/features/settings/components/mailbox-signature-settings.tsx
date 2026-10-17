@@ -9,6 +9,7 @@ import { textToComposeBodyHtml } from "#/features/compose/domain/draft";
 import {
   SettingsCard,
   SettingsSection,
+  settingsSurfaceVariants,
 } from "#/features/settings/components/settings-layout";
 import { toastError } from "#/lib/error-toast";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
@@ -41,7 +42,7 @@ export const MailboxSignatureSettings = ({
       title="Signature"
     >
       <SettingsCard>
-        <div className="space-y-3 p-4">
+        <div className={settingsSurfaceVariants({ variant: "body" })}>
           <Textarea
             aria-label={`Signature for ${mailbox.emailAddress}`}
             onChange={(event) => {
@@ -51,7 +52,7 @@ export const MailboxSignatureSettings = ({
             rows={5}
             value={signatureText}
           />
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-caption text-muted-fg">
               Leave it empty to send without a signature.
             </p>

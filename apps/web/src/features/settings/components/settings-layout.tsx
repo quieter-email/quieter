@@ -15,11 +15,15 @@ import { useSettingsAnchor } from "./use-settings-anchor";
 export const settingsSurfaceVariants = cva("", {
   variants: {
     variant: {
+      body: "space-y-3 px-4 py-3 @md:px-6",
       divide: "divide-y divide-border/70",
       divider:
         "relative after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:after:inset-x-6",
       fieldRowShell:
         "relative flex w-full flex-col items-start justify-between gap-4 px-4 py-3 after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:flex-row @md:items-center @md:px-6 @md:after:inset-x-6",
+      footer:
+        "flex flex-wrap items-center justify-between gap-3 px-4 py-3 @md:px-6",
+      form: "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2",
       insetFieldRow:
         "flex w-full flex-col gap-4 px-4 py-3 @md:flex-row @md:items-center @md:justify-between @md:px-6",
       insetRow: "flex w-full items-center gap-4 px-4 py-3 @md:px-6",
@@ -28,6 +32,7 @@ export const settingsSurfaceVariants = cva("", {
       insetStackedRow:
         "flex w-full flex-col gap-3 px-4 py-3 @md:flex-row @md:items-center @md:px-6",
       padding: "px-4 py-3 @md:px-6",
+      page: "@container space-y-8",
       rowShell:
         "squircle relative flex w-full items-center gap-4 px-4 py-3 after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
       title: "text-body-sm font-normal text-fg",
@@ -231,7 +236,7 @@ export const SettingsFieldRow = ({
 }) => (
   <div className={settingsSurfaceVariants({ variant: "fieldRowShell" })}>
     <SettingsRowText title={label}>{value}</SettingsRowText>
-    <div className="shrink-0">{action}</div>
+    <div className="w-full min-w-0 @md:w-auto @md:shrink-0">{action}</div>
   </div>
 );
 
@@ -372,7 +377,12 @@ export const SettingsErrorState = ({
   message: string;
   onRetry: () => void;
 }) => (
-  <SettingsCard className="flex min-h-15 items-center justify-between gap-4 px-4 py-3">
+  <SettingsCard
+    className={cn(
+      "flex min-h-15 items-center justify-between gap-4",
+      settingsSurfaceVariants({ variant: "padding" })
+    )}
+  >
     <Text role="alert" tone="destructive">
       {message}
     </Text>

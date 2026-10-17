@@ -22,8 +22,10 @@ import { orpc } from "#/lib/orpc";
 import {
   SettingsCard,
   SettingsLoadingState,
+  SettingsPageHeader,
   SettingsRow,
   SettingsRows,
+  SettingsSection,
   settingsSurfaceVariants,
 } from "../settings-layout";
 import type { FullOrganization } from "./domain";
@@ -140,7 +142,7 @@ export const MailSuppressionsView = ({
       <SettingsCard>
         <p
           className={cn(
-            "text-body text-muted-fg",
+            settingsSurfaceVariants({ variant: "value" }),
             settingsSurfaceVariants({ variant: "padding" })
           )}
         >
@@ -165,61 +167,63 @@ export const MailSuppressionsView = ({
     );
   } else {
     suppressionsContent = (
-      <div className="space-y-3">
-        <form
-          className={cn(
-            settingsSurfaceVariants({ variant: "insetFieldRow" }),
-            "gap-3"
-          )}
-          onSubmit={(submitEvent) => {
-            submitEvent.preventDefault();
-            submitBlock();
-          }}
-        >
-          <TextField className="min-w-0 flex-1">
-            <TextFieldInput
-              aria-describedby={
-                addressError === null ? undefined : addressErrorId
-              }
-              aria-invalid={addressError !== null}
-              chrome="ghost"
-              // oxlint-disable-next-line shadcn/no-restyle -- Ghost input fills its row.
-              className="h-8 px-0"
-              name="recipient"
-              onChange={(changeEvent) => {
-                setAddressError(null);
-                setAddress(changeEvent.target.value);
+      <>
+        <SettingsCard>
+          <div className={settingsSurfaceVariants({ variant: "body" })}>
+            <form
+              className={settingsSurfaceVariants({ variant: "form" })}
+              onSubmit={(submitEvent) => {
+                submitEvent.preventDefault();
+                submitBlock();
               }}
-              placeholder="name@example.com"
-              value={address}
-            />
-          </TextField>
-          <Button
-            className="shrink-0 @md:w-28"
-            disabled={blockMutation.isPending || address.trim() === ""}
-            type="submit"
-          >
-            {blockMutation.isPending ? (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 animate-spin"
-                icon={Loading03Icon}
-              />
-            ) : (
-              <HugeiconsIcon aria-hidden className="size-4" icon={BanIcon} />
-            )}
-            Block
-          </Button>
-        </form>
-        {addressError !== null && (
-          <p
-            className="px-4 text-body text-destructive"
-            id={addressErrorId}
-            role="alert"
-          >
-            {addressError}
-          </p>
-        )}
+            >
+              <TextField className="min-w-0">
+                <TextFieldInput
+                  aria-describedby={
+                    addressError === null ? undefined : addressErrorId
+                  }
+                  aria-invalid={addressError !== null}
+                  aria-label="Email address"
+                  name="recipient"
+                  onChange={(changeEvent) => {
+                    setAddressError(null);
+                    setAddress(changeEvent.target.value);
+                  }}
+                  placeholder="name@example.com"
+                  value={address}
+                />
+                {addressError !== null && (
+                  <p
+                    className="text-caption text-destructive"
+                    id={addressErrorId}
+                    role="alert"
+                  >
+                    {addressError}
+                  </p>
+                )}
+              </TextField>
+              <Button
+                disabled={blockMutation.isPending || address.trim() === ""}
+                type="submit"
+              >
+                {blockMutation.isPending ? (
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4 animate-spin"
+                    icon={Loading03Icon}
+                  />
+                ) : (
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4"
+                    icon={BanIcon}
+                  />
+                )}
+                Block
+              </Button>
+            </form>
+          </div>
+        </SettingsCard>
 
         {suppressionRows.length > 0 ? (
           <SettingsRows>
@@ -269,7 +273,7 @@ export const MailSuppressionsView = ({
           <SettingsCard>
             <p
               className={cn(
-                "text-center text-body text-muted-fg",
+                settingsSurfaceVariants({ variant: "value" }),
                 settingsSurfaceVariants({ variant: "padding" })
               )}
             >
@@ -277,32 +281,26 @@ export const MailSuppressionsView = ({
             </p>
           </SettingsCard>
         )}
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="@container space-y-6">
-      <div>
-        <h1 className="text-body-lg font-semibold text-fg">
-          Blocked recipients
-        </h1>
-        <p className="mt-1 text-body text-muted-fg">
-          These addresses bounced permanently, reported a message as spam,
-          unsubscribed, or were blocked manually. New messages to them are
-          stopped before another delivery attempt, which keeps this team able to
-          reach everyone else.
-        </p>
-      </div>
+    <div className={settingsSurfaceVariants({ variant: "page" })}>
+      <SettingsPageHeader title="Blocked recipients">
+        These addresses bounced permanently, reported a message as spam,
+        unsubscribed, or were blocked manually. New messages to them are stopped
+        before another delivery attempt, which keeps this team able to reach
+        everyone else.
+      </SettingsPageHeader>
 
-      {suppressionsContent}
+      <SettingsSection>{suppressionsContent}</SettingsSection>
 
       {canViewSuppressions && recentChanges.length > 0 && (
-        <section aria-label="Recent blocking changes">
-          <h2 className="text-body font-semibold text-fg">Recent changes</h2>
-          <p className="mt-1 mb-3 text-caption text-muted-fg">
-            Every block and unblock is recorded, including automatic ones.
-          </p>
+        <SettingsSection
+          description="Every block and unblock is recorded, including automatic ones."
+          title="Recent changes"
+        >
           <SettingsRows>
             {recentChanges.map((entry) => (
               <SettingsRow
@@ -322,7 +320,7 @@ export const MailSuppressionsView = ({
               </SettingsRow>
             ))}
           </SettingsRows>
-        </section>
+        </SettingsSection>
       )}
     </div>
   );

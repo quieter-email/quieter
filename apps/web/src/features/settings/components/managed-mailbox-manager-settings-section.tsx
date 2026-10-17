@@ -1,6 +1,7 @@
 "use client";
 
 import type { RouterOutputs } from "@quieter/orpc";
+import { cn } from "@quieter/ui/cn";
 import type { UseQueryResult } from "@tanstack/react-query";
 
 import type {
@@ -14,6 +15,7 @@ import type {
 import { ManagedMailboxDetailSettings } from "#/features/settings/components/managed-mailbox-detail-settings";
 import {
   SettingsCard,
+  settingsSurfaceVariants,
   SettingsLoadingState,
 } from "#/features/settings/components/settings-layout";
 import { toastError } from "#/lib/error-toast";
@@ -77,7 +79,12 @@ export const ManagedMailboxManagerSettingsSection = ({
 
   if (managedMailboxQuery.data === undefined) {
     return (
-      <SettingsCard className="p-6 text-body text-destructive">
+      <SettingsCard
+        className={cn(
+          settingsSurfaceVariants({ variant: "body" }),
+          "text-body text-destructive"
+        )}
+      >
         {managedMailboxQuery.error?.message ?? "Could not load inbox settings."}
       </SettingsCard>
     );

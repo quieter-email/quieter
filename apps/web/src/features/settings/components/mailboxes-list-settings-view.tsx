@@ -20,6 +20,7 @@ import {
   SettingsLoadingState,
   SettingsNavigationRow,
   SettingsPageHeader,
+  settingsSurfaceVariants,
   SettingsRows,
   SettingsSection,
 } from "#/features/settings/components/settings-layout";
@@ -75,7 +76,7 @@ const MailboxesListContent = ({
 }) => {
   if (groups.length === 0) {
     return (
-      <SettingsCard className="p-6">
+      <SettingsCard className={settingsSurfaceVariants({ variant: "body" })}>
         <p className="text-body text-fg">No mailboxes yet</p>
         <p className="mt-1 text-body/6 text-muted-fg">
           Connect Gmail or create a mailbox to start using Quieter.
@@ -180,7 +181,7 @@ export const MailboxesListSettingsView = ({
   };
 
   return (
-    <div className="space-y-8">
+    <div className={settingsSurfaceVariants({ variant: "page" })}>
       <SettingsPageHeader
         action={
           <Button
