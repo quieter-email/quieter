@@ -18,6 +18,7 @@ import type { SettingsSearchEntry } from "#/features/settings/domain/settings-se
 import { mailboxesQueryOptions } from "#/lib/mailboxes-query";
 import { settingsRouteApi } from "#/lib/route-apis";
 
+import { SettingsPageHeader } from "./settings-layout";
 import { useSettingsTeam } from "./use-settings-team";
 
 export const SettingsSearch = ({
@@ -147,25 +148,27 @@ export const SettingsSearch = ({
   );
   const resultContent = searching ? (
     <section aria-label="Search results" className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-body-lg">Search results</h1>
-        <label
-          htmlFor="settings-search-other-teams"
-          className="flex items-center gap-2 text-caption"
-        >
-          <Checkbox
-            id="settings-search-other-teams"
-            checked={includeOtherTeams}
-            onCheckedChange={(checked) => {
-              setIncludeOtherTeams(checked);
-              setActiveIndex(0);
-            }}
+      <SettingsPageHeader
+        title="Search results"
+        action={
+          <label
+            htmlFor="settings-search-other-teams"
+            className="flex items-center gap-2 text-caption"
           >
-            <CheckboxIndicator />
-          </Checkbox>
-          Include other teams
-        </label>
-      </div>
+            <Checkbox
+              id="settings-search-other-teams"
+              checked={includeOtherTeams}
+              onCheckedChange={(checked) => {
+                setIncludeOtherTeams(checked);
+                setActiveIndex(0);
+              }}
+            >
+              <CheckboxIndicator />
+            </Checkbox>
+            Include other teams
+          </label>
+        }
+      />
       <output className="text-caption text-muted-fg">
         {results.length
           ? `${results.length} results`

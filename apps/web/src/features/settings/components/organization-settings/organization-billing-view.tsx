@@ -2,6 +2,10 @@
 
 import type { UserBillingOverview } from "#/features/settings/domain/billing";
 
+import {
+  SettingsPageHeader,
+  settingsSurfaceVariants,
+} from "../settings-layout";
 import { useSettingsAnchor } from "../use-settings-anchor";
 import { OrganizationBillingSettings } from "./organization-billing-settings";
 import { OrganizationMailUsageSettings } from "./organization-mail-usage-settings";
@@ -25,10 +29,8 @@ export const OrganizationBillingView = ({
 }) => {
   const { ref: usageRef } = useSettingsAnchor("usage");
   return (
-    <section className="space-y-6">
-      <div>
-        <h1 className="text-body-lg font-semibold text-fg">Billing</h1>
-      </div>
+    <section className={settingsSurfaceVariants({ variant: "page" })}>
+      <SettingsPageHeader title="Billing" />
 
       <OrganizationBillingSettings
         billing={billing}
@@ -37,7 +39,7 @@ export const OrganizationBillingView = ({
         organizationId={organizationId}
       />
       <div className="@container border-t border-border/70 pt-4" ref={usageRef}>
-        <div className="-mx-4 md:-mx-6">
+        <div className="-mx-4 @md:-mx-6">
           <OrganizationMailUsageSettings
             billingAccessUnknown={billingAccessUnknown}
             billingPending={billingPending}

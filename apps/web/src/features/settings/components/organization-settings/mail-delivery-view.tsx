@@ -1,9 +1,18 @@
 "use client";
 
 import { cn } from "@quieter/ui/cn";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectList,
+  SelectScrollDownArrow,
+  SelectScrollUpArrow,
+  SelectTrigger,
+  SelectValue,
+} from "@quieter/ui/select";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Text } from "@quieter/ui/text";
-import { Toggle, ToggleGroup } from "@quieter/ui/toggle";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -15,6 +24,9 @@ import { orpc } from "#/lib/orpc";
 import {
   SettingsCard,
   SettingsLoadingState,
+  SettingsPageHeader,
+  SettingsRow,
+  SettingsSection,
   settingsSurfaceVariants,
 } from "../settings-layout";
 import type { FullOrganization } from "./domain";
@@ -24,60 +36,6 @@ import {
   mailTrackingSettingsQueryOptions,
 } from "./mail-delivery";
 import type { MailDeliveryMetricsRange } from "./mail-delivery";
-
-const MetricRow = ({
-  hint,
-  label,
-  value,
-}: {
-  hint?: string;
-  label: string;
-  value: string;
-}) => (
-  <div
-    className={cn(
-      settingsSurfaceVariants({ variant: "insetRow" }),
-      "items-center justify-between gap-3"
-    )}
-  >
-    <div className="min-w-0">
-      <p className="text-body text-fg">{label}</p>
-      {hint !== undefined && (
-        <p className="mt-0.5 text-caption text-muted-fg">{hint}</p>
-      )}
-    </div>
-    <span className="shrink-0 text-body font-semibold text-fg tabular-nums">
-      {value}
-    </span>
-  </div>
-);
-
-const RangeToggle = ({
-  range,
-  setRange,
-}: {
-  range: MailDeliveryMetricsRange;
-  setRange: (range: MailDeliveryMetricsRange) => void;
-}) => (
-  <ToggleGroup
-    aria-label="Activity period"
-    className="shrink-0"
-    size="compact"
-    value={[range]}
-    onValueChange={(values) => {
-      const [value] = values;
-      if (value === "7d" || value === "30d") {
-        setRange(value);
-      }
-    }}
-  >
-    {(["7d", "30d"] as const).map((candidate) => (
-      <Toggle size="compact" key={candidate} value={candidate}>
-        {candidate === "7d" ? "7 days" : "30 days"}
-      </Toggle>
-    ))}
-  </ToggleGroup>
-);
 
 export const MailDeliveryView = ({
   canManage,
@@ -145,7 +103,7 @@ export const MailDeliveryView = ({
       <SettingsCard>
         <p
           className={cn(
-            "text-body text-muted-fg",
+            settingsSurfaceVariants({ variant: "value" }),
             settingsSurfaceVariants({ variant: "padding" })
           )}
         >
@@ -162,7 +120,8 @@ export const MailDeliveryView = ({
       <SettingsCard>
         <p
           className={cn(
-            "text-body text-destructive",
+            settingsSurfaceVariants({ variant: "value" }),
+            "text-destructive",
             settingsSurfaceVariants({ variant: "padding" })
           )}
         >
@@ -174,73 +133,56 @@ export const MailDeliveryView = ({
     );
   } else {
     content = (
-      <div className="space-y-3">
-        <div
-          className={cn(
-            settingsSurfaceVariants({ variant: "insetRow" }),
-            "items-start justify-between gap-4"
-          )}
+      <SettingsCard>
+        <SettingsRow
+          action={
+            <Switch
+              aria-label="Open tracking"
+              checked={trackingSettings.openTrackingEnabled}
+              disabled={saveMutation.isPending}
+              id="mail-open-tracking-toggle"
+              onCheckedChange={(checked) => {
+                saveMutation.mutate({
+                  openTrackingEnabled: checked,
+                  organizationId: organization.id,
+                });
+              }}
+            >
+              <SwitchThumb />
+            </Switch>
+          }
+          title="Open tracking"
         >
-          <div className="max-w-xl">
-            <p className="text-body font-medium text-fg">Open tracking</p>
-            <p className="mt-1 text-body text-muted-fg">
-              Adds a small invisible marker to html messages this team sends.
-              Opens are approximate: privacy proxies, caching, image blocking,
-              and automatic tools can fake or miss opens, so an open never
-              proves a person read a message.
-            </p>
-          </div>
-          <Switch
-            aria-label="Open tracking"
-            checked={trackingSettings.openTrackingEnabled}
-            className="mt-1 shrink-0"
-            disabled={saveMutation.isPending}
-            id="mail-open-tracking-toggle"
-            onCheckedChange={(checked) => {
-              saveMutation.mutate({
-                openTrackingEnabled: checked,
-                organizationId: organization.id,
-              });
-            }}
-          >
-            <SwitchThumb />
-          </Switch>
-        </div>
-
-        <div
-          className={cn(
-            settingsSurfaceVariants({ variant: "insetRow" }),
-            "items-start justify-between gap-4"
-          )}
+          Adds a small invisible marker to html messages this team sends. Opens
+          are approximate: privacy proxies, caching, image blocking, and
+          automatic tools can fake or miss opens, so an open never proves a
+          person read a message.
+        </SettingsRow>
+        <SettingsRow
+          action={
+            <Switch
+              aria-label="Allow API senders to turn off tracking per message"
+              checked={trackingSettings.allowPerSendOverride}
+              disabled={
+                saveMutation.isPending || !trackingSettings.openTrackingEnabled
+              }
+              id="mail-tracking-override-toggle"
+              onCheckedChange={(checked) => {
+                saveMutation.mutate({
+                  allowPerSendOverride: checked,
+                  organizationId: organization.id,
+                });
+              }}
+            >
+              <SwitchThumb />
+            </Switch>
+          }
+          title="Allow API senders to choose per message"
         >
-          <div className="max-w-xl">
-            <p className="text-body font-medium text-fg">
-              Allow API senders to choose per message
-            </p>
-            <p className="mt-1 text-body text-muted-fg">
-              Lets authorized API senders turn tracking off for a single send.
-              Without this, the team setting applies to every message.
-            </p>
-          </div>
-          <Switch
-            aria-label="Allow API senders to turn off tracking per message"
-            checked={trackingSettings.allowPerSendOverride}
-            className="mt-1 shrink-0"
-            disabled={
-              saveMutation.isPending || !trackingSettings.openTrackingEnabled
-            }
-            id="mail-tracking-override-toggle"
-            onCheckedChange={(checked) => {
-              saveMutation.mutate({
-                allowPerSendOverride: checked,
-                organizationId: organization.id,
-              });
-            }}
-          >
-            <SwitchThumb />
-          </Switch>
-        </div>
-      </div>
+          Lets authorized API senders turn tracking off for a single send.
+          Without this, the team setting applies to every message.
+        </SettingsRow>
+      </SettingsCard>
     );
   }
 
@@ -249,9 +191,11 @@ export const MailDeliveryView = ({
     metricsSection = null;
   } else if (isMetricsError) {
     metricsSection = (
-      <Text role="alert" tone="destructive">
-        Could not load delivery metrics.
-      </Text>
+      <div className={settingsSurfaceVariants({ variant: "padding" })}>
+        <Text role="alert" tone="destructive">
+          Could not load delivery metrics.
+        </Text>
+      </div>
     );
   } else if (isMetricsPending || metrics === undefined) {
     metricsSection = <SettingsLoadingState label="Loading metrics" />;
@@ -263,99 +207,150 @@ export const MailDeliveryView = ({
     const complained = eventCounts.complained ?? 0;
     const unsubscribed = eventCounts.unsubscribed ?? 0;
     metricsSection = (
-      <div className="space-y-3">
-        <MetricRow
-          hint="Message-recipient pairs accepted for sending in this period"
-          label="Sent"
-          value={sent.toLocaleString()}
-        />
-        <MetricRow
-          hint="Recipients whose mail server accepted the message in this period"
-          label="Delivered"
-          value={delivered.toLocaleString()}
-        />
-        <MetricRow
-          hint="Recipients with permanent delivery failures in this period"
-          label="Bounced"
-          value={bounced.toLocaleString()}
-        />
-        <MetricRow
-          hint="Recipients who reported spam"
-          label="Complained"
-          value={complained.toLocaleString()}
-        />
-        <MetricRow label="Unsubscribed" value={unsubscribed.toLocaleString()} />
-        <MetricRow
-          hint="Approximate. Privacy proxies, caches, and bots distort opens."
-          label="Opened messages"
-          value={metrics.openedMessages.toLocaleString()}
-        />
-      </div>
+      <>
+        {[
+          {
+            hint: "Message-recipient pairs accepted for sending in this period",
+            label: "Sent",
+            value: sent,
+          },
+          {
+            hint: "Recipients whose mail server accepted the message in this period",
+            label: "Delivered",
+            value: delivered,
+          },
+          {
+            hint: "Recipients with permanent delivery failures in this period",
+            label: "Bounced",
+            value: bounced,
+          },
+          {
+            hint: "Recipients who reported spam",
+            label: "Complained",
+            value: complained,
+          },
+          { label: "Unsubscribed", value: unsubscribed },
+          {
+            hint: "Approximate. Privacy proxies, caches, and bots distort opens.",
+            label: "Opened messages",
+            value: metrics.openedMessages,
+          },
+        ].map((metric) => (
+          <SettingsRow
+            action={
+              <span
+                className={cn(
+                  settingsSurfaceVariants({ variant: "title" }),
+                  "tabular-nums"
+                )}
+              >
+                {metric.value.toLocaleString()}
+              </span>
+            }
+            key={metric.label}
+            title={metric.label}
+          >
+            {metric.hint}
+          </SettingsRow>
+        ))}
+      </>
     );
   }
 
+  const mailboxOptions = [
+    { label: "All team mail", value: "" },
+    ...managedMailboxes.map((mailbox) => ({
+      label: mailbox.displayName ?? mailbox.emailAddress ?? mailbox.id,
+      value: mailbox.id,
+    })),
+  ];
+  const rangeOptions = [
+    { label: "7 days", value: "7d" },
+    { label: "30 days", value: "30d" },
+  ];
+
   return (
-    <div className="@container space-y-6">
-      <div>
-        <h1 className="text-body-lg font-semibold text-fg">Delivery</h1>
-        <p className="mt-1 max-w-2xl text-body text-muted-fg">
-          Understand what happened to messages this team sent. Counts show
-          distinct message-recipient pairs for each event type observed in the
-          selected period; open numbers are best-effort estimates and never
-          prove a person read anything.
-        </p>
-      </div>
+    <div className={settingsSurfaceVariants({ variant: "page" })}>
+      <SettingsPageHeader title="Delivery">
+        Understand what happened to messages this team sent. Counts show
+        distinct message-recipient pairs for each event type observed in the
+        selected period; open numbers are best-effort estimates and never prove
+        a person read anything.
+      </SettingsPageHeader>
 
-      <section aria-label="Tracking settings">
-        <h2 className="mb-3 text-body font-semibold text-fg">Tracking</h2>
-        {content}
-      </section>
+      <SettingsSection title="Tracking">{content}</SettingsSection>
 
-      <section aria-label="Delivery metrics">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-body font-semibold text-fg">Recent activity</h2>
-          <RangeToggle range={range} setRange={setRange} />
-        </div>
-
-        {managedMailboxes.length > 0 && (
-          <ToggleGroup
-            aria-label="Mail activity scope"
-            // oxlint-disable-next-line shadcn/no-restyle -- Mailbox filters keep their wrapping pill layout.
-            className="mb-3 flex-wrap gap-1.5"
-            size="flush"
-            value={[mailboxId]}
-            variant="plain"
-          >
-            {[
-              { id: "", label: "All team mail" },
-              ...managedMailboxes.map((mailbox) => ({
-                id: mailbox.id,
-                label:
-                  mailbox.displayName ?? mailbox.emailAddress ?? mailbox.id,
-              })),
-            ].map((scope) => (
-              <Toggle
-                key={scope.id || "all"}
-                onClick={() => {
-                  setMailboxId(scope.id);
+      <SettingsSection title="Recent activity">
+        <SettingsCard>
+          <SettingsRow
+            action={
+              <Select
+                items={rangeOptions}
+                onValueChange={(value) => {
+                  if (value === "7d" || value === "30d") {
+                    setRange(value);
+                  }
                 }}
-                size="sm"
-                value={scope.id}
-                variant="pill"
+                value={range}
               >
-                <span className="max-w-48 truncate">{scope.label}</span>
-              </Toggle>
-            ))}
-          </ToggleGroup>
-        )}
-
-        {metricsSection}
-
-        <p className="mt-3 text-caption text-muted-fg">
+                <SelectTrigger aria-label="Time range" size="sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectList>
+                    {rangeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectList>
+                </SelectContent>
+              </Select>
+            }
+            title="Time range"
+          />
+          {managedMailboxes.length > 0 && (
+            <SettingsRow
+              action={
+                <Select
+                  items={mailboxOptions}
+                  onValueChange={(value) => {
+                    if (value !== null) {
+                      setMailboxId(value);
+                    }
+                  }}
+                  value={mailboxId}
+                >
+                  <SelectTrigger
+                    aria-label="Mailbox"
+                    className="max-w-48"
+                    size="sm"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectScrollUpArrow />
+                    <SelectList>
+                      {mailboxOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectList>
+                    <SelectScrollDownArrow />
+                  </SelectContent>
+                </Select>
+              }
+              title="Mailbox"
+            />
+          )}
+          {metricsSection}
+        </SettingsCard>
+        <p className={settingsSurfaceVariants({ variant: "value" })}>
           Delivery events describe what receiving mail servers confirmed.
           Complaints and unsubscribes block future sends automatically.
         </p>
-      </section>
+      </SettingsSection>
     </div>
   );
 };

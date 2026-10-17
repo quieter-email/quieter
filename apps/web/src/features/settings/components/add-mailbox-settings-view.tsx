@@ -44,6 +44,7 @@ import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 import { orpc } from "#/lib/orpc";
 
 import { useAddMailboxSettingsStore } from "./add-mailbox-settings-store";
+import { SettingsPageHeader } from "./settings-layout";
 import { useSettingsTeam } from "./use-settings-team";
 
 export const AddMailboxSettingsView = ({
@@ -215,11 +216,9 @@ export const AddMailboxSettingsView = ({
     >
       {mailboxType === undefined ? (
         <div>
-          <header className="mx-auto max-w-xl text-center">
-            <h1 className="text-title-md font-medium tracking-tight text-fg">
-              Add a mailbox
-            </h1>
-          </header>
+          <div className="mx-auto max-w-xl">
+            <SettingsPageHeader title="Add a mailbox" />
+          </div>
           <div className="mt-9 grid gap-3 sm:grid-cols-2">
             <Button
               onClick={() => {
@@ -278,11 +277,7 @@ export const AddMailboxSettingsView = ({
 
       {mailboxType === "gmail" ? (
         <div className="mx-auto max-w-md">
-          <header>
-            <h1 className="text-title-sm font-medium tracking-tight text-fg">
-              Team
-            </h1>
-          </header>
+          <SettingsPageHeader title="Team" />
           <div className="mt-6">
             <Field>
               <FieldLabel htmlFor="gmail-team">Team</FieldLabel>
@@ -327,11 +322,7 @@ export const AddMailboxSettingsView = ({
 
       {mailboxType === "shared" && !isSharedDetailsVisible ? (
         <div className="mx-auto max-w-md">
-          <header>
-            <h1 className="text-title-sm font-medium tracking-tight text-fg">
-              Team
-            </h1>
-          </header>
+          <SettingsPageHeader title="Team" />
           <div className="mt-6">
             <Field>
               <FieldLabel htmlFor="shared-team">Team</FieldLabel>
@@ -386,11 +377,7 @@ export const AddMailboxSettingsView = ({
 
       {mailboxType === "shared" && isSharedDetailsVisible ? (
         <div className="mx-auto max-w-md">
-          <header>
-            <h1 className="text-title-sm font-medium tracking-tight text-fg">
-              Address
-            </h1>
-          </header>
+          <SettingsPageHeader title="Address" />
           <div className="mt-6 space-y-5">
             <Field>
               <FieldLabel htmlFor="mailbox-access-mode">Access</FieldLabel>

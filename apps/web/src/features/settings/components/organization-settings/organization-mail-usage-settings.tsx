@@ -117,7 +117,7 @@ const Price = ({
   suffix: string;
   value: number;
 }) => (
-  <div className="min-w-0 py-3 md:px-4 md:first:pl-0 md:last:pr-0">
+  <div className="min-w-0 py-3 @md:px-4 @md:first:pl-0 @md:last:pr-0">
     <p className="text-caption text-muted-fg">{label}</p>
     <p className="mt-1 font-mono text-body font-medium text-fg">
       {rateFormatter.format(value)}
@@ -654,7 +654,7 @@ const ManagedUsageSettingsForm = ({
 
   return (
     <section className={settingsSurfaceVariants({ variant: "divider" })}>
-      <div className="flex flex-col gap-4 px-4 pt-0 md:flex-row md:items-start md:justify-between md:px-6">
+      <div className="flex flex-col gap-4 px-4 pt-0 @md:flex-row @md:items-start @md:justify-between @md:px-6">
         <SettingsRowText title="Usage">
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             {periodStart !== null && periodEnd !== null ? (
@@ -666,7 +666,7 @@ const ManagedUsageSettingsForm = ({
         </SettingsRowText>
       </div>
 
-      <div className="mt-5 px-4 md:px-6">
+      <div className="mt-5 px-4 @md:px-6">
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className="font-mono text-title-sm font-semibold text-fg">
@@ -693,7 +693,7 @@ const ManagedUsageSettingsForm = ({
         </Progress>
       </div>
 
-      <div className="mx-4 mt-5 mb-1 grid divide-y divide-border/70 border-y border-border md:mx-6 md:grid-cols-3 md:divide-x md:divide-y-0">
+      <div className="mx-4 mt-5 mb-1 grid divide-y divide-border/70 border-y border-border @md:mx-6 @md:grid-cols-3 @md:divide-x @md:divide-y-0">
         <Price
           label="Messages"
           suffix="/ 1K"
@@ -734,7 +734,7 @@ const ManagedUsageSettingsForm = ({
       />
 
       {!canManageOrganizationMailUsage && (
-        <p className="px-4 pt-1 pb-3 text-caption text-muted-fg md:px-6">
+        <p className="px-4 pt-1 pb-3 text-caption text-muted-fg @md:px-6">
           Only admins and owners can change team credit settings.
         </p>
       )}

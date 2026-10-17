@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { TextFieldInput } from "@quieter/ui/text-field";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -8,6 +9,7 @@ import { useState } from "react";
 import {
   SettingsCard,
   SettingsSection,
+  settingsSurfaceVariants,
 } from "#/features/settings/components/settings-layout";
 import { toastError } from "#/lib/error-toast";
 import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
@@ -42,7 +44,10 @@ export const GmailMailboxNameSettings = ({
     >
       <SettingsCard>
         <form
-          className="flex flex-col gap-3 p-4 @md:flex-row @md:items-center"
+          className={cn(
+            settingsSurfaceVariants({ variant: "form" }),
+            settingsSurfaceVariants({ variant: "padding" })
+          )}
           onSubmit={(event) => {
             event.preventDefault();
             if (!isDirty) {
@@ -79,7 +84,6 @@ export const GmailMailboxNameSettings = ({
             disabled={!isDirty}
             pending={updateDisplayNameMutation.isPending}
             pendingLabel="Saving…"
-            size="sm"
             type="submit"
           >
             Save name

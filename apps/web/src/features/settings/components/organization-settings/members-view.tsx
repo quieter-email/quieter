@@ -6,7 +6,11 @@ import { cn } from "@quieter/ui/cn";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { useState } from "react";
 
-import { SettingsCard, settingsSurfaceVariants } from "../settings-layout";
+import {
+  SettingsCard,
+  SettingsPageHeader,
+  settingsSurfaceVariants,
+} from "../settings-layout";
 import { formatCount, formatRoleLabel } from "./domain";
 import type { FullOrganization, OrganizationMember } from "./domain";
 import { InviteMemberForm } from "./invite-member-form";
@@ -53,13 +57,10 @@ export const MembersView = ({
   const showMemberSearch = sortedMembers.length > 1;
 
   return (
-    <section className="space-y-6">
-      <div>
-        <h1 className="text-body-lg font-semibold text-fg">Members</h1>
-        <p className="mt-1 text-body text-muted-fg">
-          {formatCount(organization.members.length, "Member", "Members")}
-        </p>
-      </div>
+    <section className={settingsSurfaceVariants({ variant: "page" })}>
+      <SettingsPageHeader title="Members">
+        {formatCount(organization.members.length, "Member", "Members")}
+      </SettingsPageHeader>
 
       {permissions.canInviteMembers && (
         <SettingsCard>

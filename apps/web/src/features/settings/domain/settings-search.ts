@@ -159,7 +159,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords: "sending usage limits overage",
     organizationView: "billing",
     scope: "team",
-    section: "mail-usage",
+    section: "usage",
     tab: "organization",
     title: "Mail usage",
   },

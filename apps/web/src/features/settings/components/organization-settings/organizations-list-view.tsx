@@ -15,6 +15,7 @@ import {
   SettingsCard,
   SettingsNavigationRow,
   SettingsLoadingState,
+  SettingsPageHeader,
   SettingsRows,
   SettingsSection,
   settingsSurfaceVariants,
@@ -224,11 +225,8 @@ export const OrganizationsListView = ({
   const queryClient = useQueryClient();
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-body font-normal text-fg">Teams</h1>
-        <OrganizationFormDialog />
-      </div>
+    <div className={settingsSurfaceVariants({ variant: "page" })}>
+      <SettingsPageHeader action={<OrganizationFormDialog />} title="Teams" />
 
       <SettingsSection title="Your teams">
         {(() => {

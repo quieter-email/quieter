@@ -10,7 +10,10 @@ import type { BillingProductId } from "@quieter/billing/plans";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 
-import { settingsSurfaceVariants } from "#/features/settings/components/settings-layout";
+import {
+  SettingsCard,
+  settingsSurfaceVariants,
+} from "#/features/settings/components/settings-layout";
 import { formatBillingProduct } from "#/features/settings/domain/billing";
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
@@ -93,16 +96,15 @@ export const BillingProductCard = ({
   }
 
   return (
-    <article
-      className={cn("rounded-xl border bg-bg-raised p-5 squircle", {
-        "border-border": !isCurrent,
+    <SettingsCard
+      className={cn(settingsSurfaceVariants({ variant: "body" }), {
         "border-primary/50 bg-primary/4": isCurrent,
       })}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-body-lg font-semibold text-fg">
+            <h3 className={settingsSurfaceVariants({ variant: "title" })}>
               {product.name}
             </h3>
             {isCurrent && (
@@ -137,7 +139,7 @@ export const BillingProductCard = ({
           </li>
         ))}
       </ul>
-    </article>
+    </SettingsCard>
   );
 };
 

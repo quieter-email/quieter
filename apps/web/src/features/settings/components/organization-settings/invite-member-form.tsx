@@ -79,7 +79,11 @@ export const InviteMemberForm = ({
 
   return (
     <form
-      className={cn(settingsSurfaceVariants({ variant: "padding" }), className)}
+      className={cn(
+        settingsSurfaceVariants({ variant: "form" }),
+        settingsSurfaceVariants({ variant: "padding" }),
+        className
+      )}
       action={async () => {
         await form.handleSubmit();
       }}
@@ -89,46 +93,24 @@ export const InviteMemberForm = ({
           const hasErrors = field.state.meta.errors.length > 0;
 
           return (
-            <TextField>
-              <div className="flex flex-col gap-3 @md:flex-row @md:items-center">
-                <TextFieldInput
-                  aria-describedby={emailErrorId}
-                  aria-invalid={hasErrors}
-                  aria-label="Email address"
-                  autoComplete="email"
-                  className="min-w-0 flex-1"
-                  name={field.name}
-                  onBlur={() => {
-                    field.handleBlur();
-                  }}
-                  onChange={(event) => {
-                    setSubmitError(null);
-                    field.handleChange(event.target.value);
-                  }}
-                  placeholder="member@example.com"
-                  value={field.state.value}
-                />
-                <Button
-                  className="shrink-0 @md:w-24"
-                  disabled={inviteMemberMutation.isPending}
-                  type="submit"
-                >
-                  {inviteMemberMutation.isPending ? (
-                    <HugeiconsIcon
-                      aria-hidden
-                      className="size-4 animate-spin"
-                      icon={Loading03Icon}
-                    />
-                  ) : (
-                    <HugeiconsIcon
-                      aria-hidden
-                      className="size-4"
-                      icon={UserAdd01Icon}
-                    />
-                  )}
-                  Invite
-                </Button>
-              </div>
+            <TextField className="min-w-0">
+              <TextFieldInput
+                aria-describedby={emailErrorId}
+                aria-invalid={hasErrors}
+                aria-label="Email address"
+                autoComplete="email"
+                className="min-w-0"
+                name={field.name}
+                onBlur={() => {
+                  field.handleBlur();
+                }}
+                onChange={(event) => {
+                  setSubmitError(null);
+                  field.handleChange(event.target.value);
+                }}
+                placeholder="member@example.com"
+                value={field.state.value}
+              />
               <div
                 aria-live="polite"
                 className="min-h-lh text-body"
@@ -148,6 +130,22 @@ export const InviteMemberForm = ({
           );
         }}
       </form.Field>
+      <Button
+        className="shrink-0 @md:w-24"
+        disabled={inviteMemberMutation.isPending}
+        type="submit"
+      >
+        {inviteMemberMutation.isPending ? (
+          <HugeiconsIcon
+            aria-hidden
+            className="size-4 animate-spin"
+            icon={Loading03Icon}
+          />
+        ) : (
+          <HugeiconsIcon aria-hidden className="size-4" icon={UserAdd01Icon} />
+        )}
+        Invite
+      </Button>
     </form>
   );
 };

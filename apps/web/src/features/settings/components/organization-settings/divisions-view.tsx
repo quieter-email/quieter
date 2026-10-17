@@ -48,6 +48,7 @@ import {
   SettingsInsetRows,
   SettingsLoadingState,
   SettingsNavigationRow,
+  SettingsPageHeader,
   SettingsRows,
   SettingsSection,
   settingsSurfaceVariants,
@@ -503,17 +504,14 @@ const DivisionDetailView = ({
   const description = division.description?.trim();
 
   return (
-    <div className="space-y-6">
+    <div className={settingsSurfaceVariants({ variant: "page" })}>
       <Button onClick={onBack} variant="ghost" size="sm">
         ← Divisions
       </Button>
-      <div>
-        <h1 className="text-body-lg font-semibold text-fg">{division.name}</h1>
-        <p className="mt-1 text-body text-muted-fg">
-          {formatCount(division.members.length, "Member")},{" "}
-          {formatCount(division.mailboxCount, "Mailbox", "Mailboxes")}
-        </p>
-      </div>
+      <SettingsPageHeader title={division.name}>
+        {formatCount(division.members.length, "Member")},{" "}
+        {formatCount(division.mailboxCount, "Mailbox", "Mailboxes")}
+      </SettingsPageHeader>
 
       <SettingsSection>
         <SettingsCard>
@@ -724,22 +722,22 @@ export const DivisionsView = ({
   }
 
   return (
-    <div className="@container space-y-6">
-      <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:justify-between">
-        <div>
-          <h1 className="text-body-lg font-semibold text-fg">Divisions</h1>
-          <p className="mt-1 text-body text-muted-fg">Shared mailbox access</p>
-        </div>
-
-        {canManageDivisions ? (
-          <CreateDivisionDialog
-            onCreated={(divisionId) => {
-              setSelectedDivisionId(divisionId);
-            }}
-            organizationId={organization.id}
-          />
-        ) : null}
-      </div>
+    <div className={settingsSurfaceVariants({ variant: "page" })}>
+      <SettingsPageHeader
+        action={
+          canManageDivisions ? (
+            <CreateDivisionDialog
+              onCreated={(divisionId) => {
+                setSelectedDivisionId(divisionId);
+              }}
+              organizationId={organization.id}
+            />
+          ) : null
+        }
+        title="Divisions"
+      >
+        {formatCount(divisions.length, "Division")}
+      </SettingsPageHeader>
 
       {divisionsContent}
     </div>

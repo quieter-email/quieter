@@ -8,7 +8,12 @@ import {
 } from "#/features/settings/domain/billing";
 import type { OrganizationSettingsView } from "#/features/settings/domain/organization-settings-view";
 
-import { SettingsErrorState, SettingsLoadingState } from "../settings-layout";
+import {
+  SettingsErrorState,
+  SettingsLoadingState,
+  SettingsPageHeader,
+  settingsSurfaceVariants,
+} from "../settings-layout";
 import { ApiKeysView } from "./api-keys-view";
 import { DivisionsView } from "./divisions-view";
 import {
@@ -208,8 +213,8 @@ export const OrganizationDetailView = ({
   }
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-title-sm font-normal">General</h1>
+    <div className={settingsSurfaceVariants({ variant: "page" })}>
+      <SettingsPageHeader title="General" />
       <OrganizationGeneralSettings
         key={organization.id}
         organization={organization}

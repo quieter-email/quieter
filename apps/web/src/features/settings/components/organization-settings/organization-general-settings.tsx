@@ -8,7 +8,11 @@ import { useState } from "react";
 import { authClient } from "#/lib/auth";
 import { toastError } from "#/lib/error-toast";
 
-import { SettingsRow, SettingsRows } from "../settings-layout";
+import {
+  SettingsCard,
+  SettingsFieldRow,
+  SettingsInsetRow,
+} from "../settings-layout";
 import { getFullOrganizationQueryKey } from "./domain";
 import type { OrganizationSummary } from "./domain";
 
@@ -54,15 +58,15 @@ export const OrganizationGeneralSettings = ({
   });
   return (
     <form
-      className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
         mutation.mutate();
       }}
     >
-      <SettingsRows>
-        <SettingsRow
-          title="Team name"
+      <SettingsCard>
+        <SettingsFieldRow
+          label="Team name"
+          value={null}
           action={
             <TextFieldInput
               aria-label="Team name"
@@ -75,8 +79,9 @@ export const OrganizationGeneralSettings = ({
             />
           }
         />
-        <SettingsRow
-          title="Team address"
+        <SettingsFieldRow
+          label="Team address"
+          value="Lowercase letters, numbers, and hyphens."
           action={
             <TextFieldInput
               aria-label="Team address"
@@ -89,22 +94,22 @@ export const OrganizationGeneralSettings = ({
               }}
             />
           }
-        >
-          Lowercase letters, numbers, and hyphens.
-        </SettingsRow>
-      </SettingsRows>
-      {canManage && (
-        <Button
-          type="submit"
-          size="sm"
-          disabled={
-            mutation.isPending ||
-            (name === organization.name && slug === organization.slug)
-          }
-        >
-          Save changes
-        </Button>
-      )}
+        />
+        {canManage && (
+          <SettingsInsetRow className="justify-end">
+            <Button
+              type="submit"
+              size="sm"
+              disabled={
+                mutation.isPending ||
+                (name === organization.name && slug === organization.slug)
+              }
+            >
+              Save changes
+            </Button>
+          </SettingsInsetRow>
+        )}
+      </SettingsCard>
     </form>
   );
 };
