@@ -11,10 +11,11 @@ export type SettingsDestination = {
 
 export const TEAM_SETTINGS_NAV = [
   { title: "General", view: "overview" },
-  { title: "Members & access", view: "members" },
+  { title: "Members & invitations", view: "members" },
   { title: "Divisions", view: "divisions" },
   { title: "Domains", view: "domains" },
   { title: "Delivery", view: "delivery" },
+  { title: "Blocked recipients", view: "suppressions" },
   { title: "Billing & usage", view: "billing" },
   { title: "API keys", view: "api-keys" },
 ] as const satisfies readonly {
@@ -23,9 +24,6 @@ export const TEAM_SETTINGS_NAV = [
 }[];
 
 export const settingsTeamSection = (view: OrganizationSettingsView) => {
-  if (view === "suppressions") {
-    return "delivery";
-  }
   if (view === "danger") {
     return "overview";
   }
