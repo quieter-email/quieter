@@ -11,7 +11,6 @@ import { useOrderedOrganizations } from "#/lib/use-ordered-organizations";
 
 import { SettingsBackButton, SettingsLoadingState } from "../settings-layout";
 import { OrganizationDetailView } from "./organization-detail-view";
-import { OrganizationSectionTabs } from "./organization-section-tabs";
 import { OrganizationsListView } from "./organizations-list-view";
 
 export const OrganizationSettingsPanel = () => {
@@ -140,12 +139,9 @@ export const OrganizationSettingsPanel = () => {
     <TooltipGroup>
       <div className="space-y-6">
         {selectedOrganization && (
-          <>
-            <p className="text-caption text-muted-fg">
-              {selectedOrganization.name}
-            </p>
-            <OrganizationSectionTabs />
-          </>
+          <p className="text-caption text-muted-fg">
+            {selectedOrganization.name}
+          </p>
         )}
         {panelContent}
       </div>

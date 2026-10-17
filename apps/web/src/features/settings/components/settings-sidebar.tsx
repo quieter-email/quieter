@@ -51,8 +51,10 @@ import { useSettingsTeam } from "./use-settings-team";
 const SETTINGS_ICONS: Record<string, typeof Settings01Icon> = {
   "AI & personalization": AiChat01Icon,
   "API keys": Key01Icon,
+  "Access groups": UserGroupIcon,
   Account: UserIcon,
   "Billing & usage": CreditCardIcon,
+  "Blocked recipients": MailSend02Icon,
   "Connected apps": Plug01Icon,
   Delivery: MailSend02Icon,
   Development: CodeIcon,
@@ -60,7 +62,7 @@ const SETTINGS_ICONS: Record<string, typeof Settings01Icon> = {
   General: Settings01Icon,
   Mailboxes: Mail01Icon,
   "Manage teams": UserGroupIcon,
-  "Members & access": UserGroupIcon,
+  "Members & invitations": UserGroupIcon,
   Preferences: Settings01Icon,
 };
 
@@ -265,7 +267,8 @@ export const SettingsSidebar = ({
             {team && (
               <>
                 {TEAM_SETTINGS_NAV.flatMap((item) =>
-                  item.view === "delivery" && !canManage ? (
+                  (item.view === "delivery" || item.view === "suppressions") &&
+                  !canManage ? (
                     []
                   ) : (
                     <div key={item.view}>

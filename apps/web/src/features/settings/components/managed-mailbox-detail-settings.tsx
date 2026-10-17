@@ -26,7 +26,6 @@ import {
   SettingsSection,
   settingsSurfaceVariants,
 } from "#/features/settings/components/settings-layout";
-import { settingsRouteApi } from "#/lib/route-apis";
 
 type ManagedMailboxDetails = {
   directGrants: { role: MailboxGrantRole; userId: string }[];
@@ -377,37 +376,58 @@ export const ManagedMailboxDetailSettings = ({
     onSettled?: () => void
   ) => void;
 }) => {
-  const { section } = settingsRouteApi.useSearch();
-  const activeSection =
-    section === "access" || section === "intelligence" ? section : "general";
   const [displayNameDraft, setDisplayNameDraft] = useState<string | null>(null);
   const autoLabelSwitchId = `managed-auto-label-${mailboxId}`;
   const isPrivate = details.mailbox.accessMode === "private";
 
   return (
     <>
-      {activeSection === "access" && (
-        <ManagedMailboxAccessSection
-          key={mailboxId}
-          canMakePrivate={canMakePrivate}
-          details={details}
-          detailManagedMembers={detailManagedMembers}
-          isAccessModePending={isAccessModePending}
-          onAccessModeChange={onAccessModeChange}
-        />
-      )}
-
-      {activeSection === "general" && (
-        <SettingsSection
-          description={
-            isPrivate
-              ? "Set the name and which messages appear in this mailbox."
-              : "Set the name, primary division, and which messages appear in this inbox."
-          }
-          title={isPrivate ? "Mailbox" : "Shared inbox"}
-        >
-          <SettingsCard>
-            <SettingsInsetRows>
+      <SettingsSection
+        description={
+          isPrivate
+            ? "Set the name and which messages appear in this mailbox."
+            : "Set the name, primary division, and which messages appear in this inbox."
+        }
+        title={isPrivate ? "Mailbox" : "Shared inbox"}
+      >
+        <SettingsCard>
+          <SettingsInsetRows>
+            <div
+              className={cn(
+                settingsSurfaceVariants({ variant: "insetRow" }),
+                "gap-4"
+              )}
+            >
+              <span className="min-w-0 flex-1 text-body text-fg">
+                Display name
+              </span>
+              <TextFieldInput
+                aria-label={
+                  isPrivate
+                    ? "Mailbox display name"
+                    : "Shared inbox display name"
+                }
+                className="max-w-64"
+                disabled={isUpdatePending}
+                value={displayNameDraft ?? details.mailbox.displayName ?? ""}
+                onChange={(event) => {
+                  setDisplayNameDraft(event.currentTarget.value);
+                }}
+                key={`${mailboxId}-display-name`}
+                onBlur={(event) => {
+                  const displayName = event.currentTarget.value.trim();
+                  if (displayName === (details.mailbox.displayName ?? "")) {
+                    setDisplayNameDraft(null);
+                    return;
+                  }
+                  onUpdateMailbox({ displayName }, () => {
+                    setDisplayNameDraft(null);
+                  });
+                }}
+                placeholder="Display name"
+              />
+            </div>
+            {!isPrivate && (
               <div
                 className={cn(
                   settingsSurfaceVariants({ variant: "insetRow" }),
@@ -415,146 +435,115 @@ export const ManagedMailboxDetailSettings = ({
                 )}
               >
                 <span className="min-w-0 flex-1 text-body text-fg">
-                  Display name
+                  Primary division
                 </span>
-                <TextFieldInput
-                  aria-label={
-                    isPrivate
-                      ? "Mailbox display name"
-                      : "Shared inbox display name"
-                  }
-                  className="max-w-64"
-                  disabled={isUpdatePending}
-                  value={displayNameDraft ?? details.mailbox.displayName ?? ""}
-                  onChange={(event) => {
-                    setDisplayNameDraft(event.currentTarget.value);
-                  }}
-                  key={`${mailboxId}-display-name`}
-                  onBlur={(event) => {
-                    const displayName = event.currentTarget.value.trim();
-                    if (displayName === (details.mailbox.displayName ?? "")) {
-                      setDisplayNameDraft(null);
-                      return;
-                    }
-                    onUpdateMailbox({ displayName }, () => {
-                      setDisplayNameDraft(null);
+                <Select
+                  items={[
+                    { label: "Unassigned", value: "none" },
+                    ...detailManagedDivisions.map((division) => ({
+                      label: division.name,
+                      value: division.id,
+                    })),
+                  ]}
+                  onValueChange={(value) => {
+                    onUpdateMailbox({
+                      divisionId: value === "none" ? null : value,
                     });
                   }}
-                  placeholder="Display name"
-                />
-              </div>
-              {!isPrivate && (
-                <div
-                  className={cn(
-                    settingsSurfaceVariants({ variant: "insetRow" }),
-                    "gap-4"
-                  )}
+                  value={details.mailbox.divisionId ?? "none"}
                 >
-                  <span className="min-w-0 flex-1 text-body text-fg">
-                    Primary division
-                  </span>
-                  <Select
-                    items={[
-                      { label: "Unassigned", value: "none" },
-                      ...detailManagedDivisions.map((division) => ({
-                        label: division.name,
-                        value: division.id,
-                      })),
-                    ]}
-                    onValueChange={(value) => {
-                      onUpdateMailbox({
-                        divisionId: value === "none" ? null : value,
-                      });
-                    }}
-                    value={details.mailbox.divisionId ?? "none"}
+                  <SelectTrigger
+                    aria-label="Primary division"
+                    pending={isUpdatePending}
+                    size="sm"
+                    variant="ghost"
                   >
-                    <SelectTrigger
-                      aria-label="Primary division"
-                      pending={isUpdatePending}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent align="end">
-                      <SelectItem value="none">Unassigned</SelectItem>
-                      {detailManagedDivisions.map((division) => (
-                        <SelectItem key={division.id} value={division.id}>
-                          {division.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <div
-                className={cn(
-                  settingsSurfaceVariants({ variant: "insetRow" }),
-                  "gap-4"
-                )}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-body text-fg">
-                    Whole-domain delivery
-                  </span>
-                  <span className="mt-0.5 block text-caption/5 text-muted-fg">
-                    {details.mailbox.catchAllDomain === null
-                      ? "Receives mail addressed to this inbox only."
-                      : `Also receives mail addressed to any address at ${details.mailbox.catchAllDomain}. Exact shared inboxes keep priority.`}
-                  </span>
-                </span>
-                <span className="shrink-0 text-caption text-muted-fg">
-                  {details.mailbox.catchAllDomain === null
-                    ? "Off"
-                    : `*@${details.mailbox.catchAllDomain}`}
-                </span>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    <SelectItem value="none">Unassigned</SelectItem>
+                    {detailManagedDivisions.map((division) => (
+                      <SelectItem key={division.id} value={division.id}>
+                        {division.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <label
-                className={cn(
-                  settingsSurfaceVariants({ variant: "insetRow" }),
-                  "cursor-pointer gap-3"
-                )}
-                htmlFor={includeApiMessagesSwitchId}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-body text-fg">
-                    Include API messages
-                  </span>
-                  <span className="mt-0.5 block text-caption/5 text-muted-fg">
-                    Also show messages sent from this exact address through the
-                    team API.
-                  </span>
+            )}
+            <div
+              className={cn(
+                settingsSurfaceVariants({ variant: "insetRow" }),
+                "gap-4"
+              )}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-body text-fg">
+                  Whole-domain delivery
                 </span>
-                <Switch
-                  aria-label={`Show API messages sent from ${emailAddress}`}
-                  checked={details.mailbox.includeApiSentMessages}
-                  className="shrink-0"
-                  size="sm"
-                  id={includeApiMessagesSwitchId}
-                  onCheckedChange={(includeApiSentMessages) => {
-                    onUpdateMailbox({ includeApiSentMessages });
-                  }}
-                >
-                  <SwitchThumb />
-                </Switch>
-              </label>
-            </SettingsInsetRows>
-          </SettingsCard>
-        </SettingsSection>
-      )}
+                <span className="mt-0.5 block text-caption/5 text-muted-fg">
+                  {details.mailbox.catchAllDomain === null
+                    ? "Receives mail addressed to this inbox only."
+                    : `Also receives mail addressed to any address at ${details.mailbox.catchAllDomain}. Exact shared inboxes keep priority.`}
+                </span>
+              </span>
+              <span className="shrink-0 text-caption text-muted-fg">
+                {details.mailbox.catchAllDomain === null
+                  ? "Off"
+                  : `*@${details.mailbox.catchAllDomain}`}
+              </span>
+            </div>
+            <label
+              className={cn(
+                settingsSurfaceVariants({ variant: "insetRow" }),
+                "cursor-pointer gap-3"
+              )}
+              htmlFor={includeApiMessagesSwitchId}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-body text-fg">
+                  Include API messages
+                </span>
+                <span className="mt-0.5 block text-caption/5 text-muted-fg">
+                  Also show messages sent from this exact address through the
+                  team API.
+                </span>
+              </span>
+              <Switch
+                aria-label={`Show API messages sent from ${emailAddress}`}
+                checked={details.mailbox.includeApiSentMessages}
+                className="shrink-0"
+                size="sm"
+                id={includeApiMessagesSwitchId}
+                onCheckedChange={(includeApiSentMessages) => {
+                  onUpdateMailbox({ includeApiSentMessages });
+                }}
+              >
+                <SwitchThumb />
+              </Switch>
+            </label>
+          </SettingsInsetRows>
+        </SettingsCard>
+      </SettingsSection>
 
-      {activeSection === "intelligence" && (
-        <ManagedMailboxIntelligenceRow
-          autoLabelEnabled={details.mailbox.autoLabelEnabled}
-          autoLabelSwitchId={autoLabelSwitchId}
-          disabled={!hasAutomationAccess}
-          emailAddress={emailAddress}
-          hasAutomationAccess={hasAutomationAccess}
-          onAutoLabelChange={onAutoLabelChange}
-        />
-      )}
+      <ManagedMailboxIntelligenceRow
+        autoLabelEnabled={details.mailbox.autoLabelEnabled}
+        autoLabelSwitchId={autoLabelSwitchId}
+        disabled={!hasAutomationAccess}
+        emailAddress={emailAddress}
+        hasAutomationAccess={hasAutomationAccess}
+        onAutoLabelChange={onAutoLabelChange}
+      />
 
-      {activeSection === "access" && !isPrivate && (
+      <ManagedMailboxAccessSection
+        key={mailboxId}
+        canMakePrivate={canMakePrivate}
+        details={details}
+        detailManagedMembers={detailManagedMembers}
+        isAccessModePending={isAccessModePending}
+        onAccessModeChange={onAccessModeChange}
+      />
+      {!isPrivate && (
         <SettingsSection
           description="Give an entire division the same level of access to this inbox."
           title="Division access"
@@ -625,87 +614,85 @@ export const ManagedMailboxDetailSettings = ({
         </SettingsSection>
       )}
 
-      {activeSection === "access" && (
-        <SettingsSection
-          description={
-            isPrivate
-              ? "Give an individual team member access to this mailbox. The owner always keeps access."
-              : "Override division access for an individual team member."
-          }
-          title={isPrivate ? "Member access" : "Direct member access"}
-        >
-          <SettingsCard>
-            <SettingsInsetRows>
-              {(isPrivate
-                ? detailManagedMembers.filter(
-                    (member) => member.userId !== details.mailbox.ownerUserId
-                  )
-                : detailManagedMembers
-              ).map((member) => {
-                const grant = details.directGrants.find(
-                  (item) => item.userId === member.userId
-                );
-                const trimmedName = member.user.name?.trim() ?? "";
-                const memberName =
-                  trimmedName === "" ? member.user.email : member.user.name;
-                return (
-                  <div
-                    className={cn(
-                      settingsSurfaceVariants({ variant: "insetRow" }),
-                      "gap-3"
-                    )}
-                    key={member.id}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-body text-fg">
-                        {memberName}
-                      </span>
-                      <span className="block truncate text-caption text-muted-fg">
-                        {member.user.email}
-                      </span>
+      <SettingsSection
+        description={
+          isPrivate
+            ? "Give an individual team member access to this mailbox. The owner always keeps access."
+            : "Override division access for an individual team member."
+        }
+        title={isPrivate ? "Member access" : "Direct member access"}
+      >
+        <SettingsCard>
+          <SettingsInsetRows>
+            {(isPrivate
+              ? detailManagedMembers.filter(
+                  (member) => member.userId !== details.mailbox.ownerUserId
+                )
+              : detailManagedMembers
+            ).map((member) => {
+              const grant = details.directGrants.find(
+                (item) => item.userId === member.userId
+              );
+              const trimmedName = member.user.name?.trim() ?? "";
+              const memberName =
+                trimmedName === "" ? member.user.email : member.user.name;
+              return (
+                <div
+                  className={cn(
+                    settingsSurfaceVariants({ variant: "insetRow" }),
+                    "gap-3"
+                  )}
+                  key={member.id}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-body text-fg">
+                      {memberName}
                     </span>
-                    <Select
-                      items={mailboxGrantSelectItems}
-                      onValueChange={(value) => {
-                        if ((value ?? "") === "" || value === "none") {
-                          onMemberGrantChange(member.userId, null);
-                          return;
-                        }
-                        const role = parseMailboxGrantRole(value ?? "");
-                        if (role === null) {
-                          return;
-                        }
-                        onMemberGrantChange(member.userId, role);
-                      }}
-                      value={grant?.role ?? "none"}
+                    <span className="block truncate text-caption text-muted-fg">
+                      {member.user.email}
+                    </span>
+                  </span>
+                  <Select
+                    items={mailboxGrantSelectItems}
+                    onValueChange={(value) => {
+                      if ((value ?? "") === "" || value === "none") {
+                        onMemberGrantChange(member.userId, null);
+                        return;
+                      }
+                      const role = parseMailboxGrantRole(value ?? "");
+                      if (role === null) {
+                        return;
+                      }
+                      onMemberGrantChange(member.userId, role);
+                    }}
+                    value={grant?.role ?? "none"}
+                  >
+                    <SelectTrigger
+                      aria-label={`${member.user.email} mailbox role`}
+                      size="sm"
+                      variant="ghost"
                     >
-                      <SelectTrigger
-                        aria-label={`${member.user.email} mailbox role`}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        {grant ? (
-                          <MailboxAccessPill role={grant.role} />
-                        ) : (
-                          <span className="text-muted-fg">No access</span>
-                        )}
-                      </SelectTrigger>
-                      <SelectContent align="end">
-                        <SelectItem value="none">No access</SelectItem>
-                        {mailboxGrantRoleOptions.map((role) => (
-                          <SelectItem key={role.value} value={role.value}>
-                            <MailboxAccessPill role={role.value} />
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                );
-              })}
-            </SettingsInsetRows>
-          </SettingsCard>
-        </SettingsSection>
-      )}
+                      {grant ? (
+                        <MailboxAccessPill role={grant.role} />
+                      ) : (
+                        <span className="text-muted-fg">No access</span>
+                      )}
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                      <SelectItem value="none">No access</SelectItem>
+                      {mailboxGrantRoleOptions.map((role) => (
+                        <SelectItem key={role.value} value={role.value}>
+                          <MailboxAccessPill role={role.value} />
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })}
+          </SettingsInsetRows>
+        </SettingsCard>
+      </SettingsSection>
     </>
   );
 };
