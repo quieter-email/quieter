@@ -394,15 +394,19 @@ writeFileSync(
 );
 
 const lilac = treatments.find((treatment) => treatment.name === "08-lilac");
-if (!lilac) {
-  throw new Error("Lilac haze treatment is missing");
+const blueHour = treatments.find(
+  (treatment) => treatment.name === "05-blue-hour"
+);
+if (!lilac || !blueHour) {
+  throw new Error("Lilac haze or Blue hour treatment is missing");
 }
 const iconBackground = shader(128, 128, lilac).toString("base64");
+const developmentIconBackground = shader(128, 128, blueHour).toString("base64");
 const icon = (coverage: number, cornerRadius = 0, development = false) =>
   svg(
     1000,
     1000,
-    `<defs><clipPath id="corners"><rect width="1000" height="1000" rx="${cornerRadius}"/></clipPath></defs><g clip-path="url(#corners)"><image width="1000" height="1000" href="data:image/png;base64,${iconBackground}"/>${artwork("mark", 1000, 1000, lilac.ink, coverage)}${development ? `<path d="M735 0h265v265Z" fill="${lilac.ink}"/>` : ""}</g>`
+    `<defs><clipPath id="corners"><rect width="1000" height="1000" rx="${cornerRadius}"/></clipPath></defs><g clip-path="url(#corners)"><image width="1000" height="1000" href="data:image/png;base64,${development ? developmentIconBackground : iconBackground}"/>${artwork("mark", 1000, 1000, development ? blueHour.ink : lilac.ink, coverage)}</g>`
   );
 for (const [filename, size] of [
   ["apple-touch-icon.png", 180],
