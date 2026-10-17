@@ -42,6 +42,8 @@
 
 ## Local development and debugging
 
+- If a worktree lacks the development credentials or local env file needed to run the app, copy the existing development env file from the main checkout into the corresponding ignored location in the worktree. Verify that it uses approved development resources, never production credentials, keep secret values out of output, and run `vp run env:doctor` afterward.
+- Other agents may be running local services at the same time. Check for occupied ports before starting a server and choose an unused port. Configure any required local URLs for that port, record the process PID, and stop only your own process tree after verification.
 - Keep a runnable, debuggable development experience whenever adding a service or changing application behavior, background processing, configuration, or infrastructure. Include the required startup, bindings, secrets, test data, failure reporting, and verification in the change; do not leave a feature dependent on an undocumented manual setup.
 - Research and prefer each provider's supported local tools, development stages, sandboxes, and inspection tools. Verify the installed versions and actual runtime behavior before adding custom replacements or declaring a feature locally testable.
 - Use the allowlisted PlanetScale `quieter_dev` logical database on the existing cluster for normal development. Do not provision a paid branch/cluster or require a persistent local PostgreSQL installation. Keep connection/concurrency limits modest because development shares cluster resources with production. Use disposable databases only for tests that require them; never run destructive test resets against the shared development or production database.
