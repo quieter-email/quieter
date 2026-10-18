@@ -92,7 +92,7 @@ export const containsProhibitedMemorySecret = (value: string) => {
     return true;
   }
   if (
-    /\b(?:verification|security|one[ -]?time|recovery|backup|authentication)\s*(?:code|pin)\s*(?:is\b|[:=])?\s*["']?[A-Z0-9-]{4,}/iu.test(
+    /\b(?:verification|security|one[ -]?time|recovery|backup|authentication)\s*(?:code|pin)\s*(?:is\b|[:=])?\s*["']?(?=[A-Z0-9-]*\d)[A-Z0-9-]{4,}/iu.test(
       value
     ) ||
     /\b(?:sk-(?:proj-|or-v1-)?|gh[pousr]_|github_pat_|AIza)[A-Za-z0-9_-]{20,}/u.test(

@@ -147,16 +147,17 @@ export const learnAiMemoryFromMailAction = async (
 ) => {
   try {
     const aiMemory = await import("../ai-memory");
-    await aiMemory.learnAiMemoryFromMailAction(input);
+    return await aiMemory.learnAiMemoryFromMailAction(input);
   } catch (error) {
     reportError(error, { operation: "mail:record-memory-action" });
+    return { status: "failed" as const };
   }
 };
 
 export const learnAiMemoryFromGmailAction = async (
-  input: MailActionMemoryInput & { accessToken: string }
+  input: MailActionMemoryInput & { accessToken: string; eventId?: string }
 ) => {
-  const { accessToken, ...action } = input;
+  const { accessToken, eventId, ...action } = input;
   const metadata = { ...action.metadata };
   try {
     const { getPersonalAiMemoryScopeConfig } = await import("../ai-memory");
@@ -213,5 +214,15 @@ export const learnAiMemoryFromGmailAction = async (
   } catch (error) {
     reportError(error, { operation: "mail:action-context" });
   }
-  await learnAiMemoryFromMailAction({ ...action, metadata });
+  if (eventId === undefined) {
+    await learnAiMemoryFromMailAction({ ...action, metadata });
+  } else {
+    const { enrichAiMemoryMailAction } = await import("../ai-memory");
+    await enrichAiMemoryMailAction({
+      eventId,
+      mailboxId: action.mailboxId,
+      metadata,
+      userId: action.userId,
+    });
+  }
 };

@@ -6,6 +6,7 @@ import {
   mutateGmailThread,
   getGmailMessageThreadAssociations,
 } from "@quieter/gmail";
+import { reportError } from "@quieter/observability";
 
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
@@ -80,7 +81,24 @@ const recordMetadataAction = async (
     userId: context.userId,
   };
   if (accessToken) {
-    await learnAiMemoryFromGmailAction({ ...action, accessToken });
+    const learn = async (eventId?: string) => {
+      try {
+        await learnAiMemoryFromGmailAction({ ...action, accessToken, eventId });
+      } catch (error) {
+        reportError(error, { operation: "mail:learn-action-context" });
+      }
+    };
+    if (
+      (operation === "read" || operation === "unread") &&
+      context.scheduleBackgroundTask
+    ) {
+      const observation = await learnAiMemoryFromMailAction(action);
+      if (observation?.status === "recorded") {
+        context.scheduleBackgroundTask(learn(observation.eventId));
+      }
+    } else {
+      await learn();
+    }
   } else {
     await learnAiMemoryFromMailAction(action);
   }

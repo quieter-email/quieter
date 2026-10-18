@@ -184,4 +184,15 @@ describe("dynamic AI memory", () => {
       containsProhibitedMemorySecret("Use card 4242 4242 4242 4242")
     ).toBeTruthy();
   });
+
+  test.each([
+    ["Find the security code email from my bank.", false],
+    ["The verification code is sent to my phone.", false],
+    ["Your verification code from Google.", false],
+    ["My security PIN is 1234", true],
+    ["Verification code: 8M2K", true],
+    ["The one-time code is AB-72", true],
+  ])("classifies code material in %s", (text, prohibited) => {
+    expect(containsProhibitedMemorySecret(text)).toBe(prohibited);
+  });
 });

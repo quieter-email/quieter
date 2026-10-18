@@ -97,7 +97,10 @@ describe("reply suggestion authorization and draft preparation", () => {
       provider: "gmail",
     });
     mocks.billing.mockResolvedValue();
-    mocks.learn.mockResolvedValue();
+    mocks.learn.mockResolvedValue({
+      eventId: "feedback-event",
+      status: "recorded",
+    });
     mocks.memory.mockResolvedValue({ instructions: null, memory: null });
     mocks.thread.mockResolvedValue({
       messages: [message()],

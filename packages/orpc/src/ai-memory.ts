@@ -1081,7 +1081,7 @@ export const learnAiMemoryFromFeedback = async (input: {
   });
   return event === null
     ? { status: "skipped" as const }
-    : { status: "recorded" as const };
+    : { eventId: event.id, status: "recorded" as const };
 };
 
 const canRunMemoryModel = async (input: {
@@ -1107,6 +1107,7 @@ export const learnAiMemoryFromChatMessage = async (input: {
   bodyText: string;
   mailboxId: string;
   messageId: string;
+  scheduleBackgroundTask?: (task: Promise<unknown>) => void;
   userId: string;
 }) => {
   const text = input.bodyText.trim();
@@ -1115,7 +1116,7 @@ export const learnAiMemoryFromChatMessage = async (input: {
   }
   const config = await getPersonalAiMemoryScopeConfig(input.userId);
   if (config.activeLearningEnabled) {
-    return await learnAiMemoryFromFeedback({
+    const result = await learnAiMemoryFromFeedback({
       eventKey: input.messageId,
       kind: "chat_discovery",
       mailboxId: input.mailboxId,
@@ -1125,65 +1126,100 @@ export const learnAiMemoryFromChatMessage = async (input: {
       },
       userId: input.userId,
     });
+    if (
+      result.status === "recorded" &&
+      input.scheduleBackgroundTask !== undefined
+    ) {
+      input.scheduleBackgroundTask(
+        (async () => {
+          try {
+            // oxlint-disable-next-line eslint/no-use-before-define
+            await refreshAiMemoryFromEvent({ eventId: result.eventId });
+          } catch (error) {
+            if (!(error instanceof ORPCError) || error.status >= 500) {
+              reportError(error, { operation: "chat:learn-personal-context" });
+            }
+          }
+        })()
+      );
+    }
+    return { status: result.status };
   }
 
-  const scope = userScope(input.userId);
-  const memories = await listScopeMemories(scope.scopeKey);
-  const current = memories.filter(
-    (memory) =>
-      memory.status === "active" &&
-      (memory.expiresAt === null || memory.expiresAt > new Date())
-  );
-  if (current.length === 0) {
-    return { status: "skipped" as const };
-  }
-  const billingMailbox = await assertAccessibleMailbox({
-    mailboxId: input.mailboxId,
-    userId: input.userId,
-  });
-  if (
-    !(await canRunMemoryModel({
-      organizationId: billingMailbox.organizationId,
-      userId: input.userId,
-    }))
-  ) {
-    return { status: "ineligible" as const };
-  }
-  const usage = createUsageCollector();
-  try {
-    const plan = await planAiMemoryUpdate({
-      currentMemories: current.map(toEditorMemory),
-      existingEditsOnly: true,
-      onUsage: usage.collect,
-      request:
-        "Apply only an explicit correction or forgetting request for an existing personal memory. Automatic learning is paused.",
-      source: "explicit",
-      userMessage: text.slice(0, AI_MEMORY_USER_MESSAGE_MAX_LENGTH),
-    });
-    if (plan.operations.length === 0) {
+  const updateExistingMemory = async () => {
+    const scope = userScope(input.userId);
+    const memories = await listScopeMemories(scope.scopeKey);
+    const current = memories.filter(
+      (memory) =>
+        memory.status === "active" &&
+        (memory.expiresAt === null || memory.expiresAt > new Date())
+    );
+    if (current.length === 0) {
       return { status: "skipped" as const };
     }
-    await applyAiMemoryPlan({
-      actorUserId: input.userId,
-      changeSetSource: "chat",
-      existingEditsOnly: true,
-      expectedVersions: new Map(
-        current.map(({ id, version }) => [id, version])
-      ),
-      plan,
-      request: null,
-      scope,
-      source: "explicit",
-    });
-    return { status: "refreshed" as const };
-  } finally {
-    await reportMemoryUsage({
-      externalId: `ai-memory-chat-edit:${input.messageId}`,
+    const billingMailbox = await assertAccessibleMailbox({
       mailboxId: input.mailboxId,
-      usage: usage.usage(),
       userId: input.userId,
     });
+    if (
+      !(await canRunMemoryModel({
+        organizationId: billingMailbox.organizationId,
+        userId: input.userId,
+      }))
+    ) {
+      return { status: "ineligible" as const };
+    }
+    const usage = createUsageCollector();
+    try {
+      const plan = await planAiMemoryUpdate({
+        currentMemories: current.map(toEditorMemory),
+        existingEditsOnly: true,
+        onUsage: usage.collect,
+        request:
+          "Apply only an explicit correction or forgetting request for an existing personal memory. Automatic learning is paused.",
+        source: "explicit",
+        userMessage: text.slice(0, AI_MEMORY_USER_MESSAGE_MAX_LENGTH),
+      });
+      if (plan.operations.length === 0) {
+        return { status: "skipped" as const };
+      }
+      await applyAiMemoryPlan({
+        actorUserId: input.userId,
+        changeSetSource: "chat",
+        existingEditsOnly: true,
+        expectedVersions: new Map(
+          current.map(({ id, version }) => [id, version])
+        ),
+        plan,
+        request: null,
+        scope,
+        source: "explicit",
+      });
+      return { status: "refreshed" as const };
+    } finally {
+      await reportMemoryUsage({
+        externalId: `ai-memory-chat-edit:${input.messageId}`,
+        mailboxId: input.mailboxId,
+        usage: usage.usage(),
+        userId: input.userId,
+      });
+    }
+  };
+  if (input.scheduleBackgroundTask !== undefined) {
+    input.scheduleBackgroundTask(
+      (async () => {
+        try {
+          await updateExistingMemory();
+        } catch (error) {
+          if (!(error instanceof ORPCError) || error.status >= 500) {
+            reportError(error, { operation: "chat:learn-personal-context" });
+          }
+        }
+      })()
+    );
+    return { status: "scheduled" as const };
   }
+  return await updateExistingMemory();
 };
 
 const resolveMemorySource = (
@@ -1948,7 +1984,42 @@ export const learnAiMemoryFromMailAction = async ({
   });
   return event === null
     ? { status: "skipped" as const }
-    : { status: "recorded" as const };
+    : { eventId: event.id, status: "recorded" as const };
+};
+
+export const enrichAiMemoryMailAction = async ({
+  eventId,
+  mailboxId,
+  metadata,
+  userId,
+}: {
+  eventId: string;
+  mailboxId: string;
+  metadata: AiMemoryEventMetadata;
+  userId: string;
+}) => {
+  const context = sanitizeMetadata({
+    senderDomains: metadata.senderDomains ?? null,
+    subjects: metadata.subjects ?? null,
+  });
+  await db
+    .update(userAiContextEvent)
+    .set({
+      metadata: sql`${userAiContextEvent.metadata} || ${JSON.stringify(context)}::jsonb`,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(userAiContextEvent.id, eventId),
+        eq(userAiContextEvent.mailboxId, mailboxId),
+        eq(userAiContextEvent.userId, userId),
+        eq(userAiContextEvent.kind, "mail_action"),
+        eq(sql<string>`${userAiContextEvent.metadata}->>'memoryScope'`, "user"),
+        isNull(userAiContextEvent.mergedAt),
+        isNull(userAiContextEvent.skippedAt),
+        isNull(userAiContextEvent.processingAt)
+      )
+    );
 };
 
 export const replaceMailboxFeedbackMemories = async ({

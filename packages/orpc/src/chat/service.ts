@@ -914,6 +914,7 @@ const prepareChatContext = async (input: {
 export const createAiChatResponse = async (input: {
   body: unknown;
   request: Request;
+  scheduleBackgroundTask?: (task: Promise<unknown>) => void;
   userId: string;
 }) => {
   let validated: ValidatedChatRequest;
@@ -1161,6 +1162,7 @@ export const createAiChatResponse = async (input: {
           bodyText: validated.userMessage.text,
           mailboxId,
           messageId: validated.userMessage.id,
+          scheduleBackgroundTask: input.scheduleBackgroundTask,
           userId: input.userId,
         });
       } catch (error) {
