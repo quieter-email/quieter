@@ -72,6 +72,19 @@ describe("chat request validation", () => {
     );
   });
 
+  test.each(["ask", "automatic"])(
+    "ignores an older client's %s approval mode",
+    (policy) => {
+      const body = validBody();
+      body.foreground = {
+        ...z.record(z.string(), z.unknown()).parse(body.foreground),
+        policy,
+      };
+
+      expect(validateChatRequest(body).foreground).not.toHaveProperty("policy");
+    }
+  );
+
   test("rejects multimodal user content", () => {
     const body = validBody();
     body.message = {

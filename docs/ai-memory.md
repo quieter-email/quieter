@@ -54,7 +54,7 @@ All contextual agents call `loadAiAgentContext` from `packages/orpc/src/ai-memor
 
 Interactive agents can receive personal and mailbox context. Background agents without an acting user receive mailbox context only. Administrative model calls and strict evidence-only extractors do not receive memory. New agents that draft, classify, prioritize, route, summarize for action, or perform external actions must integrate the central loader.
 
-Chat receives relevant knowledge through the central loader and has no memory tool. Newly persisted user messages queue observations automatically; continuation requests and assistant messages do not. Chat actions run without approval except `send_mail`, whose exact draft must match a stored approved tool call before execution.
+Chat receives relevant knowledge through the central loader and has no memory tool. Newly persisted user messages queue observations automatically; continuation requests and assistant messages do not. Chat actions run without approval except `send_mail`, whose exact draft must match a stored approved tool call before execution. Older clients' foreground mode fields are ignored, and older stored mode values never bypass sending approval. The existing event kinds and database schema are unchanged.
 
 Memory writes carry provenance. The background writer receives the acting user's own statements separately from application observations. Only the user's words can establish instructions. Subjects, sender domains, labels, and brief titles provide context for an action and cannot instruct the writer. Ordinary phrasing such as "from now on, sign off with Cheers" is captured without a tool, while instructions embedded in correspondence are not.
 

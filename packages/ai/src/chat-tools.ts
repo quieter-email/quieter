@@ -71,7 +71,7 @@ export const foregroundSnapshotSchema = z
     tabId: z.string().trim().min(1).max(128),
     view: workspaceViewSchema.optional(),
   })
-  .strict();
+  .strip();
 
 export type ForegroundSnapshot = z.infer<typeof foregroundSnapshotSchema>;
 
