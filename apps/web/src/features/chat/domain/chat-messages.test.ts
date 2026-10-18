@@ -79,8 +79,7 @@ describe("chat message conversion", () => {
     ]);
 
     expect(messages[1]?.parts[0]).toMatchObject({
-      errorText:
-        "The action was submitted, but its result is not available. Check the affected item before requesting it again.",
+      input: { action: "archive" },
       state: "output-error",
     });
   });

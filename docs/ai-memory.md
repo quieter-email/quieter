@@ -1,13 +1,13 @@
 # Ambient AI memory
 
-Quieter maintains one background memory pipeline for every behavior-producing AI agent. The product does not expose stored records, internal scopes, writer prompts, or change history. A user can ask the chat agent what it knows, tell it to remember or forget something, correct it naturally, pause adaptation, or reset personal context.
+Quieter maintains one background memory pipeline for every behavior-producing AI agent. Learning is automatic and does not appear as a chat tool, approval, or save notice. Users can inspect a concise profile in personalization settings, correct or forget context naturally in chat, and pause or reset adaptation in settings.
 
 ## Pipeline
 
 Memory moves through these stages:
 
-1. High-signal activity is captured as a compact `userAiContextEvent`. Sent-message observations contain behavioral features, not raw bodies.
-2. The memory writer consolidates observations into atomic, conflict-aware `aiMemory` records. Records carry evidence source, confidence, importance, reinforcement, applicability, provenance, expiry, and version.
+1. User chat, sent mail, labels, read state, mailbox moves, reply requests, daily brief actions, and useful-detail ratings are captured as compact `userAiContextEvent` observations after the corresponding action succeeds. Sent-message observations contain behavioral features with quoted replies removed, not raw bodies. Prefetching a thread is not a reading signal.
+2. The memory writer batches compatible observations into atomic, conflict-aware `aiMemory` records. Chat batches preserve the user's individual statements and their order. Records carry evidence source, confidence, importance, reinforcement, applicability, provenance, expiry, and version. Ambiguous clicks remain weak evidence; dismissing, deferring, and marking something unimportant have different meanings.
 3. Writing a record clears its `embedding`. A null embedding on an active record is the re-embedding queue, so a failed write, a newly written record, and a backfill all recover through one path.
 4. Embeddings are generated from the record's summary, content, and retrieval tags, then stored on the record itself. Retrieval and re-embedding both run opportunistically off the request path.
 5. Retrieval runs one query against the memory table, combining cosine similarity with lexical overlap, sender-domain evidence, agent applicability, source strength, confidence, importance, recency, reinforcement, and prior usefulness.
@@ -24,7 +24,7 @@ Semantic recall costs one embedding request per retrieval, so agents that run on
 
 ## Ownership and authority
 
-Personal memory belongs to one user, follows them across mailboxes, and stays private. Mailbox memory belongs to one mailbox and is available only through normal mailbox access. Writes to shared mailbox context require the knowledge-management capability. Every vector is partitioned into the same user or mailbox namespace as its source record.
+Personal memory belongs to one user, follows them across mailboxes, and stays private. Ambient observations of a person's chat, writing, reading, brief choices, and mail actions always update personal memory. Mailbox memory belongs to one mailbox and is available only through normal mailbox access. Shared labeling rules require the knowledge-management capability and an enabled mailbox learning setting. Every vector is partitioned into the same user or mailbox namespace as its source record.
 
 Runtime precedence is:
 
@@ -44,9 +44,9 @@ The capture filter rejects credential material: passwords, access and refresh to
 
 ## Active and passive knowledge
 
-Active learning is appropriate for reusable signals such as sending or replying, explicit memory requests, repeated corrections, useful-detail ratings, and material mailbox actions. Passive lookup is used for current, exhaustive, or auditable questions such as unread state, recent recipients, or the present contents of a thread.
+Learning collects the context of meaningful actions and looks for reusable preferences, communication style, reading interests, priorities, relationships described by the user, and organization habits. It does not keep an exhaustive click log as permanent knowledge. Passive lookup is used for current, exhaustive, or auditable questions such as unread state, recent recipients, or the present contents of a thread.
 
-Every personal and mailbox context has internal learning guidance and an adaptation flag. Settings exposes only the personal adaptation flag and a reset action. Detailed control happens conversationally in chat.
+Every personal and mailbox context has internal learning guidance and an adaptation flag. Settings exposes a continuous markdown overview of current personal knowledge, the personal adaptation flag, and a reset action. Archived and expired records do not appear in the overview.
 
 ## Agent integration contract
 
@@ -54,12 +54,14 @@ All contextual agents call `loadAiAgentContext` from `packages/orpc/src/ai-memor
 
 Interactive agents can receive personal and mailbox context. Background agents without an acting user receive mailbox context only. Administrative model calls and strict evidence-only extractors do not receive memory. New agents that draft, classify, prioritize, route, summarize for action, or perform external actions must integrate the central loader.
 
-The chat `memory` tool is the only inspection and editing interface. It can summarize personal and current-mailbox context or apply an explicit correction, remembrance, or forgetting request. The model chooses the internal scope from the user's intent without asking the user to manage the storage model.
+Chat receives relevant knowledge through the central loader and has no memory tool. Newly persisted user messages queue observations automatically; continuation requests and assistant messages do not. Chat actions run without approval except `send_mail`, whose exact draft must match a stored approved tool call before execution.
 
-Memory writes carry provenance. The tool passes the acting user's verbatim message alongside the agent's restatement of it, and the writer treats only the user's own words as evidence of intent. A restatement that claims durable intent the user did not express produces no operation, and content an agent read from mail, attachments, or connectors can never create or change a record. This is a structural boundary rather than a keyword filter, so ordinary phrasing such as "from now on, sign off with Cheers" is captured while an instruction embedded in a message is not.
+Memory writes carry provenance. The background writer receives the acting user's own statements separately from application observations. Only the user's words can establish instructions. Subjects, sender domains, labels, and brief titles provide context for an action and cannot instruct the writer. Ordinary phrasing such as "from now on, sign off with Cheers" is captured without a tool, while instructions embedded in correspondence are not.
 
 ## Reliability and deletion
 
-Model failures produce no partial memory mutation. Concurrent writes use record versions. An embedding is written only while the record's `updatedAt` is unchanged, so an embedding computed from superseded content is discarded rather than attached to newer text.
+Model failures produce no partial memory mutation. Observation completion and profile updates commit together, and retried chat requests cannot duplicate the same observation. Consolidation rechecks mailbox access, learning settings, and record versions. Scope locks serialize reset and consolidation, including scopes with no existing records. Transient user text is removed from observations after consolidation. An embedding is written only while the record's `updatedAt` is unchanged, so an embedding computed from superseded content is discarded rather than attached to newer text.
 
 Resetting personal context removes records, history, and personal learning observations in one transaction. Mailbox deletion additionally removes feedback and legacy automation profiles. Because embeddings are columns on the records themselves, deletion is immediate and complete with no second system to reconcile.
+
+Scheduled mail maintenance processes pending memory in production. Local memory processing is explicit and separate from Gmail background ownership. After starting `vp run dev:full`, use `vp run dev:trigger memory <local-user-id>` with budget-limited development AI credentials. This processes only that user's pending observations and does not perform provider mutations.

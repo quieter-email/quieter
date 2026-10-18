@@ -14,6 +14,7 @@ import {
 } from "@quieter/ui/dialog";
 import { useMutation } from "@tanstack/react-query";
 
+import { MarkdownContent } from "#/features/chat/components/markdown-content";
 import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 
@@ -28,6 +29,22 @@ export const PersonalizationMemories = () => {
       },
     })
   );
+  const exportedAt = memories.data ? Date.parse(memories.data.exportedAt) : 0;
+  const markdown = [
+    ...new Set(
+      (memories.data?.memories ?? [])
+        .filter(
+          (memory) =>
+            memory.status === "active" &&
+            (memory.expiresAt === null ||
+              Date.parse(memory.expiresAt) > exportedAt)
+        )
+        .map((memory) => memory.summary.replaceAll(/\s+/gu, " ").trim())
+        .filter(Boolean)
+    ),
+  ]
+    .map((summary) => (/[.!?]$/u.test(summary) ? summary : `${summary}.`))
+    .join(" ");
 
   return (
     <Dialog
@@ -46,9 +63,8 @@ export const PersonalizationMemories = () => {
         <DialogHeader>
           <DialogTitle>What Quieter remembers</DialogTitle>
           <DialogDescription>
-            Recent saved personal context, including archived memories. Shared
-            mailbox knowledge is separate. Ask Quieter in chat to correct or
-            forget something.
+            The personal context Quieter uses to help you. Ask in chat to
+            correct or forget something.
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="min-h-0 overflow-y-auto" spacing="4">
@@ -73,37 +89,13 @@ export const PersonalizationMemories = () => {
               </Button>
             </div>
           ) : null}
-          {memories.isSuccess && memories.data.memories.length === 0 ? (
+          {memories.isSuccess && markdown.length === 0 ? (
             <p className="text-body text-muted-fg">
-              No personal memories have been saved yet.
+              No personal memories to show yet.
             </p>
           ) : null}
-          {memories.isSuccess ? (
-            <ul className="space-y-4">
-              {memories.data.memories.map((memory) => (
-                <li
-                  className="space-y-2 rounded-lg border border-border p-3"
-                  key={`${memory.kind}:${memory.updatedAt}:${memory.summary}`}
-                >
-                  <p className="text-body font-medium wrap-anywhere">
-                    {memory.summary}
-                  </p>
-                  {memory.content === memory.summary ? null : (
-                    <p className="text-body-sm wrap-anywhere whitespace-pre-wrap text-muted-fg">
-                      {memory.content}
-                    </p>
-                  )}
-                  <p className="text-caption text-muted-fg">
-                    {memory.status === "archived" ? "Archived" : "Saved"}
-                    {memory.expiresAt !== null &&
-                    new Date(memory.expiresAt).getTime() <=
-                      new Date(memories.data.exportedAt).getTime()
-                      ? ", expired"
-                      : ""}
-                  </p>
-                </li>
-              ))}
-            </ul>
+          {memories.isSuccess && markdown.length > 0 ? (
+            <MarkdownContent markdown={markdown} />
           ) : null}
         </DialogBody>
         <DialogFooter>

@@ -13,6 +13,7 @@ import {
   getDailyBrief,
   giveDailyBriefFeedback,
   loadDailyBriefMemoryContext,
+  observeDailyBriefItem,
   prepareDailyBrief,
   recordDailyBriefActivity,
   refreshDailyBrief,
@@ -123,6 +124,12 @@ describe("Daily Brief authorization", () => {
         input: { ...input, action: "dismiss", itemId: "item" },
       })
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      observeDailyBriefItem({
+        context,
+        input: { ...input, action: "open", itemId: "item" },
+      })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(mocks.select).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
   });
@@ -139,7 +146,7 @@ describe("Daily Brief authorization", () => {
     }
   });
 
-  test("includes written personal instructions without using learned personal or other-mailbox context", async () => {
+  test("includes personal memories without using other users' or other-mailbox context", async () => {
     mocks.candidates.mockResolvedValue([
       memory({}),
       memory({ id: "personal-learned", kind: "learned" }),
@@ -174,13 +181,14 @@ describe("Daily Brief authorization", () => {
       expect.objectContaining({ id: "personal-instruction" })
     );
     expect(supplied).toContainEqual(
+      expect.objectContaining({ id: "personal-learned" })
+    );
+    expect(supplied).toContainEqual(
       expect.objectContaining({ id: "mailbox-learned" })
     );
     expect(
       supplied.some((candidate) =>
-        ["personal-learned", "other-mailbox", "other-user"].includes(
-          candidate.id
-        )
+        ["other-mailbox", "other-user"].includes(candidate.id)
       )
     ).toBeFalsy();
   });

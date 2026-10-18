@@ -4,11 +4,9 @@ export const createForegroundControl = () => {
   const state = createStore<{
     active: boolean;
     generation: number;
-    policy: "ask" | "automatic";
   }>({
     active: false,
     generation: 0,
-    policy: "ask",
   });
   let deadline = 0;
   let legs = 0;

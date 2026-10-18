@@ -21,18 +21,24 @@ import {
 } from "vite-plus/test";
 
 import type { assertCanUseAi } from "../src/ai-access";
-import type { loadAiAgentContext } from "../src/ai-memory";
+import type {
+  learnAiMemoryFromChatMessage,
+  loadAiAgentContext,
+} from "../src/ai-memory";
 import { createAiChatResponse } from "../src/chat/service";
 import type { hasConnectedConnector } from "../src/connectors/runtime";
 import type { modifyMailForUser } from "../src/gmail-chat-search";
+import type { composeMailOperations } from "../src/mail/compose";
 import type { assertAccessibleMailbox } from "../src/mailbox/service";
 
 const state = vi.hoisted(() => ({
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
+  learn: vi.fn<typeof learnAiMemoryFromChatMessage>(),
   mailboxId: crypto.randomUUID(),
   model: vi.fn<() => MockLanguageModelV4>(),
   modify: vi.fn<typeof modifyMailForUser>(),
   organizationId: crypto.randomUUID(),
+  send: vi.fn<typeof composeMailOperations.sendMessage>(),
 }));
 vi.mock(import("@quieter/env/server"), async (original) => {
   const actual = await original();
@@ -60,6 +66,7 @@ vi.mock(import("../src/ai-access"), () => ({
 }));
 vi.mock(import("../src/ai-memory"), async (original) => ({
   ...(await original()),
+  learnAiMemoryFromChatMessage: state.learn,
   loadAiAgentContext: vi
     .fn<typeof loadAiAgentContext>()
     .mockResolvedValue({ instructions: null, memory: null }),
@@ -85,6 +92,26 @@ vi.mock(import("../src/gmail-chat-search"), async (original) => ({
   ...(await original()),
   modifyMailForUser: state.modify,
 }));
+vi.mock(import("../src/mail/compose"), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    composeMailOperations: {
+      ...actual.composeMailOperations,
+      sendMessage: state.send,
+    },
+  };
+});
+
+const sendDraft = {
+  attachments: [],
+  bodyHtml: "<p>Hello Sam</p>",
+  draftId: "draft-1",
+  draftRevision: 1,
+  inlineImages: [],
+  subject: "Project update",
+  to: "sam@example.test",
+};
 
 describe.skipIf(state.databaseUrl === undefined)(
   "chat approvals on PostgreSQL",
@@ -98,7 +125,6 @@ describe.skipIf(state.databaseUrl === undefined)(
       exchangeId: string;
       expiresAt: number;
       generation: number;
-      policy: "ask";
       tabId: string;
     };
     beforeAll(async () => {
@@ -146,7 +172,6 @@ describe.skipIf(state.databaseUrl === undefined)(
         exchangeId: assistantId,
         expiresAt: Date.now() + 60_000,
         generation: 1,
-        policy: "ask",
         tabId: "tab-1",
       };
       const now = new Date();
@@ -193,6 +218,12 @@ describe.skipIf(state.databaseUrl === undefined)(
         status: "success",
         target: "message",
       });
+      state.learn.mockReset().mockResolvedValue({ status: "recorded" });
+      state.send.mockReset().mockResolvedValue({
+        draftCleanupHandled: true,
+        id: "sent-message",
+        idempotent: false,
+      });
       state.model.mockReturnValue(
         new MockLanguageModelV4({
           doStream: {
@@ -217,7 +248,8 @@ describe.skipIf(state.databaseUrl === undefined)(
     });
 
     const continueAnswer = async (
-      requestForeground: typeof foreground = foreground
+      requestForeground: typeof foreground = foreground,
+      toolName: "modify_mail" | "send_mail" = "modify_mail"
     ) =>
       await createAiChatResponse({
         body: {
@@ -231,7 +263,7 @@ describe.skipIf(state.databaseUrl === undefined)(
                 approval: { approved: true, id: "approval" },
                 state: "approval-responded",
                 toolCallId: "action",
-                type: "tool-modify_mail",
+                type: `tool-${toolName}`,
               },
             ],
             role: "assistant",
@@ -243,6 +275,143 @@ describe.skipIf(state.databaseUrl === undefined)(
         request: new Request("https://example.test/api/chat"),
         userId,
       });
+
+    test("claims an approved stored send once and preserves it after generation failure", async () => {
+      await db
+        .update(chatMessage)
+        .set({
+          parts: [
+            {
+              foreground: { ...foreground, policy: "automatic" },
+              input: {},
+              output: {
+                draft: sendDraft,
+                generation: foreground.generation,
+                mailboxId: state.mailboxId,
+                view: "compose",
+              },
+              state: "output-available",
+              toolCallId: "workspace",
+              type: "tool-get_workspace",
+            },
+            {
+              approval: { id: "approval" },
+              foreground: { ...foreground, policy: "automatic" },
+              input: { draft: sendDraft },
+              state: "approval-requested",
+              toolCallId: "action",
+              type: "tool-send_mail",
+            },
+          ],
+        })
+        .where(eq(chatMessage.id, assistantId));
+      const responses = await Promise.allSettled([
+        continueAnswer(foreground, "send_mail"),
+        continueAnswer(foreground, "send_mail"),
+      ]);
+      await Promise.all(
+        responses.flatMap((response) =>
+          response.status === "fulfilled" ? [response.value.text()] : []
+        )
+      );
+      expect(state.send).toHaveBeenCalledOnce();
+      expect(state.learn).not.toHaveBeenCalled();
+      const [stored] = await db
+        .select()
+        .from(chatMessage)
+        .where(eq(chatMessage.id, assistantId));
+      expect(
+        stored?.parts.find((part) => part.toolCallId === "action")
+      ).toMatchObject({
+        output: { status: "sent" },
+        state: "output-available",
+      });
+      await expect(
+        continueAnswer(foreground, "send_mail")
+      ).rejects.toMatchObject({ status: 409 });
+    });
+
+    test("executes a new mailbox change immediately and keeps its outcome after generation fails", async () => {
+      await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
+      state.model.mockReturnValue(
+        new MockLanguageModelV4({
+          doStream: [
+            {
+              stream: convertArrayToReadableStream([
+                { type: "stream-start", warnings: [] },
+                {
+                  input: JSON.stringify({
+                    action: "archive",
+                    id: "email",
+                    target: "message",
+                  }),
+                  toolCallId: "automatic-action",
+                  toolName: "modify_mail",
+                  type: "tool-call",
+                },
+                {
+                  finishReason: { raw: undefined, unified: "tool-calls" },
+                  type: "finish",
+                  usage: {
+                    inputTokens: {
+                      cacheRead: 0,
+                      cacheWrite: 0,
+                      noCache: 1,
+                      total: 1,
+                    },
+                    outputTokens: { reasoning: 0, text: 1, total: 1 },
+                  },
+                },
+              ]),
+            },
+            {
+              stream: convertArrayToReadableStream([
+                { type: "stream-start", warnings: [] },
+                {
+                  error: new Error("Model failed after the automatic action"),
+                  type: "error",
+                },
+              ]),
+            },
+          ],
+        })
+      );
+      const response = await createAiChatResponse({
+        body: {
+          category: "inbox",
+          foreground,
+          mailboxId: state.mailboxId,
+          message: {
+            id: userMessageId,
+            parts: [{ text: "Archive this email", type: "text" }],
+            role: "user",
+          },
+          threadId,
+          trigger: "submit-message",
+        },
+        request: new Request("https://example.test/api/chat"),
+        userId,
+      });
+      const stream = await response.text();
+      expect(stream).not.toContain("tool-approval-request");
+      expect(state.modify).toHaveBeenCalledOnce();
+      expect(state.learn).toHaveBeenCalledExactlyOnceWith({
+        bodyText: "Archive this email",
+        mailboxId: state.mailboxId,
+        messageId: userMessageId,
+        userId,
+      });
+      const [stored] = await db
+        .select()
+        .from(chatMessage)
+        .where(eq(chatMessage.id, assistantId));
+      expect(
+        stored?.parts.find((part) => part.toolCallId === "automatic-action")
+      ).toMatchObject({
+        output: { status: "success" },
+        state: "output-available",
+      });
+    });
 
     test("concurrent approvals execute once and keep the result after model failure", async () => {
       const responses = await Promise.allSettled([
@@ -274,7 +443,6 @@ describe.skipIf(state.databaseUrl === undefined)(
         exchangeId: foreground.exchangeId,
         expiresAt: foreground.expiresAt,
         generation: foreground.generation,
-        policy: foreground.policy,
         tabId: foreground.tabId,
       });
       await response.text();

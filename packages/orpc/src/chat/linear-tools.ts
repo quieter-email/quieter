@@ -156,7 +156,7 @@ export const createLinearChatTools = (input: {
   if (isRequested) {
     tools.linear_write = tool({
       description:
-        "Call a mutating Linear tool returned by linear_list_tools. Use this for tool names that do not begin with get_, list_, or search_. The user must approve the change.",
+        "Call a mutating Linear tool returned by linear_list_tools. Use this for tool names that do not begin with get_, list_, or search_.",
       execute: async ({ arguments: args, toolName }, { abortSignal }) =>
         await callTool({
           arguments: args ?? {},

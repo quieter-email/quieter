@@ -30,16 +30,24 @@ export const toCanonicalTranscript = (
     if (message.role !== "assistant" && message.role !== "user") {
       return [];
     }
-    const parts = message.parts.filter(isRenderablePart).map((part) =>
-      part.state === "approval-responded"
-        ? {
-            ...part,
-            errorText:
-              "The action was submitted, but its result is not available. Check the affected item before requesting it again.",
-            state: "output-error",
-          }
-        : part
-    );
+    const parts = message.parts.filter(isRenderablePart).map((part) => {
+      if (
+        !part.type.startsWith("tool-") ||
+        (part.state !== "approval-requested" &&
+          part.state !== "approval-responded" &&
+          part.state !== "input-available" &&
+          part.state !== "input-streaming")
+      ) {
+        return part;
+      }
+      const { approval: _approval, ...withoutApproval } = part;
+      return {
+        ...withoutApproval,
+        errorText:
+          "The action has no confirmed result. Check the affected item before requesting it again.",
+        state: "output-error",
+      };
+    });
     if (parts.length === 0) {
       return [];
     }

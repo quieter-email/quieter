@@ -13,6 +13,7 @@ import { z } from "zod";
 import { assertCanUseAi } from "./ai-access";
 import { loadAiAgentContext, serializeAiAgentContext } from "./ai-memory";
 import type { MailRequestContext } from "./gmail-request";
+import { learnAiMemoryFromMailAction } from "./mail/feedback";
 import { queriesMailOperations } from "./mail/queries";
 import { assertAccessibleMailbox } from "./mailbox/service";
 
@@ -117,7 +118,7 @@ export const requestReplySuggestion = async ({
     const model = resolveBackgroundModel();
     const requestId = randomUUID();
     generating = true;
-    return await suggestReply({
+    const suggestion = await suggestReply({
       abortSignal: context.signal,
       memoryContext: serializeAiAgentContext(memory),
       messages,
@@ -143,6 +144,21 @@ export const requestReplySuggestion = async ({
       },
       replyToMessageId: target.id,
     });
+    await learnAiMemoryFromMailAction({
+      action: "reply_requested",
+      mailboxId: mailbox.id,
+      messageIds: [target.id],
+      metadata: {
+        senderDomain:
+          target.from
+            ?.match(/[A-Z0-9._%+-]+@(?<domain>[A-Z0-9.-]+\.[A-Z]{2,})/iu)
+            ?.groups?.domain?.toLowerCase() ?? null,
+        subject: target.subject ?? null,
+      },
+      targetCount: 1,
+      userId: context.userId,
+    });
+    return suggestion;
   } catch (error) {
     if (
       error instanceof ORPCError &&

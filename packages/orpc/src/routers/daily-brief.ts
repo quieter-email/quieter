@@ -3,6 +3,7 @@ import {
   dailyBriefInputs,
   getDailyBrief,
   giveDailyBriefFeedback,
+  observeDailyBriefItem,
   prepareDailyBrief,
   recordDailyBriefActivity,
   refreshDailyBrief,
@@ -23,6 +24,9 @@ export const dailyBriefRouter = {
     .route({ method: "GET" })
     .input(dailyBriefInputs.get)
     .handler(getDailyBrief),
+  observe: protectedProcedure
+    .input(dailyBriefInputs.observe)
+    .handler(observeDailyBriefItem),
   prepare: protectedProcedure
     .input(dailyBriefInputs.prepare)
     .handler(prepareDailyBrief),

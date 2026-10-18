@@ -25,7 +25,10 @@ import {
   deleteManagedDraft,
 } from "../managed-mail/messages/drafts";
 import { sendManagedMailboxMessage } from "../managed-mail/messages/send";
-import { learnAiMemoryFromSentMessage } from "./feedback";
+import {
+  learnAiMemoryFromMailAction,
+  learnAiMemoryFromSentMessage,
+} from "./feedback";
 import type { MailInputs } from "./inputs";
 
 const parseListUnsubscribeMailto = (value: string) => {
@@ -299,6 +302,24 @@ export const composeMailOperations = {
       ).toString("base64url");
 
       await sendRawMessage(accessToken, raw);
+
+      await learnAiMemoryFromMailAction({
+        action: "unsubscribe",
+        mailboxId: input.mailboxId,
+        metadata: {
+          senderDomain:
+            message.payload?.headers
+              ?.find((header) => header.name.toLowerCase() === "from")
+              ?.value.match(/@(?<domain>[a-z0-9.-]+\.[a-z]{2,})/iu)
+              ?.groups?.domain?.toLowerCase() ?? null,
+          subject:
+            message.payload?.headers?.find(
+              (header) => header.name.toLowerCase() === "subject"
+            )?.value ?? null,
+        },
+        targetCount: 1,
+        userId: context.userId,
+      });
 
       return { sent: true };
     }),
