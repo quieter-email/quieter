@@ -3,10 +3,7 @@ import type { DatabaseClient } from "@quieter/database/client";
 import type { aiMemory } from "@quieter/database/schema";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
-import type {
-  loadAiAgentContext,
-  loadAiAgentMemoryCandidates,
-} from "../src/ai-memory";
+import type * as AiMemoryModule from "../src/ai-memory";
 import {
   configureDailyBrief,
   dailyBriefInputs,
@@ -22,13 +19,14 @@ import type { assertAccessibleMailbox } from "../src/mailbox/service";
 
 const mocks = vi.hoisted(() => ({
   access: vi.fn<typeof assertAccessibleMailbox>(),
-  candidates: vi.fn<typeof loadAiAgentMemoryCandidates>(),
-  memoryContext: vi.fn<typeof loadAiAgentContext>(),
+  candidates: vi.fn<typeof AiMemoryModule.loadAiAgentMemoryCandidates>(),
+  memoryContext: vi.fn<typeof AiMemoryModule.loadAiAgentContext>(),
   select: vi.fn<DatabaseClient["select"]>(),
   update: vi.fn<DatabaseClient["update"]>(),
 }));
-vi.mock(import("../src/ai-memory"), async (original) => ({
-  ...(await original()),
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- This fixture mocks only normal context calls, not the overview overload.
+vi.mock("../src/ai-memory", async (original) => ({
+  ...(await original<typeof AiMemoryModule>()),
   loadAiAgentContext: mocks.memoryContext,
   loadAiAgentMemoryCandidates: mocks.candidates,
 }));

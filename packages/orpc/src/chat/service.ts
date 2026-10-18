@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/server";
 import {
   createGmailChatTools,
   createGoogleCalendarChatTool,
+  createPersonalContextChatTool,
   gmailToolsPrompt,
   googleCalendarToolsPrompt,
   linearToolsPrompt,
@@ -1299,6 +1300,14 @@ export const createAiChatResponse = async (input: {
   });
 
   const tools = {
+    ...createPersonalContextChatTool({
+      readPersonalContext: async ({ cursor }) =>
+        await loadAiAgentContext({
+          mailboxId,
+          overview: { cursor },
+          userId: input.userId,
+        }),
+    }),
     ...createForegroundClientTools(),
     ...createForegroundServerTools({
       saveComposeDraft: async ({ draft }, signal) => {
@@ -1481,6 +1490,13 @@ export const createAiChatResponse = async (input: {
         provider: "openrouter",
       });
     },
+    prepareStep: ({ stepNumber, steps }) =>
+      stepNumber >= CHAT_MAX_STEPS - 1 &&
+      steps.some((step) =>
+        step.toolCalls.some((call) => call.toolName === "read_personal_context")
+      )
+        ? { toolChoice: "none" }
+        : undefined,
     providerOptions: {
       openrouter: {
         reasoning: {

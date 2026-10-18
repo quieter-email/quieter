@@ -4,10 +4,34 @@ import type { UIMessage } from "ai";
 import { describe, expect, test } from "vite-plus/test";
 
 import { getAssistantProgress, getMessageText } from "./chat-messages";
+import { isChatToolPart } from "./chat-tools";
 
 type StoredMessage = RouterOutputs["chat"]["get"]["messages"][number];
 
 describe("chat message conversion", () => {
+  test.each(["tool-memory", "tool-read_personal_context"])(
+    "keeps internal context activity hidden after restoring %s from history",
+    (type) => {
+      const restored = toCanonicalTranscript([
+        {
+          id: "assistant",
+          parts: [
+            {
+              input: {},
+              output: { status: "success" },
+              state: "output-available",
+              toolCallId: "internal-context",
+              type,
+            },
+          ],
+          role: "assistant",
+        },
+      ]);
+      const parts = restored.flatMap((message) => message.parts);
+      expect(parts.filter(isChatToolPart)).toHaveLength(0);
+    }
+  );
+
   test("projects persisted rows onto UI messages and skips system rows", () => {
     const storedMessage: StoredMessage = {
       createdAt: new Date("2026-08-20T10:00:00.000Z"),

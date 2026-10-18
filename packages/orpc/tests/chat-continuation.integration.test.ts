@@ -21,10 +21,7 @@ import {
 } from "vite-plus/test";
 
 import type { assertCanUseAi } from "../src/ai-access";
-import type {
-  learnAiMemoryFromChatMessage,
-  loadAiAgentContext,
-} from "../src/ai-memory";
+import type * as AiMemoryModule from "../src/ai-memory";
 import { createAiChatResponse } from "../src/chat/service";
 import type { hasConnectedConnector } from "../src/connectors/runtime";
 import type { modifyMailForUser } from "../src/gmail-chat-search";
@@ -33,7 +30,7 @@ import type { assertAccessibleMailbox } from "../src/mailbox/service";
 
 const state = vi.hoisted(() => ({
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
-  learn: vi.fn<typeof learnAiMemoryFromChatMessage>(),
+  learn: vi.fn<typeof AiMemoryModule.learnAiMemoryFromChatMessage>(),
   mailboxId: crypto.randomUUID(),
   model: vi.fn<() => MockLanguageModelV4>(),
   modify: vi.fn<typeof modifyMailForUser>(),
@@ -64,11 +61,12 @@ vi.mock(import("@quieter/billing"), async (original) => ({
 vi.mock(import("../src/ai-access"), () => ({
   assertCanUseAi: vi.fn<typeof assertCanUseAi>(),
 }));
-vi.mock(import("../src/ai-memory"), async (original) => ({
-  ...(await original()),
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- This fixture mocks only normal context calls, not the overview overload.
+vi.mock("../src/ai-memory", async (original) => ({
+  ...(await original<typeof AiMemoryModule>()),
   learnAiMemoryFromChatMessage: state.learn,
   loadAiAgentContext: vi
-    .fn<typeof loadAiAgentContext>()
+    .fn<typeof AiMemoryModule.loadAiAgentContext>()
     .mockResolvedValue({ instructions: null, memory: null }),
 }));
 vi.mock(import("../src/mailbox/service"), () => ({

@@ -11,6 +11,7 @@ export const isChatToolPart = (
   typeof part.type === "string" &&
   part.type.startsWith("tool-") &&
   part.type !== "tool-memory" &&
+  part.type !== "tool-read_personal_context" &&
   "toolCallId" in part;
 
 export const getToolName = (partType: string) =>
