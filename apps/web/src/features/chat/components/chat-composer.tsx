@@ -66,7 +66,7 @@ export const ChatComposer = ({
         )}
       </div>
     )}
-    <div className="flex">
+    <div className="relative flex">
       <Textarea
         aria-label="Message"
         data-assistant-composer
@@ -77,11 +77,9 @@ export const ChatComposer = ({
         onKeyDown={onInputKeyDown}
         placeholder="Ask Quieter…"
         value={input}
-        variant="composer"
+        variant="composer-action"
       />
-    </div>
-    <div className="flex min-h-7 items-center gap-2">
-      <div className="ml-auto">
+      <div className="absolute right-2 bottom-2 flex">
         {streaming ? (
           <IconButtonTooltip label="Stop response">
             <Button
