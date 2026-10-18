@@ -48,6 +48,8 @@ Learning collects the context of meaningful actions and looks for reusable prefe
 
 Every personal and mailbox context has internal learning guidance and an adaptation flag. Settings exposes a continuous markdown overview of current personal knowledge, the personal adaptation flag, and a reset action. Archived and expired records do not appear in the overview.
 
+Pausing personal adaptation stops automatic observations and learning. Chat can still honor explicit requests to correct or forget an existing personal memory. A restricted writer checks the user's current words without recording an observation; unrelated messages produce no memory change or history entry. This path cannot add or restore records, and version checks prevent a correction from recreating context that was reset while the request ran.
+
 ## Agent integration contract
 
 All contextual agents call `loadAiAgentContext` from `packages/orpc/src/ai-memory.ts` with a stable agent slug, an accessible mailbox, the acting user, and a task-specific query. `serializeAiAgentContext` is used when an AI package expects one prompt field.

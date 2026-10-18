@@ -606,6 +606,7 @@ const buildMemoryValues = ({
 const applyAiMemoryPlan = async ({
   actorUserId,
   changeSetSource,
+  existingEditsOnly = false,
   expectedVersions,
   plan,
   request,
@@ -616,6 +617,7 @@ const applyAiMemoryPlan = async ({
 }: {
   actorUserId: string;
   changeSetSource: "chat" | "feedback" | "settings" | "system";
+  existingEditsOnly?: boolean;
   expectedVersions?: ReadonlyMap<string, number>;
   plan: AiMemoryUpdatePlan;
   request: string | null;
@@ -680,6 +682,26 @@ const applyAiMemoryPlan = async ({
     const changes: AiMemoryChange[] = [];
     const now = new Date();
     if (
+      existingEditsOnly &&
+      plan.operations.some((operation) => {
+        const target = operation.targetId
+          ? recordsById.get(operation.targetId)
+          : undefined;
+        return (
+          source !== "explicit" ||
+          operation.action === "add" ||
+          target?.status !== "active" ||
+          target.version !== expectedVersions?.get(target.id) ||
+          operation.key !== target.key ||
+          operation.kind !== target.kind
+        );
+      })
+    ) {
+      throw new ORPCError("CONFLICT", {
+        message: "The memory to correct was changed or forgotten.",
+      });
+    }
+    if (
       expectedVersions !== undefined &&
       current.some(
         (record) =>
@@ -701,6 +723,12 @@ const applyAiMemoryPlan = async ({
       const target = operation.targetId
         ? recordsById.get(operation.targetId)
         : recordsByKey.get(operation.key);
+      if (
+        existingEditsOnly &&
+        (target === undefined || target.status !== "active")
+      ) {
+        continue;
+      }
       if (
         source !== "explicit" &&
         (operation.kind === "instruction" || target?.kind === "instruction")
@@ -1056,28 +1084,6 @@ export const learnAiMemoryFromFeedback = async (input: {
     : { status: "recorded" as const };
 };
 
-export const learnAiMemoryFromChatMessage = async (input: {
-  bodyText: string;
-  mailboxId: string;
-  messageId: string;
-  userId: string;
-}) => {
-  const text = input.bodyText.trim();
-  if (!text || containsProhibitedMemorySecret(text)) {
-    return { status: "skipped" as const };
-  }
-  return await learnAiMemoryFromFeedback({
-    eventKey: input.messageId,
-    kind: "chat_discovery",
-    mailboxId: input.mailboxId,
-    metadata: {
-      ambient: true,
-      userMessage: text.slice(0, AI_MEMORY_USER_MESSAGE_MAX_LENGTH),
-    },
-    userId: input.userId,
-  });
-};
-
 const canRunMemoryModel = async (input: {
   organizationId: string;
   userId: string;
@@ -1095,6 +1101,89 @@ const canRunMemoryModel = async (input: {
   }
   const usage = await getBillingCreditUsage(entitlement.account);
   return usage.costMicroCents < usage.creditAmountMicroCents;
+};
+
+export const learnAiMemoryFromChatMessage = async (input: {
+  bodyText: string;
+  mailboxId: string;
+  messageId: string;
+  userId: string;
+}) => {
+  const text = input.bodyText.trim();
+  if (!text || containsProhibitedMemorySecret(text)) {
+    return { status: "skipped" as const };
+  }
+  const config = await getPersonalAiMemoryScopeConfig(input.userId);
+  if (config.activeLearningEnabled) {
+    return await learnAiMemoryFromFeedback({
+      eventKey: input.messageId,
+      kind: "chat_discovery",
+      mailboxId: input.mailboxId,
+      metadata: {
+        ambient: true,
+        userMessage: text.slice(0, AI_MEMORY_USER_MESSAGE_MAX_LENGTH),
+      },
+      userId: input.userId,
+    });
+  }
+
+  const scope = userScope(input.userId);
+  const memories = await listScopeMemories(scope.scopeKey);
+  const current = memories.filter(
+    (memory) =>
+      memory.status === "active" &&
+      (memory.expiresAt === null || memory.expiresAt > new Date())
+  );
+  if (current.length === 0) {
+    return { status: "skipped" as const };
+  }
+  const billingMailbox = await assertAccessibleMailbox({
+    mailboxId: input.mailboxId,
+    userId: input.userId,
+  });
+  if (
+    !(await canRunMemoryModel({
+      organizationId: billingMailbox.organizationId,
+      userId: input.userId,
+    }))
+  ) {
+    return { status: "ineligible" as const };
+  }
+  const usage = createUsageCollector();
+  try {
+    const plan = await planAiMemoryUpdate({
+      currentMemories: current.map(toEditorMemory),
+      existingEditsOnly: true,
+      onUsage: usage.collect,
+      request:
+        "Apply only an explicit correction or forgetting request for an existing personal memory. Automatic learning is paused.",
+      source: "explicit",
+      userMessage: text.slice(0, AI_MEMORY_USER_MESSAGE_MAX_LENGTH),
+    });
+    if (plan.operations.length === 0) {
+      return { status: "skipped" as const };
+    }
+    await applyAiMemoryPlan({
+      actorUserId: input.userId,
+      changeSetSource: "chat",
+      existingEditsOnly: true,
+      expectedVersions: new Map(
+        current.map(({ id, version }) => [id, version])
+      ),
+      plan,
+      request: null,
+      scope,
+      source: "explicit",
+    });
+    return { status: "refreshed" as const };
+  } finally {
+    await reportMemoryUsage({
+      externalId: `ai-memory-chat-edit:${input.messageId}`,
+      mailboxId: input.mailboxId,
+      usage: usage.usage(),
+      userId: input.userId,
+    });
+  }
 };
 
 const resolveMemorySource = (
