@@ -198,7 +198,7 @@ export const haveComposeDraftPersistedFieldsChanged = (
     current.recipients.cc === next.recipients.cc &&
     current.recipients.bcc === next.recipients.bcc &&
     current.subject === next.subject &&
-    (current.senderName ?? "") === (next.senderName ?? "") &&
+    (current.senderName?.trim() ?? "") === (next.senderName?.trim() ?? "") &&
     current.bodyHtml === next.bodyHtml &&
     current.bodyText === next.bodyText &&
     areComposeAssetsEqual(current.attachments, next.attachments) &&
