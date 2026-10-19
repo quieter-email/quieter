@@ -16,12 +16,14 @@ import type { MailboxCategory, MessageListItem } from "#/lib/mail";
 
 import { MessageDetailLoadingSkeleton } from "./message-detail-loading";
 import { MessageView } from "./message-view";
+import type { MessageViewProps } from "./message-view-types";
 
 type MessageDetailProps = {
   activeMailbox: MailboxCategory;
   composeDemoMode?: boolean;
   composeManagedDemoMode?: boolean;
   composePersistDrafts?: boolean;
+  composeSenderMailbox?: MessageViewProps["composeSenderMailbox"];
   composeSignature?: { html: string | null; text: string | null };
   focusOnOpen?: boolean;
   currentUserEmail?: string | null;
@@ -41,6 +43,7 @@ export const MessageDetail = ({
   composeDemoMode,
   composeManagedDemoMode,
   composePersistDrafts,
+  composeSenderMailbox,
   composeSignature,
   focusOnOpen,
   currentUserEmail,
@@ -93,6 +96,7 @@ export const MessageDetail = ({
           composeDemoMode={composeDemoMode}
           composeManagedDemoMode={composeManagedDemoMode}
           composePersistDrafts={composePersistDrafts}
+          composeSenderMailbox={composeSenderMailbox}
           composeSignature={composeSignature}
           focusOnOpen={focusOnOpen}
           currentUserEmail={currentUserEmail}

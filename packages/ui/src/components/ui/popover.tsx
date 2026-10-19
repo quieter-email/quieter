@@ -29,12 +29,15 @@ export const PopoverContent = ({
   className,
   side = "bottom",
   sideOffset = 8,
+  size = "default",
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Popup> &
   Pick<
     ComponentPropsWithoutRef<typeof PopoverPrimitive.Positioner>,
     "align" | "alignOffset" | "side" | "sideOffset"
-  >) => (
+  > & {
+    size?: "default" | "sm";
+  }) => (
   <PopoverPortal>
     <PopoverPrimitive.Positioner
       align={align}
@@ -46,6 +49,7 @@ export const PopoverContent = ({
       <PopoverPrimitive.Popup
         className={cn(
           "z-50 max-w-sm min-w-52 origin-(--transform-origin) rounded-lg border bg-popover p-4 text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
+          { "w-80 max-w-(--available-width)": size === "sm" },
           className
         )}
         {...props}

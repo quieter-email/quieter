@@ -1,4 +1,7 @@
-import { composeDraftAnchorSchema } from "@quieter/mail/compose/schema";
+import {
+  composeDraftAnchorSchema,
+  composeSenderNameSchema,
+} from "@quieter/mail/compose/schema";
 import { tool } from "ai";
 import type { ToolSet } from "ai";
 import { z } from "zod";
@@ -103,6 +106,7 @@ export const foregroundComposeDraftSchema = z
       .optional(),
     sendOperationId: z.uuid().optional(),
     sendUncertain: z.boolean().optional(),
+    senderName: composeSenderNameSchema.optional(),
     subject: optionalText,
     to: optionalText,
   })

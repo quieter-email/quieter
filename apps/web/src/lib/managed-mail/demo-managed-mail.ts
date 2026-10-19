@@ -24,6 +24,7 @@ import { getMailboxesQueryKey } from "#/lib/mailboxes-query";
 
 export const DEMO_MANAGED_MAILBOX_ID = "demo:managed-mailbox";
 const DEMO_MANAGED_EMAIL_ADDRESS = "support@quieter.com";
+const DEMO_MANAGED_MAILBOX_NAME = "Managed demo";
 const DEMO_MANAGED_MAIL_STORAGE_KEY = "quieter:managed-demo-mail-state";
 const DEMO_MANAGED_MAIL_STATE_VERSION = 3;
 const MANAGED_DEMO_THREAD_QUERY_VERSION = 3;
@@ -308,7 +309,7 @@ export const getManagedDemoMailboxes = () => ({
             role: "manager",
           }),
           connectionStatus: "connected" as const,
-          displayName: "Managed demo",
+          displayName: DEMO_MANAGED_MAILBOX_NAME,
           emailAddress: DEMO_MANAGED_EMAIL_ADDRESS,
           grantRole: "manager" as const,
           groupId: "demo-managed-team",
@@ -425,6 +426,7 @@ const composeActions = createDemoComposeActions({
   ...store,
   prefix: "managed-demo",
   sender: DEMO_MANAGED_EMAIL_ADDRESS,
+  senderName: DEMO_MANAGED_MAILBOX_NAME,
 });
 export const {
   saveDraft: saveManagedDemoDraft,

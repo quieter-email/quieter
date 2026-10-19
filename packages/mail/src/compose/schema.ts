@@ -173,11 +173,18 @@ export const QUIETER_DRAFT_HEADER_NAMES = {
   sourceThreadId: "X-Quieter-Source-Thread-Id",
 } as const;
 
+export const composeSenderNameSchema = z
+  .string()
+  .regex(/^[^\r\n]*$/u, "Sender names cannot contain line breaks.")
+  .trim()
+  .max(120, "Keep the sender name under 120 characters.");
+
 export const composeDraftFormValuesSchema = z.object({
   bcc: composeRecipientFieldSchema,
   bodyHtml: z.string(),
   bodyText: z.string(),
   cc: composeRecipientFieldSchema,
+  senderName: composeSenderNameSchema,
   subject: z.string(),
   to: composeRecipientFieldSchema,
 });
@@ -284,6 +291,7 @@ export const composeDraftInputSchema = z.object({
   saveStatus: z.string(),
   sendOperationId: z.uuid().optional(),
   sendUncertain: z.boolean().optional(),
+  senderName: composeSenderNameSchema.optional(),
   subject: z.string(),
   updatedAt: z.number(),
 });
