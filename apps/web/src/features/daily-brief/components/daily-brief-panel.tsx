@@ -416,11 +416,6 @@ export const DailyBriefPanel = ({
                   });
                 }}
                 onPrepareDraft={() => {
-                  observe.mutate({
-                    action: "reply_requested",
-                    itemId: item.id,
-                    mailboxId: mailbox.id,
-                  });
                   prepareDraft.mutate(
                     { item, mailbox },
                     {

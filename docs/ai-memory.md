@@ -42,13 +42,15 @@ The system is intentionally allowed to remember useful private context. Relation
 
 The capture filter rejects credential material: passwords, access and refresh tokens, private keys, recovery material, verification codes, full payment-card numbers, bank-account identifiers, and similar secrets. It also rejects raw message bodies, quoted correspondence, exhaustive thread summaries, and transient one-off tasks. Live mailbox facts stay in the mailbox and are searched when needed instead of being copied into memory.
 
-A secret-bearing chat message can still request deletion of legacy personal memories. A deletion-only classifier selects owned record IDs without producing new memory content or recording the message as an observation. Explicit deletion removes the matching records, affected undo snapshots, and personal source observations under the user lock. Questions, quotes, and attempts to remember a secret produce no memory mutation. This path also works while adaptation is paused.
+A secret-bearing chat message can still request deletion of legacy personal or selected-mailbox memories. A deletion-only classifier selects record IDs in the requested scope without producing new memory content or recording the message as an observation. Mailbox edits require the knowledge-management capability, checked again after planning. Explicit deletion removes the matching records, affected undo snapshots, and source observations under the scope's user or mailbox lock. Questions, quotes, and attempts to remember a secret produce no memory mutation. This path also works while adaptation is paused.
 
 ## Active and passive knowledge
 
 Learning collects the context of meaningful actions and looks for reusable preferences, communication style, reading interests, priorities, relationships described by the user, and organization habits. It does not keep an exhaustive click log as permanent knowledge. Passive lookup is used for current, exhaustive, or auditable questions such as unread state, recent recipients, or the present contents of a thread.
 
 Every personal and mailbox context has internal learning guidance and an adaptation flag. Settings exposes a continuous markdown overview of current personal knowledge, the personal adaptation flag, and a reset action. Archived and expired records do not appear in the overview.
+
+Chat corrections and forgetting can also target existing knowledge in the selected mailbox. These explicit edits work while learning is paused, cannot add or restore mailbox records, and leave personal knowledge separate. Automatic chat observations remain personal. Scoped edits process all active records in bounded batches and reject stale plans after a reset or concurrent edit.
 
 Pausing personal adaptation stops automatic observations and learning. Chat can still honor explicit requests to correct or forget an existing personal memory. A restricted writer checks the user's current words without recording an observation; unrelated messages produce no memory change or history entry. The web request registers these edits as managed background work so the response can stream immediately. This path cannot add or restore records, and version checks prevent a correction from recreating context that was reset while the request ran.
 

@@ -1007,6 +1007,7 @@ export const requestAiMemoryUpdate = async ({
       learningGuidance: allowMutations
         ? config.learningPrompt
         : `${config.learningPrompt}\n\nThis interaction is read-only. Answer the question and return zero operations.`,
+      memoryScope: scope.scope,
       onUsage: usage.collect,
       request: normalizedRequest,
       source: "explicit",
@@ -1165,17 +1166,20 @@ const canRunMemoryModel = async (input: {
   return usage.costMicroCents < usage.creditAmountMicroCents;
 };
 
-const forgetSensitivePersonalAiMemory = async (input: {
+const forgetSensitiveAiMemory = async (input: {
   mailboxId: string;
   messageId: string;
+  scope: MemoryScopeTarget;
   text: string;
   userId: string;
 }) => {
-  const scope = userScope(input.userId);
+  const { scope } = input;
   const ownedMemoryCondition = and(
     eq(aiMemory.scopeKey, scope.scopeKey),
-    eq(aiMemory.userId, input.userId),
-    isNull(aiMemory.mailboxId)
+    eq(aiMemory.scope, scope.scope),
+    scope.scope === "user"
+      ? and(eq(aiMemory.userId, input.userId), isNull(aiMemory.mailboxId))
+      : and(eq(aiMemory.mailboxId, input.mailboxId), isNull(aiMemory.userId))
   );
   const current = await db
     .select()
@@ -1206,13 +1210,14 @@ const forgetSensitivePersonalAiMemory = async (input: {
           currentMemories: current
             .slice(offset, offset + 100)
             .map(toEditorMemory),
+          memoryScope: scope.scope,
           onUsage: usage.collect,
           userMessage: input.text,
         }))
       );
     } finally {
       await reportMemoryUsage({
-        externalId: `ai-memory-chat-forget:${input.messageId}:${offset}`,
+        externalId: `ai-memory-chat-forget:${scope.scope}:${input.messageId}:${offset}`,
         mailboxId: input.mailboxId,
         usage: usage.usage(),
         userId: input.userId,
@@ -1224,12 +1229,29 @@ const forgetSensitivePersonalAiMemory = async (input: {
   if (targets.length === 0) {
     return { status: "skipped" as const };
   }
+  if (scope.scope === "mailbox") {
+    const access = await assertAccessibleMailbox({
+      mailboxId: input.mailboxId,
+      userId: input.userId,
+    });
+    if (!access.capabilities.canManageKnowledge) {
+      return { status: "skipped" as const };
+    }
+  }
   await db.transaction(async (tx) => {
-    await tx
-      .select({ id: memoryUser.id })
-      .from(memoryUser)
-      .where(eq(memoryUser.id, input.userId))
-      .for("update");
+    if (scope.scope === "user") {
+      await tx
+        .select({ id: memoryUser.id })
+        .from(memoryUser)
+        .where(eq(memoryUser.id, input.userId))
+        .for("update");
+    } else {
+      await tx
+        .select({ id: mailbox.id })
+        .from(mailbox)
+        .where(eq(mailbox.id, input.mailboxId))
+        .for("update");
+    }
     const targetCondition = and(
       ownedMemoryCondition,
       inArray(
@@ -1253,14 +1275,17 @@ const forgetSensitivePersonalAiMemory = async (input: {
         message: "The memory to forget was changed or already forgotten.",
       });
     }
-    const personalChangesCondition = and(
-      eq(aiMemoryChangeSet.userId, input.userId),
-      isNull(aiMemoryChangeSet.mailboxId)
-    );
+    const scopeChangesCondition =
+      scope.scope === "user"
+        ? and(
+            eq(aiMemoryChangeSet.userId, input.userId),
+            isNull(aiMemoryChangeSet.mailboxId)
+          )
+        : eq(aiMemoryChangeSet.mailboxId, input.mailboxId);
     const history = await tx
       .select()
       .from(aiMemoryChangeSet)
-      .where(personalChangesCondition);
+      .where(scopeChangesCondition);
     const affectedHistory = history.filter(({ changes }) =>
       changes.some(({ memoryId }) => selectedIds.has(memoryId))
     );
@@ -1277,7 +1302,7 @@ const forgetSensitivePersonalAiMemory = async (input: {
     if (affectedHistory.length > 0) {
       await tx.delete(aiMemoryChangeSet).where(
         and(
-          personalChangesCondition,
+          scopeChangesCondition,
           inArray(
             aiMemoryChangeSet.id,
             affectedHistory.map(({ id }) => id)
@@ -1290,16 +1315,26 @@ const forgetSensitivePersonalAiMemory = async (input: {
         .delete(userAiContextEvent)
         .where(
           and(
-            eq(userAiContextEvent.userId, input.userId),
             inArray(userAiContextEvent.id, sourceEventIds),
-            or(
-              eq(userAiContextEvent.kind, "chat_discovery"),
-              eq(userAiContextEvent.kind, "explicit_preference"),
-              eq(
-                sql<string>`${userAiContextEvent.metadata}->>'memoryScope'`,
-                "user"
-              )
-            )
+            scope.scope === "user"
+              ? and(
+                  eq(userAiContextEvent.userId, input.userId),
+                  or(
+                    eq(userAiContextEvent.kind, "chat_discovery"),
+                    eq(userAiContextEvent.kind, "explicit_preference"),
+                    eq(
+                      sql<string>`${userAiContextEvent.metadata}->>'memoryScope'`,
+                      "user"
+                    )
+                  )
+                )
+              : and(
+                  eq(userAiContextEvent.mailboxId, input.mailboxId),
+                  eq(
+                    sql<string>`coalesce(${userAiContextEvent.metadata}->>'memoryScope', 'mailbox')`,
+                    "mailbox"
+                  )
+                )
           )
         );
     }
@@ -1308,7 +1343,93 @@ const forgetSensitivePersonalAiMemory = async (input: {
   return { status: "refreshed" as const };
 };
 
-export const learnAiMemoryFromChatMessage = async (input: {
+const updateExistingAiMemoryFromChatMessage = async (input: {
+  mailboxId: string;
+  messageId: string;
+  scope: MemoryScopeTarget;
+  text: string;
+  userId: string;
+}) => {
+  const { scope } = input;
+  const current = await db
+    .select()
+    .from(aiMemory)
+    .where(
+      and(
+        eq(aiMemory.scopeKey, scope.scopeKey),
+        eq(aiMemory.status, "active"),
+        or(isNull(aiMemory.expiresAt), gt(aiMemory.expiresAt, new Date()))
+      )
+    )
+    .orderBy(desc(aiMemory.updatedAt));
+  if (current.length === 0) {
+    return { status: "skipped" as const };
+  }
+  const billingMailbox = await assertAccessibleMailbox({
+    mailboxId: input.mailboxId,
+    userId: input.userId,
+  });
+  let refreshed = false;
+  for (let offset = 0; offset < current.length; offset += 100) {
+    if (
+      !(await canRunMemoryModel({
+        organizationId: billingMailbox.organizationId,
+        userId: input.userId,
+      }))
+    ) {
+      break;
+    }
+    const batch = current.slice(offset, offset + 100);
+    const usage = createUsageCollector();
+    try {
+      const plan = await planAiMemoryUpdate({
+        currentMemories: batch.map(toEditorMemory),
+        existingEditsOnly: true,
+        memoryScope: scope.scope,
+        onUsage: usage.collect,
+        request:
+          "Apply only an explicit correction or forgetting request for existing knowledge in this scope.",
+        source: "explicit",
+        userMessage: input.text.slice(0, AI_MEMORY_USER_MESSAGE_MAX_LENGTH),
+      });
+      if (plan.operations.length === 0) {
+        continue;
+      }
+      if (scope.scope === "mailbox") {
+        const access = await assertAccessibleMailbox({
+          mailboxId: input.mailboxId,
+          userId: input.userId,
+        });
+        if (!access.capabilities.canManageKnowledge) {
+          break;
+        }
+      }
+      await applyAiMemoryPlan({
+        actorUserId: input.userId,
+        changeSetSource: "chat",
+        existingEditsOnly: true,
+        expectedVersions: new Map(
+          batch.map(({ id, version }) => [id, version])
+        ),
+        plan,
+        request: null,
+        scope,
+        source: "explicit",
+      });
+      refreshed = true;
+    } finally {
+      await reportMemoryUsage({
+        externalId: `ai-memory-chat-edit:${scope.scope}:${input.messageId}:${offset}`,
+        mailboxId: input.mailboxId,
+        usage: usage.usage(),
+        userId: input.userId,
+      });
+    }
+  }
+  return { status: refreshed ? ("refreshed" as const) : ("skipped" as const) };
+};
+
+const learnPersonalAiMemoryFromChatMessage = async (input: {
   bodyText: string;
   mailboxId: string;
   messageId: string;
@@ -1320,9 +1441,10 @@ export const learnAiMemoryFromChatMessage = async (input: {
     return { status: "skipped" as const };
   }
   if (containsProhibitedMemorySecret(text)) {
-    const deletion = forgetSensitivePersonalAiMemory({
+    const deletion = forgetSensitiveAiMemory({
       mailboxId: input.mailboxId,
       messageId: input.messageId,
+      scope: userScope(input.userId),
       text,
       userId: input.userId,
     });
@@ -1374,70 +1496,17 @@ export const learnAiMemoryFromChatMessage = async (input: {
     return { status: result.status };
   }
 
-  const updateExistingMemory = async () => {
-    const scope = userScope(input.userId);
-    const memories = await listScopeMemories(scope.scopeKey);
-    const current = memories.filter(
-      (memory) =>
-        memory.status === "active" &&
-        (memory.expiresAt === null || memory.expiresAt > new Date())
-    );
-    if (current.length === 0) {
-      return { status: "skipped" as const };
-    }
-    const billingMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: input.userId,
-    });
-    if (
-      !(await canRunMemoryModel({
-        organizationId: billingMailbox.organizationId,
-        userId: input.userId,
-      }))
-    ) {
-      return { status: "ineligible" as const };
-    }
-    const usage = createUsageCollector();
-    try {
-      const plan = await planAiMemoryUpdate({
-        currentMemories: current.map(toEditorMemory),
-        existingEditsOnly: true,
-        onUsage: usage.collect,
-        request:
-          "Apply only an explicit correction or forgetting request for an existing personal memory. Automatic learning is paused.",
-        source: "explicit",
-        userMessage: text.slice(0, AI_MEMORY_USER_MESSAGE_MAX_LENGTH),
-      });
-      if (plan.operations.length === 0) {
-        return { status: "skipped" as const };
-      }
-      await applyAiMemoryPlan({
-        actorUserId: input.userId,
-        changeSetSource: "chat",
-        existingEditsOnly: true,
-        expectedVersions: new Map(
-          current.map(({ id, version }) => [id, version])
-        ),
-        plan,
-        request: null,
-        scope,
-        source: "explicit",
-      });
-      return { status: "refreshed" as const };
-    } finally {
-      await reportMemoryUsage({
-        externalId: `ai-memory-chat-edit:${input.messageId}`,
-        mailboxId: input.mailboxId,
-        usage: usage.usage(),
-        userId: input.userId,
-      });
-    }
-  };
   if (input.scheduleBackgroundTask !== undefined) {
     input.scheduleBackgroundTask(
       (async () => {
         try {
-          await updateExistingMemory();
+          await updateExistingAiMemoryFromChatMessage({
+            mailboxId: input.mailboxId,
+            messageId: input.messageId,
+            scope: userScope(input.userId),
+            text,
+            userId: input.userId,
+          });
         } catch (error) {
           if (!(error instanceof ORPCError) || error.status >= 500) {
             reportError(error, { operation: "chat:learn-personal-context" });
@@ -1447,8 +1516,60 @@ export const learnAiMemoryFromChatMessage = async (input: {
     );
     return { status: "scheduled" as const };
   }
-  return await updateExistingMemory();
+  return await updateExistingAiMemoryFromChatMessage({
+    mailboxId: input.mailboxId,
+    messageId: input.messageId,
+    scope: userScope(input.userId),
+    text,
+    userId: input.userId,
+  });
 };
+
+export const learnAiMemoryFromChatMessage = async (
+  input: Parameters<typeof learnPersonalAiMemoryFromChatMessage>[0]
+) => {
+  const personalResult = await learnPersonalAiMemoryFromChatMessage(input);
+  const text = input.bodyText.trim();
+  if (!text) {
+    return personalResult;
+  }
+  const updateMailboxMemory = async () => {
+    const accessibleMailbox = await assertAccessibleMailbox({
+      mailboxId: input.mailboxId,
+      userId: input.userId,
+    });
+    if (!accessibleMailbox.capabilities.canManageKnowledge) {
+      return { status: "skipped" as const };
+    }
+    const scopedInput = {
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+      scope: mailboxScope(input.mailboxId),
+      text,
+      userId: input.userId,
+    };
+    return containsProhibitedMemorySecret(text)
+      ? await forgetSensitiveAiMemory(scopedInput)
+      : await updateExistingAiMemoryFromChatMessage(scopedInput);
+  };
+  if (input.scheduleBackgroundTask !== undefined) {
+    input.scheduleBackgroundTask(
+      (async () => {
+        try {
+          await updateMailboxMemory();
+        } catch (error) {
+          if (!(error instanceof ORPCError) || error.status >= 500) {
+            reportError(error, { operation: "chat:edit-mailbox-context" });
+          }
+        }
+      })()
+    );
+    return { status: "scheduled" as const };
+  }
+  const mailboxResult = await updateMailboxMemory();
+  return mailboxResult.status === "refreshed" ? mailboxResult : personalResult;
+};
+
 const resolveMemorySource = (
   kind: UserAiContextEventKind
 ): "explicit" | "feedback" | "inferred" => {
@@ -1731,6 +1852,7 @@ export const refreshAiMemoryFromEvent = async ({
     const plan = await planAiMemoryUpdate({
       currentMemories: current.map(toEditorMemory),
       learningGuidance: config.learningPrompt,
+      memoryScope: scope.scope,
       observations,
       onUsage: usage.collect,
       request,
