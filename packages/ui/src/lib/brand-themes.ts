@@ -5,7 +5,7 @@ export type BrandTheme = {
   name: string;
   colorMode: "light" | "dark";
   label: string;
-  mode: "solid" | "fold" | "mist" | "metal" | "caustic" | "halo";
+  mode: "solid" | "glow" | "mist" | "metal" | "caustic" | "halo";
   base: Color;
   light: Color;
   accent: Color;
@@ -43,7 +43,7 @@ export const BRAND_THEMES: BrandTheme[] = [
     ink: brand.light,
     label: "Atmosphere",
     light: [128, 146, 164],
-    mode: "fold",
+    mode: "glow",
     name: "03-atmosphere",
     phase: 0.8,
   },
@@ -65,7 +65,7 @@ export const BRAND_THEMES: BrandTheme[] = [
     ink: brand.light,
     label: "Blue hour",
     light: [85, 148, 218],
-    mode: "fold",
+    mode: "glow",
     name: "05-blue-hour",
     phase: 2.8,
   },
@@ -76,7 +76,7 @@ export const BRAND_THEMES: BrandTheme[] = [
     ink: brand.light,
     label: "Aurora",
     light: [108, 192, 167],
-    mode: "fold",
+    mode: "glow",
     name: "06-aurora",
     phase: 4.2,
   },
@@ -87,7 +87,7 @@ export const BRAND_THEMES: BrandTheme[] = [
     ink: brand.light,
     label: "Ember",
     light: [193, 130, 96],
-    mode: "fold",
+    mode: "glow",
     name: "07-ember",
     phase: 1.9,
   },
