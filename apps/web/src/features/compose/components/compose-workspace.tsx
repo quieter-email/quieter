@@ -847,19 +847,17 @@ const ReadyComposeSurface = ({
                                             ) : null}
                                           </Field>
                                         ) : null}
-                                        <div className="flex justify-end">
-                                          <PopoverClose
-                                            disabled={!!error}
-                                            render={
-                                              <Button
-                                                size="sm"
-                                                variant="secondary"
-                                              />
-                                            }
-                                          >
-                                            Save
-                                          </PopoverClose>
-                                        </div>
+                                        <PopoverClose
+                                          disabled={!!error}
+                                          render={
+                                            <Button
+                                              size="block"
+                                              variant="secondary"
+                                            />
+                                          }
+                                        >
+                                          Save
+                                        </PopoverClose>
                                       </div>
                                     </PopoverContent>
                                   </Popover>
