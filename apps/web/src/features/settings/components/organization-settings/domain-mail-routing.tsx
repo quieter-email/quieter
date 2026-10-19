@@ -482,7 +482,7 @@ export const DomainCatchAllSection = ({
               setCatchAllMutation={setCatchAllMutation}
             />
           </DialogBody>
-          <DialogFooter>
+          <DialogFooter fullWidth>
             <DialogCloseButton>Cancel</DialogCloseButton>
           </DialogFooter>
         </DialogContent>

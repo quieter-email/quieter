@@ -218,10 +218,8 @@ const CreatedApiKeyReveal = ({
       <p className="text-body text-muted-fg">Click the key to copy it.</p>
     </DialogBody>
 
-    <DialogFooter>
-      <Button onClick={onClose} size="sm">
-        Done
-      </Button>
+    <DialogFooter fullWidth>
+      <Button onClick={onClose}>Done</Button>
     </DialogFooter>
   </>
 );
@@ -665,12 +663,11 @@ const ResetApiKeyDialog = ({
               </p>
             </AlertDialogBody>
 
-            <AlertDialogFooter>
+            <AlertDialogFooter fullWidth>
               <Button
                 onClick={() => {
                   runDetached(closeDialog);
                 }}
-                size="sm"
               >
                 Done
               </Button>

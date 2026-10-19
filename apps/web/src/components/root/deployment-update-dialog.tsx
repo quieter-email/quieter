@@ -27,7 +27,7 @@ export const DeploymentUpdateDialog = () => {
             Please reload the site to continue.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
+        <AlertDialogFooter fullWidth>
           <Button
             onClick={() => {
               window.location.reload();

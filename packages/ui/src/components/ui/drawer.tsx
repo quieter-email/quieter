@@ -87,11 +87,16 @@ export const DrawerBody = ({
 
 export const DrawerFooter = ({
   className,
+  fullWidth = false,
   ...props
-}: ComponentPropsWithoutRef<"div">) => (
+}: ComponentPropsWithoutRef<"div"> & { fullWidth?: boolean }) => (
   <div
     className={cn(
-      "flex items-center justify-end gap-2 border-t px-5 py-4",
+      "gap-2 border-t px-5 py-4",
+      {
+        "flex items-center justify-end": !fullWidth,
+        "grid auto-cols-fr grid-flow-col": fullWidth,
+      },
       className
     )}
     {...props}

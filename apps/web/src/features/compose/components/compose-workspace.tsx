@@ -851,7 +851,7 @@ const ReadyComposeSurface = ({
                                           disabled={!!error}
                                           render={
                                             <Button
-                                              size="block"
+                                              fullWidth
                                               variant="secondary"
                                             />
                                           }

@@ -79,10 +79,18 @@ export const AlertDialogBody = ({
 
 export const AlertDialogFooter = ({
   className,
+  fullWidth = false,
   ...props
-}: ComponentPropsWithoutRef<"div">) => (
+}: ComponentPropsWithoutRef<"div"> & { fullWidth?: boolean }) => (
   <div
-    className={cn("flex items-center justify-end gap-2 px-5 py-4", className)}
+    className={cn(
+      "gap-2 px-5 py-4",
+      {
+        "flex items-center justify-end": !fullWidth,
+        "grid auto-cols-fr grid-flow-col": fullWidth,
+      },
+      className
+    )}
     {...props}
   />
 );
