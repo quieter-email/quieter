@@ -1,6 +1,6 @@
 # Automatic labeling
 
-The Labels workspace has separate label management and auto-labeling tabs. The auto-label library contains editable presets with illustrative emails. A preset can create a new label or configure an existing label. Saving a preset does not turn on mailbox automation; the mailbox switch controls that separately.
+The Labels workspace is one list of the mailbox's existing labels. Each row opens an inline auto-label editor with an AI prompt and a few broad prompt examples. Sender, domain, and word conditions are optional and collapsed until needed. Saving a label's settings does not turn on mailbox automation; the mailbox switch controls that separately.
 
 ## Matching
 
@@ -21,4 +21,4 @@ The Gmail and managed-mail processors partition deterministic matches before che
 
 Migration `20261019214319_serious_retro_girl` adds nullable JSONB columns to `gmailLabel` and `managedMailLabel`. This is an additive expand step. Apply the migration before deploying the code that reads these columns. Production migrations use the protected deployment workflow. For an approved development database, follow the migration steps in [Development](development.md).
 
-The existing Gmail and managed-mail preview personas support creating and editing auto-labels in browser storage, scoped to the demo mailbox. These fixtures do not call a model or modify external mailboxes. They exercise the preset library, custom label creation, existing-label configuration, input validation, saving, reloading, and the responsive layout. Preset examples are synthetic illustrations, not classification results or messages from the user's inbox.
+The existing Gmail and managed-mail preview personas support creating labels and editing auto-label settings in browser storage, scoped to the demo mailbox. These fixtures do not call a model or modify external mailboxes. They exercise label creation, inline configuration, input validation, saving, reloading, and the responsive layout. Choosing a prompt example only fills the prompt; it does not create a label.

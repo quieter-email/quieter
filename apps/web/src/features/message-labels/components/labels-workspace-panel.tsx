@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowDown01Icon,
   Cancel01Icon,
   Delete01Icon,
   Edit01Icon,
@@ -8,6 +9,7 @@ import {
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 import type {
   MailboxLabel,
   MailboxLabelColor,
@@ -33,12 +35,12 @@ import {
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
-import { Tabs, TabsList, TabsPanel, TabsTab } from "@quieter/ui/tabs";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 
-import { AutoLabelingPanel } from "#/features/message-labels/components/auto-labeling-panel";
+import { AutoLabelEditor } from "#/features/message-labels/components/auto-label-editor";
+import { AutoLabelSwitch } from "#/features/message-labels/components/auto-label-switch";
 import { MailboxColorPicker } from "#/features/message-labels/components/mailbox-color-picker";
 import { mailboxLabelDotClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
 import {
@@ -50,6 +52,10 @@ import {
   reduceHiddenLabelState,
 } from "#/features/message-labels/domain/sidebar-label-visibility";
 import { getUserLabels } from "#/features/message-search/state/message-list-search-state";
+import {
+  getDemoLabelAutomation,
+  saveDemoLabelAutomation,
+} from "#/lib/demo-mail/label-automation";
 import { toastError } from "#/lib/error-toast";
 import { getLabelsQueryKey, labelsQueryOptions } from "#/lib/mail/labels-query";
 import {
@@ -57,6 +63,7 @@ import {
   managedLabelCountsQueryOptions,
 } from "#/lib/managed-mailbox-organization-query";
 import { orpc } from "#/lib/orpc";
+import { isSandboxMailboxId } from "#/lib/sandbox-mailbox";
 
 type LabelsWorkspacePanelProps = {
   canManage: boolean;
@@ -74,7 +81,6 @@ export const LabelsWorkspacePanel = ({
   mailboxProvider,
 }: LabelsWorkspacePanelProps) => {
   const queryClient = useQueryClient();
-  const scrollRef = useRef<HTMLDivElement>(null);
   const [newLabelColor, setNewLabelColor] = useState<MailboxLabelColor>("gray");
   const [newLabelName, setNewLabelName] = useState("");
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
@@ -82,7 +88,9 @@ export const LabelsWorkspacePanel = ({
   const [draftDescription, setDraftDescription] = useState("");
   const [draftName, setDraftName] = useState("");
   const [deletingLabel, setDeletingLabel] = useState<MailboxLabel | null>(null);
-  const [activeTab, setActiveTab] = useState("labels");
+  const [automationLabelId, setAutomationLabelId] = useState<string | null>(
+    null
+  );
   const [hiddenLabelState, updateHiddenLabelState] = useReducer(
     reduceHiddenLabelState,
     mailboxId,
@@ -189,16 +197,47 @@ export const LabelsWorkspacePanel = ({
     if (name === "") {
       return;
     }
+    if (
+      userLabels.some(
+        (label) => label.name.toLowerCase() === name.toLowerCase()
+      )
+    ) {
+      toast.error("A label with this name already exists.");
+      return;
+    }
 
     try {
-      const label = await createLabelMutation.mutateAsync({
-        color: newLabelColor,
-        mailboxId,
-        name,
-      });
+      let labelId: string;
+      if (isSandboxMailboxId(mailboxId)) {
+        const current = getDemoLabelAutomation(mailboxId);
+        const demoLabel: MailboxLabel = {
+          autoLabel: null,
+          color: newLabelColor,
+          description: null,
+          id: `demo:label:${crypto.randomUUID()}`,
+          inclusionCriteria: null,
+          name,
+          position: userLabels.length,
+          provider: mailboxProvider,
+          type: "user",
+          visible: true,
+        };
+        saveDemoLabelAutomation(mailboxId, {
+          ...current,
+          createdLabels: [...current.createdLabels, demoLabel],
+        });
+        labelId = demoLabel.id;
+      } else {
+        const label = await createLabelMutation.mutateAsync({
+          color: newLabelColor,
+          mailboxId,
+          name,
+        });
+        labelId = label.id;
+      }
       if (visibleLabelCount >= MAX_VISIBLE_SIDEBAR_LABELS) {
         setMailboxHiddenLabelIds((current) => {
-          current.add(label.id);
+          current.add(labelId);
           return current;
         });
       }
@@ -214,6 +253,7 @@ export const LabelsWorkspacePanel = ({
   };
 
   const startEditing = (label: MailboxLabel) => {
+    setAutomationLabelId(null);
     setEditingLabelId(label.id);
     setDraftName(label.name);
     setDraftDescription(label.description ?? "");
@@ -222,6 +262,42 @@ export const LabelsWorkspacePanel = ({
 
   const cancelEditing = () => {
     setEditingLabelId(null);
+  };
+
+  const saveLabelAutomation = async (
+    label: MailboxLabel,
+    autoLabel: AutoLabelSettings
+  ): Promise<boolean> => {
+    if (!isNonemptyMailboxId(mailboxId)) {
+      return false;
+    }
+    try {
+      if (isSandboxMailboxId(mailboxId)) {
+        const current = getDemoLabelAutomation(mailboxId);
+        saveDemoLabelAutomation(mailboxId, {
+          ...current,
+          labels: { ...current.labels, [label.id]: autoLabel },
+        });
+      } else {
+        await updateLabelDetailsMutation.mutateAsync({
+          autoLabel,
+          description: label.description,
+          inclusionCriteria: label.inclusionCriteria,
+          labelId: label.id,
+          mailboxId,
+        });
+      }
+      await invalidateLabels();
+      setAutomationLabelId(null);
+      toast.success("Auto-label updated.");
+      return true;
+    } catch (error) {
+      toastError(error, {
+        boundary: "labels-panel",
+        fallback: "Could not update auto-labeling. Please try again.",
+      });
+      return false;
+    }
   };
 
   const saveLabelEdit = async (label: MailboxLabel) => {
@@ -337,6 +413,7 @@ export const LabelsWorkspacePanel = ({
         {userLabels.map((label) => {
           const isShown = !effectiveHiddenLabelIds.has(label.id);
           const isEditing = editingLabelId === label.id;
+          const isConfiguring = automationLabelId === label.id;
           const description = label.description ?? label.inclusionCriteria;
 
           return (
@@ -404,7 +481,7 @@ export const LabelsWorkspacePanel = ({
                   />
                 </form>
               ) : (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   <span
                     aria-hidden
                     className={cn(
@@ -425,6 +502,32 @@ export const LabelsWorkspacePanel = ({
                       {managedLabelCountById.get(label.id) ?? 0}
                     </span>
                   ) : null}
+                  <Button
+                    aria-controls={`label-automation-${label.id}`}
+                    aria-expanded={isConfiguring}
+                    aria-label={`Auto-label settings for ${label.name}`}
+                    disabled={
+                      !canManage || updateLabelDetailsMutation.isPending
+                    }
+                    onClick={() => {
+                      setEditingLabelId(null);
+                      setAutomationLabelId(isConfiguring ? null : label.id);
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    {label.autoLabel?.enabled === false
+                      ? "Paused"
+                      : "Auto-label"}
+                    <HugeiconsIcon
+                      aria-hidden
+                      className={cn("size-3.5 transition-transform", {
+                        "rotate-180": isConfiguring,
+                      })}
+                      icon={ArrowDown01Icon}
+                    />
+                  </Button>
                   <IconButtonTooltip
                     label={isShown ? "Hide from sidebar" : "Show in sidebar"}
                   >
@@ -490,6 +593,25 @@ export const LabelsWorkspacePanel = ({
                   </DropdownMenu>
                 </div>
               )}
+              {isConfiguring ? (
+                <div
+                  className="mt-4 border-t border-border pt-4"
+                  id={`label-automation-${label.id}`}
+                >
+                  <AutoLabelEditor
+                    canManage={canManage}
+                    isPending={updateLabelDetailsMutation.isPending}
+                    key={`${mailboxId}:${label.id}:${JSON.stringify(label.autoLabel)}`}
+                    label={label}
+                    onCancel={() => {
+                      setAutomationLabelId(null);
+                    }}
+                    onSave={async (settings) =>
+                      await saveLabelAutomation(label, settings)
+                    }
+                  />
+                </div>
+              ) : null}
             </div>
           );
         })}
@@ -498,113 +620,70 @@ export const LabelsWorkspacePanel = ({
   }
 
   return (
-    <div
-      className="flex h-full min-h-0 flex-col overflow-y-auto"
-      ref={scrollRef}
-    >
-      <div
-        className={cn("mx-auto w-full px-4 py-8 sm:px-6 sm:py-12", {
-          "max-w-3xl": activeTab === "labels",
-          "max-w-5xl": activeTab === "auto-labeling",
-        })}
-      >
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto">
+      <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
         <div className="mb-8">
           <h1 className="font-sans text-title-sm font-normal text-fg">
             Labels
           </h1>
           <p className="mt-1.5 text-body text-muted-fg">
-            Give your mail a place. Organize it yourself, or let it sort
-            automatically.
+            Create labels and choose how new mail is sorted.
           </p>
         </div>
 
-        <Tabs
-          onValueChange={(value) => {
-            if (typeof value === "string") {
-              setActiveTab(value);
-            }
-          }}
-          value={activeTab}
-        >
-          <TabsList aria-label="Label settings">
-            <TabsTab value="labels">Your labels</TabsTab>
-            <TabsTab value="auto-labeling">Auto-labeling</TabsTab>
-          </TabsList>
-          <TabsPanel value="labels">
-            <div className="space-y-6 pt-2">
-              <div className="rounded-lg border border-border p-4">
-                <h2 className="mb-3 text-body font-medium text-fg">
-                  Create a label
-                </h2>
-                <form
-                  action={() => {
-                    void createLabel();
-                  }}
-                  className="flex flex-wrap items-center gap-3"
-                >
-                  <Input
-                    aria-label="New label name"
-                    className="min-w-0 flex-1"
-                    disabled={!canManage || createLabelMutation.isPending}
-                    onChange={(event) => {
-                      setNewLabelName(event.currentTarget.value);
-                    }}
-                    placeholder="New label"
-                    value={newLabelName}
-                  />
-                  <MailboxColorPicker
-                    className="shrink-0"
-                    label="Label color"
-                    onChange={setNewLabelColor}
-                    value={newLabelColor}
-                  />
-                  <Button
-                    disabled={
-                      !canManage ||
-                      createLabelMutation.isPending ||
-                      !newLabelName.trim()
-                    }
-                    type="submit"
-                  >
-                    Create
-                  </Button>
-                </form>
-              </div>
-              <div>
-                <div className="mb-2 flex items-center justify-between gap-3 px-3 text-caption text-muted-fg">
-                  <span>
-                    {userLabels.length} label
-                    {userLabels.length === 1 ? "" : "s"}
-                  </span>
-                  <span>{visibleLabelCount} shown in sidebar</span>
-                </div>
-                {labelsContent}
-              </div>
-              <p className="text-caption text-muted-fg">
-                Choose a color and a short description for each label. Set up
-                prompts and conditions in Auto-labeling.
-              </p>
+        <div className="space-y-6">
+          {isNonemptyMailboxId(mailboxId) ? (
+            <AutoLabelSwitch
+              canManage={canManage}
+              key={mailboxId}
+              mailboxId={mailboxId}
+            />
+          ) : null}
+          <form
+            action={() => {
+              void createLabel();
+            }}
+            className="flex flex-wrap items-center gap-3"
+          >
+            <Input
+              aria-label="New label name"
+              className="min-w-48 flex-1"
+              disabled={!canManage || createLabelMutation.isPending}
+              onChange={(event) => {
+                setNewLabelName(event.currentTarget.value);
+              }}
+              placeholder="New label"
+              maxLength={225}
+              value={newLabelName}
+            />
+            <MailboxColorPicker
+              className="shrink-0"
+              label="Label color"
+              onChange={setNewLabelColor}
+              value={newLabelColor}
+            />
+            <Button
+              disabled={
+                !canManage ||
+                createLabelMutation.isPending ||
+                !newLabelName.trim()
+              }
+              type="submit"
+            >
+              Create
+            </Button>
+          </form>
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3 px-3 text-caption text-muted-fg">
+              <span>
+                {userLabels.length} label
+                {userLabels.length === 1 ? "" : "s"}
+              </span>
+              <span>{visibleLabelCount} shown in sidebar</span>
             </div>
-          </TabsPanel>
-          <TabsPanel value="auto-labeling">
-            {isNonemptyMailboxId(mailboxId) &&
-            !areLabelsPending &&
-            !labelsUnavailable ? (
-              <AutoLabelingPanel
-                canManage={canManage}
-                labels={userLabels}
-                key={mailboxId}
-                mailboxId={mailboxId}
-                mailboxProvider={mailboxProvider}
-                onNavigate={() => {
-                  scrollRef.current?.scrollTo({ top: 0 });
-                }}
-              />
-            ) : (
-              labelsContent
-            )}
-          </TabsPanel>
-        </Tabs>
+            {labelsContent}
+          </div>
+        </div>
       </div>
 
       <AlertDialog

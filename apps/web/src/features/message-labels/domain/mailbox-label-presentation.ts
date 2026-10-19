@@ -25,18 +25,6 @@ export const mailboxLabelDotClassNameByColor = {
   yellow: "bg-q-yellow",
 } satisfies Record<MailboxLabelColor, string>;
 
-export const mailboxLabelIconClassNameByColor = {
-  blue: "bg-q-blue/10 text-q-blue",
-  cyan: "bg-q-cyan/10 text-q-cyan",
-  gray: "bg-q-gray/10 text-q-gray",
-  green: "bg-q-green/10 text-q-green",
-  orange: "bg-q-orange/10 text-q-orange",
-  pink: "bg-q-pink/10 text-q-pink",
-  purple: "bg-q-purple/10 text-q-purple",
-  red: "bg-q-red/10 text-q-red",
-  yellow: "bg-q-yellow/10 text-q-yellow",
-} satisfies Record<MailboxLabelColor, string>;
-
 export const mailboxLabelSearchPillSurfaceClassNameByColor = {
   blue: "bg-q-blue/15 ring-q-blue/35 hover:bg-q-blue/20",
   cyan: "bg-q-cyan/15 ring-q-cyan/35 hover:bg-q-cyan/20",
