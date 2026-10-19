@@ -4,8 +4,10 @@ import { z } from "zod";
 
 const demoLabelAutomationSchema = z.object({
   createdLabels: z.array(mailboxLabelSchema).default([]),
+  deletedLabelIds: z.array(z.string()).default([]),
   enabled: z.boolean(),
   labels: z.record(z.string(), autoLabelSettingsSchema),
+  updatedLabels: z.record(z.string(), mailboxLabelSchema).default({}),
 });
 
 export type DemoLabelAutomation = z.infer<typeof demoLabelAutomationSchema>;
@@ -28,7 +30,13 @@ export const getDemoLabelAutomation = (
       }
     }
   }
-  return { createdLabels: [], enabled: false, labels: {} };
+  return {
+    createdLabels: [],
+    deletedLabelIds: [],
+    enabled: false,
+    labels: {},
+    updatedLabels: {},
+  };
 };
 
 export const saveDemoLabelAutomation = (

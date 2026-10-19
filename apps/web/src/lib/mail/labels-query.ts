@@ -31,12 +31,13 @@ export const labelsQueryOptions = (mailboxId: string, enabled = true) =>
     queryFn: async ({ signal }) => {
       if (isManagedSandboxMailboxId(mailboxId)) {
         const automation = getDemoLabelAutomation(mailboxId);
-        return [...getManagedDemoLabels(), ...automation.createdLabels].map(
-          (label) => ({
+        return [...getManagedDemoLabels(), ...automation.createdLabels]
+          .filter((label) => !automation.deletedLabelIds.includes(label.id))
+          .map((label) => ({
             ...label,
+            ...automation.updatedLabels[label.id],
             autoLabel: automation.labels[label.id] ?? label.autoLabel,
-          })
-        );
+          }));
       }
 
       if (isSandboxMailboxId(mailboxId)) {
@@ -55,10 +56,13 @@ export const labelsQueryOptions = (mailboxId: string, enabled = true) =>
             visible: true,
           })
         );
-        return [...labels, ...automation.createdLabels].map((label) => ({
-          ...label,
-          autoLabel: automation.labels[label.id] ?? label.autoLabel,
-        }));
+        return [...labels, ...automation.createdLabels]
+          .filter((label) => !automation.deletedLabelIds.includes(label.id))
+          .map((label) => ({
+            ...label,
+            ...automation.updatedLabels[label.id],
+            autoLabel: automation.labels[label.id] ?? label.autoLabel,
+          }));
       }
       return normalizeMailboxLabels(
         await rpc.mail.listLabels({ mailboxId }, { signal })
