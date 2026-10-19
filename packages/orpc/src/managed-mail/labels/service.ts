@@ -9,6 +9,7 @@ import {
   managedMailMessageLabel,
 } from "@quieter/database/schema";
 import type { ManagedMailMailboxState } from "@quieter/database/schema";
+import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
@@ -24,6 +25,7 @@ import { updateManagedMessageLabelAssignments } from "./repository";
 const toMailboxLabel = (
   record: typeof managedMailLabel.$inferSelect
 ): MailboxLabel => ({
+  autoLabel: record.autoLabel,
   color: mailboxLabelColorSchema.parse(record.color),
   description: record.description,
   id: record.id,
@@ -107,6 +109,7 @@ export const listManagedLabelCounts = async (input: {
 };
 
 export const createManagedLabel = async (input: {
+  autoLabel?: AutoLabelSettings | null;
   color: string;
   description?: string | null;
   mailboxId: string;
@@ -123,6 +126,7 @@ export const createManagedLabel = async (input: {
   const [record] = await db
     .insert(managedMailLabel)
     .values({
+      autoLabel: input.autoLabel,
       color: mailboxLabelColorSchema.parse(input.color),
       createdAt: now,
       createdByUserId: input.userId,
@@ -140,6 +144,7 @@ export const createManagedLabel = async (input: {
 };
 
 export const updateManagedLabel = async (input: {
+  autoLabel?: AutoLabelSettings | null;
   color?: string;
   description?: string | null;
   labelId: string;
@@ -182,6 +187,9 @@ export const updateManagedLabel = async (input: {
           ? {}
           : { color: mailboxLabelColorSchema.parse(input.color) }),
         ...descriptionUpdate,
+        ...(input.autoLabel === undefined
+          ? {}
+          : { autoLabel: input.autoLabel }),
         ...(name
           ? { name, normalizedName: normalizeManagedOrganizationName(name) }
           : {}),

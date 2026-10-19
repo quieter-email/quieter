@@ -33,10 +33,12 @@ import {
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
+import { Tabs, TabsList, TabsPanel, TabsTab } from "@quieter/ui/tabs";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
+import { AutoLabelingPanel } from "#/features/message-labels/components/auto-labeling-panel";
 import { MailboxColorPicker } from "#/features/message-labels/components/mailbox-color-picker";
 import { mailboxLabelDotClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
 import {
@@ -57,6 +59,7 @@ import {
 import { orpc } from "#/lib/orpc";
 
 type LabelsWorkspacePanelProps = {
+  canManage: boolean;
   mailboxId: string | null;
   mailboxProvider: "gmail" | "managed";
 };
@@ -66,10 +69,12 @@ const isNonemptyMailboxId = (
 ): mailboxId is string => (mailboxId?.trim() ?? "") !== "";
 
 export const LabelsWorkspacePanel = ({
+  canManage,
   mailboxId,
   mailboxProvider,
 }: LabelsWorkspacePanelProps) => {
   const queryClient = useQueryClient();
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [newLabelColor, setNewLabelColor] = useState<MailboxLabelColor>("gray");
   const [newLabelName, setNewLabelName] = useState("");
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
@@ -77,6 +82,7 @@ export const LabelsWorkspacePanel = ({
   const [draftDescription, setDraftDescription] = useState("");
   const [draftName, setDraftName] = useState("");
   const [deletingLabel, setDeletingLabel] = useState<MailboxLabel | null>(null);
+  const [activeTab, setActiveTab] = useState("labels");
   const [hiddenLabelState, updateHiddenLabelState] = useReducer(
     reduceHiddenLabelState,
     mailboxId,
@@ -210,7 +216,7 @@ export const LabelsWorkspacePanel = ({
   const startEditing = (label: MailboxLabel) => {
     setEditingLabelId(label.id);
     setDraftName(label.name);
-    setDraftDescription(label.description ?? label.inclusionCriteria ?? "");
+    setDraftDescription(label.description ?? "");
     setDraftColor(label.color ?? "gray");
   };
 
@@ -335,7 +341,7 @@ export const LabelsWorkspacePanel = ({
 
           return (
             <div
-              className="rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/40"
+              className="rounded-lg px-3 py-3 transition-colors hover:bg-muted/40"
               key={label.id}
             >
               {isEditing ? (
@@ -429,6 +435,7 @@ export const LabelsWorkspacePanel = ({
                       onClick={() => {
                         void toggleSidebarVisibility(label);
                       }}
+                      disabled={!canManage}
                       size="icon-sm"
                       type="button"
                       variant="ghost"
@@ -453,6 +460,7 @@ export const LabelsWorkspacePanel = ({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
+                        disabled={!canManage}
                         onSelect={() => {
                           startEditing(label);
                         }}
@@ -465,6 +473,7 @@ export const LabelsWorkspacePanel = ({
                         Edit
                       </DropdownMenuItem>
                       <DropdownMenuItem
+                        disabled={!canManage}
                         onSelect={() => {
                           setDeletingLabel(label);
                         }}
@@ -489,49 +498,113 @@ export const LabelsWorkspacePanel = ({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl px-6 py-12">
+    <div
+      className="flex h-full min-h-0 flex-col overflow-y-auto"
+      ref={scrollRef}
+    >
+      <div
+        className={cn("mx-auto w-full px-4 py-8 sm:px-6 sm:py-12", {
+          "max-w-3xl": activeTab === "labels",
+          "max-w-5xl": activeTab === "auto-labeling",
+        })}
+      >
         <div className="mb-8">
           <h1 className="font-sans text-title-sm font-normal text-fg">
             Labels
           </h1>
           <p className="mt-1.5 text-body text-muted-fg">
-            Create labels, choose which ones appear in your sidebar, and explain
-            what belongs in each one.
+            Give your mail a place. Organize it yourself, or let it sort
+            automatically.
           </p>
         </div>
 
-        <form
-          action={() => {
-            void createLabel();
+        <Tabs
+          onValueChange={(value) => {
+            if (typeof value === "string") {
+              setActiveTab(value);
+            }
           }}
-          className="mb-6 flex items-center gap-3"
+          value={activeTab}
         >
-          <Input
-            aria-label="New label name"
-            className="min-w-0 flex-1"
-            disabled={createLabelMutation.isPending}
-            onChange={(event) => {
-              setNewLabelName(event.currentTarget.value);
-            }}
-            placeholder="New label"
-            value={newLabelName}
-          />
-          <MailboxColorPicker
-            className="shrink-0"
-            label="Label color"
-            onChange={setNewLabelColor}
-            value={newLabelColor}
-          />
-          <Button
-            disabled={createLabelMutation.isPending || !newLabelName.trim()}
-            type="submit"
-          >
-            Create
-          </Button>
-        </form>
-
-        {labelsContent}
+          <TabsList aria-label="Label settings">
+            <TabsTab value="labels">Your labels</TabsTab>
+            <TabsTab value="auto-labeling">Auto-labeling</TabsTab>
+          </TabsList>
+          <TabsPanel value="labels">
+            <div className="space-y-6 pt-2">
+              <div className="rounded-lg border border-border p-4">
+                <h2 className="mb-3 text-body font-medium text-fg">
+                  Create a label
+                </h2>
+                <form
+                  action={() => {
+                    void createLabel();
+                  }}
+                  className="flex flex-wrap items-center gap-3"
+                >
+                  <Input
+                    aria-label="New label name"
+                    className="min-w-0 flex-1"
+                    disabled={!canManage || createLabelMutation.isPending}
+                    onChange={(event) => {
+                      setNewLabelName(event.currentTarget.value);
+                    }}
+                    placeholder="New label"
+                    value={newLabelName}
+                  />
+                  <MailboxColorPicker
+                    className="shrink-0"
+                    label="Label color"
+                    onChange={setNewLabelColor}
+                    value={newLabelColor}
+                  />
+                  <Button
+                    disabled={
+                      !canManage ||
+                      createLabelMutation.isPending ||
+                      !newLabelName.trim()
+                    }
+                    type="submit"
+                  >
+                    Create
+                  </Button>
+                </form>
+              </div>
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3 px-3 text-caption text-muted-fg">
+                  <span>
+                    {userLabels.length} label
+                    {userLabels.length === 1 ? "" : "s"}
+                  </span>
+                  <span>{visibleLabelCount} shown in sidebar</span>
+                </div>
+                {labelsContent}
+              </div>
+              <p className="text-caption text-muted-fg">
+                Choose a color and a short description for each label. Set up
+                prompts and conditions in Auto-labeling.
+              </p>
+            </div>
+          </TabsPanel>
+          <TabsPanel value="auto-labeling">
+            {isNonemptyMailboxId(mailboxId) &&
+            !areLabelsPending &&
+            !labelsUnavailable ? (
+              <AutoLabelingPanel
+                canManage={canManage}
+                labels={userLabels}
+                key={mailboxId}
+                mailboxId={mailboxId}
+                mailboxProvider={mailboxProvider}
+                onNavigate={() => {
+                  scrollRef.current?.scrollTo({ top: 0 });
+                }}
+              />
+            ) : (
+              labelsContent
+            )}
+          </TabsPanel>
+        </Tabs>
       </div>
 
       <AlertDialog

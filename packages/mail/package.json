@@ -23,7 +23,8 @@
     "./messages": "./src/messages.ts",
     "./thread-list": "./src/thread-list.ts",
     "./updates": "./src/updates.ts",
-    "./visual-email": "./src/visual-email.ts"
+    "./visual-email": "./src/visual-email.ts",
+    "./auto-label": "./src/auto-label.ts"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",

@@ -1,4 +1,5 @@
 import { serverEnv } from "@quieter/env/server";
+import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 import { z } from "zod";
 
 import type { AiUsageReport } from "./chat-usage";
@@ -21,6 +22,7 @@ export type AutomationMailMessage = {
 };
 
 export type MailAutoLabelCandidate = {
+  autoLabel?: AutoLabelSettings | null;
   description: string | null;
   id: string;
   inclusionCriteria: string | null;
@@ -45,9 +47,10 @@ export const buildAutoLabelPromptInput = ({
 }) => ({
   availableLabels: labels.map((label) => ({
     description: label.description,
-    inclusionCriteria: label.inclusionCriteria,
+    inclusionCriteria: label.autoLabel ? null : label.inclusionCriteria,
     labelId: label.id,
     name: label.name,
+    prompt: label.autoLabel?.prompt || null,
   })),
   email: {
     attachments: message.attachments?.map(({ fileName, mimeType }) => ({
@@ -164,24 +167,34 @@ export const classifyMailMessage = async ({
     throw new Error("Unsupported labeling model.");
   }
   const input = buildAutoLabelPromptInput({ labels, memoryContext, message });
+  const categoryLabels = labels
+    .map((label, index) => ({ index, label }))
+    .filter(({ label }) => !label.autoLabel?.prompt);
   const answers = await runMailDecisions({
     model,
     ...(onUsage === undefined ? {} : { onUsage }),
     questions: {
-      category: {
-        criteria: Object.fromEntries(
-          labels.map((label, index) => [
-            `label${index}`,
-            JSON.stringify({
-              description: label.description,
-              inclusionCriteria: label.inclusionCriteria,
-              name: label.name,
-            }),
-          ])
-        ),
-        instructions: `Choose the best fitting existing label for this email. Every email needs a category, so compare the available labels and select the closest match even when confidence is split. Prefer a specific applicable category over a broad general category. ${AUTO_LABEL_INSTRUCTIONS}`,
-        type: "choice",
-      },
+      ...(categoryLabels.length > 0
+        ? {
+            category: {
+              criteria: Object.fromEntries(
+                categoryLabels.map(({ label, index }) => [
+                  `label${index}`,
+                  JSON.stringify({
+                    description: label.description,
+                    inclusionCriteria: label.autoLabel
+                      ? null
+                      : label.inclusionCriteria,
+                    name: label.name,
+                    prompt: label.autoLabel?.prompt || null,
+                  }),
+                ])
+              ),
+              instructions: `Choose the best fitting existing label for this email. Every email needs a category, so compare the available labels and select the closest match even when confidence is split. Prefer a specific applicable category over a broad general category. ${AUTO_LABEL_INSTRUCTIONS}`,
+              type: "choice" as const,
+            },
+          }
+        : {}),
       ...Object.fromEntries(
         labels.map((label, index) => [
           `label${index}`,
@@ -194,10 +207,13 @@ export const classifyMailMessage = async ({
             instructions: {
               label: {
                 description: label.description,
-                inclusionCriteria: label.inclusionCriteria,
+                inclusionCriteria: label.autoLabel
+                  ? null
+                  : label.inclusionCriteria,
                 name: label.name,
+                prompt: label.autoLabel?.prompt || null,
               },
-              question: `Does this email belong to this label? Multiple labels may apply when their scopes overlap. A reasonable semantic match is sufficient; do not require certainty or a literal description match. ${AUTO_LABEL_INSTRUCTIONS}`,
+              question: `The label prompt is an explicit required condition. Return false when that condition is not met, even if the label name fits. Does this email belong to this label? Multiple labels may apply when their scopes overlap. A reasonable semantic match is sufficient; do not require certainty or a literal description match. ${AUTO_LABEL_INSTRUCTIONS}`,
             },
             type: "noul" as const,
           },
@@ -208,13 +224,14 @@ export const classifyMailMessage = async ({
     timeoutMs: 10_000,
   });
   const answer = answers.category;
-  if (answer?.type !== "choice") {
+  if (categoryLabels.length > 0 && answer?.type !== "choice") {
     throw new Error("Label classification returned an incomplete decision.");
   }
-  const selected = labels.find(
-    (_label, index) => answer.choice === `label${index}`
-  );
-  if (selected === undefined) {
+  const selected = categoryLabels.find(
+    ({ index }) =>
+      answer?.type === "choice" && answer.choice === `label${index}`
+  )?.label;
+  if (categoryLabels.length > 0 && selected === undefined) {
     throw new Error("Label classification returned an unknown label.");
   }
   const additional = labels.flatMap((label, index) => {
@@ -224,7 +241,7 @@ export const classifyMailMessage = async ({
     }
     return match.noul >= 0.65 ? [label.id] : [];
   });
-  return [...new Set([selected.id, ...additional])];
+  return [...new Set([...(selected ? [selected.id] : []), ...additional])];
 };
 
 export const detectMailVerificationCode = async ({
