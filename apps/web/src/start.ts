@@ -37,6 +37,8 @@ const sitePasswordPaths = new Set([
   "/api/internal/gmail-credentials/rotate",
   "/api/openapi",
   "/api/v1/mcp",
+  "/api/v1/control",
+  "/api/v1/control/mcp",
   "/api/v1/send",
   "/api/site-password",
   "/api/waitlist",
@@ -51,7 +53,7 @@ const publicLegalPaths = new Set([
 ]);
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
-const publicPathPrefixes = ["/_build/", "/assets/"];
+const publicPathPrefixes = ["/_build/", "/assets/", "/api/v1/unsubscribe/"];
 /** Open-tracking markers are fetched by mail clients without cookies. */
 const openTrackingPrefix = "/api/v1/o/";
 const csrfMiddleware = createCsrfMiddleware({

@@ -4,6 +4,8 @@ import type {
   DeliveryStatus,
   RecipientSuppression,
 } from "@quieter/mail/delivery";
+import type { EmailContent } from "@quieter/mail/email-design";
+import type { EmailTemplate } from "@quieter/mail/templates";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -1930,6 +1932,236 @@ export const managedMailMessage = pgTable(
   ]
 );
 
+export const organizationContact = pgTable(
+  "organizationContact",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    email: text("email").notNull(),
+    id: text("id").primaryKey(),
+    name: text("name"),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    unique("organization_contact_org_email_unique").on(
+      table.organizationId,
+      table.email
+    ),
+    unique("organization_contact_org_id_unique").on(
+      table.organizationId,
+      table.id
+    ),
+    index("organization_contact_org_name_idx").on(
+      table.organizationId,
+      table.name
+    ),
+  ]
+);
+
+export const organizationAudience = pgTable(
+  "organizationAudience",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    description: text("description"),
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    unique("organization_audience_org_id_unique").on(
+      table.organizationId,
+      table.id
+    ),
+    index("organization_audience_org_name_idx").on(
+      table.organizationId,
+      table.name
+    ),
+  ]
+);
+
+export const organizationAudienceMembership = pgTable(
+  "organizationAudienceMembership",
+  {
+    audienceId: text("audienceId").notNull(),
+    consentOccurredAt: timestamp("consentOccurredAt").notNull(),
+    consentSource: text("consentSource").notNull(),
+    contactId: text("contactId").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    lastLifecycleOccurredAt: timestamp("lastLifecycleOccurredAt").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    status: text("status")
+      .$type<"subscribed" | "unsubscribed" | "removed">()
+      .notNull(),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "organization_audience_membership_status_check",
+      sql`${table.status} in ('subscribed', 'unsubscribed', 'removed')`
+    ),
+    unique("organization_audience_membership_contact_unique").on(
+      table.organizationId,
+      table.audienceId,
+      table.contactId
+    ),
+    unique("organization_audience_membership_scope_id_unique").on(
+      table.organizationId,
+      table.audienceId,
+      table.id
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.audienceId],
+      foreignColumns: [
+        organizationAudience.organizationId,
+        organizationAudience.id,
+      ],
+      name: "organization_audience_membership_audience_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.contactId],
+      foreignColumns: [
+        organizationContact.organizationId,
+        organizationContact.id,
+      ],
+      name: "organization_audience_membership_contact_fk",
+    }).onDelete("cascade"),
+    index("organization_audience_membership_status_idx").on(
+      table.organizationId,
+      table.audienceId,
+      table.status,
+      table.id
+    ),
+    index("organization_audience_membership_tags_idx").using("gin", table.tags),
+  ]
+);
+
+export const organizationAudienceSegment = pgTable(
+  "organizationAudienceSegment",
+  {
+    audienceId: text("audienceId").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    criteria: jsonb("criteria")
+      .$type<{ allTags: string[]; anyTags: string[]; excludeTags: string[] }>()
+      .notNull(),
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    unique("organization_audience_segment_scope_id_unique").on(
+      table.organizationId,
+      table.audienceId,
+      table.id
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.audienceId],
+      foreignColumns: [
+        organizationAudience.organizationId,
+        organizationAudience.id,
+      ],
+      name: "organization_audience_segment_audience_fk",
+    }).onDelete("cascade"),
+    index("organization_audience_segment_audience_idx").on(
+      table.organizationId,
+      table.audienceId
+    ),
+  ]
+);
+
+export const organizationAudienceLifecycleEvent = pgTable(
+  "organizationAudienceLifecycleEvent",
+  {
+    actorId: text("actorId"),
+    actorType: text("actorType")
+      .$type<"user" | "api_key" | "recipient">()
+      .notNull(),
+    afterStatus: text("afterStatus")
+      .$type<"subscribed" | "unsubscribed" | "removed">()
+      .notNull(),
+    applied: boolean("applied").notNull(),
+    audienceId: text("audienceId").notNull(),
+    beforeStatus: text("beforeStatus").$type<
+      "subscribed" | "unsubscribed" | "removed"
+    >(),
+    channel: text("channel").notNull(),
+    contactId: text("contactId").notNull(),
+    eventType: text("eventType").notNull(),
+    id: text("id").primaryKey(),
+    membershipId: text("membershipId").notNull(),
+    occurredAt: timestamp("occurredAt").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    reason: text("reason"),
+    recordedAt: timestamp("recordedAt").notNull(),
+    source: text("source").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.audienceId, table.membershipId],
+      foreignColumns: [
+        organizationAudienceMembership.organizationId,
+        organizationAudienceMembership.audienceId,
+        organizationAudienceMembership.id,
+      ],
+      name: "organization_audience_event_membership_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.contactId],
+      foreignColumns: [
+        organizationContact.organizationId,
+        organizationContact.id,
+      ],
+      name: "organization_audience_event_contact_fk",
+    }).onDelete("cascade"),
+    index("organization_audience_event_history_idx").on(
+      table.organizationId,
+      table.audienceId,
+      table.recordedAt,
+      table.id
+    ),
+    index("organization_audience_event_membership_idx").on(
+      table.organizationId,
+      table.audienceId,
+      table.membershipId,
+      table.recordedAt
+    ),
+  ]
+);
+
+export const organizationAudienceOperation = pgTable(
+  "organizationAudienceOperation",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    idempotencyKey: text("idempotencyKey").notNull(),
+    inputHash: text("inputHash").notNull(),
+    operation: text("operation").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    result: jsonb("result").$type<unknown>(),
+  },
+  (table) => [
+    unique("organization_audience_operation_key_unique").on(
+      table.organizationId,
+      table.idempotencyKey
+    ),
+  ]
+);
+
 export const organizationApiMailMessage = pgTable(
   "organizationApiMailMessage",
   {
@@ -2018,6 +2250,182 @@ export const organizationApiMailAttachment = pgTable(
       table.normalizedFileName
     ),
     index("organization_api_mail_attachment_message_idx").on(table.messageId),
+  ]
+);
+
+export const organizationEmailTemplate = pgTable(
+  "organizationEmailTemplate",
+  {
+    archivedAt: timestamp("archivedAt"),
+    content: jsonb("content").$type<EmailContent>().notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    subject: text("subject").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("organization_email_template_list_idx").on(
+      table.organizationId,
+      table.archivedAt,
+      table.updatedAt
+    ),
+  ]
+);
+
+export const organizationTemplateOperation = pgTable(
+  "organizationTemplateOperation",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    idempotencyKey: text("idempotencyKey").notNull(),
+    inputHash: text("inputHash").notNull(),
+    operation: text("operation").$type<"create" | "duplicate">().notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    result: jsonb("result").$type<EmailTemplate>(),
+  },
+  (table) => [
+    unique("organization_template_operation_key_unique").on(
+      table.organizationId,
+      table.idempotencyKey
+    ),
+    check(
+      "organization_template_operation_type_check",
+      sql`${table.operation} in ('create', 'duplicate')`
+    ),
+  ]
+);
+
+export const organizationCampaign = pgTable(
+  "organizationCampaign",
+  {
+    audienceId: text("audienceId").notNull(),
+    content: jsonb("content").$type<EmailContent>(),
+    createdAt: timestamp("createdAt").notNull(),
+    from: text("from").notNull(),
+    html: text("html"),
+    id: text("id").primaryKey(),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    leaseToken: text("leaseToken"),
+    name: text("name").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    segmentIds: jsonb("segmentIds").$type<string[]>().notNull().default([]),
+    selectionSnapshot: jsonb("selectionSnapshot").$type<{
+      audienceId: string;
+      segmentIds: string[];
+      criteria: unknown;
+    }>(),
+    sendKey: text("sendKey"),
+    sendRequestHash: text("sendRequestHash"),
+    sentAt: timestamp("sentAt"),
+    status: text("status")
+      .$type<
+        "draft" | "queued" | "sending" | "completed" | "canceled" | "paused"
+      >()
+      .notNull()
+      .default("draft"),
+    subject: text("subject").notNull(),
+    text: text("text").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    unique("organization_campaign_tenant_id_unique").on(
+      table.organizationId,
+      table.id
+    ),
+    foreignKey({
+      columns: [table.organizationId, table.audienceId],
+      foreignColumns: [
+        organizationAudience.organizationId,
+        organizationAudience.id,
+      ],
+      name: "organization_campaign_audience_tenant_fk",
+    }).onDelete("cascade"),
+    unique("organization_campaign_send_key_unique").on(
+      table.organizationId,
+      table.sendKey
+    ),
+    index("organization_campaign_queue_idx").on(
+      table.status,
+      table.leaseExpiresAt
+    ),
+    index("organization_campaign_list_idx").on(
+      table.organizationId,
+      table.createdAt
+    ),
+    check(
+      "organization_campaign_status_check",
+      sql`${table.status} in ('draft','queued','sending','completed','canceled','paused')`
+    ),
+  ]
+);
+
+export const organizationCampaignRecipient = pgTable(
+  "organizationCampaignRecipient",
+  {
+    attempts: integer("attempts").notNull().default(0),
+    campaignId: text("campaignId").notNull(),
+    contactId: text("contactId").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    email: text("email").notNull(),
+    exclusionReason: text("exclusionReason"),
+    id: text("id").primaryKey(),
+    membershipId: text("membershipId").notNull(),
+    name: text("name"),
+    nextAttemptAt: timestamp("nextAttemptAt").notNull(),
+    organizationId: text("organizationId").notNull(),
+    providerMessageId: text("providerMessageId"),
+    sendKey: text("sendKey").notNull(),
+    sendOperationId: text("sendOperationId"),
+    status: text("status")
+      .$type<
+        | "pending"
+        | "sending"
+        | "sent"
+        | "uncertain"
+        | "failed"
+        | "excluded"
+        | "canceled"
+      >()
+      .notNull(),
+    subscriptionStatus: text("subscriptionStatus").notNull(),
+    tags: jsonb("tags").$type<string[]>().notNull(),
+    unsubscribeToken: text("unsubscribeToken").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.campaignId],
+      foreignColumns: [
+        organizationCampaign.organizationId,
+        organizationCampaign.id,
+      ],
+      name: "organization_campaign_recipient_tenant_fk",
+    }).onDelete("cascade"),
+    unique("organization_campaign_recipient_email_unique").on(
+      table.campaignId,
+      table.email
+    ),
+    unique("organization_campaign_unsubscribe_token_unique").on(
+      table.unsubscribeToken
+    ),
+    unique("organization_campaign_recipient_send_key_unique").on(table.sendKey),
+    index("organization_campaign_recipient_work_idx").on(
+      table.campaignId,
+      table.status,
+      table.nextAttemptAt
+    ),
+    check(
+      "organization_campaign_recipient_status_check",
+      sql`${table.status} in ('pending','sending','sent','uncertain','failed','excluded','canceled')`
+    ),
   ]
 );
 
@@ -3034,6 +3442,14 @@ export const tables = {
   organization,
   organizationApiMailAttachment,
   organizationApiMailMessage,
+  organizationAudience,
+  organizationAudienceLifecycleEvent,
+  organizationAudienceMembership,
+  organizationAudienceOperation,
+  organizationAudienceSegment,
+  organizationCampaign,
+  organizationCampaignRecipient,
+  organizationContact,
   organizationDivision,
   organizationDivisionMember,
   organizationMailDeliveryEvent,

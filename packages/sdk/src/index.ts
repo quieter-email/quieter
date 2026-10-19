@@ -1,3 +1,9 @@
+import { controlOperations } from "@quieter/mail/control";
+import type {
+  ControlInput,
+  ControlOperation,
+  ControlOutput,
+} from "@quieter/mail/control";
 import {
   messageDeliverySchema,
   recipientSuppressionListSchema,
@@ -27,6 +33,24 @@ export type QuieterDeliveryStatus = DeliveryStatus;
 export type QuieterDeliveryEvent = DeliveryEvent;
 export type QuieterMessageDelivery = MessageDelivery;
 export type QuieterRecipientSuppression = RecipientSuppression;
+export type {
+  EmailBlock,
+  EmailContent,
+  EmailDesign,
+  EmailTheme,
+} from "@quieter/mail/email-design";
+export {
+  createEmailDesign,
+  exportEmailDesign,
+  importEmailTheme,
+  renderEmailContent,
+} from "@quieter/mail/email-design";
+export type { EmailTemplate } from "@quieter/mail/templates";
+export type {
+  ControlInput,
+  ControlOperation,
+  ControlOutput,
+} from "@quieter/mail/control";
 
 export type QuieterAttachment = Omit<
   NonNullable<SendMessageRequest["attachments"]>[number],
@@ -58,6 +82,172 @@ export type QuieterOptions = {
 };
 
 export class Quieter {
+  readonly audiences = {
+    create: async (
+      input: ControlInput<"audiences.create">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.create">> =>
+      await this.control("audiences.create", input, options),
+    createSegment: async (
+      input: ControlInput<"audiences.createSegment">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.createSegment">> =>
+      await this.control("audiences.createSegment", input, options),
+    deleteSegment: async (
+      input: ControlInput<"audiences.deleteSegment">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.deleteSegment">> =>
+      await this.control("audiences.deleteSegment", input, options),
+    get: async (
+      input: ControlInput<"audiences.get">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.get">> =>
+      await this.control("audiences.get", input, options),
+    importContacts: async (
+      input: ControlInput<"audiences.importContacts">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.importContacts">> =>
+      await this.control("audiences.importContacts", input, options),
+    list: async (
+      input: ControlInput<"audiences.list"> = {},
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.list">> =>
+      await this.control("audiences.list", input, options),
+    listContacts: async (
+      input: ControlInput<"audiences.listContacts">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.listContacts">> =>
+      await this.control("audiences.listContacts", input, options),
+    listHistory: async (
+      input: ControlInput<"audiences.listHistory">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.listHistory">> =>
+      await this.control("audiences.listHistory", input, options),
+    listSegments: async (
+      input: ControlInput<"audiences.listSegments">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.listSegments">> =>
+      await this.control("audiences.listSegments", input, options),
+    registerContact: async (
+      input: ControlInput<"audiences.registerContact">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.registerContact">> =>
+      await this.control("audiences.registerContact", input, options),
+    removeContact: async (
+      input: ControlInput<"audiences.removeContact">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.removeContact">> =>
+      await this.control("audiences.removeContact", input, options),
+    resubscribeContact: async (
+      input: ControlInput<"audiences.resubscribeContact">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.resubscribeContact">> =>
+      await this.control("audiences.resubscribeContact", input, options),
+    setSuppression: async (
+      input: ControlInput<"audiences.setSuppression">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.setSuppression">> =>
+      await this.control("audiences.setSuppression", input, options),
+    unsubscribeContact: async (
+      input: ControlInput<"audiences.unsubscribeContact">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.unsubscribeContact">> =>
+      await this.control("audiences.unsubscribeContact", input, options),
+    update: async (
+      input: ControlInput<"audiences.update">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.update">> =>
+      await this.control("audiences.update", input, options),
+    updateContact: async (
+      input: ControlInput<"audiences.updateContact">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.updateContact">> =>
+      await this.control("audiences.updateContact", input, options),
+    updateSegment: async (
+      input: ControlInput<"audiences.updateSegment">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"audiences.updateSegment">> =>
+      await this.control("audiences.updateSegment", input, options),
+  };
+  readonly campaigns = {
+    cancel: async (
+      input: ControlInput<"campaigns.cancel">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"campaigns.cancel">> =>
+      await this.control("campaigns.cancel", input, options),
+    create: async (
+      input: ControlInput<"campaigns.create">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"campaigns.create">> =>
+      await this.control("campaigns.create", input, options),
+    get: async (
+      input: ControlInput<"campaigns.get">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"campaigns.get">> =>
+      await this.control("campaigns.get", input, options),
+    list: async (
+      input: ControlInput<"campaigns.list"> = {},
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"campaigns.list">> =>
+      await this.control("campaigns.list", input, options),
+    preview: async (
+      input: ControlInput<"campaigns.preview">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"campaigns.preview">> =>
+      await this.control("campaigns.preview", input, options),
+    retry: async (
+      input: ControlInput<"campaigns.retry">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"campaigns.retry">> =>
+      await this.control("campaigns.retry", input, options),
+    send: async (
+      input: ControlInput<"campaigns.send">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"campaigns.send">> =>
+      await this.control("campaigns.send", input, options),
+    update: async (
+      input: ControlInput<"campaigns.update">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"campaigns.update">> =>
+      await this.control("campaigns.update", input, options),
+  };
+  readonly templates = {
+    archive: async (
+      input: ControlInput<"templates.archive">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.archive">> =>
+      await this.control("templates.archive", input, options),
+    create: async (
+      input: ControlInput<"templates.create">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.create">> =>
+      await this.control("templates.create", input, options),
+    duplicate: async (
+      input: ControlInput<"templates.duplicate">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.duplicate">> =>
+      await this.control("templates.duplicate", input, options),
+    get: async (
+      input: ControlInput<"templates.get">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.get">> =>
+      await this.control("templates.get", input, options),
+    list: async (
+      input: ControlInput<"templates.list"> = {},
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.list">> =>
+      await this.control("templates.list", input, options),
+    render: async (
+      input: ControlInput<"templates.render">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.render">> =>
+      await this.control("templates.render", input, options),
+    update: async (
+      input: ControlInput<"templates.update">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.update">> =>
+      await this.control("templates.update", input, options),
+  };
   readonly #apiKey: string;
   readonly baseUrl: string;
   readonly #fetch: QuieterFetch;
@@ -116,6 +306,27 @@ export class Quieter {
       });
     }
     return parsed.data;
+  }
+
+  async control<K extends ControlOperation>(
+    operation: K,
+    input: ControlInput<K>,
+    options: QuieterRequestOptions = {}
+  ): Promise<ControlOutput<K>> {
+    const contract = controlOperations[operation];
+    const parsed = contract.input.parse(input);
+    return await this.#request<ControlOutput<K>>(
+      "api/v1/control",
+      z.custom<ControlOutput<K>>(
+        (value) => contract.output.safeParse(value).success
+      ),
+      {
+        body: JSON.stringify({ input: parsed, operation }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+        signal: options.signal,
+      }
+    );
   }
 
   async getMessage(

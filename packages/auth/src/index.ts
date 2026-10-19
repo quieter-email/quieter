@@ -118,6 +118,7 @@ const trustedOrigins = [
 const organizationApiKeyPlugin = apiKey({
   configId: ORGANIZATION_API_KEY_CONFIG_ID,
   defaultPrefix: "quieter_",
+  keyExpiration: { minExpiresIn: 1 / 86_400 },
   maximumNameLength: 64,
   references: "organization",
   startingCharactersConfig: {

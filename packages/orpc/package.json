@@ -3,6 +3,12 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./templates": "./src/templates/service.ts",
+    "./control": "./src/control.ts",
+    "./audiences": "./src/audiences/service.ts",
+    "./campaigns": "./src/campaigns/service.ts",
+    "./campaigns/processor": "./src/campaigns/processor.ts",
+    "./growth-access": "./src/growth-access.ts",
     "./daily-brief": "./src/daily-brief.ts",
     "./ai-memory": "./src/ai-memory.ts",
     "./managed-mail/rule-backfills": "./src/managed-mail/rules/backfill.ts",
