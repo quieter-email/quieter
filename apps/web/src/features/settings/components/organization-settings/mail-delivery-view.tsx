@@ -154,8 +154,9 @@ export const MailDeliveryView = ({
           }
           title="Open tracking"
         >
-          Estimate opens using a small tracking image. Opens do not confirm a
-          message was read.
+          Estimate opens using a small tracking image. Ad blockers and email
+          clients can distort open counts. An open does not confirm a message
+          was read.
         </SettingsRow>
         <SettingsRow
           action={
