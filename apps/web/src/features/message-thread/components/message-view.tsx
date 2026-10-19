@@ -78,6 +78,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     composeDemoMode,
     composeManagedDemoMode,
     composePersistDrafts,
+    composeSenderMailbox,
     composeSignature,
     currentUserEmail,
     gmailLabels,
@@ -380,6 +381,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                       onManageSnippets={onManageSnippets}
                       persistDrafts={composePersistDrafts}
                       senderEmail={currentUserEmail}
+                      senderMailbox={composeSenderMailbox}
                       signature={composeSignature}
                       variant="inline"
                     />

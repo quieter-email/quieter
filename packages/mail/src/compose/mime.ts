@@ -51,7 +51,7 @@ export const normalizeComposeBodyHtml = (
 export const buildMimeMessage = async (
   draft: ComposeDraftInput,
   options?: {
-    from?: string;
+    from?: string | { address: string; name: string };
     htmlTransform?: (html: string) => string;
     includeQuieterDraftHeaders?: boolean;
     messageId?: string;

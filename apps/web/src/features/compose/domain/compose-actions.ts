@@ -326,6 +326,7 @@ export const buildComposeDraftFromSavedDraftMessage = (
     },
     replyContext: buildReplyContext(message, { useInReplyTo: true }),
     saveStatus: (message.draftId?.trim() ?? "") === "" ? "idle" : "saved",
+    senderName: parseSender(message.from).name || undefined,
     subject: message.subject ?? "",
     updatedAt: Date.now(),
   };

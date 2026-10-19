@@ -105,11 +105,15 @@ export const parseSender = (from?: string): ParsedSender => {
   const rawNameSource =
     bracketMatch?.groups?.name ??
     (email ? display.replace(email, "") : display);
-  const rawName = rawNameSource
-    .replaceAll('"', "")
-    .replaceAll(/[<>]/gu, "")
-    .trim();
-  const name = rawName && rawName !== email ? rawName : "";
+  const rawName = rawNameSource.trim();
+  const decodedName = (
+    rawName.startsWith('"') && rawName.endsWith('"')
+      ? rawName
+          .slice(1, -1)
+          .replaceAll(/\\(?<character>["\\])/gu, "$<character>")
+      : rawName.replaceAll(/[<>]/gu, "")
+  ).trim();
+  const name = decodedName && decodedName !== email ? decodedName : "";
 
   return { display, email, name };
 };

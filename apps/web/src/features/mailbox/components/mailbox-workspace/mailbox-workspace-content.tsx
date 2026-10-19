@@ -461,6 +461,7 @@ const MailboxWorkspaceContentInner = ({
           onOpenSidebar={onOpenSidebar}
           persistDrafts={persistComposeDrafts}
           senderEmail={composeMailbox?.emailAddress ?? currentUserEmail}
+          senderMailbox={composeMailbox}
           senderMailboxes={allInboxesActive ? senderMailboxes : undefined}
           signature={
             composeMailbox
@@ -598,6 +599,7 @@ const MailboxWorkspaceContentInner = ({
           <MailboxMessagesPanel
             detailOnly
             activeMailbox={activeMailbox}
+            senderMailbox={composeMailbox}
             currentUserEmail={currentUserEmail}
             focusOnOpen={
               combinedFocusTarget?.mailboxId === selectedMailboxId &&
@@ -704,6 +706,7 @@ const MailboxWorkspaceContentInner = ({
       <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,max(34%,405px))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-2">
         <MailboxMessagesPanel
           activeMailbox={activeMailbox}
+          senderMailbox={composeMailbox}
           currentUserEmail={currentUserEmail}
           isDemoMode={isDemoMode}
           isManagedDemoMode={isManagedDemoMode}

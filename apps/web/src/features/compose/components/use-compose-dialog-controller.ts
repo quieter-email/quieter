@@ -100,6 +100,7 @@ export const useComposeDialogController = ({
   autosavePaused = false,
   beforeNavigate,
   demoMode = false,
+  defaultSenderName,
   initialDraft = null,
   initialDraftNeedsSave = false,
   managedDemoMode = false,
@@ -114,6 +115,7 @@ export const useComposeDialogController = ({
   autosavePaused?: boolean;
   beforeNavigate?: () => Promise<void>;
   demoMode?: boolean;
+  defaultSenderName?: string;
   initialDraft?: ComposeActionDraft | null;
   initialDraftNeedsSave?: boolean;
   managedDemoMode?: boolean;
@@ -147,6 +149,10 @@ export const useComposeDialogController = ({
         : seed
     );
     let resolved = draft;
+    draft.senderName =
+      defaultSenderName === undefined
+        ? undefined
+        : (draft.senderName ?? defaultSenderName);
     if ((draft.draftId ?? "") === "" && draft.recoveryEditorId === undefined) {
       resolved = appendComposeSignature(
         draft,

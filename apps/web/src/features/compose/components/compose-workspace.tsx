@@ -9,6 +9,7 @@ import {
   MailSend02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { resolveManagedMailSender } from "@quieter/mail/compose/sender";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -74,6 +75,7 @@ export type ComposeSenderMailbox = {
   id: string;
   emailAddress: string;
   displayName: string | null;
+  provider: "api" | "gmail" | "managed";
   signatureHtml?: string | null;
   signatureText?: string | null;
 };
@@ -98,6 +100,7 @@ export type ComposeSurfaceProps = {
   ) => Promise<void> | void;
   persistDrafts?: boolean;
   senderEmail?: string | null;
+  senderMailbox?: ComposeSenderMailbox | null;
   senderMailboxes?: ComposeSenderMailbox[];
   senderUnavailable?: boolean;
   signature?: { html: string | null; text: string | null };
@@ -119,7 +122,10 @@ type ComposeFormFieldProps = Pick<
   disabled?: boolean;
   divided?: boolean;
   label: string;
-  name: keyof Pick<ComposeFormValues, "to" | "cc" | "bcc" | "subject">;
+  name: keyof Pick<
+    ComposeFormValues,
+    "to" | "cc" | "bcc" | "subject" | "senderName"
+  >;
   placeholder?: string;
 };
 
@@ -160,6 +166,7 @@ const ComposeFormField = ({
         >
           <FieldControl
             aria-invalid={!!error}
+            aria-label={name === "senderName" ? "Sender name" : undefined}
             chrome="composer"
             disabled={disabled}
             onBlur={() => {
@@ -193,6 +200,7 @@ const ReadyComposeSurface = ({
   onSenderSwitch,
   persistDrafts = true,
   senderEmail,
+  senderMailbox,
   senderMailboxes,
   senderUnavailable = false,
   signature,
@@ -219,6 +227,14 @@ const ReadyComposeSurface = ({
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const currentSender =
+    senderMailboxes?.find((sender) => sender.id === mailboxId) ??
+    senderMailbox ??
+    undefined;
+  const managedSender =
+    currentSender?.provider === "managed"
+      ? resolveManagedMailSender(currentSender)
+      : undefined;
   const snippetsQuery = useQuery({
     ...orpc.mailSnippets.list.queryOptions({
       input: { mailboxId: mailboxId ?? "" },
@@ -234,6 +250,7 @@ const ReadyComposeSurface = ({
   const compose = useComposeDialogController({
     autosavePaused: slashMenuOpen || switchingSender,
     beforeNavigate,
+    defaultSenderName: managedSender?.name,
     demoMode,
     getTextFromHtml: (html) =>
       composeEditorRef.current?.getTextFromHtml(html) ??
@@ -300,9 +317,6 @@ const ReadyComposeSurface = ({
         !!mailboxId)) &&
     !audioBusy;
   const isInline = variant === "inline";
-  const currentSender = senderMailboxes?.find(
-    (sender) => sender.id === mailboxId
-  );
   const canSwitchSender =
     !isInline &&
     allowSenderSwitch &&
@@ -720,14 +734,24 @@ const ReadyComposeSurface = ({
                         </ComposerFieldRow>
                       )}
                       {!canSwitchSender &&
-                      !isInline &&
-                      senderMailboxes &&
+                      (!isInline || managedSender !== undefined) &&
+                      (senderMailboxes || managedSender) &&
                       senderEmail ? (
                         <ComposerFieldRow label="From">
                           <span className="flex h-8 min-w-0 items-center truncate px-2 text-body-sm">
                             {senderEmail}
                           </span>
                         </ComposerFieldRow>
+                      ) : null}
+                      {managedSender ? (
+                        <ComposeFormField
+                          disabled={!canEditBody}
+                          form={form}
+                          handleUserDraftChange={handleUserDraftChange}
+                          label="Name"
+                          name="senderName"
+                          placeholder={managedSender.name}
+                        />
                       ) : null}
                       <form.Field name="to">
                         {(recipientField) => {
@@ -1281,6 +1305,7 @@ export const ComposeWorkspace = ({
   onSwitchSenderMailbox,
   persistDrafts,
   senderEmail,
+  senderMailbox,
   senderMailboxes,
   signature,
 }: ComposeWorkspaceProps) => {
@@ -1298,9 +1323,9 @@ export const ComposeWorkspace = ({
   const savedSenderDrafts = useRef(new Map<string, ComposeDraftState>());
   const cleanupPromiseRef = useRef<Promise<void> | null>(null);
   const finishPromiseRef = useRef<Promise<void> | null>(null);
-  const selectedSender = senderMailboxes?.find(
-    (sender) => sender.id === senderSession.mailboxId
-  );
+  const selectedSender =
+    senderMailboxes?.find((sender) => sender.id === senderSession.mailboxId) ??
+    (senderMailbox?.id === senderSession.mailboxId ? senderMailbox : undefined);
   const senderBoundToInitialDraft =
     !!initialDraft &&
     ((initialDraft.draftId?.trim() ?? "") !== "" ||
@@ -1431,6 +1456,7 @@ export const ComposeWorkspace = ({
         }}
         persistDrafts={persistDrafts}
         senderEmail={selectedSender?.emailAddress ?? senderSession.senderEmail}
+        senderMailbox={selectedSender}
         senderMailboxes={senderMailboxes}
         senderUnavailable={
           senderMailboxes !== undefined && selectedSender === undefined
