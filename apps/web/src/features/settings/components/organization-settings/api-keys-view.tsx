@@ -90,6 +90,7 @@ type OrganizationApiKey = {
 type ApiKeyPermissions = {
   audiences: ("read" | "write")[];
   campaigns: ("read" | "write" | "send")[];
+  templates: ("read" | "write")[];
 };
 
 const DEFAULT_API_KEY_PREFIX = "quieter_";
@@ -225,8 +226,7 @@ const ApiKeyPermissionFields = ({
   <fieldset className="space-y-3">
     <legend className="text-body font-medium text-fg">Permissions</legend>
     <p className="text-caption/5 text-muted-fg">
-      Transactional sending is included. Choose any additional audience or
-      campaign access this key needs.
+      Transactional sending is included. Choose additional access for this key.
     </p>
     <div className="space-y-2">
       <p className="text-caption text-muted-fg">Audiences</p>
@@ -295,6 +295,39 @@ const ApiKeyPermissionFields = ({
         </label>
       ))}
     </div>
+    <div className="space-y-2">
+      <p className="text-caption text-muted-fg">Templates</p>
+      {(
+        [
+          { label: "Read and render templates", permission: "read" },
+          { label: "Manage templates", permission: "write" },
+        ] as const
+      ).map(({ permission, label }) => (
+        <label
+          className="flex items-center gap-2 text-body"
+          htmlFor={`api-key-templates-${permission}`}
+          key={permission}
+        >
+          <Checkbox
+            checked={permissions.templates.includes(permission)}
+            id={`api-key-templates-${permission}`}
+            onCheckedChange={(checked) => {
+              onChange({
+                ...permissions,
+                templates: checked
+                  ? [...permissions.templates, permission]
+                  : permissions.templates.filter(
+                      (value) => value !== permission
+                    ),
+              });
+            }}
+          >
+            <CheckboxIndicator />
+          </Checkbox>
+          {label}
+        </label>
+      ))}
+    </div>
   </fieldset>
 );
 
@@ -305,6 +338,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
   const [permissions, setPermissions] = useState<ApiKeyPermissions>({
     audiences: [],
     campaigns: [],
+    templates: [],
   });
   const queryClient = useQueryClient();
   const createMutation = useMutation({
@@ -379,7 +413,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
   const resetDialog = () => {
     setCreatedKey(null);
     setSubmitError(null);
-    setPermissions({ audiences: [], campaigns: [] });
+    setPermissions({ audiences: [], campaigns: [], templates: [] });
     form.reset({
       expiration: "one_month",
       name: "",

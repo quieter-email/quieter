@@ -65,6 +65,8 @@ export const getOrganizationApiKeyAccess = async (
     "campaigns:read",
     "campaigns:write",
     "campaigns:send",
+    "templates:read",
+    "templates:write",
   ] satisfies GrowthScope[]) {
     const [resource, action] = scope.split(":");
     if (

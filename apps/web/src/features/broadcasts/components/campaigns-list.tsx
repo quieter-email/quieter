@@ -1,51 +1,23 @@
 import { Add01Icon, MailSend02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button } from "@quieter/ui/button";
-import {
-  Dialog,
-  DialogBody,
-  DialogCloseButton,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@quieter/ui/dialog";
-import { Field, FieldLabel } from "@quieter/ui/field";
-import { Input } from "@quieter/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectList,
-  SelectTrigger,
-  SelectValue,
-} from "@quieter/ui/select";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { Button, LinkButton } from "@quieter/ui/button";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import {
-  SettingsErrorState,
-  SettingsLoadingState,
-  SettingsNavigationRow,
-  SettingsPageHeader,
-  SettingsRows,
-} from "#/features/settings/components/settings-layout";
-import { toastError } from "#/lib/error-toast";
 import { rpc } from "#/lib/orpc";
 
+import {
+  BroadcastError,
+  BroadcastHeader,
+  BroadcastLoading,
+} from "./broadcast-elements";
 import { useBroadcastWorkspace } from "./broadcast-workspace";
 import { CampaignStatus } from "./campaign-status";
 
+/* oxlint-disable eslint/no-nested-ternary, unicorn/no-nested-ternary -- Loading, empty, and campaign list states are exclusive. */
 export const CampaignsList = () => {
   const { organizationId, canManage } = useBroadcastWorkspace();
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const [offset, setOffset] = useState(0);
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [audienceId, setAudienceId] = useState("");
   const campaigns = useQuery({
     queryFn: async () =>
       await rpc.campaigns.list({ limit: 50, offset, organizationId }),
@@ -57,127 +29,81 @@ export const CampaignsList = () => {
         ? 10_000
         : false,
   });
-  const audiences = useQuery({
-    enabled: open,
-    queryFn: async () =>
-      await rpc.audiences.list({ limit: 100, organizationId }),
-    queryKey: ["audiences", organizationId, "campaign-picker"],
-  });
-  const create = useMutation({
-    mutationFn: async () =>
-      await rpc.campaigns.create({
-        audienceId,
-        from: "",
-        name,
-        organizationId,
-        segmentIds: [],
-        subject: "",
-        text: "",
-      }),
-    onError: (error) => {
-      toastError(error, {
-        boundary: "campaigns",
-        fallback: "Could not create campaign. Please try again.",
-      });
-    },
-    onSuccess: async (campaign) => {
-      setOpen(false);
-      await queryClient.invalidateQueries({
-        queryKey: ["campaigns", organizationId],
-      });
-      void navigate({
-        params: { campaignId: campaign.id },
-        search: { organizationId },
-        to: "/campaigns/$campaignId",
-      });
-    },
-  });
-  let campaignsContent: ReactNode;
-  if (campaigns.isPending) {
-    campaignsContent = <SettingsLoadingState label="Loading campaigns" />;
-  } else if (campaigns.isError) {
-    campaignsContent = (
-      <SettingsErrorState
-        message="Could not load campaigns."
-        onRetry={() => void campaigns.refetch()}
-      />
-    );
-  } else if (campaigns.data.campaigns.length === 0) {
-    campaignsContent = (
-      <div className="rounded-lg border border-border px-6 py-14 text-center">
-        <HugeiconsIcon
-          aria-hidden
-          className="mx-auto mb-3 size-6 text-muted-fg"
-          icon={MailSend02Icon}
-        />
-        <p className="text-body text-fg">
-          {offset ? "No more campaigns" : "Your next message starts here"}
-        </p>
-        <p className="mt-1 text-body text-muted-fg">
-          Create a draft and choose an audience before sending.
-        </p>
-      </div>
-    );
-  } else {
-    campaignsContent = (
-      <SettingsRows>
-        {campaigns.data.campaigns.map((campaign) => (
-          <SettingsNavigationRow
-            key={campaign.id}
-            title={campaign.name}
-            description={campaign.subject || "No subject yet"}
-            meta={<CampaignStatus status={campaign.status} />}
-            onClick={() =>
-              void navigate({
-                params: { campaignId: campaign.id },
-                search: { organizationId },
-                to: "/campaigns/$campaignId",
-              })
-            }
-          />
-        ))}
-      </SettingsRows>
-    );
-  }
-  let audiencesContent: ReactNode;
-  if (audiences.isError) {
-    audiencesContent = (
-      <SettingsErrorState
-        message="Could not load audiences."
-        onRetry={() => void audiences.refetch()}
-      />
-    );
-  } else {
-    audiencesContent =
-      audiences.data?.items.length === 0 ? (
-        <p className="text-body text-muted-fg">
-          Create an audience first, then return to start your campaign.
-        </p>
-      ) : null;
-  }
   return (
-    <div className="space-y-8">
-      <SettingsPageHeader
-        title="Campaigns"
+    <div className="flex flex-col gap-6">
+      <BroadcastHeader
         action={
           canManage ? (
-            <Button
-              onClick={() => {
-                setName("");
-                setAudienceId("");
-                setOpen(true);
-              }}
+            <LinkButton
+              search={{ organizationId }}
               size="sm"
+              to="/campaigns/new"
             >
-              <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+              <HugeiconsIcon aria-hidden icon={Add01Icon} />
               Create campaign
-            </Button>
+            </LinkButton>
           ) : undefined
         }
-      >
-        Write once, review your audience, and follow each delivery.
-      </SettingsPageHeader>
-      {campaignsContent}
+        title="Campaigns"
+      />
+      {campaigns.isPending ? (
+        <BroadcastLoading label="Loading campaigns" />
+      ) : campaigns.isError ? (
+        <BroadcastError onRetry={() => void campaigns.refetch()} />
+      ) : campaigns.data.campaigns.length === 0 ? (
+        <div className="grid min-h-80 place-content-center gap-3 rounded-xl border border-dashed border-border text-center">
+          <HugeiconsIcon
+            aria-hidden
+            className="mx-auto size-6 text-muted-fg"
+            icon={MailSend02Icon}
+          />
+          <p className="text-body text-muted-fg">
+            {offset ? "No more campaigns" : "Your next message starts here"}
+          </p>
+          {canManage && offset === 0 ? (
+            <LinkButton
+              search={{ organizationId }}
+              size="sm"
+              to="/campaigns/new"
+              variant="outline"
+            >
+              Create campaign
+            </LinkButton>
+          ) : null}
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-border">
+          {campaigns.data.campaigns.map((campaign) => (
+            <div
+              className="flex items-center gap-4 border-b border-border px-4 py-4 last:border-b-0"
+              key={campaign.id}
+            >
+              <div className="min-w-0 flex-1">
+                <LinkButton
+                  params={{ campaignId: campaign.id }}
+                  search={{ organizationId }}
+                  size="sm"
+                  to={
+                    campaign.status === "draft"
+                      ? "/campaigns/$campaignId/content"
+                      : "/campaigns/$campaignId"
+                  }
+                  variant="ghost"
+                >
+                  {campaign.name}
+                </LinkButton>
+                <p className="mt-1 truncate pl-2.5 text-caption text-muted-fg">
+                  {campaign.subject || "No subject yet"}
+                </p>
+              </div>
+              <CampaignStatus status={campaign.status} />
+              <span className="hidden text-caption text-muted-fg sm:block">
+                {new Date(campaign.updatedAt).toLocaleDateString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       {offset > 0 ||
       (campaigns.data?.nextOffset !== null &&
         campaigns.data?.nextOffset !== undefined) ? (
@@ -207,78 +133,6 @@ export const CampaignsList = () => {
           </Button>
         </div>
       ) : null}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              create.mutate();
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>Create campaign</DialogTitle>
-            </DialogHeader>
-            <DialogBody spacing="4">
-              <Field>
-                <FieldLabel>Campaign name</FieldLabel>
-                <Input
-                  maxLength={200}
-                  required
-                  onChange={(event) => {
-                    setName(event.target.value);
-                  }}
-                  placeholder="October newsletter"
-                  value={name}
-                />
-              </Field>
-              <Field>
-                <FieldLabel>Audience</FieldLabel>
-                <Select
-                  items={
-                    audiences.data?.items.map((item) => ({
-                      label: item.name,
-                      value: item.id,
-                    })) ?? []
-                  }
-                  onValueChange={(value) => {
-                    setAudienceId(value ?? "");
-                  }}
-                  value={audienceId}
-                >
-                  <SelectTrigger
-                    aria-label="Campaign audience"
-                    pending={audiences.isPending}
-                  >
-                    <SelectValue placeholder="Choose an audience" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectList>
-                      {audiences.data?.items.map((item) => (
-                        <SelectItem key={item.id} value={item.id}>
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                    </SelectList>
-                  </SelectContent>
-                </Select>
-              </Field>
-              {audiencesContent}
-            </DialogBody>
-            <DialogFooter>
-              <DialogCloseButton disabled={create.isPending}>
-                Cancel
-              </DialogCloseButton>
-              <Button
-                disabled={create.isPending || !name.trim() || !audienceId}
-                size="sm"
-                type="submit"
-              >
-                {create.isPending ? "Creating…" : "Create draft"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

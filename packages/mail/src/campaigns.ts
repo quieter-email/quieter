@@ -1,16 +1,19 @@
 import { z } from "zod";
 
+import { emailContentSchema } from "./email-design";
+
 const organizationInput = z.object({ organizationId: z.string().min(1) });
 const campaignInput = organizationInput.extend({
   campaignId: z.string().min(1),
 });
 const draftFields = {
   audienceId: z.string().min(1),
+  content: emailContentSchema.optional(),
   from: z.string().trim().max(320),
   name: z.string().trim().min(1).max(200),
   segmentIds: z.array(z.string().min(1)).max(25).default([]),
   subject: z.string().trim().max(998),
-  text: z.string().max(100_000),
+  text: z.string().max(100_000).default(""),
 };
 export const campaignStatusSchema = z.enum([
   "draft",
@@ -54,7 +57,9 @@ export const campaignSendInputSchema = campaignInput.extend({
 });
 export const campaignSchema = z.object({
   ...draftFields,
+  content: emailContentSchema,
   createdAt: z.iso.datetime(),
+  html: z.string().nullable(),
   id: z.string(),
   organizationId: z.string(),
   segmentIds: z.array(z.string()),

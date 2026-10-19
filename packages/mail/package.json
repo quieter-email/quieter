@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./email-design": "./src/email-design.ts",
+    "./templates": "./src/templates.ts",
     "./control": "./src/control.ts",
     "./audiences": "./src/audiences.ts",
     "./campaigns": "./src/campaigns.ts",
@@ -30,14 +32,17 @@
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
+    "css-tree": "^3.2.1",
     "fast-xml-parser": "catalog:",
     "fast-xml-validator": "1.4.2",
     "nodemailer": "^10.1.0",
+    "parse5": "^8.0.1",
     "postal-mime": "^4.0.5",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@quieter/config": "workspace:*",
+    "@types/css-tree": "^3.2.0",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

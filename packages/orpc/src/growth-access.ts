@@ -10,7 +10,9 @@ export type GrowthScope =
   | "audiences:write"
   | "campaigns:read"
   | "campaigns:write"
-  | "campaigns:send";
+  | "campaigns:send"
+  | "templates:read"
+  | "templates:write";
 
 export type GrowthActor =
   | { organizationId: string; userId: string; apiKeyId?: never; scopes?: never }

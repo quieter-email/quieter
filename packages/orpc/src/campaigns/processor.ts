@@ -8,6 +8,7 @@ import {
   organizationMailSendIdempotency,
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
+import { appendEmailUnsubscribe } from "@quieter/mail/email-design";
 import { sendMessageInputSchema } from "@quieter/mail/send";
 import { reportError } from "@quieter/observability";
 import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
@@ -412,6 +413,10 @@ export const processCampaignBatch = async (
               "List-Unsubscribe": `<${unsubscribeUrl}>`,
               "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
             },
+            html:
+              campaign.html === null
+                ? undefined
+                : appendEmailUnsubscribe(campaign.html, unsubscribeUrl),
             idempotencyKey: recipient.sendKey,
             subject: campaign.subject,
             text: `${campaign.text}\n\nUnsubscribe from this audience: ${unsubscribeUrl}`,

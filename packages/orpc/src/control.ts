@@ -3,11 +3,13 @@ import * as audienceSchemas from "@quieter/mail/audiences";
 import * as campaignSchemas from "@quieter/mail/campaigns";
 import { controlOperations } from "@quieter/mail/control";
 import type { ControlOperation } from "@quieter/mail/control";
+import * as templateSchemas from "@quieter/mail/templates";
 
 import * as audiences from "./audiences/service";
 import * as campaigns from "./campaigns/service";
 import { assertGrowthAccess } from "./growth-access";
 import type { GrowthActor } from "./growth-access";
+import * as templates from "./templates/service";
 
 export const executeControlOperation = async (
   actor: GrowthActor,
@@ -198,6 +200,55 @@ export const executeControlOperation = async (
       result = await campaigns.retryCampaign(
         actor,
         campaignSchemas.campaignRetryInputSchema.parse(scoped)
+      );
+      break;
+    }
+    case "templates.archive": {
+      result = await templates.archiveTemplate(
+        actor,
+        templateSchemas.templateArchiveInputSchema.parse(scoped)
+      );
+      break;
+    }
+    case "templates.create": {
+      result = await templates.createTemplate(
+        actor,
+        templateSchemas.templateCreateInputSchema.parse(scoped)
+      );
+      break;
+    }
+    case "templates.duplicate": {
+      result = await templates.duplicateTemplate(
+        actor,
+        templateSchemas.templateDuplicateInputSchema.parse(scoped)
+      );
+      break;
+    }
+    case "templates.get": {
+      result = await templates.getTemplate(
+        actor,
+        templateSchemas.templateGetInputSchema.parse(scoped)
+      );
+      break;
+    }
+    case "templates.list": {
+      result = await templates.listTemplates(
+        actor,
+        templateSchemas.templateListInputSchema.parse(scoped)
+      );
+      break;
+    }
+    case "templates.render": {
+      result = await templates.renderTemplate(
+        actor,
+        templateSchemas.templateRenderInputSchema.parse(scoped)
+      );
+      break;
+    }
+    case "templates.update": {
+      result = await templates.updateTemplate(
+        actor,
+        templateSchemas.templateUpdateInputSchema.parse(scoped)
       );
       break;
     }

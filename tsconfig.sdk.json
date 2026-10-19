@@ -6,6 +6,9 @@
     "packages/mail/src/delivery.ts",
     "packages/mail/src/audiences.ts",
     "packages/mail/src/campaigns.ts",
-    "packages/mail/src/control.ts"
+    "packages/mail/src/control.ts",
+    "packages/mail/src/templates.ts",
+    "packages/mail/src/email-design.ts",
+    "packages/mail/src/css-tree.d.ts"
   ]
 }

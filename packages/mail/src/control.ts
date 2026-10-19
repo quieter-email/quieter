@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import * as audiences from "./audiences";
 import * as campaigns from "./campaigns";
+import * as templates from "./templates";
 
 export const controlOperations = {
   "audiences.create": {
@@ -195,6 +196,52 @@ export const controlOperations = {
     input: campaigns.campaignUpdateInputSchema.omit({ organizationId: true }),
     output: campaigns.campaignSchema,
     scope: "campaigns:write",
+  },
+  "templates.archive": {
+    description: "Archive or restore a saved email template.",
+    input: templates.templateArchiveInputSchema.omit({ organizationId: true }),
+    output: templates.emailTemplateSchema,
+    scope: "templates:write",
+  },
+  "templates.create": {
+    description:
+      "Save a reusable text, visual, or imported HTML email template.",
+    input: templates.templateCreateInputSchema.omit({ organizationId: true }),
+    output: templates.emailTemplateSchema,
+    scope: "templates:write",
+  },
+  "templates.duplicate": {
+    description: "Copy a template into a separate editable template.",
+    input: templates.templateDuplicateInputSchema.omit({
+      organizationId: true,
+    }),
+    output: templates.emailTemplateSchema,
+    scope: "templates:write",
+  },
+  "templates.get": {
+    description: "Read a saved email template and its editable content.",
+    input: templates.templateGetInputSchema.omit({ organizationId: true }),
+    output: templates.emailTemplateSchema,
+    scope: "templates:read",
+  },
+  "templates.list": {
+    description: "List saved email templates for the authenticated team.",
+    input: templates.templateListInputSchema.omit({ organizationId: true }),
+    output: templates.templateListResultSchema,
+    scope: "templates:read",
+  },
+  "templates.render": {
+    description:
+      "Export a saved template as HTML and text, plus React Email source and editable JSON for visual designs.",
+    input: templates.templateRenderInputSchema.omit({ organizationId: true }),
+    output: templates.templateRenderResultSchema,
+    scope: "templates:read",
+  },
+  "templates.update": {
+    description: "Update a template using its current saved version.",
+    input: templates.templateUpdateInputSchema.omit({ organizationId: true }),
+    output: templates.emailTemplateSchema,
+    scope: "templates:write",
   },
 } as const;
 

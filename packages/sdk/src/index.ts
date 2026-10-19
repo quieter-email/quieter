@@ -33,6 +33,24 @@ export type QuieterDeliveryStatus = DeliveryStatus;
 export type QuieterDeliveryEvent = DeliveryEvent;
 export type QuieterMessageDelivery = MessageDelivery;
 export type QuieterRecipientSuppression = RecipientSuppression;
+export type {
+  EmailBlock,
+  EmailContent,
+  EmailDesign,
+  EmailTheme,
+} from "@quieter/mail/email-design";
+export {
+  createEmailDesign,
+  exportEmailDesign,
+  importEmailTheme,
+  renderEmailContent,
+} from "@quieter/mail/email-design";
+export type { EmailTemplate } from "@quieter/mail/templates";
+export type {
+  ControlInput,
+  ControlOperation,
+  ControlOutput,
+} from "@quieter/mail/control";
 
 export type QuieterAttachment = Omit<
   NonNullable<SendMessageRequest["attachments"]>[number],
@@ -192,6 +210,43 @@ export class Quieter {
       options?: QuieterRequestOptions
     ): Promise<ControlOutput<"campaigns.update">> =>
       await this.control("campaigns.update", input, options),
+  };
+  readonly templates = {
+    archive: async (
+      input: ControlInput<"templates.archive">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.archive">> =>
+      await this.control("templates.archive", input, options),
+    create: async (
+      input: ControlInput<"templates.create">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.create">> =>
+      await this.control("templates.create", input, options),
+    duplicate: async (
+      input: ControlInput<"templates.duplicate">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.duplicate">> =>
+      await this.control("templates.duplicate", input, options),
+    get: async (
+      input: ControlInput<"templates.get">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.get">> =>
+      await this.control("templates.get", input, options),
+    list: async (
+      input: ControlInput<"templates.list"> = {},
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.list">> =>
+      await this.control("templates.list", input, options),
+    render: async (
+      input: ControlInput<"templates.render">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.render">> =>
+      await this.control("templates.render", input, options),
+    update: async (
+      input: ControlInput<"templates.update">,
+      options?: QuieterRequestOptions
+    ): Promise<ControlOutput<"templates.update">> =>
+      await this.control("templates.update", input, options),
   };
   readonly #apiKey: string;
   readonly baseUrl: string;

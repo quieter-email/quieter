@@ -14,6 +14,7 @@ import { protectedProcedure } from "./base";
 const permissionsSchema = z.object({
   audiences: z.array(z.enum(["read", "write"])).optional(),
   campaigns: z.array(z.enum(["read", "write", "send"])).optional(),
+  templates: z.array(z.enum(["read", "write"])).optional(),
 });
 const organizationSchema = z.object({ organizationId: z.string().min(1) });
 

@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./templates": "./src/templates/service.ts",
     "./control": "./src/control.ts",
     "./audiences": "./src/audiences/service.ts",
     "./campaigns": "./src/campaigns/service.ts",

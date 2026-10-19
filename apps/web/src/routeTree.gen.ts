@@ -19,6 +19,7 @@ import { Route as AppDesignSystemRouteImport } from './routes/_app/design-system
 import { Route as AppOnboardingRouteImport } from './routes/_app/onboarding'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppSitePasswordRouteImport } from './routes/_app/site-password'
+import { Route as AppTemplatesRouteImport } from './routes/_app/templates'
 import { Route as PublicAboutRouteImport } from './routes/_public/about'
 import { Route as PublicContactRouteImport } from './routes/_public/contact'
 import { Route as PublicCookiesRouteImport } from './routes/_public/cookies'
@@ -35,6 +36,10 @@ import { Route as AppAudiencesIndexRouteImport } from './routes/_app/audiences.i
 import { Route as AppAudiencesAudienceIdRouteImport } from './routes/_app/audiences.$audienceId'
 import { Route as AppCampaignsIndexRouteImport } from './routes/_app/campaigns.index'
 import { Route as AppCampaignsCampaignIdRouteImport } from './routes/_app/campaigns.$campaignId'
+import { Route as AppCampaignsNewRouteImport } from './routes/_app/campaigns.new'
+import { Route as AppTemplatesIndexRouteImport } from './routes/_app/templates.index'
+import { Route as AppTemplatesTemplateIdRouteImport } from './routes/_app/templates.$templateId'
+import { Route as AppTemplatesNewRouteImport } from './routes/_app/templates.new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 import { Route as ApiConnectorsCallbackRouteImport } from './routes/api/connectors.callback'
 import { Route as ApiDomainConnectCallbackRouteImport } from './routes/api/domain-connect.callback'
@@ -44,6 +49,10 @@ import { Route as ApiV1ControlRouteImport } from './routes/api/v1/control'
 import { Route as ApiV1McpRouteImport } from './routes/api/v1/mcp'
 import { Route as ApiV1SendRouteImport } from './routes/api/v1/send'
 import { Route as ApiV1SuppressionsRouteImport } from './routes/api/v1/suppressions'
+import { Route as AppCampaignsCampaignIdIndexRouteImport } from './routes/_app/campaigns.$campaignId.index'
+import { Route as AppCampaignsCampaignIdAudienceRouteImport } from './routes/_app/campaigns.$campaignId.audience'
+import { Route as AppCampaignsCampaignIdContentRouteImport } from './routes/_app/campaigns.$campaignId.content'
+import { Route as AppCampaignsCampaignIdReviewRouteImport } from './routes/_app/campaigns.$campaignId.review'
 import { Route as ApiDomainConnectTemplatesServiceIdRouteImport } from './routes/api/domain-connect.templates.$serviceId'
 import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/api.internal.gmail-credentials.rotate'
 import { Route as ApiV1ControlMcpRouteImport } from './routes/api/v1/control.mcp'
@@ -101,6 +110,11 @@ const AppSitePasswordRoute = AppSitePasswordRouteImport.update({
 } as any).lazy(() =>
   import('./routes/_app/site-password.lazy').then((d) => d.Route),
 )
+const AppTemplatesRoute = AppTemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => AppRoute,
+} as any)
 const PublicAboutRoute = PublicAboutRouteImport.update({
   id: '/about',
   path: '/about',
@@ -181,6 +195,26 @@ const AppCampaignsCampaignIdRoute = AppCampaignsCampaignIdRouteImport.update({
   path: '/$campaignId',
   getParentRoute: () => AppCampaignsRoute,
 } as any)
+const AppCampaignsNewRoute = AppCampaignsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AppCampaignsRoute,
+} as any)
+const AppTemplatesIndexRoute = AppTemplatesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppTemplatesRoute,
+} as any)
+const AppTemplatesTemplateIdRoute = AppTemplatesTemplateIdRouteImport.update({
+  id: '/$templateId',
+  path: '/$templateId',
+  getParentRoute: () => AppTemplatesRoute,
+} as any)
+const AppTemplatesNewRoute = AppTemplatesNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AppTemplatesRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -227,6 +261,30 @@ const ApiV1SuppressionsRoute = ApiV1SuppressionsRouteImport.update({
   path: '/api/v1/suppressions',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppCampaignsCampaignIdIndexRoute =
+  AppCampaignsCampaignIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppCampaignsCampaignIdRoute,
+  } as any)
+const AppCampaignsCampaignIdAudienceRoute =
+  AppCampaignsCampaignIdAudienceRouteImport.update({
+    id: '/audience',
+    path: '/audience',
+    getParentRoute: () => AppCampaignsCampaignIdRoute,
+  } as any)
+const AppCampaignsCampaignIdContentRoute =
+  AppCampaignsCampaignIdContentRouteImport.update({
+    id: '/content',
+    path: '/content',
+    getParentRoute: () => AppCampaignsCampaignIdRoute,
+  } as any)
+const AppCampaignsCampaignIdReviewRoute =
+  AppCampaignsCampaignIdReviewRouteImport.update({
+    id: '/review',
+    path: '/review',
+    getParentRoute: () => AppCampaignsCampaignIdRoute,
+  } as any)
 const ApiDomainConnectTemplatesServiceIdRoute =
   ApiDomainConnectTemplatesServiceIdRouteImport.update({
     id: '/api/domain-connect/templates/$serviceId',
@@ -269,6 +327,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof AppOnboardingRoute
   '/settings': typeof AppSettingsRoute
   '/site-password': typeof AppSitePasswordRoute
+  '/templates': typeof AppTemplatesRouteWithChildren
   '/about': typeof PublicAboutRoute
   '/contact': typeof PublicContactRoute
   '/cookies': typeof PublicCookiesRoute
@@ -282,7 +341,10 @@ export interface FileRoutesByFullPath {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/audiences/$audienceId': typeof AppAudiencesAudienceIdRoute
-  '/campaigns/$campaignId': typeof AppCampaignsCampaignIdRoute
+  '/campaigns/$campaignId': typeof AppCampaignsCampaignIdRouteWithChildren
+  '/campaigns/new': typeof AppCampaignsNewRoute
+  '/templates/$templateId': typeof AppTemplatesTemplateIdRoute
+  '/templates/new': typeof AppTemplatesNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
@@ -294,12 +356,17 @@ export interface FileRoutesByFullPath {
   '/api/v1/suppressions': typeof ApiV1SuppressionsRoute
   '/audiences/': typeof AppAudiencesIndexRoute
   '/campaigns/': typeof AppCampaignsIndexRoute
+  '/templates/': typeof AppTemplatesIndexRoute
+  '/campaigns/$campaignId/audience': typeof AppCampaignsCampaignIdAudienceRoute
+  '/campaigns/$campaignId/content': typeof AppCampaignsCampaignIdContentRoute
+  '/campaigns/$campaignId/review': typeof AppCampaignsCampaignIdReviewRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/v1/control/mcp': typeof ApiV1ControlMcpRoute
   '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
   '/api/v1/o/$token': typeof ApiV1OTokenRoute
   '/api/v1/unsubscribe/$token': typeof ApiV1UnsubscribeTokenRoute
+  '/campaigns/$campaignId/': typeof AppCampaignsCampaignIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof AppIndexRoute
@@ -321,7 +388,9 @@ export interface FileRoutesByTo {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/audiences/$audienceId': typeof AppAudiencesAudienceIdRoute
-  '/campaigns/$campaignId': typeof AppCampaignsCampaignIdRoute
+  '/campaigns/new': typeof AppCampaignsNewRoute
+  '/templates/$templateId': typeof AppTemplatesTemplateIdRoute
+  '/templates/new': typeof AppTemplatesNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
@@ -333,12 +402,17 @@ export interface FileRoutesByTo {
   '/api/v1/suppressions': typeof ApiV1SuppressionsRoute
   '/audiences': typeof AppAudiencesIndexRoute
   '/campaigns': typeof AppCampaignsIndexRoute
+  '/templates': typeof AppTemplatesIndexRoute
+  '/campaigns/$campaignId/audience': typeof AppCampaignsCampaignIdAudienceRoute
+  '/campaigns/$campaignId/content': typeof AppCampaignsCampaignIdContentRoute
+  '/campaigns/$campaignId/review': typeof AppCampaignsCampaignIdReviewRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/v1/control/mcp': typeof ApiV1ControlMcpRoute
   '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
   '/api/v1/o/$token': typeof ApiV1OTokenRoute
   '/api/v1/unsubscribe/$token': typeof ApiV1UnsubscribeTokenRoute
+  '/campaigns/$campaignId': typeof AppCampaignsCampaignIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -351,6 +425,7 @@ export interface FileRoutesById {
   '/_app/onboarding': typeof AppOnboardingRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/site-password': typeof AppSitePasswordRoute
+  '/_app/templates': typeof AppTemplatesRouteWithChildren
   '/_public/about': typeof PublicAboutRoute
   '/_public/contact': typeof PublicContactRoute
   '/_public/cookies': typeof PublicCookiesRoute
@@ -365,7 +440,10 @@ export interface FileRoutesById {
   '/api/waitlist': typeof ApiWaitlistRoute
   '/_app/': typeof AppIndexRoute
   '/_app/audiences/$audienceId': typeof AppAudiencesAudienceIdRoute
-  '/_app/campaigns/$campaignId': typeof AppCampaignsCampaignIdRoute
+  '/_app/campaigns/$campaignId': typeof AppCampaignsCampaignIdRouteWithChildren
+  '/_app/campaigns/new': typeof AppCampaignsNewRoute
+  '/_app/templates/$templateId': typeof AppTemplatesTemplateIdRoute
+  '/_app/templates/new': typeof AppTemplatesNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
@@ -377,12 +455,17 @@ export interface FileRoutesById {
   '/api/v1/suppressions': typeof ApiV1SuppressionsRoute
   '/_app/audiences/': typeof AppAudiencesIndexRoute
   '/_app/campaigns/': typeof AppCampaignsIndexRoute
+  '/_app/templates/': typeof AppTemplatesIndexRoute
+  '/_app/campaigns/$campaignId/audience': typeof AppCampaignsCampaignIdAudienceRoute
+  '/_app/campaigns/$campaignId/content': typeof AppCampaignsCampaignIdContentRoute
+  '/_app/campaigns/$campaignId/review': typeof AppCampaignsCampaignIdReviewRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
   '/api/v1/control/mcp': typeof ApiV1ControlMcpRoute
   '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
   '/api/v1/o/$token': typeof ApiV1OTokenRoute
   '/api/v1/unsubscribe/$token': typeof ApiV1UnsubscribeTokenRoute
+  '/_app/campaigns/$campaignId/': typeof AppCampaignsCampaignIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -395,6 +478,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/settings'
     | '/site-password'
+    | '/templates'
     | '/about'
     | '/contact'
     | '/cookies'
@@ -409,6 +493,9 @@ export interface FileRouteTypes {
     | '/api/waitlist'
     | '/audiences/$audienceId'
     | '/campaigns/$campaignId'
+    | '/campaigns/new'
+    | '/templates/$templateId'
+    | '/templates/new'
     | '/api/auth/$'
     | '/api/connectors/callback'
     | '/api/domain-connect/callback'
@@ -420,12 +507,17 @@ export interface FileRouteTypes {
     | '/api/v1/suppressions'
     | '/audiences/'
     | '/campaigns/'
+    | '/templates/'
+    | '/campaigns/$campaignId/audience'
+    | '/campaigns/$campaignId/content'
+    | '/campaigns/$campaignId/review'
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/v1/control/mcp'
     | '/api/v1/messages/$messageId'
     | '/api/v1/o/$token'
     | '/api/v1/unsubscribe/$token'
+    | '/campaigns/$campaignId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -447,7 +539,9 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/waitlist'
     | '/audiences/$audienceId'
-    | '/campaigns/$campaignId'
+    | '/campaigns/new'
+    | '/templates/$templateId'
+    | '/templates/new'
     | '/api/auth/$'
     | '/api/connectors/callback'
     | '/api/domain-connect/callback'
@@ -459,12 +553,17 @@ export interface FileRouteTypes {
     | '/api/v1/suppressions'
     | '/audiences'
     | '/campaigns'
+    | '/templates'
+    | '/campaigns/$campaignId/audience'
+    | '/campaigns/$campaignId/content'
+    | '/campaigns/$campaignId/review'
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/v1/control/mcp'
     | '/api/v1/messages/$messageId'
     | '/api/v1/o/$token'
     | '/api/v1/unsubscribe/$token'
+    | '/campaigns/$campaignId'
   id:
     | '__root__'
     | '/_app'
@@ -476,6 +575,7 @@ export interface FileRouteTypes {
     | '/_app/onboarding'
     | '/_app/settings'
     | '/_app/site-password'
+    | '/_app/templates'
     | '/_public/about'
     | '/_public/contact'
     | '/_public/cookies'
@@ -491,6 +591,9 @@ export interface FileRouteTypes {
     | '/_app/'
     | '/_app/audiences/$audienceId'
     | '/_app/campaigns/$campaignId'
+    | '/_app/campaigns/new'
+    | '/_app/templates/$templateId'
+    | '/_app/templates/new'
     | '/api/auth/$'
     | '/api/connectors/callback'
     | '/api/domain-connect/callback'
@@ -502,12 +605,17 @@ export interface FileRouteTypes {
     | '/api/v1/suppressions'
     | '/_app/audiences/'
     | '/_app/campaigns/'
+    | '/_app/templates/'
+    | '/_app/campaigns/$campaignId/audience'
+    | '/_app/campaigns/$campaignId/content'
+    | '/_app/campaigns/$campaignId/review'
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
     | '/api/v1/control/mcp'
     | '/api/v1/messages/$messageId'
     | '/api/v1/o/$token'
     | '/api/v1/unsubscribe/$token'
+    | '/_app/campaigns/$campaignId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -604,6 +712,13 @@ declare module '@tanstack/react-router' {
       path: '/site-password'
       fullPath: '/site-password'
       preLoaderRoute: typeof AppSitePasswordRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/templates': {
+      id: '/_app/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof AppTemplatesRouteImport
       parentRoute: typeof AppRoute
     }
     '/_public/about': {
@@ -718,6 +833,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCampaignsCampaignIdRouteImport
       parentRoute: typeof AppCampaignsRoute
     }
+    '/_app/campaigns/new': {
+      id: '/_app/campaigns/new'
+      path: '/new'
+      fullPath: '/campaigns/new'
+      preLoaderRoute: typeof AppCampaignsNewRouteImport
+      parentRoute: typeof AppCampaignsRoute
+    }
+    '/_app/templates/': {
+      id: '/_app/templates/'
+      path: '/'
+      fullPath: '/templates/'
+      preLoaderRoute: typeof AppTemplatesIndexRouteImport
+      parentRoute: typeof AppTemplatesRoute
+    }
+    '/_app/templates/$templateId': {
+      id: '/_app/templates/$templateId'
+      path: '/$templateId'
+      fullPath: '/templates/$templateId'
+      preLoaderRoute: typeof AppTemplatesTemplateIdRouteImport
+      parentRoute: typeof AppTemplatesRoute
+    }
+    '/_app/templates/new': {
+      id: '/_app/templates/new'
+      path: '/new'
+      fullPath: '/templates/new'
+      preLoaderRoute: typeof AppTemplatesNewRouteImport
+      parentRoute: typeof AppTemplatesRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -781,6 +924,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1SuppressionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/campaigns/$campaignId/': {
+      id: '/_app/campaigns/$campaignId/'
+      path: '/'
+      fullPath: '/campaigns/$campaignId/'
+      preLoaderRoute: typeof AppCampaignsCampaignIdIndexRouteImport
+      parentRoute: typeof AppCampaignsCampaignIdRoute
+    }
+    '/_app/campaigns/$campaignId/audience': {
+      id: '/_app/campaigns/$campaignId/audience'
+      path: '/audience'
+      fullPath: '/campaigns/$campaignId/audience'
+      preLoaderRoute: typeof AppCampaignsCampaignIdAudienceRouteImport
+      parentRoute: typeof AppCampaignsCampaignIdRoute
+    }
+    '/_app/campaigns/$campaignId/content': {
+      id: '/_app/campaigns/$campaignId/content'
+      path: '/content'
+      fullPath: '/campaigns/$campaignId/content'
+      preLoaderRoute: typeof AppCampaignsCampaignIdContentRouteImport
+      parentRoute: typeof AppCampaignsCampaignIdRoute
+    }
+    '/_app/campaigns/$campaignId/review': {
+      id: '/_app/campaigns/$campaignId/review'
+      path: '/review'
+      fullPath: '/campaigns/$campaignId/review'
+      preLoaderRoute: typeof AppCampaignsCampaignIdReviewRouteImport
+      parentRoute: typeof AppCampaignsCampaignIdRoute
+    }
     '/api/domain-connect/templates/$serviceId': {
       id: '/api/domain-connect/templates/$serviceId'
       path: '/api/domain-connect/templates/$serviceId'
@@ -840,18 +1011,56 @@ const AppAudiencesRouteWithChildren = AppAudiencesRoute._addFileChildren(
   AppAudiencesRouteChildren,
 )
 
+interface AppCampaignsCampaignIdRouteChildren {
+  AppCampaignsCampaignIdAudienceRoute: typeof AppCampaignsCampaignIdAudienceRoute
+  AppCampaignsCampaignIdContentRoute: typeof AppCampaignsCampaignIdContentRoute
+  AppCampaignsCampaignIdReviewRoute: typeof AppCampaignsCampaignIdReviewRoute
+  AppCampaignsCampaignIdIndexRoute: typeof AppCampaignsCampaignIdIndexRoute
+}
+
+const AppCampaignsCampaignIdRouteChildren: AppCampaignsCampaignIdRouteChildren =
+  {
+    AppCampaignsCampaignIdAudienceRoute: AppCampaignsCampaignIdAudienceRoute,
+    AppCampaignsCampaignIdContentRoute: AppCampaignsCampaignIdContentRoute,
+    AppCampaignsCampaignIdReviewRoute: AppCampaignsCampaignIdReviewRoute,
+    AppCampaignsCampaignIdIndexRoute: AppCampaignsCampaignIdIndexRoute,
+  }
+
+const AppCampaignsCampaignIdRouteWithChildren =
+  AppCampaignsCampaignIdRoute._addFileChildren(
+    AppCampaignsCampaignIdRouteChildren,
+  )
+
 interface AppCampaignsRouteChildren {
-  AppCampaignsCampaignIdRoute: typeof AppCampaignsCampaignIdRoute
+  AppCampaignsCampaignIdRoute: typeof AppCampaignsCampaignIdRouteWithChildren
+  AppCampaignsNewRoute: typeof AppCampaignsNewRoute
   AppCampaignsIndexRoute: typeof AppCampaignsIndexRoute
 }
 
 const AppCampaignsRouteChildren: AppCampaignsRouteChildren = {
-  AppCampaignsCampaignIdRoute: AppCampaignsCampaignIdRoute,
+  AppCampaignsCampaignIdRoute: AppCampaignsCampaignIdRouteWithChildren,
+  AppCampaignsNewRoute: AppCampaignsNewRoute,
   AppCampaignsIndexRoute: AppCampaignsIndexRoute,
 }
 
 const AppCampaignsRouteWithChildren = AppCampaignsRoute._addFileChildren(
   AppCampaignsRouteChildren,
+)
+
+interface AppTemplatesRouteChildren {
+  AppTemplatesTemplateIdRoute: typeof AppTemplatesTemplateIdRoute
+  AppTemplatesNewRoute: typeof AppTemplatesNewRoute
+  AppTemplatesIndexRoute: typeof AppTemplatesIndexRoute
+}
+
+const AppTemplatesRouteChildren: AppTemplatesRouteChildren = {
+  AppTemplatesTemplateIdRoute: AppTemplatesTemplateIdRoute,
+  AppTemplatesNewRoute: AppTemplatesNewRoute,
+  AppTemplatesIndexRoute: AppTemplatesIndexRoute,
+}
+
+const AppTemplatesRouteWithChildren = AppTemplatesRoute._addFileChildren(
+  AppTemplatesRouteChildren,
 )
 
 interface AppRouteChildren {
@@ -862,6 +1071,7 @@ interface AppRouteChildren {
   AppOnboardingRoute: typeof AppOnboardingRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSitePasswordRoute: typeof AppSitePasswordRoute
+  AppTemplatesRoute: typeof AppTemplatesRouteWithChildren
   AppIndexRoute: typeof AppIndexRoute
 }
 
@@ -873,6 +1083,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppOnboardingRoute: AppOnboardingRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSitePasswordRoute: AppSitePasswordRoute,
+  AppTemplatesRoute: AppTemplatesRouteWithChildren,
   AppIndexRoute: AppIndexRoute,
 }
 

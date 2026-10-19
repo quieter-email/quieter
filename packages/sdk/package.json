@@ -41,6 +41,7 @@
     "@react-email/render": "^2.1.0",
     "@types/react": "catalog:",
     "react": "catalog:",
+    "react-email": "^6.11.3",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

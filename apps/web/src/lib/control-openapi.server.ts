@@ -5,7 +5,7 @@ export const controlOpenApiPaths = {
   "/api/v1/control": {
     post: {
       description:
-        "Organization-bound audience and campaign operations. The API key must have the operation's explicit permission. Organization identity comes from the authenticated key. Transactional-only keys have no control access. All operations reuse the app's authorization, consent, suppression, and history services.",
+        "Organization-bound audience, template, and campaign operations. The API key must have the operation's explicit permission. Organization identity comes from the authenticated key. Transactional-only keys have no control access. All operations reuse the app's authorization, validation, consent, suppression, and history services.",
       operationId: "controlOperation",
       requestBody: {
         content: {
@@ -61,20 +61,20 @@ export const controlOpenApiPaths = {
         "429": { description: "Rate limit reached." },
       },
       security: [{ organizationApiKey: [] }],
-      summary: "Manage audiences and campaigns",
+      summary: "Manage audiences, templates, and campaigns",
     },
   },
   "/api/v1/control/mcp": {
     post: {
       description:
-        "Streamable HTTP MCP with tools discovered from the authenticated key's audience and campaign permissions. Uses the same operation contracts as /api/v1/control.",
+        "Streamable HTTP MCP with tools discovered from the authenticated key's audience, template, and campaign permissions. Uses the same operation contracts as /api/v1/control.",
       responses: {
         "200": { description: "MCP response." },
         "401": { description: "Invalid API key." },
         "403": { description: "No management permissions." },
       },
       security: [{ organizationApiKey: [] }],
-      summary: "Audience and campaign MCP",
+      summary: "Audience, template, and campaign MCP",
     },
   },
 };

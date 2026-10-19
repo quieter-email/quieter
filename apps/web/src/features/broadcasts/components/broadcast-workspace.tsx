@@ -3,9 +3,11 @@ import {
   MailSend02Icon,
   Menu01Icon,
   UserGroupIcon,
+  NoteEditIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, LinkButton } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
   Select,
@@ -44,7 +46,7 @@ export const BroadcastWorkspace = ({
 }: {
   children: ReactNode;
   organizationId?: string;
-  section: "audiences" | "campaigns";
+  section: "audiences" | "campaigns" | "templates";
 }) => {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -123,7 +125,11 @@ export const BroadcastWorkspace = ({
                     close?.();
                     void navigate({
                       search: { organizationId: value },
-                      to: section === "audiences" ? "/audiences" : "/campaigns",
+                      to: {
+                        audiences: "/audiences",
+                        campaigns: "/campaigns",
+                        templates: "/templates",
+                      }[section],
                     });
                   }
                 }}
@@ -159,6 +165,20 @@ export const BroadcastWorkspace = ({
                 Audiences
               </LinkButton>
               <LinkButton
+                aria-current={section === "templates" ? "page" : undefined}
+                onClick={close}
+                search={{ organizationId }}
+                to="/templates"
+                variant={section === "templates" ? "secondary" : "ghost"}
+              >
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-4"
+                  icon={NoteEditIcon}
+                />
+                Templates
+              </LinkButton>
+              <LinkButton
                 aria-current={section === "campaigns" ? "page" : undefined}
                 onClick={close}
                 search={{ organizationId }}
@@ -173,12 +193,8 @@ export const BroadcastWorkspace = ({
                 Campaigns
               </LinkButton>
             </nav>
-            <p className="mt-auto text-caption/5 text-muted-fg">
+            <p className="mt-auto text-caption text-muted-fg">
               {team?.name ?? "Your team"}
-              <br />
-              {canManage
-                ? "Manage contacts and send campaigns."
-                : "View contacts and campaign results."}
             </p>
           </div>
         )}
@@ -204,7 +220,12 @@ export const BroadcastWorkspace = ({
             </IconButtonTooltip>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-240 space-y-8 px-5 py-8 md:px-8 md:py-14">
+            <div
+              className={cn("mx-auto w-full px-5 py-6 md:px-7", {
+                "max-w-240 space-y-8 md:py-14": section === "audiences",
+                "max-w-440": section !== "audiences",
+              })}
+            >
               {content}
             </div>
           </div>

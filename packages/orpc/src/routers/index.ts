@@ -80,6 +80,10 @@ export const appRouter = {
         })
       )
   ),
+  templates: lazy(async () => {
+    const { templatesRouter } = await import("./templates");
+    return { default: templatesRouter };
+  }),
 };
 
 export type AppRouter = typeof appRouter;

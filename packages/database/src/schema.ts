@@ -4,6 +4,8 @@ import type {
   DeliveryStatus,
   RecipientSuppression,
 } from "@quieter/mail/delivery";
+import type { EmailContent } from "@quieter/mail/email-design";
+import type { EmailTemplate } from "@quieter/mail/templates";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -2251,12 +2253,62 @@ export const organizationApiMailAttachment = pgTable(
   ]
 );
 
+export const organizationEmailTemplate = pgTable(
+  "organizationEmailTemplate",
+  {
+    archivedAt: timestamp("archivedAt"),
+    content: jsonb("content").$type<EmailContent>().notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    subject: text("subject").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("organization_email_template_list_idx").on(
+      table.organizationId,
+      table.archivedAt,
+      table.updatedAt
+    ),
+  ]
+);
+
+export const organizationTemplateOperation = pgTable(
+  "organizationTemplateOperation",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    idempotencyKey: text("idempotencyKey").notNull(),
+    inputHash: text("inputHash").notNull(),
+    operation: text("operation").$type<"create" | "duplicate">().notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    result: jsonb("result").$type<EmailTemplate>(),
+  },
+  (table) => [
+    unique("organization_template_operation_key_unique").on(
+      table.organizationId,
+      table.idempotencyKey
+    ),
+    check(
+      "organization_template_operation_type_check",
+      sql`${table.operation} in ('create', 'duplicate')`
+    ),
+  ]
+);
+
 export const organizationCampaign = pgTable(
   "organizationCampaign",
   {
     audienceId: text("audienceId").notNull(),
+    content: jsonb("content").$type<EmailContent>(),
     createdAt: timestamp("createdAt").notNull(),
     from: text("from").notNull(),
+    html: text("html"),
     id: text("id").primaryKey(),
     leaseExpiresAt: timestamp("leaseExpiresAt"),
     leaseToken: text("leaseToken"),

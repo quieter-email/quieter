@@ -359,6 +359,23 @@ const SidebarInboxSection = ({
               />
               Campaigns
             </LinkButton>
+            <LinkButton
+              // oxlint-disable-next-line shadcn/no-restyle -- Match the surrounding sidebar navigation rows.
+              className="w-full justify-start gap-3 px-3"
+              onClick={onRequestClose}
+              search={{ organizationId }}
+              size="sm"
+              to="/templates"
+              variant="ghost"
+            >
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4"
+                icon={NoteEditIcon}
+                strokeWidth={1.5}
+              />
+              Templates
+            </LinkButton>
           </nav>
         )}
         {!allInboxesActive &&

@@ -23,6 +23,10 @@ import type {
   campaignSendInputSchema,
   campaignListInputSchema,
 } from "@quieter/mail/campaigns";
+import {
+  appendEmailUnsubscribe,
+  renderEmailContent,
+} from "@quieter/mail/email-design";
 import { sendMessageInputSchema } from "@quieter/mail/send";
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
@@ -44,6 +48,7 @@ type CampaignInput = { campaignId: string; organizationId: string };
 const serializeCampaign = (row: CampaignRow) =>
   campaignSchema.parse({
     ...row,
+    content: row.content ?? { kind: "text", text: row.text },
     createdAt: row.createdAt.toISOString(),
     sentAt: row.sentAt?.toISOString() ?? null,
     updatedAt: row.updatedAt.toISOString(),
@@ -102,6 +107,8 @@ export const createCampaign = async (
   input: z.infer<typeof campaignCreateInputSchema>
 ) => {
   await assertGrowthAccess(actor, "campaigns:write");
+  const content = input.content ?? { kind: "text" as const, text: input.text };
+  const rendered = renderEmailContent(content);
   return await db.transaction(async (tx) => {
     await lockAudienceForSnapshot(tx, actor.organizationId, input.audienceId);
     await Promise.all(
@@ -119,9 +126,12 @@ export const createCampaign = async (
       .insert(organizationCampaign)
       .values({
         ...input,
+        content,
         createdAt: now,
+        html: rendered.html,
         id: randomUUID(),
         organizationId: actor.organizationId,
+        text: rendered.text,
         updatedAt: now,
       })
       .returning();
@@ -137,6 +147,8 @@ export const updateCampaign = async (
   input: z.infer<typeof campaignUpdateInputSchema>
 ) => {
   await assertGrowthAccess(actor, "campaigns:write");
+  const content = input.content ?? { kind: "text" as const, text: input.text };
+  const rendered = renderEmailContent(content);
   return await db.transaction(async (tx) => {
     await lockAudienceForSnapshot(tx, actor.organizationId, input.audienceId);
     await Promise.all(
@@ -153,12 +165,16 @@ export const updateCampaign = async (
       .update(organizationCampaign)
       .set({
         audienceId: input.audienceId,
+        content,
         from: input.from,
+        html: rendered.html,
         name: input.name,
         segmentIds: input.segmentIds,
         subject: input.subject,
-        text: input.text,
-        updatedAt: new Date(),
+        text: rendered.text,
+        updatedAt: new Date(
+          Math.max(Date.now(), new Date(input.expectedUpdatedAt).getTime() + 1)
+        ),
       })
       .where(
         and(
@@ -268,8 +284,17 @@ export const previewCampaign = async (
     attachmentSizeBytes: 0,
     bcc: [],
     cc: [],
+    html:
+      campaign.html === null
+        ? undefined
+        : appendEmailUnsubscribe(
+            campaign.html,
+            `https://unsubscribe.example/api/v1/unsubscribe/${"x".repeat(43)}`
+          ),
     subject: campaign.subject,
-    text: campaign.text,
+    text:
+      `${campaign.text}\n\nUnsubscribe from this audience: ` +
+      `https://unsubscribe.example/api/v1/unsubscribe/${"x".repeat(43)}`,
     to: ["estimate@example.com"],
   });
   return {
@@ -311,6 +336,7 @@ export const sendCampaign = async (
   }
   sendMessageInputSchema.parse({
     from: campaign.from,
+    html: campaign.html ?? undefined,
     subject: campaign.subject,
     text: campaign.text,
     to: ["validation@example.com"],

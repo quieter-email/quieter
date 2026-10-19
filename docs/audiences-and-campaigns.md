@@ -1,6 +1,6 @@
 # Audiences and broadcast campaigns
 
-Organization contacts are canonical email identities. Audience memberships hold subscription state, tags, consent source, and append-only lifecycle history. Campaigns store saved text drafts and durable recipient snapshots. The app, control API, TypeScript SDK, and management MCP use the same contracts in `packages/mail/src/audiences.ts`, `campaigns.ts`, and `control.ts`.
+Organization contacts are canonical email identities. Audience memberships hold subscription state, tags, consent source, and append-only lifecycle history. Campaigns store saved text, visual-design, or imported-HTML drafts and durable recipient snapshots. The app, control API, TypeScript SDK, and management MCP use the same contracts in `packages/mail/src/audiences.ts`, `campaigns.ts`, `templates.ts`, and `control.ts`. See [Visual email builder](visual-email-builder.md) for templates, React Email workflows, and the dedicated content/audience/review pages.
 
 ## Access and routes
 

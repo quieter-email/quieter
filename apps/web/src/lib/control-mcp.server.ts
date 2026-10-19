@@ -93,6 +93,8 @@ const handler = createMcpHandler(
             "campaigns:read",
             "campaigns:write",
             "campaigns:send",
+            "templates:read",
+            "templates:write",
           ])
         ),
       })
