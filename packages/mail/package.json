@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./control": "./src/control.ts",
+    "./audiences": "./src/audiences.ts",
+    "./campaigns": "./src/campaigns.ts",
     "./daily-brief": "./src/daily-brief.ts",
     "./delivery": "./src/delivery.ts",
     "./live-sync": "./src/live-sync.ts",

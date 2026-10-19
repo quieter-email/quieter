@@ -23,6 +23,7 @@
     "./composer-chrome": "./src/components/ui/composer-chrome.tsx",
     "./command-menu": "./src/components/ui/command-menu.tsx",
     "./context-menu": "./src/components/ui/context-menu.tsx",
+    "./content-section": "./src/components/ui/content-section.tsx",
     "./dialog": "./src/components/ui/dialog.tsx",
     "./drawer": "./src/components/ui/drawer.tsx",
     "./dropdown-menu": "./src/components/ui/dropdown-menu.tsx",

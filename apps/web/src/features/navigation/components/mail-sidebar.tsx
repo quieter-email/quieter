@@ -7,6 +7,8 @@ import {
   HelpCircleIcon,
   NoteEditIcon,
   Settings01Icon,
+  MailSend02Icon,
+  UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, LinkButton } from "@quieter/ui/button";
@@ -48,6 +50,7 @@ type MailSidebarProps = {
   groups: {
     id: string;
     kind: "division" | "organization" | "unassigned";
+    organizationId?: string;
     mailboxes: {
       connectionStatus: "connected" | "needs_reconnect";
       divisionName?: string | null;
@@ -209,6 +212,9 @@ const SidebarInboxSection = ({
   const selectedMailboxGrantRole = groups
     .flatMap((group) => group.mailboxes)
     .find((mailbox) => mailbox.id === selectedMailboxId)?.grantRole;
+  const organizationId = groups.find((group) =>
+    group.mailboxes.some((mailbox) => mailbox.id === selectedMailboxId)
+  )?.organizationId;
   const handleComposeNewMail = () => {
     onComposeNewMail();
     onRequestClose?.();
@@ -314,6 +320,47 @@ const SidebarInboxSection = ({
             </SidebarNavItem>
           </SidebarEntrance>
         ) : null}
+        {embedded === true ? null : (
+          <nav
+            aria-label="Broadcasts"
+            className="mt-3 grid gap-1 border-t border-border/60 pt-3"
+          >
+            <LinkButton
+              // oxlint-disable-next-line shadcn/no-restyle -- Match the surrounding sidebar navigation rows.
+              className="w-full justify-start gap-3 px-3"
+              onClick={onRequestClose}
+              search={{ organizationId }}
+              size="sm"
+              to="/audiences"
+              variant="ghost"
+            >
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4"
+                icon={UserGroupIcon}
+                strokeWidth={1.5}
+              />
+              Audiences
+            </LinkButton>
+            <LinkButton
+              // oxlint-disable-next-line shadcn/no-restyle -- Match the surrounding sidebar navigation rows.
+              className="w-full justify-start gap-3 px-3"
+              onClick={onRequestClose}
+              search={{ organizationId }}
+              size="sm"
+              to="/campaigns"
+              variant="ghost"
+            >
+              <HugeiconsIcon
+                aria-hidden
+                className="size-4"
+                icon={MailSend02Icon}
+                strokeWidth={1.5}
+              />
+              Campaigns
+            </LinkButton>
+          </nav>
+        )}
         {!allInboxesActive &&
         selectedMailboxProvider === "managed" &&
         selectedMailboxId ? (

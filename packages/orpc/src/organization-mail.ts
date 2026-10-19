@@ -24,6 +24,7 @@ export { sendMessageInputSchema } from "@quieter/mail/send";
 export type { SendMessageInput, SendMessageResult } from "@quieter/mail/send";
 
 export const sendOrganizationMailMessage = async (input: {
+  beforeSubmit?: (operationId: string) => Promise<void>;
   message: SendMessageInput;
   organizationId: string;
 }): Promise<SendMessageResult> => {
@@ -43,6 +44,7 @@ export const sendOrganizationMailMessage = async (input: {
   const parsed = await parseRawMailMessage(built.raw);
   try {
     const result = await sendPreparedMail({
+      beforeSubmit: input.beforeSubmit,
       id,
       idempotencyKey: message.idempotencyKey ?? id,
       messageHeaderId,

@@ -1,3 +1,5 @@
+import { controlOpenApiPaths } from "./control-openapi.server";
+
 export const openApiDocument = {
   components: {
     schemas: {
@@ -240,6 +242,7 @@ export const openApiDocument = {
   },
   openapi: "3.1.0",
   paths: {
+    ...controlOpenApiPaths,
     "/api/v1/messages/{messageId}": {
       get: {
         description:

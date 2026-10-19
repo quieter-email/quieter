@@ -8,6 +8,7 @@ import type {
   QuieterSendResult,
 } from "./index";
 
+// oxlint-disable-next-line oxc/no-barrel-file -- The React entry preserves the core SDK exports.
 export * from "./index";
 export type QuieterSendInput =
   | CoreSendInput

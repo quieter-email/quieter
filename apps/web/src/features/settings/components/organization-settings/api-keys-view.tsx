@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
+import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
 import {
   Dialog,
@@ -55,6 +56,7 @@ import { z } from "zod";
 import { runDetached } from "#/features/settings/components/mailboxes-settings-shared";
 import { authClient } from "#/lib/auth";
 import { toastError } from "#/lib/error-toast";
+import { rpc } from "#/lib/orpc";
 import { rethrowClassified } from "#/lib/orpc-errors";
 
 import {
@@ -81,11 +83,14 @@ type OrganizationApiKey = {
   lastRequest: Date | null;
   name: string | null;
   prefix: string | null;
+  permissions?: Record<string, string[]> | null;
   start: string | null;
 };
 
-const getMutationErrorMessage = (error: unknown, fallback: string) =>
-  error instanceof Error ? error.message : fallback;
+type ApiKeyPermissions = {
+  audiences: ("read" | "write")[];
+  campaigns: ("read" | "write" | "send")[];
+};
 
 const DEFAULT_API_KEY_PREFIX = "quieter_";
 
@@ -131,22 +136,6 @@ const formatApiKeyPreview = (apiKey: OrganizationApiKey) => {
 
 const formatApiKeyMeta = (apiKey: OrganizationApiKey) =>
   `Expires ${formatApiKeyDate(apiKey.expiresAt)}, last used ${formatApiKeyDate(apiKey.lastRequest)}`;
-
-const IMMEDIATE_EXPIRES_IN_SECONDS = 1;
-
-const remainingExpiresInSeconds = (expiresAt: Date | string | null) => {
-  if (expiresAt === null) {
-    return null;
-  }
-
-  const date = expiresAt instanceof Date ? expiresAt : new Date(expiresAt);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  const seconds = Math.floor((date.getTime() - Date.now()) / 1000);
-  return seconds > 0 ? seconds : IMMEDIATE_EXPIRES_IN_SECONDS;
-};
 
 const isExpirationValue = (value: string | null): value is ExpirationValue =>
   expirationOptions.some((option) => option.value === value);
@@ -226,35 +215,117 @@ const CreatedApiKeyReveal = ({
   </>
 );
 
+const ApiKeyPermissionFields = ({
+  permissions,
+  onChange,
+}: {
+  permissions: ApiKeyPermissions;
+  onChange: (value: ApiKeyPermissions) => void;
+}) => (
+  <fieldset className="space-y-3">
+    <legend className="text-body font-medium text-fg">Permissions</legend>
+    <p className="text-caption/5 text-muted-fg">
+      Transactional sending is included. Choose any additional audience or
+      campaign access this key needs.
+    </p>
+    <div className="space-y-2">
+      <p className="text-caption text-muted-fg">Audiences</p>
+      {(
+        [
+          { label: "Read audiences and contacts", permission: "read" },
+          { label: "Manage audiences and contacts", permission: "write" },
+        ] as const
+      ).map(({ permission, label }) => (
+        <label
+          className="flex items-center gap-2 text-body"
+          htmlFor={`api-key-audiences-${permission}`}
+          key={permission}
+        >
+          <Checkbox
+            checked={permissions.audiences.includes(permission)}
+            id={`api-key-audiences-${permission}`}
+            onCheckedChange={(checked) => {
+              onChange({
+                ...permissions,
+                audiences: checked
+                  ? [...permissions.audiences, permission]
+                  : permissions.audiences.filter(
+                      (value) => value !== permission
+                    ),
+              });
+            }}
+          >
+            <CheckboxIndicator />
+          </Checkbox>
+          {label}
+        </label>
+      ))}
+    </div>
+    <div className="space-y-2">
+      <p className="text-caption text-muted-fg">Campaigns</p>
+      {(
+        [
+          { label: "Read campaigns and results", permission: "read" },
+          { label: "Manage campaign drafts", permission: "write" },
+          { label: "Send and control campaigns", permission: "send" },
+        ] as const
+      ).map(({ permission, label }) => (
+        <label
+          className="flex items-center gap-2 text-body"
+          htmlFor={`api-key-campaigns-${permission}`}
+          key={permission}
+        >
+          <Checkbox
+            checked={permissions.campaigns.includes(permission)}
+            id={`api-key-campaigns-${permission}`}
+            onCheckedChange={(checked) => {
+              onChange({
+                ...permissions,
+                campaigns: checked
+                  ? [...permissions.campaigns, permission]
+                  : permissions.campaigns.filter(
+                      (value) => value !== permission
+                    ),
+              });
+            }}
+          >
+            <CheckboxIndicator />
+          </Checkbox>
+          {label}
+        </label>
+      ))}
+    </div>
+  </fieldset>
+);
+
 const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
   const [open, setOpen] = useState(false);
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<ApiKeyPermissions>({
+    audiences: [],
+    campaigns: [],
+  });
   const queryClient = useQueryClient();
   const createMutation = useMutation({
     mutationFn: async (input: {
       expiresIn: number | null;
       name: string;
       organizationId: string;
+      permissions: ApiKeyPermissions;
     }) => {
-      const response = await authClient.apiKey.create({
-        configId: ORGANIZATION_API_KEY_CONFIG_ID,
+      const response = await rpc.organizationApiKeys.create({
         expiresIn: input.expiresIn,
         name: input.name,
         organizationId: input.organizationId,
-        prefix: DEFAULT_API_KEY_PREFIX,
+        permissions: input.permissions,
       });
-
-      if (response.error) {
-        rethrowClassified(response.error, "Could not create API key.");
-      }
-
-      const createdApiKey = response.data?.key;
+      const createdApiKey = response.key;
       if (createdApiKey === undefined || createdApiKey === "") {
         throw new Error("Could not read the created API key.");
       }
 
-      return response.data;
+      return response;
     },
     mutationKey: ["organization-api-keys", organizationId, "create"],
     onSuccess: async (data) => {
@@ -283,11 +354,14 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
           expiresIn: expiration?.seconds ?? null,
           name: value.name.trim(),
           organizationId,
+          permissions,
         });
       } catch (mutationError: unknown) {
-        setSubmitError(
-          getMutationErrorMessage(mutationError, "Could not create API key.")
-        );
+        toastError(mutationError, {
+          boundary: "organization-api-keys",
+          fallback: "Could not create API key. Please try again.",
+        });
+        setSubmitError("Could not create API key. Please try again.");
       }
     },
     validationLogic: revalidateLogic(),
@@ -305,6 +379,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
   const resetDialog = () => {
     setCreatedKey(null);
     setSubmitError(null);
+    setPermissions({ audiences: [], campaigns: [] });
     form.reset({
       expiration: "one_month",
       name: "",
@@ -428,6 +503,11 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                   )}
                 </form.Field>
 
+                <ApiKeyPermissionFields
+                  permissions={permissions}
+                  onChange={setPermissions}
+                />
+
                 {submitError === null ? null : (
                   <Text tone="destructive">{submitError}</Text>
                 )}
@@ -486,43 +566,11 @@ const ResetApiKeyDialog = ({
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const resetMutation = useMutation({
-    mutationFn: async () => {
-      const createResponse = await authClient.apiKey.create({
-        configId: ORGANIZATION_API_KEY_CONFIG_ID,
-        expiresIn: remainingExpiresInSeconds(apiKey.expiresAt),
-        name: (() => {
-          const trimmed = apiKey.name?.trim() ?? "";
-          return trimmed === "" ? "API key" : trimmed;
-        })(),
-        organizationId,
-        prefix: (() => {
-          const trimmed = apiKey.prefix?.trim() ?? "";
-          return trimmed === "" ? DEFAULT_API_KEY_PREFIX : trimmed;
-        })(),
-      });
-
-      if (createResponse.error) {
-        rethrowClassified(
-          createResponse.error,
-          "Could not create the replacement key."
-        );
-      }
-
-      const replacementKey = createResponse.data?.key;
-      if (replacementKey === undefined || replacementKey === "") {
-        throw new Error("Could not read the replacement API key.");
-      }
-
-      const deleteResponse = await authClient.apiKey.delete({
-        configId: ORGANIZATION_API_KEY_CONFIG_ID,
+    mutationFn: async () =>
+      await rpc.organizationApiKeys.rotate({
         keyId: apiKey.id,
-      });
-
-      return {
-        cleanupFailed: Boolean(deleteResponse.error),
-        key: replacementKey,
-      };
-    },
+        organizationId,
+      }),
     mutationKey: ["organization-api-keys", organizationId, apiKey.id, "reset"],
     onError: async (error: unknown) => {
       try {
@@ -861,6 +909,15 @@ const ApiKeysListSection = ({
         >
           <span className="font-mono">{formatApiKeyPreview(apiKey)}</span>
           {`. ${billingAccess === "paused" ? "Paused, subscription required" : formatApiKeyMeta(apiKey)}`}
+          <span className="mt-1 block">
+            Transactional sending
+            {Object.entries(apiKey.permissions ?? {}).map(
+              ([resource, permissions]) =>
+                permissions.length > 0
+                  ? `, ${resource}: ${permissions.join(", ")}`
+                  : ""
+            )}
+          </span>
         </SettingsRow>
       ))}
     </SettingsRows>

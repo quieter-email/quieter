@@ -142,6 +142,19 @@ export default {
         return requestErrorResponse(error, "local-daily-briefs");
       }
     }
+    if (url.pathname === "/__dev/campaigns") {
+      try {
+        const { processCampaignBatch } =
+          await import("@quieter/orpc/campaigns/processor");
+        return Response.json(
+          await withRequestDatabaseClient(
+            async () => await processCampaignBatch({ dryRun: true })
+          )
+        );
+      } catch (error) {
+        return requestErrorResponse(error, "local-campaign-preview");
+      }
+    }
     if (url.pathname === "/__dev/mail-recovery") {
       const { cleanupRateLimitBuckets } =
         await import("@quieter/orpc/abuse-protection");

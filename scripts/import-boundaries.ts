@@ -3,6 +3,8 @@ import path from "node:path";
 import { parseSync, Visitor } from "oxc-parser";
 
 const awsOrpcEntrypoints = new Set([
+  "@quieter/orpc/campaigns/processor",
+  "@quieter/orpc/mail-send",
   "@quieter/orpc/managed-mail/ingestion",
   "@quieter/orpc/organization-mail-delivery",
 ]);

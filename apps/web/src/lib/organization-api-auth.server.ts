@@ -1,6 +1,15 @@
-export const getOrganizationApiKeyOrganizationId = async (
+import type { GrowthScope } from "@quieter/orpc/growth-access";
+import { z } from "zod";
+
+export type OrganizationApiKeyAccess = {
+  organizationId: string;
+  apiKeyId: string;
+  scopes: GrowthScope[];
+};
+
+export const getOrganizationApiKeyAccess = async (
   request: Request
-): Promise<string | null> => {
+): Promise<OrganizationApiKeyAccess | null> => {
   const authorization = request.headers.get("authorization")?.trim();
   if (
     authorization === undefined ||
@@ -46,5 +55,36 @@ export const getOrganizationApiKeyOrganizationId = async (
     return null;
   }
 
-  return verifiedApiKey.key.referenceId;
+  const permissions = z
+    .record(z.string(), z.array(z.string()))
+    .safeParse(verifiedApiKey.key.permissions).data;
+  const scopes: GrowthScope[] = [];
+  for (const scope of [
+    "audiences:read",
+    "audiences:write",
+    "campaigns:read",
+    "campaigns:write",
+    "campaigns:send",
+  ] satisfies GrowthScope[]) {
+    const [resource, action] = scope.split(":");
+    if (
+      resource !== undefined &&
+      action !== undefined &&
+      permissions?.[resource]?.includes(action) === true
+    ) {
+      scopes.push(scope);
+    }
+  }
+  return {
+    apiKeyId: verifiedApiKey.key.id,
+    organizationId: verifiedApiKey.key.referenceId,
+    scopes,
+  };
+};
+
+export const getOrganizationApiKeyOrganizationId = async (
+  request: Request
+): Promise<string | null> => {
+  const access = await getOrganizationApiKeyAccess(request);
+  return access?.organizationId ?? null;
 };

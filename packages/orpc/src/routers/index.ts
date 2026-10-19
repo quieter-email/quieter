@@ -5,6 +5,10 @@ export const appRouter = {
     async () =>
       await import("./ai").then(({ aiRouter }) => ({ default: aiRouter }))
   ),
+  audiences: lazy(async () => {
+    const { audiencesRouter } = await import("./audiences");
+    return { default: audiencesRouter };
+  }),
   auth: lazy(
     async () =>
       await import("./auth").then(({ authRouter }) => ({ default: authRouter }))
@@ -15,6 +19,10 @@ export const appRouter = {
         default: billingRouter,
       }))
   ),
+  campaigns: lazy(async () => {
+    const { campaignsRouter } = await import("./campaigns");
+    return { default: campaignsRouter };
+  }),
   chat: lazy(
     async () =>
       await import("./chat").then(({ chatRouter }) => ({ default: chatRouter }))
@@ -59,6 +67,11 @@ export const appRouter = {
         default: organizationRouter,
       }))
   ),
+  organizationApiKeys: lazy(async () => {
+    const { organizationApiKeysRouter } =
+      await import("./organization-api-keys");
+    return { default: organizationApiKeysRouter };
+  }),
   organizationMailUsage: lazy(
     async () =>
       await import("./organization-mail-usage").then(

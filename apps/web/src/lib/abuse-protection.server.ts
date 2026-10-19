@@ -15,7 +15,14 @@ const getRateLimitPolicy = (pathname: string) => {
   if (pathname === "/api/waitlist") {
     return { group: "waitlist", limit: 5, windowMs: 60 * 60_000 };
   }
-  if (pathname === "/api/v1/send" || pathname === "/api/v1/mcp") {
+  if (
+    [
+      "/api/v1/send",
+      "/api/v1/mcp",
+      "/api/v1/control",
+      "/api/v1/control/mcp",
+    ].includes(pathname)
+  ) {
     return { group: "send", limit: 60, windowMs: 60_000 };
   }
   if (pathname.includes("/chat")) {
