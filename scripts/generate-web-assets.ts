@@ -40,43 +40,56 @@ const pngChunk = (kind: string, data: Buffer) => {
   return chunk;
 };
 
-// Still frames of curved light fields, with spatial grain and a quiet center for the artwork.
+// Diffuse light pools with spatial grain and a quiet center for the artwork.
 const shader = (width: number, height: number, treatment: Treatment) => {
   const scanlines = Buffer.alloc((width * 3 + 1) * height);
+  const { phase, mode } = treatment;
+  const offsetX = Math.sin(phase) * 0.28;
+  const offsetY = Math.cos(phase * 1.3) * 0.18;
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const u = (x / width - 0.5) * 2;
       const v = (y / height - 0.5) * 2;
-      const { phase, mode } = treatment;
       const curve = v + 0.24 * u - 0.38 * Math.sin(u * 2 + phase) - 0.18;
-      const fold = Math.exp(-(curve * curve) / 0.018);
       const broad = Math.exp(-(curve * curve) / 0.2);
       const glow = Math.exp(-((u + 0.75) ** 2 / 0.8 + (v - 0.5) ** 2 / 0.65));
       const quiet = 1 - 0.76 * Math.exp(-((u * u) / 0.42 + (v * v) / 0.22));
+      const lowerLight = Math.exp(
+        -(
+          (u + 0.72 - offsetX) ** 2 / 1.05 +
+          (v - 0.78 + offsetY + u * 0.16) ** 2 / 0.42
+        )
+      );
+      const upperLight = Math.exp(
+        -(
+          (u - 0.78 + offsetY) ** 2 / 0.72 +
+          (v + 0.68 - offsetX * 0.6 - u * 0.12) ** 2 / 0.58
+        )
+      );
+      const haze = Math.exp(
+        -((u + 0.12 + offsetY) ** 2 / 1.8 + (v - 0.12) ** 2 / 1.3)
+      );
       let highlight = 0;
       let tint = 0;
-      if (mode === "fold") {
-        highlight = (fold * 0.58 + broad * 0.18) * quiet;
-        tint = glow * 0.62;
+      if (mode === "glow") {
+        highlight =
+          (lowerLight * 0.82 + upperLight * 0.64 + haze * 0.1) * quiet;
+        tint = lowerLight * 0.24 + upperLight * 0.18 + haze * 0.5;
       } else if (mode === "mist") {
         highlight = Math.exp(-((u - 0.3) ** 2 + (v + 0.55) ** 2) / 0.85) * 0.9;
         tint = (broad * 0.36 + glow * 0.23) * quiet;
       } else if (mode === "metal") {
-        const stripe = v + 0.54 * u + 0.17 * Math.sin(u * 3 + phase);
-        highlight = Math.exp(-((stripe - 0.47) ** 2) / 0.032) * 0.68 * quiet;
-        tint = broad * 0.3;
-      } else if (mode === "caustic") {
-        const second = v - 0.43 * Math.sin(u * 2.7 + phase) + 0.3;
         highlight =
-          (Math.exp(-(curve * curve) / 0.003) +
-            Math.exp(-(second * second) / 0.005)) *
-          0.4 *
-          quiet;
-        tint = (broad + glow) * 0.24;
+          (lowerLight * 0.66 + upperLight * 0.42 + haze * 0.1) * quiet;
+        tint = haze * 0.3;
+      } else if (mode === "caustic") {
+        highlight =
+          (lowerLight * 0.48 + upperLight * 0.86 + haze * 0.08) * quiet;
+        tint = (lowerLight + haze) * 0.38;
       } else if (mode === "halo") {
-        const distance = Math.hypot(u * (width / height), v + 0.07);
-        highlight = Math.exp(-((distance - 0.7) ** 2) / 0.008) * 0.56;
-        tint = Math.exp(-((distance - 0.72) ** 2) / 0.065) * 0.65;
+        highlight =
+          (lowerLight * 0.32 + upperLight * 0.72 + haze * 0.14) * quiet;
+        tint = (upperLight * 0.4 + haze * 0.45) * quiet;
       }
       const random = Math.sin(x * 12.9898 + y * 78.233) * 43_758.5453;
       const grain =
