@@ -131,6 +131,8 @@ const dialogCloseButtonVariants = cva(
           "h-8 bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg",
         outline:
           "h-8 border border-border bg-bg-surface text-fg shadow-sm hover:bg-muted active:bg-muted/80",
+        secondary:
+          "h-8 bg-secondary text-secondary-fg shadow-sm hover:bg-secondary-hover active:bg-secondary-active",
       },
     },
   }
@@ -145,7 +147,7 @@ export const DialogCloseButton = ({
   // special-purpose treatments do not belong in dialog footers.
   variant?: Exclude<
     ButtonProps["variant"],
-    "card" | "chip" | "option" | "overlay" | "result" | "secondary"
+    "card" | "chip" | "option" | "overlay" | "result"
   >;
 }) => (
   <DialogPrimitive.Close

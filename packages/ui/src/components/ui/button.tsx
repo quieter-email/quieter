@@ -61,7 +61,7 @@ const buttonVariants = cva(
           "h-auto w-full justify-start bg-transparent py-4 text-left font-normal whitespace-normal text-muted-fg hover:bg-muted hover:text-fg data-[active=true]:bg-accent",
         // Quiet secondary action, e.g. the stop-response button.
         secondary:
-          "bg-muted text-fg shadow-sm hover:bg-control-hover active:bg-control-active",
+          "bg-secondary text-secondary-fg shadow-sm hover:bg-secondary-hover active:bg-secondary-active",
       },
     },
   }

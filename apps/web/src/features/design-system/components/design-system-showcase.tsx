@@ -75,7 +75,7 @@ const surfaceTokens = [
   { cls: "bg-bg", name: "bg", note: "sunken" },
   { cls: "bg-card", name: "card", note: "raised, both themes" },
   { cls: "bg-muted", name: "muted", note: "alias of control-hover" },
-  { cls: "bg-secondary", name: "secondary", note: "alias of control" },
+  { cls: "bg-secondary", name: "secondary", note: "secondary actions" },
   {
     cls: "bg-control",
     name: "control",
@@ -212,6 +212,9 @@ export const DesignSystemShowcase = () => {
         <Section title="Buttons">
           <Row label="Variants">
             <Button type="button">Primary</Button>
+            <Button type="button" variant="secondary">
+              Secondary
+            </Button>
             <Button type="button" variant="outline">
               Outline
             </Button>
@@ -275,7 +278,9 @@ export const DesignSystemShowcase = () => {
                   </DialogDescription>
                 </DialogHeader>
                 <DialogFooter fullWidth>
-                  <DialogCloseButton>Done</DialogCloseButton>
+                  <DialogCloseButton variant="secondary">
+                    Done
+                  </DialogCloseButton>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -291,7 +296,7 @@ export const DesignSystemShowcase = () => {
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter fullWidth>
-                  <AlertDialogCloseButton variant="default">
+                  <AlertDialogCloseButton variant="secondary">
                     Got it
                   </AlertDialogCloseButton>
                 </AlertDialogFooter>
@@ -309,7 +314,9 @@ export const DesignSystemShowcase = () => {
                   </DrawerDescription>
                 </DrawerHeader>
                 <DrawerFooter fullWidth>
-                  <DrawerCloseButton>Done</DrawerCloseButton>
+                  <DrawerCloseButton variant="secondary">
+                    Done
+                  </DrawerCloseButton>
                 </DrawerFooter>
               </DrawerContent>
             </Drawer>

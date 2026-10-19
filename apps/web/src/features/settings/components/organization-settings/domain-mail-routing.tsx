@@ -483,7 +483,7 @@ export const DomainCatchAllSection = ({
             />
           </DialogBody>
           <DialogFooter fullWidth>
-            <DialogCloseButton>Cancel</DialogCloseButton>
+            <DialogCloseButton variant="secondary">Cancel</DialogCloseButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
