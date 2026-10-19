@@ -19,19 +19,12 @@ import {
   ComposerFieldRow,
   ComposerFrame,
 } from "@quieter/ui/composer-chrome";
-import {
-  Field,
-  FieldControl,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from "@quieter/ui/field";
+import { Field, FieldControl, FieldError, FieldLabel } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
   Popover,
   PopoverClose,
   PopoverContent,
-  PopoverTitle,
   PopoverTrigger,
 } from "@quieter/ui/popover";
 import {
@@ -726,11 +719,12 @@ const ReadyComposeSurface = ({
                                         icon={ArrowDown01Icon}
                                       />
                                     </PopoverTrigger>
-                                    <PopoverContent align="start" size="sm">
+                                    <PopoverContent
+                                      align="start"
+                                      aria-label="Edit sender"
+                                      size="sm"
+                                    >
                                       <div className="flex flex-col gap-4">
-                                        <PopoverTitle>
-                                          Sender details
-                                        </PopoverTitle>
                                         {canSwitchSender ? (
                                           <Field>
                                             <FieldLabel>
@@ -846,10 +840,6 @@ const ReadyComposeSurface = ({
                                               placeholder={managedSender.name}
                                               value={senderField.state.value}
                                             />
-                                            <FieldDescription>
-                                              The name recipients see on this
-                                              message.
-                                            </FieldDescription>
                                             {error ? (
                                               <FieldError>
                                                 {error.message}
@@ -867,7 +857,7 @@ const ReadyComposeSurface = ({
                                               />
                                             }
                                           >
-                                            Done
+                                            Save
                                           </PopoverClose>
                                         </div>
                                       </div>
