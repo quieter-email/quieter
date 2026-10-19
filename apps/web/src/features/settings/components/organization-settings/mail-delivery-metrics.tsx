@@ -4,7 +4,6 @@ import { InformationCircleIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { BarChart } from "@quieter/ui/bar-chart";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import { Separator } from "@quieter/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
 
@@ -14,9 +13,9 @@ import { SettingsCard } from "../settings-layout";
 import type { MailDeliveryMetricsRange } from "./mail-delivery";
 
 const deliverySeries = [
-  { color: "var(--chart-3)", key: "sent", label: "Sent" },
-  { color: "var(--success)", key: "delivered", label: "Delivered" },
-  { color: "var(--warning)", key: "bounced", label: "Bounced" },
+  { color: "var(--q-blue)", key: "sent", label: "Sent" },
+  { color: "var(--q-green)", key: "delivered", label: "Delivered" },
+  { color: "var(--q-orange)", key: "bounced", label: "Bounced" },
 ];
 
 export const MailDeliveryMetrics = ({
@@ -91,47 +90,39 @@ export const MailDeliveryMetrics = ({
 
   return (
     <div className="flex flex-col gap-4">
-      <dl className="grid grid-cols-2 gap-3 @lg:grid-cols-4">
-        {stats.map((stat) => (
-          <SettingsCard className="flex flex-col gap-2 p-4" key={stat.label}>
-            <dt className="flex items-center justify-between gap-1 text-caption text-muted-fg">
-              {stat.label}
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      aria-label={`About ${stat.label.toLowerCase()}`}
-                      size="icon-xs"
-                      variant="ghost"
-                    />
-                  }
-                >
-                  <HugeiconsIcon icon={InformationCircleIcon} />
-                </TooltipTrigger>
-                <TooltipContent>{stat.hint}</TooltipContent>
-              </Tooltip>
-            </dt>
-            <dd className="flex flex-col gap-1.5">
-              <span
-                className={cn(
-                  "text-title-lg leading-none tracking-tight tabular-nums",
-                  {
-                    "text-success":
-                      stat.label === "Delivered" && stat.value > 0,
-                    "text-warning": stat.label === "Bounced" && stat.value > 0,
-                  }
-                )}
-              >
-                {stat.value.toLocaleString()}
-              </span>
-              <span className="text-micro text-muted-fg">{stat.note}</span>
-            </dd>
-          </SettingsCard>
-        ))}
-      </dl>
-
       <SettingsCard>
-        <div className="flex flex-col gap-6 p-4 @md:p-5">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-5 px-4 py-4 @md:px-6 @lg:grid-cols-4">
+          {stats.map((stat) => (
+            <div className="flex min-w-0 flex-col gap-2" key={stat.label}>
+              <dt className="flex items-center gap-1 text-caption text-muted-fg">
+                {stat.label}
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        aria-label={`About ${stat.label.toLowerCase()}`}
+                        size="icon-xs"
+                        variant="ghost"
+                      />
+                    }
+                  >
+                    <HugeiconsIcon icon={InformationCircleIcon} />
+                  </TooltipTrigger>
+                  <TooltipContent>{stat.hint}</TooltipContent>
+                </Tooltip>
+              </dt>
+              <dd className="flex flex-col gap-1.5">
+                <span className="text-title-lg leading-none tracking-tight text-fg tabular-nums">
+                  {stat.value.toLocaleString()}
+                </span>
+                <span className="text-micro text-muted-fg">{stat.note}</span>
+              </dd>
+            </div>
+          ))}
+        </dl>
+
+        <Separator />
+        <div className="flex flex-col gap-6 px-4 py-4 @md:px-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-body-sm text-fg">Daily activity</h2>
             <span className="text-micro text-muted-fg">
@@ -159,7 +150,7 @@ export const MailDeliveryMetrics = ({
             },
           ].map((stat) => (
             <div
-              className="flex items-center gap-2 px-4 py-3 @md:px-5"
+              className="flex items-center gap-2 px-4 py-3 @md:px-6"
               key={stat.label}
             >
               <dt className="flex items-center gap-1 text-caption text-muted-fg">
