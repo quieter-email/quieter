@@ -20,12 +20,10 @@ const deliverySeries = [
 
 export const MailDeliveryMetrics = ({
   metrics,
-  openTrackingEnabled,
   range,
   to,
 }: {
   metrics: Awaited<ReturnType<typeof rpc.organization.getMailDeliveryMetrics>>;
-  openTrackingEnabled: boolean | undefined;
   range: MailDeliveryMetricsRange;
   to: Date;
 }) => {
@@ -62,28 +60,21 @@ export const MailDeliveryMetrics = ({
     {
       hint: "Each message counts once per recipient when accepted for sending.",
       label: "Sent",
-      note: "Accepted for sending",
       value: metrics.eventsByType.sent ?? 0,
     },
     {
       hint: "The recipient's mail server accepted the message. This does not confirm it reached their inbox.",
       label: "Delivered",
-      note: "Accepted by mail server",
       value: metrics.eventsByType.delivered ?? 0,
     },
     {
       hint: "Messages with a permanent delivery failure, counted once per recipient.",
       label: "Bounced",
-      note: "Could not be delivered",
       value: metrics.eventsByType.bounced ?? 0,
     },
     {
       hint: "Messages whose tracking image loaded. Privacy tools and bots can inflate or hide opens. An open never proves someone read a message.",
       label: "Opened",
-      note:
-        openTrackingEnabled === false
-          ? "Tracking is off"
-          : "Estimated message opens",
       value: metrics.openedMessages,
     },
   ];
@@ -111,11 +102,8 @@ export const MailDeliveryMetrics = ({
                   <TooltipContent>{stat.hint}</TooltipContent>
                 </Tooltip>
               </dt>
-              <dd className="flex flex-col gap-1.5">
-                <span className="text-title-lg leading-none tracking-tight text-fg tabular-nums">
-                  {stat.value.toLocaleString()}
-                </span>
-                <span className="text-micro text-muted-fg">{stat.note}</span>
+              <dd className="text-title-lg leading-none tracking-tight text-fg tabular-nums">
+                {stat.value.toLocaleString()}
               </dd>
             </div>
           ))}

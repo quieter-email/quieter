@@ -200,12 +200,7 @@ export const MailDeliveryView = ({
     metricsSection = <SettingsLoadingState label="Loading metrics" />;
   } else {
     metricsSection = (
-      <MailDeliveryMetrics
-        metrics={metrics}
-        openTrackingEnabled={trackingSettings?.openTrackingEnabled}
-        range={range}
-        to={metrics.to}
-      />
+      <MailDeliveryMetrics metrics={metrics} range={range} to={metrics.to} />
     );
   }
 
