@@ -36,6 +36,7 @@ import {
   mailTrackingSettingsQueryOptions,
 } from "./mail-delivery";
 import type { MailDeliveryMetricsRange } from "./mail-delivery";
+import { MailDeliveryMetrics } from "./mail-delivery-metrics";
 
 export const MailDeliveryView = ({
   canManage,
@@ -153,10 +154,8 @@ export const MailDeliveryView = ({
           }
           title="Open tracking"
         >
-          Adds a small invisible marker to html messages this team sends. Opens
-          are approximate: privacy proxies, caching, image blocking, and
-          automatic tools can fake or miss opens, so an open never proves a
-          person read a message.
+          Estimate opens using a small tracking image. Opens do not confirm a
+          message was read.
         </SettingsRow>
         <SettingsRow
           action={
@@ -177,10 +176,9 @@ export const MailDeliveryView = ({
               <SwitchThumb />
             </Switch>
           }
-          title="Allow API senders to choose per message"
+          title="Per-message control"
         >
-          Lets authorized API senders turn tracking off for a single send.
-          Without this, the team setting applies to every message.
+          Let API senders turn tracking off for individual messages.
         </SettingsRow>
       </SettingsCard>
     );
@@ -200,60 +198,13 @@ export const MailDeliveryView = ({
   } else if (isMetricsPending || metrics === undefined) {
     metricsSection = <SettingsLoadingState label="Loading metrics" />;
   } else {
-    const eventCounts = metrics.eventsByType ?? {};
-    const sent = eventCounts.sent ?? 0;
-    const delivered = eventCounts.delivered ?? 0;
-    const bounced = eventCounts.bounced ?? 0;
-    const complained = eventCounts.complained ?? 0;
-    const unsubscribed = eventCounts.unsubscribed ?? 0;
     metricsSection = (
-      <>
-        {[
-          {
-            hint: "Message-recipient pairs accepted for sending in this period",
-            label: "Sent",
-            value: sent,
-          },
-          {
-            hint: "Recipients whose mail server accepted the message in this period",
-            label: "Delivered",
-            value: delivered,
-          },
-          {
-            hint: "Recipients with permanent delivery failures in this period",
-            label: "Bounced",
-            value: bounced,
-          },
-          {
-            hint: "Recipients who reported spam",
-            label: "Complained",
-            value: complained,
-          },
-          { label: "Unsubscribed", value: unsubscribed },
-          {
-            hint: "Approximate. Privacy proxies, caches, and bots distort opens.",
-            label: "Opened messages",
-            value: metrics.openedMessages,
-          },
-        ].map((metric) => (
-          <SettingsRow
-            action={
-              <span
-                className={cn(
-                  settingsSurfaceVariants({ variant: "title" }),
-                  "tabular-nums"
-                )}
-              >
-                {metric.value.toLocaleString()}
-              </span>
-            }
-            key={metric.label}
-            title={metric.label}
-          >
-            {metric.hint}
-          </SettingsRow>
-        ))}
-      </>
+      <MailDeliveryMetrics
+        metrics={metrics}
+        openTrackingEnabled={trackingSettings?.openTrackingEnabled}
+        range={range}
+        to={metrics.to}
+      />
     );
   }
 
@@ -265,53 +216,22 @@ export const MailDeliveryView = ({
     })),
   ];
   const rangeOptions = [
-    { label: "7 days", value: "7d" },
-    { label: "30 days", value: "30d" },
+    { label: "Last 7 days", value: "7d" },
+    { label: "Last 30 days", value: "30d" },
   ];
 
   return (
     <div className={settingsSurfaceVariants({ variant: "page" })}>
       <SettingsPageHeader title="Delivery">
-        Understand what happened to messages this team sent. Counts show
-        distinct message-recipient pairs for each event type observed in the
-        selected period; open numbers are best-effort estimates and never prove
-        a person read anything.
+        Delivery and engagement for your team mail.
       </SettingsPageHeader>
 
-      <SettingsSection title="Tracking">{content}</SettingsSection>
-
-      <SettingsSection title="Recent activity">
-        <SettingsCard>
-          <SettingsRow
-            action={
-              <Select
-                items={rangeOptions}
-                onValueChange={(value) => {
-                  if (value === "7d" || value === "30d") {
-                    setRange(value);
-                  }
-                }}
-                value={range}
-              >
-                <SelectTrigger aria-label="Time range" size="sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectList>
-                    {rangeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectList>
-                </SelectContent>
-              </Select>
-            }
-            title="Time range"
-          />
-          {managedMailboxes.length > 0 && (
-            <SettingsRow
-              action={
+      {canManage ? (
+        <section className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-body text-fg">Overview</h2>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              {managedMailboxes.length > 0 ? (
                 <Select
                   items={mailboxOptions}
                   onValueChange={(value) => {
@@ -323,7 +243,7 @@ export const MailDeliveryView = ({
                 >
                   <SelectTrigger
                     aria-label="Mailbox"
-                    className="max-w-48"
+                    className="w-auto max-w-44"
                     size="sm"
                   >
                     <SelectValue />
@@ -340,17 +260,40 @@ export const MailDeliveryView = ({
                     <SelectScrollDownArrow />
                   </SelectContent>
                 </Select>
-              }
-              title="Mailbox"
-            />
-          )}
+              ) : null}
+              <Select
+                items={rangeOptions}
+                onValueChange={(value) => {
+                  if (value === "7d" || value === "30d") {
+                    setRange(value);
+                  }
+                }}
+                value={range}
+              >
+                <SelectTrigger
+                  aria-label="Time range"
+                  className="w-auto"
+                  size="sm"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectList>
+                    {rangeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectList>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           {metricsSection}
-        </SettingsCard>
-        <p className={settingsSurfaceVariants({ variant: "value" })}>
-          Delivery events describe what receiving mail servers confirmed.
-          Complaints and unsubscribes block future sends automatically.
-        </p>
-      </SettingsSection>
+        </section>
+      ) : null}
+
+      <SettingsSection title="Tracking">{content}</SettingsSection>
     </div>
   );
 };

@@ -40,19 +40,24 @@ export const mailDeliveryMetricsQueryOptions = (
   organizationId: string,
   range: MailDeliveryMetricsRange,
   mailboxId?: string
-) => {
-  const from = new Date(Date.now() - RANGE_DAYS[range] * 24 * 60 * 60 * 1000);
-  return queryOptions({
-    queryFn: async ({ signal }) =>
-      await rpc.organization.getMailDeliveryMetrics(
+) =>
+  queryOptions({
+    queryFn: async ({ signal }) => {
+      const to = new Date();
+      const from = new Date(to);
+      from.setUTCHours(0, 0, 0, 0);
+      from.setUTCDate(from.getUTCDate() - RANGE_DAYS[range] + 1);
+      const metrics = await rpc.organization.getMailDeliveryMetrics(
         {
           from,
           organizationId,
+          to,
           ...(mailboxId !== undefined && mailboxId !== "" ? { mailboxId } : {}),
         },
         { signal }
-      ),
+      );
+      return { ...metrics, to };
+    },
     queryKey: getMailDeliveryMetricsQueryKey(organizationId, range, mailboxId),
     staleTime: 60_000,
   });
-};
