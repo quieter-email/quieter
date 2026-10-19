@@ -44,7 +44,7 @@ export const ComposerFieldGroup = ({
 );
 
 const composerFieldRowClassName =
-  "flex items-center gap-2.5 px-5 transition-colors duration-150 ease-out focus-within:bg-bg-surface";
+  "flex min-w-0 items-center gap-2.5 px-5 transition-colors duration-150 ease-out focus-within:bg-bg-surface";
 
 export const ComposerFieldRow = ({
   children,

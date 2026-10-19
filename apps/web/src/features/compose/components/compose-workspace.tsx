@@ -2,6 +2,7 @@
 
 import {
   AlertCircleIcon,
+  ArrowDown01Icon,
   Attachment01Icon,
   Cancel01Icon,
   Delete02Icon,
@@ -18,11 +19,25 @@ import {
   ComposerFieldRow,
   ComposerFrame,
 } from "@quieter/ui/composer-chrome";
-import { FieldControl, FieldError } from "@quieter/ui/field";
+import {
+  Field,
+  FieldControl,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import {
+  Popover,
+  PopoverClose,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@quieter/ui/popover";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -122,10 +137,7 @@ type ComposeFormFieldProps = Pick<
   disabled?: boolean;
   divided?: boolean;
   label: string;
-  name: keyof Pick<
-    ComposeFormValues,
-    "to" | "cc" | "bcc" | "subject" | "senderName"
-  >;
+  name: keyof Pick<ComposeFormValues, "to" | "cc" | "bcc" | "subject">;
   placeholder?: string;
 };
 
@@ -166,7 +178,6 @@ const ComposeFormField = ({
         >
           <FieldControl
             aria-invalid={!!error}
-            aria-label={name === "senderName" ? "Sender name" : undefined}
             chrome="composer"
             disabled={disabled}
             onBlur={() => {
@@ -223,6 +234,7 @@ const ReadyComposeSurface = ({
   }, []);
   const [snippetDraft, setSnippetDraft] = useState<string | null>(null);
   const [switchingSender, setSwitchingSender] = useState(false);
+  const [senderDetailsOpen, setSenderDetailsOpen] = useState(false);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
@@ -662,96 +674,221 @@ const ReadyComposeSurface = ({
                     })}
                   >
                     <ComposerFieldGroup bare>
-                      {canSwitchSender && (
-                        <ComposerFieldRow label="From">
-                          <div className="flex h-8 min-w-0 flex-1 items-center">
-                            <Select
-                              items={[
-                                ...(senderMailboxes?.map((sender) => ({
-                                  label: sender.displayName
-                                    ? `${sender.displayName} <${sender.emailAddress}>`
-                                    : sender.emailAddress,
-                                  value: sender.id,
-                                })) ?? []),
-                                ...(currentSender === undefined && mailboxId
-                                  ? [
-                                      {
-                                        label: `${senderEmail ?? "Account"} (unavailable)`,
-                                        value: mailboxId,
-                                      },
-                                    ]
-                                  : []),
-                              ]}
-                              onValueChange={(nextMailboxId) => {
-                                void handleSenderChange(nextMailboxId);
-                              }}
-                              value={mailboxId}
-                            >
-                              <SelectTrigger
-                                aria-label="From address"
-                                title={senderEmail ?? undefined}
-                                className="max-w-full min-w-0 shrink"
-                                disabled={
-                                  !canEditBody ||
-                                  audioBusy ||
-                                  state.draft.saveStatus === "saving"
+                      {canSwitchSender || managedSender ? (
+                        <form.Field name="senderName">
+                          {(senderField) => {
+                            const [error] = senderField.state.meta.errors;
+                            const senderName = managedSender
+                              ? senderField.state.value.trim() ||
+                                managedSender.name
+                              : "";
+                            return (
+                              <ComposerFieldRow
+                                error={
+                                  senderDetailsOpen ? undefined : error?.message
                                 }
-                                pending={switchingSender}
-                                size="sm"
-                                variant="ghost"
+                                label="From"
                               >
-                                <SelectValue>
-                                  {senderEmail ?? "Choose a sending address"}
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent
-                                align="start"
-                                className="max-w-(--available-width)"
-                              >
-                                {currentSender === undefined && mailboxId ? (
-                                  <SelectItem value={mailboxId}>
-                                    {senderEmail ?? "Account"} (unavailable)
-                                  </SelectItem>
-                                ) : null}
-                                {senderMailboxes?.map((sender) => (
-                                  <SelectItem key={sender.id} value={sender.id}>
-                                    <span className="flex min-w-0 flex-col gap-0.5 py-1">
-                                      <span className="truncate text-body-sm font-medium">
-                                        {sender.displayName ||
-                                          sender.emailAddress}
-                                      </span>
-                                      {sender.displayName && (
-                                        <span className="text-caption break-all text-muted-fg">
-                                          {sender.emailAddress}
+                                <div className="flex h-8 min-w-0 flex-1 items-center">
+                                  <Popover
+                                    onOpenChange={setSenderDetailsOpen}
+                                    open={senderDetailsOpen}
+                                  >
+                                    <PopoverTrigger
+                                      aria-label={`Edit sender, ${senderName ? `${senderName}, ` : ""}${senderEmail ?? "choose an address"}`}
+                                      disabled={
+                                        !canEditBody ||
+                                        audioBusy ||
+                                        state.draft.saveStatus === "saving"
+                                      }
+                                      render={
+                                        <Button
+                                          className="max-w-full min-w-0 shrink justify-start"
+                                          size="sm"
+                                          variant="ghost"
+                                        />
+                                      }
+                                    >
+                                      {senderName ? (
+                                        <span className="max-w-1/2 shrink-0 truncate text-fg">
+                                          {senderName}
                                         </span>
-                                      )}
-                                    </span>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </ComposerFieldRow>
-                      )}
+                                      ) : null}
+                                      <span className="truncate">
+                                        {senderName && senderEmail
+                                          ? `<${senderEmail}>`
+                                          : (senderEmail ??
+                                            "Choose a sending address")}
+                                      </span>
+                                      <HugeiconsIcon
+                                        aria-hidden
+                                        data-icon="inline-end"
+                                        icon={ArrowDown01Icon}
+                                      />
+                                    </PopoverTrigger>
+                                    <PopoverContent align="start" size="sm">
+                                      <div className="flex flex-col gap-4">
+                                        <PopoverTitle>
+                                          Sender details
+                                        </PopoverTitle>
+                                        {canSwitchSender ? (
+                                          <Field>
+                                            <FieldLabel>
+                                              Sending address
+                                            </FieldLabel>
+                                            <Select
+                                              items={[
+                                                ...(senderMailboxes?.map(
+                                                  (sender) => ({
+                                                    label: sender.displayName
+                                                      ? `${sender.displayName} <${sender.emailAddress}>`
+                                                      : sender.emailAddress,
+                                                    value: sender.id,
+                                                  })
+                                                ) ?? []),
+                                                ...(currentSender ===
+                                                  undefined && mailboxId
+                                                  ? [
+                                                      {
+                                                        label: `${senderEmail ?? "Account"} (unavailable)`,
+                                                        value: mailboxId,
+                                                      },
+                                                    ]
+                                                  : []),
+                                              ]}
+                                              onValueChange={(
+                                                nextMailboxId
+                                              ) => {
+                                                void handleSenderChange(
+                                                  nextMailboxId
+                                                );
+                                              }}
+                                              value={mailboxId}
+                                            >
+                                              <SelectTrigger
+                                                aria-label="Sending address"
+                                                className="w-full"
+                                                disabled={
+                                                  !canEditBody ||
+                                                  audioBusy ||
+                                                  state.draft.saveStatus ===
+                                                    "saving"
+                                                }
+                                                pending={switchingSender}
+                                              >
+                                                <SelectValue>
+                                                  {senderEmail ??
+                                                    "Choose a sending address"}
+                                                </SelectValue>
+                                              </SelectTrigger>
+                                              <SelectContent
+                                                align="start"
+                                                className="max-w-(--available-width)"
+                                              >
+                                                <SelectGroup>
+                                                  {currentSender ===
+                                                    undefined && mailboxId ? (
+                                                    <SelectItem
+                                                      value={mailboxId}
+                                                    >
+                                                      {senderEmail ?? "Account"}{" "}
+                                                      (unavailable)
+                                                    </SelectItem>
+                                                  ) : null}
+                                                  {senderMailboxes?.map(
+                                                    (sender) => (
+                                                      <SelectItem
+                                                        key={sender.id}
+                                                        value={sender.id}
+                                                      >
+                                                        <span className="flex min-w-0 flex-col gap-0.5 py-1">
+                                                          <span className="truncate text-body-sm font-medium">
+                                                            {sender.displayName ||
+                                                              sender.emailAddress}
+                                                          </span>
+                                                          {sender.displayName ? (
+                                                            <span className="text-caption break-all text-muted-fg">
+                                                              {
+                                                                sender.emailAddress
+                                                              }
+                                                            </span>
+                                                          ) : null}
+                                                        </span>
+                                                      </SelectItem>
+                                                    )
+                                                  )}
+                                                </SelectGroup>
+                                              </SelectContent>
+                                            </Select>
+                                          </Field>
+                                        ) : null}
+                                        {managedSender ? (
+                                          <Field invalid={!!error}>
+                                            <FieldLabel>Sender name</FieldLabel>
+                                            <FieldControl
+                                              aria-invalid={!!error}
+                                              disabled={!canEditBody}
+                                              onBlur={senderField.handleBlur}
+                                              onChange={(event) => {
+                                                handleUserDraftChange();
+                                                senderField.handleChange(
+                                                  event.currentTarget.value
+                                                );
+                                              }}
+                                              onKeyDown={(event) => {
+                                                if (event.key === "Enter") {
+                                                  event.preventDefault();
+                                                  if (!error) {
+                                                    setSenderDetailsOpen(false);
+                                                  }
+                                                }
+                                              }}
+                                              placeholder={managedSender.name}
+                                              value={senderField.state.value}
+                                            />
+                                            <FieldDescription>
+                                              The name recipients see on this
+                                              message.
+                                            </FieldDescription>
+                                            {error ? (
+                                              <FieldError>
+                                                {error.message}
+                                              </FieldError>
+                                            ) : null}
+                                          </Field>
+                                        ) : null}
+                                        <div className="flex justify-end">
+                                          <PopoverClose
+                                            disabled={!!error}
+                                            render={
+                                              <Button
+                                                size="sm"
+                                                variant="secondary"
+                                              />
+                                            }
+                                          >
+                                            Done
+                                          </PopoverClose>
+                                        </div>
+                                      </div>
+                                    </PopoverContent>
+                                  </Popover>
+                                </div>
+                              </ComposerFieldRow>
+                            );
+                          }}
+                        </form.Field>
+                      ) : null}
                       {!canSwitchSender &&
-                      (!isInline || managedSender !== undefined) &&
-                      (senderMailboxes || managedSender) &&
+                      !managedSender &&
+                      !isInline &&
+                      senderMailboxes &&
                       senderEmail ? (
                         <ComposerFieldRow label="From">
                           <span className="flex h-8 min-w-0 items-center truncate px-2 text-body-sm">
                             {senderEmail}
                           </span>
                         </ComposerFieldRow>
-                      ) : null}
-                      {managedSender ? (
-                        <ComposeFormField
-                          disabled={!canEditBody}
-                          form={form}
-                          handleUserDraftChange={handleUserDraftChange}
-                          label="Name"
-                          name="senderName"
-                          placeholder={managedSender.name}
-                        />
                       ) : null}
                       <form.Field name="to">
                         {(recipientField) => {
