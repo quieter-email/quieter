@@ -550,7 +550,15 @@ export const useComposeDialogController = ({
     let previousValues = form.state.values;
     const subscription = form.store.subscribe(() => {
       if (
-        ["to", "cc", "bcc", "subject", "bodyText", "bodyHtml"].some(
+        [
+          "to",
+          "cc",
+          "bcc",
+          "senderName",
+          "subject",
+          "bodyText",
+          "bodyHtml",
+        ].some(
           (field) =>
             Reflect.get(previousValues, field) !==
             Reflect.get(form.state.values, field)

@@ -15,7 +15,7 @@ import {
   splitMailAddressList,
 } from "@quieter/mail/compose/schema";
 import type { composeMessageInputSchema } from "@quieter/mail/compose/schema";
-import { resolveManagedMailSender } from "@quieter/mail/compose/sender";
+import { resolveMailSender } from "@quieter/mail/compose/sender";
 import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
@@ -152,7 +152,7 @@ export const sendManagedMailboxMessage = async (input: {
     organizationId,
   });
   const raw = await buildMimeMessage(message, {
-    from: resolveManagedMailSender(selectedMailbox, message.senderName),
+    from: resolveMailSender(selectedMailbox, message.senderName),
     messageId: messageHeaderId,
     omitBccHeader: true,
     sentAt,

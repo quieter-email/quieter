@@ -9,7 +9,7 @@ export const formatMailSender = (sender: {
   return `"${name.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}" <${sender.address}>`;
 };
 
-export const resolveManagedMailSender = (
+export const resolveMailSender = (
   mailbox: { displayName: string | null; emailAddress: string },
   senderName?: string
 ): { address: string; name: string } => {

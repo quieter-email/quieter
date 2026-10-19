@@ -81,6 +81,7 @@ const toMailboxGroup = (
   id: group.id,
   kind: group.kind,
   mailboxes: group.mailboxes.map((mailbox) => ({
+    capabilities: mailbox.capabilities,
     connectionStatus: mailbox.connectionStatus,
     displayName: mailbox.displayName,
     divisionName: "divisionName" in mailbox ? mailbox.divisionName : null,

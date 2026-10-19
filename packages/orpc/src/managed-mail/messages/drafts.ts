@@ -10,7 +10,7 @@ import {
 } from "@quieter/database/schema";
 import { buildMimeMessage } from "@quieter/mail/compose/mime";
 import type { composeDraftInputSchema } from "@quieter/mail/compose/schema";
-import { resolveManagedMailSender } from "@quieter/mail/compose/sender";
+import { resolveMailSender } from "@quieter/mail/compose/sender";
 import {
   parseRawMailAttachments,
   parseRawMailMessage,
@@ -217,7 +217,7 @@ export const saveManagedDraft = async (input: {
   );
   const raw = new TextEncoder().encode(
     await buildMimeMessage(draft, {
-      from: resolveManagedMailSender(selectedMailbox, draft.senderName),
+      from: resolveMailSender(selectedMailbox, draft.senderName),
       includeQuieterDraftHeaders: true,
       sentAt: now,
     })

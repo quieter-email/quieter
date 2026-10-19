@@ -10,7 +10,8 @@ import {
   MailSend02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { resolveManagedMailSender } from "@quieter/mail/compose/sender";
+import { resolveMailSender } from "@quieter/mail/compose/sender";
+import type { MailboxCapabilities } from "@quieter/mail/data-plane";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -80,10 +81,10 @@ import {
 import type { ComposeDialogController } from "./use-compose-dialog-controller";
 
 export type ComposeSenderMailbox = {
+  capabilities: Pick<MailboxCapabilities, "canSetSenderName">;
   id: string;
   emailAddress: string;
   displayName: string | null;
-  provider: "api" | "gmail" | "managed";
   signatureHtml?: string | null;
   signatureText?: string | null;
 };
@@ -236,9 +237,9 @@ const ReadyComposeSurface = ({
     senderMailboxes?.find((sender) => sender.id === mailboxId) ??
     senderMailbox ??
     undefined;
-  const managedSender =
-    currentSender?.provider === "managed"
-      ? resolveManagedMailSender(currentSender)
+  const editableSender =
+    currentSender?.capabilities.canSetSenderName === true
+      ? resolveMailSender(currentSender)
       : undefined;
   const snippetsQuery = useQuery({
     ...orpc.mailSnippets.list.queryOptions({
@@ -255,7 +256,7 @@ const ReadyComposeSurface = ({
   const compose = useComposeDialogController({
     autosavePaused: slashMenuOpen || switchingSender,
     beforeNavigate,
-    defaultSenderName: managedSender?.name,
+    defaultSenderName: editableSender?.name,
     demoMode,
     getTextFromHtml: (html) =>
       composeEditorRef.current?.getTextFromHtml(html) ??
@@ -667,13 +668,13 @@ const ReadyComposeSurface = ({
                     })}
                   >
                     <ComposerFieldGroup bare>
-                      {canSwitchSender || managedSender ? (
+                      {canSwitchSender || editableSender ? (
                         <form.Field name="senderName">
                           {(senderField) => {
                             const [error] = senderField.state.meta.errors;
-                            const senderName = managedSender
+                            const senderName = editableSender
                               ? senderField.state.value.trim() ||
-                                managedSender.name
+                                editableSender.name
                               : "";
                             return (
                               <ComposerFieldRow
@@ -816,7 +817,7 @@ const ReadyComposeSurface = ({
                                             </Select>
                                           </Field>
                                         ) : null}
-                                        {managedSender ? (
+                                        {editableSender ? (
                                           <Field invalid={!!error}>
                                             <FieldLabel>Sender name</FieldLabel>
                                             <FieldControl
@@ -837,7 +838,7 @@ const ReadyComposeSurface = ({
                                                   }
                                                 }
                                               }}
-                                              placeholder={managedSender.name}
+                                              placeholder={editableSender.name}
                                               value={senderField.state.value}
                                             />
                                             {error ? (
@@ -868,7 +869,7 @@ const ReadyComposeSurface = ({
                         </form.Field>
                       ) : null}
                       {!canSwitchSender &&
-                      !managedSender &&
+                      !editableSender &&
                       !isInline &&
                       senderMailboxes &&
                       senderEmail ? (
