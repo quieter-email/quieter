@@ -298,18 +298,20 @@ export const DesignSystemShowcase = () => {
             </IconButtonTooltip>
           </Row>
           <Row label="Multiline copy action">
-            <Button
-              className="w-64 max-w-full justify-start text-left"
-              onClick={() => {
-                void copySampleKey();
-              }}
-              size="auto"
-              variant="outline"
-            >
-              <code className="font-mono text-caption break-all">
-                example_key_for_documentation_only_not_a_real_credential
-              </code>
-            </Button>
+            <div className="flex w-64 max-w-full">
+              <Button
+                fullWidth
+                onClick={() => {
+                  void copySampleKey();
+                }}
+                size="auto"
+                variant="outline"
+              >
+                <code className="font-mono text-caption break-all">
+                  example_key_for_documentation_only_not_a_real_credential
+                </code>
+              </Button>
+            </div>
           </Row>
           <Row label="Disabled">
             <Button disabled type="button">

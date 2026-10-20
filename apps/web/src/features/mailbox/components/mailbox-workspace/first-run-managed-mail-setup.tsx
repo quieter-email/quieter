@@ -435,7 +435,7 @@ const FirstRunApiKeyStep = ({
             API key created. Store it before leaving this screen.
           </p>
           <Button
-            className="w-full justify-start text-left"
+            className="w-full"
             onClick={() => {
               if (createdApiKey !== null) {
                 void navigator.clipboard.writeText(createdApiKey);

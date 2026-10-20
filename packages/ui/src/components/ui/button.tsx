@@ -24,7 +24,7 @@ export const buttonVariants = cva(
         true: "group relative w-full gap-3",
       },
       size: {
-        auto: "h-auto px-3 py-2 text-body-sm whitespace-normal [&_svg]:size-4",
+        auto: "h-auto justify-start px-3 py-2 text-left text-body-sm whitespace-normal [&_svg]:size-4",
         // Caption-height action, e.g. retry and approval buttons.
         compact: "h-7 px-2 text-caption font-medium [&_svg]:size-3.5",
         default: "h-8 px-3 text-body-sm [&_svg]:size-4",
@@ -46,7 +46,7 @@ export const buttonVariants = cva(
         destructive:
           "bg-destructive text-destructive-fg shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
         ghost:
-          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-control-active active:text-fg aria-[current=page]:bg-muted aria-[current=page]:text-fg",
+          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-control-active active:text-fg aria-[current=page]:bg-muted aria-[current=page]:text-fg aria-[current=true]:bg-muted aria-[current=true]:text-fg",
         // Segmented option, e.g. the rule-builder choices. The selected look
         // follows aria-pressed so callers only pass the state.
         option:

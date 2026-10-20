@@ -352,7 +352,7 @@ const DomainCatchAllPickerBody = ({
     <div className="space-y-1">
       {candidates.map((mailbox) => (
         <Button
-          className="w-full justify-between text-left"
+          className="w-full"
           disabled={setCatchAllMutation.isPending}
           key={mailbox.id}
           onClick={() => {
@@ -373,12 +373,16 @@ const DomainCatchAllPickerBody = ({
           type="button"
           variant="outline"
         >
-          <span className="min-w-0 truncate text-body text-fg">
-            {mailbox.emailAddress}
+          <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+            <span className="min-w-0 truncate text-body text-fg">
+              {mailbox.emailAddress}
+            </span>
+            {mailbox.catchAllDomain === null ? null : (
+              <span className="shrink-0 text-caption text-muted-fg">
+                current
+              </span>
+            )}
           </span>
-          {mailbox.catchAllDomain === null ? null : (
-            <span className="shrink-0 text-caption text-muted-fg">current</span>
-          )}
         </Button>
       ))}
     </div>
