@@ -1,0 +1,25 @@
+"use client";
+
+import type {
+  MailboxActions,
+  MailboxPendingActions,
+} from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
+import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+
+export type MessageViewProps = {
+  activeMailbox: MailboxCategory;
+  composeDemoMode?: boolean;
+  composeManagedDemoMode?: boolean;
+  composePersistDrafts?: boolean;
+  composeSignature?: { html: string | null; text: string | null };
+  focusOnOpen?: boolean;
+  currentUserEmail?: string | null;
+  mailboxId: string;
+  mailboxProvider: "api" | "gmail" | "managed";
+  mailboxActions: MailboxActions;
+  message: MessageListItem;
+  onBackToList?: () => void;
+  onAutoFocusComplete?: () => void;
+  onManageSnippets?: () => void;
+  pendingActions: MailboxPendingActions;
+};

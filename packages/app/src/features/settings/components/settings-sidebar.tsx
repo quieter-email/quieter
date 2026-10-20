@@ -1,0 +1,335 @@
+"use client";
+
+import {
+  ArrowLeft01Icon,
+  ArrowDown01Icon,
+  Add01Icon,
+  Cancel01Icon,
+  Settings01Icon,
+  UserIcon,
+  Mail01Icon,
+  UserGroupIcon,
+  Key01Icon,
+  GlobeIcon,
+  CreditCardIcon,
+  AiChat01Icon,
+  Plug01Icon,
+  CodeIcon,
+  MailSend02Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
+import {
+  fullOrganizationQueryOptions,
+  hasOrganizationPermission,
+  normalizeOrganizationRole,
+} from "@quieter/app/features/settings/components/organization-settings/domain";
+import { OrganizationFormDialog } from "@quieter/app/features/settings/components/organization-settings/organization-form-dialog";
+import { useSettingsTeam } from "@quieter/app/features/settings/components/use-settings-team";
+import { isDemoModeAvailable } from "@quieter/app/features/settings/domain/demo-mode-setting";
+import {
+  settingsDestinationSearch,
+  settingsTeamSection,
+  TEAM_SETTINGS_NAV,
+} from "@quieter/app/features/settings/domain/settings-destination";
+import type { SettingsDestination } from "@quieter/app/features/settings/domain/settings-destination";
+import { authClient } from "@quieter/app/lib/auth";
+import { settingsRouteApi } from "@quieter/app/lib/route-apis";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@quieter/ui/dropdown-menu";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import type { ReactNode } from "react";
+
+const SETTINGS_ICONS: Record<string, typeof Settings01Icon> = {
+  "AI & personalization": AiChat01Icon,
+  "API keys": Key01Icon,
+  Account: UserIcon,
+  "Billing & usage": CreditCardIcon,
+  "Blocked recipients": MailSend02Icon,
+  "Connected apps": Plug01Icon,
+  Delivery: MailSend02Icon,
+  Development: CodeIcon,
+  Divisions: UserGroupIcon,
+  Domains: GlobeIcon,
+  General: Settings01Icon,
+  Mailboxes: Mail01Icon,
+  "Members & invitations": UserGroupIcon,
+  Preferences: Settings01Icon,
+};
+
+const PERSONAL_ITEMS = [
+  { tab: "account", title: "Account" },
+  { tab: "appearance", title: "Preferences" },
+  { tab: "ai", title: "AI & personalization" },
+  { tab: "connectors", title: "Connected apps" },
+] as const;
+
+export const SettingsSidebar = ({
+  onRequestClose,
+  searchInput,
+  searchResults,
+}: {
+  onRequestClose?: () => void;
+  searchInput: ReactNode;
+  searchResults?: ReactNode;
+}) => {
+  const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
+  const navigate = useNavigate({ from: "/settings" });
+  const { tab, from, organizationView, organizationId } =
+    settingsRouteApi.useSearch();
+  const { organizations, organizationsState, team, teamId } = useSettingsTeam();
+  const session = authClient.useSession().data;
+  const { data: details } = useQuery({
+    ...fullOrganizationQueryOptions(teamId),
+    enabled: team !== undefined,
+  });
+  const member = details?.members.find(
+    (item) => item.userId === session?.user.id
+  );
+  const canManage = hasOrganizationPermission(
+    member ? normalizeOrganizationRole(member.role) : null,
+    { organization: ["update"] }
+  );
+  const open = (destination: SettingsDestination) => {
+    onRequestClose?.();
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        ...settingsDestinationSearch(destination, teamId),
+      }),
+      to: ".",
+    });
+  };
+  const navigationButton = (
+    title: string,
+    destination: SettingsDestination,
+    selected: boolean
+  ) => (
+    <SidebarNavItem
+      active={selected}
+      key={title}
+      aria-current={selected ? "page" : undefined}
+      // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with compact settings-row spacing.
+      className={cn(
+        "h-6 w-full justify-start gap-2 px-2 text-left text-caption font-normal [&_svg]:size-3.5",
+        {
+          "text-fg": selected,
+          "text-muted-fg": !selected,
+        }
+      )}
+      // oxlint-enable shadcn/no-restyle
+      onClick={() => {
+        open(destination);
+      }}
+      variant="ghost"
+      size="sm"
+    >
+      <HugeiconsIcon
+        icon={SETTINGS_ICONS[title] ?? Settings01Icon}
+        strokeWidth={1.5}
+        className="shrink-0 text-fg"
+      />
+      {title}
+    </SidebarNavItem>
+  );
+  return (
+    <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6">
+      <div className="mb-3 flex items-center justify-between px-1">
+        <Button
+          // oxlint-disable-next-line shadcn/no-restyle -- Back link keeps its caption metrics.
+          className="justify-start gap-2 px-2 text-caption"
+          onClick={() => {
+            void navigate({ to: from });
+          }}
+          variant="ghost"
+          size="sm"
+        >
+          <HugeiconsIcon
+            icon={ArrowLeft01Icon}
+            strokeWidth={1.5}
+            className="size-4"
+          />
+          Back to mail
+        </Button>
+        {onRequestClose && (
+          <IconButtonTooltip label="Close settings menu">
+            <Button
+              aria-label="Close settings menu"
+              size="icon-sm"
+              variant="ghost"
+              onClick={onRequestClose}
+            >
+              <HugeiconsIcon
+                icon={Cancel01Icon}
+                strokeWidth={1.5}
+                className="size-4"
+              />
+            </Button>
+          </IconButtonTooltip>
+        )}
+      </div>
+      <div className="mb-4 px-1">{searchInput}</div>
+      {searchResults !== undefined && searchResults !== null ? (
+        <div className="px-1">{searchResults}</div>
+      ) : (
+        <nav aria-label="Settings" className="space-y-4 p-1">
+          <div className="space-y-0">
+            <p className="px-2 py-1 text-caption text-muted-fg">Personal</p>
+            {PERSONAL_ITEMS.map((item) =>
+              navigationButton(
+                item.title,
+                { tab: item.tab },
+                item.tab === tab ||
+                  (item.tab === "appearance" &&
+                    ["overview", "reading", "privacy", "shortcuts"].includes(
+                      tab
+                    ))
+              )
+            )}
+            {isDemoModeAvailable() &&
+              navigationButton(
+                "Development",
+                { tab: "development" },
+                tab === "development"
+              )}
+          </div>
+          <div className="space-y-0">
+            <p className="px-2 py-1 text-caption text-muted-fg">
+              Team settings
+            </p>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Team settings"
+                render={
+                  <Button
+                    // oxlint-disable-next-line shadcn/no-restyle -- Preserve the existing team switcher spacing and caption metrics.
+                    className="mb-2 w-full gap-2 text-caption font-normal"
+                    size="sm"
+                    variant="outline"
+                  />
+                }
+              >
+                <HugeiconsIcon
+                  icon={UserGroupIcon}
+                  strokeWidth={1.5}
+                  className="size-3.5 shrink-0"
+                />
+                <span className="min-w-0 flex-1 truncate text-left">
+                  {team?.name ??
+                    (organizationsState.isPending
+                      ? "Loading teams"
+                      : "Choose a team")}
+                </span>
+                <HugeiconsIcon
+                  icon={ArrowDown01Icon}
+                  strokeWidth={1.5}
+                  className="size-3.5 shrink-0 text-muted-fg"
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" size="compact">
+                {organizations.map((item) => (
+                  <DropdownMenuCheckboxItem
+                    checked={item.id === team?.id}
+                    closeOnSelect
+                    key={item.id}
+                    onCheckedChange={() => {
+                      onRequestClose?.();
+                      void navigate({
+                        search: (previous) => ({
+                          ...previous,
+                          domainId: "",
+                          mailboxId: "",
+                          mailboxView: "list",
+                          organizationId: item.id,
+                          section:
+                            previous.mailboxId !== "" ||
+                            previous.domainId !== ""
+                              ? ""
+                              : previous.section,
+                        }),
+                        to: ".",
+                      });
+                    }}
+                  >
+                    {item.name}
+                  </DropdownMenuCheckboxItem>
+                ))}
+                {organizations.length > 0 && <DropdownMenuSeparator />}
+                <DropdownMenuItem
+                  onSelect={() => {
+                    open({ organizationId: "", tab: "organization" });
+                  }}
+                >
+                  <HugeiconsIcon
+                    icon={UserGroupIcon}
+                    strokeWidth={1.5}
+                    className="size-3.5"
+                  />
+                  Teams & invitations
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setIsCreateTeamOpen(true);
+                  }}
+                >
+                  <HugeiconsIcon
+                    icon={Add01Icon}
+                    strokeWidth={1.5}
+                    className="size-3.5"
+                  />
+                  Create team
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <OrganizationFormDialog
+              open={isCreateTeamOpen}
+              onOpenChange={setIsCreateTeamOpen}
+            />
+            {organizationsState.error && (
+              <p role="alert" className="px-3 text-caption text-destructive">
+                Could not load teams.
+              </p>
+            )}
+            {team && (
+              <>
+                {TEAM_SETTINGS_NAV.flatMap((item) =>
+                  (item.view === "delivery" || item.view === "suppressions") &&
+                  !canManage ? (
+                    []
+                  ) : (
+                    <div key={item.view}>
+                      {navigationButton(
+                        item.title,
+                        { organizationView: item.view, tab: "organization" },
+                        tab === "organization" &&
+                          organizationId !== "" &&
+                          settingsTeamSection(organizationView) === item.view
+                      )}
+                      {item.view === "members" &&
+                        navigationButton(
+                          "Mailboxes",
+                          { tab: "mailboxes" },
+                          tab === "mailboxes"
+                        )}
+                    </div>
+                  )
+                )}
+              </>
+            )}
+          </div>
+        </nav>
+      )}
+    </div>
+  );
+};

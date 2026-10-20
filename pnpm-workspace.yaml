@@ -113,6 +113,8 @@ minimumReleaseAge: 0
 allowBuilds:
   "@sentry/cli": true
   "@vgpu/adapter-node": false
+  electron: true
+  electron-winstaller: false
   esbuild: true
   webgpu: false
   workerd: true

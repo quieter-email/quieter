@@ -1,8 +1,8 @@
 import { ORPCError } from "@orpc/server";
+import { getSettingsReturnTo } from "@quieter/app/features/settings/components/mailboxes-settings-shared";
 import { createFileRoute } from "@tanstack/react-router";
 import { deleteCookie, setCookie } from "@tanstack/react-start/server";
 
-import { getSettingsReturnTo } from "#/features/settings/components/mailboxes-settings-shared";
 import { reportServerError } from "#/lib/server-error-reporting";
 
 const redirectWithStatus = (

@@ -1,0 +1,40 @@
+import { Button } from "@quieter/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
+import type { ReactNode } from "react";
+
+export { SettingsFieldRow as SettingsRow } from "@quieter/app/features/settings/components/settings-layout";
+
+export const MutedActionButton = ({
+  buttonClassName,
+  icon,
+  label,
+  reason,
+}: {
+  buttonClassName?: string;
+  icon: ReactNode;
+  label: string;
+  reason: string;
+}) => (
+  <Tooltip>
+    <TooltipTrigger
+      className="inline-flex"
+      render={<button aria-label={`${label} unavailable`} type="button" />}
+    >
+      <Button
+        className={
+          // oxlint-disable-next-line shadcn/require-static-classes -- Optional caller override with a static fallback.
+          buttonClassName ??
+          // oxlint-disable-next-line shadcn/no-restyle -- Static preview keeps its inert treatment.
+          "pointer-events-none bg-transparent text-muted-fg opacity-100 hover:bg-transparent hover:text-muted-fg"
+        }
+        disabled
+        size="sm"
+        variant="outline"
+      >
+        {icon}
+        {label}
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent>{reason}</TooltipContent>
+  </Tooltip>
+);

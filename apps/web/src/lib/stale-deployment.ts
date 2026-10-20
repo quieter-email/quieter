@@ -1,6 +1,5 @@
+import { isDeploymentAssetError } from "@quieter/app/lib/deployment-errors";
 import { useSyncExternalStore } from "react";
-
-import { isDeploymentAssetError } from "./deployment-errors";
 
 let updateRequired = false;
 const listeners = new Set<() => void>();

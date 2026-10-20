@@ -1,10 +1,10 @@
 "use client";
 
+import { ConsentPreferencesLink } from "@quieter/app/components/consent-preferences-link";
 import { cn } from "@quieter/ui/cn";
 import { Link, useLocation } from "@tanstack/react-router";
 import { domAnimation, LazyMotion } from "motion/react";
 
-import { ConsentPreferencesLink } from "#/components/consent-preferences-link";
 import { Reveal, RevealChild } from "#/features/home/components/reveal";
 
 const publicFooterRoutes = new Set([

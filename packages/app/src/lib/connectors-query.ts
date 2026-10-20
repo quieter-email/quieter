@@ -1,0 +1,23 @@
+import { rpc } from "@quieter/app/lib/orpc";
+import { openExternalUrl } from "@quieter/app/runtime";
+import { queryOptions } from "@tanstack/react-query";
+
+export type ConnectorProvider = "google_calendar" | "linear";
+
+export const CONNECTORS_QUERY_KEY = ["connectors"] as const;
+
+export const connectorsQueryOptions = () =>
+  queryOptions({
+    queryFn: async ({ signal }) =>
+      await rpc.connectors.list(undefined, { signal }),
+    queryKey: CONNECTORS_QUERY_KEY,
+    staleTime: 60_000,
+  });
+
+export const openConnectorLink = async (input: {
+  provider: ConnectorProvider;
+  returnTo: string;
+}) => {
+  const { authorizationUrl } = await rpc.connectors.startConnection(input);
+  await openExternalUrl(authorizationUrl);
+};

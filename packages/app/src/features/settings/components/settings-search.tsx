@@ -1,0 +1,198 @@
+"use client";
+
+import { SettingsPageHeader } from "@quieter/app/features/settings/components/settings-layout";
+import { useSettingsTeam } from "@quieter/app/features/settings/components/use-settings-team";
+import { isDemoModeAvailable } from "@quieter/app/features/settings/domain/demo-mode-setting";
+import { settingsDestinationSearch } from "@quieter/app/features/settings/domain/settings-destination";
+import {
+  matchSettingsEntries,
+  SETTINGS_SEARCH_ENTRIES,
+} from "@quieter/app/features/settings/domain/settings-search";
+import type { SettingsSearchEntry } from "@quieter/app/features/settings/domain/settings-search";
+import { mailboxesQueryOptions } from "@quieter/app/lib/mailboxes-query";
+import { settingsRouteApi } from "@quieter/app/lib/route-apis";
+import { Button } from "@quieter/ui/button";
+import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
+import { Input } from "@quieter/ui/input";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import type { ReactNode } from "react";
+import { useState } from "react";
+
+export const SettingsSearch = ({
+  children,
+  onSelect,
+}: {
+  children: (search: {
+    input: ReactNode;
+    results: ReactNode;
+    searching: boolean;
+  }) => ReactNode;
+  onSelect: () => void;
+}) => {
+  const { organizationView } = settingsRouteApi.useSearch();
+  const [previousOrganizationView, setPreviousOrganizationView] =
+    useState(organizationView);
+  const [query, setQuery] = useState("");
+  const [includeOtherTeams, setIncludeOtherTeams] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const navigate = useNavigate({ from: "/settings" });
+  const { teamId, organizations } = useSettingsTeam();
+  const { data } = useQuery(mailboxesQueryOptions());
+  if (previousOrganizationView !== organizationView) {
+    setPreviousOrganizationView(organizationView);
+    setQuery("");
+    setIncludeOtherTeams(false);
+    setActiveIndex(0);
+  }
+  const teams = organizations.filter(
+    (team) => includeOtherTeams || team.id === teamId
+  );
+  const entries = SETTINGS_SEARCH_ENTRIES.flatMap(
+    (entry): SettingsSearchEntry[] => {
+      if (entry.scope === "personal") {
+        return [entry];
+      }
+      if (entry.scope === "team") {
+        return teams.map((team) => ({
+          ...entry,
+          description: `${team.name} / ${entry.description}`,
+          id: `${entry.id}-${team.id}`,
+          keywords: `${entry.keywords} ${team.name}`,
+          organizationId: team.id,
+        }));
+      }
+      return (data?.groups ?? []).flatMap((group) =>
+        group.mailboxes.flatMap((mailbox) => {
+          const accessible =
+            teams.some((team) => team.id === mailbox.organizationId) &&
+            (mailbox.provider === "gmail" ||
+              (mailbox.provider === "managed" &&
+                (mailbox.grantRole === "manager" ||
+                  entry.section === "brief")));
+          if (!accessible) {
+            return [];
+          }
+          return [
+            {
+              ...entry,
+              description: `${group.name} / Mailboxes / ${mailbox.displayName || mailbox.emailAddress} / ${entry.title}`,
+              id: `${entry.id}-${mailbox.id}`,
+              keywords: `${entry.keywords} ${mailbox.displayName ?? ""} ${mailbox.emailAddress} ${group.name}`,
+              mailboxId: mailbox.id,
+              organizationId: mailbox.organizationId,
+            },
+          ];
+        })
+      );
+    }
+  );
+  const results = matchSettingsEntries(query, {
+    entries,
+    includeDevelopment: isDemoModeAvailable(),
+  });
+  const select = (entry: SettingsSearchEntry) => {
+    setQuery("");
+    setActiveIndex(0);
+    onSelect();
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        ...settingsDestinationSearch(entry, teamId),
+      }),
+      to: ".",
+    });
+  };
+  const searching = query.trim().length > 0;
+  const input = (
+    <Input
+      aria-label="Search settings"
+      // oxlint-disable-next-line shadcn/no-restyle -- Compact search keeps caption type.
+      className="h-7 px-2.5 text-caption"
+      placeholder="Search settings"
+      type="search"
+      autoComplete="off"
+      value={query}
+      onChange={(event) => {
+        setQuery(event.target.value);
+        setActiveIndex(0);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          setQuery("");
+        }
+        if (!results.length) {
+          return;
+        }
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setActiveIndex((index) => (index + 1) % results.length);
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setActiveIndex(
+            (index) => (index - 1 + results.length) % results.length
+          );
+        }
+        if (event.key === "Enter") {
+          event.preventDefault();
+          const entry = results[Math.min(activeIndex, results.length - 1)];
+          if (entry !== undefined) {
+            select(entry);
+          }
+        }
+      }}
+    />
+  );
+  const resultContent = searching ? (
+    <section aria-label="Search results" className="space-y-4">
+      <SettingsPageHeader
+        title="Search results"
+        action={
+          <label
+            htmlFor="settings-search-other-teams"
+            className="flex items-center gap-2 text-caption"
+          >
+            <Checkbox
+              id="settings-search-other-teams"
+              checked={includeOtherTeams}
+              onCheckedChange={(checked) => {
+                setIncludeOtherTeams(checked);
+                setActiveIndex(0);
+              }}
+            >
+              <CheckboxIndicator />
+            </Checkbox>
+            Include other teams
+          </label>
+        }
+      />
+      <output className="text-caption text-muted-fg">
+        {results.length
+          ? `${results.length} results`
+          : "No settings match. Try a different word or include other teams."}
+      </output>
+      <div className="divide-y divide-border">
+        {results.map((entry, index) => (
+          <Button
+            data-active={index === Math.min(activeIndex, results.length - 1)}
+            key={entry.id}
+            onClick={() => {
+              select(entry);
+            }}
+            variant="result"
+          >
+            <span>
+              <span className="block text-body">{entry.title}</span>
+              <span className="mt-1 block text-caption text-muted-fg">
+                {entry.scope === "personal" ? "Personal / " : ""}
+                {entry.description}
+              </span>
+            </span>
+          </Button>
+        ))}
+      </div>
+    </section>
+  ) : null;
+  return <>{children({ input, results: resultContent, searching })}</>;
+};

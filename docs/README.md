@@ -1,6 +1,7 @@
 # Quieter Documentation
 
 - [Development](development.md)
+- [Electron desktop](desktop.md)
 - [Development integration plan](development-integrations.md)
 - [Architecture](architecture.md)
 - [Responsive mail baseline](responsive-mail.md)

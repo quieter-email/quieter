@@ -1,0 +1,139 @@
+"use client";
+
+import { Search01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  formatCount,
+  formatRoleLabel,
+} from "@quieter/app/features/settings/components/organization-settings/domain";
+import type {
+  FullOrganization,
+  OrganizationMember,
+} from "@quieter/app/features/settings/components/organization-settings/domain";
+import { InviteMemberForm } from "@quieter/app/features/settings/components/organization-settings/invite-member-form";
+import { MemberActions } from "@quieter/app/features/settings/components/organization-settings/member-actions";
+import { PendingOrganizationInvitations } from "@quieter/app/features/settings/components/organization-settings/pending-organization-invitations";
+import {
+  SettingsCard,
+  SettingsPageHeader,
+  settingsSurfaceVariants,
+} from "@quieter/app/features/settings/components/settings-layout";
+import { cn } from "@quieter/ui/cn";
+import { TextField, TextFieldInput } from "@quieter/ui/text-field";
+import { useState } from "react";
+
+export const MembersView = ({
+  activeMember,
+  organization,
+  permissions,
+}: {
+  activeMember: OrganizationMember | null;
+  onBack: () => void;
+  organization: FullOrganization;
+  permissions: {
+    canCancelInvitations: boolean;
+    canInviteMembers: boolean;
+    canRemoveMembers: boolean;
+    canUpdateMemberRole: boolean;
+  };
+}) => {
+  const [memberSearch, setMemberSearch] = useState("");
+  const sortedMembers = organization.members.toSorted((left, right) => {
+    const isLeftActive = left.userId === activeMember?.userId;
+    const isRightActive = right.userId === activeMember?.userId;
+    if (isLeftActive) {
+      return -1;
+    }
+    if (isRightActive) {
+      return 1;
+    }
+    return left.user.email.localeCompare(right.user.email);
+  });
+  const normalizedMemberSearch = memberSearch.trim().toLowerCase();
+  const visibleMembers = normalizedMemberSearch
+    ? sortedMembers.filter((member) =>
+        [
+          member.user.name ?? "",
+          member.user.email,
+          formatRoleLabel(member.role),
+        ].some((value) => value.toLowerCase().includes(normalizedMemberSearch))
+      )
+    : sortedMembers;
+  const showMemberSearch = sortedMembers.length > 1;
+
+  return (
+    <section className={settingsSurfaceVariants({ variant: "page" })}>
+      <SettingsPageHeader title="Members">
+        {formatCount(organization.members.length, "Member", "Members")}
+      </SettingsPageHeader>
+
+      {permissions.canInviteMembers && (
+        <SettingsCard>
+          <InviteMemberForm
+            canInviteMembers={permissions.canInviteMembers}
+            organization={organization}
+          />
+        </SettingsCard>
+      )}
+
+      <SettingsCard>
+        {showMemberSearch && (
+          <TextField
+            className={cn(
+              // oxlint-disable-next-line shadcn/require-static-classes -- Shared surface scale lives in settings-layout.
+              settingsSurfaceVariants({ variant: "insetRow" }),
+              // oxlint-disable-next-line shadcn/require-static-classes -- Shared surface scale lives in settings-layout.
+              settingsSurfaceVariants({ variant: "divider" }),
+              "relative"
+            )}
+          >
+            <HugeiconsIcon
+              aria-hidden
+              className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-fg @md:left-6"
+              icon={Search01Icon}
+            />
+            <TextFieldInput
+              aria-label="Search members"
+              chrome="ghost"
+              // oxlint-disable-next-line shadcn/no-restyle -- Search input leaves room for its leading icon.
+              className="h-8 pl-7"
+              onChange={(event) => {
+                setMemberSearch(event.target.value);
+              }}
+              placeholder="Search members"
+              value={memberSearch}
+            />
+          </TextField>
+        )}
+
+        {visibleMembers.map((member) => (
+          <MemberActions
+            activeMember={activeMember}
+            canRemoveMembers={permissions.canRemoveMembers}
+            canUpdateMemberRole={permissions.canUpdateMemberRole}
+            key={member.id}
+            member={member}
+            organizationId={organization.id}
+          />
+        ))}
+
+        {visibleMembers.length === 0 && (
+          <p
+            className={cn(
+              "text-center text-body text-muted-fg",
+              settingsSurfaceVariants({ variant: "padding" })
+            )}
+          >
+            No members found.
+          </p>
+        )}
+      </SettingsCard>
+
+      <PendingOrganizationInvitations
+        canCancelInvitations={permissions.canCancelInvitations}
+        invitations={organization.invitations}
+        organizationId={organization.id}
+      />
+    </section>
+  );
+};

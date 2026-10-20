@@ -1,4 +1,5 @@
 import { apiKey } from "@better-auth/api-key";
+import { electron } from "@better-auth/electron";
 import { passkey } from "@better-auth/passkey";
 import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
@@ -26,6 +27,10 @@ import {
 } from "better-auth/plugins/organization/access";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 
+import {
+  DESKTOP_AUTH_CLIENT_ID,
+  DESKTOP_AUTH_PROTOCOL_SCHEME,
+} from "./desktop";
 import { GOOGLE_AUTH_SCOPES } from "./google-scopes";
 import { lazyAuth } from "./lazy-auth";
 import {
@@ -111,6 +116,7 @@ const memberRole = organizationAccessControl.newRole({
 const baseURL = serverEnv.BETTER_AUTH_URL ?? "http://localhost:3000";
 const trustedOrigins = [
   baseURL,
+  `${DESKTOP_AUTH_PROTOCOL_SCHEME}:/`,
   ...(serverEnv.BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
     .map((origin) => origin.trim())
     .filter(Boolean) ?? []),
@@ -232,6 +238,7 @@ export const auth = lazyAuth(() =>
       }),
     },
     plugins: [
+      electron({ clientID: DESKTOP_AUTH_CLIENT_ID }),
       passkey(),
       organization({
         ac: organizationAccessControl,

@@ -1,6 +1,5 @@
+import { DesignSystemShowcase } from "@quieter/app/features/design-system/components/design-system-showcase";
 import { createFileRoute } from "@tanstack/react-router";
-
-import { DesignSystemShowcase } from "#/features/design-system/components/design-system-showcase";
 
 export const Route = createFileRoute("/_app/design-system")({
   component: DesignSystemShowcase,

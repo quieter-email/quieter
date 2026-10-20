@@ -1,6 +1,5 @@
+import { InboxPageClient } from "@quieter/app/features/mailbox/components/inbox-page-client";
 import { createLazyFileRoute } from "@tanstack/react-router";
-
-import { InboxPageClient } from "#/features/mailbox/components/inbox-page-client";
 
 export const Route = createLazyFileRoute("/_app/")({
   component: InboxRouteComponent,

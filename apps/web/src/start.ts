@@ -1,3 +1,4 @@
+import { getSafeAuthReturnTo } from "@quieter/app/lib/return-to";
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { checkDeploymentDatabase } from "@quieter/orpc/deployment-health";
 import {
@@ -30,9 +31,8 @@ import {
   sitePasswordCookieName,
 } from "#/lib/site-password.server";
 
-import { getSafeAuthReturnTo } from "./lib/return-to";
-
 const sitePasswordPaths = new Set([
+  "/api/auth/electron/token",
   "/api/auth/polar/webhooks",
   "/api/internal/gmail-credentials/rotate",
   "/api/openapi",
@@ -333,6 +333,14 @@ const sitePasswordMiddleware = createMiddleware().server(
     }
 
     if (shouldRedirectToHomePage(request)) {
+      if (normalizedPath === "/desktop/auth") {
+        const passwordUrl = new URL(sitePasswordPagePath, requestUrl);
+        passwordUrl.searchParams.set(
+          "returnTo",
+          `${requestUrl.pathname}${requestUrl.search}`
+        );
+        return Response.redirect(passwordUrl, 302);
+      }
       return Response.redirect(getHomePageUrl(request), 302);
     }
 
