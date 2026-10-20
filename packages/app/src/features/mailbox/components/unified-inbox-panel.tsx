@@ -18,7 +18,6 @@ import type {
   UnifiedInboxPreferences,
 } from "@quieter/app/features/mailbox/domain/unified-inbox";
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
-import { mailboxLabelDotClassNameByColor } from "@quieter/app/features/message-labels/domain/mailbox-label-presentation";
 import { MessageList } from "@quieter/app/features/message-list/components/message-list";
 import type { MessageListMailboxContext } from "@quieter/app/features/message-list/components/message-list-types";
 import { toastError } from "@quieter/app/lib/error-toast";
@@ -36,7 +35,7 @@ import {
 } from "@quieter/mail/search";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
-import { cn } from "@quieter/ui/cn";
+import { ColorSwatch } from "@quieter/ui/color-swatch";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
 import { toast } from "@quieter/ui/toast";
@@ -448,12 +447,10 @@ export const UnifiedInboxPanel = ({
         preferences.colors[mailbox.id] ?? defaultMailboxColor(mailbox.id);
       realContexts.set(uiThreadId, {
         badge: (
-          <span
-            aria-hidden
-            className={cn(
-              "inline-flex size-2.5 shrink-0 rounded-xs",
-              mailboxLabelDotClassNameByColor[color]
-            )}
+          <ColorSwatch
+            color={color.startsWith("#") ? color : `var(--q-${color})`}
+            shape="square"
+            size="sm"
           />
         ),
         displayName: mailbox.displayName,
@@ -612,28 +609,27 @@ export const UnifiedInboxPanel = ({
   const headerAddon = (
     <div className="flex items-center justify-between gap-2">
       <div className="flex min-w-0 items-center gap-3 overflow-hidden">
-        {selectedMailboxes.slice(0, 3).map((mailbox) => (
-          <IconButtonTooltip
-            key={mailbox.id}
-            label={`${mailbox.displayName?.trim() || mailbox.emailAddress}, ${mailbox.emailAddress}`}
-          >
-            <span className="inline-flex min-w-0 items-center gap-1.5 text-caption text-muted-fg">
-              <span
-                aria-hidden
-                className={cn(
-                  "inline-flex size-2.5 shrink-0 rounded-xs",
-                  mailboxLabelDotClassNameByColor[
-                    preferences.colors[mailbox.id] ??
-                      defaultMailboxColor(mailbox.id)
-                  ]
-                )}
-              />
-              <span className="truncate">
-                {mailbox.displayName?.trim() || mailbox.emailAddress}
+        {selectedMailboxes.slice(0, 3).map((mailbox) => {
+          const color =
+            preferences.colors[mailbox.id] ?? defaultMailboxColor(mailbox.id);
+          return (
+            <IconButtonTooltip
+              key={mailbox.id}
+              label={`${mailbox.displayName?.trim() || mailbox.emailAddress}, ${mailbox.emailAddress}`}
+            >
+              <span className="inline-flex min-w-0 items-center gap-1.5 text-caption text-muted-fg">
+                <ColorSwatch
+                  color={color.startsWith("#") ? color : `var(--q-${color})`}
+                  shape="square"
+                  size="sm"
+                />
+                <span className="truncate">
+                  {mailbox.displayName?.trim() || mailbox.emailAddress}
+                </span>
               </span>
-            </span>
-          </IconButtonTooltip>
-        ))}
+            </IconButtonTooltip>
+          );
+        })}
         {selectedMailboxes.length > 3 && (
           <span className="text-micro text-muted-fg">
             +{selectedMailboxes.length - 3}

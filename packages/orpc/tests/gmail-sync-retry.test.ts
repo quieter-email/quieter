@@ -1,3 +1,6 @@
+import type { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
+import type { getMessageWithDetails, mutateGmailMessage } from "@quieter/gmail";
+import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 /* oxlint-disable eslint/require-await -- Async mock contracts resolve without network or database I/O. */
 import type * as drizzleOrm from "drizzle-orm";
 import { getTableName } from "drizzle-orm";
@@ -17,8 +20,11 @@ type BudgetStatus = Awaited<ReturnType<typeof getMailAutomationAiBudgetStatus>>;
 
 const fixtures = vi.hoisted(() => ({
   budget: vi.fn<() => Promise<BudgetStatus>>(),
+  classify: vi.fn<typeof classifyMailMessage>(),
+  getMessage: vi.fn<typeof getMessageWithDetails>(),
   mailboxes: [] as Row[],
   markUrgent: vi.fn<() => Promise<void>>(),
+  mutate: vi.fn<typeof mutateGmailMessage>(),
   pendingCodeMessageIds: [] as string[],
   processCode: vi.fn<typeof processMailVerificationCode>(),
   rows: [] as Row[],
@@ -127,18 +133,43 @@ vi.mock("@quieter/database/client", () => {
       },
       update: () => ({
         set: (values: Row) => ({
-          where: async (predicate: Predicate) => {
-            for (const row of fixtures.rows.filter((candidate) =>
+          where: (predicate: Predicate) => {
+            const updated = fixtures.rows.filter((candidate) =>
               predicate(candidate)
-            )) {
+            );
+            for (const row of updated) {
               Object.assign(row, values);
             }
+            return { returning: async () => updated };
           },
         }),
       }),
     },
   };
   return client;
+});
+
+vi.mock(import("@quieter/gmail"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  getMessageWithDetails: fixtures.getMessage,
+  mutateGmailMessage: fixtures.mutate,
+}));
+vi.mock(
+  import("@quieter/ai/classify-gmail-message"),
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    classifyMailMessage: fixtures.classify,
+  })
+);
+vi.mock(import("@quieter/env/server"), async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    serverEnv: {
+      ...original.serverEnv,
+      QUIETER_LOCAL_PROVIDER_MODE: "write" as const,
+    },
+  };
 });
 
 vi.mock(import("../src/verification-codes"), () => ({
@@ -170,6 +201,18 @@ const input = {
 
 describe("Gmail automation retry recovery", () => {
   beforeEach(() => {
+    fixtures.classify.mockReset();
+    fixtures.mutate.mockReset().mockResolvedValue({
+      id: "deferred-message",
+      isUnread: false,
+      labelIds: ["INBOX", "deterministic"],
+    });
+    fixtures.getMessage.mockReset().mockResolvedValue({
+      from: "Sender <mail@example.com>",
+      id: "deferred-message",
+      labelIds: ["INBOX"],
+      threadId: "thread-1",
+    });
     fixtures.rows.length = 0;
     fixtures.mailboxes.length = 0;
     fixtures.pendingCodeMessageIds.length = 0;
@@ -280,6 +323,72 @@ describe("Gmail automation retry recovery", () => {
     expect(fixtures.rows[1]?.appliedAt).toBeNull();
     expect(fixtures.budget).not.toHaveBeenCalled();
   });
+
+  test.each([false, true])(
+    "applies deterministic matches while AI budget is exhausted, with mixed AI labels: %s",
+    async (mixed) => {
+      const [event] = fixtures.rows;
+      if (event === undefined) {
+        throw new Error("Missing retry fixture.");
+      }
+      event.nextAttemptAt = new Date(Date.now() - 60_000);
+      fixtures.budget.mockResolvedValue({
+        allowed: false,
+        message: MAIL_AUTOMATION_AI_PAUSED_MESSAGE,
+        reason: "credits_exhausted",
+      });
+      const autoLabel: AutoLabelSettings = {
+        domains: [],
+        enabled: true,
+        keywordScope: "anywhere",
+        keywords: [],
+        matchMode: "all",
+        prompt: "",
+        senders: ["mail@example.com"],
+      };
+      const candidate = {
+        autoLabel,
+        description: null,
+        id: "deterministic",
+        inclusionCriteria: null,
+        name: "Sender",
+      };
+      await retryPendingAutomationMessages({
+        ...input,
+        automationRuntime: {
+          ...input.automationRuntime,
+          getAutoLabelContext: async () => ({
+            availableLabelIds: new Set(["deterministic", "ai"]),
+            labels: [
+              candidate,
+              ...(mixed
+                ? [
+                    {
+                      ...candidate,
+                      autoLabel: { ...autoLabel, prompt: "Only invoices" },
+                      id: "ai",
+                    },
+                  ]
+                : []),
+            ],
+            memoryCandidates: [],
+            model: "fixture-model",
+          }),
+        },
+      });
+      expect(
+        fixtures.mutate.mock.calls.flatMap((call) =>
+          typeof call[2] === "string" ? [] : (call[2].addLabelIds ?? [])
+        )
+      ).toContain("deterministic");
+      expect(fixtures.classify).not.toHaveBeenCalled();
+      expect(event.appliedAt instanceof Date).toBe(!mixed);
+      expect(event.labelIds).toStrictEqual(mixed ? null : ["deterministic"]);
+      expect(event.nextAttemptAt instanceof Date).toBe(mixed);
+      expect(event.usageReportedAt instanceof Date).toBe(!mixed);
+      expect(fixtures.budget).toHaveBeenCalledTimes(Number(mixed));
+    }
+  );
 
   test("schedules an enabled mailbox's budget backlog even after a recent reconciliation", async () => {
     const jobs = await listGmailPubSubMaintenanceJobs();

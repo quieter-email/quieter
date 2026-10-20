@@ -8,9 +8,8 @@ import {
   assertAccessibleMailbox,
   getAuthorizedManagedMailbox,
 } from "../mailbox/service";
-import { assertMailAutomationAiBudget } from "./ai-budget";
 
-const assertAutomationAccess = async (input: {
+export const setMailboxAutoLabeling = async (input: {
   enabled: boolean;
   mailboxId: string;
   userId: string;
@@ -28,22 +27,6 @@ const assertAutomationAccess = async (input: {
     });
   }
 
-  if (input.enabled) {
-    await assertMailAutomationAiBudget({
-      organizationId: selectedMailbox.organizationId ?? undefined,
-      userId: input.userId,
-    });
-  }
-
-  return selectedMailbox;
-};
-
-export const setMailboxAutoLabeling = async (input: {
-  enabled: boolean;
-  mailboxId: string;
-  userId: string;
-}) => {
-  const selectedMailbox = await assertAutomationAccess(input);
   const now = new Date();
   await db
     .insert(mailboxAutomationSettings)

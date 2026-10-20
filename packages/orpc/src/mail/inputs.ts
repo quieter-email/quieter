@@ -1,3 +1,4 @@
+import { autoLabelSettingsSchema } from "@quieter/mail/auto-label";
 import {
   composeDraftInputSchema,
   composeMessageInputSchema,
@@ -47,6 +48,7 @@ export const mailInputSchemas = {
       }),
   }),
   createLabel: z.object({
+    autoLabel: autoLabelSettingsSchema.nullable().optional(),
     color: mailboxLabelColorSchema.optional(),
     description: z.string().trim().max(2000).nullable().optional(),
     mailboxId: z.string().trim().min(1),
@@ -165,6 +167,7 @@ export const mailInputSchemas = {
     visible: z.boolean().optional(),
   }),
   updateLabelDetails: z.object({
+    autoLabel: autoLabelSettingsSchema.nullable().optional(),
     description: z.string().trim().max(2000).nullable(),
     inclusionCriteria: z.string().trim().max(4000).nullable(),
     labelId: z.string().trim().min(1),

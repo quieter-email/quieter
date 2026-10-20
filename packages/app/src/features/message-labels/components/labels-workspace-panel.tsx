@@ -1,15 +1,15 @@
 "use client";
 
 import {
-  Cancel01Icon,
+  Add01Icon,
   Delete01Icon,
   Edit01Icon,
   MoreVerticalIcon,
-  Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { AutoLabelEditor } from "@quieter/app/features/message-labels/components/auto-label-editor";
+import { AutoLabelSwitch } from "@quieter/app/features/message-labels/components/auto-label-switch";
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
-import { mailboxLabelDotClassNameByColor } from "@quieter/app/features/message-labels/domain/mailbox-label-presentation";
 import {
   MAX_VISIBLE_SIDEBAR_LABELS,
   SIDEBAR_LABEL_VISIBILITY_EVENT,
@@ -17,8 +17,13 @@ import {
   createHiddenLabelState,
   readHiddenLabelIds,
   reduceHiddenLabelState,
+  writeHiddenLabelIds,
 } from "@quieter/app/features/message-labels/domain/sidebar-label-visibility";
 import { getUserLabels } from "@quieter/app/features/message-search/state/message-list-search-state";
+import {
+  getDemoLabelAutomation,
+  saveDemoLabelAutomation,
+} from "@quieter/app/lib/demo-mail/label-automation";
 import { toastError } from "@quieter/app/lib/error-toast";
 import {
   getLabelsQueryKey,
@@ -29,6 +34,8 @@ import {
   managedLabelCountsQueryOptions,
 } from "@quieter/app/lib/managed-mailbox-organization-query";
 import { orpc } from "@quieter/app/lib/orpc";
+import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
+import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 import type {
   MailboxLabel,
   MailboxLabelColor,
@@ -44,7 +51,16 @@ import {
   AlertDialogTitle,
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
+import { ColorSwatch } from "@quieter/ui/color-swatch";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@quieter/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,11 +70,13 @@ import {
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
+import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useId, useReducer, useState } from "react";
 
 type LabelsWorkspacePanelProps = {
+  canManage: boolean;
   mailboxId: string | null;
   mailboxProvider: "gmail" | "managed";
 };
@@ -68,10 +86,13 @@ const isNonemptyMailboxId = (
 ): mailboxId is string => (mailboxId?.trim() ?? "") !== "";
 
 export const LabelsWorkspacePanel = ({
+  canManage,
   mailboxId,
   mailboxProvider,
 }: LabelsWorkspacePanelProps) => {
   const queryClient = useQueryClient();
+  const id = useId();
+  const [isCreatingLabel, setIsCreatingLabel] = useState(false);
   const [newLabelColor, setNewLabelColor] = useState<MailboxLabelColor>("gray");
   const [newLabelName, setNewLabelName] = useState("");
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
@@ -79,6 +100,9 @@ export const LabelsWorkspacePanel = ({
   const [draftDescription, setDraftDescription] = useState("");
   const [draftName, setDraftName] = useState("");
   const [deletingLabel, setDeletingLabel] = useState<MailboxLabel | null>(null);
+  const [automationLabelId, setAutomationLabelId] = useState<string | null>(
+    null
+  );
   const [hiddenLabelState, updateHiddenLabelState] = useReducer(
     reduceHiddenLabelState,
     mailboxId,
@@ -126,6 +150,10 @@ export const LabelsWorkspacePanel = ({
   );
 
   const userLabels = getUserLabels(labels ?? []);
+  const editingLabel = userLabels.find((label) => label.id === editingLabelId);
+  const automationLabel = userLabels.find(
+    (label) => label.id === automationLabelId
+  );
   const hiddenLabelIds =
     hiddenLabelState.mailboxId === mailboxId
       ? hiddenLabelState.value
@@ -151,6 +179,8 @@ export const LabelsWorkspacePanel = ({
   const updateLabelDetailsMutation = useMutation(
     orpc.mail.updateLabelDetails.mutationOptions()
   );
+  const isSavingLabel =
+    updateLabelMutation.isPending || updateLabelDetailsMutation.isPending;
 
   const setMailboxHiddenLabelIds = (
     updater: (current: Set<string>) => Set<string>
@@ -158,7 +188,7 @@ export const LabelsWorkspacePanel = ({
     if (!isNonemptyMailboxId(mailboxId)) {
       return;
     }
-    updateHiddenLabelState({ mailboxId, updater });
+    writeHiddenLabelIds(mailboxId, updater(readHiddenLabelIds(mailboxId)));
   };
 
   const invalidateLabels = async () => {
@@ -185,22 +215,54 @@ export const LabelsWorkspacePanel = ({
     if (name === "") {
       return;
     }
+    if (
+      userLabels.some(
+        (label) => label.name.toLowerCase() === name.toLowerCase()
+      )
+    ) {
+      toast.error("A label with this name already exists.");
+      return;
+    }
 
     try {
-      const label = await createLabelMutation.mutateAsync({
-        color: newLabelColor,
-        mailboxId,
-        name,
-      });
+      let labelId: string;
+      if (isSandboxMailboxId(mailboxId)) {
+        const current = getDemoLabelAutomation(mailboxId);
+        const demoLabel: MailboxLabel = {
+          autoLabel: null,
+          color: newLabelColor,
+          description: null,
+          id: `demo:label:${crypto.randomUUID()}`,
+          inclusionCriteria: null,
+          name,
+          position: userLabels.length,
+          provider: mailboxProvider,
+          type: "user",
+          visible: true,
+        };
+        saveDemoLabelAutomation(mailboxId, {
+          ...current,
+          createdLabels: [...current.createdLabels, demoLabel],
+        });
+        labelId = demoLabel.id;
+      } else {
+        const label = await createLabelMutation.mutateAsync({
+          color: newLabelColor,
+          mailboxId,
+          name,
+        });
+        labelId = label.id;
+      }
       if (visibleLabelCount >= MAX_VISIBLE_SIDEBAR_LABELS) {
         setMailboxHiddenLabelIds((current) => {
-          current.add(label.id);
+          current.add(labelId);
           return current;
         });
       }
       setNewLabelColor("gray");
       setNewLabelName("");
       await invalidateLabels();
+      setIsCreatingLabel(false);
     } catch (error) {
       toastError(error, {
         boundary: "labels-panel",
@@ -210,14 +272,51 @@ export const LabelsWorkspacePanel = ({
   };
 
   const startEditing = (label: MailboxLabel) => {
+    setAutomationLabelId(null);
     setEditingLabelId(label.id);
     setDraftName(label.name);
-    setDraftDescription(label.description ?? label.inclusionCriteria ?? "");
+    setDraftDescription(label.description ?? "");
     setDraftColor(label.color ?? "gray");
   };
 
   const cancelEditing = () => {
     setEditingLabelId(null);
+  };
+
+  const saveLabelAutomation = async (
+    label: MailboxLabel,
+    autoLabel: AutoLabelSettings
+  ): Promise<boolean> => {
+    if (!isNonemptyMailboxId(mailboxId)) {
+      return false;
+    }
+    try {
+      if (isSandboxMailboxId(mailboxId)) {
+        const current = getDemoLabelAutomation(mailboxId);
+        saveDemoLabelAutomation(mailboxId, {
+          ...current,
+          labels: { ...current.labels, [label.id]: autoLabel },
+        });
+      } else {
+        await updateLabelDetailsMutation.mutateAsync({
+          autoLabel,
+          description: label.description,
+          inclusionCriteria: label.inclusionCriteria,
+          labelId: label.id,
+          mailboxId,
+        });
+      }
+      await invalidateLabels();
+      setAutomationLabelId(null);
+      toast.success("Auto-label updated.");
+      return true;
+    } catch (error) {
+      toastError(error, {
+        boundary: "labels-panel",
+        fallback: "Could not update auto-labeling. Please try again.",
+      });
+      return false;
+    }
   };
 
   const saveLabelEdit = async (label: MailboxLabel) => {
@@ -230,18 +329,34 @@ export const LabelsWorkspacePanel = ({
     }
 
     try {
-      await updateLabelMutation.mutateAsync({
-        color: draftColor,
-        labelId: label.id,
-        mailboxId,
-        name,
-      });
-      await updateLabelDetailsMutation.mutateAsync({
-        description: draftDescription.trim() === "" ? null : draftDescription,
-        inclusionCriteria: label.inclusionCriteria ?? null,
-        labelId: label.id,
-        mailboxId,
-      });
+      if (isSandboxMailboxId(mailboxId)) {
+        const current = getDemoLabelAutomation(mailboxId);
+        saveDemoLabelAutomation(mailboxId, {
+          ...current,
+          updatedLabels: {
+            ...current.updatedLabels,
+            [label.id]: {
+              ...label,
+              color: draftColor,
+              description: draftDescription.trim() || null,
+              name,
+            },
+          },
+        });
+      } else {
+        await updateLabelMutation.mutateAsync({
+          color: draftColor,
+          labelId: label.id,
+          mailboxId,
+          name,
+        });
+        await updateLabelDetailsMutation.mutateAsync({
+          description: draftDescription.trim() === "" ? null : draftDescription,
+          inclusionCriteria: label.inclusionCriteria ?? null,
+          labelId: label.id,
+          mailboxId,
+        });
+      }
       setEditingLabelId(null);
       await invalidateLabels();
     } catch (error) {
@@ -258,12 +373,26 @@ export const LabelsWorkspacePanel = ({
     }
     if (mailboxProvider === "managed") {
       try {
-        await updateLabelMutation.mutateAsync({
-          labelId: label.id,
-          mailboxId,
-          name: label.name,
-          visible: effectiveHiddenLabelIds.has(label.id),
-        });
+        if (isSandboxMailboxId(mailboxId)) {
+          const current = getDemoLabelAutomation(mailboxId);
+          saveDemoLabelAutomation(mailboxId, {
+            ...current,
+            updatedLabels: {
+              ...current.updatedLabels,
+              [label.id]: {
+                ...label,
+                visible: effectiveHiddenLabelIds.has(label.id),
+              },
+            },
+          });
+        } else {
+          await updateLabelMutation.mutateAsync({
+            labelId: label.id,
+            mailboxId,
+            name: label.name,
+            visible: effectiveHiddenLabelIds.has(label.id),
+          });
+        }
         await invalidateLabels();
       } catch (error) {
         toastError(error, {
@@ -296,7 +425,15 @@ export const LabelsWorkspacePanel = ({
     }
 
     try {
-      await deleteLabelMutation.mutateAsync({ labelId: label.id, mailboxId });
+      if (isSandboxMailboxId(mailboxId)) {
+        const current = getDemoLabelAutomation(mailboxId);
+        saveDemoLabelAutomation(mailboxId, {
+          ...current,
+          deletedLabelIds: [...current.deletedLabelIds, label.id],
+        });
+      } else {
+        await deleteLabelMutation.mutateAsync({ labelId: label.id, mailboxId });
+      }
       if (editingLabelId === label.id) {
         setEditingLabelId(null);
       }
@@ -329,212 +466,301 @@ export const LabelsWorkspacePanel = ({
     );
   } else {
     labelsContent = (
-      <div className="flex flex-col">
+      <ul className="-mx-3 space-y-1">
         {userLabels.map((label) => {
           const isShown = !effectiveHiddenLabelIds.has(label.id);
-          const isEditing = editingLabelId === label.id;
-          const description = label.description ?? label.inclusionCriteria;
 
           return (
-            <div
-              className="rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/40"
-              key={label.id}
-            >
-              {isEditing ? (
-                <form
-                  action={() => {
-                    void saveLabelEdit(label);
-                  }}
-                  className="flex flex-col gap-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <Input
-                      aria-label="Label name"
-                      className="min-w-0 flex-1"
-                      disabled={updateLabelMutation.isPending}
-                      onChange={(event) => {
-                        setDraftName(event.currentTarget.value);
-                      }}
-                      value={draftName}
-                    />
-                    <IconButtonTooltip label="Save label">
-                      <Button
-                        aria-label="Save label"
-                        disabled={
-                          updateLabelMutation.isPending ||
-                          draftName.trim() === ""
-                        }
-                        size="icon-sm"
-                        type="submit"
-                        variant="ghost"
-                      >
-                        <HugeiconsIcon aria-hidden icon={Tick02Icon} />
-                      </Button>
-                    </IconButtonTooltip>
-                    <IconButtonTooltip label="Cancel editing">
-                      <Button
-                        aria-label="Cancel editing"
-                        disabled={updateLabelMutation.isPending}
-                        onClick={cancelEditing}
-                        size="icon-sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
-                      </Button>
-                    </IconButtonTooltip>
-                  </div>
-                  <Input
-                    aria-label="Label description"
-                    disabled={updateLabelDetailsMutation.isPending}
-                    onChange={(event) => {
-                      setDraftDescription(event.currentTarget.value);
-                    }}
-                    placeholder="A short explanation of what belongs here."
-                    value={draftDescription}
-                  />
-                  <MailboxColorPicker
-                    label="Label color"
-                    onChange={setDraftColor}
-                    value={draftColor}
-                  />
-                </form>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "size-3 shrink-0 rounded-full",
-                      mailboxLabelDotClassNameByColor[label.color ?? "gray"]
-                    )}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-body text-fg">{label.name}</p>
-                    {description === undefined || description === "" ? null : (
-                      <p className="truncate text-caption text-muted-fg">
-                        {description}
-                      </p>
-                    )}
-                  </div>
-                  {mailboxProvider === "managed" ? (
-                    <span className="shrink-0 text-micro text-muted-fg tabular-nums">
-                      {managedLabelCountById.get(label.id) ?? 0}
-                    </span>
-                  ) : null}
-                  <IconButtonTooltip
-                    label={isShown ? "Hide from sidebar" : "Show in sidebar"}
+            <li className="flex items-center gap-3 px-3 py-2.5" key={label.id}>
+              <ColorSwatch
+                color={
+                  label.color?.startsWith("#") === true
+                    ? label.color
+                    : `var(--q-${label.color ?? "gray"})`
+                }
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-body text-fg">{label.name}</p>
+              </div>
+              {mailboxProvider === "managed" ? (
+                <span className="shrink-0 text-micro text-muted-fg tabular-nums">
+                  {managedLabelCountById.get(label.id) ?? 0}
+                </span>
+              ) : null}
+              <Button
+                aria-haspopup="dialog"
+                aria-label={`Auto-label settings for ${label.name}`}
+                disabled={!canManage || updateLabelDetailsMutation.isPending}
+                onClick={() => {
+                  setAutomationLabelId(label.id);
+                }}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                {label.autoLabel?.enabled === false ? "Paused" : "Auto-label"}
+              </Button>
+              <DropdownMenu>
+                <IconButtonTooltip label={`Options for ${label.name}`}>
+                  <DropdownMenuTrigger
+                    appearance="icon"
+                    aria-label={`Options for ${label.name}`}
                   >
-                    <Button
-                      aria-label={
-                        isShown ? "Hide from sidebar" : "Show in sidebar"
-                      }
-                      onClick={() => {
-                        void toggleSidebarVisibility(label);
-                      }}
-                      size="icon-sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      {isShown ? (
-                        <EyeIcon aria-hidden className="size-4" />
-                      ) : (
-                        <EyeOffIcon aria-hidden className="size-4" />
-                      )}
-                    </Button>
-                  </IconButtonTooltip>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      appearance="icon"
-                      aria-label={`Options for ${label.name}`}
-                    >
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-4"
-                        icon={MoreVerticalIcon}
-                      />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          startEditing(label);
-                        }}
-                      >
-                        <HugeiconsIcon
-                          aria-hidden
-                          className="size-4"
-                          icon={Edit01Icon}
-                        />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          setDeletingLabel(label);
-                        }}
-                        tone="destructive"
-                      >
-                        <HugeiconsIcon
-                          aria-hidden
-                          className="size-4"
-                          icon={Delete01Icon}
-                        />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              )}
-            </div>
+                    <HugeiconsIcon
+                      aria-hidden
+                      className="size-4"
+                      icon={MoreVerticalIcon}
+                    />
+                  </DropdownMenuTrigger>
+                </IconButtonTooltip>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    disabled={!canManage}
+                    onSelect={() => {
+                      startEditing(label);
+                    }}
+                  >
+                    <HugeiconsIcon
+                      aria-hidden
+                      className="size-4"
+                      icon={Edit01Icon}
+                    />
+                    Edit label
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!canManage}
+                    onSelect={() => {
+                      void toggleSidebarVisibility(label);
+                    }}
+                  >
+                    {isShown ? (
+                      <EyeOffIcon aria-hidden className="size-4" />
+                    ) : (
+                      <EyeIcon aria-hidden className="size-4" />
+                    )}
+                    {isShown ? "Hide from sidebar" : "Show in sidebar"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!canManage}
+                    onSelect={() => {
+                      setDeletingLabel(label);
+                    }}
+                    tone="destructive"
+                  >
+                    <HugeiconsIcon
+                      aria-hidden
+                      className="size-4"
+                      icon={Delete01Icon}
+                    />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </li>
           );
         })}
-      </div>
+      </ul>
     );
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl px-6 py-12">
-        <div className="mb-8">
+      <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+        <div className="mb-6 flex items-center justify-between gap-4">
           <h1 className="font-sans text-title-sm font-normal text-fg">
             Labels
           </h1>
-          <p className="mt-1.5 text-body text-muted-fg">
-            Create labels, choose which ones appear in your sidebar, and explain
-            what belongs in each one.
-          </p>
+          <Button
+            aria-haspopup="dialog"
+            disabled={!canManage || !isNonemptyMailboxId(mailboxId)}
+            onClick={() => {
+              setNewLabelName("");
+              setNewLabelColor("gray");
+              setIsCreatingLabel(true);
+            }}
+            size="sm"
+            type="button"
+          >
+            <HugeiconsIcon aria-hidden icon={Add01Icon} />
+            New label
+          </Button>
         </div>
 
-        <form
-          action={() => {
-            void createLabel();
-          }}
-          className="mb-6 flex items-center gap-3"
-        >
-          <Input
-            aria-label="New label name"
-            className="min-w-0 flex-1"
-            disabled={createLabelMutation.isPending}
-            onChange={(event) => {
-              setNewLabelName(event.currentTarget.value);
-            }}
-            placeholder="New label"
-            value={newLabelName}
-          />
-          <MailboxColorPicker
-            className="shrink-0"
-            label="Label color"
-            onChange={setNewLabelColor}
-            value={newLabelColor}
-          />
-          <Button
-            disabled={createLabelMutation.isPending || !newLabelName.trim()}
-            type="submit"
-          >
-            Create
-          </Button>
-        </form>
-
-        {labelsContent}
+        <div className="space-y-6">
+          {isNonemptyMailboxId(mailboxId) ? (
+            <AutoLabelSwitch
+              canManage={canManage}
+              key={mailboxId}
+              mailboxId={mailboxId}
+            />
+          ) : null}
+          {labelsContent}
+        </div>
       </div>
+
+      <Dialog open={isCreatingLabel} onOpenChange={setIsCreatingLabel}>
+        <DialogContent>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!createLabelMutation.isPending) {
+                void createLabel();
+              }
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>New label</DialogTitle>
+            </DialogHeader>
+            <DialogBody spacing="5">
+              <div className="space-y-2">
+                <label
+                  className="text-caption font-medium"
+                  htmlFor={`${id}-new-name`}
+                >
+                  Name
+                </label>
+                <Input
+                  disabled={!canManage || createLabelMutation.isPending}
+                  id={`${id}-new-name`}
+                  maxLength={225}
+                  onChange={(event) => {
+                    setNewLabelName(event.currentTarget.value);
+                  }}
+                  placeholder="e.g. Work"
+                  required
+                  value={newLabelName}
+                />
+              </div>
+              <div className="space-y-3">
+                <p className="text-caption font-medium">Color</p>
+                <MailboxColorPicker
+                  label="Label color"
+                  onChange={setNewLabelColor}
+                  value={newLabelColor}
+                />
+              </div>
+            </DialogBody>
+            <DialogFooter fullWidth>
+              <DialogCloseButton
+                disabled={createLabelMutation.isPending}
+                variant="secondary"
+              >
+                Cancel
+              </DialogCloseButton>
+              <Button
+                disabled={
+                  !canManage ||
+                  createLabelMutation.isPending ||
+                  !newLabelName.trim()
+                }
+                pending={createLabelMutation.isPending}
+                pendingLabel="Creating…"
+                type="submit"
+              >
+                Create label
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!editingLabel}
+        onOpenChange={(open) => {
+          if (!open) {
+            cancelEditing();
+          }
+        }}
+      >
+        <DialogContent>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (editingLabel && !isSavingLabel) {
+                void saveLabelEdit(editingLabel);
+              }
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Edit label</DialogTitle>
+            </DialogHeader>
+            <DialogBody spacing="5">
+              <div className="space-y-2">
+                <label
+                  className="text-caption font-medium"
+                  htmlFor={`${id}-name`}
+                >
+                  Name
+                </label>
+                <Input
+                  disabled={isSavingLabel || !canManage}
+                  id={`${id}-name`}
+                  maxLength={225}
+                  onChange={(event) => {
+                    setDraftName(event.currentTarget.value);
+                  }}
+                  required
+                  value={draftName}
+                />
+              </div>
+              <div className="space-y-2">
+                <label
+                  className="text-caption font-medium"
+                  htmlFor={`${id}-description`}
+                >
+                  Description
+                </label>
+                <Textarea
+                  disabled={isSavingLabel || !canManage}
+                  id={`${id}-description`}
+                  onChange={(event) => {
+                    setDraftDescription(event.currentTarget.value);
+                  }}
+                  placeholder="A short explanation of what belongs here."
+                  rows={2}
+                  value={draftDescription}
+                />
+              </div>
+              <div className="space-y-3">
+                <p className="text-caption font-medium">Color</p>
+                <MailboxColorPicker
+                  label="Label color"
+                  onChange={setDraftColor}
+                  value={draftColor}
+                />
+              </div>
+            </DialogBody>
+            <DialogFooter fullWidth>
+              <DialogCloseButton disabled={isSavingLabel} variant="secondary">
+                Cancel
+              </DialogCloseButton>
+              <Button
+                disabled={!canManage || isSavingLabel || !draftName.trim()}
+                pending={isSavingLabel}
+                pendingLabel="Saving…"
+                type="submit"
+              >
+                Save changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {automationLabel ? (
+        <AutoLabelEditor
+          canManage={canManage}
+          isPending={updateLabelDetailsMutation.isPending}
+          key={`${mailboxId}:${automationLabel.id}:${JSON.stringify(automationLabel.autoLabel)}`}
+          label={automationLabel}
+          onCancel={() => {
+            setAutomationLabelId(null);
+          }}
+          onSave={async (settings) =>
+            await saveLabelAutomation(automationLabel, settings)
+          }
+        />
+      ) : null}
 
       <AlertDialog
         onOpenChange={(open) => {
@@ -558,8 +784,10 @@ export const LabelsWorkspacePanel = ({
               {deletingLabel?.name ? `"${deletingLabel.name}"` : "this label"}?
             </p>
           </AlertDialogBody>
-          <AlertDialogFooter>
-            <AlertDialogCloseButton>Cancel</AlertDialogCloseButton>
+          <AlertDialogFooter fullWidth>
+            <AlertDialogCloseButton variant="secondary">
+              Cancel
+            </AlertDialogCloseButton>
             <Button
               disabled={deleteLabelMutation.isPending || !deletingLabel}
               onClick={() => {

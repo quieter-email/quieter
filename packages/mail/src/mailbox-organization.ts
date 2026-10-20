@@ -1,8 +1,9 @@
 import { z } from "zod";
 
+import { autoLabelSettingsSchema } from "./auto-label";
 import { structuredMailSearchSchema } from "./search";
 
-export const mailboxLabelColorSchema = z.enum([
+export const mailboxLabelNamedColorSchema = z.enum([
   "blue",
   "cyan",
   "green",
@@ -14,9 +15,18 @@ export const mailboxLabelColorSchema = z.enum([
   "yellow",
 ]);
 
+export const mailboxLabelColorSchema = z.union([
+  mailboxLabelNamedColorSchema,
+  z
+    .string()
+    .regex(/^#[\da-f]{6}$/iu, "Choose a valid hex color.")
+    .pipe(z.templateLiteral(["#", z.string()])),
+]);
+
 export type MailboxLabelColor = z.infer<typeof mailboxLabelColorSchema>;
 
 export const mailboxLabelSchema = z.object({
+  autoLabel: autoLabelSettingsSchema.nullable(),
   color: mailboxLabelColorSchema.nullable(),
   description: z.string().nullable(),
   id: z.string(),

@@ -354,6 +354,7 @@ export const getManagedDemoThread = (threadId: string): ThreadMessagesResult =>
   getDemoMailThread(getSortedMessages(), threadId);
 export const getManagedDemoLabels = (): MailboxLabel[] =>
   readDemoState().labels.map((label) => ({
+    autoLabel: null,
     color: label.color,
     description: label.description,
     id: label.id,

@@ -25,7 +25,7 @@ import { Calendar } from "@quieter/ui/calendar";
 import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 
 const getFilterLabel = (type: string) => {
   switch (type) {
@@ -185,6 +185,16 @@ export const MessageListSearchView = ({
                   const label = userLabelsBySelectionKey.get(
                     normalizeLabelSelectionKey(filter.value)
                   );
+                  const filterStyle: CSSProperties & {
+                    "--filter-order": number;
+                    "--selected-color": MailboxLabel["color"] | undefined;
+                  } = {
+                    "--filter-order": index * 2 + 1,
+                    "--selected-color":
+                      label?.color?.startsWith("#") === true
+                        ? label.color
+                        : undefined,
+                  };
 
                   return (
                     <button
@@ -195,16 +205,17 @@ export const MessageListSearchView = ({
                       }
                       className={cn(
                         messageListHeaderControlVariants({ control: "chip" }),
-                        "gap-1",
+                        "order-(--filter-order) gap-1",
                         {
                           [mailboxLabelSearchPillSurfaceClassNameByColor[
                             label?.color ?? "gray"
-                          ]]: label !== undefined,
+                          ] ?? ""]: label !== undefined,
+                          "q-custom-color-surface":
+                            label?.color?.startsWith("#") === true,
                         }
                       )}
                       key={filterRenderKey}
-                      // oxlint-disable-next-line shadcn/no-inline-styles -- Interleaved pills need computed flex order.
-                      style={{ order: index * 2 + 1 }}
+                      style={filterStyle}
                       onClick={(event) => {
                         event.stopPropagation();
                         cycleFilterFromPointer(index);

@@ -3,7 +3,6 @@
 import { MoreVerticalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useUnifiedInboxPreferences } from "@quieter/app/features/mailbox/domain/unified-inbox";
-import { mailboxLabelDotClassNameByColor } from "@quieter/app/features/message-labels/domain/mailbox-label-presentation";
 import {
   SIDEBAR_LABEL_VISIBILITY_EVENT,
   SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY,
@@ -23,6 +22,7 @@ import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { ColorSwatch } from "@quieter/ui/color-swatch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -219,12 +219,12 @@ export const UnifiedSidebarLabelNav = ({
               type="button"
               variant="ghost"
             >
-              <span
-                aria-hidden
-                className={cn(
-                  "inline-flex size-3 shrink-0 rounded-full",
-                  mailboxLabelDotClassNameByColor[label.color ?? "gray"]
-                )}
+              <ColorSwatch
+                color={
+                  label.color?.startsWith("#") === true
+                    ? label.color
+                    : `var(--q-${label.color ?? "gray"})`
+                }
               />
               <span className="min-w-0 truncate">{label.name}</span>
             </SidebarNavItem>

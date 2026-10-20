@@ -50,6 +50,9 @@ export const MessageLabels = ({
             "max-w-44": !compact,
           })}
           key={label.id}
+          customColor={
+            label.color?.startsWith("#") === true ? label.color : undefined
+          }
           size={compact ? "xs" : "sm"}
           title={label.name}
           tone={mailboxLabelPillToneByColor[label.color ?? "gray"]}

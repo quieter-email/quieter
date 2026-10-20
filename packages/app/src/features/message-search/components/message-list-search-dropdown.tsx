@@ -18,7 +18,7 @@ import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { cn } from "@quieter/ui/cn";
 import { LazyMotion, domAnimation, AnimatePresence, m } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 const createSearchFilterSections = (
@@ -73,6 +73,7 @@ const SearchDropdownSectionLabel = ({ children }: { children: string }) => (
 const SearchDropdownRow = ({
   active = false,
   className,
+  customColor,
   highlighted = false,
   hint,
   icon,
@@ -81,35 +82,45 @@ const SearchDropdownRow = ({
 }: {
   active?: boolean;
   className?: string;
+  customColor?: string;
   highlighted?: boolean;
   hint?: string;
   icon: IconSvgElement;
   label: string;
   onClick: () => void;
-}) => (
-  <button
-    className={cn(
-      "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
-      className,
-      {
-        "bg-accent": active && !className,
-        "bg-muted": highlighted && !className,
-        "ring-1 ring-ring/45 ring-inset": active && !highlighted && !!className,
-        "ring-2 ring-ring/60 ring-inset": highlighted && !!className,
-      }
-    )}
-    onClick={onClick}
-    type="button"
-  >
-    <HugeiconsIcon
-      aria-hidden
-      className="size-3.5 shrink-0 text-muted-fg"
-      icon={icon}
-    />
-    <span className="min-w-0 flex-1 truncate">{label}</span>
-    {!!hint && <span className="text-micro text-muted-fg">{hint}</span>}
-  </button>
-);
+}) => {
+  const rowStyle: CSSProperties & { "--selected-color": string | undefined } = {
+    "--selected-color": customColor,
+  };
+  return (
+    <button
+      className={cn(
+        "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
+        className,
+        {
+          "bg-accent": active && !className && !customColor,
+          "bg-muted": highlighted && !className && !customColor,
+          "q-custom-color-surface": !!customColor,
+          "ring-1 ring-ring/45 ring-inset":
+            active && !highlighted && !!(className || customColor),
+          "ring-2 ring-ring/60 ring-inset":
+            highlighted && !!(className || customColor),
+        }
+      )}
+      onClick={onClick}
+      style={rowStyle}
+      type="button"
+    >
+      <HugeiconsIcon
+        aria-hidden
+        className="size-3.5 shrink-0 text-muted-fg"
+        icon={icon}
+      />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {!!hint && <span className="text-micro text-muted-fg">{hint}</span>}
+    </button>
+  );
+};
 
 type LabelsSubmenuLayout = {
   coneHeight: number;
@@ -262,6 +273,9 @@ export const MessageListSearchDropdown = ({
           return (
             <SearchDropdownRow
               active={selectionState !== undefined}
+              customColor={
+                label.color?.startsWith("#") === true ? label.color : undefined
+              }
               className={
                 mailboxLabelSearchPillSurfaceClassNameByColor[
                   label.color ?? "gray"
