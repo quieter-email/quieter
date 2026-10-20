@@ -12,4 +12,10 @@ contextBridge.exposeInMainWorld("quieterDesktop", {
     await ipcRenderer.invoke("quieter:open-external", url);
   },
   platform: process.platform,
+  setTitleBarColors: async (colors: {
+    background: string;
+    foreground: string;
+  }): Promise<void> => {
+    await ipcRenderer.invoke("quieter:set-title-bar-colors", colors);
+  },
 } satisfies DesktopBridge);

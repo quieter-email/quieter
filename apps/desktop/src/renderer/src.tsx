@@ -8,6 +8,8 @@ import { MotionConfig } from "motion/react";
 import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
+import { DESKTOP_TITLE_BAR_HEIGHT } from "../shared/bridge";
+import { DesktopShell } from "./desktop-shell";
 import { router } from "./router";
 
 import "./styles.css";
@@ -19,6 +21,10 @@ configureAppRuntime({
 });
 configureAppAuthClient({ baseURL: window.quieterDesktop.apiBaseURL });
 document.documentElement.dataset.platform = window.quieterDesktop.platform;
+document.documentElement.style.setProperty(
+  "--desktop-title-bar-height",
+  `${DESKTOP_TITLE_BAR_HEIGHT}px`
+);
 
 const SessionEvents = () => {
   const { refetch } = authClient.useSession();
@@ -55,7 +61,9 @@ createRoot(root).render(
   <ColorModeProvider initialColorMode="system">
     <MotionConfig reducedMotion="user">
       <SessionEvents />
-      <RouterProvider router={router} />
+      <DesktopShell>
+        <RouterProvider router={router} />
+      </DesktopShell>
       <Toaster />
     </MotionConfig>
   </ColorModeProvider>

@@ -23,7 +23,7 @@ import {
 } from "electron";
 import type { IpcMainInvokeEvent } from "electron";
 
-import { DESKTOP_APP_ORIGIN } from "../shared/bridge";
+import { DESKTOP_APP_ORIGIN, DESKTOP_TITLE_BAR_HEIGHT } from "../shared/bridge";
 import { createAuthStorage } from "./auth-storage";
 import {
   getAuthCallbackToken,
@@ -168,6 +168,27 @@ ipcMain.handle("quieter:open-external", async (event, input: unknown) => {
     throw new Error("This link cannot be opened.");
   }
   await shell.openExternal(url);
+});
+ipcMain.handle("quieter:set-title-bar-colors", (event, input: unknown) => {
+  assertTrustedSender(event);
+  if (
+    input === null ||
+    typeof input !== "object" ||
+    !("background" in input) ||
+    typeof input.background !== "string" ||
+    !/^#[\da-f]{6}$/iu.test(input.background) ||
+    !("foreground" in input) ||
+    typeof input.foreground !== "string" ||
+    !/^#[\da-f]{6}$/iu.test(input.foreground)
+  ) {
+    throw new Error("This window appearance cannot be applied.");
+  }
+  if (process.platform === "win32" || process.platform === "linux") {
+    mainWindow?.setTitleBarOverlay({
+      color: input.background,
+      symbolColor: input.foreground,
+    });
+  }
 });
 
 const completeAuthentication = async (token: string): Promise<void> => {
@@ -372,6 +393,11 @@ const createWindow = async (): Promise<void> => {
     minWidth: 900,
     show: false,
     title: "Quieter",
+    titleBarOverlay: {
+      ...(process.platform === "darwin" ? {} : { color: "#00000000" }),
+      height: DESKTOP_TITLE_BAR_HEIGHT,
+    },
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
