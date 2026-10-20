@@ -401,7 +401,7 @@ export const AutoLabelEditor = ({
               </p>
             ) : null}
           </DialogBody>
-          <DialogFooter className="shrink-0" fullWidth>
+          <DialogFooter className="shrink-0">
             <Button
               disabled={isPending}
               onClick={onCancel}

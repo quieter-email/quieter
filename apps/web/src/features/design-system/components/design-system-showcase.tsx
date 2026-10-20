@@ -2,6 +2,7 @@
 
 import { Delete02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import {
   AlertDialog,
   AlertDialogCloseButton,
@@ -277,10 +278,8 @@ export const DesignSystemShowcase = () => {
                     Your preferences are up to date.
                   </DialogDescription>
                 </DialogHeader>
-                <DialogFooter fullWidth>
-                  <DialogCloseButton variant="secondary">
-                    Done
-                  </DialogCloseButton>
+                <DialogFooter>
+                  <DialogCloseButton variant="default">Done</DialogCloseButton>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -295,8 +294,8 @@ export const DesignSystemShowcase = () => {
                     Your inbox is ready to use.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
-                <AlertDialogFooter fullWidth>
-                  <AlertDialogCloseButton variant="secondary">
+                <AlertDialogFooter>
+                  <AlertDialogCloseButton variant="default">
                     Got it
                   </AlertDialogCloseButton>
                 </AlertDialogFooter>
@@ -313,13 +312,28 @@ export const DesignSystemShowcase = () => {
                     Your preferences are up to date.
                   </DrawerDescription>
                 </DrawerHeader>
-                <DrawerFooter fullWidth>
-                  <DrawerCloseButton variant="secondary">
-                    Done
-                  </DrawerCloseButton>
+                <DrawerFooter>
+                  <DrawerCloseButton variant="default">Done</DrawerCloseButton>
                 </DrawerFooter>
               </DrawerContent>
             </Drawer>
+          </Row>
+          <Row label="Paired footer actions">
+            <div className="w-80">
+              <ActionFooter>
+                <Button variant="secondary">Cancel</Button>
+                <Button>Apply</Button>
+              </ActionFooter>
+            </div>
+          </Row>
+          <Row label="Three footer actions">
+            <div className="w-80">
+              <ActionFooter>
+                <Button variant="secondary">Cancel</Button>
+                <Button variant="destructive">Delete</Button>
+                <Button>Save</Button>
+              </ActionFooter>
+            </div>
           </Row>
         </Section>
 

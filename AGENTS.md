@@ -42,6 +42,7 @@
 
 ## Local development and debugging
 
+- Fetch `origin/main` before starting changes and again before the final push. If remote `main` has newer commits, merge them into the working branch, resolve conflicts while preserving those updates, and complete any affected verification before pushing. Preserve uncommitted work while synchronizing; never reset or discard it.
 - If a worktree lacks the development credentials or local env file needed to run the app, copy the existing development env file from the main checkout into the corresponding ignored location in the worktree. Verify that it uses approved development resources, never production credentials, keep secret values out of output, and run `vp run env:doctor` afterward.
 - Other agents may be running local services at the same time. Check for occupied ports before starting a server and choose an unused port. Configure any required local URLs for that port, record the process PID, and stop only your own process tree after verification.
 - Keep a runnable, debuggable development experience whenever adding a service or changing application behavior, background processing, configuration, or infrastructure. Include the required startup, bindings, secrets, test data, failure reporting, and verification in the change; do not leave a feature dependent on an undocumented manual setup.
@@ -60,10 +61,13 @@
 - Keep comments minimal — only for hacky or high-complexity code where intent isn't obvious from the code itself.
 - Use TanStack Query for server state and TanStack Store for complex client-only workflows.
 - Use named theme colors. Do not use arbitrary Tailwind colors.
+- Keep primary actions tied to the active theme's semantic `primary` tokens. The default palette uses a vivid blue primary with a little violet in light mode and very bright near-white with a faint purple tint in dark mode; optional brand themes use their own palette. Never mute or substitute secondary styling for the primary action. Destructive actions stay red in every theme.
 - Do not use native `<select>` or direct Base UI/Vaul imports in app code. Use only native interactive elements if absolutely necessary, otherwise use the `@quieter/ui` package or extend shared components.
 - Use object syntax for conditional classes in `cn(...)`.
 - Give icon-only controls a shared tooltip and concise `aria-label`.
 - Preserve existing layout, density, and hierarchy during incremental UI work.
+- Footer action rows in dropdowns, popovers, dialogs, drawers, and compact panels must fill the available content width: one action spans the row, multiple actions share equal widths. Keep three actions side by side when their labels fit; wrap only when needed. Use `ActionFooter` from `@quieter/ui/action-footer` or the overlay's shared footer, with action buttons or links as direct children. Do not right-align content-width footer buttons, add spacer elements, or override the shared fill behavior. This rule applies to footer actions, not toolbars, inline controls, or ordinary menu items.
+- Keep footer action order consistent in the DOM and visually: cancel/secondary first, destructive next when present, and the primary action last. Use one primary action per footer for completing the current task, including a lone Done, Close, or Reload action. Cancel uses `secondary` so it stays distinct from the background. Delete, remove, reset, and other irreversible actions always use `variant="destructive"`, including actions that first open a confirmation; their destructive treatment takes precedence over primary styling. Never use `ghost` or `outline` for these footer actions.
 - Do not use the middle-dot character or any HTML/entity/escape spelling; prefer styled div elements as separators or just commas.
 - The lint rules in this codebase are very strict. Try to adhere to them, but if working around a warning or error would be too complicated or overly complex for the situation, it is acceptable to disable the lint rule for that specific line or function with an inline suppression comment.
 

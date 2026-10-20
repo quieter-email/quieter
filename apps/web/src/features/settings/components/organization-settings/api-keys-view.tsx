@@ -218,10 +218,8 @@ const CreatedApiKeyReveal = ({
       <p className="text-body text-muted-fg">Click the key to copy it.</p>
     </DialogBody>
 
-    <DialogFooter fullWidth>
-      <Button onClick={onClose} variant="secondary">
-        Done
-      </Button>
+    <DialogFooter>
+      <Button onClick={onClose}>Done</Button>
     </DialogFooter>
   </>
 );
@@ -620,6 +618,7 @@ const ResetApiKeyDialog = ({
                   resetMutation.mutate();
                 }}
                 size="sm"
+                variant="destructive"
               >
                 {resetMutation.isPending ? (
                   <HugeiconsIcon
@@ -665,9 +664,8 @@ const ResetApiKeyDialog = ({
               </p>
             </AlertDialogBody>
 
-            <AlertDialogFooter fullWidth>
+            <AlertDialogFooter>
               <Button
-                variant="secondary"
                 onClick={() => {
                   runDetached(closeDialog);
                 }}

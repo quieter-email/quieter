@@ -106,8 +106,8 @@ export const PersonalizationMemories = () => {
             </ul>
           ) : null}
         </DialogBody>
-        <DialogFooter fullWidth>
-          <DialogCloseButton variant="secondary">Close</DialogCloseButton>
+        <DialogFooter>
+          <DialogCloseButton variant="default">Close</DialogCloseButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

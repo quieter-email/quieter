@@ -330,7 +330,7 @@ export const SnippetWorkspace = ({
                     setDeleteSnippet(currentSnippet);
                   }}
                   type="button"
-                  variant="ghost"
+                  variant="destructive"
                 >
                   <HugeiconsIcon icon={Delete02Icon} />
                   Delete

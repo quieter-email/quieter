@@ -160,7 +160,7 @@ export const MessageInspectorPanel = ({
         </DialogBody>
 
         <DialogFooter>
-          <DialogCloseButton>Close</DialogCloseButton>
+          <DialogCloseButton variant="default">Close</DialogCloseButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>
