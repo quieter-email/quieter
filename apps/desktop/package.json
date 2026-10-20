@@ -3,7 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Quieter desktop email app",
-  "author": "Quieter",
+  "homepage": "https://quieter.email",
+  "license": "MIT",
+  "author": {
+    "name": "Quieter",
+    "email": "support@quieter.email"
+  },
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
