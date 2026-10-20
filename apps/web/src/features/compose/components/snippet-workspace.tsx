@@ -165,7 +165,7 @@ export const SnippetWorkspace = ({
 
   return (
     <>
-      <WorkspaceSection className="lg:inset-2">
+      <WorkspaceSection>
         <header className="@container border-b border-border p-3 sm:px-4">
           <div className="flex items-center gap-2">
             <IconButtonTooltip label="Open sidebar">

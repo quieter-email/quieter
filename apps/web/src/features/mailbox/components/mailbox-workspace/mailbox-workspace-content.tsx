@@ -11,6 +11,7 @@ import { cn } from "@quieter/ui/cn";
 import { Text } from "@quieter/ui/text";
 import {
   WorkspaceSection,
+  workspaceGutterClassName,
   workspaceSectionVariants,
 } from "@quieter/ui/workspace-section";
 import { domAnimation, LazyMotion, m } from "motion/react";
@@ -57,6 +58,11 @@ const ChatView = lazy(loadChatView);
 const ComposeWorkspace = lazy(loadComposeWorkspace);
 
 const SnippetWorkspace = lazy(loadSnippetWorkspace);
+
+const messagePanelsClassName = cn(
+  workspaceGutterClassName,
+  "absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,max(34%,405px))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-(--workspace-gutter)"
+);
 
 const DailyBriefPanel = lazy(async () => {
   const { DailyBriefPanel: Panel } =
@@ -538,7 +544,7 @@ const MailboxWorkspaceContentInner = ({
     );
   } else if (allInboxesActive) {
     mailboxContent = (
-      <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,max(34%,405px))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-2">
+      <div className={messagePanelsClassName}>
         <WorkspaceSection
           className={cn({ flex: !messageId, hidden: !!messageId })}
           layout="cell"
@@ -708,7 +714,7 @@ const MailboxWorkspaceContentInner = ({
     );
   } else {
     mailboxContent = (
-      <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,max(34%,405px))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-2">
+      <div className={messagePanelsClassName}>
         <MailboxMessagesPanel
           activeMailbox={activeMailbox}
           senderMailbox={composeMailbox}
@@ -883,6 +889,7 @@ const MailboxWorkspaceContentInner = ({
                     </p>
                   )}
                   <ChatView
+                    docked={assistantSidebar}
                     visible={assistantOpen}
                     activeMailbox={activeMailbox ?? "inbox"}
                     mailContext={chatContext}

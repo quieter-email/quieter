@@ -23,7 +23,10 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
-import { workspaceSectionVariants } from "@quieter/ui/workspace-section";
+import {
+  workspaceGutterClassName,
+  workspaceSectionVariants,
+} from "@quieter/ui/workspace-section";
 import {
   AnimatePresence,
   motion,
@@ -258,10 +261,11 @@ export const FloatingAssistant = ({
 
   return (
     <div
-      className={cn("z-50", {
+      className={cn(workspaceGutterClassName, "z-50", {
         "pointer-events-none fixed inset-[max(1.5rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))] [--assistant-safe-bottom:env(safe-area-inset-bottom,0px)] [--assistant-safe-left:env(safe-area-inset-left,0px)] [--assistant-safe-right:env(safe-area-inset-right,0px)] [--assistant-safe-top:env(safe-area-inset-top,0px)] max-sm:inset-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-right),env(safe-area-inset-bottom),env(safe-area-inset-left))]":
           !sidebar,
-        "relative flex min-h-0 shrink-0 flex-col p-1.5": sidebar,
+        "relative flex min-h-0 shrink-0 flex-col p-(--workspace-gutter) pl-0":
+          sidebar,
         "w-12": sidebar && (!open || narrow),
         "w-[clamp(20rem,26vw,25rem)]": sidebar && open && !narrow,
       })}
@@ -400,7 +404,8 @@ export const FloatingAssistant = ({
                 [floatingSurfaceClassName]: !sidebar,
                 "fixed inset-y-[max(1rem,env(safe-area-inset-top),env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] h-auto! w-[min(25rem,calc(100dvw-2*max(1rem,env(safe-area-inset-left),env(safe-area-inset-right))))]! max-w-none":
                   sidebar && narrow,
-                "inset-1.5 h-auto! w-auto!": sidebar && !narrow,
+                "inset-(--workspace-gutter) left-0 h-auto! w-auto!":
+                  sidebar && !narrow,
                 "right-[var(--assistant-right)] bottom-[var(--assistant-bottom)]":
                   !sidebar,
               }
@@ -492,7 +497,7 @@ export const FloatingAssistant = ({
             initial={false}
             animate={{ opacity: open ? 1 : 0 }}
             className={cn(
-              "absolute top-0 right-0 left-auto m-0 flex min-h-[min(15rem,calc(100dvh-3rem-2px))] w-[398px] max-w-[calc(100dvw-3rem-2px)] flex-col border-0 bg-transparent p-0 pt-4 text-fg max-sm:min-h-[min(15rem,calc(100dvh-2rem-2px))] max-sm:max-w-[calc(100dvw-2rem-2px)]",
+              "absolute top-0 right-0 left-auto m-0 flex min-h-[min(15rem,calc(100dvh-3rem-2px))] w-[398px] max-w-[calc(100dvw-3rem-2px)] flex-col border-0 bg-transparent p-0 text-fg max-sm:min-h-[min(15rem,calc(100dvh-2rem-2px))] max-sm:max-w-[calc(100dvw-2rem-2px)]",
               { "pointer-events-none": !open },
               {
                 "relative top-auto right-auto h-full min-h-0 w-full max-w-none max-sm:min-h-0 max-sm:max-w-none":
@@ -500,7 +505,7 @@ export const FloatingAssistant = ({
               }
             )}
           >
-            <header className="flex h-9 shrink-0 items-center gap-2 px-4">
+            <header className="flex shrink-0 items-center gap-2 p-4">
               {sidebar ? null : (
                 <IconButtonTooltip label="Move assistant">
                   <Button
