@@ -6,6 +6,7 @@ import { resolveBackgroundModel } from "./model-config";
 
 export const AI_MEMORY_CONTENT_MAX_LENGTH = 2000;
 export const AI_MEMORY_REQUEST_MAX_LENGTH = 2000;
+export const AI_MEMORY_UPDATE_OPERATION_LIMIT = 12;
 const AI_MEMORY_UPDATE_TIMEOUT_MS = 20_000;
 const MEMORY_SCOPE_RULES = `The trusted memoryScope field defines ownership of every supplied record.
 "user" means the acting user's private personal profile. "mailbox" means the selected mailbox's
@@ -46,7 +47,9 @@ const aiMemoryOperationSchema = z.object({
 
 const aiMemoryUpdateSchema = z.object({
   answer: z.string().trim().min(1).max(1000),
-  operations: z.array(aiMemoryOperationSchema).max(12),
+  operations: z
+    .array(aiMemoryOperationSchema)
+    .max(AI_MEMORY_UPDATE_OPERATION_LIMIT),
   summary: z.string().trim().min(1).max(500),
 });
 

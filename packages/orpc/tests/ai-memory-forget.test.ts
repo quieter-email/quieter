@@ -115,7 +115,7 @@ describe("sensitive chat memory erasure", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.rows.clear();
-    mocks.rows.set(aiMemory, [[storedSecret], [storedSecret]]);
+    mocks.rows.set(aiMemory, [[storedSecret], [], [storedSecret]]);
     mocks.rows.set(user, [[{ id: "owner" }]]);
     mocks.rows.set(aiMemoryChangeSet, [[]]);
     mocks.plan.mockResolvedValue([storedSecret.id]);
@@ -146,12 +146,13 @@ describe("sensitive chat memory erasure", () => {
   test("rejects a changed target and a target removed by a concurrent reset", async () => {
     mocks.rows.set(aiMemory, [
       [storedSecret],
+      [],
       [{ ...storedSecret, version: 2 }],
     ]);
     await expect(learnAiMemoryFromChatMessage(request)).rejects.toMatchObject({
       code: "CONFLICT",
     });
-    mocks.rows.set(aiMemory, [[storedSecret], []]);
+    mocks.rows.set(aiMemory, [[storedSecret], [], []]);
     await expect(learnAiMemoryFromChatMessage(request)).rejects.toMatchObject({
       code: "CONFLICT",
     });
