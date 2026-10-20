@@ -85,6 +85,15 @@ const CHAT_MAX_COMPLETION_TOKENS = 2048;
 const CHAT_MAX_STEPS = 6;
 const MAIL_TOOL_TIMEOUT_MS = 25_000;
 const FOREGROUND_EXCHANGE_MAX_MS = 5 * 60_000;
+const MUTATING_CHAT_TOOLS = new Set([
+  "create_google_calendar_event",
+  "linear_write",
+  "modify_mail",
+  "save_compose_draft",
+  "send_mail",
+]);
+const UNCERTAIN_ACTION_ERROR =
+  "The action could not be confirmed. Check the affected item before trying again.";
 
 export class ChatRequestError extends Error {
   readonly status: number;
@@ -1433,6 +1442,103 @@ export const createAiChatResponse = async (input: {
       : {}),
   };
 
+  // Tool executions can run concurrently and outlive response consumption.
+  // Serialize their claims and outcomes before exposing either to the stream.
+  let toolPersistence = Promise.resolve();
+  let hasUncertainWrite = persistedAssistantParts.some(
+    (part) =>
+      MUTATING_CHAT_TOOLS.has(part.type.slice("tool-".length)) &&
+      (part.state === "output-error" ||
+        (typeof part.output === "object" &&
+          part.output !== null &&
+          Reflect.get(part.output, "status") === "error"))
+  );
+  const persistToolPart = async (
+    outcome: ChatMessagePart,
+    claimWrite = false
+  ) => {
+    const previous = toolPersistence;
+    const pending = (async () => {
+      await previous;
+      const expectedParts = persistedAssistantParts;
+      if (expectedParts === null) {
+        throw new ChatRequestError(409, "This chat exchange is invalid.");
+      }
+      const existingPart = expectedParts.find(
+        (part) => part.toolCallId === outcome.toolCallId
+      );
+      if (
+        claimWrite &&
+        (hasUncertainWrite ||
+          existingPart?.state === "output-available" ||
+          existingPart?.state === "output-error")
+      ) {
+        throw new ChatRequestError(409, UNCERTAIN_ACTION_ERROR);
+      }
+      const merged = { ...existingPart, ...outcome };
+      const parts = existingPart
+        ? expectedParts.map((part) => (part === existingPart ? merged : part))
+        : [...expectedParts, merged];
+      const saved = await replaceChatParts({
+        chatId: threadId,
+        expectedParts,
+        messageId: assistantMessageId,
+        parts,
+        userId: input.userId,
+      });
+      if (!saved) {
+        throw new ChatRequestError(
+          409,
+          "This chat changed while the action was being saved."
+        );
+      }
+      persistedAssistantParts = parts;
+    })();
+    toolPersistence = pending;
+    await pending;
+  };
+  for (const [toolName, definition] of Object.entries(tools)) {
+    if (!MUTATING_CHAT_TOOLS.has(toolName) || !definition.execute) {
+      continue;
+    }
+    const { execute } = definition;
+    // oxlint-disable-next-line eslint/no-loop-func -- Wrappers intentionally share this request's uncertain-write state.
+    definition.execute = async (toolInput: unknown, options) => {
+      options.abortSignal?.throwIfAborted();
+      await assertForegroundExchangeActive({
+        assistantMessageId,
+        chatId: threadId,
+        userId: input.userId,
+      });
+      const part = {
+        foreground: validated.foreground,
+        input: toolInput,
+        toolCallId: options.toolCallId,
+        type: `tool-${toolName}`,
+      };
+      await persistToolPart(
+        { ...part, errorText: UNCERTAIN_ACTION_ERROR, state: "output-error" },
+        true
+      );
+      try {
+        options.abortSignal?.throwIfAborted();
+        const output: unknown = await execute(toolInput, options);
+        if (
+          typeof output === "object" &&
+          output !== null &&
+          Reflect.get(output, "status") === "error"
+        ) {
+          hasUncertainWrite = true;
+        }
+        await persistToolPart({ ...part, output, state: "output-available" });
+        return output;
+      } catch (error) {
+        hasUncertainWrite = true;
+        throw error;
+      }
+    };
+  }
+
   const systemPrompt = [
     gmailToolsPrompt,
     `The visible workspace is a foreground session. Its selected route and draft are only current for this response. Use get_workspace before relying on a changing selection. Use navigate, open_compose, and edit_compose for visible workspace changes. These tools never save or send mail.`,
@@ -1507,10 +1613,13 @@ export const createAiChatResponse = async (input: {
       });
     },
     prepareStep: ({ stepNumber, steps }) =>
-      stepNumber >= CHAT_MAX_STEPS - 1 &&
-      steps.some((step) =>
-        step.toolCalls.some((call) => call.toolName === "read_personal_context")
-      )
+      hasUncertainWrite ||
+      (stepNumber >= CHAT_MAX_STEPS - 1 &&
+        steps.some((step) =>
+          step.toolCalls.some(
+            (call) => call.toolName === "read_personal_context"
+          )
+        ))
         ? { toolChoice: "none" }
         : undefined,
     providerOptions: {
@@ -1530,9 +1639,14 @@ export const createAiChatResponse = async (input: {
   let persistenceErrorText: string | null = null;
   const responseStream = toUIMessageStream({
     generateMessageId: () => assistantMessageId,
-    onEnd: async ({ messages }) => {
+    onEnd: async ({ isAborted, isCancelled, messages, outcome }) => {
       // Tool outcomes are already durable; failed prose must not replace them.
-      if (generationFailed) {
+      if (
+        generationFailed ||
+        isAborted ||
+        isCancelled ||
+        outcome.status === "failed"
+      ) {
         if (assistantReservationParts !== null) {
           try {
             await replaceChatParts({
@@ -1564,10 +1678,26 @@ export const createAiChatResponse = async (input: {
       }
       try {
         const now = new Date();
-        const parts = stampForegroundLease(
+        let parts = stampForegroundLease(
           responseMessage.parts,
           validated.foreground
         );
+        await toolPersistence;
+        for (const part of persistedAssistantParts ?? []) {
+          if (
+            MUTATING_CHAT_TOOLS.has(part.type.slice("tool-".length)) &&
+            (part.state === "output-available" || part.state === "output-error")
+          ) {
+            const streamedPart = parts.find(
+              (candidate) => candidate.toolCallId === part.toolCallId
+            );
+            parts = streamedPart
+              ? parts.map((candidate) =>
+                  candidate === streamedPart ? part : candidate
+                )
+              : [...parts, part];
+          }
+        }
         await db.transaction(async (transaction) => {
           const expectedParts = persistedAssistantParts;
           if (expectedParts === null) {
@@ -1648,14 +1778,25 @@ export const createAiChatResponse = async (input: {
               chunk.type === "tool-error" ||
               chunk.type === "tool-output-denied")
           ) {
-            const existingPart = persistedAssistantParts.find(
-              (part) => part.toolCallId === chunk.toolCallId
-            );
-            const basePart = existingPart ?? {
+            if (
+              MUTATING_CHAT_TOOLS.has(chunk.toolName) &&
+              persistedAssistantParts.some(
+                (part) =>
+                  part.toolCallId === chunk.toolCallId &&
+                  (part.state === "output-available" ||
+                    part.state === "output-error")
+              )
+            ) {
+              controller.enqueue(chunk);
+              return;
+            }
+            const chunkInput: unknown =
+              chunk.type === "tool-output-denied" ? undefined : chunk.input;
+            const basePart = {
               foreground: validated.foreground,
               ...(chunk.type === "tool-output-denied"
                 ? {}
-                : { input: chunk.input }),
+                : { input: chunkInput }),
               toolCallId: chunk.toolCallId,
               type: `tool-${chunk.toolName}`,
             };
@@ -1672,30 +1813,11 @@ export const createAiChatResponse = async (input: {
             } else {
               outcome = {
                 ...basePart,
-                errorText:
-                  "The action could not be confirmed. Check the affected item before trying again.",
+                errorText: UNCERTAIN_ACTION_ERROR,
                 state: "output-error",
               };
             }
-            const parts = existingPart
-              ? persistedAssistantParts.map((part) =>
-                  part === existingPart ? outcome : part
-                )
-              : [...persistedAssistantParts, outcome];
-            const saved = await replaceChatParts({
-              chatId: threadId,
-              expectedParts: persistedAssistantParts,
-              messageId: assistantMessageId,
-              parts,
-              userId: input.userId,
-            });
-            if (!saved) {
-              throw new ChatRequestError(
-                409,
-                "This chat changed while the action was being saved."
-              );
-            }
-            persistedAssistantParts = parts;
+            await persistToolPart(outcome);
           }
           controller.enqueue(chunk);
         },

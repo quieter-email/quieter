@@ -64,6 +64,8 @@ Chat receives relevant knowledge through the central loader. Explicit profile ov
 
 Chat has no tool for learning or editing memory. Ordinary user messages queue observations automatically and request immediate background consolidation when learning is enabled; explicit edits, continuation requests, and assistant messages do not. Explicit edits run directly against the full existing memory set. Chat actions run without approval except `send_mail`, whose exact draft must match a stored approved tool call before execution. Older clients' foreground mode fields are ignored, and older stored mode values never bypass sending approval. The existing event kinds and database schema are unchanged.
 
+Server actions that change external data persist an uncertain tool record before execution and save the outcome inside execution, independently of response delivery. Stream cancellation or failed prose cannot erase that checkpoint or a confirmed result. An uncertain write blocks automatic follow-up writes for that response, and retrying the same chat submission cannot execute it again. Sending mail still requires approval of the exact draft.
+
 Memory writes carry provenance. The background writer receives the acting user's own statements separately from application observations. Only the user's words can establish instructions. Subjects, sender domains, labels, and brief titles provide context for an action and cannot instruct the writer. Ordinary phrasing such as "from now on, sign off with Cheers" is captured without a tool, while instructions embedded in correspondence are not.
 
 ## Reliability and deletion
