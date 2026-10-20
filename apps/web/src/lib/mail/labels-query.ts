@@ -9,6 +9,7 @@ import {
   isSandboxMailboxId,
 } from "#/lib/sandbox-mailbox";
 
+import { getDemoLabelAutomation } from "../demo-mail/label-automation";
 import { getDemoLabels } from "../gmail/demo-mail";
 import { getManagedDemoLabels } from "../managed-mail/demo-managed-mail";
 
@@ -29,21 +30,39 @@ export const labelsQueryOptions = (mailboxId: string, enabled = true) =>
     persister: queryPersister.persisterFn,
     queryFn: async ({ signal }) => {
       if (isManagedSandboxMailboxId(mailboxId)) {
-        return getManagedDemoLabels();
+        const automation = getDemoLabelAutomation(mailboxId);
+        return [...getManagedDemoLabels(), ...automation.createdLabels]
+          .filter((label) => !automation.deletedLabelIds.includes(label.id))
+          .map((label) => ({
+            ...label,
+            ...automation.updatedLabels[label.id],
+            autoLabel: automation.labels[label.id] ?? label.autoLabel,
+          }));
       }
 
       if (isSandboxMailboxId(mailboxId)) {
-        return getDemoLabels().map((label, position) => ({
-          ...label,
-          color: label.color ?? null,
-          description: label.description ?? null,
-          inclusionCriteria: label.inclusionCriteria ?? null,
-          position,
-          provider: "gmail" as const,
-          type:
-            label.type === "system" ? ("system" as const) : ("user" as const),
-          visible: true,
-        }));
+        const automation = getDemoLabelAutomation(mailboxId);
+        const labels: MailboxLabel[] = getDemoLabels().map(
+          (label, position) => ({
+            ...label,
+            autoLabel: automation.labels[label.id] ?? null,
+            color: label.color ?? null,
+            description: label.description ?? null,
+            inclusionCriteria: label.inclusionCriteria ?? null,
+            position,
+            provider: "gmail" as const,
+            type:
+              label.type === "system" ? ("system" as const) : ("user" as const),
+            visible: true,
+          })
+        );
+        return [...labels, ...automation.createdLabels]
+          .filter((label) => !automation.deletedLabelIds.includes(label.id))
+          .map((label) => ({
+            ...label,
+            ...automation.updatedLabels[label.id],
+            autoLabel: automation.labels[label.id] ?? label.autoLabel,
+          }));
       }
       return normalizeMailboxLabels(
         await rpc.mail.listLabels({ mailboxId }, { signal })

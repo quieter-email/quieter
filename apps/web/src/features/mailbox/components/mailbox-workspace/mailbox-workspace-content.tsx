@@ -694,6 +694,11 @@ const MailboxWorkspaceContentInner = ({
         transition={{ duration: 0.08, ease: "linear" }}
       >
         <LabelsWorkspacePanel
+          canManage={
+            selectedMailboxProvider !== "managed" ||
+            composeMailbox?.grantRole === "manager"
+          }
+          key={selectedMailboxId}
           mailboxId={selectedMailboxId}
           mailboxProvider={
             selectedMailboxProvider === "managed" ? "managed" : "gmail"

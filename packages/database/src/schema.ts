@@ -1,3 +1,4 @@
+import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 import type { DailyBriefItem } from "@quieter/mail/daily-brief";
 import type {
   DeliveryEvent,
@@ -1073,6 +1074,7 @@ export const connectorCredential = pgTable(
 export const gmailLabel = pgTable(
   "gmailLabel",
   {
+    autoLabel: jsonb("autoLabel").$type<AutoLabelSettings>(),
     color: text("color").notNull().default("gray"),
     createdAt: timestamp("createdAt").notNull(),
     description: text("description"),
@@ -2159,6 +2161,7 @@ export const organizationMailSuppressionAudit = pgTable(
 export const managedMailLabel = pgTable(
   "managedMailLabel",
   {
+    autoLabel: jsonb("autoLabel").$type<AutoLabelSettings>(),
     color: text("color").notNull().default("gray"),
     createdAt: timestamp("createdAt").notNull(),
     createdByUserId: text("createdByUserId").references(() => user.id, {

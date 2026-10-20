@@ -1072,6 +1072,9 @@ importers:
       fast-xml-validator:
         specifier: 1.4.2
         version: 1.4.2
+      html-to-text:
+        specifier: 10.0.1
+        version: 10.0.1
       nodemailer:
         specifier: ^10.1.0
         version: 10.1.0
@@ -1085,6 +1088,9 @@ importers:
       '@quieter/config':
         specifier: workspace:*
         version: link:../config
+      '@types/html-to-text':
+        specifier: 9.0.4
+        version: 9.0.4
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
@@ -1258,6 +1264,9 @@ importers:
       motion:
         specifier: 'catalog:'
         version: 14.2.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      react-colorful:
+        specifier: ^5.8.1
+        version: 5.8.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       react-day-picker:
         specifier: ^10.0.2
         version: 10.0.2(@types/react@19.3.0)(react@19.3.0)
@@ -6785,6 +6794,12 @@ packages:
   radash@12.1.1:
     resolution: {integrity: sha512-h36JMxKRqrAxVD8201FrCpyeNuUY9Y5zZwujr20fFO77tpUtGa6EZzfKw/3WaiBX95fq7+MpsuMLNdSnORAwSA==}
     engines: {node: '>=14.18.0'}
+
+  react-colorful@5.8.1:
+    resolution: {integrity: sha512-oz68bhsnFWnpDf1ZR8daiQbYpXUnM2h2J6hl9Zg2rTpM/DU6vCqe1E+CpqmqLnJucMZetHZeifSAfJ+geN9lcA==}
+    peerDependencies:
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
 
   react-day-picker@10.0.2:
     resolution: {integrity: sha512-QetiKtZWE9Uaw/pM/SYNv6WPYOTRnSJ2puL0GgwkmUFMIwiY0dtjH1W4B7DOVXVNQM0ZOClGpH/heOfBSzWeiA==}
@@ -12796,6 +12811,11 @@ snapshots:
       hookified: 2.2.0
 
   radash@12.1.1: {}
+
+  react-colorful@5.8.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
+    dependencies:
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
 
   react-day-picker@10.0.2(@types/react@19.3.0)(react@19.3.0):
     dependencies:

@@ -96,7 +96,7 @@ export const readHiddenLabelIds = (mailboxId: string | null) => {
   return storedIds === undefined ? new Set<string>() : new Set(storedIds);
 };
 
-const writeHiddenLabelIds = (
+export const writeHiddenLabelIds = (
   mailboxId: string,
   hiddenLabelIds: Set<string>
 ) => {
@@ -134,7 +134,6 @@ export const reduceHiddenLabelState = (
       ? current.value
       : readHiddenLabelIds(mailboxId);
   const next = updater(new Set(currentValue));
-  writeHiddenLabelIds(mailboxId, next);
   return {
     mailboxId,
     value: next,

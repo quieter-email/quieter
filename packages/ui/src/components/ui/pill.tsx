@@ -2,7 +2,7 @@
 
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
-import type { ComponentPropsWithoutRef } from "react";
+import type { ComponentPropsWithoutRef, CSSProperties } from "react";
 
 import { cn } from "../../lib/cn";
 
@@ -47,13 +47,27 @@ export const pillVariants = cva(
 export type PillTone = NonNullable<VariantProps<typeof pillVariants>["tone"]>;
 
 type PillProps = ComponentPropsWithoutRef<"span"> &
-  VariantProps<typeof pillVariants>;
+  VariantProps<typeof pillVariants> & { customColor?: string };
 
 export const Pill = ({
   className,
+  customColor,
   size = "sm",
   tone = "gray",
+  style,
   ...props
-}: PillProps) => (
-  <span className={cn(pillVariants({ size, tone }), className)} {...props} />
-);
+}: PillProps) => {
+  const pillStyle: CSSProperties & { "--selected-color": string | undefined } =
+    { "--selected-color": customColor, ...style };
+  return (
+    <span
+      className={cn(
+        pillVariants({ size, tone }),
+        { "q-custom-color-surface text-fg": !!customColor },
+        className
+      )}
+      style={pillStyle}
+      {...props}
+    />
+  );
+};

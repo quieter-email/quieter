@@ -42,6 +42,8 @@ const toggleVariants = cva(
         default:
           "rounded-md text-muted-fg hover:text-fg active:text-fg data-pressed:text-fg",
         pill: "rounded-full border border-border px-3 text-caption text-muted-fg hover:text-fg data-pressed:border-primary data-pressed:text-primary-fg data-pressed:hover:text-primary-fg",
+        secondary:
+          "rounded-md text-muted-fg hover:text-fg active:text-fg data-pressed:text-secondary-fg",
       },
     },
   }
@@ -86,7 +88,9 @@ export const Toggle = ({
             {state.pressed && (
               <SelectionIndicator
                 layoutId={selectionId}
-                variant={variant === "pill" ? "primary" : "default"}
+                variant={
+                  variant === "pill" ? "primary" : (variant ?? "default")
+                }
               />
             )}
             {toggleProps.children}

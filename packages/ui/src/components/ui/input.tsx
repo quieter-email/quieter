@@ -12,7 +12,7 @@ import type {
 
 import { cn } from "../../lib/cn";
 
-const inputVariants = cva(
+export const inputVariants = cva(
   "w-full text-fg transition-colors duration-150 ease-out placeholder:text-muted-fg focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive/45",
   {
     defaultVariants: {
