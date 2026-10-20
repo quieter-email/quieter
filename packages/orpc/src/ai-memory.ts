@@ -5,8 +5,8 @@ import {
   AI_MEMORY_REQUEST_MAX_LENGTH,
   AI_MEMORY_UPDATE_OPERATION_LIMIT,
   AI_MEMORY_USER_MESSAGE_MAX_LENGTH,
+  classifyAiMemoryEditIntent,
   containsProhibitedMemorySecret,
-  hasExplicitAiMemoryEditIntent,
   planAiMemoryDeletion,
   planAiMemoryUpdate,
 } from "@quieter/ai/ai-memory";
@@ -1505,11 +1505,34 @@ export const learnAiMemoryFromChatMessage = async (
   if (!text) {
     return { status: "skipped" as const };
   }
+  const accessibleMailbox = await assertAccessibleMailbox({
+    mailboxId: input.mailboxId,
+    userId: input.userId,
+  });
+  let editIntent: Awaited<ReturnType<typeof classifyAiMemoryEditIntent>>;
   if (containsProhibitedMemorySecret(text)) {
-    const accessibleMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
+    editIntent = "forget_sensitive";
+  } else {
+    await assertCanUseAi({
+      organizationId: accessibleMailbox.organizationId,
       userId: input.userId,
     });
+    const usage = createUsageCollector();
+    try {
+      editIntent = await classifyAiMemoryEditIntent({
+        onUsage: usage.collect,
+        userMessage: text,
+      });
+    } finally {
+      await reportMemoryUsage({
+        externalId: `ai-memory-chat-edit-intent:${input.messageId}`,
+        mailboxId: input.mailboxId,
+        usage: usage.usage(),
+        userId: input.userId,
+      });
+    }
+  }
+  if (editIntent === "forget_sensitive") {
     const scope = userScope(input.userId);
     return await forgetSensitiveAiMemory({
       mailboxId: input.mailboxId,
@@ -1521,30 +1544,7 @@ export const learnAiMemoryFromChatMessage = async (
       userId: input.userId,
     });
   }
-  const accessibleMailbox = await assertAccessibleMailbox({
-    mailboxId: input.mailboxId,
-    userId: input.userId,
-  });
-  await assertCanUseAi({
-    organizationId: accessibleMailbox.organizationId,
-    userId: input.userId,
-  });
-  const usage = createUsageCollector();
-  let explicitEditIntent: boolean;
-  try {
-    explicitEditIntent = await hasExplicitAiMemoryEditIntent({
-      onUsage: usage.collect,
-      userMessage: text,
-    });
-  } finally {
-    await reportMemoryUsage({
-      externalId: `ai-memory-chat-edit-intent:${input.messageId}`,
-      mailboxId: input.mailboxId,
-      usage: usage.usage(),
-      userId: input.userId,
-    });
-  }
-  if (!explicitEditIntent) {
+  if (editIntent === "none") {
     return await learnPersonalAiMemoryFromChatMessage(input);
   }
   const scopes = accessibleMailbox.capabilities.canManageKnowledge
