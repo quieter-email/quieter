@@ -22,6 +22,7 @@ import { reportAiUsage } from "@quieter/billing";
 import { getBillingCreditUsage } from "@quieter/billing/credits";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
+import type { DatabaseExecutor } from "@quieter/database/client";
 import {
   aiMemory,
   aiMemoryChangeSet,
@@ -646,6 +647,7 @@ const buildMemoryValues = ({
 const applyAiMemoryPlan = async ({
   actorUserId,
   changeSetSource,
+  executor,
   existingEditsOnly = false,
   expectedVersions,
   plan,
@@ -657,6 +659,7 @@ const applyAiMemoryPlan = async ({
 }: {
   actorUserId: string;
   changeSetSource: "chat" | "feedback" | "settings" | "system";
+  executor?: DatabaseExecutor;
   existingEditsOnly?: boolean;
   expectedVersions?: ReadonlyMap<string, number>;
   plan: AiMemoryUpdatePlan;
@@ -666,7 +669,7 @@ const applyAiMemoryPlan = async ({
   sourceEventId?: string | null;
   sourceEventIds?: string[];
 }) => {
-  const appliedChangeSet = await db.transaction(async (tx) => {
+  const appliedChangeSet = await (executor ?? db).transaction(async (tx) => {
     if (scope.scope === "user") {
       await tx
         .select({ id: memoryUser.id })
@@ -911,11 +914,13 @@ const applyAiMemoryPlan = async ({
 
     return { changeSet: insertedChangeSet, changes };
   });
-  void embedAiMemories(
-    appliedChangeSet.changes.flatMap((change) =>
-      change.after?.status === "active" ? [change.memoryId] : []
-    )
-  );
+  if (executor === undefined) {
+    void embedAiMemories(
+      appliedChangeSet.changes.flatMap((change) =>
+        change.after?.status === "active" ? [change.memoryId] : []
+      )
+    );
+  }
   return appliedChangeSet.changeSet;
 };
 
@@ -1364,7 +1369,7 @@ const forgetSensitiveAiMemory = async (input: {
   return { status: "refreshed" as const };
 };
 
-const updateExistingAiMemoryFromChatMessage = async (input: {
+const planExistingAiMemoryFromChatMessage = async (input: {
   mailboxId: string;
   messageId: string;
   scope: MemoryScopeTarget;
@@ -1384,7 +1389,7 @@ const updateExistingAiMemoryFromChatMessage = async (input: {
     )
     .orderBy(desc(aiMemory.updatedAt));
   if (current.length === 0) {
-    return { status: "skipped" as const };
+    return null;
   }
   const billingMailbox = await assertAccessibleMailbox({
     mailboxId: input.mailboxId,
@@ -1434,44 +1439,26 @@ const updateExistingAiMemoryFromChatMessage = async (input: {
     }
   }
   if (operations.length === 0) {
-    return { status: "skipped" as const };
+    return null;
   }
-  if (scope.scope === "mailbox") {
-    const access = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: input.userId,
-    });
-    if (!access.capabilities.canManageKnowledge) {
-      return { status: "skipped" as const };
-    }
-  }
-  await applyAiMemoryPlan({
-    actorUserId: input.userId,
-    changeSetSource: "chat",
-    existingEditsOnly: true,
+  return {
     expectedVersions: new Map(current.map(({ id, version }) => [id, version])),
     plan: {
       answer: "Updated the requested knowledge.",
       operations,
       summary: "Updated existing knowledge from an explicit chat request.",
-    },
-    request: null,
+    } satisfies AiMemoryUpdatePlan,
     scope,
-    source: "explicit",
-  });
-  return { status: "refreshed" as const };
+  };
 };
 
-const learnPersonalAiMemoryFromChatMessage = async (
-  input: {
-    bodyText: string;
-    mailboxId: string;
-    messageId: string;
-    scheduleBackgroundTask?: (task: Promise<unknown>) => void;
-    userId: string;
-  },
-  hasExplicitEditIntent: () => Promise<boolean>
-) => {
+const learnPersonalAiMemoryFromChatMessage = async (input: {
+  bodyText: string;
+  mailboxId: string;
+  messageId: string;
+  scheduleBackgroundTask?: (task: Promise<unknown>) => void;
+  userId: string;
+}) => {
   const text = input.bodyText.trim();
   if (!text) {
     return { status: "skipped" as const };
@@ -1508,39 +1495,7 @@ const learnPersonalAiMemoryFromChatMessage = async (
     return { status: result.status };
   }
 
-  if (input.scheduleBackgroundTask !== undefined) {
-    input.scheduleBackgroundTask(
-      (async () => {
-        try {
-          if (!(await hasExplicitEditIntent())) {
-            return;
-          }
-          await updateExistingAiMemoryFromChatMessage({
-            mailboxId: input.mailboxId,
-            messageId: input.messageId,
-            scope: userScope(input.userId),
-            text,
-            userId: input.userId,
-          });
-        } catch (error) {
-          if (!(error instanceof ORPCError) || error.status >= 500) {
-            reportError(error, { operation: "chat:learn-personal-context" });
-          }
-        }
-      })()
-    );
-    return { status: "scheduled" as const };
-  }
-  if (!(await hasExplicitEditIntent())) {
-    return { status: "skipped" as const };
-  }
-  return await updateExistingAiMemoryFromChatMessage({
-    mailboxId: input.mailboxId,
-    messageId: input.messageId,
-    scope: userScope(input.userId),
-    text,
-    userId: input.userId,
-  });
+  return { status: "skipped" as const };
 };
 
 export const learnAiMemoryFromChatMessage = async (
@@ -1566,78 +1521,91 @@ export const learnAiMemoryFromChatMessage = async (
       userId: input.userId,
     });
   }
-  let explicitEditIntent: Promise<boolean> | undefined;
-  const hasExplicitEditIntent = async () => {
-    explicitEditIntent ??= (async () => {
-      const accessibleMailbox = await assertAccessibleMailbox({
-        mailboxId: input.mailboxId,
-        userId: input.userId,
-      });
-      if (
-        !(await canRunMemoryModel({
-          organizationId: accessibleMailbox.organizationId,
-          userId: input.userId,
-        }))
-      ) {
-        return false;
-      }
-      const usage = createUsageCollector();
-      try {
-        return await hasExplicitAiMemoryEditIntent({
-          onUsage: usage.collect,
-          userMessage: text,
-        });
-      } finally {
-        await reportMemoryUsage({
-          externalId: `ai-memory-chat-edit-intent:${input.messageId}`,
-          mailboxId: input.mailboxId,
-          usage: usage.usage(),
-          userId: input.userId,
-        });
-      }
-    })();
-    return await explicitEditIntent;
-  };
-  const personalResult = await learnPersonalAiMemoryFromChatMessage(
-    input,
-    hasExplicitEditIntent
-  );
-  const updateMailboxMemory = async () => {
-    const accessibleMailbox = await assertAccessibleMailbox({
+  const accessibleMailbox = await assertAccessibleMailbox({
+    mailboxId: input.mailboxId,
+    userId: input.userId,
+  });
+  await assertCanUseAi({
+    organizationId: accessibleMailbox.organizationId,
+    userId: input.userId,
+  });
+  const usage = createUsageCollector();
+  let explicitEditIntent: boolean;
+  try {
+    explicitEditIntent = await hasExplicitAiMemoryEditIntent({
+      onUsage: usage.collect,
+      userMessage: text,
+    });
+  } finally {
+    await reportMemoryUsage({
+      externalId: `ai-memory-chat-edit-intent:${input.messageId}`,
+      mailboxId: input.mailboxId,
+      usage: usage.usage(),
+      userId: input.userId,
+    });
+  }
+  if (!explicitEditIntent) {
+    return await learnPersonalAiMemoryFromChatMessage(input);
+  }
+  const scopes = accessibleMailbox.capabilities.canManageKnowledge
+    ? [userScope(input.userId), mailboxScope(input.mailboxId)]
+    : [userScope(input.userId)];
+  const scopePlans: NonNullable<
+    Awaited<ReturnType<typeof planExistingAiMemoryFromChatMessage>>
+  >[] = [];
+  for (const scope of scopes) {
+    const plan = await planExistingAiMemoryFromChatMessage({
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+      scope,
+      text,
+      userId: input.userId,
+    });
+    if (plan !== null) {
+      scopePlans.push(plan);
+    }
+  }
+  if (scopePlans.length === 0) {
+    return { status: "skipped" as const };
+  }
+  if (scopes.some((scope) => scope.scope === "mailbox")) {
+    const access = await assertAccessibleMailbox({
       mailboxId: input.mailboxId,
       userId: input.userId,
     });
-    if (!accessibleMailbox.capabilities.canManageKnowledge) {
-      return { status: "skipped" as const };
+    if (!access.capabilities.canManageKnowledge) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "Nothing changed because your mailbox access changed.",
+      });
     }
-    if (!(await hasExplicitEditIntent())) {
-      return { status: "skipped" as const };
-    }
-    const scopedInput = {
-      mailboxId: input.mailboxId,
-      messageId: input.messageId,
-      scope: mailboxScope(input.mailboxId),
-      text,
-      userId: input.userId,
-    };
-    return await updateExistingAiMemoryFromChatMessage(scopedInput);
-  };
-  if (input.scheduleBackgroundTask !== undefined) {
-    input.scheduleBackgroundTask(
-      (async () => {
-        try {
-          await updateMailboxMemory();
-        } catch (error) {
-          if (!(error instanceof ORPCError) || error.status >= 500) {
-            reportError(error, { operation: "chat:edit-mailbox-context" });
-          }
-        }
-      })()
-    );
-    return { status: "scheduled" as const };
   }
-  const mailboxResult = await updateMailboxMemory();
-  return mailboxResult.status === "refreshed" ? mailboxResult : personalResult;
+  const changeSets = await db.transaction(async (tx) => {
+    const applied: Awaited<ReturnType<typeof applyAiMemoryPlan>>[] = [];
+    for (const { expectedVersions, plan, scope } of scopePlans) {
+      applied.push(
+        await applyAiMemoryPlan({
+          actorUserId: input.userId,
+          changeSetSource: "chat",
+          executor: tx,
+          existingEditsOnly: true,
+          expectedVersions,
+          plan,
+          request: null,
+          scope,
+          source: "explicit",
+        })
+      );
+    }
+    return applied;
+  });
+  void embedAiMemories(
+    changeSets.flatMap(({ changes }) =>
+      changes.flatMap((change) =>
+        change.after?.status === "active" ? [change.memoryId] : []
+      )
+    )
+  );
+  return { status: "refreshed" as const };
 };
 
 const resolveMemorySource = (

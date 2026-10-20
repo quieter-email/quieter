@@ -1,5 +1,4 @@
 import { ORPCError } from "@orpc/server";
-import { containsProhibitedMemorySecret } from "@quieter/ai/ai-memory";
 import {
   createGmailChatTools,
   createGoogleCalendarChatTool,
@@ -996,9 +995,6 @@ export const createAiChatResponse = async (input: {
   let titlePrompt = "";
 
   if (validated.kind === "message") {
-    const requiresMemoryErasure = containsProhibitedMemorySecret(
-      validated.userMessage.text
-    );
     assistantMessageId = validated.foreground.exchangeId;
     const reservationParts: ChatMessagePart[] = [
       { foreground: validated.foreground, type: "data-foreground" },
@@ -1009,15 +1005,13 @@ export const createAiChatResponse = async (input: {
       { text: validated.userMessage.text, type: "text" },
       { foreground: validated.foreground, type: "data-foreground" },
     ];
-    const eraseSensitiveMemory = async () => {
-      if (!requiresMemoryErasure) {
-        return;
-      }
+    const updateChatMemory = async () => {
       try {
         await learnAiMemoryFromChatMessage({
           bodyText: validated.userMessage.text,
           mailboxId,
           messageId: validated.userMessage.id,
+          scheduleBackgroundTask: input.scheduleBackgroundTask,
           userId: input.userId,
         });
       } catch (error) {
@@ -1026,10 +1020,10 @@ export const createAiChatResponse = async (input: {
             cause: error,
           });
         }
-        reportError(error, { operation: "chat:forget-context" });
+        reportError(error, { operation: "chat:update-context" });
         throw new ChatRequestError(
           500,
-          "Could not finish forgetting that information. Please try again.",
+          "Could not update saved information. Please try again.",
           { cause: error }
         );
       }
@@ -1067,7 +1061,7 @@ export const createAiChatResponse = async (input: {
       // The previous attempt was aborted before its answer was persisted;
       // reuse the stored user message instead of duplicating it.
       transcript = toCanonicalTranscript(rows);
-      await eraseSensitiveMemory();
+      await updateChatMemory();
       const [reserved] = await db
         .insert(chatMessage)
         .values({
@@ -1105,7 +1099,7 @@ export const createAiChatResponse = async (input: {
           "This chat message has already been submitted."
         );
       }
-      await eraseSensitiveMemory();
+      await updateChatMemory();
       const now = new Date();
       shouldGenerateTitle = !rows.some((row) => row.role === "user");
       titlePrompt = validated.userMessage.text;
@@ -1189,19 +1183,6 @@ export const createAiChatResponse = async (input: {
           );
         }
         throw error;
-      }
-      if (!requiresMemoryErasure) {
-        try {
-          await learnAiMemoryFromChatMessage({
-            bodyText: validated.userMessage.text,
-            mailboxId,
-            messageId: validated.userMessage.id,
-            scheduleBackgroundTask: input.scheduleBackgroundTask,
-            userId: input.userId,
-          });
-        } catch (error) {
-          reportError(error, { operation: "chat:learn-personal-context" });
-        }
       }
       transcript = [
         ...toCanonicalTranscript(rows),
