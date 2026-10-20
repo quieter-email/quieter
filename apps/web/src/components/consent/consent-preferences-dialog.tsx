@@ -68,42 +68,37 @@ const ConsentPreferencesDialogContent = () => {
         })}
       </DialogBody>
 
-      <DialogFooter
-        // oxlint-disable-next-line shadcn/no-restyle -- Consent footer keeps its stacked-split actions.
-        className="flex-col gap-2 sm:flex-row sm:justify-between"
-      >
+      <DialogFooter>
         <Button
           onClick={() => {
             void performDialogAction("reject");
           }}
           size="sm"
           type="button"
-          variant="ghost"
+          variant="secondary"
         >
           {translations.common.rejectAll}
         </Button>
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button
-            onClick={() => {
-              void saveCustomPreferences();
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {translations.common.save}
-          </Button>
-          <Button
-            onClick={() => {
-              void performDialogAction("accept");
-            }}
-            size="sm"
-            type="button"
-          >
-            {translations.common.acceptAll}
-          </Button>
-        </div>
+        <Button
+          onClick={() => {
+            void performDialogAction("accept");
+          }}
+          size="sm"
+          type="button"
+          variant="secondary"
+        >
+          {translations.common.acceptAll}
+        </Button>
+        <Button
+          onClick={() => {
+            void saveCustomPreferences();
+          }}
+          size="sm"
+          type="button"
+        >
+          {translations.common.save}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

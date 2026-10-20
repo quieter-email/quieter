@@ -638,7 +638,7 @@ export const LabelsWorkspacePanel = ({
                 />
               </div>
             </DialogBody>
-            <DialogFooter fullWidth>
+            <DialogFooter>
               <DialogCloseButton
                 disabled={createLabelMutation.isPending}
                 variant="secondary"
@@ -728,7 +728,7 @@ export const LabelsWorkspacePanel = ({
                 />
               </div>
             </DialogBody>
-            <DialogFooter fullWidth>
+            <DialogFooter>
               <DialogCloseButton disabled={isSavingLabel} variant="secondary">
                 Cancel
               </DialogCloseButton>
@@ -782,7 +782,7 @@ export const LabelsWorkspacePanel = ({
               {deletingLabel?.name ? `"${deletingLabel.name}"` : "this label"}?
             </p>
           </AlertDialogBody>
-          <AlertDialogFooter fullWidth>
+          <AlertDialogFooter>
             <AlertDialogCloseButton variant="secondary">
               Cancel
             </AlertDialogCloseButton>

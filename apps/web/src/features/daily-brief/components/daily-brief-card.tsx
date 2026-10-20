@@ -196,7 +196,7 @@ export const DailyBriefCard = ({
                 onClick={() => {
                   setFeedbackOpen(false);
                 }}
-                variant="ghost"
+                variant="secondary"
               >
                 Cancel
               </Button>
