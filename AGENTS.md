@@ -54,6 +54,18 @@
 - Agents may inspect and transfer secrets as needed between approved local configuration and the intended service within the current task. Keep values out of tracked files, logs, screenshots, reports, and messages. Do not treat permission to handle secrets as authorization to broaden access or change production resources.
 - Complete authorized setup and debugging autonomously. When a required login, consent, account decision, or other user action blocks progress, explain the exact action needed and pause dependent work while continuing independent work. Verify connector/CLI access rather than assuming a configured MCP is connected.
 
+## Design system
+
+- Read [the design-system guide](docs/design-system.md) before frontend work. Inspect the relevant `packages/ui` source and an existing product use before writing UI. `/design-system` is the live component reference.
+- Reuse `@quieter/ui` components and their existing variants first. App components own domain data and interactions; `packages/ui` owns reusable appearance. Do not create a local version of an existing control, badge, overlay, settings row, or panel.
+- Shared component props own appearance: use `size`, `variant`, `chrome`, `tone`, and state props. Do not cancel those choices with height, padding, type, color, border, radius, shadow, or interaction classes at the call site, through a wrapper, or in descendant CSS. Placement, responsive width, truncation, and surrounding margin/gap belong to the layout.
+- When a need is missing, first try the nearest established pattern. Add a named shared variant only for a distinct interaction or reusable treatment, with a real caller and a showcase example. Prefer removing an unnecessary difference over adding another variant. Keep domain-to-color mappings in the app, rather than duplicate domain-named styles in shared components.
+- Use the custom type scale and semantic color tokens from `packages/ui/src/styles.css`. Use the existing spacing and radius scales; do not invent parallel scales, arbitrary visual values, or feature-local palette aliases. Equal token values may express different roles, so do not merge semantic roles solely because they currently match. Unused tokens need no artificial callers.
+- Use the shared settings layouts, workspace sections, composer chrome, input groups, pills, and footer components for their established purposes. Compose these before introducing another shell or a large copied class string.
+- Exceptions are allowed when shared controls cannot express the interaction, such as structured mail search, email content, graphics, or measured positioning. Keep exceptions narrow and explain the specific constraint beside the code. A lint suppression alone does not justify an exception. Repeated exceptions should prompt a shared API review.
+- Do not add or tighten design-system lint rules as a substitute for good instructions, component APIs, and review. Check the diff for competing visual conventions and manually inspect changed treatments at narrow width and in light/dark themes when relevant.
+- Leave the landing page and its `features/home` styles unchanged during design-system maintenance unless the user explicitly includes them.
+
 ## Code style
 
 - Keep types strict. Avoid `any`, unnecessary casts, effects, abstractions used once, placeholders, dead fallbacks, and obsolete compatibility branches.

@@ -76,6 +76,7 @@ export const DomainDangerSection = ({
                   manageReason ??
                   "Shared inboxes must be removed or migrated before removing this domain."
                 }
+                variant="destructive"
               />
             ) : (
               <Button

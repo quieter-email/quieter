@@ -235,11 +235,11 @@ const NoMailboxWorkspace = ({
               your own domain with managed mailboxes and API keys.
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <button
-                className="rounded-lg border border-border bg-bg-raised/80 p-4 text-left shadow-sm transition-colors hover:bg-muted/60"
+              <Button
                 disabled={isConnectingGmail}
                 onClick={onConnectGmail}
                 type="button"
+                variant="card"
               >
                 <span className="flex items-center gap-2 text-body font-medium text-fg">
                   <HugeiconsIcon
@@ -254,13 +254,13 @@ const NoMailboxWorkspace = ({
                 <span className="mt-2 block text-body text-muted-fg">
                   Add an existing Gmail or Google Workspace inbox.
                 </span>
-              </button>
-              <button
-                className="rounded-lg border border-border bg-bg-raised/80 p-4 text-left shadow-sm transition-colors hover:bg-muted/60"
+              </Button>
+              <Button
                 onClick={() => {
                   setSetupMode("managed");
                 }}
                 type="button"
+                variant="card"
               >
                 <span className="flex items-center gap-2 text-body font-medium text-fg">
                   <HugeiconsIcon
@@ -273,7 +273,7 @@ const NoMailboxWorkspace = ({
                 <span className="mt-2 block text-body text-muted-fg">
                   Use your own domain with managed mailboxes and API keys.
                 </span>
-              </button>
+              </Button>
             </div>
             <div className="mt-4">
               <LinkButton search={{ from: "/" }} to="/settings" variant="ghost">

@@ -12,7 +12,7 @@ import type { ComponentRef, ReactNode, Ref } from "react";
 
 import { cn } from "../../lib/cn";
 
-const buttonVariants = cva(
+export const buttonVariants = cva(
   "inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-body whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     defaultVariants: {
@@ -66,6 +66,9 @@ const buttonVariants = cva(
     },
   }
 );
+
+export const buttonFooterClassName =
+  "squircle min-w-20 px-3.5 font-medium [&_svg]:size-3.5";
 
 export type ButtonProps = BaseUIButtonProps &
   VariantProps<typeof buttonVariants> & {

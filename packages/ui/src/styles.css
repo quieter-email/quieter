@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./typeset.css";
+@import "./brand-palettes.generated.css";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
 @import "tw-animate-css";
@@ -78,14 +79,9 @@
   --chart-4: oklch(0.62 0.002 264);
   --chart-5: oklch(0.72 0.002 264);
   --font-sans: var(--font-geist);
+  --font-heading: var(--font-geist);
   --font-mono: var(--font-geist-mono);
   --radius: 0.625rem;
-  --shadow-x: 0px;
-  --shadow-y: 1px;
-  --shadow-blur: 2px;
-  --shadow-spread: 0px;
-  --shadow-opacity: 0.05;
-  --shadow-color: oklch(0 0 0);
   --shadow-2xs: 0 1px 2px 0 oklch(0 0 0 / 0.03);
   --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.04);
   --shadow-sm:
@@ -99,7 +95,6 @@
     0 20px 25px -5px oklch(0 0 0 / 0.07), 0 8px 10px -6px oklch(0 0 0 / 0.05);
   --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.15);
   --shadow-elevation: 0 8px 24px -8px oklch(0 0 0 / 0.08);
-  --shadow-elevation-sm: 0 4px 12px -4px oklch(0 0 0 / 0.06);
   --shadow-surface:
     0 16px 32px -20px oklch(0 0 0 / 0.18), 0 4px 10px -6px oklch(0 0 0 / 0.08);
   --canvas-glow: radial-gradient(
@@ -194,7 +189,6 @@
     0 20px 25px -5px oklch(0 0 0 / 0.25), 0 8px 10px -6px oklch(0 0 0 / 0.15);
   --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.4);
   --shadow-elevation: 0 8px 24px -8px oklch(0 0 0 / 0.25);
-  --shadow-elevation-sm: 0 4px 12px -4px oklch(0 0 0 / 0.2);
   --shadow-surface:
     0 24px 48px -24px oklch(0 0 0 / 0.75), 0 6px 16px -8px oklch(0 0 0 / 0.45);
   --canvas-glow: radial-gradient(
@@ -283,102 +277,6 @@
   );
 }
 
-:root[data-color-theme="01-obsidian"],
-.theme-swatch[data-color-theme="01-obsidian"] {
-  --theme-base: rgb(14 15 16);
-  --theme-light: rgb(14 15 16);
-  --theme-accent: rgb(14 15 16);
-  --theme-ink: #eeeef0;
-}
-
-:root[data-color-theme="02-paper"],
-.theme-swatch[data-color-theme="02-paper"] {
-  --theme-base: rgb(238 238 240);
-  --theme-light: rgb(238 238 240);
-  --theme-accent: rgb(238 238 240);
-  --theme-ink: #0e0f10;
-}
-
-:root[data-color-theme="03-atmosphere"],
-.theme-swatch[data-color-theme="03-atmosphere"] {
-  --theme-base: rgb(9 12 17);
-  --theme-light: rgb(128 146 164);
-  --theme-accent: rgb(29 55 97);
-  --theme-ink: #eeeef0;
-}
-
-:root[data-color-theme="04-porcelain"],
-.theme-swatch[data-color-theme="04-porcelain"] {
-  --theme-base: rgb(230 231 233);
-  --theme-light: rgb(254 254 252);
-  --theme-accent: rgb(154 169 186);
-  --theme-ink: #0e0f10;
-}
-
-:root[data-color-theme="05-blue-hour"],
-.theme-swatch[data-color-theme="05-blue-hour"] {
-  --theme-base: rgb(5 13 35);
-  --theme-light: rgb(85 148 218);
-  --theme-accent: rgb(18 53 132);
-  --theme-ink: #eeeef0;
-}
-
-:root[data-color-theme="06-aurora"],
-.theme-swatch[data-color-theme="06-aurora"] {
-  --theme-base: rgb(5 19 22);
-  --theme-light: rgb(108 192 167);
-  --theme-accent: rgb(26 72 107);
-  --theme-ink: #eeeef0;
-}
-
-:root[data-color-theme="07-ember"],
-.theme-swatch[data-color-theme="07-ember"] {
-  --theme-base: rgb(22 11 12);
-  --theme-light: rgb(193 130 96);
-  --theme-accent: rgb(97 35 31);
-  --theme-ink: #eeeef0;
-}
-
-:root[data-color-theme="08-lilac"],
-.theme-swatch[data-color-theme="08-lilac"] {
-  --theme-base: rgb(224 222 233);
-  --theme-light: rgb(254 246 240);
-  --theme-accent: rgb(160 149 187);
-  --theme-ink: #0e0f10;
-}
-
-:root[data-color-theme="09-silver"],
-.theme-swatch[data-color-theme="09-silver"] {
-  --theme-base: rgb(12 15 19);
-  --theme-light: rgb(131 141 151);
-  --theme-accent: rgb(40 49 62);
-  --theme-ink: #eeeef0;
-}
-
-:root[data-color-theme="10-sand"],
-.theme-swatch[data-color-theme="10-sand"] {
-  --theme-base: rgb(229 222 210);
-  --theme-light: rgb(253 248 236);
-  --theme-accent: rgb(177 153 130);
-  --theme-ink: #28231f;
-}
-
-:root[data-color-theme="11-caustic"],
-.theme-swatch[data-color-theme="11-caustic"] {
-  --theme-base: rgb(6 18 30);
-  --theme-light: rgb(108 182 207);
-  --theme-accent: rgb(21 54 74);
-  --theme-ink: #eeeef0;
-}
-
-:root[data-color-theme="12-eclipse"],
-.theme-swatch[data-color-theme="12-eclipse"] {
-  --theme-base: rgb(10 11 14);
-  --theme-light: rgb(155 164 190);
-  --theme-accent: rgb(40 45 68);
-  --theme-ink: #eeeef0;
-}
-
 @theme inline {
   --color-brand-bg: var(--brand-bg);
   --color-auth-visual-bg: var(--auth-visual-bg);
@@ -459,10 +357,6 @@
   --text-micro: 0.6875rem;
   --text-micro--line-height: 1.3;
 
-  --blur-glass: 18px;
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
-  --ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
-
   /* Calm radius ladder: chips 10, controls 12, rows and avatars 14, panels and sheets 16. */
   --radius-xs: 8px;
   --radius-sm: 10px;
@@ -482,9 +376,7 @@
   --shadow-xl: var(--shadow-xl);
   --shadow-2xl: var(--shadow-2xl);
   --shadow-elevation: var(--shadow-elevation);
-  --shadow-elevation-sm: var(--shadow-elevation-sm);
   --shadow-surface: var(--shadow-surface);
-  --shadow-inset: var(--shadow-inset);
 }
 
 @layer base {

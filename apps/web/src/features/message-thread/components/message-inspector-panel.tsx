@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Pill } from "@quieter/ui/pill";
 import { Text } from "@quieter/ui/text";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -136,16 +137,8 @@ export const MessageInspectorPanel = ({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="w-[min(92vw,56rem)]">
         <DialogHeader>
-          <DialogTitle
-            // oxlint-disable-next-line shadcn/no-restyle -- Inspector title keeps its large bold treatment.
-            className="text-body-lg font-bold"
-          >
-            Full details
-          </DialogTitle>
-          <DialogDescription
-            // oxlint-disable-next-line shadcn/no-restyle -- Inspector description keeps foreground text.
-            className="text-fg"
-          >
+          <DialogTitle>Full details</DialogTitle>
+          <DialogDescription>
             Complete information available for this message.
           </DialogDescription>
         </DialogHeader>
@@ -207,11 +200,11 @@ export const ApiSourceAction = ({
     apiSource.senderMailboxId !== ""
   ) {
     return (
-      <span className="rounded-md bg-muted px-2 py-1 text-caption text-muted-fg squircle">
+      <Pill size="xs" tone="neutral">
         {apiSource.includedInMailbox
           ? "Included in mailbox"
           : "Mailbox copy disabled"}
-      </span>
+      </Pill>
     );
   }
   return null;

@@ -10,6 +10,7 @@ import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "./icons";
+import { overlayBackdropClassName } from "./overlay-chrome";
 
 type SelectDensity = "default" | "compact";
 
@@ -47,10 +48,7 @@ export const SelectBackdrop = ({
   ...props
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Backdrop>) => (
   <SelectPrimitive.Backdrop
-    className={cn(
-      "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0",
-      className
-    )}
+    className={cn(overlayBackdropClassName, className)}
     {...props}
   />
 );

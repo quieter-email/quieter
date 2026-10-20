@@ -10,6 +10,7 @@ export type BrandTheme = {
   light: Color;
   accent: Color;
   ink: string;
+  cssInk?: string;
   phase: number;
 };
 
@@ -106,6 +107,7 @@ export const BRAND_THEMES: BrandTheme[] = [
     accent: [40, 49, 62],
     base: [12, 15, 19],
     colorMode: "dark",
+    cssInk: brand.light,
     ink: "url(#metal)",
     label: "Silver",
     light: [131, 141, 151],

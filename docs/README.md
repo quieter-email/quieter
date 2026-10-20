@@ -3,6 +3,7 @@
 - [Development](development.md)
 - [Development integration plan](development-integrations.md)
 - [Architecture](architecture.md)
+- [Design system](design-system.md)
 - [Responsive mail baseline](responsive-mail.md)
 - [Live mail and browser caching](mail-live-updates.md)
 - [Database safety](database-safety.md)

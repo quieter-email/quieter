@@ -17,6 +17,7 @@ import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { Input } from "@quieter/ui/input";
+import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { FlowProgress } from "@quieter/ui/progress";
 import {
   Select,
@@ -424,12 +425,10 @@ const CustomInboxPlaybook = ({
           {managedMailboxes.length > 0 ? (
             <ConnectedAddressList mailboxes={managedMailboxes} />
           ) : null}
-          <div className="flex h-8 w-full max-w-md items-center rounded-md border border-border bg-bg shadow-sm transition-colors squircle">
+          <InputGroup className="w-full max-w-md" surface="page">
             <TextFieldInput
               aria-label="Mailbox address"
-              chrome="ghost"
-              // oxlint-disable-next-line shadcn/no-restyle -- Local-part input fills its row height.
-              className="h-full min-w-0 flex-1 pr-1"
+              chrome="attached"
               onChange={(event) => {
                 setLocalPart(
                   event.currentTarget.value.replaceAll(/[@\s]/gu, "")
@@ -438,9 +437,7 @@ const CustomInboxPlaybook = ({
               placeholder="support"
               value={localPart}
             />
-            <span aria-hidden className="text-body text-muted-fg select-none">
-              @
-            </span>
+            <InputAddon aria-hidden>@</InputAddon>
             <Select
               items={verifiedReceiving.map((item) => ({
                 label: item.domain,
@@ -466,7 +463,7 @@ const CustomInboxPlaybook = ({
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </InputGroup>
           <Button
             disabled={trimmedLocalPart === "" || domain === "" || isCreating}
             onClick={() => {

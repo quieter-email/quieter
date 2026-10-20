@@ -21,6 +21,7 @@ export const inputVariants = cva(
     },
     variants: {
       chrome: {
+        attached: "border-0 bg-transparent shadow-none focus-visible:ring-0",
         default:
           "squircle rounded-md border border-border bg-input shadow-none read-only:cursor-default read-only:bg-input",
         ghost: "border-0 bg-transparent shadow-none read-only:bg-transparent",
@@ -65,7 +66,10 @@ export const Input = ({
       ref={ref}
       className={cn(
         inputVariants({ chrome, size }),
-        { "min-w-0 flex-1": chrome === "ghost" },
+        {
+          "h-full min-w-0 flex-1 pr-1": chrome === "attached",
+          "min-w-0 flex-1": chrome === "ghost",
+        },
         className
       )}
       {...props}

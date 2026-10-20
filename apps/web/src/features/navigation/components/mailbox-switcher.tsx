@@ -949,13 +949,11 @@ export const MailboxSwitcherDropdown = ({
                   <div className="sticky top-0 z-10 bg-popover">
                     <Input
                       aria-label="Search mailboxes"
-                      className="h-8"
                       onChange={(event) => {
                         setSearchQuery(event.currentTarget.value);
                       }}
                       placeholder="Search mailboxes"
                       ref={searchRef}
-                      size="sm"
                       value={searchQuery}
                     />
                   </div>

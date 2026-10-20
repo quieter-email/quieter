@@ -1,36 +1,35 @@
 import { Button } from "@quieter/ui/button";
+import type { ButtonProps } from "@quieter/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
 import type { ReactNode } from "react";
 
 export { SettingsFieldRow as SettingsRow } from "../settings-layout";
 
 export const MutedActionButton = ({
-  buttonClassName,
   icon,
   label,
   reason,
+  variant = "outline",
 }: {
-  buttonClassName?: string;
   icon: ReactNode;
   label: string;
   reason: string;
+  variant?: ButtonProps["variant"];
 }) => (
   <Tooltip>
     <TooltipTrigger
       className="inline-flex"
-      render={<button aria-label={`${label} unavailable`} type="button" />}
+      render={
+        <span
+          aria-disabled="true"
+          aria-label={`${label} unavailable: ${reason}`}
+          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Tooltip needs a focusable wrapper around a disabled Button without nesting buttons.
+          role="button"
+          tabIndex={0}
+        />
+      }
     >
-      <Button
-        className={
-          // oxlint-disable-next-line shadcn/require-static-classes -- Optional caller override with a static fallback.
-          buttonClassName ??
-          // oxlint-disable-next-line shadcn/no-restyle -- Static preview keeps its inert treatment.
-          "pointer-events-none bg-transparent text-muted-fg opacity-100 hover:bg-transparent hover:text-muted-fg"
-        }
-        disabled
-        size="sm"
-        variant="outline"
-      >
+      <Button aria-hidden disabled size="sm" tabIndex={-1} variant={variant}>
         {icon}
         {label}
       </Button>
