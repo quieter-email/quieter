@@ -31,6 +31,7 @@ import {
   useManagedDemoModeEnabled,
 } from "#/features/settings/domain/managed-demo-mode-setting";
 
+import { DefaultMailboxSetting } from "./default-mailbox-setting";
 import {
   SettingsCard,
   SettingsRow,
@@ -51,6 +52,7 @@ export const PreferencesSettingsPanel = () => {
   const { openKeyboardShortcuts } = useKeyboardShortcuts();
   return (
     <div className={settingsSurfaceVariants({ variant: "page" })}>
+      <DefaultMailboxSetting />
       <SettingsSection title="Appearance">
         <SettingsRows>
           <SettingsRow

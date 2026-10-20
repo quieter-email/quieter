@@ -23,7 +23,6 @@ export const MailboxDetailSettingsView = ({
   const {
     areMailboxesPending,
     canMakeMailboxPrivate,
-    defaultMailboxId,
     detailGroup,
     detailManagedDivisions,
     detailManagedMembers,
@@ -72,7 +71,6 @@ export const MailboxDetailSettingsView = ({
   return (
     <MailboxDetailSettingsContent
       canMakePrivate={canMakeMailboxPrivate}
-      defaultMailboxId={defaultMailboxId}
       deleteManagedMailboxMutation={asSettingsMutation(
         mutations.deleteManagedMailboxMutation
       )}
@@ -89,9 +87,6 @@ export const MailboxDetailSettingsView = ({
       moveGmailMailboxMutation={asSettingsMutation(
         mutations.moveGmailMailboxMutation
       )}
-      onSetDefaultMailbox={(nextMailboxId) => {
-        mutations.setDefaultMailbox(nextMailboxId, defaultMailboxId);
-      }}
       onStartGmailConnection={async (input) => {
         await mutations.startGmailConnection({ ...input, organizations });
       }}
@@ -102,9 +97,6 @@ export const MailboxDetailSettingsView = ({
       )}
       removeManagedMailboxGrantMutation={asSettingsMutation(
         mutations.removeManagedMailboxGrantMutation
-      )}
-      setDefaultMailboxMutation={asSettingsMutation(
-        mutations.setDefaultMailboxMutation
       )}
       setGmailAutoLabelingMutation={asSettingsMutation(
         mutations.setGmailAutoLabelingMutation
