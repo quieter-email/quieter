@@ -50,18 +50,19 @@ export const ChatComposer = ({
         <span className="min-w-0 truncate">{contextLabel}</span>
         {onDismissContext === undefined ? null : (
           <IconButtonTooltip label="Remove message context">
-            <button
+            <Button
               aria-label="Remove message context"
-              className="text-muted-fg transition-colors hover:text-fg focus-visible:outline-none"
               onClick={onDismissContext}
+              size="icon-xs"
               type="button"
+              variant="ghost"
             >
               <HugeiconsIcon
                 aria-hidden
                 className="size-3.5"
                 icon={Cancel01Icon}
               />
-            </button>
+            </Button>
           </IconButtonTooltip>
         )}
       </div>

@@ -537,8 +537,7 @@ export const FloatingAssistant = ({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="start"
-                  // oxlint-disable-next-line shadcn/no-restyle -- Assistant panel keeps its menu sizing.
-                  className="w-72 p-1.5"
+                  className="w-72"
                   sideOffset={8}
                   data-assistant-panel
                 >
@@ -578,8 +577,6 @@ export const FloatingAssistant = ({
                         >
                           <Input
                             aria-label="Conversation title"
-                            // oxlint-disable-next-line shadcn/no-restyle -- Rename input keeps caption type.
-                            className="h-8 text-caption"
                             onChange={(event) => {
                               setRenameTitle(event.target.value);
                             }}

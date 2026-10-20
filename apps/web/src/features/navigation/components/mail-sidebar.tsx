@@ -11,7 +11,6 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
 import { Button, LinkButton } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -291,10 +290,7 @@ const SidebarInboxSection = ({
               active={isSnippetMailbox}
               aria-current={isSnippetMailbox ? "page" : undefined}
               // oxlint-disable shadcn/no-restyle -- The sidebar row uses its existing animated active styling.
-              className={cn("w-full justify-start gap-3 px-3 text-left", {
-                "text-fg": isSnippetMailbox,
-                "text-muted-fg": !isSnippetMailbox,
-              })}
+              className="justify-start gap-3 px-3 text-left"
               // oxlint-enable shadcn/no-restyle
               onClick={() => {
                 onManageSnippets();

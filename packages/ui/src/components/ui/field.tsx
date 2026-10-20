@@ -7,33 +7,30 @@ import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
 import { GhostFieldShell } from "./input";
+import {
+  inputControlClassName,
+  inputControlSizeVariants,
+} from "./input-chrome";
 
-const fieldControlVariants = cva(
-  "squircle w-full text-fg transition-colors duration-150 ease-out placeholder:text-muted-fg focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive/45",
-  {
-    defaultVariants: {
-      chrome: "default",
-      size: "default",
+const fieldControlVariants = cva(`squircle ${inputControlClassName}`, {
+  defaultVariants: {
+    chrome: "default",
+    size: "default",
+  },
+  variants: {
+    chrome: {
+      // Borderless header control; the row tints instead, which keeps the
+      // group reading as one surface while still marking where the caret
+      // is. Used by the mail composer.
+      composer:
+        "h-11 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none",
+      default:
+        "rounded-md border border-border bg-input shadow-sm read-only:cursor-default read-only:bg-input",
+      ghost: "border-0 bg-transparent shadow-none read-only:bg-transparent",
     },
-    variants: {
-      chrome: {
-        // Borderless header control; the row tints instead, which keeps the
-        // group reading as one surface while still marking where the caret
-        // is. Used by the mail composer.
-        composer:
-          "h-11 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none",
-        default:
-          "rounded-md border border-border bg-input shadow-sm read-only:cursor-default read-only:bg-input",
-        ghost: "border-0 bg-transparent shadow-none read-only:bg-transparent",
-      },
-      size: {
-        default: "h-8 px-2.5 text-body-sm",
-        lg: "h-10 px-4 text-body-lg",
-        sm: "h-7 px-2 text-body-sm",
-      },
-    },
-  }
-);
+    size: inputControlSizeVariants,
+  },
+});
 
 export const Field = ({
   className,

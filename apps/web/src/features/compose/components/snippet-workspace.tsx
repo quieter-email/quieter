@@ -31,7 +31,7 @@ import {
 } from "@quieter/ui/dialog";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
-import { Textarea } from "@quieter/ui/textarea";
+import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -40,6 +40,8 @@ import type { ReactNode } from "react";
 
 import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
+
+import { SnippetFields } from "./snippet-fields";
 
 type MailSnippetItem = {
   bodyText: string;
@@ -286,40 +288,12 @@ export const SnippetWorkspace = ({
               </DialogTitle>
             </DialogHeader>
             <DialogBody spacing="3">
-              <label
-                className="flex flex-col gap-2 text-caption font-medium text-fg"
-                htmlFor="snippet-workspace-name"
-              >
-                Name
-                <Input
-                  id="snippet-workspace-name"
-                  maxLength={120}
-                  required
-                  onChange={(event) => {
-                    setName(event.currentTarget.value);
-                  }}
-                  placeholder="Snippet name"
-                  value={name}
-                />
-              </label>
-              <label
-                className="flex flex-col gap-2 text-caption font-medium text-fg"
-                htmlFor="snippet-workspace-text"
-              >
-                Text
-                <Textarea
-                  id="snippet-workspace-text"
-                  maxLength={100_000}
-                  required
-                  rows={3}
-                  variant="composer"
-                  onChange={(event) => {
-                    setBodyText(event.currentTarget.value);
-                  }}
-                  placeholder="Write text to reuse in a message"
-                  value={bodyText}
-                />
-              </label>
+              <SnippetFields
+                bodyText={bodyText}
+                name={name}
+                onBodyTextChange={setBodyText}
+                onNameChange={setName}
+              />
             </DialogBody>
             <DialogFooter>
               <DialogCloseButton>Cancel</DialogCloseButton>
@@ -368,11 +342,10 @@ export const SnippetWorkspace = ({
               This removes the snippet from this mailbox.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogBody
-            // oxlint-disable-next-line shadcn/no-restyle -- Danger copy keeps body text.
-            className="text-body text-muted-fg"
-          >
-            Messages that already used this snippet will not change.
+          <AlertDialogBody>
+            <Text tone="muted">
+              Messages that already used this snippet will not change.
+            </Text>
           </AlertDialogBody>
           <AlertDialogFooter>
             <AlertDialogCloseButton>Cancel</AlertDialogCloseButton>

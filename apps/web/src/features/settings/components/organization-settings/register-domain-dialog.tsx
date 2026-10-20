@@ -6,6 +6,7 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -14,7 +15,6 @@ import {
   DialogCloseButton,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
@@ -245,10 +245,7 @@ export const RegisterDomainDialog = ({
                 <Text tone="destructive">{submitError}</Text>
               ) : null}
 
-              <DialogFooter
-                // oxlint-disable-next-line shadcn/no-restyle -- Flush footer keeps edge-to-edge actions.
-                className="px-0 pb-0"
-              >
+              <ActionFooter>
                 <DialogCloseButton disabled={createSetupMutation.isPending}>
                   Cancel
                 </DialogCloseButton>
@@ -272,7 +269,7 @@ export const RegisterDomainDialog = ({
                   )}
                   Register domain
                 </Button>
-              </DialogFooter>
+              </ActionFooter>
             </form>
           </DialogBody>
         </DialogContent>
