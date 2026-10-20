@@ -740,16 +740,19 @@ const applyAiMemoryPlan = async ({
       });
     }
     if (
-      expectedVersions !== undefined &&
-      current.some(
-        (record) =>
-          record.version !== expectedVersions.get(record.id) &&
-          plan.operations.some((operation) =>
-            operation.targetId
-              ? operation.targetId === record.id
-              : operation.key === record.key
-          )
-      )
+      plan.operations.some(
+        ({ targetId }) => targetId !== null && !recordsById.has(targetId)
+      ) ||
+      (expectedVersions !== undefined &&
+        current.some(
+          (record) =>
+            record.version !== expectedVersions.get(record.id) &&
+            plan.operations.some((operation) =>
+              operation.targetId
+                ? operation.targetId === record.id
+                : operation.key === record.key
+            )
+        ))
     ) {
       throw new ORPCError("CONFLICT", {
         message:
