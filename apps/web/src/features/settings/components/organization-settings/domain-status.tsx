@@ -1,7 +1,8 @@
 "use client";
 
 import type { RouterOutputs } from "@quieter/orpc";
-import { cn } from "@quieter/ui/cn";
+import { Pill } from "@quieter/ui/pill";
+import type { PillTone } from "@quieter/ui/pill";
 
 export const RecordState = ({
   message,
@@ -10,23 +11,14 @@ export const RecordState = ({
   message: string;
   ok: boolean | null;
 }) => {
-  let className = "bg-muted/40 text-muted-fg";
+  let tone: PillTone = "neutral";
   if (ok === true) {
-    className = "bg-success/15 text-success";
+    tone = "success";
   } else if (ok === false) {
-    className = "bg-destructive/10 text-destructive";
+    tone = "destructive";
   }
 
-  return (
-    <span
-      className={cn(
-        "inline-flex w-fit items-center rounded-full px-2 py-0.5 text-micro font-medium",
-        className
-      )}
-    >
-      {message}
-    </span>
-  );
+  return <Pill tone={tone}>{message}</Pill>;
 };
 
 export type DomainStatusTone = "success" | "warning" | "error" | "neutral";

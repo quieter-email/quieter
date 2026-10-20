@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Text } from "@quieter/ui/text";
 import type { UseMutationResult } from "@tanstack/react-query";
 
 import {
@@ -76,6 +77,7 @@ export const DomainDangerSection = ({
                   manageReason ??
                   "Shared inboxes must be removed or migrated before removing this domain."
                 }
+                variant="destructive"
               />
             ) : (
               <Button
@@ -112,16 +114,14 @@ export const DomainDangerSection = ({
             This action disconnects the domain from Quieter.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody
-          // oxlint-disable-next-line shadcn/no-restyle -- Danger copy keeps body text.
-          className="text-body text-muted-fg"
-          spacing="3"
-        >
-          <p>Sending and incoming mail will stop for this domain.</p>
-          <p>
+        <DialogBody spacing="3">
+          <Text tone="muted">
+            Sending and incoming mail will stop for this domain.
+          </Text>
+          <Text tone="muted">
             Remove the DNS records at your provider after this domain is
             disconnected.
-          </p>
+          </Text>
         </DialogBody>
         <DialogFooter>
           <DialogCloseButton disabled={removeMutation.isPending}>

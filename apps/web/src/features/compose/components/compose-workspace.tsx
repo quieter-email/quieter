@@ -12,6 +12,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { resolveMailSender } from "@quieter/mail/compose/sender";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -848,17 +849,14 @@ const ReadyComposeSurface = ({
                                             ) : null}
                                           </Field>
                                         ) : null}
-                                        <PopoverClose
-                                          disabled={!!error}
-                                          render={
-                                            <Button
-                                              fullWidth
-                                              variant="secondary"
-                                            />
-                                          }
-                                        >
-                                          Save
-                                        </PopoverClose>
+                                        <ActionFooter>
+                                          <PopoverClose
+                                            disabled={!!error}
+                                            render={<Button />}
+                                          >
+                                            Save
+                                          </PopoverClose>
+                                        </ActionFooter>
                                       </div>
                                     </PopoverContent>
                                   </Popover>

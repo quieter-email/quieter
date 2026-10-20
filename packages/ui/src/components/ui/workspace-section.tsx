@@ -4,8 +4,11 @@ import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
 
+export const workspaceGutterClassName =
+  "[--workspace-gutter:--spacing(1.5)] lg:[--workspace-gutter:--spacing(2)]";
+
 export const workspaceSectionVariants = cva(
-  "overflow-hidden rounded-xl border border-border bg-bg-raised shadow-surface [background-image:var(--panel-gradient)]",
+  `${workspaceGutterClassName} overflow-hidden rounded-xl border border-border bg-bg-raised shadow-surface [background-image:var(--panel-gradient)]`,
   {
     defaultVariants: {
       centered: false,
@@ -17,8 +20,8 @@ export const workspaceSectionVariants = cva(
         true: "items-center justify-center",
       },
       layout: {
-        cell: "m-1.5 min-h-0 min-w-0 flex-1 flex-col lg:m-2 lg:ml-0 lg:flex",
-        fill: "absolute inset-1.5 flex min-h-0 min-w-0 flex-col",
+        cell: "m-(--workspace-gutter) min-h-0 min-w-0 flex-1 flex-col lg:ml-0 lg:flex",
+        fill: "absolute inset-(--workspace-gutter) flex min-h-0 min-w-0 flex-col",
         surface: "flex min-h-0 min-w-0 flex-col",
       },
     },

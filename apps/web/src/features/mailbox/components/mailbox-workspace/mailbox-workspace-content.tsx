@@ -11,6 +11,7 @@ import { cn } from "@quieter/ui/cn";
 import { Text } from "@quieter/ui/text";
 import {
   WorkspaceSection,
+  workspaceGutterClassName,
   workspaceSectionVariants,
 } from "@quieter/ui/workspace-section";
 import { domAnimation, LazyMotion, m } from "motion/react";
@@ -57,6 +58,11 @@ const ChatView = lazy(loadChatView);
 const ComposeWorkspace = lazy(loadComposeWorkspace);
 
 const SnippetWorkspace = lazy(loadSnippetWorkspace);
+
+const messagePanelsClassName = cn(
+  workspaceGutterClassName,
+  "absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,max(34%,405px))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-(--workspace-gutter)"
+);
 
 const DailyBriefPanel = lazy(async () => {
   const { DailyBriefPanel: Panel } =
@@ -235,11 +241,11 @@ const NoMailboxWorkspace = ({
               your own domain with managed mailboxes and API keys.
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <button
-                className="rounded-lg border border-border bg-bg-raised/80 p-4 text-left shadow-sm transition-colors hover:bg-muted/60"
+              <Button
                 disabled={isConnectingGmail}
                 onClick={onConnectGmail}
                 type="button"
+                variant="card"
               >
                 <span className="flex items-center gap-2 text-body font-medium text-fg">
                   <HugeiconsIcon
@@ -254,13 +260,13 @@ const NoMailboxWorkspace = ({
                 <span className="mt-2 block text-body text-muted-fg">
                   Add an existing Gmail or Google Workspace inbox.
                 </span>
-              </button>
-              <button
-                className="rounded-lg border border-border bg-bg-raised/80 p-4 text-left shadow-sm transition-colors hover:bg-muted/60"
+              </Button>
+              <Button
                 onClick={() => {
                   setSetupMode("managed");
                 }}
                 type="button"
+                variant="card"
               >
                 <span className="flex items-center gap-2 text-body font-medium text-fg">
                   <HugeiconsIcon
@@ -273,7 +279,7 @@ const NoMailboxWorkspace = ({
                 <span className="mt-2 block text-body text-muted-fg">
                   Use your own domain with managed mailboxes and API keys.
                 </span>
-              </button>
+              </Button>
             </div>
             <div className="mt-4">
               <LinkButton search={{ from: "/" }} to="/settings" variant="ghost">
@@ -538,7 +544,7 @@ const MailboxWorkspaceContentInner = ({
     );
   } else if (allInboxesActive) {
     mailboxContent = (
-      <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,max(34%,405px))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-2">
+      <div className={messagePanelsClassName}>
         <WorkspaceSection
           className={cn({ flex: !messageId, hidden: !!messageId })}
           layout="cell"
@@ -708,7 +714,7 @@ const MailboxWorkspaceContentInner = ({
     );
   } else {
     mailboxContent = (
-      <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,max(34%,405px))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-2">
+      <div className={messagePanelsClassName}>
         <MailboxMessagesPanel
           activeMailbox={activeMailbox}
           senderMailbox={composeMailbox}
@@ -883,6 +889,7 @@ const MailboxWorkspaceContentInner = ({
                     </p>
                   )}
                   <ChatView
+                    docked={assistantSidebar}
                     visible={assistantOpen}
                     activeMailbox={activeMailbox ?? "inbox"}
                     mailContext={chatContext}

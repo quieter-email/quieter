@@ -1,3 +1,5 @@
+import { Button } from "@quieter/ui/button";
+import { Input } from "@quieter/ui/input";
 import { Text } from "@quieter/ui/text";
 
 export const SitePasswordRouteComponent = ({
@@ -22,24 +24,21 @@ export const SitePasswordRouteComponent = ({
         method="post"
       >
         <input name="returnTo" type="hidden" value={returnTo} />
-        <input
+        <Input
           aria-label="Site password"
           autoComplete="current-password"
-          className="h-10 rounded-md border border-border bg-bg px-3 text-body text-fg shadow-sm placeholder:text-muted-fg"
           name="password"
           placeholder="Password"
           required
+          size="lg"
           type="password"
         />
         {hasSitePasswordError && (
           <Text tone="destructive">That password did not work.</Text>
         )}
-        <button
-          className="inline-flex h-10 items-center justify-center rounded-md border border-primary bg-primary px-4 text-body font-medium text-primary-fg shadow-sm hover:bg-primary/90"
-          type="submit"
-        >
+        <Button size="lg" type="submit">
           Unlock site
-        </button>
+        </Button>
       </form>
     </div>
   </main>

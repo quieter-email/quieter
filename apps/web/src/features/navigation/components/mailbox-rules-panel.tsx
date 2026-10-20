@@ -683,7 +683,7 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
           }}
           size="icon-sm"
           type="button"
-          variant="ghost"
+          variant="destructive"
         >
           <HugeiconsIcon aria-hidden icon={Delete01Icon} />
         </Button>

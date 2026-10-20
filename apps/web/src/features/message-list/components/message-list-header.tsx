@@ -16,8 +16,6 @@ import type { ReactNode } from "react";
 
 import { getAppPresenceMotion } from "#/features/motion/app-motion";
 
-import { messageListHeaderControlVariants } from "./message-list-header-surfaces";
-
 /**
  * Owns the message list header row: a sidebar slot that survives every state,
  * plus a single stacked cell that cross-fades between search and selection so
@@ -47,13 +45,9 @@ export const MessageListHeader = ({
             <IconButtonTooltip label="Open sidebar">
               <Button
                 aria-label="Open sidebar"
-                // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
-                className={messageListHeaderControlVariants({
-                  control: "toolbar",
-                })}
                 onClick={onOpenSidebar}
                 size="icon"
-                variant="ghost"
+                variant="outline"
               >
                 <HugeiconsIcon icon={SidebarLeftIcon} />
               </Button>

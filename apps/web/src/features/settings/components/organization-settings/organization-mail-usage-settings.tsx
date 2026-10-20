@@ -6,6 +6,7 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { Fieldset } from "@quieter/ui/fieldset";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
@@ -490,28 +491,32 @@ const ManagedUsageSettingsControls = ({
       ) : null}
 
       {canManageOrganizationMailUsage ? (
-        <SettingsInsetRow className="justify-end gap-3">
-          {hasUnsavedChanges ? (
-            <p className="text-caption text-muted-fg">Unsaved changes</p>
-          ) : null}
-          <Button
-            disabled={
-              !hasUnsavedChanges ||
-              (milestoneError !== null && milestoneError !== "") ||
-              isSaving
-            }
-            onClick={onSave}
-            size="sm"
-          >
-            {isSaving && (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 animate-spin"
-                icon={Loading03Icon}
-              />
-            )}
-            Save changes
-          </Button>
+        <SettingsInsetRow>
+          <div className="w-full space-y-3">
+            {hasUnsavedChanges ? (
+              <p className="text-caption text-muted-fg">Unsaved changes</p>
+            ) : null}
+            <ActionFooter>
+              <Button
+                disabled={
+                  !hasUnsavedChanges ||
+                  (milestoneError !== null && milestoneError !== "") ||
+                  isSaving
+                }
+                onClick={onSave}
+                size="sm"
+              >
+                {isSaving && (
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4 animate-spin"
+                    icon={Loading03Icon}
+                  />
+                )}
+                Save changes
+              </Button>
+            </ActionFooter>
+          </div>
         </SettingsInsetRow>
       ) : null}
     </SettingsInsetRows>

@@ -1,5 +1,6 @@
 "use client";
 
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { Textarea } from "@quieter/ui/textarea";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -52,36 +53,39 @@ export const MailboxSignatureSettings = ({
             rows={5}
             value={signatureText}
           />
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <p className="text-caption text-muted-fg">
               Leave it empty to send without a signature.
             </p>
-            <Button
-              disabled={!isDirty}
-              onClick={() => {
-                updateSignatureMutation.mutate(
-                  {
-                    mailboxId: mailbox.id,
-                    signatureHtml: textToComposeBodyHtml(signatureText) || null,
-                    signatureText: signatureText.trim() || null,
-                  },
-                  {
-                    onError: (error) => {
-                      toastError(error, {
-                        boundary: "mailbox-settings",
-                        fallback: "Could not save signature.",
-                      });
+            <ActionFooter>
+              <Button
+                disabled={!isDirty}
+                onClick={() => {
+                  updateSignatureMutation.mutate(
+                    {
+                      mailboxId: mailbox.id,
+                      signatureHtml:
+                        textToComposeBodyHtml(signatureText) || null,
+                      signatureText: signatureText.trim() || null,
                     },
-                  }
-                );
-              }}
-              pending={updateSignatureMutation.isPending}
-              pendingLabel="Saving…"
-              size="sm"
-              type="button"
-            >
-              Save signature
-            </Button>
+                    {
+                      onError: (error) => {
+                        toastError(error, {
+                          boundary: "mailbox-settings",
+                          fallback: "Could not save signature.",
+                        });
+                      },
+                    }
+                  );
+                }}
+                pending={updateSignatureMutation.isPending}
+                pendingLabel="Saving…"
+                size="sm"
+                type="button"
+              >
+                Save signature
+              </Button>
+            </ActionFooter>
           </div>
         </div>
       </SettingsCard>

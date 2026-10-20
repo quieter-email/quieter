@@ -11,14 +11,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
-import { Input } from "@quieter/ui/input";
-import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { useState } from "react";
 
 import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
+
+import { SnippetFields } from "./snippet-fields";
 
 export const SaveSnippetDialog = ({
   initialText,
@@ -29,7 +29,6 @@ export const SaveSnippetDialog = ({
   mailboxId: string;
   onClose: () => void;
 }) => {
-  const id = useId();
   const [name, setName] = useState(
     initialText.trim().split("\n")[0]?.slice(0, 60) ?? ""
   );
@@ -78,43 +77,12 @@ export const SaveSnippetDialog = ({
             </DialogDescription>
           </DialogHeader>
           <DialogBody spacing="4">
-            <div className="space-y-2">
-              <label
-                className="text-caption font-medium"
-                htmlFor={`${id}-name`}
-              >
-                Name
-              </label>
-              <Input
-                id={`${id}-name`}
-                maxLength={120}
-                onChange={(event) => {
-                  setName(event.currentTarget.value);
-                }}
-                placeholder="e.g. Thank you"
-                required
-                value={name}
-              />
-            </div>
-            <div className="space-y-2">
-              <label
-                className="text-caption font-medium"
-                htmlFor={`${id}-text`}
-              >
-                Text
-              </label>
-              <Textarea
-                id={`${id}-text`}
-                maxLength={100_000}
-                onChange={(event) => {
-                  setBodyText(event.currentTarget.value);
-                }}
-                required
-                rows={3}
-                variant="composer"
-                value={bodyText}
-              />
-            </div>
+            <SnippetFields
+              bodyText={bodyText}
+              name={name}
+              onBodyTextChange={setBodyText}
+              onNameChange={setName}
+            />
           </DialogBody>
           <DialogFooter>
             <DialogCloseButton>Cancel</DialogCloseButton>

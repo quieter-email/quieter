@@ -3,6 +3,7 @@
 import { Alert02Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
@@ -12,6 +13,7 @@ import { ChatMessage } from "./chat-message";
 
 type ChatTranscriptProps = {
   approvals: ChatToolApproval[];
+  docked: boolean;
   errorMessage?: string;
   isStreaming: boolean;
   messages: UIMessage[];
@@ -22,6 +24,7 @@ const SCROLL_THRESHOLD = 120;
 
 export const ChatTranscript = ({
   approvals,
+  docked,
   errorMessage,
   isStreaming,
   messages,
@@ -63,9 +66,14 @@ export const ChatTranscript = ({
   }, []);
 
   return (
-    <div className="relative max-h-[min(28rem,calc(100dvh-15rem))] min-h-0">
+    <div
+      className={cn("relative flex min-h-0 flex-col", {
+        "flex-1": docked,
+        "max-h-[min(28rem,calc(100dvh-15rem))]": !docked,
+      })}
+    >
       <div
-        className="max-h-[min(28rem,calc(100dvh-15rem))] overflow-y-auto overscroll-contain"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
         onScroll={() => {
           const viewport = viewportRef.current;
           if (viewport === null) {

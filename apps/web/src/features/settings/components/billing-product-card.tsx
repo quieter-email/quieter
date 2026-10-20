@@ -9,6 +9,7 @@ import { BILLING_PRODUCTS, GMAIL_MAILBOX_LIMITS } from "@quieter/billing/plans";
 import type { BillingProductId } from "@quieter/billing/plans";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Pill } from "@quieter/ui/pill";
 
 import {
   SettingsCard,
@@ -108,9 +109,9 @@ export const BillingProductCard = ({
               {product.name}
             </h3>
             {isCurrent && (
-              <span className="rounded-full border border-primary/40 px-2 py-0.5 text-micro font-medium text-primary squircle">
+              <Pill size="xs" tone="blue">
                 Current
-              </span>
+              </Pill>
             )}
           </div>
           <p className="mt-1.5 text-body/6 text-muted-fg">

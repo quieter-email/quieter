@@ -4,6 +4,12 @@ import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu
 import type { ComponentPropsWithoutRef, MouseEvent } from "react";
 
 import { cn } from "../../lib/cn";
+import {
+  menuItemClassName,
+  menuPopupClassName,
+  menuSeparatorClassName,
+} from "./menu-chrome";
+import { overlayTriggerClassName } from "./overlay-chrome";
 
 export const ContextMenu = ContextMenuPrimitive.Root;
 export const ContextMenuPortal = ContextMenuPrimitive.Portal;
@@ -13,10 +19,7 @@ export const ContextMenuTrigger = ({
   ...props
 }: ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Trigger>) => (
   <ContextMenuPrimitive.Trigger
-    className={cn(
-      "transition-transform duration-100 ease-out squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
-      className
-    )}
+    className={cn(overlayTriggerClassName, "squircle", className)}
     {...props}
   />
 );
@@ -43,7 +46,8 @@ export const ContextMenuContent = ({
     >
       <ContextMenuPrimitive.Popup
         className={cn(
-          "z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 origin-(--transform-origin) overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-body text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] outline-none data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
+          menuPopupClassName,
+          "will-change-[opacity,transform]",
           className
         )}
         {...props}
@@ -70,7 +74,7 @@ export const ContextMenuItem = ({
 }: ContextMenuItemProps) => (
   <ContextMenuPrimitive.Item
     className={cn(
-      "relative flex min-h-7 cursor-default items-center gap-2 rounded-md px-2.5 text-body-sm text-fg transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+      menuItemClassName,
       { "text-destructive": tone === "destructive" },
       className
     )}
@@ -85,7 +89,7 @@ export const ContextMenuSeparator = ({
   ...props
 }: ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Separator>) => (
   <ContextMenuPrimitive.Separator
-    className={cn("my-1 h-px bg-border", className)}
+    className={cn(menuSeparatorClassName, className)}
     {...props}
   />
 );

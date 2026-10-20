@@ -468,6 +468,7 @@ const ChatSession = ({
     >
       {chat.messages.length > 0 || errorMessage !== "" ? (
         <ChatTranscript
+          docked={props.docked}
           messages={chat.messages}
           isStreaming={streaming}
           approvals={approvals}

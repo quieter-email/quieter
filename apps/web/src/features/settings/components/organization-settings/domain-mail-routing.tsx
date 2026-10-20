@@ -266,6 +266,7 @@ const DomainCatchAllAction = ({
           }
           label="Remove"
           reason={manageReason}
+          variant="destructive"
         />
       );
     }
@@ -286,7 +287,7 @@ const DomainCatchAllAction = ({
           );
         }}
         size="sm"
-        variant="outline"
+        variant="destructive"
       >
         Remove
       </Button>
@@ -350,13 +351,8 @@ const DomainCatchAllPickerBody = ({
   return (
     <div className="space-y-1">
       {candidates.map((mailbox) => (
-        <button
-          className={cn(
-            "flex w-full items-center justify-between gap-3 rounded-md border border-border bg-bg px-3 py-2 text-left transition-colors squircle",
-            "hover:bg-muted/25",
-            "active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100",
-            { "cursor-not-allowed opacity-50": setCatchAllMutation.isPending }
-          )}
+        <Button
+          fullWidth
           disabled={setCatchAllMutation.isPending}
           key={mailbox.id}
           onClick={() => {
@@ -373,15 +369,21 @@ const DomainCatchAllPickerBody = ({
               }
             );
           }}
+          size="auto"
           type="button"
+          variant="outline"
         >
-          <span className="min-w-0 truncate text-body text-fg">
-            {mailbox.emailAddress}
+          <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+            <span className="min-w-0 truncate text-body text-fg">
+              {mailbox.emailAddress}
+            </span>
+            {mailbox.catchAllDomain === null ? null : (
+              <span className="shrink-0 text-caption text-muted-fg">
+                current
+              </span>
+            )}
           </span>
-          {mailbox.catchAllDomain === null ? null : (
-            <span className="shrink-0 text-caption text-muted-fg">current</span>
-          )}
-        </button>
+        </Button>
       ))}
     </div>
   );

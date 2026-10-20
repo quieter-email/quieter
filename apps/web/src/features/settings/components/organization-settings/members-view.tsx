@@ -91,7 +91,7 @@ export const MembersView = ({
               aria-label="Search members"
               chrome="ghost"
               // oxlint-disable-next-line shadcn/no-restyle -- Search input leaves room for its leading icon.
-              className="h-8 pl-7"
+              className="pl-7"
               onChange={(event) => {
                 setMemberSearch(event.target.value);
               }}

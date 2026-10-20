@@ -135,7 +135,7 @@ const AiPersonalizationSection = ({
                 }}
                 size="sm"
                 type="button"
-                variant="ghost"
+                variant="destructive"
               >
                 Start fresh
               </Button>

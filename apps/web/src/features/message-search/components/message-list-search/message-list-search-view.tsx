@@ -18,7 +18,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { ArrowInteractionButton } from "#/components/arrow-interaction-button";
 import { SpinWhileActive } from "#/components/spin-while-active";
 import { mailboxLabelSearchPillSurfaceClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
-import { messageListHeaderControlVariants } from "#/features/message-list/components/message-list-header-surfaces";
+import { messageListSearchChipClassName } from "#/features/message-list/components/message-list-header-surfaces";
 import { normalizeLabelSelectionKey } from "#/features/message-search/state/message-list-search-state";
 
 import { MessageListSearchDropdown } from "../message-list-search-dropdown";
@@ -137,15 +137,10 @@ export const MessageListSearchView = ({
           <IconButtonTooltip label="Refresh list">
             <Button
               aria-label="Refresh list"
-              // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
-              // oxlint-disable shadcn/require-static-classes -- Uses the shared header-control variant with a fixed toolbar option.
-              className={messageListHeaderControlVariants({
-                control: "toolbar",
-              })}
               disabled={isRefreshing}
               onClick={() => void onRefresh()}
               size="icon"
-              variant="ghost"
+              variant="outline"
             >
               <SpinWhileActive active={isRefreshing}>
                 <HugeiconsIcon icon={Refresh01Icon} />
@@ -206,7 +201,7 @@ export const MessageListSearchView = ({
                           : `Exclude label ${label?.name ?? filter.value}`
                       }
                       className={cn(
-                        messageListHeaderControlVariants({ control: "chip" }),
+                        messageListSearchChipClassName,
                         "order-(--filter-order) gap-1",
                         {
                           [mailboxLabelSearchPillSurfaceClassNameByColor[
@@ -259,10 +254,7 @@ export const MessageListSearchView = ({
                           ? `Remove excluded ${filter.value} filter`
                           : `Exclude ${filter.value} filter`
                       }
-                      className={cn(
-                        messageListHeaderControlVariants({ control: "chip" }),
-                        "gap-1"
-                      )}
+                      className={cn(messageListSearchChipClassName, "gap-1")}
                       key={filterRenderKey}
                       // oxlint-disable-next-line shadcn/no-inline-styles -- Interleaved pills need computed flex order.
                       style={{ order: index * 2 + 1 }}
@@ -303,14 +295,10 @@ export const MessageListSearchView = ({
                 const isCurrentFilterDate = isDateFilter(filter);
                 return (
                   <div
-                    className={cn(
-                      messageListHeaderControlVariants({ control: "chip" }),
-                      "gap-1",
-                      {
-                        "bg-control-active ring-2 ring-ring/30":
-                          activeDateFilterIndex === index,
-                      }
-                    )}
+                    className={cn(messageListSearchChipClassName, "gap-1", {
+                      "bg-control-active ring-2 ring-ring/30":
+                        activeDateFilterIndex === index,
+                    })}
                     key={filterRenderKey}
                     onPointerDown={(event) => {
                       removeFilterOnMiddlePointer(event, index);
@@ -615,14 +603,10 @@ export const MessageListSearchView = ({
           <IconButtonTooltip label="Scroll to top">
             <ArrowInteractionButton
               aria-label="Scroll to top"
-              className={messageListHeaderControlVariants({
-                control: "toolbar",
-              })}
-              // oxlint-enable shadcn/require-static-classes
               onClick={onScrollToTop}
               size="icon"
               type="button"
-              variant="ghost"
+              variant="outline"
             />
           </IconButtonTooltip>
         </div>
