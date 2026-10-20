@@ -282,6 +282,7 @@ describe(writeComposeFormValues, () => {
       bodyHtml: "<p>Reply body</p>",
       bodyText: "Reply body",
       cc: "casey@example.com",
+      senderName: "Support",
       subject: "Re: Project update",
       to: "alex@example.com",
     };
@@ -309,6 +310,7 @@ describe(writeComposeFormValues, () => {
         ["cc", "casey@example.com"],
         ["bcc", ""],
         ["subject", "Re: Project update"],
+        ["senderName", "Support"],
         ["bodyHtml", "<p>Reply body</p>"],
         ["bodyText", "Reply body"],
       ])

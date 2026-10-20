@@ -638,8 +638,11 @@ export const LabelsWorkspacePanel = ({
                 />
               </div>
             </DialogBody>
-            <DialogFooter>
-              <DialogCloseButton disabled={createLabelMutation.isPending}>
+            <DialogFooter fullWidth>
+              <DialogCloseButton
+                disabled={createLabelMutation.isPending}
+                variant="secondary"
+              >
                 Cancel
               </DialogCloseButton>
               <Button
@@ -725,8 +728,8 @@ export const LabelsWorkspacePanel = ({
                 />
               </div>
             </DialogBody>
-            <DialogFooter>
-              <DialogCloseButton disabled={isSavingLabel}>
+            <DialogFooter fullWidth>
+              <DialogCloseButton disabled={isSavingLabel} variant="secondary">
                 Cancel
               </DialogCloseButton>
               <Button
@@ -779,8 +782,10 @@ export const LabelsWorkspacePanel = ({
               {deletingLabel?.name ? `"${deletingLabel.name}"` : "this label"}?
             </p>
           </AlertDialogBody>
-          <AlertDialogFooter>
-            <AlertDialogCloseButton>Cancel</AlertDialogCloseButton>
+          <AlertDialogFooter fullWidth>
+            <AlertDialogCloseButton variant="secondary">
+              Cancel
+            </AlertDialogCloseButton>
             <Button
               disabled={deleteLabelMutation.isPending || !deletingLabel}
               onClick={() => {

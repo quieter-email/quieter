@@ -43,7 +43,9 @@
   --popover-fg: var(--fg);
   --primary: oklch(0.37 0.002 264);
   --primary-fg: oklch(0.985 0.002 264);
-  --secondary: var(--control-hover);
+  --secondary: oklch(0.85 0.002 264);
+  --secondary-hover: oklch(0.8 0.002 264);
+  --secondary-active: oklch(0.76 0.002 264);
   --secondary-fg: oklch(0.205 0.002 264);
   --muted: var(--control-hover);
   --muted-fg: oklch(0.45 0.003 264);
@@ -141,7 +143,9 @@
   --popover-fg: var(--fg);
   --primary: oklch(0.95 0.002 264);
   --primary-fg: oklch(0.141 0.003 264);
-  --secondary: var(--control-hover);
+  --secondary: oklch(0.34 0.003 264);
+  --secondary-hover: oklch(0.38 0.003 264);
+  --secondary-active: oklch(0.42 0.003 264);
   --secondary-fg: oklch(1 0.002 264);
   --muted: var(--control-hover);
   --muted-fg: oklch(0.74 0.004 264);
@@ -241,7 +245,17 @@
   --popover-fg: var(--fg);
   --primary: var(--theme-ink);
   --primary-fg: var(--theme-base);
-  --secondary: var(--control-hover);
+  --secondary: color-mix(in srgb, var(--theme-base), var(--theme-ink) 18%);
+  --secondary-hover: color-mix(
+    in srgb,
+    var(--theme-base),
+    var(--theme-ink) 22%
+  );
+  --secondary-active: color-mix(
+    in srgb,
+    var(--theme-base),
+    var(--theme-ink) 26%
+  );
   --secondary-fg: var(--fg);
   --muted: var(--control-hover);
   --muted-fg: color-mix(in srgb, var(--theme-ink) 65%, var(--theme-base));
@@ -379,6 +393,8 @@
   --color-primary: var(--primary);
   --color-primary-fg: var(--primary-fg);
   --color-secondary: var(--secondary);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-active: var(--secondary-active);
   --color-secondary-fg: var(--secondary-fg);
   --color-muted: var(--muted);
   --color-muted-fg: var(--muted-fg);

@@ -69,8 +69,8 @@ const ConsentPreferencesDialogContent = () => {
       </DialogBody>
 
       <DialogFooter
-        // oxlint-disable-next-line shadcn/no-restyle -- Three consent actions stack on narrow screens.
-        className="grid-flow-row sm:grid-flow-col"
+        // oxlint-disable-next-line shadcn/no-restyle -- Consent footer keeps its stacked-split actions.
+        className="flex-col gap-2 sm:flex-row sm:justify-between"
       >
         <Button
           onClick={() => {
@@ -83,25 +83,27 @@ const ConsentPreferencesDialogContent = () => {
           {translations.common.rejectAll}
         </Button>
 
-        <Button
-          onClick={() => {
-            void saveCustomPreferences();
-          }}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          {translations.common.save}
-        </Button>
-        <Button
-          onClick={() => {
-            void performDialogAction("accept");
-          }}
-          size="sm"
-          type="button"
-        >
-          {translations.common.acceptAll}
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            onClick={() => {
+              void saveCustomPreferences();
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {translations.common.save}
+          </Button>
+          <Button
+            onClick={() => {
+              void performDialogAction("accept");
+            }}
+            size="sm"
+            type="button"
+          >
+            {translations.common.acceptAll}
+          </Button>
+        </div>
       </DialogFooter>
     </DialogContent>
   );

@@ -133,7 +133,7 @@ const FirstRunSetupNavigation = ({
           className={cn(
             "flex items-center gap-2 rounded-md px-3 py-2 text-body",
             {
-              "bg-secondary/40 text-muted-fg": !stepStatus[step.id],
+              "bg-muted/40 text-muted-fg": !stepStatus[step.id],
               "bg-success/10 text-success": stepStatus[step.id],
             }
           )}
@@ -440,7 +440,7 @@ const FirstRunApiKeyStep = ({
             API key created. Store it before leaving this screen.
           </p>
           <button
-            className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg hover:bg-secondary/50"
+            className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-left font-mono text-caption break-all text-fg hover:bg-muted/50"
             onClick={() => {
               if (createdApiKey !== null) {
                 void navigator.clipboard.writeText(createdApiKey);

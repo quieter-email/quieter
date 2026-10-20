@@ -2,6 +2,7 @@
 
 import {
   AlertCircleIcon,
+  ArrowDown01Icon,
   Attachment01Icon,
   Cancel01Icon,
   Delete02Icon,
@@ -9,6 +10,8 @@ import {
   MailSend02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { resolveMailSender } from "@quieter/mail/compose/sender";
+import type { MailboxCapabilities } from "@quieter/mail/data-plane";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -17,11 +20,18 @@ import {
   ComposerFieldRow,
   ComposerFrame,
 } from "@quieter/ui/composer-chrome";
-import { FieldControl, FieldError } from "@quieter/ui/field";
+import { Field, FieldControl, FieldError, FieldLabel } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import {
+  Popover,
+  PopoverClose,
+  PopoverContent,
+  PopoverTrigger,
+} from "@quieter/ui/popover";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -71,6 +81,7 @@ import {
 import type { ComposeDialogController } from "./use-compose-dialog-controller";
 
 export type ComposeSenderMailbox = {
+  capabilities: Pick<MailboxCapabilities, "canSetSenderName">;
   id: string;
   emailAddress: string;
   displayName: string | null;
@@ -98,6 +109,7 @@ export type ComposeSurfaceProps = {
   ) => Promise<void> | void;
   persistDrafts?: boolean;
   senderEmail?: string | null;
+  senderMailbox?: ComposeSenderMailbox | null;
   senderMailboxes?: ComposeSenderMailbox[];
   senderUnavailable?: boolean;
   signature?: { html: string | null; text: string | null };
@@ -193,6 +205,7 @@ const ReadyComposeSurface = ({
   onSenderSwitch,
   persistDrafts = true,
   senderEmail,
+  senderMailbox,
   senderMailboxes,
   senderUnavailable = false,
   signature,
@@ -215,10 +228,19 @@ const ReadyComposeSurface = ({
   }, []);
   const [snippetDraft, setSnippetDraft] = useState<string | null>(null);
   const [switchingSender, setSwitchingSender] = useState(false);
+  const [senderDetailsOpen, setSenderDetailsOpen] = useState(false);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const currentSender =
+    senderMailboxes?.find((sender) => sender.id === mailboxId) ??
+    senderMailbox ??
+    undefined;
+  const editableSender =
+    currentSender?.capabilities.canSetSenderName === true
+      ? resolveMailSender(currentSender)
+      : undefined;
   const snippetsQuery = useQuery({
     ...orpc.mailSnippets.list.queryOptions({
       input: { mailboxId: mailboxId ?? "" },
@@ -234,6 +256,7 @@ const ReadyComposeSurface = ({
   const compose = useComposeDialogController({
     autosavePaused: slashMenuOpen || switchingSender,
     beforeNavigate,
+    defaultSenderName: editableSender?.name,
     demoMode,
     getTextFromHtml: (html) =>
       composeEditorRef.current?.getTextFromHtml(html) ??
@@ -300,9 +323,6 @@ const ReadyComposeSurface = ({
         !!mailboxId)) &&
     !audioBusy;
   const isInline = variant === "inline";
-  const currentSender = senderMailboxes?.find(
-    (sender) => sender.id === mailboxId
-  );
   const canSwitchSender =
     !isInline &&
     allowSenderSwitch &&
@@ -648,78 +668,208 @@ const ReadyComposeSurface = ({
                     })}
                   >
                     <ComposerFieldGroup bare>
-                      {canSwitchSender && (
-                        <ComposerFieldRow label="From">
-                          <div className="flex h-8 min-w-0 flex-1 items-center">
-                            <Select
-                              items={[
-                                ...(senderMailboxes?.map((sender) => ({
-                                  label: sender.displayName
-                                    ? `${sender.displayName} <${sender.emailAddress}>`
-                                    : sender.emailAddress,
-                                  value: sender.id,
-                                })) ?? []),
-                                ...(currentSender === undefined && mailboxId
-                                  ? [
-                                      {
-                                        label: `${senderEmail ?? "Account"} (unavailable)`,
-                                        value: mailboxId,
-                                      },
-                                    ]
-                                  : []),
-                              ]}
-                              onValueChange={(nextMailboxId) => {
-                                void handleSenderChange(nextMailboxId);
-                              }}
-                              value={mailboxId}
-                            >
-                              <SelectTrigger
-                                aria-label="From address"
-                                title={senderEmail ?? undefined}
-                                className="max-w-full min-w-0 shrink"
-                                disabled={
-                                  !canEditBody ||
-                                  audioBusy ||
-                                  state.draft.saveStatus === "saving"
+                      {canSwitchSender || editableSender ? (
+                        <form.Field name="senderName">
+                          {(senderField) => {
+                            const [error] = senderField.state.meta.errors;
+                            const senderName = editableSender
+                              ? senderField.state.value.trim() ||
+                                editableSender.name
+                              : "";
+                            return (
+                              <ComposerFieldRow
+                                error={
+                                  senderDetailsOpen ? undefined : error?.message
                                 }
-                                pending={switchingSender}
-                                size="sm"
-                                variant="ghost"
+                                label="From"
                               >
-                                <SelectValue>
-                                  {senderEmail ?? "Choose a sending address"}
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent
-                                align="start"
-                                className="max-w-(--available-width)"
-                              >
-                                {currentSender === undefined && mailboxId ? (
-                                  <SelectItem value={mailboxId}>
-                                    {senderEmail ?? "Account"} (unavailable)
-                                  </SelectItem>
-                                ) : null}
-                                {senderMailboxes?.map((sender) => (
-                                  <SelectItem key={sender.id} value={sender.id}>
-                                    <span className="flex min-w-0 flex-col gap-0.5 py-1">
-                                      <span className="truncate text-body-sm font-medium">
-                                        {sender.displayName ||
-                                          sender.emailAddress}
-                                      </span>
-                                      {sender.displayName && (
-                                        <span className="text-caption break-all text-muted-fg">
-                                          {sender.emailAddress}
+                                <div className="flex h-8 min-w-0 flex-1 items-center">
+                                  <Popover
+                                    onOpenChange={setSenderDetailsOpen}
+                                    open={senderDetailsOpen}
+                                  >
+                                    <PopoverTrigger
+                                      aria-label={`Edit sender, ${senderName ? `${senderName}, ` : ""}${senderEmail ?? "choose an address"}`}
+                                      disabled={
+                                        !canEditBody ||
+                                        audioBusy ||
+                                        state.draft.saveStatus === "saving"
+                                      }
+                                      render={
+                                        <Button
+                                          className="max-w-full min-w-0 shrink justify-start"
+                                          size="sm"
+                                          variant="ghost"
+                                        />
+                                      }
+                                    >
+                                      {senderName ? (
+                                        <span className="max-w-1/2 shrink-0 truncate text-fg">
+                                          {senderName}
                                         </span>
-                                      )}
-                                    </span>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </ComposerFieldRow>
-                      )}
+                                      ) : null}
+                                      <span className="truncate">
+                                        {senderName && senderEmail
+                                          ? `<${senderEmail}>`
+                                          : (senderEmail ??
+                                            "Choose a sending address")}
+                                      </span>
+                                      <HugeiconsIcon
+                                        aria-hidden
+                                        data-icon="inline-end"
+                                        icon={ArrowDown01Icon}
+                                      />
+                                    </PopoverTrigger>
+                                    <PopoverContent
+                                      align="start"
+                                      aria-label="Edit sender"
+                                      size="sm"
+                                    >
+                                      <div className="flex flex-col gap-4">
+                                        {canSwitchSender ? (
+                                          <Field>
+                                            <FieldLabel>
+                                              Sending address
+                                            </FieldLabel>
+                                            <Select
+                                              items={[
+                                                ...(senderMailboxes?.map(
+                                                  (sender) => ({
+                                                    label: sender.displayName
+                                                      ? `${sender.displayName} <${sender.emailAddress}>`
+                                                      : sender.emailAddress,
+                                                    value: sender.id,
+                                                  })
+                                                ) ?? []),
+                                                ...(currentSender ===
+                                                  undefined && mailboxId
+                                                  ? [
+                                                      {
+                                                        label: `${senderEmail ?? "Account"} (unavailable)`,
+                                                        value: mailboxId,
+                                                      },
+                                                    ]
+                                                  : []),
+                                              ]}
+                                              onValueChange={(
+                                                nextMailboxId
+                                              ) => {
+                                                void handleSenderChange(
+                                                  nextMailboxId
+                                                );
+                                              }}
+                                              value={mailboxId}
+                                            >
+                                              <SelectTrigger
+                                                aria-label="Sending address"
+                                                className="w-full"
+                                                disabled={
+                                                  !canEditBody ||
+                                                  audioBusy ||
+                                                  state.draft.saveStatus ===
+                                                    "saving"
+                                                }
+                                                pending={switchingSender}
+                                              >
+                                                <SelectValue>
+                                                  {senderEmail ??
+                                                    "Choose a sending address"}
+                                                </SelectValue>
+                                              </SelectTrigger>
+                                              <SelectContent
+                                                align="start"
+                                                className="max-w-(--available-width)"
+                                              >
+                                                <SelectGroup>
+                                                  {currentSender ===
+                                                    undefined && mailboxId ? (
+                                                    <SelectItem
+                                                      value={mailboxId}
+                                                    >
+                                                      {senderEmail ?? "Account"}{" "}
+                                                      (unavailable)
+                                                    </SelectItem>
+                                                  ) : null}
+                                                  {senderMailboxes?.map(
+                                                    (sender) => (
+                                                      <SelectItem
+                                                        key={sender.id}
+                                                        value={sender.id}
+                                                      >
+                                                        <span className="flex min-w-0 flex-col gap-0.5 py-1">
+                                                          <span className="truncate text-body-sm font-medium">
+                                                            {sender.displayName ||
+                                                              sender.emailAddress}
+                                                          </span>
+                                                          {sender.displayName ? (
+                                                            <span className="text-caption break-all text-muted-fg">
+                                                              {
+                                                                sender.emailAddress
+                                                              }
+                                                            </span>
+                                                          ) : null}
+                                                        </span>
+                                                      </SelectItem>
+                                                    )
+                                                  )}
+                                                </SelectGroup>
+                                              </SelectContent>
+                                            </Select>
+                                          </Field>
+                                        ) : null}
+                                        {editableSender ? (
+                                          <Field invalid={!!error}>
+                                            <FieldLabel>Sender name</FieldLabel>
+                                            <FieldControl
+                                              aria-invalid={!!error}
+                                              disabled={!canEditBody}
+                                              onBlur={senderField.handleBlur}
+                                              onChange={(event) => {
+                                                handleUserDraftChange();
+                                                senderField.handleChange(
+                                                  event.currentTarget.value
+                                                );
+                                              }}
+                                              onKeyDown={(event) => {
+                                                if (event.key === "Enter") {
+                                                  event.preventDefault();
+                                                  if (!error) {
+                                                    setSenderDetailsOpen(false);
+                                                  }
+                                                }
+                                              }}
+                                              placeholder={editableSender.name}
+                                              value={senderField.state.value}
+                                            />
+                                            {error ? (
+                                              <FieldError>
+                                                {error.message}
+                                              </FieldError>
+                                            ) : null}
+                                          </Field>
+                                        ) : null}
+                                        <PopoverClose
+                                          disabled={!!error}
+                                          render={
+                                            <Button
+                                              fullWidth
+                                              variant="secondary"
+                                            />
+                                          }
+                                        >
+                                          Save
+                                        </PopoverClose>
+                                      </div>
+                                    </PopoverContent>
+                                  </Popover>
+                                </div>
+                              </ComposerFieldRow>
+                            );
+                          }}
+                        </form.Field>
+                      ) : null}
                       {!canSwitchSender &&
+                      !editableSender &&
                       !isInline &&
                       senderMailboxes &&
                       senderEmail ? (
@@ -1281,6 +1431,7 @@ export const ComposeWorkspace = ({
   onSwitchSenderMailbox,
   persistDrafts,
   senderEmail,
+  senderMailbox,
   senderMailboxes,
   signature,
 }: ComposeWorkspaceProps) => {
@@ -1298,9 +1449,9 @@ export const ComposeWorkspace = ({
   const savedSenderDrafts = useRef(new Map<string, ComposeDraftState>());
   const cleanupPromiseRef = useRef<Promise<void> | null>(null);
   const finishPromiseRef = useRef<Promise<void> | null>(null);
-  const selectedSender = senderMailboxes?.find(
-    (sender) => sender.id === senderSession.mailboxId
-  );
+  const selectedSender =
+    senderMailboxes?.find((sender) => sender.id === senderSession.mailboxId) ??
+    (senderMailbox?.id === senderSession.mailboxId ? senderMailbox : undefined);
   const senderBoundToInitialDraft =
     !!initialDraft &&
     ((initialDraft.draftId?.trim() ?? "") !== "" ||
@@ -1431,6 +1582,7 @@ export const ComposeWorkspace = ({
         }}
         persistDrafts={persistDrafts}
         senderEmail={selectedSender?.emailAddress ?? senderSession.senderEmail}
+        senderMailbox={selectedSender}
         senderMailboxes={senderMailboxes}
         senderUnavailable={
           senderMailboxes !== undefined && selectedSender === undefined

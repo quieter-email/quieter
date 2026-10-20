@@ -13,10 +13,7 @@ export type ComposeFormValues = z.infer<typeof composeDraftFormValuesSchema>;
 
 type ComposeFormWriter = {
   reset: (values: ComposeFormValues) => void;
-  setFieldValue: (
-    field: "bcc" | "bodyHtml" | "bodyText" | "cc" | "subject" | "to",
-    value: string
-  ) => void;
+  setFieldValue: (field: keyof ComposeFormValues, value: string) => void;
   validateAllFields: (cause: "change") => unknown;
 };
 
@@ -49,6 +46,7 @@ export const draftToComposeFormValues = (
   bodyHtml: getRenderableComposeBodyHtml(draft.bodyHtml, draft.bodyText),
   bodyText: draft.bodyText,
   cc: draft.recipients.cc,
+  senderName: draft.senderName ?? "",
   subject: draft.subject,
   to: draft.recipients.to,
 });
@@ -62,6 +60,7 @@ export const writeComposeFormValues = (
   form.setFieldValue("cc", values.cc);
   form.setFieldValue("bcc", values.bcc);
   form.setFieldValue("subject", values.subject);
+  form.setFieldValue("senderName", values.senderName);
   form.setFieldValue("bodyHtml", values.bodyHtml);
   form.setFieldValue("bodyText", values.bodyText);
 
@@ -77,6 +76,7 @@ export const composeFormValuesToDraft = (
     bodyHtml: values.bodyHtml,
     bodyText: values.bodyText,
     recipients: { bcc: values.bcc, cc: values.cc, to: values.to },
+    senderName: values.senderName,
     subject: values.subject,
   };
   const syncedDraft = syncInlineImagesWithHtml(base, values.bodyHtml);

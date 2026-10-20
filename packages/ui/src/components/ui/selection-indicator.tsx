@@ -9,7 +9,7 @@ export const SelectionIndicator = ({
   variant = "default",
 }: {
   layoutId?: string;
-  variant?: "default" | "primary";
+  variant?: "default" | "primary" | "secondary";
 }) => {
   const reducedMotion = useReducedMotion() === true;
   return (
@@ -20,6 +20,7 @@ export const SelectionIndicator = ({
         {
           "bg-bg-surface shadow-sm": variant === "default",
           "bg-primary": variant === "primary",
+          "bg-secondary shadow-sm": variant === "secondary",
         }
       )}
       initial={false}

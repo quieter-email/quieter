@@ -18,11 +18,6 @@ export const mailTrackingSettingsQueryOptions = (organizationId: string) =>
 
 export type MailDeliveryMetricsRange = "30d" | "7d";
 
-const RANGE_DAYS: Record<MailDeliveryMetricsRange, number> = {
-  "30d": 30,
-  "7d": 7,
-};
-
 const getMailDeliveryMetricsQueryKey = (
   organizationId: string,
   range: MailDeliveryMetricsRange,
@@ -40,14 +35,13 @@ export const mailDeliveryMetricsQueryOptions = (
   organizationId: string,
   range: MailDeliveryMetricsRange,
   mailboxId?: string
-) => {
-  const from = new Date(Date.now() - RANGE_DAYS[range] * 24 * 60 * 60 * 1000);
-  return queryOptions({
+) =>
+  queryOptions({
     queryFn: async ({ signal }) =>
       await rpc.organization.getMailDeliveryMetrics(
         {
-          from,
           organizationId,
+          range,
           ...(mailboxId !== undefined && mailboxId !== "" ? { mailboxId } : {}),
         },
         { signal }
@@ -55,4 +49,3 @@ export const mailDeliveryMetricsQueryOptions = (
     queryKey: getMailDeliveryMetricsQueryKey(organizationId, range, mailboxId),
     staleTime: 60_000,
   });
-};

@@ -271,6 +271,7 @@ export const AutoLabelEditor = ({
                         size="sm"
                         type="button"
                         value={mode}
+                        variant="secondary"
                       >
                         Match {mode}
                       </Toggle>
@@ -400,13 +401,13 @@ export const AutoLabelEditor = ({
               </p>
             ) : null}
           </DialogBody>
-          <DialogFooter className="shrink-0">
+          <DialogFooter className="shrink-0" fullWidth>
             <Button
               disabled={isPending}
               onClick={onCancel}
               size="sm"
               type="button"
-              variant="ghost"
+              variant="secondary"
             >
               Cancel
             </Button>

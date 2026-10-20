@@ -136,6 +136,7 @@ export type WorkspaceBridge = Omit<
       messageId?: string;
       sendOperationId?: string;
       sendUncertain?: boolean;
+      senderName: string;
       replyContext?: ComposeDraftState["replyContext"];
       to: string;
       cc: string;
@@ -310,6 +311,7 @@ export const AgentWorkspaceProvider = ({
                   replyContext: draft.replyContext,
                   sendOperationId: draft.sendOperationId,
                   sendUncertain: draft.sendUncertain,
+                  senderName: draft.values.senderName,
                   subject: draft.values.subject,
                   to: draft.values.to,
                 },
