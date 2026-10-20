@@ -1,6 +1,6 @@
 # Automatic labeling
 
-The Labels workspace is one list of the mailbox's existing labels. Creation, label details, and auto-label settings open in separate dialogs. The auto-label dialog contains an AI prompt and a few broad prompt examples. Sender, domain, and word conditions are optional and collapsed until needed. Saving a label's settings does not turn on mailbox automation; the mailbox switch controls that separately.
+The Labels workspace is one list of the mailbox's existing labels. Creation, label details, and auto-label settings open in separate dialogs. The auto-label dialog contains an AI prompt and a few broad prompt examples. Sender, recipient, sender domain, and word conditions are optional and collapsed until needed. Saving a label's settings does not turn on mailbox automation; the mailbox switch controls that separately.
 
 ## Matching
 
@@ -9,9 +9,10 @@ Both mailbox providers store the same nullable `autoLabel` settings on each labe
 - A null configuration preserves existing AI classification using the label name, description, and legacy inclusion criteria.
 - A configuration with `enabled: false` excludes that label from automation.
 - Sender conditions match an exact parsed email address. Display names cannot satisfy them.
+- Recipient conditions match exact parsed addresses in To, Cc, or Bcc, ignoring case and display names. They can distinguish addresses delivered to a catch-all inbox. Hidden delivery recipients that are absent from the stored headers cannot match. Existing settings can omit the recipient field.
 - A domain such as `example.com` matches only that domain. `*.example.com` matches one or more subdomain levels, excluding the main domain. Add both patterns to include both.
 - Keywords are case-insensitive literal substrings or phrases. They can match the subject, body, or either.
-- Entries within a field are alternatives. Match all or Match any combines the nonempty sender, domain, and keyword fields.
+- Entries within a field are alternatives. Match all or Match any combines the nonempty sender, recipient, sender domain, and keyword fields.
 - A nonempty AI prompt adds an AI confirmation after those conditions match. With no fixed conditions, the prompt alone determines the match.
 - Fixed conditions with an empty prompt run without an AI request. An enabled configuration with neither conditions nor a prompt uses the label name and description.
 

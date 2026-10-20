@@ -77,15 +77,20 @@ export const AutoLabelEditor = ({
     keywords: [],
     matchMode: "all",
     prompt: label.inclusionCriteria ?? "",
+    recipients: [],
     senders: [],
   };
   const [settings, setSettings] = useState(initialSettings);
   const [senders, setSenders] = useState(initialSettings.senders.join(", "));
+  const [recipients, setRecipients] = useState(
+    initialSettings.recipients?.join(", ") ?? ""
+  );
   const [domains, setDomains] = useState(initialSettings.domains.join(", "));
   const [keywords, setKeywords] = useState(initialSettings.keywords.join(", "));
   const [showErrors, setShowErrors] = useState(false);
   const [showConditions, setShowConditions] = useState(
     initialSettings.senders.length > 0 ||
+      (initialSettings.recipients?.length ?? 0) > 0 ||
       initialSettings.domains.length > 0 ||
       initialSettings.keywords.length > 0
   );
@@ -100,6 +105,10 @@ export const AutoLabelEditor = ({
       .map((value) => value.trim())
       .filter(Boolean),
     prompt: settings.prompt.trim(),
+    recipients: recipients
+      .split(/[,;\n]/u)
+      .map((value) => value.trim())
+      .filter(Boolean),
     senders: senders
       .split(/[,;\n]/u)
       .map((value) => value.trim())
@@ -309,9 +318,41 @@ export const AutoLabelEditor = ({
                   <div className="space-y-1.5">
                     <label
                       className="flex items-center gap-2 text-caption font-medium text-fg"
+                      htmlFor={`${id}-recipients`}
+                    >
+                      Recipients
+                    </label>
+                    <Input
+                      aria-describedby={`${id}-recipients-help`}
+                      aria-invalid={
+                        showErrors &&
+                        validationErrors.some(
+                          (issue) => issue.path[0] === "recipients"
+                        )
+                      }
+                      autoCapitalize="none"
+                      id={`${id}-recipients`}
+                      onChange={(event) => {
+                        setRecipients(event.target.value);
+                      }}
+                      placeholder="sales@example.com, support@example.com"
+                      spellCheck={false}
+                      value={recipients}
+                    />
+                    <p
+                      className="text-caption text-muted-fg"
+                      id={`${id}-recipients-help`}
+                    >
+                      Match addresses in To, Cc, or Bcc when available.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label
+                      className="flex items-center gap-2 text-caption font-medium text-fg"
                       htmlFor={`${id}-domains`}
                     >
-                      Domains
+                      Sender domains
                     </label>
                     <Input
                       aria-invalid={

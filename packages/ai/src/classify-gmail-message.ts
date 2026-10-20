@@ -8,8 +8,10 @@ export const AUTO_LABEL_MODEL = "typesafe/jev-1.13";
 
 export type AutomationMailMessage = {
   attachments?: { fileName: string; mimeType: string }[];
+  bcc?: string | null;
   bodyHtml?: string | null;
   bodyText?: string | null;
+  cc?: string | null;
   date?: string | null;
   from?: string | null;
   id: string;

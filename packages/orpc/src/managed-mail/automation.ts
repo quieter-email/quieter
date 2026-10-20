@@ -61,8 +61,10 @@ const toAutomationMessage = (
   };
   return {
     attachments,
+    bcc: message.bcc,
     bodyHtml: message.bodyHtml,
     bodyText: message.bodyText,
+    cc: message.cc,
     from: message.from,
     id: message.id,
     internalDate: String(message.createdAt.getTime()),
