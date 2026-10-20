@@ -465,13 +465,12 @@ export const LabelsWorkspacePanel = ({
     );
   } else {
     labelsContent = (
-      <ul className="divide-y divide-border border-y border-border">
+      <ul className="-mx-3 space-y-1">
         {userLabels.map((label) => {
           const isShown = !effectiveHiddenLabelIds.has(label.id);
-          const description = label.description ?? label.inclusionCriteria;
 
           return (
-            <li className="flex items-center gap-3 py-4" key={label.id}>
+            <li className="flex items-center gap-3 px-3 py-2.5" key={label.id}>
               <span
                 aria-hidden
                 className={cn(
@@ -481,11 +480,6 @@ export const LabelsWorkspacePanel = ({
               />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-body text-fg">{label.name}</p>
-                {description ? (
-                  <p className="mt-0.5 truncate text-caption text-muted-fg">
-                    {description}
-                  </p>
-                ) : null}
               </div>
               {mailboxProvider === "managed" ? (
                 <span className="shrink-0 text-micro text-muted-fg tabular-nums">
@@ -501,7 +495,7 @@ export const LabelsWorkspacePanel = ({
                 }}
                 size="sm"
                 type="button"
-                variant="outline"
+                variant="ghost"
               >
                 {label.autoLabel?.enabled === false ? "Paused" : "Auto-label"}
               </Button>
@@ -571,15 +565,10 @@ export const LabelsWorkspacePanel = ({
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
-        <div className="mb-8 flex items-start justify-between gap-4">
-          <div>
-            <h1 className="font-sans text-title-sm font-normal text-fg">
-              Labels
-            </h1>
-            <p className="mt-1.5 text-body text-muted-fg">
-              Create labels and choose how new mail is sorted.
-            </p>
-          </div>
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <h1 className="font-sans text-title-sm font-normal text-fg">
+            Labels
+          </h1>
           <Button
             aria-haspopup="dialog"
             disabled={!canManage || !isNonemptyMailboxId(mailboxId)}
@@ -604,16 +593,7 @@ export const LabelsWorkspacePanel = ({
               mailboxId={mailboxId}
             />
           ) : null}
-          <div>
-            <div className="mb-3 flex items-center justify-between gap-3 text-caption text-muted-fg">
-              <span>
-                {userLabels.length} label
-                {userLabels.length === 1 ? "" : "s"}
-              </span>
-              <span>{visibleLabelCount} shown in sidebar</span>
-            </div>
-            {labelsContent}
-          </div>
+          {labelsContent}
         </div>
       </div>
 

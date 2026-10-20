@@ -63,12 +63,9 @@ export const AutoLabelSwitch = ({
   };
 
   return (
-    <div className="flex items-center gap-4 border-b border-border pb-5">
+    <div className="flex items-center gap-4">
       <label className="min-w-0 flex-1 cursor-pointer" htmlFor={id}>
         <span className="block text-body text-fg">Auto-label new mail</span>
-        <span className="mt-1 block text-caption text-muted-fg">
-          Apply your labels to new Inbox mail.
-        </span>
       </label>
       <Switch
         checked={enabled}

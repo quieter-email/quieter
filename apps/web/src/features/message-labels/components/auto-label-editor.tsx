@@ -1,18 +1,30 @@
 "use client";
 
+import {
+  ArrowDown01Icon,
+  InformationCircleIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { autoLabelSettingsSchema } from "@quieter/mail/auto-label";
 import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   Dialog,
   DialogBody,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@quieter/ui/dropdown-menu";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import {
   Select,
@@ -94,9 +106,6 @@ export const AutoLabelEditor = ({
       .filter(Boolean),
   });
   const validationErrors = parsed.success ? [] : parsed.error.issues;
-  const hasConditions = Boolean(
-    senders.trim() || domains.trim() || keywords.trim()
-  );
   const disabled = !canManage || isPending;
 
   const saveSettings = async () => {
@@ -127,22 +136,21 @@ export const AutoLabelEditor = ({
           }}
         >
           <DialogHeader className="shrink-0">
-            <DialogTitle>Auto-label settings</DialogTitle>
-            <DialogDescription>
-              Automatically apply {label.name} to matching new Inbox mail.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody className="min-h-0 overflow-y-auto" spacing="5">
-            <div className="flex items-start justify-between gap-4">
-              <p className="text-caption text-muted-fg">
-                Automatically apply this label
-              </p>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <DialogTitle>
+                  <span className="block truncate">
+                    Auto-label {label.name}
+                  </span>
+                </DialogTitle>
+              </div>
               <label
                 className="flex shrink-0 items-center gap-2 text-caption text-muted-fg"
                 htmlFor={`${id}-enabled`}
               >
-                {settings.enabled ? "Enabled" : "Paused"}
+                {settings.enabled ? "On" : "Paused"}
                 <Switch
+                  aria-label={`Enable auto-label for ${label.name}`}
                   checked={settings.enabled}
                   disabled={disabled}
                   id={`${id}-enabled`}
@@ -155,20 +163,44 @@ export const AutoLabelEditor = ({
                 </Switch>
               </label>
             </div>
-
+          </DialogHeader>
+          <DialogBody className="min-h-0 overflow-y-auto" spacing="4">
             <fieldset className="space-y-5" disabled={disabled}>
               <div className="space-y-2">
-                <label
-                  className="flex items-center gap-2 text-body font-medium text-fg"
-                  htmlFor={`${id}-prompt`}
-                >
-                  AI prompt
-                  <span className="ml-auto text-caption font-normal text-muted-fg">
-                    Optional
-                  </span>
-                </label>
+                <div className="flex items-center justify-between gap-2">
+                  <label
+                    className="text-caption font-medium text-fg"
+                    htmlFor={`${id}-prompt`}
+                  >
+                    AI prompt
+                  </label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      disabled={disabled}
+                      render={
+                        <Button size="compact" type="button" variant="ghost" />
+                      }
+                    >
+                      Examples
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" size="compact">
+                      {promptExamples.map((example) => (
+                        <DropdownMenuItem
+                          key={example.name}
+                          onSelect={() => {
+                            setSettings((current) => ({
+                              ...current,
+                              prompt: example.prompt,
+                            }));
+                          }}
+                        >
+                          {example.name}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
                 <Textarea
-                  aria-describedby={`${id}-prompt-help`}
                   id={`${id}-prompt`}
                   maxLength={4000}
                   onChange={(event) => {
@@ -177,103 +209,85 @@ export const AutoLabelEditor = ({
                       prompt: event.target.value,
                     }));
                   }}
-                  placeholder="Describe the emails that belong here and anything to leave out…"
+                  placeholder="Describe the emails to label…"
                   rows={3}
                   value={settings.prompt}
                 />
-                <div className="flex flex-wrap items-center gap-1">
-                  <span className="mr-1 text-caption text-muted-fg">
-                    Examples
-                  </span>
-                  {promptExamples.map((example) => (
-                    <Button
-                      disabled={disabled}
-                      key={example.name}
-                      onClick={() => {
-                        setSettings((current) => ({
-                          ...current,
-                          prompt: example.prompt,
-                        }));
-                      }}
-                      size="compact"
-                      type="button"
-                      variant="ghost"
-                    >
-                      {example.name}
-                    </Button>
-                  ))}
-                </div>
-                <p
-                  className="text-caption text-muted-fg"
-                  id={`${id}-prompt-help`}
-                >
-                  {hasConditions
-                    ? "AI checks your prompt after the conditions below match."
-                    : "Describe what belongs here. Leave blank to use the label's name and description."}
-                </p>
               </div>
 
-              <Button
-                aria-controls={`${id}-conditions`}
-                aria-expanded={showConditions}
-                onClick={() => {
-                  setShowConditions((current) => !current);
-                }}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                {showConditions
-                  ? "Hide conditions"
-                  : "Sender, domain, or word conditions"}
-              </Button>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1">
+                  <Button
+                    aria-controls={`${id}-conditions`}
+                    aria-expanded={showConditions}
+                    onClick={() => {
+                      setShowConditions((current) => !current);
+                    }}
+                    size="compact"
+                    type="button"
+                    variant="ghost"
+                  >
+                    Conditions
+                    <HugeiconsIcon
+                      aria-hidden
+                      className={cn("size-3.5", {
+                        "rotate-180": showConditions,
+                      })}
+                      icon={ArrowDown01Icon}
+                    />
+                  </Button>
+                  {showConditions ? (
+                    <IconButtonTooltip label="Match all requires every filled field; match any requires one. Entries within a field use any. Separate entries with commas. Domains are exact; *.example.com matches subdomains.">
+                      <Button
+                        aria-label="Condition matching help"
+                        size="icon-sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <HugeiconsIcon
+                          aria-hidden
+                          icon={InformationCircleIcon}
+                        />
+                      </Button>
+                    </IconButtonTooltip>
+                  ) : null}
+                </div>
+                {showConditions ? (
+                  <ToggleGroup
+                    aria-label="Match conditions"
+                    size="compact"
+                    value={[settings.matchMode]}
+                    variant="subtle"
+                  >
+                    {(["all", "any"] as const).map((mode) => (
+                      <Toggle
+                        key={mode}
+                        onClick={() => {
+                          setSettings((current) => ({
+                            ...current,
+                            matchMode: mode,
+                          }));
+                        }}
+                        size="sm"
+                        type="button"
+                        value={mode}
+                      >
+                        Match {mode}
+                      </Toggle>
+                    ))}
+                  </ToggleGroup>
+                ) : null}
+              </div>
               {showConditions ? (
-                <div
-                  className="space-y-4 border-t border-border pt-4"
-                  id={`${id}-conditions`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-body font-medium text-fg">Conditions</p>
-                    <ToggleGroup
-                      aria-label="Match conditions"
-                      size="compact"
-                      value={[settings.matchMode]}
-                      variant="subtle"
-                    >
-                      {(["all", "any"] as const).map((mode) => (
-                        <Toggle
-                          key={mode}
-                          onClick={() => {
-                            setSettings((current) => ({
-                              ...current,
-                              matchMode: mode,
-                            }));
-                          }}
-                          size="sm"
-                          type="button"
-                          value={mode}
-                        >
-                          Match {mode}
-                        </Toggle>
-                      ))}
-                    </ToggleGroup>
-                  </div>
-                  <p className="text-caption text-muted-fg">
-                    {settings.matchMode === "all"
-                      ? "Every filled-in condition must match."
-                      : "At least one filled-in condition must match."}{" "}
-                    Any entry within a field can match.
-                  </p>
-
+                <div className="space-y-4" id={`${id}-conditions`}>
                   <div className="space-y-1.5">
                     <label
                       className="flex items-center gap-2 text-caption font-medium text-fg"
                       htmlFor={`${id}-senders`}
                     >
-                      From senders
+                      Senders
                     </label>
                     <Input
-                      aria-describedby={`${id}-senders-help`}
                       aria-invalid={
                         showErrors &&
                         validationErrors.some(
@@ -289,12 +303,6 @@ export const AutoLabelEditor = ({
                       spellCheck={false}
                       value={senders}
                     />
-                    <p
-                      className="text-caption text-muted-fg"
-                      id={`${id}-senders-help`}
-                    >
-                      Exact email addresses, separated by commas.
-                    </p>
                   </div>
 
                   <div className="space-y-1.5">
@@ -302,10 +310,9 @@ export const AutoLabelEditor = ({
                       className="flex items-center gap-2 text-caption font-medium text-fg"
                       htmlFor={`${id}-domains`}
                     >
-                      From domains
+                      Domains
                     </label>
                     <Input
-                      aria-describedby={`${id}-domains-help`}
                       aria-invalid={
                         showErrors &&
                         validationErrors.some(
@@ -321,16 +328,6 @@ export const AutoLabelEditor = ({
                       spellCheck={false}
                       value={domains}
                     />
-                    <p
-                      className="text-caption text-muted-fg"
-                      id={`${id}-domains-help`}
-                    >
-                      <span className="font-mono">example.com</span> matches
-                      that domain.{" "}
-                      <span className="font-mono">*.example.com</span> matches
-                      subdomains like{" "}
-                      <span className="font-mono">news.example.com</span>.
-                    </p>
                   </div>
 
                   <div className="space-y-1.5">
@@ -339,7 +336,7 @@ export const AutoLabelEditor = ({
                         className="flex items-center gap-2 text-caption font-medium text-fg"
                         htmlFor={`${id}-keywords`}
                       >
-                        Contains words
+                        Words
                       </label>
                       <Select
                         disabled={disabled}
@@ -379,7 +376,6 @@ export const AutoLabelEditor = ({
                       </Select>
                     </div>
                     <Input
-                      aria-describedby={`${id}-keywords-help`}
                       aria-invalid={
                         showErrors &&
                         validationErrors.some(
@@ -390,16 +386,9 @@ export const AutoLabelEditor = ({
                       onChange={(event) => {
                         setKeywords(event.target.value);
                       }}
-                      placeholder="invoice, payment received, order confirmation"
+                      placeholder="invoice, payment received"
                       value={keywords}
                     />
-                    <p
-                      className="text-caption text-muted-fg"
-                      id={`${id}-keywords-help`}
-                    >
-                      Words or phrases, separated by commas. Capitalization does
-                      not matter.
-                    </p>
                   </div>
                 </div>
               ) : null}
@@ -428,7 +417,7 @@ export const AutoLabelEditor = ({
               size="sm"
               type="submit"
             >
-              Save changes
+              Save
             </Button>
           </DialogFooter>
         </form>
