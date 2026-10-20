@@ -1204,7 +1204,10 @@ const forgetSensitiveAiMemory = async (input: {
         userId: input.userId,
       }))
     ) {
-      break;
+      throw new ORPCError("FORBIDDEN", {
+        message:
+          "Nothing was forgotten because the full memory scan requires available usage balance.",
+      });
     }
     const usage = createUsageCollector();
     try {

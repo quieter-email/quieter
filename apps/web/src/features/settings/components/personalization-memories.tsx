@@ -14,7 +14,6 @@ import {
 } from "@quieter/ui/dialog";
 import { useMutation } from "@tanstack/react-query";
 
-import { MarkdownContent } from "#/features/chat/components/markdown-content";
 import { toastError } from "#/lib/error-toast";
 import { orpc } from "#/lib/orpc";
 
@@ -30,7 +29,7 @@ export const PersonalizationMemories = () => {
     })
   );
   const exportedAt = memories.data ? Date.parse(memories.data.exportedAt) : 0;
-  const markdown = [
+  const profile = [
     ...new Set(
       (memories.data?.memories ?? [])
         .filter(
@@ -89,13 +88,13 @@ export const PersonalizationMemories = () => {
               </Button>
             </div>
           ) : null}
-          {memories.isSuccess && markdown.length === 0 ? (
+          {memories.isSuccess && profile.length === 0 ? (
             <p className="text-body text-muted-fg">
               No personal memories to show yet.
             </p>
           ) : null}
-          {memories.isSuccess && markdown.length > 0 ? (
-            <MarkdownContent markdown={markdown} />
+          {memories.isSuccess && profile.length > 0 ? (
+            <p className="text-body leading-relaxed text-fg">{profile}</p>
           ) : null}
         </DialogBody>
         <DialogFooter>
