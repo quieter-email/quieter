@@ -6,6 +6,7 @@ import {
   RefreshIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { ORPCError } from "@orpc/client";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -19,6 +20,7 @@ import {
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { toast } from "@quieter/ui/toast";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
+import * as Sentry from "@sentry/react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 
@@ -28,6 +30,7 @@ import { textToComposeBodyHtml } from "#/features/compose/domain/draft";
 import type { ComposeDraftState } from "#/features/compose/domain/draft";
 import { useBriefMailboxActivity } from "#/features/mailbox/components/use-brief-mailbox-activity";
 import type { UnifiedInboxMailbox } from "#/features/mailbox/domain/unified-inbox";
+import { isExpectedClientError } from "#/lib/client-error-reporting";
 import { toastError } from "#/lib/error-toast";
 import type { MessageListItem } from "#/lib/mail";
 import { orpc, rpc } from "#/lib/orpc";
@@ -110,6 +113,20 @@ export const DailyBriefPanel = ({
     },
     onSuccess: (data, input) => {
       updateBrief(input.mailboxId, data);
+    },
+  });
+  // oxlint-disable-next-line react-doctor/query-mutation-missing-invalidation -- Observations queue personal memory without changing brief state.
+  const observe = useMutation({
+    ...orpc.dailyBrief.observe.mutationOptions(),
+    onError: (error) => {
+      if (
+        !isExpectedClientError(error) &&
+        !(error instanceof ORPCError && error.status < 500)
+      ) {
+        Sentry.captureException(error, {
+          tags: { boundary: "brief-item-observation" },
+        });
+      }
     },
   });
   // oxlint-disable-next-line react-doctor/query-mutation-missing-invalidation -- Suggestions prepare composer text without writing mail or brief state.
@@ -375,7 +392,14 @@ export const DailyBriefPanel = ({
                 mailbox={mailbox}
                 showMailbox={combined}
                 busy={busy}
-                onOpenSource={onOpenSource}
+                onOpenSource={(mailboxId, messageId, threadId) => {
+                  onOpenSource(mailboxId, messageId, threadId);
+                  observe.mutate({
+                    action: "open",
+                    itemId: item.id,
+                    mailboxId,
+                  });
+                }}
                 onFeedback={(action, preference) => {
                   feedback.mutate({
                     action,

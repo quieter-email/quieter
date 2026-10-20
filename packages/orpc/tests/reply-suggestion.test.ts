@@ -7,7 +7,8 @@ import type { reportError } from "@quieter/observability";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import type { assertCanUseAi } from "../src/ai-access";
-import type { loadAiAgentContext } from "../src/ai-memory";
+import type * as AiMemoryModule from "../src/ai-memory";
+import type { learnAiMemoryFromMailAction } from "../src/mail/feedback";
 import type { queriesMailOperations } from "../src/mail/queries";
 import type { assertAccessibleMailbox } from "../src/mailbox/service";
 import {
@@ -19,7 +20,8 @@ const mocks = vi.hoisted(() => ({
   access: vi.fn<typeof assertAccessibleMailbox>(),
   billing: vi.fn<typeof assertCanUseAi>(),
   generate: vi.fn<typeof suggestReply>(),
-  memory: vi.fn<typeof loadAiAgentContext>(),
+  learn: vi.fn<typeof learnAiMemoryFromMailAction>(),
+  memory: vi.fn<typeof AiMemoryModule.loadAiAgentContext>(),
   reportError: vi.fn<typeof reportError>(),
   reportUsage: vi.fn<typeof reportAiUsage>(),
   thread: vi.fn<(typeof queriesMailOperations)["getThread"]>(),
@@ -29,6 +31,10 @@ vi.mock(import("../src/mailbox/service"), () => ({
   assertAccessibleMailbox: mocks.access,
 }));
 vi.mock(import("../src/ai-access"), () => ({ assertCanUseAi: mocks.billing }));
+vi.mock(import("../src/mail/feedback"), async (original) => ({
+  ...(await original()),
+  learnAiMemoryFromMailAction: mocks.learn,
+}));
 vi.mock(import("../src/mail/queries"), async (original) => {
   const actual = await original();
   return {
@@ -38,8 +44,9 @@ vi.mock(import("../src/mail/queries"), async (original) => {
     },
   };
 });
-vi.mock(import("../src/ai-memory"), async (original) => ({
-  ...(await original()),
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- This fixture mocks only normal context calls, not the overview overload.
+vi.mock("../src/ai-memory", async (original) => ({
+  ...(await original<typeof AiMemoryModule>()),
   loadAiAgentContext: mocks.memory,
 }));
 vi.mock(import("@quieter/ai/suggest-reply"), () => ({
@@ -91,6 +98,10 @@ describe("reply suggestion authorization and draft preparation", () => {
       provider: "gmail",
     });
     mocks.billing.mockResolvedValue();
+    mocks.learn.mockResolvedValue({
+      eventId: "feedback-event",
+      status: "recorded",
+    });
     mocks.memory.mockResolvedValue({ instructions: null, memory: null });
     mocks.thread.mockResolvedValue({
       messages: [message()],
@@ -129,6 +140,7 @@ describe("reply suggestion authorization and draft preparation", () => {
     });
     expect(mocks.thread).not.toHaveBeenCalled();
     expect(mocks.generate).not.toHaveBeenCalled();
+    expect(mocks.learn).not.toHaveBeenCalled();
     expect(mocks.reportError).not.toHaveBeenCalled();
   });
 
@@ -183,6 +195,7 @@ describe("reply suggestion authorization and draft preparation", () => {
     });
     expect(mocks.generate).not.toHaveBeenCalled();
     expect(mocks.memory).not.toHaveBeenCalled();
+    expect(mocks.learn).not.toHaveBeenCalled();
   });
 
   test.each([
@@ -194,6 +207,7 @@ describe("reply suggestion authorization and draft preparation", () => {
       code: "BAD_REQUEST",
     });
     expect(mocks.generate).not.toHaveBeenCalled();
+    expect(mocks.learn).not.toHaveBeenCalled();
   });
 
   test("does not generate a reply to the user's own sent message", async () => {
@@ -316,5 +330,12 @@ describe("reply suggestion authorization and draft preparation", () => {
     await expect(requestReplySuggestion(request)).resolves.toMatchObject({
       status: "not_needed",
     });
+    expect(mocks.learn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mailboxId: "mailbox-1",
+        messageIds: ["message-1"],
+        userId: "user-1",
+      })
+    );
   });
 });

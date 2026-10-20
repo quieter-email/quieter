@@ -33,6 +33,7 @@ import { z } from "zod";
 
 import { assertCanUseAi } from "./ai-access";
 import {
+  learnAiMemoryFromMailAction,
   loadAiAgentContext,
   loadAiAgentMemoryCandidates,
   serializeAiAgentContext,
@@ -79,6 +80,10 @@ export const dailyBriefInputs = {
     preference: z.string().trim().max(1000).optional(),
   }),
   get: mailboxInput,
+  observe: mailboxInput.extend({
+    action: z.enum(["open", "reply_requested"]),
+    itemId: z.string().min(1).max(500),
+  }),
   prepare: mailboxInput.extend({
     onlyIfActive: z.boolean().optional(),
     timeZone: timeZoneInput.optional(),
@@ -110,8 +115,7 @@ export const loadDailyBriefMemoryContext = async ({
           candidate.scopeKey === `mailbox:${mailboxId}`) ||
         (candidate.scope === "user" &&
           candidate.userId === userId &&
-          candidate.scopeKey === `user:${userId}` &&
-          candidate.kind === "instruction")
+          candidate.scopeKey === `user:${userId}`)
     ),
     mailboxId,
     query,
@@ -358,6 +362,44 @@ export const configureDailyBrief = async ({
   return await getDailyBrief({ context, input });
 };
 
+const learnFromDailyBriefAction = async ({
+  action,
+  deferredUntil,
+  item,
+  mailboxId,
+  preference,
+  userId,
+}: Scope & {
+  action: string;
+  deferredUntil?: string;
+  item: DailyBriefItem;
+  preference?: string;
+}) => {
+  try {
+    await learnAiMemoryFromMailAction({
+      action: `daily_brief:${action}`,
+      mailboxId,
+      messageIds: item.sources.map((source) => source.messageId),
+      metadata: {
+        deferredUntil: deferredUntil ?? null,
+        group: item.group,
+        preference: preference || null,
+        source: "daily_brief",
+        sourceSenders: item.sources
+          .map((source) => source.fromName ?? "")
+          .join("\n"),
+        sourceSubjects: item.sources.map((source) => source.subject).join("\n"),
+        title: item.title,
+        ...(preference ? { userMessage: preference } : {}),
+      },
+      targetCount: item.sources.length,
+      userId,
+    });
+  } catch (error) {
+    reportError(error, { operation: "daily-brief:learn-from-action" });
+  }
+};
+
 export const giveDailyBriefFeedback = async ({
   context,
   input,
@@ -437,7 +479,47 @@ export const giveDailyBriefFeedback = async ({
         target: [dailyBriefFeedback.settingsId, dailyBriefFeedback.itemId],
       });
   });
+  await learnFromDailyBriefAction({
+    action: input.action,
+    deferredUntil: deferUntil?.toISOString(),
+    item,
+    mailboxId: input.mailboxId,
+    preference: input.preference,
+    userId: context.userId,
+  });
   return await getDailyBrief({ context, input });
+};
+
+export const observeDailyBriefItem = async ({
+  context,
+  input,
+}: {
+  context: MailRequestContext;
+  input: z.infer<typeof dailyBriefInputs.observe>;
+}) => {
+  await assertAccessibleMailbox({
+    mailboxId: input.mailboxId,
+    userId: context.userId,
+  });
+  const settings = await loadSettings({
+    mailboxId: input.mailboxId,
+    userId: context.userId,
+  });
+  const edition =
+    settings?.enabled === true ? await loadEdition(settings) : null;
+  const item = edition?.items.find((entry) => entry.id === input.itemId);
+  if (item === undefined) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Daily Brief item not found.",
+    });
+  }
+  await learnFromDailyBriefAction({
+    action: input.action,
+    item,
+    mailboxId: input.mailboxId,
+    userId: context.userId,
+  });
+  return { recorded: true };
 };
 
 const generateEdition = async ({

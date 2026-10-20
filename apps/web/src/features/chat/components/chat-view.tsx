@@ -13,7 +13,6 @@ import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSelector } from "@tanstack/react-store";
 import { DefaultChatTransport, isToolUIPart } from "ai";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -50,7 +49,6 @@ const ChatSession = ({
     throw new Error("The assistant needs a mail workspace.");
   }
   const queryClient = useQueryClient();
-  const policy = useSelector(workspace.control.state, (state) => state.policy);
   const [input, setInput] = useState("");
   const contextKey = JSON.stringify([
     props.mailContext?.messageId,
@@ -95,10 +93,19 @@ const ChatSession = ({
   };
   // oxlint-disable-next-line react/hook-use-state -- useChat keeps one transport per session.
   const [transport] = useState(
-    // oxlint-disable-next-line react/react-compiler -- The transport reads refs only when a request starts, never during render.
+    // oxlint-disable-next-line react/react-compiler, react/refs -- The transport reads refs only when a request starts, never during render.
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
+        fetch: async (url, init) => {
+          const response = await fetch(url, init);
+          if (!response.ok) {
+            throw Object.assign(new Error(await response.text()), {
+              status: response.status,
+            });
+          }
+          return response;
+        },
         prepareSendMessagesRequest: ({ messages, trigger }) => {
           const foreground = foregroundRef.current;
           if (!foreground) {
@@ -123,8 +130,9 @@ const ChatSession = ({
     messages: cancelForegroundMessages(
       toCanonicalTranscript(chatData?.messages ?? [])
     ),
-    onError: () => {
+    onError: (error) => {
       workspace.control.finish();
+      toastError(error, { boundary: "assistant-chat" });
     },
     onFinish: ({ messages, isAbort, isError }) => {
       for (const message of messages) {
@@ -302,7 +310,11 @@ const ChatSession = ({
   const streaming = chat.status === "streaming" || chat.status === "submitted";
   const approvals = chat.messages.flatMap((message) =>
     message.parts.flatMap((part) => {
-      if (!isToolUIPart(part) || part.state !== "approval-requested") {
+      if (
+        !isToolUIPart(part) ||
+        part.type !== "tool-send_mail" ||
+        part.state !== "approval-requested"
+      ) {
         return [];
       }
       return [
@@ -312,30 +324,25 @@ const ChatSession = ({
               foregroundRef.current &&
               workspace.control.isCurrent(foregroundRef.current.generation)
             ) {
-              if (
-                part.type === "tool-send_mail" ||
-                part.type === "tool-save_compose_draft"
-              ) {
-                const proposed = saveComposeDraftInputSchema.safeParse(
-                  part.input
-                );
-                const currentDraft = saveComposeDraftInputSchema.safeParse({
-                  draft: workspace.read().draft,
+              const proposed = saveComposeDraftInputSchema.safeParse(
+                part.input
+              );
+              const currentDraft = saveComposeDraftInputSchema.safeParse({
+                draft: workspace.read().draft,
+              });
+              const matches =
+                proposed.success &&
+                currentDraft.success &&
+                JSON.stringify(proposed.data) ===
+                  JSON.stringify(currentDraft.data);
+              if (!matches) {
+                void chat.addToolApprovalResponse({
+                  approved: false,
+                  id: part.approval.id,
+                  reason:
+                    "The visible draft changed. Read the current draft and request approval again.",
                 });
-                const matches =
-                  proposed.success &&
-                  currentDraft.success &&
-                  JSON.stringify(proposed.data) ===
-                    JSON.stringify(currentDraft.data);
-                if (!matches) {
-                  void chat.addToolApprovalResponse({
-                    approved: false,
-                    id: part.approval.id,
-                    reason:
-                      "The visible draft changed. Read the current draft and request approval again.",
-                  });
-                  return;
-                }
+                return;
               }
               void chat.addToolApprovalResponse({
                 approved: true,
@@ -412,7 +419,6 @@ const ChatSession = ({
         exchangeId: crypto.randomUUID(),
         expiresAt: Date.now() + 120_000,
         generation,
-        policy,
         query: snapshot.query,
         selectedMessageId: snapshot.selectedMessageId,
         selectedThreadId: snapshot.selectedThreadId,
@@ -484,19 +490,10 @@ const ChatSession = ({
         </p>
       )}
       <ChatComposer
-        visible={props.visible}
         input={input}
         disabled={!canUseAiChat || busy || streaming || approvals.length > 0}
         streaming={streaming || approvals.length > 0}
         submitting={chat.status === "submitted"}
-        policy={policy}
-        onPolicyChange={(nextPolicy) => {
-          workspace.control.cancel();
-          workspace.control.state.setState((state) => ({
-            ...state,
-            policy: nextPolicy,
-          }));
-        }}
         contextLabel={contextLabel}
         onDismissContext={() => {
           setDismissedContext(contextKey);

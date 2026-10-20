@@ -1,7 +1,5 @@
 import {
-  ArrowDown01Icon,
   Cancel01Icon,
-  Shield01Icon,
   Loading03Icon,
   Mail01Icon,
   SentIcon,
@@ -9,46 +7,32 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@quieter/ui/dropdown-menu";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Textarea } from "@quieter/ui/textarea";
 import type { KeyboardEvent, SubmitEvent } from "react";
 
-export type AssistantPolicy = "ask" | "automatic";
-
 type ChatComposerProps = {
-  visible?: boolean;
   contextLabel?: string;
   disabled?: boolean;
   input: string;
   onDismissContext?: () => void;
   onInputChange: (value: string) => void;
   onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
-  onPolicyChange: (policy: AssistantPolicy) => void;
   onStop: () => void;
   onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
-  policy: AssistantPolicy;
   streaming: boolean;
   submitting: boolean;
 };
 
 export const ChatComposer = ({
-  visible = true,
   contextLabel,
   disabled,
   input,
   onDismissContext,
   onInputChange,
   onInputKeyDown,
-  onPolicyChange,
   onStop,
   onSubmit,
-  policy,
   streaming,
   submitting,
 }: ChatComposerProps) => (
@@ -82,7 +66,7 @@ export const ChatComposer = ({
         )}
       </div>
     )}
-    <div className="flex">
+    <div className="relative flex">
       <Textarea
         aria-label="Message"
         data-assistant-composer
@@ -93,45 +77,9 @@ export const ChatComposer = ({
         onKeyDown={onInputKeyDown}
         placeholder="Ask Quieter…"
         value={input}
-        variant="composer"
+        variant="composer-action"
       />
-    </div>
-    <div className="flex min-h-7 items-center gap-2">
-      <DropdownMenu key={visible ? "visible" : "hidden"}>
-        <DropdownMenuTrigger
-          appearance="row"
-          aria-label="Choose assistant change policy"
-          disabled={disabled}
-          type="button"
-        >
-          <HugeiconsIcon aria-hidden className="size-3.5" icon={Shield01Icon} />
-          <span>
-            {policy === "ask" ? "Ask before changes" : "Auto approve"}
-          </span>
-          <HugeiconsIcon
-            aria-hidden
-            className="size-3"
-            icon={ArrowDown01Icon}
-          />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" side="top" data-assistant-panel>
-          <DropdownMenuItem
-            onSelect={() => {
-              onPolicyChange("ask");
-            }}
-          >
-            Ask before changes
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => {
-              onPolicyChange("automatic");
-            }}
-          >
-            Auto approve
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <div className="ml-auto">
+      <div className="absolute right-2 bottom-2 flex">
         {streaming ? (
           <IconButtonTooltip label="Stop response">
             <Button

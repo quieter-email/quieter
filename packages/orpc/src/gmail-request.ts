@@ -4,7 +4,10 @@ import { isGmailRateLimitedError } from "@quieter/gmail";
 import type { OrpcContext } from "./context";
 import { runAuthorizedGmailMailbox } from "./gmail-mailbox-access";
 
-export type MailRequestContext = Pick<OrpcContext, "signal" | "resHeaders"> & {
+export type MailRequestContext = Pick<
+  OrpcContext,
+  "signal" | "resHeaders" | "scheduleBackgroundTask"
+> & {
   userId: string;
 };
 

@@ -124,8 +124,7 @@ const AiPersonalizationSection = ({
             action={<PersonalizationMemories />}
             title="What Quieter remembers"
           >
-            Review the personal context saved from your conversations and the
-            way you handle mail.
+            Read what Quieter has learned about you.
           </SettingsRow>
           <SettingsRow
             action={
