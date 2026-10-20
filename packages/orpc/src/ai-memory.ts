@@ -6,6 +6,7 @@ import {
   AI_MEMORY_UPDATE_OPERATION_LIMIT,
   AI_MEMORY_USER_MESSAGE_MAX_LENGTH,
   containsProhibitedMemorySecret,
+  hasExplicitAiMemoryEditIntent,
   planAiMemoryDeletion,
   planAiMemoryUpdate,
 } from "@quieter/ai/ai-memory";
@@ -1461,13 +1462,16 @@ const updateExistingAiMemoryFromChatMessage = async (input: {
   return { status: "refreshed" as const };
 };
 
-const learnPersonalAiMemoryFromChatMessage = async (input: {
-  bodyText: string;
-  mailboxId: string;
-  messageId: string;
-  scheduleBackgroundTask?: (task: Promise<unknown>) => void;
-  userId: string;
-}) => {
+const learnPersonalAiMemoryFromChatMessage = async (
+  input: {
+    bodyText: string;
+    mailboxId: string;
+    messageId: string;
+    scheduleBackgroundTask?: (task: Promise<unknown>) => void;
+    userId: string;
+  },
+  hasExplicitEditIntent: () => Promise<boolean>
+) => {
   const text = input.bodyText.trim();
   if (!text) {
     return { status: "skipped" as const };
@@ -1508,6 +1512,9 @@ const learnPersonalAiMemoryFromChatMessage = async (input: {
     input.scheduleBackgroundTask(
       (async () => {
         try {
+          if (!(await hasExplicitEditIntent())) {
+            return;
+          }
           await updateExistingAiMemoryFromChatMessage({
             mailboxId: input.mailboxId,
             messageId: input.messageId,
@@ -1523,6 +1530,9 @@ const learnPersonalAiMemoryFromChatMessage = async (input: {
       })()
     );
     return { status: "scheduled" as const };
+  }
+  if (!(await hasExplicitEditIntent())) {
+    return { status: "skipped" as const };
   }
   return await updateExistingAiMemoryFromChatMessage({
     mailboxId: input.mailboxId,
@@ -1556,13 +1566,51 @@ export const learnAiMemoryFromChatMessage = async (
       userId: input.userId,
     });
   }
-  const personalResult = await learnPersonalAiMemoryFromChatMessage(input);
+  let explicitEditIntent: Promise<boolean> | undefined;
+  const hasExplicitEditIntent = async () => {
+    explicitEditIntent ??= (async () => {
+      const accessibleMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: input.userId,
+      });
+      if (
+        !(await canRunMemoryModel({
+          organizationId: accessibleMailbox.organizationId,
+          userId: input.userId,
+        }))
+      ) {
+        return false;
+      }
+      const usage = createUsageCollector();
+      try {
+        return await hasExplicitAiMemoryEditIntent({
+          onUsage: usage.collect,
+          userMessage: text,
+        });
+      } finally {
+        await reportMemoryUsage({
+          externalId: `ai-memory-chat-edit-intent:${input.messageId}`,
+          mailboxId: input.mailboxId,
+          usage: usage.usage(),
+          userId: input.userId,
+        });
+      }
+    })();
+    return await explicitEditIntent;
+  };
+  const personalResult = await learnPersonalAiMemoryFromChatMessage(
+    input,
+    hasExplicitEditIntent
+  );
   const updateMailboxMemory = async () => {
     const accessibleMailbox = await assertAccessibleMailbox({
       mailboxId: input.mailboxId,
       userId: input.userId,
     });
     if (!accessibleMailbox.capabilities.canManageKnowledge) {
+      return { status: "skipped" as const };
+    }
+    if (!(await hasExplicitEditIntent())) {
       return { status: "skipped" as const };
     }
     const scopedInput = {
