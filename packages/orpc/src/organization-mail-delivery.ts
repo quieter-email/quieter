@@ -33,7 +33,6 @@ import { reportError } from "@quieter/observability";
 import {
   and,
   count,
-  countDistinct,
   desc,
   eq,
   exists,
@@ -1127,6 +1126,10 @@ export const recordOrganizationMailMarkerLoad = async (input: {
 };
 
 export type OrganizationMailDeliveryMetrics = {
+  dailyEvents: {
+    date: string;
+    eventsByType: Partial<Record<OrganizationMailDeliveryEventType, number>>;
+  }[];
   eventsByType: Partial<Record<OrganizationMailDeliveryEventType, number>>;
   openedMessages: number;
 };
@@ -1166,17 +1169,32 @@ export const getOrganizationMailDeliveryMetrics = async (input: {
     );
   }
 
+  const distinctEvents = db
+    .select({
+      eventType: organizationMailDeliveryEvent.eventType,
+      occurredAt: sql`min(${organizationMailDeliveryEvent.occurredAt})`.as(
+        "occurredAt"
+      ),
+    })
+    .from(organizationMailDeliveryEvent)
+    .where(and(...conditions))
+    .groupBy(
+      organizationMailDeliveryEvent.eventType,
+      organizationMailDeliveryEvent.providerMessageId,
+      organizationMailDeliveryEvent.recipient
+    )
+    .as("distinctEvents");
+  const eventDate = sql<string>`to_char(${distinctEvents.occurredAt}, 'YYYY-MM-DD')`;
   const [eventRows, [openRow]] = await Promise.all([
     db
       .select({
-        count: countDistinct(
-          sql`(${organizationMailDeliveryEvent.providerMessageId}, ${organizationMailDeliveryEvent.recipient})`
-        ),
-        eventType: organizationMailDeliveryEvent.eventType,
+        count: count(),
+        date: eventDate,
+        eventType: distinctEvents.eventType,
       })
-      .from(organizationMailDeliveryEvent)
-      .where(and(...conditions))
-      .groupBy(organizationMailDeliveryEvent.eventType),
+      .from(distinctEvents)
+      .groupBy(eventDate, distinctEvents.eventType)
+      .orderBy(eventDate),
     db
       .select({
         openedMessages: count(),
@@ -1214,10 +1232,25 @@ export const getOrganizationMailDeliveryMetrics = async (input: {
       ),
   ]);
 
+  const eventsByType: OrganizationMailDeliveryMetrics["eventsByType"] = {};
+  const dailyEvents = new Map<
+    string,
+    OrganizationMailDeliveryMetrics["dailyEvents"][number]
+  >();
+  for (const row of eventRows) {
+    eventsByType[row.eventType] =
+      (eventsByType[row.eventType] ?? 0) + row.count;
+    const day = dailyEvents.get(row.date) ?? {
+      date: row.date,
+      eventsByType: {},
+    };
+    day.eventsByType[row.eventType] = row.count;
+    dailyEvents.set(row.date, day);
+  }
+
   return {
-    eventsByType: Object.fromEntries(
-      eventRows.map((row) => [row.eventType, row.count])
-    ),
+    dailyEvents: [...dailyEvents.values()],
+    eventsByType,
     openedMessages: openRow?.openedMessages ?? 0,
   } satisfies OrganizationMailDeliveryMetrics;
 };

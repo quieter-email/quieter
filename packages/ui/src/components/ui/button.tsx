@@ -20,10 +20,10 @@ const buttonVariants = cva(
       variant: "default",
     },
     variants: {
+      fullWidth: {
+        true: "group relative w-full gap-3",
+      },
       size: {
-        // Full-width bar action at default height, e.g. auth buttons.
-        block:
-          "group relative h-8 w-full justify-center gap-3 px-3 text-body-sm [&_svg]:size-4",
         // Caption-height action, e.g. retry and approval buttons.
         compact: "h-7 px-2 text-caption font-medium [&_svg]:size-3.5",
         default: "h-8 px-3 text-body-sm [&_svg]:size-4",
@@ -61,7 +61,7 @@ const buttonVariants = cva(
           "h-auto w-full justify-start bg-transparent py-4 text-left font-normal whitespace-normal text-muted-fg hover:bg-muted hover:text-fg data-[active=true]:bg-accent",
         // Quiet secondary action, e.g. the stop-response button.
         secondary:
-          "bg-muted text-fg shadow-sm hover:bg-control-hover active:bg-control-active",
+          "bg-secondary text-secondary-fg shadow-sm hover:bg-secondary-hover active:bg-secondary-active",
       },
     },
   }
@@ -76,6 +76,7 @@ export type ButtonProps = BaseUIButtonProps &
 
 export const Button = ({
   className,
+  fullWidth = false,
   pending = false,
   pendingLabel,
   ref,
@@ -114,8 +115,9 @@ export const Button = ({
       aria-busy={pending || undefined}
       className={
         typeof className === "function"
-          ? (state) => cn(buttonVariants({ size, variant }), className(state))
-          : cn(buttonVariants({ size, variant }), className)
+          ? (state) =>
+              cn(buttonVariants({ fullWidth, size, variant }), className(state))
+          : cn(buttonVariants({ fullWidth, size, variant }), className)
       }
       disabled={pending || props.disabled}
       ref={ref}

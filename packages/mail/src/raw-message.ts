@@ -1,5 +1,7 @@
-import PostalMime from "postal-mime";
+import PostalMime, { addressParser } from "postal-mime";
 import type { Address, Email } from "postal-mime";
+
+import { formatMailSender } from "./compose/sender";
 
 export type ParsedRawMailMessage = {
   attachments: {
@@ -38,16 +40,21 @@ const toOptionalTrimmed = (value: string | undefined): string | undefined => {
   return trimmed !== undefined && trimmed.length > 0 ? trimmed : undefined;
 };
 
-const formatMailbox = (mailbox: { address: string; name: string }) => {
-  const name = mailbox.name.trim();
-  if (name.length === 0) {
-    return mailbox.address;
+export const parseRawMailSender = (
+  value: string
+): { address: string; name: string } | null => {
+  const addresses = addressParser(value, { flatten: true });
+  const [sender] = addresses;
+  if (addresses.length !== 1 || sender === undefined || sender.group) {
+    return null;
   }
-  return `"${name.replaceAll('"', '\\"')}" <${mailbox.address}>`;
+  return { address: sender.address, name: sender.name };
 };
 
 const flattenAddress = (address: Address): string[] =>
-  address.group ? address.group.map(formatMailbox) : [formatMailbox(address)];
+  address.group
+    ? address.group.map(formatMailSender)
+    : [formatMailSender(address)];
 
 const formatAddresses = (addresses: Address[] | undefined) => {
   const value =

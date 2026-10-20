@@ -120,7 +120,7 @@ const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
   } = props;
 
   return (
-    <div className="space-y-2 rounded-lg bg-secondary/40 p-3 squircle">
+    <div className="space-y-2 rounded-lg bg-muted/40 p-3 squircle">
       <p className="text-caption font-medium text-muted-fg">Then</p>
       <ToggleGroup
         aria-label="Rule action"
@@ -252,7 +252,7 @@ const ManagedRuleLabelsEditor = (props: MailboxOrganizerContentProps) => {
   } = props;
 
   return ruleActionKind === "set-labels" ? (
-    <div className="space-y-2 rounded-lg bg-secondary/40 p-3 squircle">
+    <div className="space-y-2 rounded-lg bg-muted/40 p-3 squircle">
       <p className="text-caption font-medium text-muted-fg">Labels</p>
       {(labelsData ?? []).flatMap((label) =>
         label.type === "user"

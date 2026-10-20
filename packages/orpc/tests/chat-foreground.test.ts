@@ -172,6 +172,31 @@ describe("foreground chat requests", () => {
     ).toThrow(/visible draft changed/u);
   });
 
+  test("persists the reviewed sender name and rejects changes or omission", () => {
+    const draft = { ...richDraft, senderName: "Customer Support" };
+    const reviewedDraft = resolveForegroundComposeDraftForPersistence({
+      draft,
+      foreground,
+      mailboxId: "mailbox-1",
+      transcript: transcriptWithDraft(draft),
+    });
+
+    expect(
+      toForegroundComposeMessage(reviewedDraft, "chat-local-id")
+    ).toMatchObject({ senderName: draft.senderName });
+
+    for (const proposed of [richDraft, { ...draft, senderName: "Sales" }]) {
+      expect(() =>
+        resolveForegroundComposeDraftForPersistence({
+          draft: proposed,
+          foreground,
+          mailboxId: "mailbox-1",
+          transcript: transcriptWithDraft(draft),
+        })
+      ).toThrow(/visible draft changed/u);
+    }
+  });
+
   test("does not fall back to an older workspace after a newer mismatched read", () => {
     const transcript = transcriptWithDraft(richDraft);
     transcript[0]?.parts.push({

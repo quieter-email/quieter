@@ -1,4 +1,7 @@
-import { composeDraftAnchorSchema } from "@quieter/mail/compose/schema";
+import {
+  composeDraftAnchorSchema,
+  composeSenderNameSchema,
+} from "@quieter/mail/compose/schema";
 import { z } from "zod";
 
 import { draftRecoveryJournal } from "#/lib/draft-recovery-journal";
@@ -43,6 +46,7 @@ export const recoverableDraftSchema = z.object({
   saveStatus: z.enum(["idle", "saving", "saved", "error", "sending"]),
   sendOperationId: z.uuid().optional(),
   sendUncertain: z.boolean().optional(),
+  senderName: composeSenderNameSchema.optional(),
   subject: z.string(),
   updatedAt: z.number(),
 });

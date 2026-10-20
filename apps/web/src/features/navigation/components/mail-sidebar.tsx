@@ -9,6 +9,7 @@ import {
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { MailboxCapabilities } from "@quieter/mail/data-plane";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -49,6 +50,7 @@ type MailSidebarProps = {
     id: string;
     kind: "division" | "organization" | "unassigned";
     mailboxes: {
+      capabilities: MailboxCapabilities;
       connectionStatus: "connected" | "needs_reconnect";
       divisionName?: string | null;
       grantRole?: "manager" | "reader" | "responder" | null;

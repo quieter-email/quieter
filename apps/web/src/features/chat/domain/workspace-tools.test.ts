@@ -46,6 +46,7 @@ const createCompose = () => {
     bodyHtml: "<p>Initial</p>",
     bodyText: "Initial",
     cc: "",
+    senderName: "Support",
     subject: "Initial subject",
     to: "person@example.test",
   };

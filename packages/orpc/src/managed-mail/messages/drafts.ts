@@ -10,6 +10,7 @@ import {
 } from "@quieter/database/schema";
 import { buildMimeMessage } from "@quieter/mail/compose/mime";
 import type { composeDraftInputSchema } from "@quieter/mail/compose/schema";
+import { resolveMailSender } from "@quieter/mail/compose/sender";
 import {
   parseRawMailAttachments,
   parseRawMailMessage,
@@ -112,6 +113,7 @@ const toSavedManagedDraft = (
   })),
   recipients: draft.recipients,
   replyContext: draft.replyContext ?? null,
+  senderName: draft.senderName,
   subject: draft.subject,
 });
 
@@ -215,7 +217,7 @@ export const saveManagedDraft = async (input: {
   );
   const raw = new TextEncoder().encode(
     await buildMimeMessage(draft, {
-      from: selectedMailbox.emailAddress,
+      from: resolveMailSender(selectedMailbox, draft.senderName),
       includeQuieterDraftHeaders: true,
       sentAt: now,
     })
@@ -300,8 +302,8 @@ export const saveManagedDraft = async (input: {
     bodyText: parsed.bodyText || null,
     cc: draft.recipients.cc || null,
     ccNormalized: normalizeManagedSearchValue(draft.recipients.cc),
-    from: selectedMailbox.emailAddress,
-    fromNormalized: normalizeManagedSearchValue(selectedMailbox.emailAddress),
+    from: parsed.from,
+    fromNormalized: normalizeManagedSearchValue(parsed.from),
     headers: parsed.headers,
     inReplyTo: draft.replyContext?.messageHeaderId ?? null,
     isRead: true,

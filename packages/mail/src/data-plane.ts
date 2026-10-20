@@ -57,6 +57,7 @@ export type MailboxCapabilities = {
   canMoveToSpam: boolean;
   canMoveToTrash: boolean;
   canSend: boolean;
+  canSetSenderName: boolean;
 };
 
 export type MailCommand =
@@ -112,6 +113,7 @@ export const getMailboxCapabilities = (input: {
       canMoveToSpam: false,
       canMoveToTrash: false,
       canSend: false,
+      canSetSenderName: false,
       categories: ["sent"],
     };
   }
@@ -130,6 +132,7 @@ export const getMailboxCapabilities = (input: {
     canMoveToSpam: canRespond,
     canMoveToTrash: canRespond,
     canSend: canRespond,
+    canSetSenderName: input.provider === "managed" && canRespond,
     categories: [
       "inbox",
       "unread",
