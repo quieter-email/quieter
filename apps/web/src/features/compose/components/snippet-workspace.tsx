@@ -226,7 +226,7 @@ export const SnippetWorkspace = ({
             <Button
               aria-label={`Edit snippet ${snippet.name}`}
               aria-current={editingId === snippet.id ? "true" : undefined}
-              className="w-full"
+              fullWidth
               key={snippet.id}
               onClick={() => {
                 setEditingId(snippet.id);

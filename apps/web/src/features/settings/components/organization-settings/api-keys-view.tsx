@@ -205,7 +205,7 @@ const CreatedApiKeyReveal = ({
 
     <DialogBody spacing="3">
       <Button
-        className="w-full"
+        fullWidth
         onClick={() => {
           runDetached(async () => {
             await copyText(createdKey);
@@ -651,7 +651,7 @@ const ResetApiKeyDialog = ({
 
             <AlertDialogBody spacing="3">
               <Button
-                className="w-full"
+                fullWidth
                 onClick={() => {
                   runDetached(async () => {
                     await copyText(createdKey);

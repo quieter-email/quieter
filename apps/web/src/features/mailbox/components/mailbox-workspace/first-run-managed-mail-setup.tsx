@@ -12,7 +12,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
-import { Button } from "@quieter/ui/button";
+import { Button, buttonVariants } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { Pill } from "@quieter/ui/pill";
@@ -435,7 +435,7 @@ const FirstRunApiKeyStep = ({
             API key created. Store it before leaving this screen.
           </p>
           <Button
-            className="w-full"
+            fullWidth
             onClick={() => {
               if (createdApiKey !== null) {
                 void navigator.clipboard.writeText(createdApiKey);
@@ -450,20 +450,15 @@ const FirstRunApiKeyStep = ({
               {createdApiKey}
             </code>
           </Button>
-          <Button
-            nativeButton={false}
-            render={
-              <a
-                aria-label="Open API reference"
-                href="/api/openapi"
-                rel="noreferrer"
-                target="_blank"
-              />
-            }
-            variant="outline"
+          <a
+            aria-label="Open API reference"
+            className={cn(buttonVariants({ variant: "outline" }))}
+            href="/api/openapi"
+            rel="noreferrer"
+            target="_blank"
           >
             Open API reference
-          </Button>
+          </a>
         </div>
       );
     }
@@ -479,20 +474,15 @@ const FirstRunApiKeyStep = ({
             />
             This organization already has an API key.
           </p>
-          <Button
-            nativeButton={false}
-            render={
-              <a
-                aria-label="Open API reference"
-                href="/api/openapi"
-                rel="noreferrer"
-                target="_blank"
-              />
-            }
-            variant="outline"
+          <a
+            aria-label="Open API reference"
+            className={cn(buttonVariants({ variant: "outline" }))}
+            href="/api/openapi"
+            rel="noreferrer"
+            target="_blank"
           >
             Open API reference
-          </Button>
+          </a>
         </div>
       );
     }
@@ -516,20 +506,15 @@ const FirstRunApiKeyStep = ({
           )}
           Create API key
         </Button>
-        <Button
-          nativeButton={false}
-          render={
-            <a
-              aria-label="Open API reference"
-              href="/api/openapi"
-              rel="noreferrer"
-              target="_blank"
-            />
-          }
-          variant="ghost"
+        <a
+          aria-label="Open API reference"
+          className={cn(buttonVariants({ variant: "ghost" }))}
+          href="/api/openapi"
+          rel="noreferrer"
+          target="_blank"
         >
           Open API reference
-        </Button>
+        </a>
       </div>
     );
   };

@@ -352,7 +352,7 @@ const DomainCatchAllPickerBody = ({
     <div className="space-y-1">
       {candidates.map((mailbox) => (
         <Button
-          className="w-full"
+          fullWidth
           disabled={setCatchAllMutation.isPending}
           key={mailbox.id}
           onClick={() => {
