@@ -23,6 +23,7 @@ import {
   mutateGmailMessage,
   watchGmailMailbox,
 } from "@quieter/gmail";
+import { partitionAutoLabelCandidates } from "@quieter/mail/auto-label-matching";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import {
@@ -339,31 +340,50 @@ const processAutoLabelMessage = async ({
         costUsd: undefined,
         promptTokens: 0,
       };
-      const budgetStatus = await getBudgetStatus();
-      if (!budgetStatus.allowed) {
-        await deferAutoLabelAutomation(event.id, budgetStatus.message);
-        return;
+      const { aiLabels, deterministicLabelIds } = partitionAutoLabelCandidates(
+        autoLabelContext.labels,
+        message
+      );
+      if (aiLabels.length > 0) {
+        const budgetStatus = await getBudgetStatus();
+        if (!budgetStatus.allowed) {
+          if (
+            deterministicLabelIds.length > 0 &&
+            (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local" ||
+              serverEnv.QUIETER_LOCAL_PROVIDER_MODE === "write")
+          ) {
+            await mutateGmailMessage(accessToken, gmailMessageId, {
+              addLabelIds: deterministicLabelIds,
+            });
+          }
+          await deferAutoLabelAutomation(event.id, budgetStatus.message);
+          return;
+        }
       }
 
-      const labelIds = await classifyMailMessage({
-        labels: autoLabelContext.labels,
-        memoryContext: serializeAiAgentContext(
-          await loadAiAgentContext({
-            agent: "auto_label",
-            candidates: autoLabelContext.memoryCandidates,
-            includeUserScope: false,
-            mailboxId,
-            query: buildMailMemoryQuery(message),
-            semantic: false,
-            userId,
-          })
-        ),
-        message,
-        model: autoLabelContext.model,
-        onUsage: (reportedUsage) => {
-          usage = reportedUsage;
-        },
-      });
+      const aiLabelIds =
+        aiLabels.length === 0
+          ? []
+          : await classifyMailMessage({
+              labels: aiLabels,
+              memoryContext: serializeAiAgentContext(
+                await loadAiAgentContext({
+                  agent: "auto_label",
+                  candidates: autoLabelContext.memoryCandidates,
+                  includeUserScope: false,
+                  mailboxId,
+                  query: buildMailMemoryQuery(message),
+                  semantic: false,
+                  userId,
+                })
+              ),
+              message,
+              model: autoLabelContext.model,
+              onUsage: (reportedUsage) => {
+                usage = reportedUsage;
+              },
+            });
+      const labelIds = [...new Set([...deterministicLabelIds, ...aiLabelIds])];
       const now = new Date();
       const [classified] = await db
         .update(gmailAutoLabelEvent)
@@ -374,7 +394,7 @@ const processAutoLabelMessage = async ({
           costUsd: usage.costUsd,
           labelIds,
           lastError: null,
-          model: autoLabelContext.model,
+          model: aiLabels.length > 0 ? autoLabelContext.model : null,
           promptTokens: usage.promptTokens,
           updatedAt: now,
           // Unreportable usage is terminal; only retryable reporting failures
@@ -780,8 +800,12 @@ const processMailboxHistory = async ({
             getMailAutomationContext(),
           ]).then(([gmailLabels, automationContext]) => {
             const labels = gmailLabels
-              .filter((label) => label.type === "user")
+              .filter(
+                (label) =>
+                  label.type === "user" && label.autoLabel?.enabled !== false
+              )
               .map((label) => ({
+                autoLabel: label.autoLabel,
                 description: label.description,
                 id: label.id,
                 inclusionCriteria: label.inclusionCriteria,

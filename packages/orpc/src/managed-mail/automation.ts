@@ -17,6 +17,7 @@ import {
   managedMailMessage,
   organization,
 } from "@quieter/database/schema";
+import { partitionAutoLabelCandidates } from "@quieter/mail/auto-label-matching";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
@@ -25,7 +26,7 @@ import {
   buildMailMemoryQuery,
   loadAiAgentMemoryCandidates,
   loadAiConfiguration,
-  rankAiAgentMemoryCandidates,
+  loadAiAgentContext,
   serializeAiAgentContext,
 } from "../ai-memory";
 import type { AiAgentMemoryCandidates } from "../ai-memory";
@@ -117,6 +118,7 @@ const getManagedAutoLabelCandidates = async (input: {
   const [labels, aiConfiguration, memoryCandidates] = await Promise.all([
     db
       .select({
+        autoLabel: managedMailLabel.autoLabel,
         description: managedMailLabel.description,
         id: managedMailLabel.id,
         name: managedMailLabel.name,
@@ -131,12 +133,15 @@ const getManagedAutoLabelCandidates = async (input: {
     }),
   ]);
 
-  const candidates = labels.map((label) => ({
-    description: label.description,
-    id: label.id,
-    inclusionCriteria: null,
-    name: label.name,
-  }));
+  const candidates = labels
+    .filter((label) => label.autoLabel?.enabled !== false)
+    .map((label) => ({
+      autoLabel: label.autoLabel,
+      description: label.description,
+      id: label.id,
+      inclusionCriteria: null,
+      name: label.name,
+    }));
 
   return {
     availableLabelIds: new Set(candidates.map((label) => label.id)),
@@ -261,31 +266,52 @@ const processManagedAutoLabelMessage = async (input: {
         costUsd: undefined,
         promptTokens: 0,
       };
-      const budgetStatus = await getMailAutomationAiBudgetStatus({
-        organizationId: input.organizationId,
-        userId: input.userId,
-      });
-      if (!budgetStatus.allowed) {
-        await deferAutoLabelAutomation(event.id, budgetStatus.message);
-        return;
+      const { aiLabels, deterministicLabelIds } = partitionAutoLabelCandidates(
+        input.autoLabelContext.labels,
+        message
+      );
+      if (aiLabels.length > 0) {
+        const budgetStatus = await getMailAutomationAiBudgetStatus({
+          organizationId: input.organizationId,
+          userId: input.userId,
+        });
+        if (!budgetStatus.allowed) {
+          if (deterministicLabelIds.length > 0) {
+            await updateManagedMessageLabelAssignments({
+              addLabelIds: deterministicLabelIds,
+              mailboxId: input.mailboxId,
+              messageIds: [input.messageId],
+              source: "ai_auto_label",
+            });
+          }
+          await deferAutoLabelAutomation(event.id, budgetStatus.message);
+          return;
+        }
       }
 
-      const labelIds = await classifyMailMessage({
-        labels: input.autoLabelContext.labels,
-        memoryContext: serializeAiAgentContext(
-          await rankAiAgentMemoryCandidates({
-            agent: "auto_label",
-            candidates: input.autoLabelContext.memoryCandidates,
-            query: buildMailMemoryQuery(message),
-            semantic: false,
-          })
-        ),
-        message,
-        model: input.autoLabelContext.model,
-        onUsage: (reportedUsage) => {
-          usage = reportedUsage;
-        },
-      });
+      const aiLabelIds =
+        aiLabels.length === 0
+          ? []
+          : await classifyMailMessage({
+              labels: aiLabels,
+              memoryContext: serializeAiAgentContext(
+                await loadAiAgentContext({
+                  agent: "auto_label",
+                  candidates: input.autoLabelContext.memoryCandidates,
+                  includeUserScope: false,
+                  mailboxId: input.mailboxId,
+                  query: buildMailMemoryQuery(message),
+                  semantic: false,
+                  userId: input.userId,
+                })
+              ),
+              message,
+              model: input.autoLabelContext.model,
+              onUsage: (reportedUsage) => {
+                usage = reportedUsage;
+              },
+            });
+      const labelIds = [...new Set([...deterministicLabelIds, ...aiLabelIds])];
       const [classified] = await db
         .update(gmailAutoLabelEvent)
         .set({
@@ -295,7 +321,7 @@ const processManagedAutoLabelMessage = async (input: {
           costUsd: usage.costUsd ?? null,
           labelIds,
           lastError: null,
-          model: input.autoLabelContext.model,
+          model: aiLabels.length > 0 ? input.autoLabelContext.model : null,
           promptTokens: usage.promptTokens,
           updatedAt: new Date(),
           // Unreportable usage is terminal; only retryable reporting failures

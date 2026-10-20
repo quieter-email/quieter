@@ -1,3 +1,4 @@
+import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
 import { useMemo, useSyncExternalStore } from "react";
 
@@ -80,11 +81,9 @@ export const readUnifiedInboxPreferences = (
       !Array.isArray(value.colors)
     ) {
       for (const [id, color] of Object.entries(value.colors)) {
-        const matchedColor = DEFAULT_COLORS.find(
-          (candidate) => candidate === color
-        );
-        if (matchedColor !== undefined) {
-          colors[id] = matchedColor;
+        const parsedColor = mailboxLabelColorSchema.safeParse(color);
+        if (parsedColor.success) {
+          colors[id] = parsedColor.data;
         }
       }
     }
