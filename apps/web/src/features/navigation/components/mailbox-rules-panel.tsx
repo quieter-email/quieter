@@ -22,6 +22,7 @@ import {
   structuredMailSearchSchema,
 } from "@quieter/mail/search";
 import type { RouterOutputs } from "@quieter/orpc";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { FullPageDialogDescription } from "@quieter/ui/full-page-dialog";
@@ -320,7 +321,7 @@ const ManagedRulePreviewActions = (props: MailboxOrganizerContentProps) => {
           {preview.count === 1 ? "" : "s"}
         </p>
       ) : null}
-      <div className="flex gap-2">
+      <ActionFooter>
         <Button
           disabled={!validRuleInput || previewRuleMutation.isPending}
           onClick={() => void previewRule()}
@@ -328,7 +329,7 @@ const ManagedRulePreviewActions = (props: MailboxOrganizerContentProps) => {
           pendingLabel="Previewing…"
           size="sm"
           type="button"
-          variant="outline"
+          variant="secondary"
         >
           Preview
         </Button>
@@ -352,7 +353,7 @@ const ManagedRulePreviewActions = (props: MailboxOrganizerContentProps) => {
             ? "Update rule"
             : "Save rule"}
         </Button>
-      </div>
+      </ActionFooter>
     </>
   );
 };

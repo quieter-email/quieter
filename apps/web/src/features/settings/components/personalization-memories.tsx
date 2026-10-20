@@ -97,8 +97,8 @@ export const PersonalizationMemories = () => {
             <p className="text-body leading-relaxed text-fg">{profile}</p>
           ) : null}
         </DialogBody>
-        <DialogFooter fullWidth>
-          <DialogCloseButton variant="secondary">Close</DialogCloseButton>
+        <DialogFooter>
+          <DialogCloseButton variant="default">Close</DialogCloseButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

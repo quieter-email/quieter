@@ -5,6 +5,7 @@ import { cva } from "class-variance-authority";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
+import { ActionFooter } from "./action-footer";
 import type { ButtonProps } from "./button";
 
 export const Dialog = DialogPrimitive.Root;
@@ -79,20 +80,9 @@ export const DialogBody = ({
 
 export const DialogFooter = ({
   className,
-  fullWidth = false,
   ...props
-}: ComponentPropsWithoutRef<"div"> & { fullWidth?: boolean }) => (
-  <div
-    className={cn(
-      "gap-2 px-5 py-4",
-      {
-        "flex items-center justify-end": !fullWidth,
-        "grid auto-cols-fr grid-flow-col": fullWidth,
-      },
-      className
-    )}
-    {...props}
-  />
+}: ComponentPropsWithoutRef<"div">) => (
+  <ActionFooter className={cn("px-5 py-4", className)} {...props} />
 );
 
 export const DialogTitle = ({
@@ -119,7 +109,7 @@ const dialogCloseButtonVariants = cva(
   "squircle inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-body-sm font-medium whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
   {
     defaultVariants: {
-      variant: "outline",
+      variant: "secondary",
     },
     variants: {
       variant: {
@@ -140,7 +130,7 @@ const dialogCloseButtonVariants = cva(
 
 export const DialogCloseButton = ({
   className,
-  variant = "outline",
+  variant = "secondary",
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Close> & {
   // Close buttons support the core button looks; card, chip, and the other

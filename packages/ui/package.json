@@ -7,6 +7,7 @@
   ],
   "exports": {
     "./accordion": "./src/components/ui/accordion.tsx",
+    "./action-footer": "./src/components/ui/action-footer.tsx",
     "./alert-dialog": "./src/components/ui/alert-dialog.tsx",
     "./avatar": "./src/components/ui/avatar.tsx",
     "./avatar-fallback": "./src/components/ui/avatar-fallback.tsx",
