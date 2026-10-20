@@ -24,6 +24,7 @@ import { SidebarEntrance } from "@quieter/app/features/navigation/components/sid
 import { UnifiedSidebarLabelNav } from "@quieter/app/features/navigation/components/unified-sidebar-label-nav";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { appRuntime } from "@quieter/app/runtime";
+import type { MailboxCapabilities } from "@quieter/mail/data-plane";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -48,6 +49,7 @@ type MailSidebarProps = {
     id: string;
     kind: "division" | "organization" | "unassigned";
     mailboxes: {
+      capabilities: MailboxCapabilities;
       connectionStatus: "connected" | "needs_reconnect";
       divisionName?: string | null;
       grantRole?: "manager" | "reader" | "responder" | null;

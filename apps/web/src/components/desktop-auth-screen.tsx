@@ -116,7 +116,7 @@ export const DesktopAuthScreen = () => {
                 `${DESKTOP_AUTH_PROTOCOL_SCHEME}:/${DESKTOP_AUTH_CALLBACK_PATH}#token=${authorizationCode}`
               );
             }}
-            size="block"
+            fullWidth
             type="button"
           >
             Open Quieter
@@ -136,7 +136,7 @@ export const DesktopAuthScreen = () => {
             onClick={() => {
               void handleCopyAuthorizationCode();
             }}
-            size="block"
+            fullWidth
             type="button"
             variant="outline"
           >
@@ -151,7 +151,7 @@ export const DesktopAuthScreen = () => {
             onClick={() => {
               transferMutation.mutate();
             }}
-            size="block"
+            fullWidth
             type="button"
           >
             {transferMutation.isPending

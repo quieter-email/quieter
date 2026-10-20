@@ -15,6 +15,7 @@ import {
   splitMailAddressList,
 } from "@quieter/mail/compose/schema";
 import type { composeMessageInputSchema } from "@quieter/mail/compose/schema";
+import { resolveMailSender } from "@quieter/mail/compose/sender";
 import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
@@ -99,6 +100,7 @@ export const sendManagedMailboxMessage = async (input: {
     headers: message.headers,
     recipients: message.recipients,
     replyContext: message.replyContext,
+    senderName: message.senderName?.trim() || undefined,
     subject: message.subject,
   });
   if (draft !== undefined) {
@@ -150,7 +152,7 @@ export const sendManagedMailboxMessage = async (input: {
     organizationId,
   });
   const raw = await buildMimeMessage(message, {
-    from: selectedMailbox.emailAddress,
+    from: resolveMailSender(selectedMailbox, message.senderName),
     messageId: messageHeaderId,
     omitBccHeader: true,
     sentAt,
@@ -183,7 +185,7 @@ export const sendManagedMailboxMessage = async (input: {
         mailboxId: input.mailboxId,
         rawSizeBytes: Buffer.byteLength(raw),
         replyTo: [selectedMailbox.emailAddress],
-        sender: selectedMailbox.emailAddress,
+        sender: parsed.from,
         sentAt: sentAt.toISOString(),
         subject: message.subject,
         tags: [],

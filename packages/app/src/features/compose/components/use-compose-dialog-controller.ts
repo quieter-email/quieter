@@ -98,6 +98,7 @@ export const useComposeDialogController = ({
   autosavePaused = false,
   beforeNavigate,
   demoMode = false,
+  defaultSenderName,
   initialDraft = null,
   initialDraftNeedsSave = false,
   managedDemoMode = false,
@@ -112,6 +113,7 @@ export const useComposeDialogController = ({
   autosavePaused?: boolean;
   beforeNavigate?: () => Promise<void>;
   demoMode?: boolean;
+  defaultSenderName?: string;
   initialDraft?: ComposeActionDraft | null;
   initialDraftNeedsSave?: boolean;
   managedDemoMode?: boolean;
@@ -145,6 +147,10 @@ export const useComposeDialogController = ({
         : seed
     );
     let resolved = draft;
+    draft.senderName =
+      defaultSenderName === undefined
+        ? undefined
+        : (draft.senderName ?? defaultSenderName);
     if ((draft.draftId ?? "") === "" && draft.recoveryEditorId === undefined) {
       resolved = appendComposeSignature(
         draft,
@@ -542,7 +548,15 @@ export const useComposeDialogController = ({
     let previousValues = form.state.values;
     const subscription = form.store.subscribe(() => {
       if (
-        ["to", "cc", "bcc", "subject", "bodyText", "bodyHtml"].some(
+        [
+          "to",
+          "cc",
+          "bcc",
+          "senderName",
+          "subject",
+          "bodyText",
+          "bodyHtml",
+        ].some(
           (field) =>
             Reflect.get(previousValues, field) !==
             Reflect.get(form.state.values, field)

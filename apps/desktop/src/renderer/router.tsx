@@ -145,6 +145,16 @@ const homeRoute = createRoute({
   path: "/home",
 });
 
+const designSystemRoute = createRoute({
+  component: lazyRouteComponent(
+    async () =>
+      await import("@quieter/app/features/design-system/components/design-system-showcase"),
+    "DesignSystemShowcase"
+  ),
+  getParentRoute: () => appRoute,
+  path: "/design-system",
+});
+
 const legalRoutes = (
   ["/privacy", "/cookies", "/terms", "/imprint"] as const
 ).map((path) =>
@@ -166,6 +176,7 @@ export const router = createRouter({
       inboxRoute,
       settingsRoute,
       onboardingRoute,
+      designSystemRoute,
     ]),
     homeRoute,
     ...legalRoutes,

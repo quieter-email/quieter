@@ -55,7 +55,7 @@ export const DesktopAuthScreen = () => {
         }}
         pending={pending}
         pendingLabel="Opening browser"
-        size="block"
+        fullWidth
       >
         {waiting ? "Open browser again" : "Continue in browser"}
         <HugeiconsIcon icon={ArrowUpRight01Icon} size={16} />
@@ -72,7 +72,7 @@ export const DesktopAuthScreen = () => {
             onClick={() => {
               setShowCode(!showCode);
             }}
-            size="block"
+            fullWidth
             variant="ghost"
           >
             Use a sign-in code
@@ -100,7 +100,7 @@ export const DesktopAuthScreen = () => {
               <Button
                 disabled={!code.trim()}
                 pending={pending}
-                size="block"
+                fullWidth
                 type="submit"
                 variant="outline"
               >

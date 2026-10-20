@@ -400,6 +400,7 @@ export const toForegroundComposeMessage = (
   saveStatus: "saved",
   sendOperationId: draft.sendOperationId,
   sendUncertain: draft.sendUncertain,
+  senderName: draft.senderName,
   subject: draft.subject ?? "",
   updatedAt: draft.draftRevision,
 });

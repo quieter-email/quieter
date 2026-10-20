@@ -316,7 +316,7 @@ export const AuthCredentials = ({
             }
 
             return (
-              <Button disabled={!canSubmit} size="block" type="submit">
+              <Button disabled={!canSubmit} fullWidth type="submit">
                 {authClient.isLastUsedLoginMethod("magic-link") && (
                   <AuthLastUsedHint />
                 )}
@@ -348,7 +348,7 @@ export const AuthCredentials = ({
         onClick={() => {
           googleMutation.mutate();
         }}
-        size="block"
+        fullWidth
         type="button"
         variant="outline"
       >
@@ -369,7 +369,7 @@ export const AuthCredentials = ({
         onClick={() => {
           passkeyMutation.mutate();
         }}
-        size="block"
+        fullWidth
         type="button"
         variant="outline"
       >

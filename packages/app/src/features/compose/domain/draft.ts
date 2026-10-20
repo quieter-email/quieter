@@ -53,6 +53,7 @@ export type ComposeDraftState = {
   saveStatus: ComposeSaveStatus;
   sendOperationId?: string;
   sendUncertain?: boolean;
+  senderName?: string;
   errorMessage: string | null;
   lastSavedAt?: number;
   recoveryEditorId?: string;
@@ -196,6 +197,7 @@ export const haveComposeDraftPersistedFieldsChanged = (
     current.recipients.cc === next.recipients.cc &&
     current.recipients.bcc === next.recipients.bcc &&
     current.subject === next.subject &&
+    (current.senderName?.trim() ?? "") === (next.senderName?.trim() ?? "") &&
     current.bodyHtml === next.bodyHtml &&
     current.bodyText === next.bodyText &&
     areComposeAssetsEqual(current.attachments, next.attachments) &&

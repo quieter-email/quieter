@@ -4,9 +4,39 @@ import { Delete02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
-import { Button } from "@quieter/ui/button";
+import {
+  AlertDialog,
+  AlertDialogCloseButton,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@quieter/ui/alert-dialog";
+import { Button, LinkButton } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
+import {
+  Dialog,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@quieter/ui/dialog";
+import {
+  Drawer,
+  DrawerCloseButton,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@quieter/ui/drawer";
 import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
@@ -44,7 +74,7 @@ const surfaceTokens = [
   { cls: "bg-bg", name: "bg", note: "sunken" },
   { cls: "bg-card", name: "card", note: "raised, both themes" },
   { cls: "bg-muted", name: "muted", note: "alias of control-hover" },
-  { cls: "bg-secondary", name: "secondary", note: "alias of control" },
+  { cls: "bg-secondary", name: "secondary", note: "secondary actions" },
   {
     cls: "bg-control",
     name: "control",
@@ -181,6 +211,9 @@ export const DesignSystemShowcase = () => {
         <Section title="Buttons">
           <Row label="Variants">
             <Button type="button">Primary</Button>
+            <Button type="button" variant="secondary">
+              Secondary
+            </Button>
             <Button type="button" variant="outline">
               Outline
             </Button>
@@ -219,6 +252,73 @@ export const DesignSystemShowcase = () => {
             <Button disabled type="button" variant="outline">
               Outline
             </Button>
+          </Row>
+          <Row label="Full width">
+            <div className="flex w-64 flex-col gap-2">
+              <Button fullWidth size="sm">
+                Small action
+              </Button>
+              <Button fullWidth>Default action</Button>
+              <LinkButton fullWidth to="/design-system" variant="outline">
+                Link action
+              </LinkButton>
+            </div>
+          </Row>
+          <Row label="Full-width footers">
+            <Dialog>
+              <DialogTrigger render={<Button variant="outline" />}>
+                Open dialog
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Changes saved</DialogTitle>
+                  <DialogDescription>
+                    Your preferences are up to date.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter fullWidth>
+                  <DialogCloseButton variant="secondary">
+                    Done
+                  </DialogCloseButton>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            <AlertDialog>
+              <AlertDialogTrigger render={<Button variant="outline" />}>
+                Open alert
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Setup complete</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Your inbox is ready to use.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter fullWidth>
+                  <AlertDialogCloseButton variant="secondary">
+                    Got it
+                  </AlertDialogCloseButton>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <Drawer direction="right">
+              <DrawerTrigger asChild>
+                <Button variant="outline">Open drawer</Button>
+              </DrawerTrigger>
+              <DrawerContent>
+                <DrawerHeader>
+                  <DrawerTitle>Changes saved</DrawerTitle>
+                  <DrawerDescription>
+                    Your preferences are up to date.
+                  </DrawerDescription>
+                </DrawerHeader>
+                <DrawerFooter fullWidth>
+                  <DrawerCloseButton variant="secondary">
+                    Done
+                  </DrawerCloseButton>
+                </DrawerFooter>
+              </DrawerContent>
+            </Drawer>
           </Row>
         </Section>
 

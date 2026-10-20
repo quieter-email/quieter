@@ -203,7 +203,7 @@ const CreatedApiKeyReveal = ({
 
     <DialogBody spacing="3">
       <button
-        className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg squircle hover:bg-secondary/50"
+        className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-left font-mono text-caption break-all text-fg squircle hover:bg-muted/50"
         onClick={() => {
           runDetached(async () => {
             await copyText(createdKey);
@@ -216,8 +216,8 @@ const CreatedApiKeyReveal = ({
       <p className="text-body text-muted-fg">Click the key to copy it.</p>
     </DialogBody>
 
-    <DialogFooter>
-      <Button onClick={onClose} size="sm">
+    <DialogFooter fullWidth>
+      <Button onClick={onClose} variant="secondary">
         Done
       </Button>
     </DialogFooter>
@@ -648,7 +648,7 @@ const ResetApiKeyDialog = ({
 
             <AlertDialogBody spacing="3">
               <button
-                className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-left font-mono text-caption break-all text-fg squircle hover:bg-secondary/50"
+                className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-left font-mono text-caption break-all text-fg squircle hover:bg-muted/50"
                 onClick={() => {
                   runDetached(async () => {
                     await copyText(createdKey);
@@ -663,12 +663,12 @@ const ResetApiKeyDialog = ({
               </p>
             </AlertDialogBody>
 
-            <AlertDialogFooter>
+            <AlertDialogFooter fullWidth>
               <Button
+                variant="secondary"
                 onClick={() => {
                   runDetached(closeDialog);
                 }}
-                size="sm"
               >
                 Done
               </Button>

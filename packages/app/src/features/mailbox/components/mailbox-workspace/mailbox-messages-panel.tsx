@@ -1,5 +1,6 @@
 "use client";
 
+import type { ComposeSenderMailbox } from "@quieter/app/features/compose/components/compose-workspace";
 import { buildComposeDraftFromSavedDraftMessage } from "@quieter/app/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { useMailboxListController } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-list-controller";
@@ -31,6 +32,7 @@ type MailboxMessagesPanelProps = {
   onSearchQueryChange: (query: string) => void;
   persistComposeDrafts: boolean;
   searchQuery: string;
+  senderMailbox?: ComposeSenderMailbox;
   signature?: { html: string | null; text: string | null };
 };
 
@@ -50,6 +52,7 @@ export const MailboxMessagesPanel = ({
   onSearchQueryChange,
   persistComposeDrafts,
   searchQuery,
+  senderMailbox,
   signature,
 }: MailboxMessagesPanelProps) => {
   const messageId = useMailboxMessageId() ?? null;
@@ -213,6 +216,7 @@ export const MailboxMessagesPanel = ({
             composeDemoMode={isDemoMode}
             composeManagedDemoMode={isManagedDemoMode}
             composePersistDrafts={persistComposeDrafts}
+            composeSenderMailbox={senderMailbox}
             composeSignature={signature}
             currentUserEmail={currentUserEmail}
             focusOnOpen={shouldFocusMessageView || focusOnOpen === true}

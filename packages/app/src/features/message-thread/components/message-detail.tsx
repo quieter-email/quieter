@@ -9,6 +9,7 @@ import type {
 } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
 import { MessageDetailLoadingSkeleton } from "@quieter/app/features/message-thread/components/message-detail-loading";
 import { MessageView } from "@quieter/app/features/message-thread/components/message-view";
+import type { MessageViewProps } from "@quieter/app/features/message-thread/components/message-view-types";
 import {
   appEaseOut,
   appMotionDuration,
@@ -23,6 +24,7 @@ type MessageDetailProps = {
   composeDemoMode?: boolean;
   composeManagedDemoMode?: boolean;
   composePersistDrafts?: boolean;
+  composeSenderMailbox?: MessageViewProps["composeSenderMailbox"];
   composeSignature?: { html: string | null; text: string | null };
   focusOnOpen?: boolean;
   currentUserEmail?: string | null;
@@ -42,6 +44,7 @@ export const MessageDetail = ({
   composeDemoMode,
   composeManagedDemoMode,
   composePersistDrafts,
+  composeSenderMailbox,
   composeSignature,
   focusOnOpen,
   currentUserEmail,
@@ -94,6 +97,7 @@ export const MessageDetail = ({
           composeDemoMode={composeDemoMode}
           composeManagedDemoMode={composeManagedDemoMode}
           composePersistDrafts={composePersistDrafts}
+          composeSenderMailbox={composeSenderMailbox}
           composeSignature={composeSignature}
           focusOnOpen={focusOnOpen}
           currentUserEmail={currentUserEmail}

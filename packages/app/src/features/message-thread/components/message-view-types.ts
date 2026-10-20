@@ -1,5 +1,6 @@
 "use client";
 
+import type { ComposeSenderMailbox } from "@quieter/app/features/compose/components/compose-workspace";
 import type {
   MailboxActions,
   MailboxPendingActions,
@@ -11,6 +12,7 @@ export type MessageViewProps = {
   composeDemoMode?: boolean;
   composeManagedDemoMode?: boolean;
   composePersistDrafts?: boolean;
+  composeSenderMailbox?: ComposeSenderMailbox;
   composeSignature?: { html: string | null; text: string | null };
   focusOnOpen?: boolean;
   currentUserEmail?: string | null;

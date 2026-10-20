@@ -7,6 +7,7 @@ import {
   applyMessageLabelChangesLocally,
   getMailCommandUpdater,
 } from "@quieter/app/lib/mail/inbox-query/data";
+import { formatMailSender } from "@quieter/mail/compose/sender";
 import type { MailCommand } from "@quieter/mail/data-plane";
 
 export type DemoMessageStore = {
@@ -186,6 +187,7 @@ export const createDemoActions = (
 export const createDemoComposeActions = (
   store: DemoMessageStore & {
     sender: string;
+    senderName?: string;
     prefix: string;
   }
 ) => ({
@@ -214,7 +216,10 @@ export const createDemoComposeActions = (
       bodyText: draft.bodyText,
       date: new Date(now).toISOString(),
       draftId,
-      from: store.sender,
+      from: formatMailSender({
+        address: store.sender,
+        name: draft.senderName?.trim() || store.senderName || "",
+      }),
       id: messageId,
       isUnread: false,
       labelIds: [MAILBOX_LABELS.drafts],
@@ -249,7 +254,10 @@ export const createDemoComposeActions = (
       bodyHtml: draft.bodyHtml,
       bodyText: draft.bodyText,
       date: new Date().toISOString(),
-      from: store.sender,
+      from: formatMailSender({
+        address: store.sender,
+        name: draft.senderName?.trim() || store.senderName || "",
+      }),
       id,
       isUnread: false,
       labelIds: [MAILBOX_LABELS.sent],

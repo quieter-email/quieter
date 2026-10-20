@@ -46,6 +46,10 @@ const auth = createRoute({
   validateSearch: zodValidator(z.object({ returnTo: z.string().optional() })),
 });
 const home = createRoute({ getParentRoute: () => root, path: "/home" });
+const designSystem = createRoute({
+  getParentRoute: () => app,
+  path: "/design-system",
+});
 const privacy = createRoute({ getParentRoute: () => root, path: "/privacy" });
 const terms = createRoute({ getParentRoute: () => root, path: "/terms" });
 const cookies = createRoute({ getParentRoute: () => root, path: "/cookies" });
@@ -53,7 +57,7 @@ const imprint = createRoute({ getParentRoute: () => root, path: "/imprint" });
 
 export const router = createRouter({
   routeTree: root.addChildren([
-    app.addChildren([inbox, settings, onboarding, auth]),
+    app.addChildren([inbox, settings, onboarding, auth, designSystem]),
     home,
     privacy,
     terms,
