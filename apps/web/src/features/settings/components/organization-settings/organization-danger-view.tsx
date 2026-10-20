@@ -63,6 +63,7 @@ export const OrganizationDangerView = ({
                 }
                 label="Leave"
                 reason={leaveOrganizationReason}
+                variant="destructive"
               />
             ) : (
               <LeaveOrganizationDialog

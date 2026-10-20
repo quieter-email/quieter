@@ -12,6 +12,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domMax, m } from "motion/react";
@@ -215,16 +216,19 @@ const MessageViewContent = (props: MessageViewContentProps) => {
       <header className="w-full border-b p-3 @sm:px-5 @sm:py-4">
         <div className="flex min-w-0 items-center gap-3">
           {onBackToList ? (
-            <Button
-              aria-label="Back to list"
-              className="shrink-0 lg:hidden"
-              onClick={onBackToList}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
-            </Button>
+            <div className="shrink-0 lg:hidden">
+              <IconButtonTooltip label="Back to list">
+                <Button
+                  aria-label="Back to list"
+                  onClick={onBackToList}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+                </Button>
+              </IconButtonTooltip>
+            </div>
           ) : null}
           <h1
             // oxlint-disable-next-line shadcn/no-arbitrary-values -- Optical tracking for the thread subject.
@@ -428,26 +432,28 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                       : `Reply to ${replyTargetLabel}`}
                   </Button>
                   {showReplyAll ? (
-                    <Button
-                      aria-label="Reply all"
-                      disabled={isBodyRefreshPending}
-                      onClick={() => {
-                        openInlineCompose(
-                          buildComposeDraftFromMessageAction({
-                            action: "reply-all",
-                            currentUserEmail,
-                            existingDraftMessage: hotkeyLinkedDraftMessage,
-                            message: hotkeyMessage,
-                          })
-                        );
-                      }}
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
-                      <span className="hidden @sm:inline">Reply all</span>
-                    </Button>
+                    <IconButtonTooltip label="Reply all">
+                      <Button
+                        aria-label="Reply all"
+                        disabled={isBodyRefreshPending}
+                        onClick={() => {
+                          openInlineCompose(
+                            buildComposeDraftFromMessageAction({
+                              action: "reply-all",
+                              currentUserEmail,
+                              existingDraftMessage: hotkeyLinkedDraftMessage,
+                              message: hotkeyMessage,
+                            })
+                          );
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
+                        <span className="hidden @sm:inline">Reply all</span>
+                      </Button>
+                    </IconButtonTooltip>
                   ) : null}
                   {!hotkeyLinkedDraftMessage &&
                   composeDemoMode !== true &&
@@ -479,26 +485,28 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                       </span>
                     </Button>
                   ) : null}
-                  <Button
-                    aria-label="Forward"
-                    disabled={isBodyRefreshPending}
-                    onClick={() => {
-                      openInlineCompose(
-                        buildComposeDraftFromMessageAction({
-                          action: "forward",
-                          currentUserEmail,
-                          existingDraftMessage: null,
-                          message: hotkeyMessage,
-                        })
-                      );
-                    }}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
-                    <span className="hidden @sm:inline">Forward</span>
-                  </Button>
+                  <IconButtonTooltip label="Forward">
+                    <Button
+                      aria-label="Forward"
+                      disabled={isBodyRefreshPending}
+                      onClick={() => {
+                        openInlineCompose(
+                          buildComposeDraftFromMessageAction({
+                            action: "forward",
+                            currentUserEmail,
+                            existingDraftMessage: null,
+                            message: hotkeyMessage,
+                          })
+                        );
+                      }}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
+                      <span className="hidden @sm:inline">Forward</span>
+                    </Button>
+                  </IconButtonTooltip>
                 </m.div>
               )}
             </AnimatePresence>

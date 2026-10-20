@@ -19,7 +19,6 @@ import {
   AlertDialogTitle,
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import {
   Dialog,
   DialogBody,
@@ -224,17 +223,10 @@ export const SnippetWorkspace = ({
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {filteredSnippets.map((snippet) => (
-            <button
+            <Button
               aria-label={`Edit snippet ${snippet.name}`}
-              aria-current={editingId === snippet.id ? "true" : undefined}
-              className={cn(
-                "group flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors",
-                {
-                  "bg-muted text-fg": editingId === snippet.id,
-                  "text-muted-fg hover:bg-muted/55 hover:text-fg":
-                    editingId !== snippet.id,
-                }
-              )}
+              aria-current={editingId === snippet.id ? "page" : undefined}
+              className="w-full justify-start text-left"
               key={snippet.id}
               onClick={() => {
                 setEditingId(snippet.id);
@@ -242,7 +234,9 @@ export const SnippetWorkspace = ({
                 setBodyText(snippet.bodyText);
                 setEditorOpen(true);
               }}
+              size="auto"
               type="button"
+              variant="ghost"
             >
               <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-4">
                 <span className="block shrink-0 truncate text-body-sm font-medium sm:w-44">
@@ -252,7 +246,7 @@ export const SnippetWorkspace = ({
                   {snippet.bodyText}
                 </span>
               </span>
-            </button>
+            </Button>
           ))}
           {snippetQueryState}
         </div>

@@ -644,8 +644,7 @@ export const UnifiedInboxPanel = ({
       <Popover>
         <PopoverTrigger
           aria-label="Choose inboxes"
-          // oxlint-disable-next-line shadcn/no-restyle -- Match the compact list toolbar.
-          className="rounded-md px-2 py-1 text-caption text-muted-fg hover:bg-muted/60 hover:text-fg"
+          render={<Button size="compact" variant="ghost" />}
         >
           Inboxes ({selectedMailboxes.length})
         </PopoverTrigger>

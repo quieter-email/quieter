@@ -1,5 +1,6 @@
 "use client";
 
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { TextFieldInput } from "@quieter/ui/text-field";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -96,17 +97,19 @@ export const OrganizationGeneralSettings = ({
           }
         />
         {canManage && (
-          <SettingsInsetRow className="justify-end">
-            <Button
-              type="submit"
-              size="sm"
-              disabled={
-                mutation.isPending ||
-                (name === organization.name && slug === organization.slug)
-              }
-            >
-              Save changes
-            </Button>
+          <SettingsInsetRow>
+            <ActionFooter>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={
+                  mutation.isPending ||
+                  (name === organization.name && slug === organization.slug)
+                }
+              >
+                Save changes
+              </Button>
+            </ActionFooter>
           </SettingsInsetRow>
         )}
       </SettingsCard>

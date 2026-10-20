@@ -15,6 +15,7 @@ import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-k
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
+import { Pill } from "@quieter/ui/pill";
 import {
   Select,
   SelectContent,
@@ -241,12 +242,9 @@ const FirstRunDomainStep = ({
     verifiedDomains.length > 0 ? (
       <div className="flex flex-wrap items-center gap-2">
         {verifiedDomains.map((verifiedDomain) => (
-          <span
-            className="rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-body text-success"
-            key={verifiedDomain.id}
-          >
+          <Pill key={verifiedDomain.id} tone="success">
             {verifiedDomain.domain}
-          </span>
+          </Pill>
         ))}
         <RegisterDomainDialog
           onCreated={onCreated}
@@ -436,26 +434,36 @@ const FirstRunApiKeyStep = ({
             />
             API key created. Store it before leaving this screen.
           </p>
-          <button
-            className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-left font-mono text-caption break-all text-fg hover:bg-muted/50"
+          <Button
+            className="w-full justify-start text-left"
             onClick={() => {
               if (createdApiKey !== null) {
                 void navigator.clipboard.writeText(createdApiKey);
                 toast.success("Copied API key to clipboard.");
               }
             }}
+            size="auto"
             type="button"
+            variant="outline"
           >
-            {createdApiKey}
-          </button>
-          <a
-            className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none squircle hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
-            href="/api/openapi"
-            rel="noreferrer"
-            target="_blank"
+            <code className="font-mono text-caption break-all">
+              {createdApiKey}
+            </code>
+          </Button>
+          <Button
+            nativeButton={false}
+            render={
+              <a
+                aria-label="Open API reference"
+                href="/api/openapi"
+                rel="noreferrer"
+                target="_blank"
+              />
+            }
+            variant="outline"
           >
             Open API reference
-          </a>
+          </Button>
         </div>
       );
     }
@@ -471,14 +479,20 @@ const FirstRunApiKeyStep = ({
             />
             This organization already has an API key.
           </p>
-          <a
-            className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none squircle hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
-            href="/api/openapi"
-            rel="noreferrer"
-            target="_blank"
+          <Button
+            nativeButton={false}
+            render={
+              <a
+                aria-label="Open API reference"
+                href="/api/openapi"
+                rel="noreferrer"
+                target="_blank"
+              />
+            }
+            variant="outline"
           >
             Open API reference
-          </a>
+          </Button>
         </div>
       );
     }
@@ -502,14 +516,20 @@ const FirstRunApiKeyStep = ({
           )}
           Create API key
         </Button>
-        <a
-          className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm text-muted-fg transition-transform duration-100 ease-out select-none squircle hover:bg-muted/60 hover:text-fg active:scale-[0.97] active:bg-muted/60 active:text-fg"
-          href="/api/openapi"
-          rel="noreferrer"
-          target="_blank"
+        <Button
+          nativeButton={false}
+          render={
+            <a
+              aria-label="Open API reference"
+              href="/api/openapi"
+              rel="noreferrer"
+              target="_blank"
+            />
+          }
+          variant="ghost"
         >
           Open API reference
-        </a>
+        </Button>
       </div>
     );
   };

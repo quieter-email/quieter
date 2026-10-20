@@ -1,25 +1,17 @@
 "use client";
 
 import { Pill } from "@quieter/ui/pill";
-import type { PillTone } from "@quieter/ui/pill";
 import { useQuery } from "@tanstack/react-query";
 
 import {
   ACCEPTED_DELIVERY_LABEL,
+  DELIVERY_PILL_TONES,
   getAggregateDeliveryStatus,
   getDeliveryStatusDescription,
   getDeliveryStatusLabel,
   getDeliveryStatusTone,
 } from "../domain/delivery-status";
-import type { DeliveryStatusTone } from "../domain/delivery-status";
 import { getMessageDeliveryOptions } from "../domain/message-delivery-query";
-
-const PILL_TONES: Record<DeliveryStatusTone, PillTone> = {
-  danger: "red",
-  neutral: "gray",
-  positive: "green",
-  warning: "orange",
-};
 
 export const MessageDeliveryStatus = ({
   mailboxId,
@@ -45,7 +37,7 @@ export const MessageDeliveryStatus = ({
       aria-label={`Delivery status: ${label}`}
       className="cursor-text"
       title={getDeliveryStatusDescription(status)}
-      tone={PILL_TONES[getDeliveryStatusTone(status)]}
+      tone={DELIVERY_PILL_TONES[getDeliveryStatusTone(status)]}
     >
       {label}
     </Pill>

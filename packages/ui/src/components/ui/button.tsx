@@ -24,6 +24,7 @@ export const buttonVariants = cva(
         true: "group relative w-full gap-3",
       },
       size: {
+        auto: "h-auto px-3 py-2 text-body-sm whitespace-normal [&_svg]:size-4",
         // Caption-height action, e.g. retry and approval buttons.
         compact: "h-7 px-2 text-caption font-medium [&_svg]:size-3.5",
         default: "h-8 px-3 text-body-sm [&_svg]:size-4",

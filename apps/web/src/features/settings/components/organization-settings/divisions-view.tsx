@@ -422,7 +422,7 @@ const DeleteDivisionDialog = ({
           setOpen(true);
         }}
         size="sm"
-        variant="outline"
+        variant="destructive"
       >
         <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
         Delete

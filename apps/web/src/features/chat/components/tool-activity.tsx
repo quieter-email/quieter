@@ -191,7 +191,6 @@ export const ToolActivity = ({
               }}
               size="compact"
               type="button"
-              variant="ghost"
             >
               Send
             </Button>
@@ -202,7 +201,7 @@ export const ToolActivity = ({
               }}
               size="compact"
               type="button"
-              variant="ghost"
+              variant="secondary"
             >
               Cancel
             </Button>

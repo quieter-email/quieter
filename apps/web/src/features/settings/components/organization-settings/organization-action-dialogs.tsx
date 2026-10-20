@@ -102,7 +102,7 @@ export const LeaveOrganizationDialog = ({
           setOpen(true);
         }}
         size="sm"
-        variant="outline"
+        variant="destructive"
       >
         <HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />
         Leave

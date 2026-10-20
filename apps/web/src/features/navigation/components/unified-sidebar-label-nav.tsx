@@ -137,9 +137,8 @@ export const UnifiedSidebarLabelNav = ({
           <DropdownMenu>
             <IconButtonTooltip label="Labels options">
               <DropdownMenuTrigger
-                appearance="icon-transparent"
                 aria-label="Labels options"
-                className="size-6"
+                render={<Button size="icon-xs" variant="ghost" />}
               >
                 <HugeiconsIcon
                   aria-hidden

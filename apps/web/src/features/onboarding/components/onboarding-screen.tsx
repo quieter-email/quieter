@@ -18,6 +18,7 @@ import { cn } from "@quieter/ui/cn";
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { Input } from "@quieter/ui/input";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
+import { Pill } from "@quieter/ui/pill";
 import { FlowProgress } from "@quieter/ui/progress";
 import {
   Select,
@@ -129,9 +130,9 @@ const PlaybookCard = ({
       />
       <h3 className="text-body font-medium tracking-tight text-fg">{title}</h3>
       {requirement === undefined ? null : (
-        <span className="rounded-full border border-border px-2 py-0.5 text-micro text-muted-fg">
+        <Pill size="xs" tone="neutral">
           {requirement}
-        </span>
+        </Pill>
       )}
     </div>
     <div className="mt-3">{children}</div>
@@ -324,12 +325,9 @@ const SendingPlaybook = ({
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
             {verifiedSending.map((domain) => (
-              <span
-                className="rounded-md border border-success/30 bg-success/10 px-2 py-0.5 text-caption text-success"
-                key={domain.id}
-              >
+              <Pill key={domain.id} size="xs" tone="success">
                 {domain.domain}
-              </span>
+              </Pill>
             ))}
           </div>
           <p className="text-body-sm text-muted-fg">

@@ -123,7 +123,7 @@ const renderPasskeyList = (
             onRemovePasskey(passkey.id);
           }}
           size="sm"
-          variant="outline"
+          variant="destructive"
         >
           {removingPasskeyId === passkey.id ? (
             <SpinnerIcon />

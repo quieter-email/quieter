@@ -59,18 +59,16 @@ const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
         {links.map((link) => (
           <Button
             key={link.href}
-            onClick={() => {
-              const openedWindow = window.open(
-                link.href,
-                "_blank",
-                "noopener,noreferrer"
-              );
-              if (openedWindow) {
-                openedWindow.opener = null;
-              }
-            }}
+            nativeButton={false}
+            render={
+              <a
+                aria-label={link.label}
+                href={link.href}
+                rel="noopener noreferrer"
+                target="_blank"
+              />
+            }
             size="sm"
-            type="button"
             variant="outline"
           >
             {link.label}

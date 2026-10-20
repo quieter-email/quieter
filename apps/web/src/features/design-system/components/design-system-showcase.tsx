@@ -61,6 +61,7 @@ import {
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Textarea } from "@quieter/ui/textarea";
 import { ThemePicker } from "@quieter/ui/theme-picker";
+import { toast } from "@quieter/ui/toast";
 import { TokenField } from "@quieter/ui/token-field";
 import type { TokenFieldToken } from "@quieter/ui/token-field";
 import { useState } from "react";
@@ -68,6 +69,7 @@ import type { ReactNode } from "react";
 
 import { EmptyMessageState } from "#/components/empty-message-state";
 import { MobileHeader } from "#/components/mobile-header";
+import { toastError } from "#/lib/error-toast";
 
 // Sample data only. Real mentions come from the user's connected apps.
 const showcaseTokens: TokenFieldToken[] = [
@@ -159,6 +161,20 @@ const Row = ({ children, label }: { children: ReactNode; label: string }) => (
     <div className="flex min-w-0 flex-wrap items-center gap-3">{children}</div>
   </div>
 );
+
+const copySampleKey = async () => {
+  try {
+    await navigator.clipboard.writeText(
+      "example_key_for_documentation_only_not_a_real_credential"
+    );
+    toast.success("Copied sample key.");
+  } catch (error) {
+    toastError(error, {
+      boundary: "clipboard",
+      fallback: "Could not copy sample key.",
+    });
+  }
+};
 
 export const DesignSystemShowcase = () => {
   const { colorMode, setColorMode } = useColorMode();
@@ -271,7 +287,7 @@ export const DesignSystemShowcase = () => {
           </Row>
           <Row label="Icon, with tooltip">
             <IconButtonTooltip label="Delete">
-              <Button aria-label="Delete" size="icon-sm" variant="ghost">
+              <Button aria-label="Delete" size="icon-sm" variant="destructive">
                 <HugeiconsIcon aria-hidden icon={Delete02Icon} />
               </Button>
             </IconButtonTooltip>
@@ -280,6 +296,20 @@ export const DesignSystemShowcase = () => {
                 <HugeiconsIcon aria-hidden icon={Mail01Icon} />
               </Button>
             </IconButtonTooltip>
+          </Row>
+          <Row label="Multiline copy action">
+            <Button
+              className="w-64 max-w-full justify-start text-left"
+              onClick={() => {
+                void copySampleKey();
+              }}
+              size="auto"
+              variant="outline"
+            >
+              <code className="font-mono text-caption break-all">
+                example_key_for_documentation_only_not_a_real_credential
+              </code>
+            </Button>
           </Row>
           <Row label="Disabled">
             <Button disabled type="button">

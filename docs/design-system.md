@@ -47,6 +47,8 @@ Use props to select component appearance. Existing examples include `Button size
 
 For an unstyled HTML host with a specialized role, use an existing exported recipe when available. Dialog close elements use shared button variants while retaining the Close primitive. A custom editor's native control can remain native when replacing it changes the editing behavior.
 
+Use `Button size="auto"` for multiline actions such as copying a revealed key or choosing a content-sized row. Put code typography on its `code` child and placement on the button. Do not rebuild a native button or override a fixed-height size to make it wrap.
+
 When a design differs:
 
 1. Try the standard component and established composition.
@@ -116,7 +118,7 @@ Keep the landing page unchanged during this maintenance work. Its atmospheric vi
 
 ## Audit on October 20, 2026
 
-The audit inspected all 188 app TSX files and the shared component and token sources. At the starting revision, 130 app files imported `@quieter/ui`; app JSX included 26 native buttons and six native inputs. There were no native selects or textareas, no direct Base UI/Vaul imports, and no raw palette or arbitrary literal color utilities in app TSX. These are inventory findings, not ongoing quotas.
+The initial inventory covered 188 app TSX files and the shared component and token sources. At the starting revision, 130 app files imported `@quieter/ui`; app JSX included 26 native buttons and six native inputs. There were no native selects or textareas, no direct Base UI/Vaul imports, and no raw palette or arbitrary literal color utilities in app TSX. These are inventory findings, not ongoing quotas.
 
 The changes consolidate three overlay close-button recipes and repeated overlay chrome, move settings appearance into the shared package, replace three copied compound-address shells, simplify duplicate Pill tones, and replace ordinary custom setup/password controls with shared components. Named brand palette CSS now comes from the same definitions as the artwork. Unused shadow and motion tokens were removed, and the missing heading-font token was supplied. The live reference includes the resulting compositions and correct surface labels.
 
@@ -132,3 +134,11 @@ The audit also identified deliberate or unresolved specialized styling:
 | Charts, color pickers, graphics, email HTML | Data-driven values and external content are valid exceptions. |
 
 These are documented review areas, not blanket permission for new overrides. Follow the decision process above for future changes.
+
+### Full-source follow-up
+
+The follow-up read all 515 source and supporting files in its inventory, including client hooks/utilities, routes, CSS, shaders, shared components, brand generators, and email/SDK adapters. Six frontend metadata/configuration files were also reviewed. The [per-file coverage ledger](frontend-audit-2026-10-20.csv) records each decision, with no missing or duplicate source entries. Another 35 SVG assets were parsed structurally and recorded separately; raster artwork contains no frontend source code.
+
+This pass changed 38 source files. It removed redundant menu component layers, reused the trigger interaction and delivery-tone recipes, replaced copied list-header/attachment/setup controls with shared controls, and introduced automatic button height for repeated multiline actions. It also aligned status badges, destructive actions, icon tooltips and four settings finishing rows with existing shared APIs. Existing density, selected-card highlighting, editor behavior, data/cache logic and all landing sources remain intact. No lint restrictions or visual snapshot tests were added.
+
+Checks passed for the changed source files. One existing composer warning remains for the effect that detects the keyboard modifier label. Chrome verification covered light/dark controls, multiline sample-key copying, narrow search dismissal, settings footers and onboarding playbooks. Screenshots use preview personas and sample data; provider-dependent send, domain-registration and key-creation actions were not executed for this styling pass.

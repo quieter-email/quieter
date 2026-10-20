@@ -148,9 +148,9 @@ type DropdownMenuItemProps = Omit<
   tone?: "default" | "destructive";
 };
 
-const DropdownMenuItemContent = ({
+export const DropdownMenuItem = ({
   className,
-  closeOnSelect,
+  closeOnSelect = true,
   onSelect,
   tone = "default",
   ...props
@@ -171,20 +171,6 @@ const DropdownMenuItemContent = ({
     />
   );
 };
-
-export const DropdownMenuItem = ({
-  className,
-  closeOnSelect = true,
-  onSelect,
-  ...props
-}: DropdownMenuItemProps) => (
-  <DropdownMenuItemContent
-    className={className}
-    closeOnSelect={closeOnSelect}
-    onSelect={onSelect}
-    {...props}
-  />
-);
 
 type DropdownMenuCheckboxItemProps = Omit<
   ComponentPropsWithoutRef<typeof MenuPrimitive.CheckboxItem>,
@@ -233,7 +219,7 @@ export const DropdownMenuCheckboxItem = ({
   );
 };
 
-const DropdownMenuSubmenuTriggerContent = ({
+export const DropdownMenuSubmenuTrigger = ({
   children,
   className,
   ...props
@@ -255,16 +241,6 @@ const DropdownMenuSubmenuTriggerContent = ({
     </MenuPrimitive.SubmenuTrigger>
   );
 };
-
-export const DropdownMenuSubmenuTrigger = ({
-  children,
-  className,
-  ...props
-}: ComponentPropsWithoutRef<typeof MenuPrimitive.SubmenuTrigger>) => (
-  <DropdownMenuSubmenuTriggerContent className={className} {...props}>
-    {children}
-  </DropdownMenuSubmenuTriggerContent>
-);
 
 export const DropdownMenuSeparator = ({
   className,

@@ -28,12 +28,12 @@ const MailboxOrganizerSidebar = (props: MailboxOrganizerContentProps) => {
       <IconButtonTooltip label="Manage rules">
         <Button
           aria-label="Manage rules"
-          className="mt-4 size-6"
+          className="mt-4"
           onClick={() => {
             setRuleQueryDraft(searchQuery);
             setIsOpen(true);
           }}
-          size="icon-sm"
+          size="icon-xs"
           type="button"
           variant="ghost"
         >
