@@ -82,7 +82,10 @@ export const DialogFooter = ({
   ...props
 }: ComponentPropsWithoutRef<"div">) => (
   <div
-    className={cn("flex items-center justify-end gap-2 px-5 py-4", className)}
+    className={cn(
+      "grid auto-cols-fr grid-flow-col items-center gap-2 px-5 py-4",
+      className
+    )}
     {...props}
   />
 );
