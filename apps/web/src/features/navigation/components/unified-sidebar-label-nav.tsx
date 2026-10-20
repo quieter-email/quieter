@@ -5,6 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { ColorSwatch } from "@quieter/ui/color-swatch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +18,6 @@ import type { ComponentProps } from "react";
 import { Fragment, useEffect, useState } from "react";
 
 import { useUnifiedInboxPreferences } from "#/features/mailbox/domain/unified-inbox";
-import { mailboxLabelDotClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
 import {
   SIDEBAR_LABEL_VISIBILITY_EVENT,
   SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY,
@@ -221,12 +221,12 @@ export const UnifiedSidebarLabelNav = ({
               type="button"
               variant="ghost"
             >
-              <span
-                aria-hidden
-                className={cn(
-                  "inline-flex size-3 shrink-0 rounded-full",
-                  mailboxLabelDotClassNameByColor[label.color ?? "gray"]
-                )}
+              <ColorSwatch
+                color={
+                  label.color?.startsWith("#") === true
+                    ? label.color
+                    : `var(--q-${label.color ?? "gray"})`
+                }
               />
               <span className="min-w-0 truncate">{label.name}</span>
             </SidebarNavItem>

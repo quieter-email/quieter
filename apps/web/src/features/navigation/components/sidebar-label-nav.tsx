@@ -5,12 +5,12 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { ColorSwatch } from "@quieter/ui/color-swatch";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useEffect, useReducer } from "react";
 
-import { mailboxLabelDotClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
 import {
   SIDEBAR_LABEL_VISIBILITY_EVENT,
   computeEffectiveHiddenLabelIds,
@@ -46,13 +46,11 @@ const ManagedLabelColorDot = ({
   className?: string;
   color: MailboxLabel["color"] | null | undefined;
 }) => (
-  <span
-    aria-hidden
-    className={cn(
-      "inline-flex size-3 shrink-0 rounded-full",
-      mailboxLabelDotClassNameByColor[color ?? "gray"],
-      className
-    )}
+  <ColorSwatch
+    className={className}
+    color={
+      color?.startsWith("#") === true ? color : `var(--q-${color ?? "gray"})`
+    }
   />
 );
 

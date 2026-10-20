@@ -24,18 +24,21 @@
     "./thread-list": "./src/thread-list.ts",
     "./updates": "./src/updates.ts",
     "./visual-email": "./src/visual-email.ts",
-    "./auto-label": "./src/auto-label.ts"
+    "./auto-label": "./src/auto-label.ts",
+    "./auto-label-matching": "./src/auto-label-matching.ts"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
     "fast-xml-parser": "catalog:",
     "fast-xml-validator": "1.4.2",
+    "html-to-text": "10.0.1",
     "nodemailer": "^10.1.0",
     "postal-mime": "^4.0.5",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@quieter/config": "workspace:*",
+    "@types/html-to-text": "9.0.4",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

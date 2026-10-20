@@ -23,7 +23,7 @@ import {
   AlertDialogTitle,
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
+import { ColorSwatch } from "@quieter/ui/color-swatch";
 import {
   Dialog,
   DialogBody,
@@ -50,7 +50,6 @@ import { useEffect, useId, useReducer, useState } from "react";
 import { AutoLabelEditor } from "#/features/message-labels/components/auto-label-editor";
 import { AutoLabelSwitch } from "#/features/message-labels/components/auto-label-switch";
 import { MailboxColorPicker } from "#/features/message-labels/components/mailbox-color-picker";
-import { mailboxLabelDotClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
 import {
   MAX_VISIBLE_SIDEBAR_LABELS,
   SIDEBAR_LABEL_VISIBILITY_EVENT,
@@ -471,12 +470,12 @@ export const LabelsWorkspacePanel = ({
 
           return (
             <li className="flex items-center gap-3 px-3 py-2.5" key={label.id}>
-              <span
-                aria-hidden
-                className={cn(
-                  "size-3 shrink-0 rounded-full",
-                  mailboxLabelDotClassNameByColor[label.color ?? "gray"]
-                )}
+              <ColorSwatch
+                color={
+                  label.color?.startsWith("#") === true
+                    ? label.color
+                    : `var(--q-${label.color ?? "gray"})`
+                }
               />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-body text-fg">{label.name}</p>

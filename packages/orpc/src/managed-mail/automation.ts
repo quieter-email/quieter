@@ -17,7 +17,7 @@ import {
   managedMailMessage,
   organization,
 } from "@quieter/database/schema";
-import { partitionAutoLabelCandidates } from "@quieter/mail/auto-label";
+import { partitionAutoLabelCandidates } from "@quieter/mail/auto-label-matching";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import { and, eq, isNull, lte, or } from "drizzle-orm";

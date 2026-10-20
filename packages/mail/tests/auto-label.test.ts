@@ -1,10 +1,8 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import {
-  autoLabelSettingsSchema,
-  partitionAutoLabelCandidates,
-} from "../src/auto-label";
+import { autoLabelSettingsSchema } from "../src/auto-label";
 import type { AutoLabelSettings } from "../src/auto-label";
+import { partitionAutoLabelCandidates } from "../src/auto-label-matching";
 
 const settings: AutoLabelSettings = {
   domains: [],
@@ -151,6 +149,79 @@ describe("auto-label matching", () => {
         from: "other@example.com",
       }).aiLabels.map(({ id }) => id)
     ).toStrictEqual(["prompt", "legacy", "fallback"]);
+  });
+
+  test("matches visible HTML phrases across inline tags and decoded entities", () => {
+    const labels = [
+      {
+        autoLabel: {
+          ...settings,
+          keywordScope: "body" as const,
+          keywords: ["paid invoice & receipt"],
+        },
+        id: "finance",
+      },
+    ];
+    for (const bodyHtml of [
+      "<p>Paid <strong>invoice</strong> &amp; receipt attached.</p>",
+      "<p>Pa<span>id</span>&nbsp;invoice &#38; receipt attached.</p>",
+      "<div>Paid invoice</div><div>&#x26; receipt attached.</div>",
+    ]) {
+      expect(
+        partitionAutoLabelCandidates(labels, { bodyHtml }).deterministicLabelIds
+      ).toContain("finance");
+    }
+  });
+
+  test("does not match HTML attributes, links, comments, CSS or hidden content", () => {
+    const labels = [
+      {
+        autoLabel: { ...settings, keywords: ["invoice"] },
+        id: "finance",
+      },
+    ];
+    const bodyHtml = `
+      <html><head><style>.invoice { color: red; }</style></head><body>
+        <p class="invoice" title="invoice" data-type="invoice">Hello</p>
+        <a href="https://example.com/invoice">Open message</a>
+        <img src="invoice.png" alt="invoice">
+        <!-- invoice -->
+        <script>const invoice = true;</script>
+        <span hidden>invoice</span>
+        <span aria-hidden="true">invoice</span>
+        <span style="display:none">invoice</span>
+        <span style="display: none">invoice</span>
+      </body></html>`;
+    expect(
+      partitionAutoLabelCandidates(labels, { bodyHtml }).deterministicLabelIds
+    ).toHaveLength(0);
+  });
+
+  test("falls back to HTML for an empty plain-text body and otherwise prefers plain text", () => {
+    const labels = [
+      {
+        autoLabel: {
+          ...settings,
+          keywordScope: "body" as const,
+          keywords: ["invoice"],
+        },
+        id: "finance",
+      },
+    ];
+    for (const bodyText of [null, "", " \n "]) {
+      expect(
+        partitionAutoLabelCandidates(labels, {
+          bodyHtml: "<p>Invoice attached</p>",
+          bodyText,
+        }).deterministicLabelIds
+      ).toContain("finance");
+    }
+    expect(
+      partitionAutoLabelCandidates(labels, {
+        bodyHtml: "<p>Invoice attached</p>",
+        bodyText: "Project update",
+      }).deterministicLabelIds
+    ).toHaveLength(0);
   });
 
   test("rejects ambiguous patterns and normalizes valid addresses", () => {

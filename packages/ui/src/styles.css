@@ -564,6 +564,32 @@
   animation: toast-shake-even 0.35s ease;
 }
 
+.q-color-picker.react-colorful {
+  width: 100%;
+  height: 10rem;
+  gap: 0.75rem;
+}
+
+.q-custom-color-surface {
+  background-color: color-mix(in srgb, var(--selected-color) 15%, transparent);
+}
+
+.q-color-picker .react-colorful__saturation {
+  border-radius: var(--radius-md);
+  border-bottom: 0;
+}
+
+.q-color-picker .react-colorful__hue {
+  height: 0.5rem;
+  border-radius: 9999px;
+}
+
+.q-color-picker .react-colorful__pointer {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-width: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .toast-shake-odd,
   .toast-shake-even {
