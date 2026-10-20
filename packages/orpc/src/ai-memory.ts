@@ -1375,7 +1375,7 @@ const updateExistingAiMemoryFromChatMessage = async (input: {
     mailboxId: input.mailboxId,
     userId: input.userId,
   });
-  let refreshed = false;
+  const operations: AiMemoryUpdatePlan["operations"] = [];
   for (let offset = 0; offset < current.length; offset += 100) {
     if (
       !(await canRunMemoryModel({
@@ -1383,7 +1383,10 @@ const updateExistingAiMemoryFromChatMessage = async (input: {
         userId: input.userId,
       }))
     ) {
-      break;
+      throw new ORPCError("FORBIDDEN", {
+        message:
+          "Nothing changed because the full memory update requires available usage balance.",
+      });
     }
     const batch = current.slice(offset, offset + 100);
     const usage = createUsageCollector();
@@ -1398,31 +1401,7 @@ const updateExistingAiMemoryFromChatMessage = async (input: {
         source: "explicit",
         userMessage: input.text.slice(0, AI_MEMORY_USER_MESSAGE_MAX_LENGTH),
       });
-      if (plan.operations.length === 0) {
-        continue;
-      }
-      if (scope.scope === "mailbox") {
-        const access = await assertAccessibleMailbox({
-          mailboxId: input.mailboxId,
-          userId: input.userId,
-        });
-        if (!access.capabilities.canManageKnowledge) {
-          break;
-        }
-      }
-      await applyAiMemoryPlan({
-        actorUserId: input.userId,
-        changeSetSource: "chat",
-        existingEditsOnly: true,
-        expectedVersions: new Map(
-          batch.map(({ id, version }) => [id, version])
-        ),
-        plan,
-        request: null,
-        scope,
-        source: "explicit",
-      });
-      refreshed = true;
+      operations.push(...plan.operations);
     } finally {
       await reportMemoryUsage({
         externalId: `ai-memory-chat-edit:${scope.scope}:${input.messageId}:${offset}`,
@@ -1432,7 +1411,33 @@ const updateExistingAiMemoryFromChatMessage = async (input: {
       });
     }
   }
-  return { status: refreshed ? ("refreshed" as const) : ("skipped" as const) };
+  if (operations.length === 0) {
+    return { status: "skipped" as const };
+  }
+  if (scope.scope === "mailbox") {
+    const access = await assertAccessibleMailbox({
+      mailboxId: input.mailboxId,
+      userId: input.userId,
+    });
+    if (!access.capabilities.canManageKnowledge) {
+      return { status: "skipped" as const };
+    }
+  }
+  await applyAiMemoryPlan({
+    actorUserId: input.userId,
+    changeSetSource: "chat",
+    existingEditsOnly: true,
+    expectedVersions: new Map(current.map(({ id, version }) => [id, version])),
+    plan: {
+      answer: "Updated the requested knowledge.",
+      operations,
+      summary: "Updated existing knowledge from an explicit chat request.",
+    },
+    request: null,
+    scope,
+    source: "explicit",
+  });
+  return { status: "refreshed" as const };
 };
 
 const learnPersonalAiMemoryFromChatMessage = async (input: {

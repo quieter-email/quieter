@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { containsProhibitedMemorySecret } from "@quieter/ai/ai-memory";
 import {
   createGmailChatTools,
   createGoogleCalendarChatTool,
@@ -994,6 +995,9 @@ export const createAiChatResponse = async (input: {
   let titlePrompt = "";
 
   if (validated.kind === "message") {
+    const requiresMemoryErasure = containsProhibitedMemorySecret(
+      validated.userMessage.text
+    );
     assistantMessageId = validated.foreground.exchangeId;
     const reservationParts: ChatMessagePart[] = [
       { foreground: validated.foreground, type: "data-foreground" },
@@ -1004,6 +1008,31 @@ export const createAiChatResponse = async (input: {
       { text: validated.userMessage.text, type: "text" },
       { foreground: validated.foreground, type: "data-foreground" },
     ];
+    const eraseSensitiveMemory = async () => {
+      if (!requiresMemoryErasure) {
+        return;
+      }
+      try {
+        await learnAiMemoryFromChatMessage({
+          bodyText: validated.userMessage.text,
+          mailboxId,
+          messageId: validated.userMessage.id,
+          userId: input.userId,
+        });
+      } catch (error) {
+        if (error instanceof ORPCError && error.status < 500) {
+          throw new ChatRequestError(error.status, error.message, {
+            cause: error,
+          });
+        }
+        reportError(error, { operation: "chat:forget-context" });
+        throw new ChatRequestError(
+          500,
+          "Could not finish forgetting that information. Please try again.",
+          { cause: error }
+        );
+      }
+    };
     // Only marker-stamped reservations are ever dropped, so an explicit
     // retry reuses the stored user message without ever deleting an active
     // reservation (including a concurrent attempt's newer one).
@@ -1037,6 +1066,7 @@ export const createAiChatResponse = async (input: {
       // The previous attempt was aborted before its answer was persisted;
       // reuse the stored user message instead of duplicating it.
       transcript = toCanonicalTranscript(rows);
+      await eraseSensitiveMemory();
       const [reserved] = await db
         .insert(chatMessage)
         .values({
@@ -1074,6 +1104,7 @@ export const createAiChatResponse = async (input: {
           "This chat message has already been submitted."
         );
       }
+      await eraseSensitiveMemory();
       const now = new Date();
       shouldGenerateTitle = !rows.some((row) => row.role === "user");
       titlePrompt = validated.userMessage.text;
@@ -1158,16 +1189,18 @@ export const createAiChatResponse = async (input: {
         }
         throw error;
       }
-      try {
-        await learnAiMemoryFromChatMessage({
-          bodyText: validated.userMessage.text,
-          mailboxId,
-          messageId: validated.userMessage.id,
-          scheduleBackgroundTask: input.scheduleBackgroundTask,
-          userId: input.userId,
-        });
-      } catch (error) {
-        reportError(error, { operation: "chat:learn-personal-context" });
+      if (!requiresMemoryErasure) {
+        try {
+          await learnAiMemoryFromChatMessage({
+            bodyText: validated.userMessage.text,
+            mailboxId,
+            messageId: validated.userMessage.id,
+            scheduleBackgroundTask: input.scheduleBackgroundTask,
+            userId: input.userId,
+          });
+        } catch (error) {
+          reportError(error, { operation: "chat:learn-personal-context" });
+        }
       }
       transcript = [
         ...toCanonicalTranscript(rows),
@@ -1247,8 +1280,9 @@ export const createAiChatResponse = async (input: {
       id: lastRow.id,
       // Parts round-trip as opaque JSON; the resolutions above re-validate
       // everything the model consumes.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      /* oxlint-disable typescript/no-unsafe-type-assertion */
       parts: lastRow.parts as UIMessagePart[],
+      /* oxlint-enable typescript/no-unsafe-type-assertion */
       role: "assistant",
     };
     transcript = [

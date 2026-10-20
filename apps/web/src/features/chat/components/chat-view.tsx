@@ -97,6 +97,15 @@ const ChatSession = ({
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
+        fetch: async (url, init) => {
+          const response = await fetch(url, init);
+          if (!response.ok) {
+            throw Object.assign(new Error(await response.text()), {
+              status: response.status,
+            });
+          }
+          return response;
+        },
         prepareSendMessagesRequest: ({ messages, trigger }) => {
           const foreground = foregroundRef.current;
           if (!foreground) {
@@ -121,8 +130,9 @@ const ChatSession = ({
     messages: cancelForegroundMessages(
       toCanonicalTranscript(chatData?.messages ?? [])
     ),
-    onError: () => {
+    onError: (error) => {
       workspace.control.finish();
+      toastError(error, { boundary: "assistant-chat" });
     },
     onFinish: ({ messages, isAbort, isError }) => {
       for (const message of messages) {

@@ -98,7 +98,7 @@ export const PersonalizationMemories = () => {
           ) : null}
         </DialogBody>
         <DialogFooter>
-          <DialogCloseButton>Close</DialogCloseButton>
+          <DialogCloseButton className="w-full">Close</DialogCloseButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>
