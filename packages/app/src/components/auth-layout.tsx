@@ -1,0 +1,47 @@
+"use client";
+
+import { Brand } from "@quieter/ui/brand";
+import { Link } from "@tanstack/react-router";
+import type { ReactNode } from "react";
+
+import { AtmosphericBackground } from "./atmospheric-background";
+
+export const AuthLayout = ({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) => (
+  <main className="dark relative isolate min-h-dvh w-full overflow-hidden bg-bg">
+    <AtmosphericBackground variant="closing" />
+    <div
+      aria-hidden
+      className="auth-background-shade pointer-events-none absolute inset-0"
+    />
+    <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center px-6 py-16">
+      <div className="w-full max-w-[22rem]">
+        <Brand
+          // oxlint-disable-next-line shadcn/no-restyle -- Auth keeps the shared brand size centered above the form.
+          className="mx-auto mb-8 h-6 w-24 text-fg"
+          variant="combination"
+        />
+        <h1 className="text-center text-title-md font-medium tracking-tight text-fg">
+          {title}
+        </h1>
+        {children}
+        <nav
+          aria-label="Legal"
+          className="mt-10 flex justify-center gap-5 text-caption text-muted-fg"
+        >
+          <Link className="underline-offset-4 hover:underline" to="/terms">
+            Terms
+          </Link>
+          <Link className="underline-offset-4 hover:underline" to="/privacy">
+            Privacy
+          </Link>
+        </nav>
+      </div>
+    </div>
+  </main>
+);

@@ -1,0 +1,1130 @@
+"use client";
+
+import { LoadingPage } from "@quieter/app/components/loading-page";
+import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
+import { parseMailtoComposeDraft } from "@quieter/app/features/compose/domain/mailto";
+import { shouldIgnoreAppShortcut } from "@quieter/app/features/hotkeys/domain/hotkey-guards";
+import { MailboxWorkspaceContent } from "@quieter/app/features/mailbox/components/mailbox-workspace/mailbox-workspace-content";
+import { useMailboxRouteSearch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
+import { useMailboxSelection } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-selection";
+import { useWorkspaceUiState } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-workspace-ui-state";
+import {
+  loadComposeWorkspace,
+  loadSnippetWorkspace,
+} from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
+import type { MailboxWorkspaceView } from "@quieter/app/features/mailbox/domain/mailbox-workspace-view";
+import { useDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
+import { useManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
+import { authClient } from "@quieter/app/lib/auth";
+import {
+  chatsQueryOptions,
+  getChatQueryKey,
+  getChatsQueryKey,
+} from "@quieter/app/lib/chat-query";
+import { toastError } from "@quieter/app/lib/error-toast";
+import { openGoogleAccountLink } from "@quieter/app/lib/google-account-link";
+import type { MailboxCategory } from "@quieter/app/lib/mail";
+import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
+import { orpc } from "@quieter/app/lib/orpc";
+import { getErrorMessage } from "@quieter/app/lib/orpc-errors";
+import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
+import type { RouterOutputs } from "@quieter/orpc";
+import { Button, LinkButton } from "@quieter/ui/button";
+import { Text } from "@quieter/ui/text";
+import { useHotkey, useHotkeySequence } from "@tanstack/react-hotkeys";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "@tanstack/react-router";
+import type { ComponentProps } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+
+type MailboxWorkspaceProps = {
+  user: {
+    id?: string | null;
+    email?: string | null;
+    name?: string | null;
+  };
+};
+
+const isMailboxSupportedByProvider = (
+  provider: "api" | "gmail" | "managed" | null,
+  mailbox: MailboxCategory
+) => {
+  if (provider === "api") {
+    return mailbox === "sent";
+  }
+  return true;
+};
+
+const useChatActions = ({
+  activeChatId,
+  chats,
+  selectedMailboxId,
+  setMailboxSearch,
+}: {
+  activeChatId: string | undefined;
+  chats: RouterOutputs["chat"]["list"];
+  selectedMailboxId: string | null;
+  setMailboxSearch: ReturnType<
+    typeof useMailboxRouteSearch
+  >["setMailboxSearch"];
+}) => {
+  const queryClient = useQueryClient();
+  const renameChatMutation = useMutation({
+    ...orpc.chat.rename.mutationOptions(),
+    onSuccess: async (_updatedChat, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: getChatsQueryKey(variables.mailboxId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: getChatQueryKey(variables.mailboxId, variables.chatId),
+        }),
+      ]);
+    },
+  });
+  const deleteChatMutation = useMutation({
+    ...orpc.chat.delete.mutationOptions(),
+    onSuccess: async (_result, variables) => {
+      queryClient.removeQueries({
+        queryKey: getChatQueryKey(variables.mailboxId, variables.chatId),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: getChatsQueryKey(variables.mailboxId),
+      });
+    },
+  });
+
+  const deleteChat = async (deletedChatId: string) => {
+    if (selectedMailboxId === null || selectedMailboxId === "") {
+      return;
+    }
+
+    const nextChatId =
+      deletedChatId === activeChatId
+        ? (chats.find((existingChat) => existingChat.id !== deletedChatId)
+            ?.id ?? null)
+        : null;
+
+    await deleteChatMutation.mutateAsync({
+      chatId: deletedChatId,
+      mailboxId: selectedMailboxId,
+    });
+
+    if (deletedChatId === activeChatId) {
+      void setMailboxSearch({
+        chatId: nextChatId,
+      });
+    }
+  };
+
+  return {
+    deleteChat,
+    renameChat: async (chatId: string, title: string) => {
+      if (selectedMailboxId === null || selectedMailboxId === "") {
+        return;
+      }
+      await renameChatMutation.mutateAsync({
+        chatId,
+        mailboxId: selectedMailboxId,
+        title,
+      });
+    },
+  };
+};
+
+type SetMailboxSearch = ReturnType<
+  typeof useMailboxRouteSearch
+>["setMailboxSearch"];
+type MailboxProvider = "api" | "gmail" | "managed" | null;
+
+const useMailboxWorkspaceCompose = ({
+  activeMailbox,
+  canComposeNew,
+  newComposeMailboxId,
+  selectedMailboxId,
+  isComposeMailbox,
+  isSnippetMailbox,
+  view,
+  setMailboxSearch,
+}: {
+  activeMailbox: MailboxCategory;
+  canComposeNew: boolean;
+  newComposeMailboxId: string | null;
+  selectedMailboxId: string | null;
+  isComposeMailbox: boolean;
+  isSnippetMailbox: boolean;
+  view: MailboxWorkspaceView;
+  setMailboxSearch: SetMailboxSearch;
+}) => {
+  const [composeSession, setComposeSession] = useState<{
+    key: number;
+    draft: ComposeDraftState | null;
+    mailboxId: string | null;
+  }>({
+    draft: null,
+    key: 0,
+    mailboxId: selectedMailboxId,
+  });
+  const [switchingSenderTo, setSwitchingSenderTo] = useState<string | null>(
+    null
+  );
+  if (switchingSenderTo !== null && selectedMailboxId === switchingSenderTo) {
+    setSwitchingSenderTo(null);
+  }
+  if (
+    isComposeMailbox &&
+    switchingSenderTo === null &&
+    composeSession.mailboxId !== selectedMailboxId
+  ) {
+    setComposeSession({
+      draft: null,
+      key: composeSession.key + 1,
+      mailboxId: selectedMailboxId,
+    });
+  }
+  const composeReturnMailboxRef = useRef<MailboxCategory>("inbox");
+  const launchedMailtoRef = useRef<string | null>(null);
+  const allInboxesActive =
+    view === "all-inboxes" || view === "all-inboxes-brief";
+
+  const openComposeWorkspace = (
+    draft: ComposeDraftState | null,
+    draftMailboxId = selectedMailboxId,
+    consumeMailto = false
+  ) => {
+    if (isComposeMailbox || (draft === null && !canComposeNew)) {
+      return;
+    }
+    void loadComposeWorkspace();
+    const returnMailbox =
+      isComposeMailbox || isSnippetMailbox
+        ? composeReturnMailboxRef.current
+        : activeMailbox;
+    composeReturnMailboxRef.current = returnMailbox;
+    const nextMailboxId =
+      draft === null && allInboxesActive ? newComposeMailboxId : draftMailboxId;
+    setComposeSession((session) => ({
+      draft,
+      key: session.key + 1,
+      mailboxId: nextMailboxId,
+    }));
+    void setMailboxSearch({
+      compose: consumeMailto ? null : undefined,
+      mailbox: "compose",
+      mailboxId: nextMailboxId,
+      mailto: consumeMailto ? null : undefined,
+      messageId: null,
+      threadId: null,
+      view: allInboxesActive || view === "daily-brief" ? view : "inbox",
+    });
+  };
+
+  const switchComposeSenderMailbox = async (nextMailboxId: string) => {
+    if (!isComposeMailbox || nextMailboxId === selectedMailboxId) {
+      return;
+    }
+    const previousMailboxId = composeSession.mailboxId;
+    setSwitchingSenderTo(nextMailboxId);
+    setComposeSession((session) => ({
+      ...session,
+      mailboxId: nextMailboxId,
+    }));
+    try {
+      await setMailboxSearch({
+        chatId: null,
+        mailboxId: nextMailboxId,
+        messageId: null,
+        query: null,
+        threadId: null,
+      });
+    } catch (error) {
+      setComposeSession((session) => ({
+        ...session,
+        mailboxId: previousMailboxId,
+      }));
+      setSwitchingSenderTo(null);
+      throw error;
+    }
+  };
+
+  const closeComposeWorkspace = () => {
+    void setMailboxSearch({
+      mailbox: composeReturnMailboxRef.current,
+      messageId: null,
+      threadId: null,
+      view: allInboxesActive || view === "daily-brief" ? view : "inbox",
+    });
+  };
+
+  return {
+    closeComposeWorkspace,
+    composeSession,
+    launchedMailtoRef,
+    openComposeWorkspace,
+    switchComposeSenderMailbox,
+  };
+};
+
+const useMailboxWorkspaceRouteEffects = ({
+  activeMailbox,
+  chatId,
+  compose,
+  isCompletingGmailConnection,
+  isComposeMailbox,
+  isSandboxMode,
+  isSnippetMailbox,
+  isWorkspaceReady,
+  launchedMailtoRef,
+  mailboxId,
+  mailboxes,
+  mailto,
+  mailboxesPending,
+  openComposeWorkspace,
+  queryClient,
+  selectedMailboxId,
+  selectedMailboxProvider,
+  setMailboxSearch,
+  view,
+}: {
+  activeMailbox: MailboxCategory;
+  chatId: string | null | undefined;
+  compose: string | null | undefined;
+  isCompletingGmailConnection: boolean;
+  isComposeMailbox: boolean;
+  isSandboxMode: boolean;
+  isSnippetMailbox: boolean;
+  isWorkspaceReady: boolean;
+  launchedMailtoRef: { current: string | null };
+  mailboxId: string | null | undefined;
+  mailboxes: ReturnType<typeof useMailboxSelection>["mailboxes"];
+  mailto: string | null | undefined;
+  mailboxesPending: boolean;
+  openComposeWorkspace: (
+    draft: ComposeDraftState | null,
+    draftMailboxId?: string | null,
+    consumeMailto?: boolean
+  ) => void;
+  queryClient: ReturnType<typeof useQueryClient>;
+  selectedMailboxId: string | null;
+  selectedMailboxProvider: MailboxProvider;
+  setMailboxSearch: SetMailboxSearch;
+  view: MailboxWorkspaceView;
+}) => {
+  useEffect((): (() => void) | undefined => {
+    if (!isCompletingGmailConnection) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const refetchMailboxes = async () => {
+      try {
+        await queryClient.refetchQueries({
+          exact: true,
+          queryKey: getMailboxesQueryKey(),
+          type: "active",
+        });
+        if (!cancelled) {
+          void setMailboxSearch({ mailboxId });
+        }
+      } catch {
+        // The mailbox query exposes its own error state.
+      }
+    };
+    void refetchMailboxes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isCompletingGmailConnection, mailboxId, queryClient, setMailboxSearch]);
+
+  useLayoutEffect(() => {
+    if (
+      !isWorkspaceReady ||
+      isCompletingGmailConnection ||
+      (!isSandboxMode && mailboxesPending)
+    ) {
+      return;
+    }
+    if (compose === "mailto" && mailto) {
+      return;
+    }
+
+    const trimmedMailboxId = mailboxId?.trim();
+    const normalizedMailboxId =
+      trimmedMailboxId === undefined || trimmedMailboxId === ""
+        ? null
+        : trimmedMailboxId;
+    const nextMailboxId =
+      (view === "all-inboxes" ||
+        view === "all-inboxes-brief" ||
+        view === "daily-brief") &&
+      selectedMailboxProvider === "api"
+        ? (mailboxes.find((mailbox) => mailbox.provider !== "api")?.id ??
+          selectedMailboxId)
+        : selectedMailboxId;
+    if (normalizedMailboxId === nextMailboxId) {
+      return;
+    }
+
+    void setMailboxSearch({
+      chatId: null,
+      mailboxId: nextMailboxId,
+      messageId: null,
+      view,
+    });
+  }, [
+    compose,
+    isCompletingGmailConnection,
+    isSandboxMode,
+    isWorkspaceReady,
+    mailboxId,
+    mailboxes,
+    mailboxesPending,
+    mailto,
+    selectedMailboxId,
+    selectedMailboxProvider,
+    setMailboxSearch,
+    view,
+  ]);
+
+  useLayoutEffect(() => {
+    if (selectedMailboxProvider === "api" && chatId) {
+      void setMailboxSearch({ chatId: null });
+    }
+  }, [chatId, selectedMailboxProvider, setMailboxSearch]);
+
+  useLayoutEffect(() => {
+    if (
+      isComposeMailbox ||
+      isSnippetMailbox ||
+      view === "all-inboxes" ||
+      view === "all-inboxes-brief"
+    ) {
+      return;
+    }
+    if (isMailboxSupportedByProvider(selectedMailboxProvider, activeMailbox)) {
+      return;
+    }
+
+    void setMailboxSearch({
+      mailbox: selectedMailboxProvider === "api" ? "sent" : "inbox",
+      messageId: null,
+    });
+  }, [
+    activeMailbox,
+    isComposeMailbox,
+    isSnippetMailbox,
+    selectedMailboxProvider,
+    setMailboxSearch,
+    view,
+  ]);
+
+  useLayoutEffect(() => {
+    if (
+      compose !== "mailto" ||
+      mailto === null ||
+      mailto === undefined ||
+      mailto === ""
+    ) {
+      launchedMailtoRef.current = null;
+    } else if (isWorkspaceReady && launchedMailtoRef.current !== mailto) {
+      launchedMailtoRef.current = mailto;
+      const draft = parseMailtoComposeDraft(mailto);
+      if (draft && selectedMailboxId) {
+        openComposeWorkspace(draft, selectedMailboxId, true);
+      } else {
+        void setMailboxSearch(
+          { compose: null, mailto: null },
+          { replace: true }
+        );
+      }
+    }
+  }, [
+    compose,
+    isWorkspaceReady,
+    launchedMailtoRef,
+    mailto,
+    openComposeWorkspace,
+    selectedMailboxId,
+    setMailboxSearch,
+  ]);
+};
+
+const useMailboxWorkspaceActions = ({
+  activeMailbox,
+  isComposeMailbox,
+  isSnippetMailbox,
+  mailboxes,
+  openComposeWorkspace,
+  query,
+  queryClient,
+  selectedMailboxId,
+  selectedMailboxProvider,
+  setMailboxSearch,
+  view,
+}: {
+  activeMailbox: MailboxCategory;
+  isComposeMailbox: boolean;
+  isSnippetMailbox: boolean;
+  mailboxes: { id: string; provider: string }[];
+  openComposeWorkspace: (draft: ComposeDraftState | null) => void;
+  query: string | null;
+  queryClient: ReturnType<typeof useQueryClient>;
+  selectedMailboxId: string | null;
+  selectedMailboxProvider: MailboxProvider;
+  setMailboxSearch: SetMailboxSearch;
+  view: MailboxWorkspaceView;
+}) => {
+  const [draftChatKey, setDraftChatKey] = useState(() => crypto.randomUUID());
+  const [gmailReconnectError, setGmailReconnectError] = useState<string | null>(
+    null
+  );
+  const [isStartingGmailConnection, setIsStartingGmailConnection] =
+    useState(false);
+  const [startingReconnectMailboxId, setStartingReconnectMailboxId] = useState<
+    string | null
+  >(null);
+  const allInboxesActive =
+    view === "all-inboxes" || view === "all-inboxes-brief";
+
+  const applySearch = (nextQuery: string) => {
+    const normalizedQuery = nextQuery.trim();
+
+    if (normalizedQuery === (query ?? "").trim()) {
+      void setMailboxSearch({ messageId: null });
+      return;
+    }
+
+    void setMailboxSearch({
+      messageId: null,
+      query: normalizedQuery === "" ? null : normalizedQuery,
+    });
+  };
+
+  const selectMailbox = (mailbox: MailboxCategory) => {
+    if (
+      !isSnippetMailbox &&
+      !isComposeMailbox &&
+      mailbox === activeMailbox &&
+      view === "inbox"
+    ) {
+      return;
+    }
+    void setMailboxSearch({
+      mailbox,
+      messageId: null,
+      view: allInboxesActive ? "all-inboxes" : "inbox",
+    });
+  };
+
+  const selectView = (nextView: MailboxWorkspaceView) => {
+    const briefActive = view === "daily-brief" || view === "all-inboxes-brief";
+    const resolvedView =
+      (nextView === "daily-brief" && allInboxesActive) ||
+      (nextView === "all-inboxes" && briefActive)
+        ? "all-inboxes-brief"
+        : nextView;
+    if (resolvedView === view && !isComposeMailbox && !isSnippetMailbox) {
+      return;
+    }
+    void setMailboxSearch({
+      mailbox:
+        resolvedView === "all-inboxes" ||
+        resolvedView === "all-inboxes-brief" ||
+        resolvedView === "daily-brief"
+          ? "inbox"
+          : undefined,
+      mailboxId:
+        (resolvedView === "all-inboxes" ||
+          resolvedView === "all-inboxes-brief" ||
+          resolvedView === "daily-brief") &&
+        selectedMailboxProvider === "api"
+          ? (mailboxes.find((mailbox) => mailbox.provider !== "api")?.id ??
+            selectedMailboxId)
+          : undefined,
+      messageId: null,
+      query: null,
+      view: resolvedView,
+    });
+  };
+
+  const selectMailboxFromHotkey = (mailbox: MailboxCategory) => {
+    if (!isMailboxSupportedByProvider(selectedMailboxProvider, mailbox)) {
+      return;
+    }
+    selectMailbox(mailbox);
+  };
+
+  const reconnectMailbox = async (mailbox: {
+    emailAddress: string;
+    id: string;
+  }) => {
+    setGmailReconnectError(null);
+    setStartingReconnectMailboxId(mailbox.id);
+
+    try {
+      await openGoogleAccountLink({
+        mailboxId: mailbox.id,
+        queryClient,
+        returnTo:
+          `${window.location.pathname}${window.location.search}${window.location.hash}` ||
+          "/",
+      });
+    } catch (error) {
+      setStartingReconnectMailboxId(null);
+      setGmailReconnectError(
+        getErrorMessage(error, "Could not start Google reconnect.")
+      );
+    }
+  };
+
+  const connectGmail = async () => {
+    setGmailReconnectError(null);
+    setIsStartingGmailConnection(true);
+
+    try {
+      await openGoogleAccountLink({
+        queryClient,
+        returnTo:
+          `${window.location.pathname}${window.location.search}${window.location.hash}` ||
+          "/",
+      });
+    } catch (error) {
+      setIsStartingGmailConnection(false);
+      setGmailReconnectError(
+        getErrorMessage(error, "Could not start Gmail connection.")
+      );
+    }
+  };
+
+  const createChat = () => {
+    setDraftChatKey(crypto.randomUUID());
+    void setMailboxSearch({ chatId: null });
+  };
+
+  const selectChat = (nextChatId: string) => {
+    void setMailboxSearch({ chatId: nextChatId });
+  };
+
+  const changeChatId = (nextChatId: string | null) => {
+    void setMailboxSearch({ chatId: nextChatId });
+  };
+
+  const selectMailboxId = (nextMailboxId: string) => {
+    if (nextMailboxId === selectedMailboxId && !allInboxesActive) {
+      return;
+    }
+    const nextMailboxProvider = mailboxes.find(
+      (availableMailbox) => availableMailbox.id === nextMailboxId
+    )?.provider;
+    let nextMailboxCategory: MailboxCategory | undefined;
+    if (nextMailboxProvider === "api") {
+      nextMailboxCategory = "sent";
+    } else if (allInboxesActive) {
+      nextMailboxCategory = "inbox";
+    }
+    let nextView: MailboxWorkspaceView | undefined;
+    if (nextMailboxProvider === "api" || view === "all-inboxes") {
+      nextView = "inbox";
+    } else if (view === "all-inboxes-brief") {
+      nextView = "daily-brief";
+    }
+    setDraftChatKey(crypto.randomUUID());
+    void setMailboxSearch({
+      chatId: null,
+      mailbox: nextMailboxCategory,
+      mailboxId: nextMailboxId,
+      messageId: null,
+      query: nextMailboxProvider === selectedMailboxProvider ? undefined : null,
+      view: nextView,
+    });
+  };
+
+  const createComposeDraft = () => {
+    if (selectedMailboxProvider !== "api") {
+      openComposeWorkspace(null);
+    }
+  };
+
+  const manageSnippets = () => {
+    void loadSnippetWorkspace();
+    void setMailboxSearch({
+      mailbox: "snippets",
+      messageId: null,
+      threadId: null,
+      view: "inbox",
+    });
+  };
+
+  return {
+    applySearch,
+    changeChatId,
+    connectGmail,
+    createChat,
+    createComposeDraft,
+    draftChatKey,
+    gmailReconnectError,
+    isStartingGmailConnection,
+    manageSnippets,
+    reconnectMailbox,
+    reconnectingMailboxId: startingReconnectMailboxId,
+    resetDraftChatKey: () => {
+      setDraftChatKey(crypto.randomUUID());
+    },
+    selectChat,
+    selectMailbox,
+    selectMailboxFromHotkey,
+    selectMailboxId,
+    selectView,
+  };
+};
+
+const useMailboxWorkspaceHotkeys = ({
+  isWorkspaceReady,
+  openComposeWorkspace,
+  selectMailboxFromHotkey,
+  selectedMailboxId,
+  selectedMailboxProvider,
+}: {
+  isWorkspaceReady: boolean;
+  openComposeWorkspace: (draft: ComposeDraftState | null) => void;
+  selectMailboxFromHotkey: (mailbox: MailboxCategory) => void;
+  selectedMailboxId: string | null;
+  selectedMailboxProvider: MailboxProvider;
+}) => {
+  const enabled = isWorkspaceReady && selectedMailboxId !== null;
+
+  useHotkey(
+    "C",
+    (event) => {
+      if (
+        selectedMailboxId === null ||
+        selectedMailboxProvider === "api" ||
+        shouldIgnoreAppShortcut(event)
+      ) {
+        return;
+      }
+      openComposeWorkspace(null);
+    },
+    { enabled: isWorkspaceReady, ignoreInputs: true }
+  );
+
+  useHotkeySequence(
+    ["G", "I"],
+    (event) => {
+      if (!shouldIgnoreAppShortcut(event)) {
+        selectMailboxFromHotkey("inbox");
+      }
+    },
+    { enabled, ignoreInputs: true }
+  );
+  useHotkeySequence(
+    ["G", "T"],
+    (event) => {
+      if (!shouldIgnoreAppShortcut(event)) {
+        selectMailboxFromHotkey("sent");
+      }
+    },
+    { enabled, ignoreInputs: true }
+  );
+  useHotkeySequence(
+    ["G", "A"],
+    (event) => {
+      if (!shouldIgnoreAppShortcut(event)) {
+        selectMailboxFromHotkey("archive");
+      }
+    },
+    { enabled, ignoreInputs: true }
+  );
+  useHotkeySequence(
+    ["G", "D"],
+    (event) => {
+      if (!shouldIgnoreAppShortcut(event)) {
+        selectMailboxFromHotkey("drafts");
+      }
+    },
+    { enabled, ignoreInputs: true }
+  );
+  useHotkeySequence(
+    ["G", "U"],
+    (event) => {
+      if (!shouldIgnoreAppShortcut(event)) {
+        selectMailboxFromHotkey("unread");
+      }
+    },
+    { enabled, ignoreInputs: true }
+  );
+  useHotkeySequence(
+    ["G", "S"],
+    (event) => {
+      if (!shouldIgnoreAppShortcut(event)) {
+        selectMailboxFromHotkey("spam");
+      }
+    },
+    { enabled, ignoreInputs: true }
+  );
+  useHotkeySequence(
+    ["G", "R"],
+    (event) => {
+      if (!shouldIgnoreAppShortcut(event)) {
+        selectMailboxFromHotkey("trash");
+      }
+    },
+    { enabled, ignoreInputs: true }
+  );
+};
+
+type MailboxWorkspaceContentProps = ComponentProps<
+  typeof MailboxWorkspaceContent
+>;
+type MailboxWorkspaceBodyProps = Omit<
+  MailboxWorkspaceContentProps,
+  | "activeMailbox"
+  | "chatContext"
+  | "currentUserEmail"
+  | "draftChatKey"
+  | "persistComposeDrafts"
+  | "searchQuery"
+  | "signature"
+> & {
+  activeMailbox: MailboxCategory;
+  draftChatKey: string;
+  isSnippetMailbox: boolean;
+  messageId: string | undefined;
+  query: string;
+  selectedMailbox: {
+    emailAddress: string;
+    signatureHtml: string | null;
+    signatureText: string | null;
+  } | null;
+  threadId: string | undefined;
+};
+
+const MailboxWorkspaceBody = ({
+  activeMailbox,
+  draftChatKey,
+  isComposeMailbox,
+  isManagedDemoMode,
+  isSnippetMailbox,
+  messageId,
+  query,
+  selectedMailbox,
+  threadId,
+  ...contentProps
+}: MailboxWorkspaceBodyProps) => {
+  const normalizedChatQuery = query.trim();
+  const hasMessageId =
+    messageId !== undefined && messageId !== null && messageId !== "";
+  const hasThreadId =
+    threadId !== undefined && threadId !== null && threadId !== "";
+  // Stable identity: the chat transport rebuilds itself when this object
+  // changes, so a fresh literal every render would recreate it needlessly.
+  const chatContext = useMemo(
+    () =>
+      hasMessageId || hasThreadId || normalizedChatQuery !== ""
+        ? {
+            messageId,
+            query: normalizedChatQuery === "" ? undefined : normalizedChatQuery,
+            threadId,
+          }
+        : undefined,
+    [hasMessageId, hasThreadId, messageId, normalizedChatQuery, threadId]
+  );
+
+  return (
+    <MailboxWorkspaceContent
+      {...contentProps}
+      activeMailbox={
+        isSnippetMailbox || isComposeMailbox ? null : activeMailbox
+      }
+      chatContext={chatContext}
+      draftChatKey={draftChatKey}
+      isComposeMailbox={isComposeMailbox}
+      isSnippetMailbox={isSnippetMailbox}
+      isManagedDemoMode={isManagedDemoMode}
+      persistComposeDrafts={
+        !isManagedDemoMode && contentProps.selectedMailboxProvider !== "api"
+      }
+      searchQuery={normalizedChatQuery}
+      signature={
+        selectedMailbox
+          ? {
+              html: selectedMailbox.signatureHtml,
+              text: selectedMailbox.signatureText,
+            }
+          : undefined
+      }
+      currentUserEmail={selectedMailbox?.emailAddress ?? null}
+    />
+  );
+};
+
+export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
+  const queryClient = useQueryClient();
+  const session = authClient.useSession();
+  const returnTo = useLocation({ select: (location) => location.href });
+  useEffect(() => {
+    if (session.error && !session.isPending && !session.isRefetching) {
+      toastError(session.error, {
+        boundary: "mailbox-session",
+        fallback: "Could not load your account. Please try again.",
+      });
+    }
+  }, [session.error, session.isPending, session.isRefetching]);
+  const {
+    activeMailbox,
+    chatId,
+    compose,
+    gmailLink,
+    isComposeMailbox,
+    isSnippetMailbox,
+    mailboxId,
+    mailto,
+    messageId,
+    opensDefaultMailbox,
+    query,
+    setMailboxSearch,
+    threadId,
+    view: requestedView,
+  } = useMailboxRouteSearch();
+  const { isMobileSidebarOpen, setIsMobileSidebarOpen } = useWorkspaceUiState();
+  const isDemoMode = useDemoModeEnabled();
+  const isManagedDemoMode = useManagedDemoModeEnabled();
+  const previewPersona = usePreviewPersona();
+  const [browserPreferencesReady, setBrowserPreferencesReady] = useState(false);
+  useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- Browser-backed mailbox preferences must hydrate before consuming a mailto request.
+    setBrowserPreferencesReady(true);
+  }, []);
+  const isEmptyPreviewPersona = previewPersona === "empty";
+  const isSandboxMode =
+    isDemoMode || isManagedDemoMode || isEmptyPreviewPersona;
+  const {
+    defaultMailboxId,
+    mailboxGroups,
+    mailboxes,
+    mailboxesQuery,
+    selectedMailboxId,
+    selectedMailboxProvider,
+    selectedMailboxNeedsReconnect,
+    updateMailboxSwitcherOrderMutation,
+  } = useMailboxSelection({
+    isDemoMode,
+    isEmptyPreviewPersona,
+    isManagedDemoMode,
+    mailboxId,
+    queryClient,
+  });
+  const view =
+    opensDefaultMailbox &&
+    defaultMailboxId === null &&
+    mailboxes.some((mailbox) => mailbox.provider !== "api")
+      ? "all-inboxes"
+      : requestedView;
+  const { data: chats = [] } = useQuery(
+    chatsQueryOptions(
+      isSandboxMode || selectedMailboxProvider === "api"
+        ? null
+        : selectedMailboxId
+    )
+  );
+  const isCompletingGmailConnection =
+    gmailLink === "complete" && !isSandboxMode;
+  const sessionMatchesUser =
+    !!session.data &&
+    (session.data.user.id === user.id ||
+      (!user.id && session.data.user.email === user.email));
+  const isWorkspaceReady =
+    browserPreferencesReady &&
+    !session.isPending &&
+    sessionMatchesUser &&
+    (isSandboxMode ||
+      (!mailboxesQuery.isPending && !isCompletingGmailConnection));
+  const writableMailboxes = mailboxes.filter(
+    (mailbox) =>
+      mailbox.connectionStatus === "connected" &&
+      mailbox.provider !== "api" &&
+      mailbox.grantRole !== "reader"
+  );
+  const newComposeMailboxId =
+    writableMailboxes.find((mailbox) => mailbox.id === selectedMailboxId)?.id ??
+    writableMailboxes[0]?.id ??
+    null;
+  const composeWorkspace = useMailboxWorkspaceCompose({
+    activeMailbox,
+    canComposeNew:
+      view === "all-inboxes" || view === "all-inboxes-brief"
+        ? writableMailboxes.length > 0
+        : newComposeMailboxId !== null &&
+          newComposeMailboxId === selectedMailboxId,
+    isComposeMailbox,
+    isSnippetMailbox,
+    newComposeMailboxId,
+    selectedMailboxId,
+    setMailboxSearch,
+    view,
+  });
+  const chatActions = useChatActions({
+    activeChatId: chatId,
+    chats,
+    selectedMailboxId,
+    setMailboxSearch,
+  });
+  const workspaceActions = useMailboxWorkspaceActions({
+    activeMailbox,
+    isComposeMailbox,
+    isSnippetMailbox,
+    mailboxes,
+    openComposeWorkspace: composeWorkspace.openComposeWorkspace,
+    query,
+    queryClient,
+    selectedMailboxId,
+    selectedMailboxProvider,
+    setMailboxSearch,
+    view,
+  });
+
+  useMailboxWorkspaceRouteEffects({
+    activeMailbox,
+    chatId,
+    compose,
+    isCompletingGmailConnection,
+    isComposeMailbox,
+    isSandboxMode,
+    isSnippetMailbox,
+    isWorkspaceReady,
+    launchedMailtoRef: composeWorkspace.launchedMailtoRef,
+    mailboxId,
+    mailboxes,
+    mailboxesPending: mailboxesQuery.isPending,
+    mailto,
+    openComposeWorkspace: composeWorkspace.openComposeWorkspace,
+    queryClient,
+    selectedMailboxId,
+    selectedMailboxProvider,
+    setMailboxSearch,
+    view,
+  });
+
+  useMailboxWorkspaceHotkeys({
+    isWorkspaceReady,
+    openComposeWorkspace: composeWorkspace.openComposeWorkspace,
+    selectMailboxFromHotkey: workspaceActions.selectMailboxFromHotkey,
+    selectedMailboxId,
+    selectedMailboxProvider,
+  });
+
+  const {
+    applySearch,
+    changeChatId,
+    connectGmail,
+    createChat,
+    createComposeDraft,
+    draftChatKey,
+    gmailReconnectError,
+    isStartingGmailConnection,
+    manageSnippets,
+    reconnectMailbox,
+    reconnectingMailboxId,
+    selectChat,
+    selectMailbox,
+    selectMailboxId,
+    selectView,
+  } = workspaceActions;
+  const {
+    closeComposeWorkspace: handleCloseComposeWorkspace,
+    openComposeWorkspace: handleComposeDraftRequested,
+  } = composeWorkspace;
+  if (!session.isPending && !session.isRefetching && !sessionMatchesUser) {
+    const sessionFailed = !!session.error && session.error.status !== 401;
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 p-6">
+        <Text role="alert">
+          {sessionFailed
+            ? "Could not load your account. Please try again."
+            : "Sign in to continue."}
+        </Text>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => {
+              void session.refetch();
+            }}
+            type="button"
+          >
+            Try again
+          </Button>
+          <LinkButton search={{ returnTo }} to="/auth" variant="outline">
+            Sign in
+          </LinkButton>
+        </div>
+      </main>
+    );
+  }
+  if (!isWorkspaceReady) {
+    return <LoadingPage />;
+  }
+
+  return (
+    <MailboxWorkspaceBody
+      userId={user.id ?? user.email ?? "preview"}
+      activeMailbox={activeMailbox}
+      chatId={chatId ?? null}
+      composeSession={composeWorkspace.composeSession}
+      isComposeMailbox={isComposeMailbox}
+      isConnectingGmail={isStartingGmailConnection}
+      isDemoMode={isDemoMode}
+      isManagedDemoMode={isManagedDemoMode}
+      chats={chats}
+      draftChatKey={draftChatKey}
+      isSnippetMailbox={isSnippetMailbox}
+      layoutState={{ isMobileSidebarOpen }}
+      mailboxGroups={mailboxGroups}
+      messageId={messageId}
+      onCloseCompose={handleCloseComposeWorkspace}
+      onComposeSenderSwitch={async (nextMailboxId) => {
+        await composeWorkspace.switchComposeSenderMailbox(nextMailboxId);
+        workspaceActions.resetDraftChatKey();
+      }}
+      onConnectGmail={() => {
+        void connectGmail();
+      }}
+      onComposeDraftRequested={handleComposeDraftRequested}
+      onComposeNewMail={createComposeDraft}
+      onManageSnippets={manageSnippets}
+      onMobileOpenChange={setIsMobileSidebarOpen}
+      onOpenSidebar={() => {
+        setIsMobileSidebarOpen(true);
+      }}
+      onReorderMailboxSwitcher={(order) => {
+        updateMailboxSwitcherOrderMutation.mutate(order);
+      }}
+      onSearch={applySearch}
+      onCreateChat={createChat}
+      onDeleteChat={(deletedChatId) => {
+        void chatActions.deleteChat(deletedChatId);
+      }}
+      onRenameChat={(renamedChatId, title) => {
+        void chatActions.renameChat(renamedChatId, title);
+      }}
+      onReconnectMailbox={(mailbox) => {
+        void reconnectMailbox(mailbox);
+      }}
+      onSelectChat={selectChat}
+      onSelectMailbox={selectMailbox}
+      onSelectMailboxId={selectMailboxId}
+      onSelectView={selectView}
+      onChatIdChange={changeChatId}
+      query={query}
+      reconnectError={gmailReconnectError}
+      reconnectingMailboxId={reconnectingMailboxId}
+      selectedMailbox={
+        mailboxes.find((mailbox) => mailbox.id === selectedMailboxId) ?? null
+      }
+      selectedMailboxId={selectedMailboxId}
+      selectedMailboxProvider={selectedMailboxProvider}
+      selectedMailboxNeedsReconnect={selectedMailboxNeedsReconnect}
+      selectedView={view}
+      threadId={threadId}
+    />
+  );
+};

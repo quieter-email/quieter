@@ -1,0 +1,102 @@
+@import "@quieter/ui/styles.css";
+@source "./**/*.{ts,tsx}";
+
+/* Notch and home-indicator insets for full-bleed app shells. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility pr-safe {
+  padding-right: env(safe-area-inset-right);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility pl-safe {
+  padding-left: env(safe-area-inset-left);
+}
+
+/* Rotating conic sheen behind the auth badge. Gradient stops cannot be theme tokens. */
+@utility auth-sheen {
+  background: conic-gradient(
+    from 0deg,
+    var(--border) 0deg,
+    var(--border) 270deg,
+    color-mix(in oklch, var(--primary) 100%, var(--border)) 325deg,
+    var(--border) 360deg
+  );
+}
+
+:root {
+  --app-motion-duration-enter: 150ms;
+  --app-motion-duration-feedback: 150ms;
+  --app-motion-duration-layout: 250ms;
+  --app-motion-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --app-motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-property:
+      color, background-color, border-color, box-shadow, opacity !important;
+    transition-delay: 0ms !important;
+    transition-duration: var(--app-motion-duration-feedback) !important;
+    transition-timing-function: var(--app-motion-ease-out) !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.loading-spinner-segment {
+  animation: loading-spinner-segment 1.1s linear infinite;
+  stroke-dasharray: 1.25 98.75;
+}
+
+.auth-scene {
+  background: var(--auth-visual-bg);
+  color-scheme: dark;
+}
+
+.auth-background-shade {
+  background: radial-gradient(
+    ellipse 85% 120% at 50% 80%,
+    color-mix(in srgb, var(--bg) 85%, transparent),
+    color-mix(in srgb, var(--bg) 80%, transparent) 25%,
+    color-mix(in srgb, var(--bg) 50%, transparent) 60%,
+    transparent
+  );
+}
+
+@keyframes loading-spinner-segment {
+  from {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+/* Dead-end screens: the landing page's entrance, without the JS */
+.status-enter {
+  animation: status-enter 0.8s var(--app-motion-ease-out) both;
+}
+
+@keyframes status-enter {
+  from {
+    filter: blur(8px);
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

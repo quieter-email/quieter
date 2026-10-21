@@ -5,7 +5,7 @@ import type { ComponentProps } from "react";
 
 const AtmosphericBackground = lazy(
   async () =>
-    await import("#/components/atmospheric-background").then(
+    await import("@quieter/app/components/atmospheric-background").then(
       ({ AtmosphericBackground: Component }) => ({
         default: Component,
       })

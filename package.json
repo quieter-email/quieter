@@ -36,7 +36,10 @@
     "generate:brand-palette-css": "node scripts/generate-brand-palette-css.ts",
     "prepare": "vp config --no-agent",
     "secrets:dev": "node --env-file-if-exists=.env.sst.local scripts/local-secrets.ts",
-    "sst": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.sst.local scripts/run-sst.ts"
+    "sst": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.sst.local scripts/run-sst.ts",
+    "dev:desktop": "vp run @quieter/env#build && node --env-file-if-exists=.env.desktop.local scripts/run-desktop.ts",
+    "build:desktop": "vp run @quieter/desktop#build",
+    "package:desktop": "vp run @quieter/desktop#package"
   },
   "devDependencies": {
     "@quieter/cloudflare": "workspace:*",

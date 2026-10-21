@@ -33,6 +33,11 @@
       "types": "./src/sst-secrets.ts",
       "development": "./src/sst-secrets.ts",
       "default": "./dist/sst-secrets.js"
+    },
+    "./desktop": {
+      "types": "./src/desktop.ts",
+      "development": "./src/desktop.ts",
+      "default": "./dist/desktop.js"
     }
   },
   "scripts": {

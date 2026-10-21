@@ -55,6 +55,10 @@ export default defineConfig({
     },
     overrides: [
       {
+        files: ["apps/desktop/src/renderer/router.tsx"],
+        rules: { "sort-keys": "off" },
+      },
+      {
         files: ["**/*.test.{ts,tsx}"],
         plugins: ["vitest"],
         rules: {
@@ -80,7 +84,14 @@ export default defineConfig({
         },
       },
       {
-        files: ["apps/web/src/router.tsx", "apps/web/src/types/posthog.d.ts"],
+        files: [
+          "apps/web/src/router.tsx",
+          "apps/web/src/types/posthog.d.ts",
+          "apps/desktop/src/renderer/*.d.ts",
+          "apps/desktop/src/renderer/router.tsx",
+          "packages/app/src/router-contract.d.ts",
+          "packages/app/src/types/posthog.d.ts",
+        ],
         rules: {
           // These declarations augment existing module/global types and must merge.
           "typescript/consistent-type-definitions": "off",
@@ -140,6 +151,7 @@ export default defineConfig({
       {
         files: [
           "apps/web/src/features/mailbox/components/mailbox-workspace/use-mailbox-messages.ts",
+          "packages/app/src/features/mailbox/components/mailbox-workspace/use-mailbox-messages.ts",
           "packages/env/src/local-doctor.ts",
         ],
         rules: {
@@ -149,7 +161,9 @@ export default defineConfig({
       {
         files: [
           "apps/web/src/features/message-thread/domain/mail-html.test.ts",
+          "packages/app/src/features/message-thread/domain/mail-html.test.ts",
           "apps/web/src/lib/site-password.server.ts",
+          "packages/app/src/lib/site-password.server.ts",
           "packages/env/src/sst-secrets.ts",
           "packages/mail/tests/message-content.test.ts",
         ],
@@ -162,6 +176,7 @@ export default defineConfig({
           "apps/web/src/routes/_app/auth.tsx",
           "apps/web/src/routes/_app/settings.tsx",
           "apps/web/src/routes/_app/site-password.tsx",
+          "packages/app/src/route-search.ts",
         ],
         rules: {
           // Zod's schema fallback method is named catch(), but it is not a promise chain.
@@ -171,7 +186,10 @@ export default defineConfig({
       {
         // TanStack route modules intentionally declare the route before the
         // component and helper implementations they reference.
-        files: ["apps/web/src/routes/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
+        files: [
+          "apps/web/src/routes/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}",
+          "apps/desktop/src/renderer/router.tsx",
+        ],
         rules: {
           "eslint/func-style": "off",
           "eslint/no-use-before-define": "off",
@@ -185,9 +203,13 @@ export default defineConfig({
         // consuming flow.
         files: [
           "apps/web/src/features/message-search/components/message-list-search/use-message-list-search-controller.ts",
+          "packages/app/src/features/message-search/components/message-list-search/use-message-list-search-controller.ts",
           "apps/web/src/features/settings/components/settings-overview-panel.tsx",
+          "packages/app/src/features/settings/components/settings-overview-panel.tsx",
           "apps/web/src/lib/mail/inbox-query/actions.ts",
+          "packages/app/src/lib/mail/inbox-query/actions.ts",
           "apps/web/src/lib/mail/inbox-query/data.ts",
+          "packages/app/src/lib/mail/inbox-query/data.ts",
           "apps/web/src/start.ts",
         ],
         rules: {
@@ -200,12 +222,19 @@ export default defineConfig({
         // branches intentionally return a disposer while setup can stop early.
         files: [
           "apps/web/src/components/atmospheric-background.tsx",
+          "packages/app/src/components/atmospheric-background.tsx",
           "apps/web/src/components/auth-visual.tsx",
+          "packages/app/src/components/auth-visual.tsx",
           "apps/web/src/components/workspace-dither-background.tsx",
+          "packages/app/src/components/workspace-dither-background.tsx",
           "apps/web/src/features/chat/components/chat-transcript.tsx",
+          "packages/app/src/features/chat/components/chat-transcript.tsx",
           "apps/web/src/features/message-thread/components/message-body.tsx",
+          "packages/app/src/features/message-thread/components/message-body.tsx",
           "apps/web/src/features/message-thread/components/message-view.tsx",
+          "packages/app/src/features/message-thread/components/message-view.tsx",
           "apps/web/src/features/navigation/components/sidebar-label-nav.tsx",
+          "packages/app/src/features/navigation/components/sidebar-label-nav.tsx",
         ],
         rules: {
           "typescript/consistent-return": "off",
@@ -217,12 +246,19 @@ export default defineConfig({
         // lifecycles, which are deliberately kept outside render semantics.
         files: [
           "apps/web/src/components/atmospheric-background.tsx",
+          "packages/app/src/components/atmospheric-background.tsx",
           "apps/web/src/components/workspace-dither-background.tsx",
+          "packages/app/src/components/workspace-dither-background.tsx",
           "apps/web/src/features/chat/components/chat-transcript.tsx",
+          "packages/app/src/features/chat/components/chat-transcript.tsx",
           "apps/web/src/features/compose/components/compose-workspace.tsx",
+          "packages/app/src/features/compose/components/compose-workspace.tsx",
           "apps/web/src/features/navigation/components/mailbox-switcher.tsx",
+          "packages/app/src/features/navigation/components/mailbox-switcher.tsx",
           "apps/web/src/features/navigation/components/sidebar-surfaces.tsx",
+          "packages/app/src/features/navigation/components/sidebar-surfaces.tsx",
           "apps/web/src/features/mailbox/components/mailbox-workspace.tsx",
+          "packages/app/src/features/mailbox/components/mailbox-workspace.tsx",
         ],
         rules: {},
       },
@@ -231,6 +267,7 @@ export default defineConfig({
         // map callback renders them and does not perform asynchronous work.
         files: [
           "apps/web/src/features/navigation/components/mailbox-switcher.tsx",
+          "packages/app/src/features/navigation/components/mailbox-switcher.tsx",
         ],
         rules: {
           "typescript/promise-function-async": "off",
@@ -239,7 +276,10 @@ export default defineConfig({
       {
         // This validator intentionally uses explicit undefined returns for
         // invalid input, matching its string-or-undefined contract.
-        files: ["apps/web/src/lib/return-to.ts"],
+        files: [
+          "apps/web/src/lib/return-to.ts",
+          "packages/app/src/lib/return-to.ts",
+        ],
         rules: {
           "unicorn/no-useless-undefined": "off",
         },
@@ -249,7 +289,9 @@ export default defineConfig({
         // navigation to their child controls; they are not themselves actions.
         files: [
           "apps/web/src/features/navigation/components/sidebar-mailbox-nav.tsx",
+          "packages/app/src/features/navigation/components/sidebar-mailbox-nav.tsx",
           "apps/web/src/features/navigation/components/mail-sidebar.tsx",
+          "packages/app/src/features/navigation/components/mail-sidebar.tsx",
         ],
         rules: {
           "jsx-a11y/no-noninteractive-element-interactions": "off",
@@ -260,6 +302,7 @@ export default defineConfig({
         // container to mailbox buttons and its hover rows own pointer state.
         files: [
           "apps/web/src/features/navigation/components/mailbox-switcher.tsx",
+          "packages/app/src/features/navigation/components/mailbox-switcher.tsx",
         ],
         rules: {
           "eslint/class-methods-use-this": "off",
@@ -276,6 +319,7 @@ export default defineConfig({
         // verifies javascript URLs are rejected by the mail parser.
         files: [
           "apps/web/src/features/message-thread/domain/mail-html.test.ts",
+          "packages/app/src/features/message-thread/domain/mail-html.test.ts",
         ],
         rules: {
           "eslint/no-script-url": "off",
@@ -285,7 +329,10 @@ export default defineConfig({
       {
         // React.Children.toArray intentionally normalizes opaque children for
         // the slot signature before the transition state is reconciled.
-        files: ["apps/web/src/components/vertical-slot.tsx"],
+        files: [
+          "apps/web/src/components/vertical-slot.tsx",
+          "packages/app/src/components/vertical-slot.tsx",
+        ],
         rules: {
           "react/no-react-children": "off",
         },
@@ -305,6 +352,7 @@ export default defineConfig({
         // this rule cannot resolve that relationship through the wrapper.
         files: [
           "apps/web/src/features/compose/components/template-workspace.tsx",
+          "packages/app/src/features/compose/components/template-workspace.tsx",
         ],
         rules: {
           "jsx-a11y/control-has-associated-label": "off",
@@ -315,8 +363,11 @@ export default defineConfig({
         // Sentry's scope/configuration hooks do not expose awaitable variants.
         files: [
           "apps/web/src/lib/preview-personas.ts",
+          "packages/app/src/lib/preview-personas.ts",
           "apps/web/src/lib/server-error-reporting.ts",
+          "packages/app/src/lib/server-error-reporting.ts",
           "apps/web/src/features/ai/domain/default-chat-model-setting.ts",
+          "packages/app/src/features/ai/domain/default-chat-model-setting.ts",
           "packages/aws/src/sentry.ts",
           "packages/cloudflare/src/worker-utils.ts",
         ],
@@ -330,8 +381,11 @@ export default defineConfig({
         // missing result or JSON-replacer omission.
         files: [
           "apps/web/src/lib/query-persister.ts",
+          "packages/app/src/lib/query-persister.ts",
           "apps/web/src/lib/mail/inbox-query/data.ts",
+          "packages/app/src/lib/mail/inbox-query/data.ts",
           "apps/web/src/lib/mail/inbox-query/query-cache.ts",
+          "packages/app/src/lib/mail/inbox-query/query-cache.ts",
         ],
         rules: {
           "unicorn/no-useless-undefined": "off",
@@ -340,7 +394,10 @@ export default defineConfig({
       {
         // TanStack's persister bridge still requires the deprecated direction
         // field in its query context type while page params are adapted.
-        files: ["apps/web/src/lib/mail/inbox-query/sync.ts"],
+        files: [
+          "apps/web/src/lib/mail/inbox-query/sync.ts",
+          "packages/app/src/lib/mail/inbox-query/sync.ts",
+        ],
         rules: {
           "typescript/no-deprecated": "off",
         },
@@ -350,8 +407,11 @@ export default defineConfig({
         // synchronous client components and must not become async components.
         files: [
           "apps/web/src/components/telemetry-provider.tsx",
+          "packages/app/src/components/telemetry-provider.tsx",
           "apps/web/src/features/home/components/home-smooth-scroll.tsx",
+          "packages/app/src/features/home/components/home-smooth-scroll.tsx",
           "apps/web/src/features/message-thread/components/message-actions.tsx",
+          "packages/app/src/features/message-thread/components/message-actions.tsx",
         ],
         rules: {
           "typescript/promise-function-async": "off",
@@ -362,6 +422,7 @@ export default defineConfig({
         // passes the domain label-update callback through a dialog boundary.
         files: [
           "apps/web/src/features/message-thread/components/message-actions.tsx",
+          "packages/app/src/features/message-thread/components/message-actions.tsx",
         ],
         rules: {
           "react/jsx-handler-names": "off",
@@ -380,7 +441,7 @@ export default defineConfig({
       {
         // TanStack Router's type inference depends on route property order
         // (validateSearch, ssr, loader, head), which is not alphabetical.
-        files: ["apps/web/src/routes/**"],
+        files: ["apps/web/src/routes/**", "packages/app/types/router.ts"],
         rules: {
           "eslint/sort-keys": "off",
         },

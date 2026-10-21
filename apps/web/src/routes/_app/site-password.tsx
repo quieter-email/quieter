@@ -1,8 +1,7 @@
+import { LoadingPage } from "@quieter/app/components/loading-page";
 import { createFileRoute } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
-
-import { LoadingPage } from "#/components/loading-page";
 
 export const Route = createFileRoute("/_app/site-password")({
   pendingComponent: LoadingPage,

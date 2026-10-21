@@ -1,10 +1,10 @@
+import { LoadingPage } from "@quieter/app/components/loading-page";
+import { getSafeAuthReturnTo } from "@quieter/app/lib/return-to";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
 
-import { LoadingPage } from "#/components/loading-page";
 import { getSessionUser } from "#/lib/auth.functions";
-import { getSafeAuthReturnTo } from "#/lib/return-to";
 
 export const Route = createFileRoute("/_app/auth")({
   validateSearch: zodValidator(

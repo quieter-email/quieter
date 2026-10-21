@@ -29,8 +29,10 @@ import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiPreviewPersonaRouteImport } from './routes/api/preview-persona'
 import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
 import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
+import { Route as AppDesktopAuthRouteImport } from './routes/_app/desktop.auth'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 import { Route as ApiConnectorsCallbackRouteImport } from './routes/api/connectors.callback'
+import { Route as ApiDesktopSessionRouteImport } from './routes/api/desktop.session'
 import { Route as ApiDomainConnectCallbackRouteImport } from './routes/api/domain-connect.callback'
 import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
@@ -142,6 +144,11 @@ const ApiWaitlistRoute = ApiWaitlistRouteImport.update({
   path: '/api/waitlist',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppDesktopAuthRoute = AppDesktopAuthRouteImport.update({
+  id: '/desktop/auth',
+  path: '/desktop/auth',
+  getParentRoute: () => AppRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -150,6 +157,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 const ApiConnectorsCallbackRoute = ApiConnectorsCallbackRouteImport.update({
   id: '/api/connectors/callback',
   path: '/api/connectors/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDesktopSessionRoute = ApiDesktopSessionRouteImport.update({
+  id: '/api/desktop/session',
+  path: '/api/desktop/session',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDomainConnectCallbackRoute =
@@ -225,8 +237,10 @@ export interface FileRoutesByFullPath {
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
+  '/desktop/auth': typeof AppDesktopAuthRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
@@ -257,8 +271,10 @@ export interface FileRoutesByTo {
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
+  '/desktop/auth': typeof AppDesktopAuthRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
@@ -292,8 +308,10 @@ export interface FileRoutesById {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/desktop/auth': typeof AppDesktopAuthRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
@@ -326,8 +344,10 @@ export interface FileRouteTypes {
     | '/api/preview-persona'
     | '/api/site-password'
     | '/api/waitlist'
+    | '/desktop/auth'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
@@ -358,8 +378,10 @@ export interface FileRouteTypes {
     | '/api/preview-persona'
     | '/api/site-password'
     | '/api/waitlist'
+    | '/desktop/auth'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
@@ -392,8 +414,10 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/waitlist'
     | '/_app/'
+    | '/_app/desktop/auth'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
     | '/api/orpc/$'
@@ -416,6 +440,7 @@ export interface RootRouteChildren {
   ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiConnectorsCallbackRoute: typeof ApiConnectorsCallbackRoute
+  ApiDesktopSessionRoute: typeof ApiDesktopSessionRoute
   ApiDomainConnectCallbackRoute: typeof ApiDomainConnectCallbackRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
@@ -570,6 +595,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWaitlistRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/desktop/auth': {
+      id: '/_app/desktop/auth'
+      path: '/desktop/auth'
+      fullPath: '/desktop/auth'
+      preLoaderRoute: typeof AppDesktopAuthRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -582,6 +614,13 @@ declare module '@tanstack/react-router' {
       path: '/api/connectors/callback'
       fullPath: '/api/connectors/callback'
       preLoaderRoute: typeof ApiConnectorsCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/desktop/session': {
+      id: '/api/desktop/session'
+      path: '/api/desktop/session'
+      fullPath: '/api/desktop/session'
+      preLoaderRoute: typeof ApiDesktopSessionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/domain-connect/callback': {
@@ -664,6 +703,7 @@ interface AppRouteChildren {
   AppSettingsRoute: typeof AppSettingsRoute
   AppSitePasswordRoute: typeof AppSitePasswordRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppDesktopAuthRoute: typeof AppDesktopAuthRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -673,6 +713,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsRoute: AppSettingsRoute,
   AppSitePasswordRoute: AppSitePasswordRoute,
   AppIndexRoute: AppIndexRoute,
+  AppDesktopAuthRoute: AppDesktopAuthRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -710,6 +751,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiConnectorsCallbackRoute: ApiConnectorsCallbackRoute,
+  ApiDesktopSessionRoute: ApiDesktopSessionRoute,
   ApiDomainConnectCallbackRoute: ApiDomainConnectCallbackRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,

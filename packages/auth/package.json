@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./desktop": "./src/desktop.ts",
     "./google-scopes": "./src/google-scopes.ts",
     "./organization-api-key": "./src/organization-api-key.ts",
     "./polar-webhooks": "./src/polar-webhooks.ts",
@@ -14,6 +15,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",
+    "@better-auth/electron": "1.7.7",
     "@polar-sh/sdk": "^1.0.2",
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",

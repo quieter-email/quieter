@@ -1,0 +1,117 @@
+"use client";
+
+import { asSettingsMutation } from "@quieter/app/features/settings/components/mailbox-detail-mutation-types";
+import { MailboxDetailSettingsContent } from "@quieter/app/features/settings/components/mailbox-detail-settings-content";
+import { runDetached } from "@quieter/app/features/settings/components/mailboxes-settings-shared";
+import {
+  SettingsCard,
+  SettingsLoadingState,
+  SettingsPageHeader,
+  settingsSurfaceVariants,
+} from "@quieter/app/features/settings/components/settings-layout";
+import { useMailboxDetailViewState } from "@quieter/app/features/settings/components/use-mailbox-detail-view-state";
+import { Button } from "@quieter/ui/button";
+import { useNavigate } from "@tanstack/react-router";
+
+export const MailboxDetailSettingsView = ({
+  mailboxId,
+}: {
+  mailboxId: string;
+}) => {
+  const navigate = useNavigate({ from: "/settings" });
+  const {
+    areMailboxesPending,
+    canMakeMailboxPrivate,
+    detailGroup,
+    detailManagedDivisions,
+    detailManagedMembers,
+    hasAutomationAccess,
+    managedMailboxQuery,
+    mutations,
+    organizations,
+    placementItems,
+    selectedMailbox,
+  } = useMailboxDetailViewState(mailboxId);
+
+  if (areMailboxesPending) {
+    return (
+      <SettingsLoadingState className="min-h-64" label="Loading mailbox" />
+    );
+  }
+
+  if (selectedMailbox === null) {
+    return (
+      <div className={settingsSurfaceVariants({ variant: "page" })}>
+        <SettingsPageHeader title="Mailbox unavailable">
+          This mailbox is no longer available to your account.
+        </SettingsPageHeader>
+        <SettingsCard className={settingsSurfaceVariants({ variant: "body" })}>
+          <Button
+            onClick={() => {
+              runDetached(async () => {
+                await navigate({
+                  replace: true,
+                  search: (previous) => ({ ...previous, mailboxId: "" }),
+                  to: ".",
+                });
+              });
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            View mailboxes
+          </Button>
+        </SettingsCard>
+      </div>
+    );
+  }
+
+  return (
+    <MailboxDetailSettingsContent
+      canMakePrivate={canMakeMailboxPrivate}
+      deleteManagedMailboxMutation={asSettingsMutation(
+        mutations.deleteManagedMailboxMutation
+      )}
+      detailGroupName={detailGroup?.name}
+      detailManagedDivisions={detailManagedDivisions}
+      detailManagedMembers={detailManagedMembers}
+      disconnectMailboxMutation={asSettingsMutation(
+        mutations.disconnectMailboxMutation
+      )}
+      hasAutomationAccess={hasAutomationAccess}
+      isStartingGmail={mutations.isStartingGmail}
+      managedMailboxQuery={managedMailboxQuery}
+      mailbox={selectedMailbox}
+      moveGmailMailboxMutation={asSettingsMutation(
+        mutations.moveGmailMailboxMutation
+      )}
+      onStartGmailConnection={async (input) => {
+        await mutations.startGmailConnection({ ...input, organizations });
+      }}
+      organizations={organizations}
+      placementItems={placementItems}
+      removeManagedMailboxDivisionGrantMutation={asSettingsMutation(
+        mutations.removeManagedMailboxDivisionGrantMutation
+      )}
+      removeManagedMailboxGrantMutation={asSettingsMutation(
+        mutations.removeManagedMailboxGrantMutation
+      )}
+      setGmailAutoLabelingMutation={asSettingsMutation(
+        mutations.setGmailAutoLabelingMutation
+      )}
+      setManagedMailboxAccessModeMutation={asSettingsMutation(
+        mutations.setManagedMailboxAccessModeMutation
+      )}
+      setManagedMailboxDivisionGrantMutation={asSettingsMutation(
+        mutations.setManagedMailboxDivisionGrantMutation
+      )}
+      setManagedMailboxGrantMutation={asSettingsMutation(
+        mutations.setManagedMailboxGrantMutation
+      )}
+      updateManagedMailboxMutation={asSettingsMutation(
+        mutations.updateManagedMailboxMutation
+      )}
+    />
+  );
+};

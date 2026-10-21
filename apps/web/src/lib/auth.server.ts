@@ -1,14 +1,6 @@
 import "@tanstack/react-start/server-only";
+import type { SessionUser } from "@quieter/app/session-user";
 import { getSessionWithOrganization } from "@quieter/auth/session";
-
-type SessionUser = {
-  email: string;
-  emailVerified: boolean;
-  id: string;
-  image: string | null;
-  name: string;
-  needsOnboarding: boolean;
-};
 
 export const getSessionUserForRequest = async (
   request: Request

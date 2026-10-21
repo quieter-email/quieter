@@ -1,0 +1,31 @@
+@import "@quieter/app/styles.css";
+@source "./**/*.{ts,tsx}";
+
+.desktop-shell {
+  --desktop-content-height: calc(100dvh - var(--desktop-title-bar-height));
+  display: flex;
+  height: 100dvh;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.desktop-title-bar {
+  -webkit-app-region: drag;
+  height: var(--desktop-title-bar-height);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.desktop-content {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.desktop-content .h-dvh {
+  height: var(--desktop-content-height);
+}
+
+.desktop-content .min-h-dvh {
+  min-height: var(--desktop-content-height);
+}

@@ -1,0 +1,806 @@
+"use client";
+
+import {
+  Add01Icon,
+  Delete02Icon,
+  Loading03Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  getOrganizationMailUsageQueryKey,
+  organizationMailUsageQueryOptions,
+} from "@quieter/app/features/settings/components/organization-settings/organization-mail-usage-query";
+import {
+  SettingsInsetFieldRow,
+  SettingsInsetRow,
+  SettingsInsetRows,
+  SettingsInsetStackedRow,
+  SettingsRowText,
+  settingsSurfaceVariants,
+} from "@quieter/app/features/settings/components/settings-layout";
+import { toastError } from "@quieter/app/lib/error-toast";
+import type { rpc } from "@quieter/app/lib/orpc";
+import { orpc } from "@quieter/app/lib/orpc";
+import { ActionFooter } from "@quieter/ui/action-footer";
+import { Button } from "@quieter/ui/button";
+import { Fieldset } from "@quieter/ui/fieldset";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import {
+  NumberField,
+  NumberFieldDecrement,
+  NumberFieldGroup,
+  NumberFieldIncrement,
+  NumberFieldInput,
+} from "@quieter/ui/number-field";
+import { Pill } from "@quieter/ui/pill";
+import {
+  Progress,
+  ProgressIndicator,
+  ProgressTrack,
+} from "@quieter/ui/progress";
+import { Switch, SwitchThumb } from "@quieter/ui/switch";
+import { toast } from "@quieter/ui/toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+
+const centsPerDollar = 100;
+const maximumMilestones = 10;
+const suggestedMilestones = [25, 50, 75, 80, 90, 100];
+
+type Milestone = {
+  id: string;
+  percent: number | null;
+};
+
+const moneyFormatter = new Intl.NumberFormat("en-US", {
+  currency: "USD",
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 2,
+  style: "currency",
+});
+
+const rateFormatter = new Intl.NumberFormat("en-US", {
+  currency: "USD",
+  maximumFractionDigits: 4,
+  minimumFractionDigits: 3,
+  style: "currency",
+});
+
+const periodFormatter = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  month: "short",
+});
+
+const formatMoney = (cents: number | null) =>
+  cents === null ? "Unlimited" : moneyFormatter.format(cents / centsPerDollar);
+
+const formatPeriodDate = (value: string) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : periodFormatter.format(date);
+};
+
+const createInitialMilestones = (percents: number[]): Milestone[] =>
+  percents.map((percent, index) => ({
+    id: `saved-${index}`,
+    percent,
+  }));
+
+const ManagedUsageLoading = ({ message }: { message: string }) => (
+  <section className={settingsSurfaceVariants({ variant: "insetSection" })}>
+    <SettingsRowText title="Usage">
+      <span className="inline-flex items-center gap-2">
+        <HugeiconsIcon
+          aria-hidden
+          className="size-4 animate-spin"
+          icon={Loading03Icon}
+        />
+        {message}
+      </span>
+    </SettingsRowText>
+  </section>
+);
+
+const ManagedUsageUnavailable = ({ message }: { message: string }) => (
+  <section className={settingsSurfaceVariants({ variant: "insetSection" })}>
+    <SettingsRowText title="Usage">{message}</SettingsRowText>
+  </section>
+);
+
+const Price = ({
+  label,
+  suffix,
+  value,
+}: {
+  label: string;
+  suffix: string;
+  value: number;
+}) => (
+  <div className="min-w-0 py-3 @md:px-4 @md:first:pl-0 @md:last:pr-0">
+    <p className="text-caption text-muted-fg">{label}</p>
+    <p className="mt-1 font-mono text-body font-medium text-fg">
+      {rateFormatter.format(value)}
+      <span className="font-sans font-normal text-muted-fg"> {suffix}</span>
+    </p>
+  </div>
+);
+
+// Categorical, so it uses the q-* palette. Those tokens carry their own
+// light/dark values, so no `dark:` variant is needed here.
+const usageBreakdownConfig = [
+  {
+    className: "bg-q-blue",
+    kind: "aiChat",
+    label: "AI chat",
+  },
+  {
+    className: "bg-q-cyan",
+    kind: "aiMemory",
+    label: "AI memory",
+  },
+  {
+    className: "bg-q-yellow",
+    kind: "usefulDetails",
+    label: "Previous inbox details",
+  },
+  {
+    className: "bg-q-pink",
+    kind: "verificationCode",
+    label: "Verification codes",
+  },
+  {
+    className: "bg-q-purple",
+    kind: "autoLabel",
+    label: "Auto-label",
+  },
+  {
+    className: "bg-q-green",
+    kind: "inboundMail",
+    label: "Inbound mail",
+  },
+  {
+    className: "bg-q-orange",
+    kind: "outboundMail",
+    label: "Outbound mail",
+  },
+  {
+    className: "bg-muted-fg/50",
+    kind: "other",
+    label: "Other",
+  },
+] as const;
+
+const UsageBreakdown = ({
+  breakdown,
+  creditAmountCents,
+}: {
+  breakdown: {
+    costCents: number;
+    kind: (typeof usageBreakdownConfig)[number]["kind"];
+  }[];
+  creditAmountCents: number;
+}) => {
+  const costs = new Map(breakdown.map((item) => [item.kind, item.costCents]));
+  const items = usageBreakdownConfig.map((item) => ({
+    ...item,
+    costCents: costs.get(item.kind) ?? 0,
+  }));
+  const totalCostCents = items.reduce(
+    (total, item) => total + item.costCents,
+    0
+  );
+  const usedPercent =
+    creditAmountCents > 0
+      ? Math.min(100, (totalCostCents / creditAmountCents) * 100)
+      : 0;
+
+  return (
+    <div className="mt-3">
+      <div className="flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border/60 squircle">
+        <div
+          className="flex h-full min-w-1 overflow-hidden"
+          // oxlint-disable-next-line shadcn/no-inline-styles -- Bar width is measured from cost data.
+          style={{ width: `${usedPercent}%` }}
+        >
+          {items.flatMap((item) => {
+            if (item.costCents <= 0) {
+              return [];
+            }
+
+            const percentage =
+              totalCostCents > 0
+                ? Math.round((item.costCents / totalCostCents) * 100)
+                : 0;
+
+            return [
+              <Tooltip key={item.kind}>
+                <TooltipTrigger
+                  // oxlint-disable-next-line shadcn/no-arbitrary-values, shadcn/no-restyle -- Segments are measured per cost slice with a brightness hover.
+                  className={`${item.className} min-w-1 transition-[filter] hover:brightness-110`}
+                  render={<span />}
+                  // oxlint-disable-next-line shadcn/no-inline-styles -- Segment flex is measured from cost data.
+                  style={{ flexBasis: 0, flexGrow: item.costCents }}
+                />
+                <TooltipContent
+                  // oxlint-disable-next-line shadcn/no-restyle -- Usage tooltip keeps its card metrics.
+                  className="min-w-40 px-3 py-2"
+                >
+                  <div className="flex items-center justify-between gap-5">
+                    <span>{item.label}</span>
+                    <span className="font-mono font-medium">
+                      {moneyFormatter.format(item.costCents / centsPerDollar)}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-muted-fg">{percentage}% of usage</p>
+                </TooltipContent>
+              </Tooltip>,
+            ];
+          })}
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-x-5 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
+        {items.map((item) => (
+          <div
+            className="flex min-w-0 items-center gap-2 text-caption"
+            key={item.kind}
+          >
+            <span
+              className={`size-2 shrink-0 rounded-full ${item.className}`}
+            />
+            <span className="min-w-0 flex-1 truncate text-muted-fg">
+              {item.label}
+            </span>
+            <span className="font-mono text-fg">
+              {moneyFormatter.format(item.costCents / centsPerDollar)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const ManagedUsageMilestoneRow = ({
+  canManageOrganizationMailUsage,
+  includedUsageCents,
+  limitCents,
+  milestone,
+  milestoneCount,
+  onRemove,
+  onUpdate,
+}: {
+  canManageOrganizationMailUsage: boolean;
+  includedUsageCents: number;
+  limitCents: number | null;
+  milestone: Milestone;
+  milestoneCount: number;
+  onRemove: (id: string) => void;
+  onUpdate: (id: string, percent: number | null) => void;
+}) => {
+  const includedThresholdCents =
+    milestone.percent === null
+      ? null
+      : Math.round(includedUsageCents * (milestone.percent / 100));
+  const overageThresholdCents =
+    milestone.percent === null || limitCents === null
+      ? null
+      : Math.round(limitCents * (milestone.percent / 100));
+
+  return (
+    <SettingsInsetStackedRow>
+      <NumberField
+        className="w-auto shrink-0"
+        disabled={!canManageOrganizationMailUsage}
+        format={{
+          maximumFractionDigits: 0,
+          style: "unit",
+          unit: "percent",
+          unitDisplay: "narrow",
+        }}
+        max={100}
+        min={1}
+        onValueChange={(value) => {
+          onUpdate(milestone.id, value);
+        }}
+        step={5}
+        value={milestone.percent}
+      >
+        <NumberFieldGroup className="w-36">
+          <NumberFieldDecrement />
+          <NumberFieldInput aria-label="Alert milestone percentage" />
+          <NumberFieldIncrement />
+        </NumberFieldGroup>
+      </NumberField>
+
+      <div className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1 text-caption text-muted-fg">
+        <span>
+          <span className="font-mono text-fg">
+            {includedThresholdCents === null
+              ? "Enter a threshold"
+              : formatMoney(includedThresholdCents)}
+          </span>{" "}
+          of the monthly usage balance
+        </span>
+        {overageThresholdCents !== null && (
+          <span>
+            <span className="font-mono text-fg">
+              {formatMoney(overageThresholdCents)}
+            </span>{" "}
+            of the overage limit
+          </span>
+        )}
+      </div>
+
+      {canManageOrganizationMailUsage && (
+        <IconButtonTooltip label="Remove milestone">
+          <Button
+            aria-label="Remove milestone"
+            disabled={milestoneCount === 1}
+            onClick={() => {
+              onRemove(milestone.id);
+            }}
+            size="icon-sm"
+            variant="ghost"
+          >
+            <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+          </Button>
+        </IconButtonTooltip>
+      )}
+    </SettingsInsetStackedRow>
+  );
+};
+
+const ManagedUsageSettingsControls = ({
+  canManageOrganizationMailUsage,
+  hasUnsavedChanges,
+  includedUsageCents,
+  isSaving,
+  limitCents,
+  limitDollars,
+  milestoneError,
+  milestones,
+  onAddMilestone,
+  onRemoveMilestone,
+  onSave,
+  onUpdateMilestone,
+  overageEnabled,
+  setLimitDollars,
+  setOverageEnabled,
+}: {
+  canManageOrganizationMailUsage: boolean;
+  hasUnsavedChanges: boolean;
+  includedUsageCents: number;
+  isSaving: boolean;
+  limitCents: number | null;
+  limitDollars: number | null;
+  milestoneError: string | null;
+  milestones: Milestone[];
+  onAddMilestone: () => void;
+  onRemoveMilestone: (id: string) => void;
+  onSave: () => void;
+  onUpdateMilestone: (id: string, percent: number | null) => void;
+  overageEnabled: boolean;
+  setLimitDollars: (value: number | null) => void;
+  setOverageEnabled: (value: boolean) => void;
+}) => (
+  <Fieldset bare disabled={isSaving}>
+    <SettingsInsetRows>
+      <SettingsInsetRow className="justify-between gap-6">
+        <SettingsRowText
+          className="max-w-xl"
+          title={<label htmlFor="managed-overage-toggle">Allow overage</label>}
+        >
+          <span>Continue paid usage after the balance runs out.</span>
+        </SettingsRowText>
+        <Switch
+          checked={overageEnabled}
+          className="shrink-0"
+          disabled={!canManageOrganizationMailUsage}
+          id="managed-overage-toggle"
+          onCheckedChange={setOverageEnabled}
+        >
+          <SwitchThumb />
+        </Switch>
+      </SettingsInsetRow>
+
+      <SettingsInsetFieldRow>
+        <SettingsRowText className="max-w-xl" title="Monthly overage limit">
+          <span>Maximum extra spend per month.</span>
+        </SettingsRowText>
+
+        <div className="flex items-center gap-2">
+          <NumberField
+            disabled={!canManageOrganizationMailUsage || !overageEnabled}
+            format={{
+              currency: "USD",
+              maximumFractionDigits: 2,
+              minimumFractionDigits: 2,
+              style: "currency",
+            }}
+            min={0}
+            onValueChange={setLimitDollars}
+            step={5}
+            value={limitDollars}
+          >
+            <NumberFieldGroup className="w-44">
+              <NumberFieldDecrement />
+              <NumberFieldInput
+                aria-label="Monthly overage limit"
+                // oxlint-disable-next-line shadcn/no-restyle -- Limit reads as a numeral.
+                className="font-mono"
+                placeholder="No limit"
+              />
+              <NumberFieldIncrement />
+            </NumberFieldGroup>
+          </NumberField>
+          <Button
+            disabled={
+              !canManageOrganizationMailUsage ||
+              !overageEnabled ||
+              limitDollars === null
+            }
+            onClick={() => {
+              setLimitDollars(null);
+            }}
+            size="sm"
+            variant="ghost"
+          >
+            Clear
+          </Button>
+        </div>
+      </SettingsInsetFieldRow>
+
+      <SettingsInsetRow className="justify-between gap-4">
+        <SettingsRowText className="max-w-xl" title="Alert milestones">
+          <span>Recorded once per threshold each billing period.</span>
+        </SettingsRowText>
+
+        {canManageOrganizationMailUsage && (
+          <Button
+            disabled={milestones.length >= maximumMilestones}
+            onClick={onAddMilestone}
+            size="sm"
+            variant="outline"
+          >
+            <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+            Add
+          </Button>
+        )}
+      </SettingsInsetRow>
+
+      {milestones.map((milestone) => (
+        <ManagedUsageMilestoneRow
+          canManageOrganizationMailUsage={canManageOrganizationMailUsage}
+          includedUsageCents={includedUsageCents}
+          key={milestone.id}
+          limitCents={limitCents}
+          milestone={milestone}
+          milestoneCount={milestones.length}
+          onRemove={onRemoveMilestone}
+          onUpdate={onUpdateMilestone}
+        />
+      ))}
+
+      {milestoneError !== null && milestoneError !== "" ? (
+        <SettingsInsetRow>
+          <p className="text-caption text-destructive">{milestoneError}</p>
+        </SettingsInsetRow>
+      ) : null}
+
+      {canManageOrganizationMailUsage ? (
+        <SettingsInsetRow>
+          <div className="w-full space-y-3">
+            {hasUnsavedChanges ? (
+              <p className="text-caption text-muted-fg">Unsaved changes</p>
+            ) : null}
+            <ActionFooter>
+              <Button
+                disabled={
+                  !hasUnsavedChanges ||
+                  (milestoneError !== null && milestoneError !== "") ||
+                  isSaving
+                }
+                onClick={onSave}
+                size="sm"
+              >
+                {isSaving && (
+                  <HugeiconsIcon
+                    aria-hidden
+                    className="size-4 animate-spin"
+                    icon={Loading03Icon}
+                  />
+                )}
+                Save changes
+              </Button>
+            </ActionFooter>
+          </div>
+        </SettingsInsetRow>
+      ) : null}
+    </SettingsInsetRows>
+  </Fieldset>
+);
+
+const ManagedUsageSettingsForm = ({
+  canManageOrganizationMailUsage,
+  organizationId,
+  overview,
+}: {
+  canManageOrganizationMailUsage: boolean;
+  organizationId: string;
+  overview: Awaited<ReturnType<typeof rpc.organizationMailUsage.overview>>;
+}) => {
+  const queryClient = useQueryClient();
+  const [overageEnabled, setOverageEnabled] = useState(
+    overview.settings.overageEnabled
+  );
+  const [limitDollars, setLimitDollars] = useState<number | null>(
+    overview.settings.monthlyOverageLimitCents === null
+      ? null
+      : overview.settings.monthlyOverageLimitCents / centsPerDollar
+  );
+  const [milestones, setMilestones] = useState<Milestone[]>(() =>
+    createInitialMilestones(overview.settings.alertMilestonePercents)
+  );
+  const updateMutation = useMutation({
+    ...orpc.organizationMailUsage.updateSettings.mutationOptions(),
+    mutationKey: ["organization-mail-usage", organizationId, "update"],
+    onSuccess: async (saved) => {
+      setOverageEnabled(saved.settings.overageEnabled);
+      setLimitDollars(
+        saved.settings.monthlyOverageLimitCents === null
+          ? null
+          : saved.settings.monthlyOverageLimitCents / centsPerDollar
+      );
+      setMilestones(
+        createInitialMilestones(saved.settings.alertMilestonePercents)
+      );
+      await queryClient.invalidateQueries({
+        queryKey: getOrganizationMailUsageQueryKey(organizationId),
+      });
+    },
+  });
+  const milestonePercents = milestones.map((milestone) => milestone.percent);
+  const hasDuplicateMilestone =
+    new Set(milestonePercents.filter((percent) => percent !== null)).size !==
+    milestonePercents.filter((percent) => percent !== null).length;
+  const hasInvalidMilestone = milestonePercents.some(
+    (percent) => percent === null || percent < 1 || percent > 100
+  );
+  const milestoneError =
+    (hasInvalidMilestone && "Milestones must be between 1% and 100%.") ||
+    (hasDuplicateMilestone && "Each milestone must be unique.") ||
+    null;
+  const includedUsageCents = overview.includedManagedUsageCents ?? 0;
+  const managedUsageCostCents = overview.usage.managedUsageCostCents ?? 0;
+  const usagePercent =
+    includedUsageCents > 0
+      ? Math.min(
+          100,
+          Math.round((managedUsageCostCents / includedUsageCents) * 100)
+        )
+      : 0;
+  const limitCents =
+    limitDollars === null ? null : Math.round(limitDollars * centsPerDollar);
+  const periodStart = formatPeriodDate(overview.period.start);
+  const periodEnd = formatPeriodDate(overview.period.end);
+  const savedMilestonePercents =
+    overview.settings.alertMilestonePercents.toSorted((a, b) => a - b);
+  const hasUnsavedChanges =
+    overageEnabled !== overview.settings.overageEnabled ||
+    limitCents !== overview.settings.monthlyOverageLimitCents ||
+    milestonePercents.length !== savedMilestonePercents.length ||
+    milestonePercents
+      .toSorted((a, b) => (a ?? 0) - (b ?? 0))
+      .some((percent, index) => percent !== savedMilestonePercents[index]);
+
+  const updateMilestone = (id: string, percent: number | null) => {
+    setMilestones((current) =>
+      current.map((milestone) =>
+        milestone.id === id ? { ...milestone, percent } : milestone
+      )
+    );
+  };
+
+  const addMilestone = () => {
+    const usedPercents = new Set(milestonePercents);
+    const percent =
+      suggestedMilestones.find((candidate) => !usedPercents.has(candidate)) ??
+      Math.min(100, Math.max(1, (milestonePercents.at(-1) ?? 0) + 5));
+
+    setMilestones((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        percent,
+      },
+    ]);
+  };
+
+  const saveSettings = async () => {
+    if (milestoneError) {
+      toast.error(milestoneError);
+      return;
+    }
+
+    try {
+      const alertMilestonePercents = milestonePercents.filter(
+        (percent): percent is number => percent !== null
+      );
+      await updateMutation.mutateAsync({
+        alertMilestonePercents,
+        monthlyOverageLimitCents: limitCents,
+        organizationId,
+        overageEnabled,
+      });
+      toast.success("Usage balance settings saved.");
+    } catch (error) {
+      toastError(error, {
+        boundary: "mail-usage",
+        fallback: "Could not update usage settings.",
+      });
+    }
+  };
+
+  if (overview.hasUnlimitedAccess) {
+    return (
+      <section className={settingsSurfaceVariants({ variant: "insetSection" })}>
+        <SettingsInsetRow className="justify-between gap-4">
+          <SettingsRowText title="Usage">
+            {formatMoney(managedUsageCostCents)} tracked this period
+          </SettingsRowText>
+          <Pill tone="green">Unlimited</Pill>
+        </SettingsInsetRow>
+      </section>
+    );
+  }
+
+  return (
+    <section className={settingsSurfaceVariants({ variant: "divider" })}>
+      <div className="flex flex-col gap-4 px-4 pt-0 @md:flex-row @md:items-start @md:justify-between @md:px-6">
+        <SettingsRowText title="Usage">
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {periodStart !== null && periodEnd !== null ? (
+              <span>
+                {periodStart} to {periodEnd}
+              </span>
+            ) : null}
+          </div>
+        </SettingsRowText>
+      </div>
+
+      <div className="mt-5 px-4 @md:px-6">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="font-mono text-title-sm font-semibold text-fg">
+              {formatMoney(managedUsageCostCents)}
+            </p>
+            <p className="mt-1 text-caption text-muted-fg">used this period</p>
+          </div>
+          <p className="text-right text-caption text-muted-fg">
+            {formatMoney(includedUsageCents)} monthly usage balance
+            <br />
+            {formatMoney(overview.usage.billableCostCents)} overage
+          </p>
+        </div>
+
+        <UsageBreakdown
+          breakdown={overview.usage.breakdown}
+          creditAmountCents={includedUsageCents}
+        />
+
+        <Progress className="sr-only" max={100} value={usagePercent}>
+          <ProgressTrack>
+            <ProgressIndicator />
+          </ProgressTrack>
+        </Progress>
+      </div>
+
+      <div className="mx-4 mt-5 mb-1 grid divide-y divide-border/70 border-y border-border @md:mx-6 @md:grid-cols-3 @md:divide-x @md:divide-y-0">
+        <Price
+          label="Messages"
+          suffix="/ 1K"
+          value={overview.managedUsageRates.messagesPerThousandUsd}
+        />
+        <Price
+          label="Attachment data"
+          suffix="/ GB"
+          value={overview.managedUsageRates.attachmentDataPerGbUsd}
+        />
+        <Price
+          label="Incoming mail processing"
+          suffix="/ 1K units"
+          value={overview.managedUsageRates.inboundProcessingPerThousandUsd}
+        />
+      </div>
+
+      <ManagedUsageSettingsControls
+        canManageOrganizationMailUsage={canManageOrganizationMailUsage}
+        hasUnsavedChanges={hasUnsavedChanges}
+        includedUsageCents={includedUsageCents}
+        isSaving={updateMutation.isPending}
+        limitCents={limitCents}
+        limitDollars={limitDollars}
+        milestoneError={milestoneError}
+        milestones={milestones}
+        onAddMilestone={addMilestone}
+        onRemoveMilestone={(id) => {
+          setMilestones((current) =>
+            current.filter((candidate) => candidate.id !== id)
+          );
+        }}
+        onSave={() => void saveSettings()}
+        onUpdateMilestone={updateMilestone}
+        overageEnabled={overageEnabled}
+        setLimitDollars={setLimitDollars}
+        setOverageEnabled={setOverageEnabled}
+      />
+
+      {!canManageOrganizationMailUsage && (
+        <p className="px-4 pt-1 pb-3 text-caption text-muted-fg @md:px-6">
+          Only admins and owners can change team credit settings.
+        </p>
+      )}
+    </section>
+  );
+};
+
+export const OrganizationMailUsageSettings = ({
+  billingAccessUnknown,
+  billingPending,
+  canManageOrganizationMailUsage,
+  canUseOrganizationMail,
+  organizationId,
+}: {
+  billingAccessUnknown: boolean;
+  billingPending: boolean;
+  canManageOrganizationMailUsage: boolean;
+  canUseOrganizationMail: boolean;
+  organizationId: string;
+}) => {
+  const {
+    data: usage,
+    error: usageError,
+    isError: isUsageError,
+    isPending: isUsagePending,
+  } = useQuery(
+    organizationMailUsageQueryOptions(organizationId, canUseOrganizationMail)
+  );
+
+  if (billingPending) {
+    return <ManagedUsageLoading message="Loading billing access…" />;
+  }
+
+  if (billingAccessUnknown) {
+    return <ManagedUsageUnavailable message="Could not load billing access." />;
+  }
+
+  if (!canUseOrganizationMail) {
+    return <ManagedUsageUnavailable message="Available with Team billing." />;
+  }
+
+  if (isUsagePending) {
+    return <ManagedUsageLoading message="Loading usage…" />;
+  }
+
+  if (isUsageError) {
+    return (
+      <ManagedUsageUnavailable
+        message={usageError.message ?? "Could not load Managed Usage."}
+      />
+    );
+  }
+
+  if (!usage.hasAccess) {
+    return <ManagedUsageUnavailable message="Available with Team billing." />;
+  }
+
+  return (
+    <ManagedUsageSettingsForm
+      canManageOrganizationMailUsage={canManageOrganizationMailUsage}
+      key={organizationId}
+      organizationId={organizationId}
+      overview={usage}
+    />
+  );
+};

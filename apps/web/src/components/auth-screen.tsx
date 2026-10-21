@@ -2,29 +2,30 @@
 
 import { Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Brand } from "@quieter/ui/brand";
+import { AuthLayout } from "@quieter/app/components/auth-layout";
+import { GoogleLogo } from "@quieter/app/components/google-logo";
+import { setDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
+import { setManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
+import { authClient } from "@quieter/app/lib/auth";
+import { toastError } from "@quieter/app/lib/error-toast";
+import {
+  isPreviewPersonasAvailable,
+  setPreviewPersona,
+} from "@quieter/app/lib/preview-personas";
+import type { PreviewPersona } from "@quieter/app/lib/preview-personas";
+import { queryPersister } from "@quieter/app/lib/query-persister";
+import { desktopAuthQuerySchema } from "@quieter/auth/desktop";
+import type { DesktopAuthQuery } from "@quieter/auth/desktop";
 import { Button } from "@quieter/ui/button";
 import { FieldLabel } from "@quieter/ui/field";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { getRouteApi, Link } from "@tanstack/react-router";
+import { getRouteApi } from "@tanstack/react-router";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { z } from "zod";
-
-import { AuthVisual } from "#/components/auth-visual";
-import { GoogleLogo } from "#/components/google-logo";
-import { setDemoModeEnabled } from "#/features/settings/domain/demo-mode-setting";
-import { setManagedDemoModeEnabled } from "#/features/settings/domain/managed-demo-mode-setting";
-import { authClient } from "#/lib/auth";
-import {
-  isPreviewPersonasAvailable,
-  setPreviewPersona,
-} from "#/lib/preview-personas";
-import type { PreviewPersona } from "#/lib/preview-personas";
-import { queryPersister } from "#/lib/query-persister";
 
 const authRouteApi = getRouteApi("/_app/auth");
 const AUTHENTICATION_ERROR_MESSAGE =
@@ -80,11 +81,11 @@ const AuthLastUsedHint = () => (
   </LazyMotion>
 );
 
-const AuthCredentials = ({
-  navigate,
+export const AuthCredentials = ({
+  electronQuery,
   returnTo,
 }: {
-  navigate: AuthNavigate;
+  electronQuery?: DesktopAuthQuery;
   returnTo?: string;
 }) => {
   const queryClient = useQueryClient();
@@ -120,7 +121,7 @@ const AuthCredentials = ({
       const response = await authClient.signIn.social({
         callbackURL: callbackUrl,
         errorCallbackURL: getErrorCallbackHref(),
-        fetchOptions: { timeout: 15_000 },
+        fetchOptions: { query: electronQuery, timeout: 15_000 },
         provider: "google",
         // Unified flow: an unknown Google account creates one here rather than
         // dead-ending on `signup_disabled`.
@@ -128,7 +129,8 @@ const AuthCredentials = ({
       });
       if (response.error) {
         throw new Error(
-          response.error.message ?? "Could not start Google sign-in."
+          response.error.message ?? "Could not start Google sign-in.",
+          { cause: response.error }
         );
       }
 
@@ -136,6 +138,10 @@ const AuthCredentials = ({
     },
     mutationKey: ["auth", "sign-in", "google"],
     onError: (error) => {
+      toastError(error, {
+        boundary: "auth-google-sign-in",
+        fallback: AUTHENTICATION_ERROR_MESSAGE,
+      });
       setErrors((prev) => ({
         ...prev,
         google: error.message || "Could not start Google sign-in.",
@@ -157,16 +163,23 @@ const AuthCredentials = ({
 
   const passkeyMutation = useMutation({
     mutationFn: async () => {
-      const response = await authClient.signIn.passkey();
+      const response = await authClient.signIn.passkey({
+        fetchOptions: { query: electronQuery },
+      });
       if (response.error) {
         throw new Error(
-          response.error.message ?? "Could not sign in with a passkey."
+          response.error.message ?? "Could not sign in with a passkey.",
+          { cause: response.error }
         );
       }
       return response;
     },
     mutationKey: ["auth", "sign-in", "passkey"],
     onError: (error) => {
+      toastError(error, {
+        boundary: "auth-passkey-sign-in",
+        fallback: AUTHENTICATION_ERROR_MESSAGE,
+      });
       setErrors((prev) => ({
         ...prev,
         passkey: error.message || "Could not sign in with a passkey.",
@@ -178,13 +191,6 @@ const AuthCredentials = ({
     onSuccess: async () => {
       queryClient.clear();
       await queryPersister.removeQueries();
-
-      if (callbackUrl === "/") {
-        await navigate({
-          to: "/",
-        });
-        return;
-      }
 
       globalThis.window.location.assign(callbackUrl);
     },
@@ -207,6 +213,7 @@ const AuthCredentials = ({
             callbackURL: callbackUrl,
             email: normalizedEmail,
             errorCallbackURL: getErrorCallbackHref(),
+            fetchOptions: { query: electronQuery },
             // Always allowed: the response is identical whether or not an
             // account exists, so the form never reveals which addresses are
             // registered. A display name is set later in Settings.
@@ -214,13 +221,21 @@ const AuthCredentials = ({
           });
 
           if (response.error) {
+            toastError(response.error, {
+              boundary: "auth-magic-link",
+              fallback: AUTHENTICATION_ERROR_MESSAGE,
+            });
             return {
               form: AUTHENTICATION_ERROR_MESSAGE,
             };
           }
 
           await clearCachedAccountData();
-        } catch {
+        } catch (error) {
+          toastError(error, {
+            boundary: "auth-magic-link",
+            fallback: AUTHENTICATION_ERROR_MESSAGE,
+          });
           return {
             form: AUTHENTICATION_ERROR_MESSAGE,
           };
@@ -384,6 +399,7 @@ const AuthCredentials = ({
 };
 
 const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
+  const session = authClient.useSession();
   const [error, setError] = useState<string | null>(null);
   const [pendingPersona, setPendingPersona] = useState<PreviewPersona | null>(
     null
@@ -418,6 +434,7 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
       setPreviewPersona(persona);
       setDemoModeEnabled(persona === "gmail");
       setManagedDemoModeEnabled(persona === "managed");
+      await session.refetch();
 
       await navigate({ to: "/" });
       complete();
@@ -461,54 +478,32 @@ export const AuthScreen = () => {
   const { error, returnTo } = authRouteApi.useSearch();
   const navigate = authRouteApi.useNavigate();
   const authError = error ? AUTHENTICATION_ERROR_MESSAGE : null;
+  const returnUrl = new URL(returnTo ?? "/", "https://quieter.local");
+  const electronQuery =
+    returnUrl.pathname === "/desktop/auth"
+      ? desktopAuthQuerySchema.safeParse(
+          Object.fromEntries(returnUrl.searchParams)
+        ).data
+      : undefined;
 
   return (
-    <div className="auth-scene dark relative isolate grid h-dvh max-h-dvh w-full overflow-hidden md:grid-cols-[7fr_5fr]">
-      <div className="relative z-10 flex size-full min-h-0 flex-col items-center overflow-y-auto px-6 py-24">
-        <div className="absolute top-6 left-6">
-          <Brand
-            // oxlint-disable-next-line shadcn/no-restyle -- Auth header keeps its brand metrics.
-            className="h-6 w-24 text-fg"
-            variant="combination"
-          />
-        </div>
-        <div className="my-auto w-full max-w-[22rem]">
-          <h1 className="text-center text-title-md font-medium tracking-tight text-fg">
-            Continue to Quieter
-          </h1>
+    <AuthLayout title="Continue to Quieter">
+      <AuthCredentials
+        electronQuery={electronQuery}
+        key={returnTo ?? ""}
+        returnTo={returnTo}
+      />
 
-          <AuthCredentials
-            key={returnTo ?? ""}
-            navigate={navigate}
-            returnTo={returnTo}
-          />
+      <PreviewPersonaPicker navigate={navigate} />
 
-          <PreviewPersonaPicker navigate={navigate} />
-
-          {authError ? (
-            <output
-              aria-live="assertive"
-              className="mt-4 text-body text-destructive"
-            >
-              {authError}
-            </output>
-          ) : null}
-          <nav
-            aria-label="Legal"
-            className="mt-10 flex justify-center gap-5 text-caption text-muted-fg"
-          >
-            <Link className="underline-offset-4 hover:underline" to="/terms">
-              Terms
-            </Link>
-            <Link className="underline-offset-4 hover:underline" to="/privacy">
-              Privacy
-            </Link>
-          </nav>
-        </div>
-      </div>
-      <div className="relative size-full min-h-0 border-l border-border/30 bg-auth-visual-bg max-md:hidden">
-        <AuthVisual />
-      </div>
-    </div>
+      {authError ? (
+        <output
+          aria-live="assertive"
+          className="mt-4 text-body text-destructive"
+        >
+          {authError}
+        </output>
+      ) : null}
+    </AuthLayout>
   );
 };

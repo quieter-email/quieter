@@ -54,3 +54,8 @@ yarn-error.log*
 # Cursor (keep Ultracite agent hooks committed)
 .cursor/*
 !.cursor/hooks.json
+
+# Desktop installers
+apps/desktop/release/
+
+.env.desktop.local
