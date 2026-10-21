@@ -94,8 +94,8 @@ export const PreferencesSettingsPanel = () => {
             Choose how Quieter looks on this device.
           </SettingsRow>
           <SettingsRow action={<ThemePicker />} title="Theme">
-            Pick a color palette. Your light and dark choices are remembered on
-            this device.
+            Choose a look for your workspace. Your light and dark choices are
+            remembered on this device.
           </SettingsRow>
           <SettingsRow
             action={

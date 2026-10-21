@@ -5,7 +5,7 @@ import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
 
 export const workspaceGutterClassName =
-  "[--workspace-gutter:--spacing(1.5)] lg:[--workspace-gutter:--spacing(2)]";
+  "[--workspace-gutter:var(--workspace-gap)] lg:[--workspace-gutter:var(--workspace-gap-wide)]";
 
 export const workspaceSectionVariants = cva(
   `${workspaceGutterClassName} overflow-hidden rounded-xl border border-border bg-bg-raised shadow-surface [background-image:var(--panel-gradient)]`,

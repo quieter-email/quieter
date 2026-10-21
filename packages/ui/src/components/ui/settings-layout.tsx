@@ -10,26 +10,27 @@ import { cn } from "../../lib/cn";
 export const settingsSurfaceVariants = cva("", {
   variants: {
     variant: {
-      body: "space-y-3 px-4 py-3 @md:px-6",
+      body: "space-y-3 px-4 py-(--settings-row-padding) @md:px-6",
       divide: "divide-y divide-border/70",
       divider:
         "relative after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:after:inset-x-6",
       fieldRowShell:
-        "relative flex w-full flex-col items-start justify-between gap-4 px-4 py-3 after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:flex-row @md:items-center @md:px-6 @md:after:inset-x-6",
+        "relative flex w-full flex-col items-start justify-between gap-4 px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:flex-row @md:items-center @md:px-6 @md:after:inset-x-6",
       footer:
-        "flex flex-wrap items-center justify-between gap-3 px-4 py-3 @md:px-6",
+        "flex flex-wrap items-center justify-between gap-3 px-4 py-(--settings-row-padding) @md:px-6",
       form: "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2",
       insetFieldRow:
-        "flex w-full flex-col gap-4 px-4 py-3 @md:flex-row @md:items-center @md:justify-between @md:px-6",
-      insetRow: "flex w-full items-center gap-4 px-4 py-3 @md:px-6",
+        "flex w-full flex-col gap-4 px-4 py-(--settings-row-padding) @md:flex-row @md:items-center @md:justify-between @md:px-6",
+      insetRow:
+        "flex w-full items-center gap-4 px-4 py-(--settings-row-padding) @md:px-6",
       insetSection:
-        "relative px-4 py-3 after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
+        "relative px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
       insetStackedRow:
-        "flex w-full flex-col gap-3 px-4 py-3 @md:flex-row @md:items-center @md:px-6",
-      padding: "px-4 py-3 @md:px-6",
+        "flex w-full flex-col gap-3 px-4 py-(--settings-row-padding) @md:flex-row @md:items-center @md:px-6",
+      padding: "px-4 py-(--settings-row-padding) @md:px-6",
       page: "@container space-y-8",
       rowShell:
-        "squircle relative flex w-full items-center gap-4 px-4 py-3 after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
+        "squircle relative flex w-full items-center gap-4 px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
       title: "text-body-sm font-normal text-fg",
       value: "text-caption/4 text-muted-fg",
     },
@@ -106,7 +107,7 @@ export const SettingsCard = ({
     className={cn(
       "@container overflow-hidden rounded-lg border border-border bg-bg-raised/60 squircle",
       {
-        "flex min-h-15 items-center justify-between gap-4 px-4 py-3 @md:px-6":
+        "flex min-h-15 items-center justify-between gap-4 px-4 py-(--settings-row-padding) @md:px-6":
           variant === "error",
       },
       className
