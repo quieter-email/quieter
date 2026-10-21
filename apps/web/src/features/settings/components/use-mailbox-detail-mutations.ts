@@ -211,11 +211,6 @@ export const useMailboxDetailMutations = (
     mutationKey: ["mail", "move-gmail-mailbox"],
     onSuccess: invalidateMailboxes,
   });
-  const setDefaultMailboxMutation = useMutation({
-    ...orpc.mail.setDefaultMailbox.mutationOptions(),
-    mutationKey: ["mail", "set-default-mailbox"],
-    onSuccess: invalidateMailboxes,
-  });
   const updateManagedMailboxMutation = useMutation({
     ...orpc.mail.updateManagedMailbox.mutationOptions(),
     ...optimisticMailboxPatch(
@@ -307,24 +302,6 @@ export const useMailboxDetailMutations = (
     }
   };
 
-  const setDefaultMailbox = (
-    nextMailboxId: string,
-    defaultMailboxId: string | null
-  ) => {
-    const isDefault = nextMailboxId === defaultMailboxId;
-    setDefaultMailboxMutation.mutate(
-      { mailboxId: isDefault ? null : nextMailboxId },
-      {
-        onError: (error) => {
-          toastError(error, {
-            boundary: "mailbox-settings",
-            fallback: "Could not update default mailbox.",
-          });
-        },
-      }
-    );
-  };
-
   return {
     deleteManagedMailboxMutation,
     disconnectMailboxMutation,
@@ -332,8 +309,6 @@ export const useMailboxDetailMutations = (
     moveGmailMailboxMutation,
     removeManagedMailboxDivisionGrantMutation,
     removeManagedMailboxGrantMutation,
-    setDefaultMailbox,
-    setDefaultMailboxMutation,
     setGmailAutoLabelingMutation,
     setManagedMailboxAccessModeMutation,
     setManagedMailboxDivisionGrantMutation,

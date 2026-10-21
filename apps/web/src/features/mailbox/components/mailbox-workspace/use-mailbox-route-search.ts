@@ -44,7 +44,7 @@ export type MailboxRouteState = {
   messageId?: string;
   query: string;
   threadId?: string;
-  view: MailboxWorkspaceView;
+  view?: MailboxWorkspaceView;
 };
 
 const normalizeSearchValue = (value: string | null | undefined) => {
@@ -168,9 +168,19 @@ export const useMailboxRouteSearch = () => {
     mailboxId,
     mailto,
     messageId,
+    opensDefaultMailbox:
+      view === undefined &&
+      mailboxId === undefined &&
+      routeMailbox === "inbox" &&
+      !chatId &&
+      !compose &&
+      !mailto &&
+      !messageId &&
+      !threadId &&
+      !query,
     query,
     setMailboxSearch,
     threadId,
-    view,
+    view: view ?? "inbox",
   };
 };

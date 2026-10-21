@@ -45,7 +45,6 @@ type ManagedMailboxQuery = {
 
 export const MailboxDetailSettingsContent = ({
   canMakePrivate,
-  defaultMailboxId,
   deleteManagedMailboxMutation,
   detailGroupName,
   detailManagedDivisions,
@@ -56,13 +55,11 @@ export const MailboxDetailSettingsContent = ({
   managedMailboxQuery,
   mailbox,
   moveGmailMailboxMutation,
-  onSetDefaultMailbox,
   onStartGmailConnection,
   organizations,
   placementItems,
   removeManagedMailboxDivisionGrantMutation,
   removeManagedMailboxGrantMutation,
-  setDefaultMailboxMutation,
   setGmailAutoLabelingMutation,
   setManagedMailboxAccessModeMutation,
   setManagedMailboxDivisionGrantMutation,
@@ -70,7 +67,6 @@ export const MailboxDetailSettingsContent = ({
   updateManagedMailboxMutation,
 }: {
   canMakePrivate: boolean;
-  defaultMailboxId: string | null;
   deleteManagedMailboxMutation: SettingsMutation<{ mailboxId: string }>;
   detailGroupName: string | undefined;
   detailManagedDivisions: { id: string; name: string }[];
@@ -88,7 +84,6 @@ export const MailboxDetailSettingsContent = ({
     mailboxId: string;
     organizationId: string;
   }>;
-  onSetDefaultMailbox: (mailboxId: string) => void;
   onStartGmailConnection: (input: {
     mailboxId: string;
     organizationId: string;
@@ -103,7 +98,6 @@ export const MailboxDetailSettingsContent = ({
     mailboxId: string;
     userId: string;
   }>;
-  setDefaultMailboxMutation: SettingsMutation<{ mailboxId: string | null }>;
   setGmailAutoLabelingMutation: SettingsMutation<ManagedMailboxToggleInput>;
   setManagedMailboxAccessModeMutation: SettingsMutation<ManagedMailboxAccessModeInput>;
   setManagedMailboxDivisionGrantMutation: SettingsMutation<ManagedMailboxDivisionGrantInput>;
@@ -133,18 +127,17 @@ export const MailboxDetailSettingsContent = ({
         {detailGroupName}
       </SettingsPageHeader>
 
-      <MailboxDetailGeneralSection
-        defaultMailboxId={defaultMailboxId}
-        isDefaultMailboxPending={setDefaultMailboxMutation.isPending}
-        isMovePending={moveGmailMailboxMutation.isPending}
-        isStartingGmail={isStartingGmail}
-        mailbox={mailbox}
-        moveGmailMailboxMutation={moveGmailMailboxMutation}
-        onSetDefaultMailbox={onSetDefaultMailbox}
-        onStartGmailConnection={onStartGmailConnection}
-        organizations={organizations}
-        placementItems={placementItems}
-      />
+      {!isApi && (
+        <MailboxDetailGeneralSection
+          isMovePending={moveGmailMailboxMutation.isPending}
+          isStartingGmail={isStartingGmail}
+          mailbox={mailbox}
+          moveGmailMailboxMutation={moveGmailMailboxMutation}
+          onStartGmailConnection={onStartGmailConnection}
+          organizations={organizations}
+          placementItems={placementItems}
+        />
+      )}
 
       {isGmail && (
         <GmailMailboxNameSettings
