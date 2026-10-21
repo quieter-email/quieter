@@ -27,6 +27,8 @@ import {
 import { Textarea } from "@quieter/ui/textarea";
 import type { KeyboardEvent, ReactNode, Ref, SubmitEvent } from "react";
 
+import { ModelLabLogo } from "./model-lab-logo";
+
 export type ChatContextItem = {
   id: string;
   label: string;
@@ -79,6 +81,7 @@ export const ChatComposer = ({
   transcribing,
 }: ChatComposerProps) => {
   const audioBusy = startingRecording || transcribing;
+  const selectedModel = chatModels.find((option) => option.value === model);
   let dictationIcon = Mic01Icon;
   if (audioBusy) {
     dictationIcon = Loading03Icon;
@@ -158,7 +161,11 @@ export const ChatComposer = ({
                 size="sm"
                 variant="ghost"
               >
-                <HugeiconsIcon aria-hidden icon={SparklesIcon} />
+                {selectedModel ? (
+                  <ModelLabLogo lab={selectedModel.group} />
+                ) : (
+                  <HugeiconsIcon aria-hidden icon={SparklesIcon} />
+                )}
                 <SelectValue />
               </SelectTrigger>
               <SelectContent align="start" side="top" size="compact">
@@ -166,7 +173,10 @@ export const ChatComposer = ({
                   <SelectItem value="auto">Auto</SelectItem>
                   {chatModels.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
-                      {option.label}
+                      <span className="flex items-center gap-2">
+                        <ModelLabLogo lab={option.group} />
+                        <span>{option.label}</span>
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectList>

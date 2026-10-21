@@ -27,7 +27,7 @@ const validBody = (): Record<string, unknown> => ({
     parts: [{ text: "Summarize this thread", type: "text" }],
     role: "user",
   },
-  model: "openai/gpt-5.6-luna",
+  model: "~openai/gpt-luna-latest",
   threadId: "b44942c1-aeeb-40a9-9da8-5c054e9f6030",
   trigger: "submit-message",
 });

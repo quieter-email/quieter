@@ -80,6 +80,8 @@ Local development requires only the values needed by the paths you exercise. Imp
 - Polar: checkout and subscription flows
 - PostHog, Sentry, and logo.dev: optional integrations
 
+Interactive chat selects model families through OpenRouter's [latest aliases](https://openrouter.ai/docs/guides/routing/routers/latest-resolution), so releases update without redeploying. `QuieterChatModel` chooses the Auto family; existing concrete chat identifiers normalize to that family's latest alias. Explicit family choices stay within that family when a provider is unavailable.
+
 ## Running
 
 For the SST-managed local session, sign in to the development AWS profile and run:

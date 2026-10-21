@@ -2,6 +2,7 @@ import { serverEnv } from "@quieter/env/server";
 
 import {
   chatModelSchema,
+  chatModels,
   defaultBackgroundModel,
   defaultChatModel,
 } from "./chat-models";
@@ -30,12 +31,23 @@ export const resolveConfiguredModel = (
 };
 
 /**
- * The default for interactive chat when the client leaves model selection
- * automatic, configured through the QuieterChatModel secret with the chat
- * default as fallback. Server-only: clients must not import this module.
+ * Interactive choices use each family's native latest alias. Auto selects
+ * the family configured by QuieterChatModel, including existing pinned ids.
+ * Server-only: clients must not import this module.
  */
-export const resolveChatModel = (): ChatModel =>
-  resolveConfiguredModel(serverEnv.QUIETER_CHAT_MODEL, defaultChatModel);
+export const resolveChatModel = (selection?: ChatModel): ChatModel => {
+  const configured =
+    selection ??
+    resolveConfiguredModel(serverEnv.QUIETER_CHAT_MODEL, defaultChatModel);
+  const family = chatModels.find(
+    ({ value, versions }) =>
+      value === configured || versions.some((version) => version === configured)
+  );
+  if (family === undefined) {
+    throw new Error("The selected model family is unavailable.");
+  }
+  return family.value;
+};
 
 /**
  * The model for everything besides interactive chat, configured through the

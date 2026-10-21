@@ -1,10 +1,13 @@
-import { Mail01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
+import { SenderAvatar } from "#/components/sender-avatar";
 import { useMailboxSearchActions } from "#/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import { toastError } from "#/lib/error-toast";
+import { parseSender } from "#/lib/gmail/message-utils";
+import { getCachedMessagesQueries } from "#/lib/mail/inbox-query/query-cache";
+import { getThreadWithDetailsOptions } from "#/lib/mail/thread-query";
 
 import type { parseMailReference } from "../domain/mail-reference";
 import { useAgentWorkspace } from "../domain/workspace-context";
@@ -18,6 +21,28 @@ export const MailReference = ({
 }) => {
   const setMailboxSearch = useMailboxSearchActions();
   const workspace = useAgentWorkspace();
+  const queryClient = useQueryClient();
+  const cachedMessage = getCachedMessagesQueries(
+    queryClient,
+    workspace?.mailboxId ?? ""
+  )
+    .flatMap(
+      (query) => query.data?.pages.flatMap((page) => page.messages) ?? []
+    )
+    .find((message) => message.id === reference.messageId);
+  const threadId = reference.threadId ?? cachedMessage?.threadId;
+  const { data: thread } = useQuery(
+    getThreadWithDetailsOptions(
+      workspace?.mailboxId ?? "",
+      threadId ?? "",
+      !!workspace && !!threadId && !cachedMessage?.senderAvatarUrls
+    )
+  );
+  const message =
+    thread?.messages.find((item) => item.id === reference.messageId) ??
+    cachedMessage;
+  const sender = parseSender(message?.from ?? reference.from);
+  const senderLabel = sender.name || sender.email || sender.display;
   const subject = reference.subject || (children ?? "Open email");
   const openMessage = async () => {
     workspace?.control.cancel();
@@ -54,7 +79,11 @@ export const MailReference = ({
       type="button"
       variant="outline"
     >
-      <HugeiconsIcon aria-hidden icon={Mail01Icon} />
+      <SenderAvatar
+        avatarUrlDark={message?.senderAvatarUrls?.dark}
+        avatarUrlLight={message?.senderAvatarUrls?.light}
+        fallbackLabel={(senderLabel.trim().charAt(0) || "?").toUpperCase()}
+      />
       <span className="flex min-w-0 flex-col">
         <span className="truncate">{subject}</span>
         {reference.from ? (

@@ -15,7 +15,7 @@ export const PromptComposerFrame = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-control p-2 shadow-sm transition-colors duration-150 focus-within:border-ring motion-reduce:transition-none",
+      "flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-control p-2 shadow-sm",
       className
     )}
     {...props}

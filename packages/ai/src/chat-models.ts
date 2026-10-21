@@ -2,84 +2,94 @@ import { z } from "zod";
 
 export const chatModels = [
   {
-    group: "google",
-    label: "Gemini 2.5 Flash Lite",
-    value: "google/gemini-2.5-flash-lite",
-  },
-  {
-    group: "google",
-    label: "Gemini 3.1 Flash Lite",
-    value: "google/gemini-3.1-flash-lite",
-  },
-  {
-    group: "openai",
-    label: "GPT 5.6 Luna",
-    value: "openai/gpt-5.6-luna",
-  },
-  {
-    group: "openai",
-    label: "GPT 5.6 Terra",
-    value: "openai/gpt-5.6-terra",
-  },
-  {
-    group: "openai",
-    label: "GPT 5.6 Sol",
-    value: "openai/gpt-5.6-sol",
+    group: "anthropic",
+    label: "Haiku",
+    value: "~anthropic/claude-haiku-latest",
+    versions: ["anthropic/claude-haiku-4.5"],
   },
   {
     group: "anthropic",
-    label: "Claude Haiku 4.5",
-    value: "anthropic/claude-haiku-4.5",
+    label: "Sonnet",
+    value: "~anthropic/claude-sonnet-latest",
+    versions: ["anthropic/claude-sonnet-5"],
   },
   {
     group: "anthropic",
-    label: "Claude Sonnet 5",
-    value: "anthropic/claude-sonnet-5",
+    label: "Opus",
+    value: "~anthropic/claude-opus-latest",
+    versions: ["anthropic/claude-opus-5"],
   },
   {
     group: "anthropic",
-    label: "Claude Opus 5",
-    value: "anthropic/claude-opus-5",
+    label: "Fable",
+    value: "~anthropic/claude-fable-latest",
+    versions: [],
+  },
+  {
+    group: "openai",
+    label: "Luna",
+    value: "~openai/gpt-luna-latest",
+    versions: ["openai/gpt-5.6-luna"],
+  },
+  {
+    group: "openai",
+    label: "Terra",
+    value: "~openai/gpt-terra-latest",
+    versions: ["openai/gpt-5.6-terra"],
+  },
+  {
+    group: "openai",
+    label: "Sol",
+    value: "~openai/gpt-sol-latest",
+    versions: ["openai/gpt-5.6-sol"],
+  },
+  {
+    group: "openai",
+    label: "Astra",
+    value: "~openai/gpt-astra-latest",
+    versions: [],
   },
   {
     group: "google",
-    label: "Gemini 3.5 Flash Lite",
-    value: "google/gemini-3.5-flash-lite",
+    label: "Gemini Flash",
+    value: "~google/gemini-flash-latest",
+    versions: [
+      "google/gemini-2.5-flash-lite",
+      "google/gemini-3.1-flash-lite",
+      "google/gemini-3.5-flash-lite",
+      "google/gemini-3.6-flash",
+      "google/gemini-3.7-flash",
+    ],
   },
   {
     group: "google",
-    label: "Gemini 3.6 Flash",
-    value: "google/gemini-3.6-flash",
-  },
-  {
-    group: "google",
-    label: "Gemini 3.7 Flash",
-    value: "google/gemini-3.7-flash",
-  },
-  {
-    group: "google",
-    label: "Gemini 3.1 Pro",
-    value: "google/gemini-3.1-pro-preview",
+    label: "Gemini Pro",
+    value: "~google/gemini-pro-latest",
+    versions: ["google/gemini-3.1-pro-preview"],
   },
   {
     group: "deepseek",
-    label: "DeepSeek V4 Flash",
-    value: "deepseek/deepseek-v4-flash",
+    label: "DeepSeek Flash",
+    value: "~deepseek/deepseek-flash-latest",
+    versions: ["deepseek/deepseek-v4-flash"],
   },
   {
     group: "deepseek",
-    label: "DeepSeek V4 Pro",
-    value: "deepseek/deepseek-v4-pro",
+    label: "DeepSeek Pro",
+    value: "~deepseek/deepseek-pro-latest",
+    versions: ["deepseek/deepseek-v4-pro"],
   },
   {
-    group: "deepseek",
-    label: "GLM 5.2",
-    value: "z-ai/glm-5.2",
+    group: "z-ai",
+    label: "GLM",
+    value: "~z-ai/glm-latest",
+    versions: ["z-ai/glm-5.2"],
   },
   {
-    group: "deepseek",
-    label: "Kimi K3",
-    value: "moonshotai/kimi-k3",
+    group: "moonshotai",
+    label: "Kimi",
+    value: "~moonshotai/kimi-latest",
+    versions: ["moonshotai/kimi-k3"],
   },
 ] as const;
 
@@ -88,28 +98,30 @@ export const chatModelGroups: readonly ChatModelGroup[] = [
   ...new Set(chatModels.map(({ group }) => group)),
 ];
 
-export const chatModelSchema = z.enum(chatModels.map(({ value }) => value));
-export type ChatModel = (typeof chatModels)[number]["value"];
+// Pinned versions remain valid for configured background and verification work.
+export const chatModelSchema = z.enum(
+  chatModels.flatMap(({ value, versions }) => [value, ...versions])
+);
+export type ChatModel = z.infer<typeof chatModelSchema>;
 
-/**
- * Big-provider failover order for OpenRouter's `models` fallback routing.
- * OpenRouter tries these in order when the primary errors, including on
- * rate limits and downtime, and bills whichever model ultimately serves.
- * The primary is always filtered out by `resolveModelFallbacks`.
- */
 const MODEL_FALLBACK_ORDER: readonly ChatModel[] = [
   "openai/gpt-5.6-luna",
   "anthropic/claude-haiku-4.5",
   "google/gemini-3.5-flash-lite",
 ];
 
-export const resolveModelFallbacks = (model: ChatModel): ChatModel[] =>
-  (model === "google/gemini-2.5-flash-lite"
-    ? (["google/gemini-3.1-flash-lite", ...MODEL_FALLBACK_ORDER] as const)
-    : MODEL_FALLBACK_ORDER
+export const resolveModelFallbacks = (model: ChatModel): ChatModel[] => {
+  if (model.startsWith("~")) {
+    return [];
+  }
+  return (
+    model === "google/gemini-2.5-flash-lite"
+      ? (["google/gemini-3.1-flash-lite", ...MODEL_FALLBACK_ORDER] as const)
+      : MODEL_FALLBACK_ORDER
   )
     .filter((fallback) => fallback !== model)
     .slice(0, 3);
+};
 
 export const defaultChatModel: ChatModel = "google/gemini-3.7-flash";
 export const defaultBackgroundModel: ChatModel = "google/gemini-3.5-flash-lite";

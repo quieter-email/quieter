@@ -250,7 +250,7 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
       foreground: parsedBody.foreground,
       kind: "message",
       mailboxId: parsedBody.mailboxId,
-      model: parsedBody.model ?? resolveChatModel(),
+      model: resolveChatModel(parsedBody.model),
       threadId,
       trigger: parsedBody.trigger,
       userMessage: {
@@ -326,7 +326,7 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
     foreground: parsedBody.foreground,
     kind: "continue",
     mailboxId: parsedBody.mailboxId,
-    model: parsedBody.model ?? resolveChatModel(),
+    model: resolveChatModel(parsedBody.model),
     threadId,
     toolDecisions,
     toolOutputs,
