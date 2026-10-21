@@ -19,6 +19,15 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Account",
   },
   {
+    description: "Preferences / Default mailbox",
+    id: "default-mailbox",
+    keywords: "default mailbox inbox all inboxes startup opening start",
+    scope: "personal",
+    section: "default-mailbox",
+    tab: "overview",
+    title: "Default mailbox",
+  },
+  {
     description: "Preferences / Appearance",
     id: "theme",
     keywords:

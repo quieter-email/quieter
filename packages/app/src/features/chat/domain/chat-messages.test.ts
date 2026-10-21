@@ -3,6 +3,7 @@ import {
   getAssistantProgress,
   getMessageText,
 } from "@quieter/app/features/chat/domain/chat-messages";
+import { isChatToolPart } from "@quieter/app/features/chat/domain/chat-tools";
 import type { RouterOutputs } from "@quieter/orpc";
 import type { UIMessage } from "ai";
 import { describe, expect, test } from "vite-plus/test";
@@ -10,6 +11,29 @@ import { describe, expect, test } from "vite-plus/test";
 type StoredMessage = RouterOutputs["chat"]["get"]["messages"][number];
 
 describe("chat message conversion", () => {
+  test.each(["tool-memory", "tool-read_personal_context"])(
+    "keeps internal context activity hidden after restoring %s from history",
+    (type) => {
+      const restored = toCanonicalTranscript([
+        {
+          id: "assistant",
+          parts: [
+            {
+              input: {},
+              output: { status: "success" },
+              state: "output-available",
+              toolCallId: "internal-context",
+              type,
+            },
+          ],
+          role: "assistant",
+        },
+      ]);
+      const parts = restored.flatMap((message) => message.parts);
+      expect(parts.filter(isChatToolPart)).toHaveLength(0);
+    }
+  );
+
   test("projects persisted rows onto UI messages and skips system rows", () => {
     const storedMessage: StoredMessage = {
       createdAt: new Date("2026-08-20T10:00:00.000Z"),
@@ -81,8 +105,7 @@ describe("chat message conversion", () => {
     ]);
 
     expect(messages[1]?.parts[0]).toMatchObject({
-      errorText:
-        "The action was submitted, but its result is not available. Check the affected item before requesting it again.",
+      input: { action: "archive" },
       state: "output-error",
     });
   });

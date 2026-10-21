@@ -12,6 +12,7 @@ import {
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
 import type { RouterOutputs } from "@quieter/orpc";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { Input } from "@quieter/ui/input";
 import {
@@ -236,16 +237,17 @@ const MailboxBriefForm = ({
               ? "Reconnect this mailbox to prepare new editions."
               : "These preferences apply only to your Brief."}
           </p>
-          <Button
-            disabled={!isDirty || pending}
-            pending={pending}
-            pendingLabel="Saving…"
-            size="sm"
-            type="submit"
-            variant="outline"
-          >
-            Save preferences
-          </Button>
+          <ActionFooter>
+            <Button
+              disabled={!isDirty || pending}
+              pending={pending}
+              pendingLabel="Saving…"
+              size="sm"
+              type="submit"
+            >
+              Save preferences
+            </Button>
+          </ActionFooter>
         </div>
       </SettingsCard>
     </form>

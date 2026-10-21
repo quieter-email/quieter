@@ -8,14 +8,12 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { MessageLabelsMenu } from "@quieter/app/features/message-labels/components/message-labels-menu";
-import { messageListHeaderControlVariants } from "@quieter/app/features/message-list/components/message-list-header-surfaces";
 import type {
   MessageListBulkAction,
   MessageListBulkLabels,
 } from "@quieter/app/features/message-list/components/message-list-types";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
-import { cn } from "@quieter/ui/cn";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -89,18 +87,13 @@ const MessageListBulkActionButton = ({
   <IconButtonTooltip label={action.label}>
     <Button
       aria-label={action.label}
-      // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
-      className={cn(messageListHeaderControlVariants({ control: "toolbar" }), {
-        // oxlint-disable-next-line shadcn/no-restyle -- Destructive actions hover red.
-        "hover:text-destructive": action.destructive === true,
-      })}
       disabled={disabled}
       onClick={() => {
         void action.onSelect();
       }}
       size="icon"
       type="button"
-      variant="ghost"
+      variant={action.destructive === true ? "destructive" : "outline"}
     >
       <HugeiconsIcon aria-hidden icon={action.icon} />
     </Button>
@@ -120,8 +113,7 @@ const MessageListBulkLabelsMenu = ({
       <IconButtonTooltip label="Labels">
         <DropdownMenuTrigger
           aria-label="Modify labels"
-          // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
-          className={messageListHeaderControlVariants({ control: "trigger" })}
+          render={<Button size="icon" variant="outline" />}
           disabled={disabled}
           type="button"
         >
@@ -143,8 +135,7 @@ const MessageListBulkOverflowMenu = ({
     <IconButtonTooltip label="More actions">
       <DropdownMenuTrigger
         aria-label="Open more actions"
-        // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
-        className={messageListHeaderControlVariants({ control: "trigger" })}
+        render={<Button size="icon" variant="outline" />}
         disabled={disabled}
         type="button"
       >
@@ -223,8 +214,6 @@ export const MessageListSelectionToolbar = ({
                 : `Select all loaded ${itemLabelPlural}`
             }
             checked={allSelected}
-            // oxlint-disable-next-line shadcn/no-arbitrary-values, shadcn/no-restyle -- Bulk-select checkbox is deliberately larger than the base control.
-            className="size-4.5 rounded-[5px]"
             disabled={disabled}
             indeterminate={indeterminate}
             onCheckedChange={(checked) => {
@@ -276,13 +265,11 @@ export const MessageListSelectionToolbar = ({
         <IconButtonTooltip label="Clear selection">
           <Button
             aria-label="Clear selection"
-            // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
-            className={messageListHeaderControlVariants({ control: "toolbar" })}
             disabled={disabled}
             onClick={onClearSelection}
             size="icon"
             type="button"
-            variant="ghost"
+            variant="outline"
           >
             <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
           </Button>

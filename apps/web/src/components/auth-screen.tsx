@@ -455,7 +455,6 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
       <div className="flex flex-wrap gap-2">
         {previewPersonaOptions.map((option) => (
           <Button
-            className="justify-center text-center"
             disabled={pendingPersona !== null}
             key={option.persona}
             onClick={() => void startPreviewPersona(option.persona)}

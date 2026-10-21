@@ -3,17 +3,26 @@ import { requireServerEnv } from "@quieter/env/server";
 
 assertLocalEnvFile(".env.local");
 const action = process.argv[2] ?? "health";
-if (!["health", "maintenance", "mail-recovery", "briefs"].includes(action)) {
+if (
+  !["health", "maintenance", "mail-recovery", "briefs", "memory"].includes(
+    action
+  )
+) {
   throw new Error(
-    "Use dev:trigger health, maintenance, mail-recovery, or briefs."
+    "Use dev:trigger health, maintenance, mail-recovery, briefs, or memory."
   );
 }
 const response = await fetch(`http://127.0.0.1:8787/__dev/${action}`, {
+  ...(action === "memory"
+    ? { body: JSON.stringify({ userId: process.argv[3] }) }
+    : {}),
   headers: {
     authorization: `Bearer ${requireServerEnv("QUIETER_LOCAL_WORKER_TOKEN")}`,
   },
   method: action === "health" ? "GET" : "POST",
-  signal: AbortSignal.timeout(action === "briefs" ? 180_000 : 30_000),
+  signal: AbortSignal.timeout(
+    ["briefs", "memory"].includes(action) ? 180_000 : 30_000
+  ),
 });
 if (!response.ok) {
   throw new Error(

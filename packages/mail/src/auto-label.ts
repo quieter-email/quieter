@@ -22,6 +22,10 @@ export const autoLabelSettingsSchema = z.object({
   keywords: z.array(z.string().trim().min(1).max(200)).max(30),
   matchMode: z.enum(["all", "any"]),
   prompt: z.string().trim().max(4000),
+  recipients: z
+    .array(z.string().trim().toLowerCase().max(254).pipe(z.email()))
+    .max(30)
+    .optional(),
   senders: z
     .array(z.string().trim().toLowerCase().max(254).pipe(z.email()))
     .max(30),

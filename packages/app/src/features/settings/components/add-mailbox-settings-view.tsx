@@ -31,6 +31,7 @@ import { orpc } from "@quieter/app/lib/orpc";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
+import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { FlowProgress } from "@quieter/ui/progress";
 import {
   Select,
@@ -460,12 +461,10 @@ export const AddMailboxSettingsView = ({
 
             <Field>
               <FieldLabel htmlFor="local-part">Email address</FieldLabel>
-              <div className="flex h-8 min-w-0 items-center rounded-md border border-border bg-input shadow-sm transition-colors squircle focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
+              <InputGroup>
                 <TextFieldInput
                   aria-label="Mailbox address"
-                  chrome="ghost"
-                  // oxlint-disable-next-line shadcn/no-restyle -- Local-part input fills its row height.
-                  className="h-full min-w-0 flex-1 pr-1"
+                  chrome="attached"
                   id="local-part"
                   onChange={(event) => {
                     workflowStore.setState((state) => ({
@@ -479,12 +478,7 @@ export const AddMailboxSettingsView = ({
                   placeholder="support"
                   value={managedLocalPart}
                 />
-                <span
-                  aria-hidden
-                  className="text-body text-muted-fg select-none"
-                >
-                  @
-                </span>
+                <InputAddon aria-hidden>@</InputAddon>
                 {verifiedDomains.length > 0 ? (
                   <Select
                     items={verifiedDomains.map((domain) => ({
@@ -521,7 +515,7 @@ export const AddMailboxSettingsView = ({
                       : "no receiving domain"}
                   </span>
                 )}
-              </div>
+              </InputGroup>
               {verifiedDomains.length === 0 && !areManagedDomainsLoading ? (
                 <FieldDescription>
                   Add and verify a send-and-receive domain in{" "}

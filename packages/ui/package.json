@@ -7,6 +7,7 @@
   ],
   "exports": {
     "./accordion": "./src/components/ui/accordion.tsx",
+    "./action-footer": "./src/components/ui/action-footer.tsx",
     "./alert-dialog": "./src/components/ui/alert-dialog.tsx",
     "./avatar": "./src/components/ui/avatar.tsx",
     "./avatar-fallback": "./src/components/ui/avatar-fallback.tsx",
@@ -35,6 +36,7 @@
     "./icon-button-tooltip": "./src/components/ui/icon-button-tooltip.tsx",
     "./icons": "./src/components/ui/icons.tsx",
     "./input": "./src/components/ui/input.tsx",
+    "./input-group": "./src/components/ui/input-group.tsx",
     "./number-field": "./src/components/ui/number-field.tsx",
     "./popover": "./src/components/ui/popover.tsx",
     "./pill": "./src/components/ui/pill.tsx",
@@ -43,6 +45,7 @@
     "./scroll-area": "./src/components/ui/scroll-area.tsx",
     "./select": "./src/components/ui/select.tsx",
     "./separator": "./src/components/ui/separator.tsx",
+    "./settings-layout": "./src/components/ui/settings-layout.tsx",
     "./slider": "./src/components/ui/slider.tsx",
     "./spinner-icon": "./src/components/ui/spinner-icon.tsx",
     "./styles.css": "./src/styles.css",

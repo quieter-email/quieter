@@ -23,6 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -132,33 +133,35 @@ export const MemberActions = ({
         </p>
 
         <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                aria-label={`Open actions for ${member.user.name || member.user.email}`}
-                disabled={isPending}
-                size="icon-sm"
-                variant="ghost"
-              />
-            }
-            onClick={() => {
-              setError(null);
-            }}
-          >
-            {isPending ? (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 animate-spin"
-                icon={Loading03Icon}
-              />
-            ) : (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4"
-                icon={MoreVerticalIcon}
-              />
-            )}
-          </DropdownMenuTrigger>
+          <IconButtonTooltip label="Member actions">
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  aria-label={`Open actions for ${member.user.name || member.user.email}`}
+                  disabled={isPending}
+                  size="icon-sm"
+                  variant="ghost"
+                />
+              }
+              onClick={() => {
+                setError(null);
+              }}
+            >
+              {isPending ? (
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-4 animate-spin"
+                  icon={Loading03Icon}
+                />
+              ) : (
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-4"
+                  icon={MoreVerticalIcon}
+                />
+              )}
+            </DropdownMenuTrigger>
+          </IconButtonTooltip>
 
           <DropdownMenuContent align="end">
             {organizationRoleOptions.map((role) => {

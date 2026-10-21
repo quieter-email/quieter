@@ -6,6 +6,7 @@ import {
   RefreshIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { ORPCError } from "@orpc/client";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
 import { buildComposeDraftFromMessageAction } from "@quieter/app/features/compose/domain/compose-actions";
 import { textToComposeBodyHtml } from "@quieter/app/features/compose/domain/draft";
@@ -13,6 +14,7 @@ import type { ComposeDraftState } from "@quieter/app/features/compose/domain/dra
 import { DailyBriefCard } from "@quieter/app/features/daily-brief/components/daily-brief-card";
 import { useBriefMailboxActivity } from "@quieter/app/features/mailbox/components/use-brief-mailbox-activity";
 import type { UnifiedInboxMailbox } from "@quieter/app/features/mailbox/domain/unified-inbox";
+import { isExpectedClientError } from "@quieter/app/lib/client-error-reporting";
 import { toastError } from "@quieter/app/lib/error-toast";
 import type { MessageListItem } from "@quieter/app/lib/mail";
 import { orpc, rpc } from "@quieter/app/lib/orpc";
@@ -29,6 +31,7 @@ import {
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { toast } from "@quieter/ui/toast";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
+import * as Sentry from "@sentry/react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 
@@ -108,6 +111,20 @@ export const DailyBriefPanel = ({
     },
     onSuccess: (data, input) => {
       updateBrief(input.mailboxId, data);
+    },
+  });
+  // oxlint-disable-next-line react-doctor/query-mutation-missing-invalidation -- Observations queue personal memory without changing brief state.
+  const observe = useMutation({
+    ...orpc.dailyBrief.observe.mutationOptions(),
+    onError: (error) => {
+      if (
+        !isExpectedClientError(error) &&
+        !(error instanceof ORPCError && error.status < 500)
+      ) {
+        Sentry.captureException(error, {
+          tags: { boundary: "brief-item-observation" },
+        });
+      }
     },
   });
   // oxlint-disable-next-line react-doctor/query-mutation-missing-invalidation -- Suggestions prepare composer text without writing mail or brief state.
@@ -373,7 +390,14 @@ export const DailyBriefPanel = ({
                 mailbox={mailbox}
                 showMailbox={combined}
                 busy={busy}
-                onOpenSource={onOpenSource}
+                onOpenSource={(mailboxId, messageId, threadId) => {
+                  onOpenSource(mailboxId, messageId, threadId);
+                  observe.mutate({
+                    action: "open",
+                    itemId: item.id,
+                    mailboxId,
+                  });
+                }}
                 onFeedback={(action, preference) => {
                   feedback.mutate({
                     action,

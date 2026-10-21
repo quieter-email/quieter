@@ -222,7 +222,7 @@ export const SidebarLabelNav = ({
             aria-pressed={isActive}
             // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom label-row spacing.
             className={cn(
-              "h-7 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-left text-caption font-normal squircle",
+              "min-w-0 justify-start text-left text-caption font-normal squircle",
               {
                 "text-fg": isActive,
                 "text-muted-fg": !isActive,
@@ -269,9 +269,8 @@ export const SidebarLabelNav = ({
           <IconButtonTooltip label={`Manage ${labelNounPlural}`}>
             <Button
               aria-label={`Manage ${labelNounPlural}`}
-              className="size-6"
               onClick={onManageLabels}
-              size="icon-sm"
+              size="icon-xs"
               type="button"
               variant="ghost"
             >

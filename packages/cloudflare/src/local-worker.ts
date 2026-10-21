@@ -142,6 +142,32 @@ export default {
         return requestErrorResponse(error, "local-daily-briefs");
       }
     }
+    if (url.pathname === "/__dev/memory") {
+      try {
+        const input = z
+          .object({ userId: z.string().min(1).max(500) })
+          .safeParse(await readBoundedJson(request, 4096));
+        if (!input.success) {
+          return Response.json(
+            { error: "Choose a local user to process memory for." },
+            { status: 400 }
+          );
+        }
+        const { processPendingAiMemoryEvents } =
+          await import("@quieter/orpc/ai-memory");
+        return Response.json(
+          await withRequestDatabaseClient(
+            async () =>
+              await processPendingAiMemoryEvents({
+                allowLocal: true,
+                userId: input.data.userId,
+              })
+          )
+        );
+      } catch (error) {
+        return requestErrorResponse(error, "local-memory");
+      }
+    }
     if (url.pathname === "/__dev/mail-recovery") {
       const { cleanupRateLimitBuckets } =
         await import("@quieter/orpc/abuse-protection");

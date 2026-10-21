@@ -72,7 +72,7 @@ export const DraftRecoveryNotice = ({
       </Button>
       <Button
         size="sm"
-        variant="ghost"
+        variant="destructive"
         disabled={discard.isPending}
         onClick={() => {
           discard.mutate();

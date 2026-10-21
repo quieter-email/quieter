@@ -73,6 +73,7 @@ export const OrganizationDangerView = ({
                 }
                 label="Leave"
                 reason={leaveOrganizationReason}
+                variant="destructive"
               />
             ) : (
               <LeaveOrganizationDialog
@@ -89,7 +90,6 @@ export const OrganizationDangerView = ({
           action={
             deleteOrganizationReason ? (
               <MutedActionButton
-                buttonClassName="pointer-events-none border-destructive/25 bg-destructive/10 text-destructive/80 opacity-100 hover:bg-destructive/10 hover:text-destructive/80"
                 icon={
                   <HugeiconsIcon
                     aria-hidden
@@ -99,6 +99,7 @@ export const OrganizationDangerView = ({
                 }
                 label="Delete"
                 reason={deleteOrganizationReason}
+                variant="destructive"
               />
             ) : (
               <DeleteOrganizationDialog

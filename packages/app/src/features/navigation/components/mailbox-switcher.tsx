@@ -22,8 +22,6 @@ import {
   ArrowRight01Icon,
   Loading03Icon,
   Mail01Icon,
-  PinIcon,
-  PinOffIcon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -77,17 +75,9 @@ type MailboxSummaryProps = {
   mailbox: MailboxSwitcherMailbox;
 };
 
-type MailboxDefaultButtonProps = {
-  defaultMailboxLabel: string;
-  isDefault: boolean;
-  mailboxId: string;
-  onSetDefaultMailbox: (mailboxId: string | null) => void;
-};
-
 type MailboxSwitcherDropdownProps = {
   allInboxesActive?: boolean;
   onSelectAllInboxes?: () => void;
-  defaultMailboxId: string | null;
   embedded?: boolean;
   groups: MailboxSwitcherGroup[];
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
@@ -95,7 +85,6 @@ type MailboxSwitcherDropdownProps = {
     mailbox: Pick<MailboxSwitcherMailbox, "emailAddress" | "id">
   ) => void;
   onSelectMailboxId: (mailboxId: string) => void;
-  onSetDefaultMailbox: (mailboxId: string | null) => void;
   reconnectingMailboxId: string | null;
   selectedMailboxId: string | null;
   side?: "bottom" | "right";
@@ -437,41 +426,6 @@ const MailboxSummary = ({
   );
 };
 
-const MailboxDefaultButton = ({
-  defaultMailboxLabel,
-  isDefault,
-  mailboxId,
-  onSetDefaultMailbox,
-}: MailboxDefaultButtonProps) => (
-  <IconButtonTooltip label={defaultMailboxLabel}>
-    <Button
-      aria-label={defaultMailboxLabel}
-      // oxlint-disable-next-line shadcn/no-restyle -- Pin toggle keeps its compact reveal-on-hover metrics.
-      className={cn("size-5 shrink-0 rounded-md p-0", {
-        // oxlint-disable-next-line shadcn/no-restyle -- Pinned state uses foreground text.
-        "text-fg": isDefault,
-        // oxlint-disable-next-line shadcn/no-restyle -- Unpinned state reveals on hover.
-        "text-muted-fg/50 opacity-0 group-focus-within/item:opacity-100 group-hover/item:opacity-100 hover:text-fg focus-visible:opacity-100":
-          !isDefault,
-      })}
-      data-mailbox-switcher-navigation-action
-      onClick={(event) => {
-        event.stopPropagation();
-        onSetDefaultMailbox(isDefault ? null : mailboxId);
-      }}
-      size="icon-sm"
-      type="button"
-      variant="ghost"
-    >
-      <HugeiconsIcon
-        aria-hidden
-        className="size-3.5"
-        icon={isDefault ? PinIcon : PinOffIcon}
-      />
-    </Button>
-  </IconButtonTooltip>
-);
-
 const MailboxTeam = ({
   children,
   collapsed,
@@ -612,13 +566,11 @@ const getFocusedNavigationItem = (
 export const MailboxSwitcherDropdown = ({
   allInboxesActive = false,
   onSelectAllInboxes,
-  defaultMailboxId,
   embedded = false,
   groups,
   onReorderMailboxSwitcher,
   onReconnectMailbox,
   onSelectMailboxId,
-  onSetDefaultMailbox,
   reconnectingMailboxId,
   selectedMailboxId,
   side = "right",
@@ -951,13 +903,11 @@ export const MailboxSwitcherDropdown = ({
                   <div className="sticky top-0 z-10 bg-popover">
                     <Input
                       aria-label="Search mailboxes"
-                      className="h-8"
                       onChange={(event) => {
                         setSearchQuery(event.currentTarget.value);
                       }}
                       placeholder="Search mailboxes"
                       ref={searchRef}
-                      size="sm"
                       value={searchQuery}
                     />
                   </div>
@@ -988,15 +938,10 @@ export const MailboxSwitcherDropdown = ({
                             const isActive =
                               !allInboxesActive &&
                               mailbox.id === selectedMailboxId;
-                            const isDefault = mailbox.id === defaultMailboxId;
                             const needsReconnect =
                               mailbox.connectionStatus === "needs_reconnect";
                             const isReconnecting =
                               reconnectingMailboxId === mailbox.id;
-                            const canSetDefault = mailbox.provider !== "api";
-                            const defaultMailboxLabel = isDefault
-                              ? "Unset default mailbox"
-                              : "Set as default mailbox";
 
                             return (
                               <ReorderRow
@@ -1045,18 +990,6 @@ export const MailboxSwitcherDropdown = ({
                                             />
                                             Reconnect
                                           </button>
-                                        )}
-                                        {canSetDefault && (
-                                          <MailboxDefaultButton
-                                            defaultMailboxLabel={
-                                              defaultMailboxLabel
-                                            }
-                                            isDefault={isDefault}
-                                            mailboxId={mailbox.id}
-                                            onSetDefaultMailbox={
-                                              onSetDefaultMailbox
-                                            }
-                                          />
                                         )}
                                       </div>
                                     }

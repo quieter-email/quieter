@@ -1,4 +1,5 @@
 import { compile } from "html-to-text";
+import { addressParser } from "postal-mime";
 import { z } from "zod";
 
 import type { AutoLabelSettings } from "./auto-label";
@@ -25,11 +26,14 @@ export const partitionAutoLabelCandidates = <
 >(
   labels: Label[],
   message: {
+    bcc?: string | null;
     bodyHtml?: string | null;
     bodyText?: string | null;
+    cc?: string | null;
     from?: string | null;
     snippet?: string | null;
     subject?: string | null;
+    to?: string | null;
   }
 ): { aiLabels: Label[]; deterministicLabelIds: string[] } => {
   const deterministicLabelIds: string[] = [];
@@ -40,6 +44,14 @@ export const partitionAutoLabelCandidates = <
   const parsedSender = z.email().safeParse(angleAddress ?? from);
   const sender = parsedSender.success ? parsedSender.data.toLowerCase() : null;
   const domain = sender?.slice(sender.lastIndexOf("@") + 1);
+  const recipientAddresses = new Set(
+    [message.to, message.cc, message.bcc].flatMap((value) =>
+      addressParser(value ?? "", { flatten: true }).flatMap((address) => {
+        const parsed = z.email().safeParse(address.address);
+        return parsed.success ? [parsed.data.toLowerCase()] : [];
+      })
+    )
+  );
   let body: string | undefined;
 
   for (const label of labels) {
@@ -54,6 +66,13 @@ export const partitionAutoLabelCandidates = <
     const matches: boolean[] = [];
     if (settings.senders.length > 0) {
       matches.push(sender !== null && settings.senders.includes(sender));
+    }
+    if (settings.recipients && settings.recipients.length > 0) {
+      matches.push(
+        settings.recipients.some((recipient) =>
+          recipientAddresses.has(recipient)
+        )
+      );
     }
     if (settings.domains.length > 0) {
       matches.push(

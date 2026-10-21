@@ -9,8 +9,9 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowInteractionButton } from "@quieter/app/components/arrow-interaction-button";
 import { SpinWhileActive } from "@quieter/app/components/spin-while-active";
+import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { mailboxLabelSearchPillSurfaceClassNameByColor } from "@quieter/app/features/message-labels/domain/mailbox-label-presentation";
-import { messageListHeaderControlVariants } from "@quieter/app/features/message-list/components/message-list-header-surfaces";
+import { messageListSearchChipClassName } from "@quieter/app/features/message-list/components/message-list-header-surfaces";
 import { MessageListSearchDropdown } from "@quieter/app/features/message-search/components/message-list-search-dropdown";
 import {
   isDateFilter,
@@ -131,27 +132,6 @@ export const MessageListSearchView = ({
   return (
     <search className="block min-w-0">
       <div className="flex h-8 min-w-0 items-stretch gap-2">
-        <div className="flex self-stretch">
-          <IconButtonTooltip label="Refresh list">
-            <Button
-              aria-label="Refresh list"
-              // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
-              // oxlint-disable shadcn/require-static-classes -- Uses the shared header-control variant with a fixed toolbar option.
-              className={messageListHeaderControlVariants({
-                control: "toolbar",
-              })}
-              disabled={isRefreshing}
-              onClick={() => void onRefresh()}
-              size="icon"
-              variant="ghost"
-            >
-              <SpinWhileActive active={isRefreshing}>
-                <HugeiconsIcon icon={Refresh01Icon} />
-              </SpinWhileActive>
-            </Button>
-          </IconButtonTooltip>
-        </div>
-
         <div
           className="relative min-w-0 flex-1"
           onBlur={handleSearchFieldBlur}
@@ -204,7 +184,7 @@ export const MessageListSearchView = ({
                           : `Exclude label ${label?.name ?? filter.value}`
                       }
                       className={cn(
-                        messageListHeaderControlVariants({ control: "chip" }),
+                        messageListSearchChipClassName,
                         "order-(--filter-order) gap-1",
                         {
                           [mailboxLabelSearchPillSurfaceClassNameByColor[
@@ -257,10 +237,7 @@ export const MessageListSearchView = ({
                           ? `Remove excluded ${filter.value} filter`
                           : `Exclude ${filter.value} filter`
                       }
-                      className={cn(
-                        messageListHeaderControlVariants({ control: "chip" }),
-                        "gap-1"
-                      )}
+                      className={cn(messageListSearchChipClassName, "gap-1")}
                       key={filterRenderKey}
                       // oxlint-disable-next-line shadcn/no-inline-styles -- Interleaved pills need computed flex order.
                       style={{ order: index * 2 + 1 }}
@@ -301,14 +278,10 @@ export const MessageListSearchView = ({
                 const isCurrentFilterDate = isDateFilter(filter);
                 return (
                   <div
-                    className={cn(
-                      messageListHeaderControlVariants({ control: "chip" }),
-                      "gap-1",
-                      {
-                        "bg-control-active ring-2 ring-ring/30":
-                          activeDateFilterIndex === index,
-                      }
-                    )}
+                    className={cn(messageListSearchChipClassName, "gap-1", {
+                      "bg-control-active ring-2 ring-ring/30":
+                        activeDateFilterIndex === index,
+                    })}
                     key={filterRenderKey}
                     onPointerDown={(event) => {
                       removeFilterOnMiddlePointer(event, index);
@@ -610,20 +583,33 @@ export const MessageListSearchView = ({
         </div>
 
         <div className="flex self-stretch">
+          <IconButtonTooltip label="Refresh list">
+            <Button
+              aria-label="Refresh list"
+              disabled={isRefreshing}
+              onClick={() => void onRefresh()}
+              size="icon"
+              variant="toolbar"
+            >
+              <SpinWhileActive active={isRefreshing}>
+                <HugeiconsIcon icon={Refresh01Icon} />
+              </SpinWhileActive>
+            </Button>
+          </IconButtonTooltip>
+        </div>
+
+        <div className="flex self-stretch">
           <IconButtonTooltip label="Scroll to top">
             <ArrowInteractionButton
               aria-label="Scroll to top"
-              className={messageListHeaderControlVariants({
-                control: "toolbar",
-              })}
-              // oxlint-enable shadcn/require-static-classes
               onClick={onScrollToTop}
               size="icon"
               type="button"
-              variant="ghost"
+              variant="toolbar"
             />
           </IconButtonTooltip>
         </div>
+        <AssistantSidebarTrigger className="data-[sidebar-open=true]:-ms-2" />
       </div>
     </search>
   );

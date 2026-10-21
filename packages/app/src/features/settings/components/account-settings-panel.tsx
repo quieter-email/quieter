@@ -8,12 +8,6 @@ import {
   Logout03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  SettingsCard,
-  SettingsFieldRow,
-  SettingsSection,
-  settingsSurfaceVariants,
-} from "@quieter/app/features/settings/components/settings-layout";
 import { setDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import { setManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
 import { authClient } from "@quieter/app/lib/auth";
@@ -44,6 +38,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
+
+import {
+  SettingsCard,
+  SettingsFieldRow,
+  SettingsSection,
+  settingsSurfaceVariants,
+} from "./settings-layout";
 
 const getMutationErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
@@ -123,7 +124,7 @@ const renderPasskeyList = (
             onRemovePasskey(passkey.id);
           }}
           size="sm"
-          variant="outline"
+          variant="destructive"
         >
           {removingPasskeyId === passkey.id ? (
             <SpinnerIcon />

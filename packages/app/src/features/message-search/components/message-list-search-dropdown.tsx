@@ -15,6 +15,8 @@ import type {
   StructuredSearchState,
 } from "@quieter/app/features/message-search/state/message-list-search-state";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import { ActionFooter } from "@quieter/ui/action-footer";
+import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { LazyMotion, domAnimation, AnimatePresence, m } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -512,20 +514,16 @@ export const MessageListSearchDropdown = ({
               </div>
             </div>
 
-            <div className="mt-1 shrink-0 lg:hidden">
-              <button
-                className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md text-caption text-muted-fg hover:bg-muted hover:text-fg active:bg-muted"
-                onClick={onDismiss}
-                type="button"
-              >
+            <ActionFooter className="mt-1 shrink-0 lg:hidden">
+              <Button onClick={onDismiss} size="sm" type="button">
                 <HugeiconsIcon
                   aria-hidden
                   className="size-3.5"
                   icon={Cancel01Icon}
                 />
                 Close search
-              </button>
-            </div>
+              </Button>
+            </ActionFooter>
           </m.div>
         )}
       </AnimatePresence>

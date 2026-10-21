@@ -48,16 +48,16 @@ const parseMailboxSearchCategory = (
 
 const parseMailboxWorkspaceView = (
   value: unknown
-): (typeof MAILBOX_WORKSPACE_VIEWS)[number] => {
+): (typeof MAILBOX_WORKSPACE_VIEWS)[number] | undefined => {
   if (typeof value !== "string") {
-    return "inbox";
+    return undefined;
   }
   for (const view of MAILBOX_WORKSPACE_VIEWS) {
     if (value === view) {
       return view;
     }
   }
-  return "inbox";
+  return undefined;
 };
 
 const mailboxSearchCategory = () =>
@@ -69,7 +69,7 @@ const mailboxSearchCategory = () =>
 const mailboxWorkspaceViewSearch = () =>
   z.preprocess(
     parseMailboxWorkspaceView,
-    z.enum(MAILBOX_WORKSPACE_VIEWS).default("inbox")
+    z.enum(MAILBOX_WORKSPACE_VIEWS).optional()
   );
 
 const searchQueryParam = () =>

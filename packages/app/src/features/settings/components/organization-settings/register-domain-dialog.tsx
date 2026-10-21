@@ -9,6 +9,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { getOrganizationMailDomainsQueryKey } from "@quieter/app/features/settings/components/organization-settings/mail-domains";
 import type { OrganizationMailDomain } from "@quieter/app/features/settings/components/organization-settings/mail-domains";
 import { orpc } from "@quieter/app/lib/orpc";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -17,7 +18,6 @@ import {
   DialogCloseButton,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
@@ -243,10 +243,7 @@ export const RegisterDomainDialog = ({
                 <Text tone="destructive">{submitError}</Text>
               ) : null}
 
-              <DialogFooter
-                // oxlint-disable-next-line shadcn/no-restyle -- Flush footer keeps edge-to-edge actions.
-                className="px-0 pb-0"
-              >
+              <ActionFooter>
                 <DialogCloseButton disabled={createSetupMutation.isPending}>
                   Cancel
                 </DialogCloseButton>
@@ -270,7 +267,7 @@ export const RegisterDomainDialog = ({
                   )}
                   Register domain
                 </Button>
-              </DialogFooter>
+              </ActionFooter>
             </form>
           </DialogBody>
         </DialogContent>

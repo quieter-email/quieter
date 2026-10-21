@@ -214,14 +214,6 @@ export const useMailboxSelection = ({
   const selectedMailboxNeedsReconnect =
     selectedMailbox?.connectionStatus === "needs_reconnect";
 
-  const setDefaultMailboxMutation = useMutation({
-    ...orpc.mail.setDefaultMailbox.mutationOptions(),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: getMailboxesQueryKey(),
-      });
-    },
-  });
   const updateMailboxSwitcherOrderOptions =
     orpc.mail.updateMailboxSwitcherOrder.mutationOptions();
   const updateMailboxSwitcherOrderMutation = useMutation<
@@ -292,7 +284,6 @@ export const useMailboxSelection = ({
     selectedMailboxId,
     selectedMailboxNeedsReconnect,
     selectedMailboxProvider,
-    setDefaultMailboxMutation,
     updateMailboxSwitcherOrderMutation,
   };
 };

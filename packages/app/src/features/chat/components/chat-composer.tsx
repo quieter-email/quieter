@@ -1,166 +1,197 @@
 import {
-  ArrowDown01Icon,
-  Cancel01Icon,
-  Shield01Icon,
+  ArrowUp02Icon,
   Loading03Icon,
   Mail01Icon,
-  SentIcon,
+  Mic01Icon,
+  Search01Icon,
   StopIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { ChatModel } from "@quieter/ai/chat-models";
+import { ChatModelPicker } from "@quieter/app/features/chat/components/chat-model-picker";
 import { Button } from "@quieter/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@quieter/ui/dropdown-menu";
+  ComposerContextChip,
+  PromptComposerFrame,
+} from "@quieter/ui/composer-chrome";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Textarea } from "@quieter/ui/textarea";
-import type { KeyboardEvent, SubmitEvent } from "react";
+import type { KeyboardEvent, ReactNode, Ref, SubmitEvent } from "react";
 
-export type AssistantPolicy = "ask" | "automatic";
+export type ChatContextItem = {
+  id: string;
+  label: string;
+  messageId?: string;
+  query?: string;
+  threadId?: string;
+};
 
 type ChatComposerProps = {
-  visible?: boolean;
-  contextLabel?: string;
+  contextItems: ChatContextItem[];
+  contextPicker: ReactNode;
   disabled?: boolean;
   input: string;
-  onDismissContext?: () => void;
+  inputRef?: Ref<HTMLTextAreaElement>;
+  model: ChatModel | "auto";
   onInputChange: (value: string) => void;
   onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
-  onPolicyChange: (policy: AssistantPolicy) => void;
+  onModelChange: (model: ChatModel | "auto") => void;
+  onRemoveContext: (id: string) => void;
   onStop: () => void;
   onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
-  policy: AssistantPolicy;
+  onToggleDictation: () => void;
+  recording: boolean;
+  recordingSupported: boolean;
+  startingRecording: boolean;
   streaming: boolean;
   submitting: boolean;
+  transcribing: boolean;
 };
 
 export const ChatComposer = ({
-  visible = true,
-  contextLabel,
-  disabled,
+  contextItems,
+  contextPicker,
+  disabled = false,
   input,
-  onDismissContext,
+  inputRef,
+  model,
   onInputChange,
   onInputKeyDown,
-  onPolicyChange,
+  onModelChange,
+  onRemoveContext,
   onStop,
   onSubmit,
-  policy,
+  onToggleDictation,
+  recording,
+  recordingSupported,
+  startingRecording,
   streaming,
   submitting,
-}: ChatComposerProps) => (
-  <form
-    className="mt-auto flex w-full shrink-0 flex-col gap-2 p-4"
-    onSubmit={onSubmit}
-  >
-    {contextLabel === undefined ? null : (
-      <div className="flex h-4 items-center gap-2 text-caption text-muted-fg">
-        <HugeiconsIcon
-          aria-hidden
-          className="size-3.5 shrink-0"
-          icon={Mail01Icon}
-        />
-        <span className="min-w-0 truncate">{contextLabel}</span>
-        {onDismissContext === undefined ? null : (
-          <IconButtonTooltip label="Remove message context">
-            <button
-              aria-label="Remove message context"
-              className="text-muted-fg transition-colors hover:text-fg focus-visible:outline-none"
-              onClick={onDismissContext}
-              type="button"
-            >
-              <HugeiconsIcon
-                aria-hidden
-                className="size-3.5"
-                icon={Cancel01Icon}
-              />
-            </button>
-          </IconButtonTooltip>
-        )}
-      </div>
-    )}
-    <div className="flex">
-      <Textarea
-        aria-label="Message"
-        data-assistant-composer
-        disabled={disabled}
-        onChange={(event) => {
-          onInputChange(event.target.value);
-        }}
-        onKeyDown={onInputKeyDown}
-        placeholder="Ask Quieter…"
-        value={input}
-        variant="composer"
-      />
-    </div>
-    <div className="flex min-h-7 items-center gap-2">
-      <DropdownMenu key={visible ? "visible" : "hidden"}>
-        <DropdownMenuTrigger
-          appearance="row"
-          aria-label="Choose assistant change policy"
+  transcribing,
+}: ChatComposerProps) => {
+  const audioBusy = startingRecording || transcribing;
+  let dictationIcon = Mic01Icon;
+  if (audioBusy) {
+    dictationIcon = Loading03Icon;
+  } else if (recording) {
+    dictationIcon = StopIcon;
+  }
+  let dictationLabel = "Dictate";
+  if (!recordingSupported) {
+    dictationLabel = "Dictation is unavailable in this browser";
+  } else if (recording) {
+    dictationLabel = "Finish dictation";
+  } else if (audioBusy) {
+    dictationLabel = transcribing ? "Transcribing…" : "Starting microphone…";
+  }
+
+  return (
+    <form className="mt-auto w-full shrink-0 p-3" onSubmit={onSubmit}>
+      <PromptComposerFrame>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          {contextPicker}
+          {contextItems.map((item) => (
+            <ComposerContextChip
+              disabled={disabled}
+              icon={
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-3 shrink-0"
+                  icon={item.query === undefined ? Mail01Icon : Search01Icon}
+                />
+              }
+              key={item.id}
+              label={item.label}
+              onRemove={() => {
+                onRemoveContext(item.id);
+              }}
+            />
+          ))}
+        </div>
+        <Textarea
+          aria-label="Message"
+          data-assistant-composer
           disabled={disabled}
-          type="button"
-        >
-          <HugeiconsIcon aria-hidden className="size-3.5" icon={Shield01Icon} />
-          <span>
-            {policy === "ask" ? "Ask before changes" : "Auto approve"}
-          </span>
-          <HugeiconsIcon
-            aria-hidden
-            className="size-3"
-            icon={ArrowDown01Icon}
-          />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" side="top" data-assistant-panel>
-          <DropdownMenuItem
-            onSelect={() => {
-              onPolicyChange("ask");
-            }}
+          onChange={(event) => {
+            onInputChange(event.target.value);
+          }}
+          onKeyDown={onInputKeyDown}
+          placeholder="Ask about your mail…"
+          ref={inputRef}
+          value={input}
+          variant="prompt"
+        />
+        {recording || audioBusy ? (
+          <output
+            className="px-1 text-caption text-muted-fg"
+            aria-live="polite"
           >
-            Ask before changes
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => {
-              onPolicyChange("automatic");
-            }}
-          >
-            Auto approve
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <div className="ml-auto">
-        {streaming ? (
-          <IconButtonTooltip label="Stop response">
-            <Button
-              aria-label="Stop response"
-              onClick={onStop}
-              size="icon-sm"
-              type="button"
-              variant="secondary"
-            >
-              <HugeiconsIcon aria-hidden className="size-3.5" icon={StopIcon} />
-            </Button>
-          </IconButtonTooltip>
-        ) : (
-          <IconButtonTooltip label="Send">
-            <Button
-              aria-label="Send"
-              disabled={disabled === true || submitting || !input.trim()}
-              size="icon-sm"
-              type="submit"
-            >
-              <HugeiconsIcon
-                aria-hidden
-                className={submitting ? "size-3.5 animate-spin" : "size-3.5"}
-                icon={submitting ? Loading03Icon : SentIcon}
-              />
-            </Button>
-          </IconButtonTooltip>
-        )}
-      </div>
-    </div>
-  </form>
-);
+            {recording
+              ? "Listening… Finish when you're done, up to 60 seconds."
+              : dictationLabel}
+          </output>
+        ) : null}
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="min-w-0">
+            <ChatModelPicker
+              disabled={disabled}
+              model={model}
+              onModelChange={onModelChange}
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <IconButtonTooltip label={dictationLabel}>
+              <Button
+                aria-label={dictationLabel}
+                aria-pressed={recording}
+                disabled={disabled || audioBusy || !recordingSupported}
+                onClick={onToggleDictation}
+                size="icon-sm"
+                variant={recording ? "secondary" : "ghost"}
+              >
+                <HugeiconsIcon
+                  aria-hidden
+                  className={audioBusy ? "animate-spin" : undefined}
+                  icon={dictationIcon}
+                />
+              </Button>
+            </IconButtonTooltip>
+            {streaming ? (
+              <IconButtonTooltip label="Stop response">
+                <Button
+                  aria-label="Stop response"
+                  onClick={onStop}
+                  size="icon-sm"
+                  variant="secondary"
+                >
+                  <HugeiconsIcon aria-hidden icon={StopIcon} />
+                </Button>
+              </IconButtonTooltip>
+            ) : (
+              <IconButtonTooltip label="Send">
+                <Button
+                  aria-label="Send"
+                  disabled={
+                    disabled ||
+                    submitting ||
+                    recording ||
+                    audioBusy ||
+                    !input.trim()
+                  }
+                  size="icon-sm"
+                  type="submit"
+                >
+                  <HugeiconsIcon
+                    aria-hidden
+                    className={submitting ? "animate-spin" : undefined}
+                    icon={submitting ? Loading03Icon : ArrowUp02Icon}
+                  />
+                </Button>
+              </IconButtonTooltip>
+            )}
+          </div>
+        </div>
+      </PromptComposerFrame>
+    </form>
+  );
+};

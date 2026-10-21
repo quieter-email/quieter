@@ -35,8 +35,10 @@ import { orpc } from "@quieter/app/lib/orpc";
 import { rethrowClassified } from "@quieter/app/lib/orpc-errors";
 import { getApiUrl, openExternalUrl } from "@quieter/app/runtime";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
-import { Button } from "@quieter/ui/button";
+import { Button, buttonVariants } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { InputAddon, InputGroup } from "@quieter/ui/input-group";
+import { Pill } from "@quieter/ui/pill";
 import {
   Select,
   SelectContent,
@@ -240,12 +242,9 @@ const FirstRunDomainStep = ({
     verifiedDomains.length > 0 ? (
       <div className="flex flex-wrap items-center gap-2">
         {verifiedDomains.map((verifiedDomain) => (
-          <span
-            className="rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-body text-success"
-            key={verifiedDomain.id}
-          >
+          <Pill key={verifiedDomain.id} tone="success">
             {verifiedDomain.domain}
-          </span>
+          </Pill>
         ))}
         <RegisterDomainDialog
           onCreated={onCreated}
@@ -336,12 +335,10 @@ const FirstRunMailboxStep = ({
       </p>
     ) : (
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex h-8 w-full max-w-md items-center rounded-md border border-border bg-bg shadow-sm transition-colors squircle">
+        <InputGroup className="w-full max-w-md" surface="page">
           <TextFieldInput
             aria-label="Managed mailbox local part"
-            chrome="ghost"
-            // oxlint-disable-next-line shadcn/no-restyle -- Local-part input fills its row height.
-            className="h-full min-w-0 flex-1 pr-1"
+            chrome="attached"
             onChange={(event) => {
               onLocalPartChange(
                 event.currentTarget.value.replaceAll(/[@\s]/gu, "")
@@ -350,9 +347,7 @@ const FirstRunMailboxStep = ({
             placeholder="support"
             value={localPart}
           />
-          <span aria-hidden className="text-body text-muted-fg select-none">
-            @
-          </span>
+          <InputAddon aria-hidden>@</InputAddon>
           {verifiedDomains.length > 0 ? (
             <Select
               items={verifiedDomains.map((verifiedDomain) => ({
@@ -387,7 +382,7 @@ const FirstRunMailboxStep = ({
               {isDomainsPending ? "loading…" : "verified domain"}
             </span>
           )}
-        </div>
+        </InputGroup>
         <Button
           disabled={
             !hasManagedAccess ||
@@ -439,20 +434,25 @@ const FirstRunApiKeyStep = ({
             />
             API key created. Store it before leaving this screen.
           </p>
-          <button
-            className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-left font-mono text-caption break-all text-fg hover:bg-muted/50"
+          <Button
+            fullWidth
             onClick={() => {
               if (createdApiKey !== null) {
                 void navigator.clipboard.writeText(createdApiKey);
                 toast.success("Copied API key to clipboard.");
               }
             }}
+            size="auto"
             type="button"
+            variant="outline"
           >
-            {createdApiKey}
-          </button>
+            <code className="font-mono text-caption break-all">
+              {createdApiKey}
+            </code>
+          </Button>
           <a
-            className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none squircle hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
+            aria-label="Open API reference"
+            className={cn(buttonVariants({ variant: "outline" }))}
             href={getApiUrl("/api/openapi")}
             rel="noreferrer"
             target="_blank"
@@ -475,7 +475,8 @@ const FirstRunApiKeyStep = ({
             This organization already has an API key.
           </p>
           <a
-            className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-bg-surface px-3.5 text-body-sm text-fg shadow-sm transition-transform duration-100 ease-out select-none squircle hover:bg-muted/60 active:scale-[0.97] active:bg-muted/80"
+            aria-label="Open API reference"
+            className={cn(buttonVariants({ variant: "outline" }))}
             href={getApiUrl("/api/openapi")}
             rel="noreferrer"
             target="_blank"
@@ -506,7 +507,8 @@ const FirstRunApiKeyStep = ({
           Create API key
         </Button>
         <a
-          className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm text-muted-fg transition-transform duration-100 ease-out select-none squircle hover:bg-muted/60 hover:text-fg active:scale-[0.97] active:bg-muted/60 active:text-fg"
+          aria-label="Open API reference"
+          className={cn(buttonVariants({ variant: "ghost" }))}
           href={getApiUrl("/api/openapi")}
           rel="noreferrer"
           target="_blank"

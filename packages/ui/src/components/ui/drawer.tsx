@@ -1,11 +1,17 @@
 "use client";
 
-import { cva } from "class-variance-authority";
 import type { ComponentPropsWithoutRef } from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
 
 import { cn } from "../../lib/cn";
+import { ActionFooter } from "./action-footer";
+import { buttonFooterClassName, buttonVariants } from "./button";
 import type { ButtonProps } from "./button";
+import {
+  overlayDescriptionClassName,
+  overlayTitleClassName,
+  overlayTriggerClassName,
+} from "./overlay-chrome";
 
 export const Drawer = DrawerPrimitive.Root;
 export const DrawerPortal = DrawerPrimitive.Portal;
@@ -15,11 +21,7 @@ export const DrawerTrigger = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Trigger>) => (
   <DrawerPrimitive.Trigger
-    className={cn(
-      "squircle",
-      className,
-      "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
-    )}
+    className={cn("squircle", className, overlayTriggerClassName)}
     {...props}
   />
 );
@@ -87,20 +89,9 @@ export const DrawerBody = ({
 
 export const DrawerFooter = ({
   className,
-  fullWidth = false,
   ...props
-}: ComponentPropsWithoutRef<"div"> & { fullWidth?: boolean }) => (
-  <div
-    className={cn(
-      "gap-2 border-t px-5 py-4",
-      {
-        "flex items-center justify-end": !fullWidth,
-        "grid auto-cols-fr grid-flow-col": fullWidth,
-      },
-      className
-    )}
-    {...props}
-  />
+}: ComponentPropsWithoutRef<"div">) => (
+  <ActionFooter className={cn("border-t px-5 py-4", className)} {...props} />
 );
 
 export const DrawerTitle = ({
@@ -108,7 +99,7 @@ export const DrawerTitle = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Title>) => (
   <DrawerPrimitive.Title
-    className={cn("text-body-lg font-semibold tracking-tight", className)}
+    className={cn(overlayTitleClassName, className)}
     {...props}
   />
 );
@@ -118,37 +109,14 @@ export const DrawerDescription = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Description>) => (
   <DrawerPrimitive.Description
-    className={cn("mt-2 text-body text-muted-fg", className)}
+    className={cn(overlayDescriptionClassName, className)}
     {...props}
   />
 );
 
-const drawerCloseButtonVariants = cva(
-  "squircle inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-body-sm font-medium whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
-  {
-    defaultVariants: {
-      variant: "outline",
-    },
-    variants: {
-      variant: {
-        default:
-          "h-8 bg-primary text-primary-fg shadow-sm hover:bg-primary/90 active:bg-primary/85",
-        destructive:
-          "h-8 bg-destructive text-destructive-fg shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
-        ghost:
-          "h-8 bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg",
-        outline:
-          "h-8 border border-border bg-bg-surface text-fg shadow-sm hover:bg-muted active:bg-muted/80",
-        secondary:
-          "h-8 bg-secondary text-secondary-fg shadow-sm hover:bg-secondary-hover active:bg-secondary-active",
-      },
-    },
-  }
-);
-
 export const DrawerCloseButton = ({
   className,
-  variant = "outline",
+  variant = "secondary",
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Close> & {
   // Close buttons support the core button looks; card, chip, and the other
@@ -159,7 +127,11 @@ export const DrawerCloseButton = ({
   >;
 }) => (
   <DrawerPrimitive.Close
-    className={cn(drawerCloseButtonVariants({ variant }), className)}
+    className={cn(
+      buttonVariants({ variant }),
+      buttonFooterClassName,
+      className
+    )}
     {...props}
   />
 );

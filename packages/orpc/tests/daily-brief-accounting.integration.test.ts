@@ -28,6 +28,7 @@ import {
   vi,
 } from "vite-plus/test";
 
+import type * as AiMemoryModule from "../src/ai-memory";
 import {
   configureDailyBrief,
   markDailyBriefUrgentPending,
@@ -65,8 +66,9 @@ vi.mock(import("@quieter/env/server"), async (original) => {
 vi.mock(import("../src/ai-access"), () => ({
   assertCanUseAi: vi.fn<() => Promise<void>>().mockResolvedValue(),
 }));
-vi.mock(import("../src/ai-memory"), async (original) => ({
-  ...(await original()),
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- This fixture mocks only normal context calls, not the overview overload.
+vi.mock("../src/ai-memory", async (original) => ({
+  ...(await original<typeof AiMemoryModule>()),
   loadAiAgentContext: vi
     .fn<() => Promise<{ instructions: null; memory: null }>>()
     .mockResolvedValue({ instructions: null, memory: null }),

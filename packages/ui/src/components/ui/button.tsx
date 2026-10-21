@@ -12,7 +12,7 @@ import type { ComponentRef, ReactNode, Ref } from "react";
 
 import { cn } from "../../lib/cn";
 
-const buttonVariants = cva(
+export const buttonVariants = cva(
   "inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-body whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     defaultVariants: {
@@ -24,6 +24,7 @@ const buttonVariants = cva(
         true: "group relative w-full gap-3",
       },
       size: {
+        auto: "h-auto justify-start px-3 py-2 text-left text-body-sm whitespace-normal [&_svg]:size-4",
         // Caption-height action, e.g. retry and approval buttons.
         compact: "h-7 px-2 text-caption font-medium [&_svg]:size-3.5",
         default: "h-8 px-3 text-body-sm [&_svg]:size-4",
@@ -45,7 +46,7 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive text-destructive-fg shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
         ghost:
-          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-control-active active:text-fg aria-[current=page]:bg-muted aria-[current=page]:text-fg",
+          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-control-active active:text-fg aria-[current=page]:bg-muted aria-[current=page]:text-fg aria-[current=true]:bg-muted aria-[current=true]:text-fg",
         // Segmented option, e.g. the rule-builder choices. The selected look
         // follows aria-pressed so callers only pass the state.
         option:
@@ -62,10 +63,15 @@ const buttonVariants = cva(
         // Quiet secondary action, e.g. the stop-response button.
         secondary:
           "bg-secondary text-secondary-fg shadow-sm hover:bg-secondary-hover active:bg-secondary-active",
+        toolbar:
+          "rounded-xl border-border bg-control text-muted-fg shadow-xs hover:bg-control-hover hover:text-fg active:bg-control-active active:text-fg [&_svg]:size-3.5",
       },
     },
   }
 );
+
+export const buttonFooterClassName =
+  "squircle min-w-20 px-3.5 font-medium [&_svg]:size-3.5";
 
 export type ButtonProps = BaseUIButtonProps &
   VariantProps<typeof buttonVariants> & {

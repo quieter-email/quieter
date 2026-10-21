@@ -202,24 +202,24 @@ const CreatedApiKeyReveal = ({
     </DialogHeader>
 
     <DialogBody spacing="3">
-      <button
-        className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-left font-mono text-caption break-all text-fg squircle hover:bg-muted/50"
+      <Button
+        fullWidth
         onClick={() => {
           runDetached(async () => {
             await copyText(createdKey);
           });
         }}
+        size="auto"
         type="button"
+        variant="outline"
       >
-        {createdKey}
-      </button>
+        <code className="font-mono text-caption break-all">{createdKey}</code>
+      </Button>
       <p className="text-body text-muted-fg">Click the key to copy it.</p>
     </DialogBody>
 
-    <DialogFooter fullWidth>
-      <Button onClick={onClose} variant="secondary">
-        Done
-      </Button>
+    <DialogFooter>
+      <Button onClick={onClose}>Done</Button>
     </DialogFooter>
   </>
 );
@@ -579,7 +579,7 @@ const ResetApiKeyDialog = ({
           }}
           size="icon-sm"
           type="button"
-          variant="ghost"
+          variant="destructive"
         >
           <HugeiconsIcon
             aria-hidden
@@ -618,6 +618,7 @@ const ResetApiKeyDialog = ({
                   resetMutation.mutate();
                 }}
                 size="sm"
+                variant="destructive"
               >
                 {resetMutation.isPending ? (
                   <HugeiconsIcon
@@ -647,25 +648,28 @@ const ResetApiKeyDialog = ({
             </AlertDialogHeader>
 
             <AlertDialogBody spacing="3">
-              <button
-                className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-left font-mono text-caption break-all text-fg squircle hover:bg-muted/50"
+              <Button
+                fullWidth
                 onClick={() => {
                   runDetached(async () => {
                     await copyText(createdKey);
                   });
                 }}
+                size="auto"
                 type="button"
+                variant="outline"
               >
-                {createdKey}
-              </button>
+                <code className="font-mono text-caption break-all">
+                  {createdKey}
+                </code>
+              </Button>
               <p className="text-body text-muted-fg">
                 Click the key to copy it.
               </p>
             </AlertDialogBody>
 
-            <AlertDialogFooter fullWidth>
+            <AlertDialogFooter>
               <Button
-                variant="secondary"
                 onClick={() => {
                   runDetached(closeDialog);
                 }}
@@ -729,13 +733,12 @@ const DeleteApiKeyDialog = ({
           }}
           size="icon-sm"
           type="button"
-          variant="ghost"
+          variant="destructive"
         >
           <HugeiconsIcon
             aria-hidden
             className={cn("size-4", {
               "animate-spin": deleteMutation.isPending,
-              "text-destructive": !deleteMutation.isPending,
             })}
             icon={deleteMutation.isPending ? Loading03Icon : Delete02Icon}
           />

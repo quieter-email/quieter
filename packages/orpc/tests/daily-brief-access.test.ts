@@ -3,16 +3,14 @@ import type { DatabaseClient } from "@quieter/database/client";
 import type { aiMemory } from "@quieter/database/schema";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
-import type {
-  loadAiAgentContext,
-  loadAiAgentMemoryCandidates,
-} from "../src/ai-memory";
+import type * as AiMemoryModule from "../src/ai-memory";
 import {
   configureDailyBrief,
   dailyBriefInputs,
   getDailyBrief,
   giveDailyBriefFeedback,
   loadDailyBriefMemoryContext,
+  observeDailyBriefItem,
   prepareDailyBrief,
   recordDailyBriefActivity,
   refreshDailyBrief,
@@ -21,13 +19,14 @@ import type { assertAccessibleMailbox } from "../src/mailbox/service";
 
 const mocks = vi.hoisted(() => ({
   access: vi.fn<typeof assertAccessibleMailbox>(),
-  candidates: vi.fn<typeof loadAiAgentMemoryCandidates>(),
-  memoryContext: vi.fn<typeof loadAiAgentContext>(),
+  candidates: vi.fn<typeof AiMemoryModule.loadAiAgentMemoryCandidates>(),
+  memoryContext: vi.fn<typeof AiMemoryModule.loadAiAgentContext>(),
   select: vi.fn<DatabaseClient["select"]>(),
   update: vi.fn<DatabaseClient["update"]>(),
 }));
-vi.mock(import("../src/ai-memory"), async (original) => ({
-  ...(await original()),
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- This fixture mocks only normal context calls, not the overview overload.
+vi.mock("../src/ai-memory", async (original) => ({
+  ...(await original<typeof AiMemoryModule>()),
   loadAiAgentContext: mocks.memoryContext,
   loadAiAgentMemoryCandidates: mocks.candidates,
 }));
@@ -123,6 +122,12 @@ describe("Daily Brief authorization", () => {
         input: { ...input, action: "dismiss", itemId: "item" },
       })
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      observeDailyBriefItem({
+        context,
+        input: { ...input, action: "open", itemId: "item" },
+      })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(mocks.select).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
   });
@@ -139,7 +144,7 @@ describe("Daily Brief authorization", () => {
     }
   });
 
-  test("includes written personal instructions without using learned personal or other-mailbox context", async () => {
+  test("includes personal memories without using other users' or other-mailbox context", async () => {
     mocks.candidates.mockResolvedValue([
       memory({}),
       memory({ id: "personal-learned", kind: "learned" }),
@@ -174,13 +179,14 @@ describe("Daily Brief authorization", () => {
       expect.objectContaining({ id: "personal-instruction" })
     );
     expect(supplied).toContainEqual(
+      expect.objectContaining({ id: "personal-learned" })
+    );
+    expect(supplied).toContainEqual(
       expect.objectContaining({ id: "mailbox-learned" })
     );
     expect(
       supplied.some((candidate) =>
-        ["personal-learned", "other-mailbox", "other-user"].includes(
-          candidate.id
-        )
+        ["other-mailbox", "other-user"].includes(candidate.id)
       )
     ).toBeFalsy();
   });

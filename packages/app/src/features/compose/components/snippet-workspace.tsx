@@ -8,6 +8,7 @@ import {
   SidebarLeftIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { SnippetFields } from "@quieter/app/features/compose/components/snippet-fields";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
 import {
@@ -21,7 +22,6 @@ import {
   AlertDialogTitle,
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import {
   Dialog,
   DialogBody,
@@ -33,7 +33,7 @@ import {
 } from "@quieter/ui/dialog";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
-import { Textarea } from "@quieter/ui/textarea";
+import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -163,7 +163,7 @@ export const SnippetWorkspace = ({
 
   return (
     <>
-      <WorkspaceSection className="lg:inset-2">
+      <WorkspaceSection>
         <header className="@container border-b border-border p-3 sm:px-4">
           <div className="flex items-center gap-2">
             <IconButtonTooltip label="Open sidebar">
@@ -221,17 +221,10 @@ export const SnippetWorkspace = ({
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {filteredSnippets.map((snippet) => (
-            <button
+            <Button
               aria-label={`Edit snippet ${snippet.name}`}
               aria-current={editingId === snippet.id ? "true" : undefined}
-              className={cn(
-                "group flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors",
-                {
-                  "bg-muted text-fg": editingId === snippet.id,
-                  "text-muted-fg hover:bg-muted/55 hover:text-fg":
-                    editingId !== snippet.id,
-                }
-              )}
+              fullWidth
               key={snippet.id}
               onClick={() => {
                 setEditingId(snippet.id);
@@ -239,7 +232,9 @@ export const SnippetWorkspace = ({
                 setBodyText(snippet.bodyText);
                 setEditorOpen(true);
               }}
+              size="auto"
               type="button"
+              variant="ghost"
             >
               <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-4">
                 <span className="block shrink-0 truncate text-body-sm font-medium sm:w-44">
@@ -249,7 +244,7 @@ export const SnippetWorkspace = ({
                   {snippet.bodyText}
                 </span>
               </span>
-            </button>
+            </Button>
           ))}
           {snippetQueryState}
         </div>
@@ -285,40 +280,12 @@ export const SnippetWorkspace = ({
               </DialogTitle>
             </DialogHeader>
             <DialogBody spacing="3">
-              <label
-                className="flex flex-col gap-2 text-caption font-medium text-fg"
-                htmlFor="snippet-workspace-name"
-              >
-                Name
-                <Input
-                  id="snippet-workspace-name"
-                  maxLength={120}
-                  required
-                  onChange={(event) => {
-                    setName(event.currentTarget.value);
-                  }}
-                  placeholder="Snippet name"
-                  value={name}
-                />
-              </label>
-              <label
-                className="flex flex-col gap-2 text-caption font-medium text-fg"
-                htmlFor="snippet-workspace-text"
-              >
-                Text
-                <Textarea
-                  id="snippet-workspace-text"
-                  maxLength={100_000}
-                  required
-                  rows={3}
-                  variant="composer"
-                  onChange={(event) => {
-                    setBodyText(event.currentTarget.value);
-                  }}
-                  placeholder="Write text to reuse in a message"
-                  value={bodyText}
-                />
-              </label>
+              <SnippetFields
+                bodyText={bodyText}
+                name={name}
+                onBodyTextChange={setBodyText}
+                onNameChange={setName}
+              />
             </DialogBody>
             <DialogFooter>
               <DialogCloseButton>Cancel</DialogCloseButton>
@@ -329,7 +296,7 @@ export const SnippetWorkspace = ({
                     setDeleteSnippet(currentSnippet);
                   }}
                   type="button"
-                  variant="ghost"
+                  variant="destructive"
                 >
                   <HugeiconsIcon icon={Delete02Icon} />
                   Delete
@@ -367,11 +334,10 @@ export const SnippetWorkspace = ({
               This removes the snippet from this mailbox.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogBody
-            // oxlint-disable-next-line shadcn/no-restyle -- Danger copy keeps body text.
-            className="text-body text-muted-fg"
-          >
-            Messages that already used this snippet will not change.
+          <AlertDialogBody>
+            <Text tone="muted">
+              Messages that already used this snippet will not change.
+            </Text>
           </AlertDialogBody>
           <AlertDialogFooter>
             <AlertDialogCloseButton>Cancel</AlertDialogCloseButton>

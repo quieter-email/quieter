@@ -1,9 +1,15 @@
 "use client";
 
-import { Delete02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
+import {
+  Delete02Icon,
+  Mail01Icon,
+  Refresh01Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
+import { toastError } from "@quieter/app/lib/error-toast";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import {
   AlertDialog,
   AlertDialogCloseButton,
@@ -17,6 +23,11 @@ import {
 import { Button, LinkButton } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
+import { useColorMode } from "@quieter/ui/color-mode";
+import {
+  ComposerContextChip,
+  PromptComposerFrame,
+} from "@quieter/ui/composer-chrome";
 import {
   Dialog,
   DialogCloseButton,
@@ -40,10 +51,28 @@ import {
 import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { Pill } from "@quieter/ui/pill";
 import type { PillTone } from "@quieter/ui/pill";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectList,
+  SelectTrigger,
+  SelectValue,
+} from "@quieter/ui/select";
+import {
+  SettingsCard,
+  SettingsFieldRow,
+  SettingsNavigationRow,
+  SettingsPageHeader,
+  SettingsSectionLayout,
+} from "@quieter/ui/settings-layout";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Textarea } from "@quieter/ui/textarea";
+import { ThemePicker } from "@quieter/ui/theme-picker";
+import { toast } from "@quieter/ui/toast";
 import { TokenField } from "@quieter/ui/token-field";
 import type { TokenFieldToken } from "@quieter/ui/token-field";
 import { useState } from "react";
@@ -69,9 +98,9 @@ const showcaseTokens: TokenFieldToken[] = [
 
 // Literal classes: Tailwind cannot extract an interpolated `bg-${name}`.
 const surfaceTokens = [
-  { cls: "bg-bg-raised", name: "bg", note: "canvas" },
-  { cls: "bg-bg-surface", name: "bg-surface", note: "raised" },
-  { cls: "bg-bg", name: "bg", note: "sunken" },
+  { cls: "bg-bg", name: "bg", note: "canvas" },
+  { cls: "bg-bg-raised", name: "bg-raised", note: "raised" },
+  { cls: "bg-bg-surface", name: "bg-surface", note: "surface" },
   { cls: "bg-card", name: "card", note: "raised, both themes" },
   { cls: "bg-muted", name: "muted", note: "alias of control-hover" },
   { cls: "bg-secondary", name: "secondary", note: "secondary actions" },
@@ -113,6 +142,8 @@ const pillTones: PillTone[] = [
   "purple",
 ];
 
+const statusTones: PillTone[] = ["neutral", "success", "destructive"];
+
 const Section = ({
   children,
   description,
@@ -138,12 +169,29 @@ const Row = ({ children, label }: { children: ReactNode; label: string }) => (
   </div>
 );
 
+const copySampleKey = async () => {
+  try {
+    await navigator.clipboard.writeText(
+      "example_key_for_documentation_only_not_a_real_credential"
+    );
+    toast.success("Copied sample key.");
+  } catch (error) {
+    toastError(error, {
+      boundary: "clipboard",
+      fallback: "Could not copy sample key.",
+    });
+  }
+};
+
 export const DesignSystemShowcase = () => {
+  const { colorMode, setColorMode } = useColorMode();
   const [checked, setChecked] = useState(true);
   const [tokenFieldValue, setTokenFieldValue] = useState(
     "When it's a bug, use @Tracker to file it."
   );
   const [boxChecked, setBoxChecked] = useState(true);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [showPromptContext, setShowPromptContext] = useState(true);
 
   return (
     <main className="@container min-h-dvh text-fg">
@@ -155,12 +203,24 @@ export const DesignSystemShowcase = () => {
           <p className="mt-2 max-w-prose text-body-sm text-muted-fg">
             Every control the product composes from. If a surface needs
             something that is not here, extend a primitive rather than inventing
-            one locally. Toggle your OS or app theme to review both palettes.
+            one locally. Use the theme controls to review the same components
+            across palettes.
           </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button
+              onClick={() => {
+                setColorMode(colorMode === "dark" ? "light" : "dark");
+              }}
+              variant="secondary"
+            >
+              {colorMode === "dark" ? "Switch to light" : "Switch to dark"}
+            </Button>
+            <ThemePicker />
+          </div>
         </header>
 
         <Section
-          description="A card reads as raised in both themes. bg sits below the canvas."
+          description="The canvas, raised panels, and control states use semantic roles in every theme."
           title="Surfaces"
         >
           <div className="grid grid-cols-2 gap-3 @md:grid-cols-3">
@@ -235,7 +295,7 @@ export const DesignSystemShowcase = () => {
           </Row>
           <Row label="Icon, with tooltip">
             <IconButtonTooltip label="Delete">
-              <Button aria-label="Delete" size="icon-sm" variant="ghost">
+              <Button aria-label="Delete" size="icon-sm" variant="destructive">
                 <HugeiconsIcon aria-hidden icon={Delete02Icon} />
               </Button>
             </IconButtonTooltip>
@@ -244,6 +304,29 @@ export const DesignSystemShowcase = () => {
                 <HugeiconsIcon aria-hidden icon={Mail01Icon} />
               </Button>
             </IconButtonTooltip>
+          </Row>
+          <Row label="Toolbar control">
+            <IconButtonTooltip label="Refresh">
+              <Button aria-label="Refresh" size="icon" variant="toolbar">
+                <HugeiconsIcon aria-hidden icon={Refresh01Icon} />
+              </Button>
+            </IconButtonTooltip>
+          </Row>
+          <Row label="Multiline copy action">
+            <div className="flex w-64 max-w-full">
+              <Button
+                fullWidth
+                onClick={() => {
+                  void copySampleKey();
+                }}
+                size="auto"
+                variant="outline"
+              >
+                <code className="font-mono text-caption break-all">
+                  example_key_for_documentation_only_not_a_real_credential
+                </code>
+              </Button>
+            </div>
           </Row>
           <Row label="Disabled">
             <Button disabled type="button">
@@ -276,10 +359,8 @@ export const DesignSystemShowcase = () => {
                     Your preferences are up to date.
                   </DialogDescription>
                 </DialogHeader>
-                <DialogFooter fullWidth>
-                  <DialogCloseButton variant="secondary">
-                    Done
-                  </DialogCloseButton>
+                <DialogFooter>
+                  <DialogCloseButton variant="default">Done</DialogCloseButton>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -294,8 +375,8 @@ export const DesignSystemShowcase = () => {
                     Your inbox is ready to use.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
-                <AlertDialogFooter fullWidth>
-                  <AlertDialogCloseButton variant="secondary">
+                <AlertDialogFooter>
+                  <AlertDialogCloseButton variant="default">
                     Got it
                   </AlertDialogCloseButton>
                 </AlertDialogFooter>
@@ -312,25 +393,120 @@ export const DesignSystemShowcase = () => {
                     Your preferences are up to date.
                   </DrawerDescription>
                 </DrawerHeader>
-                <DrawerFooter fullWidth>
-                  <DrawerCloseButton variant="secondary">
-                    Done
-                  </DrawerCloseButton>
+                <DrawerFooter>
+                  <DrawerCloseButton variant="default">Done</DrawerCloseButton>
                 </DrawerFooter>
               </DrawerContent>
             </Drawer>
+          </Row>
+          <Row label="Paired footer actions">
+            <div className="w-80">
+              <ActionFooter>
+                <Button variant="secondary">Cancel</Button>
+                <Button>Apply</Button>
+              </ActionFooter>
+            </div>
+          </Row>
+          <Row label="Three footer actions">
+            <div className="w-80">
+              <ActionFooter>
+                <Button variant="secondary">Cancel</Button>
+                <Button variant="destructive">Delete</Button>
+                <Button>Save</Button>
+              </ActionFooter>
+            </div>
           </Row>
         </Section>
 
         <Section title="Form controls">
           <Row label="Input">
-            <Input className="w-64" placeholder="Placeholder" />
+            <Input
+              aria-label="Default input"
+              className="w-64"
+              placeholder="Placeholder"
+            />
+          </Row>
+          <Row label="Input, small">
+            <Input
+              aria-label="Small input"
+              className="w-64"
+              placeholder="Search settings"
+              size="sm"
+            />
           </Row>
           <Row label="Input, invalid">
-            <Input aria-invalid className="w-64" defaultValue="Not an email" />
+            <Input
+              aria-invalid
+              aria-label="Invalid input"
+              className="w-64"
+              defaultValue="Not an email"
+            />
+          </Row>
+          <Row label="Compound address">
+            <InputGroup className="w-80 max-w-full">
+              <Input
+                aria-label="Mailbox name"
+                chrome="attached"
+                defaultValue="support"
+              />
+              <InputAddon aria-hidden>@</InputAddon>
+              <Select defaultValue="example.test">
+                <SelectTrigger aria-label="Mailbox domain" variant="attached">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectList>
+                    <SelectItem value="example.test">example.test</SelectItem>
+                    <SelectItem value="studio.test">studio.test</SelectItem>
+                  </SelectList>
+                </SelectContent>
+              </Select>
+            </InputGroup>
           </Row>
           <Row label="Textarea">
-            <Textarea className="w-64" placeholder="Placeholder" />
+            <Textarea
+              aria-label="Message"
+              className="w-64"
+              placeholder="Placeholder"
+            />
+          </Row>
+          <Row label="Prompt composer">
+            <PromptComposerFrame className="w-80 max-w-full">
+              {showPromptContext ? (
+                <div className="flex min-w-0">
+                  <ComposerContextChip
+                    icon={
+                      <HugeiconsIcon
+                        aria-hidden
+                        className="size-3"
+                        icon={Mail01Icon}
+                      />
+                    }
+                    label="Planning the autumn release"
+                    onRemove={() => {
+                      setShowPromptContext(false);
+                    }}
+                  />
+                </div>
+              ) : null}
+              <Textarea
+                aria-label="Example assistant message"
+                placeholder="Ask about your mail…"
+                variant="prompt"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <Button
+                  onClick={() => {
+                    setShowPromptContext(true);
+                  }}
+                  size="compact"
+                  variant="ghost"
+                >
+                  Attach mail
+                </Button>
+                <Button size="compact">Send</Button>
+              </div>
+            </PromptComposerFrame>
           </Row>
           <Row label="Token field">
             <div className="w-80 rounded-md border border-border bg-input px-3 py-2 shadow-sm squircle focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
@@ -382,7 +558,7 @@ export const DesignSystemShowcase = () => {
         </Section>
 
         <Section
-          description="Categorical only. State uses success, warning, and destructive."
+          description="Categorical colors describe labels and roles. Semantic tones describe status."
           title="Pills"
         >
           <div className="flex flex-wrap gap-2">
@@ -392,11 +568,86 @@ export const DesignSystemShowcase = () => {
               </Pill>
             ))}
           </div>
+          <Row label="Status">
+            {statusTones.map((tone) => (
+              <Pill key={tone} tone={tone}>
+                {tone}
+              </Pill>
+            ))}
+          </Row>
           <Row label="Sizes">
             <Pill tone="blue">Default</Pill>
             <Pill size="xs" tone="blue">
               Compact
             </Pill>
+          </Row>
+        </Section>
+
+        <Section
+          description="Settings wrappers add domain behavior and anchors. Shared layouts own the spacing, type, borders, and row treatments."
+          title="Settings layouts"
+        >
+          <div className="space-y-6">
+            <SettingsPageHeader title="Preferences">
+              Choose how your inbox works for you.
+            </SettingsPageHeader>
+            <SettingsSectionLayout title="Reading">
+              <SettingsCard>
+                <SettingsFieldRow
+                  action={
+                    <Switch
+                      aria-label="Show message previews"
+                      checked={checked}
+                      onCheckedChange={setChecked}
+                    >
+                      <SwitchThumb />
+                    </Switch>
+                  }
+                  label="Message previews"
+                  value="Show a short preview beside each subject."
+                />
+                <SettingsNavigationRow
+                  description="Choose who can use this mailbox."
+                  onClick={() => {
+                    setSettingsDialogOpen(true);
+                  }}
+                  title="Mailbox access"
+                />
+              </SettingsCard>
+            </SettingsSectionLayout>
+          </div>
+          <Dialog
+            open={settingsDialogOpen}
+            onOpenChange={setSettingsDialogOpen}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Mailbox access</DialogTitle>
+                <DialogDescription>
+                  This example uses the same settings row and dialog as the
+                  product.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogCloseButton variant="default">Done</DialogCloseButton>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Row label="Setup choices">
+            <div className="grid w-full gap-3 @md:grid-cols-2">
+              <Button variant="card">
+                <span className="text-body font-medium">Connect a mailbox</span>
+                <span className="text-body-sm text-muted-fg">
+                  Use an existing email account.
+                </span>
+              </Button>
+              <Button variant="card">
+                <span className="text-body font-medium">Use your domain</span>
+                <span className="text-body-sm text-muted-fg">
+                  Create a managed mailbox.
+                </span>
+              </Button>
+            </div>
           </Row>
         </Section>
 

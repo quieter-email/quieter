@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  Loading03Icon,
-  Mail01Icon,
-  PinIcon,
-  PinOffIcon,
-} from "@hugeicons/core-free-icons";
+import { Loading03Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { MailboxAccessPill } from "@quieter/app/features/mailbox/components/mailbox-access-pill";
 import type { MailboxGrantRole } from "@quieter/app/features/mailbox/components/mailbox-access-pill";
@@ -37,19 +32,14 @@ const getGrantRoleDescription = (grantRole: MailboxGrantRole) => {
 };
 
 export const MailboxDetailGeneralSection = ({
-  defaultMailboxId,
-  isDefaultMailboxPending,
   isMovePending,
   isStartingGmail,
   mailbox,
   moveGmailMailboxMutation,
-  onSetDefaultMailbox,
   onStartGmailConnection,
   organizations,
   placementItems,
 }: {
-  defaultMailboxId: string | null;
-  isDefaultMailboxPending: boolean;
   isMovePending: boolean;
   isStartingGmail: boolean;
   mailbox: {
@@ -67,150 +57,117 @@ export const MailboxDetailGeneralSection = ({
       options?: { onError?: (error: unknown) => void }
     ) => void;
   };
-  onSetDefaultMailbox: (mailboxId: string) => void;
   onStartGmailConnection: (input: {
     mailboxId: string;
     organizationId: string;
   }) => Promise<void>;
   organizations: { id: string; name: string }[];
   placementItems: { label: string; value: string }[];
-}) => {
-  const isDefault = mailbox.id === defaultMailboxId;
+}) => (
+  <SettingsSection
+    description="Manage this mailbox's connection, placement, and access."
+    title="General"
+  >
+    <SettingsRows>
+      {mailbox.provider === "gmail" && (
+        <SettingsRow
+          action={
+            <Select
+              disabled={isMovePending}
+              items={placementItems}
+              onValueChange={(value = "") => {
+                if (value === "" || value === null) {
+                  return;
+                }
+                moveGmailMailboxMutation.mutate(
+                  { mailboxId: mailbox.id, organizationId: value },
+                  {
+                    onError: (error) => {
+                      toastError(error, {
+                        boundary: "mailbox-settings",
+                        fallback: "Could not move mailbox.",
+                      });
+                    },
+                  }
+                );
+              }}
+              value={mailbox.organizationId}
+            >
+              <SelectTrigger
+                aria-label={`Team for ${mailbox.emailAddress}`}
+                className="max-w-44"
+                pending={isMovePending}
+                size="sm"
+                variant="ghost"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {organizations.map((organization) => (
+                  <SelectItem key={organization.id} value={organization.id}>
+                    {organization.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+          title="Team"
+        >
+          Placement keeps mailbox switching organized; this mailbox remains
+          private to you.
+        </SettingsRow>
+      )}
 
-  return (
-    <SettingsSection
-      description="Choose where this mailbox appears and which mailbox opens by default."
-      title="General"
-    >
-      <SettingsRows>
-        {mailbox.provider !== "api" && (
+      {mailbox.provider === "managed" &&
+        mailbox.grantRole !== undefined &&
+        mailbox.grantRole !== null && (
           <SettingsRow
-            action={
+            action={<MailboxAccessPill role={mailbox.grantRole} />}
+            title="Your access"
+          >
+            {getGrantRoleDescription(mailbox.grantRole)}
+          </SettingsRow>
+        )}
+
+      {mailbox.provider === "gmail" && (
+        <SettingsRow
+          action={
+            mailbox.connectionStatus === "needs_reconnect" ? (
               <Button
-                disabled={isDefaultMailboxPending}
+                disabled={isStartingGmail}
                 onClick={() => {
-                  onSetDefaultMailbox(mailbox.id);
+                  runDetached(async () => {
+                    await onStartGmailConnection({
+                      mailboxId: mailbox.id,
+                      organizationId: mailbox.organizationId,
+                    });
+                  });
                 }}
-                pending={isDefaultMailboxPending}
-                pendingLabel="Saving…"
+                pending={isStartingGmail}
+                pendingLabel="Connecting…"
                 size="sm"
                 type="button"
-                variant="ghost"
               >
                 <HugeiconsIcon
                   aria-hidden
-                  className="size-4"
-                  icon={isDefault ? PinIcon : PinOffIcon}
+                  className={cn("size-4", {
+                    "animate-spin": isStartingGmail,
+                  })}
+                  icon={isStartingGmail ? Loading03Icon : Mail01Icon}
                 />
-                {isDefault ? "Default" : "Set as default"}
+                Reconnect
               </Button>
-            }
-            title="Default mailbox"
-          >
-            Open this mailbox when no other mailbox is selected.
-          </SettingsRow>
-        )}
-
-        {mailbox.provider === "gmail" && (
-          <SettingsRow
-            action={
-              <Select
-                disabled={isMovePending}
-                items={placementItems}
-                onValueChange={(value = "") => {
-                  if (value === "" || value === null) {
-                    return;
-                  }
-                  moveGmailMailboxMutation.mutate(
-                    { mailboxId: mailbox.id, organizationId: value },
-                    {
-                      onError: (error) => {
-                        toastError(error, {
-                          boundary: "mailbox-settings",
-                          fallback: "Could not move mailbox.",
-                        });
-                      },
-                    }
-                  );
-                }}
-                value={mailbox.organizationId}
-              >
-                <SelectTrigger
-                  aria-label={`Team for ${mailbox.emailAddress}`}
-                  className="max-w-44"
-                  pending={isMovePending}
-                  size="sm"
-                  variant="ghost"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {organizations.map((organization) => (
-                    <SelectItem key={organization.id} value={organization.id}>
-                      {organization.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            }
-            title="Team"
-          >
-            Placement keeps mailbox switching organized; this mailbox remains
-            private to you.
-          </SettingsRow>
-        )}
-
-        {mailbox.provider === "managed" &&
-          mailbox.grantRole !== undefined &&
-          mailbox.grantRole !== null && (
-            <SettingsRow
-              action={<MailboxAccessPill role={mailbox.grantRole} />}
-              title="Your access"
-            >
-              {getGrantRoleDescription(mailbox.grantRole)}
-            </SettingsRow>
-          )}
-
-        {mailbox.provider === "gmail" && (
-          <SettingsRow
-            action={
-              mailbox.connectionStatus === "needs_reconnect" ? (
-                <Button
-                  disabled={isStartingGmail}
-                  onClick={() => {
-                    runDetached(async () => {
-                      await onStartGmailConnection({
-                        mailboxId: mailbox.id,
-                        organizationId: mailbox.organizationId,
-                      });
-                    });
-                  }}
-                  pending={isStartingGmail}
-                  pendingLabel="Connecting…"
-                  size="sm"
-                  type="button"
-                >
-                  <HugeiconsIcon
-                    aria-hidden
-                    className={cn("size-4", {
-                      "animate-spin": isStartingGmail,
-                    })}
-                    icon={isStartingGmail ? Loading03Icon : Mail01Icon}
-                  />
-                  Reconnect
-                </Button>
-              ) : (
-                <span className="text-caption text-muted-fg">Connected</span>
-              )
-            }
-            title="Connection"
-          >
-            {mailbox.connectionStatus === "needs_reconnect"
-              ? "Reconnect through Google to resume reading and sending mail."
-              : "Quieter can read and send mail for this account."}
-          </SettingsRow>
-        )}
-      </SettingsRows>
-    </SettingsSection>
-  );
-};
+            ) : (
+              <span className="text-caption text-muted-fg">Connected</span>
+            )
+          }
+          title="Connection"
+        >
+          {mailbox.connectionStatus === "needs_reconnect"
+            ? "Reconnect through Google to resume reading and sending mail."
+            : "Quieter can read and send mail for this account."}
+        </SettingsRow>
+      )}
+    </SettingsRows>
+  </SettingsSection>
+);

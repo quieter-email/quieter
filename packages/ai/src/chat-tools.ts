@@ -6,8 +6,6 @@ import { tool } from "ai";
 import type { ToolSet } from "ai";
 import { z } from "zod";
 
-export const assistantPolicySchema = z.enum(["ask", "automatic"]);
-
 export const assistantCapabilitySchema = z.enum([
   "navigate",
   "compose",
@@ -70,14 +68,13 @@ export const foregroundSnapshotSchema = z
     exchangeId: z.uuid(),
     expiresAt: z.number().int().positive(),
     generation: z.number().int().positive(),
-    policy: assistantPolicySchema,
     query: z.string().trim().max(500).optional(),
     selectedMessageId: optionalIdentifier,
     selectedThreadId: optionalIdentifier,
     tabId: z.string().trim().min(1).max(128),
     view: workspaceViewSchema.optional(),
   })
-  .strict();
+  .strip();
 
 export type ForegroundSnapshot = z.infer<typeof foregroundSnapshotSchema>;
 
@@ -304,7 +301,7 @@ export const createForegroundServerTools = (
 ): ToolSet => ({
   save_compose_draft: tool({
     description:
-      "Save this exact reviewed compose draft. The user must approve the payload before it is persisted. If it has attachments or inline images, ask the user to save it from the composer instead.",
+      "Save this exact visible compose draft. If it has attachments or inline images, ask the user to save it from the composer instead.",
     execute: async ({ draft }, { abortSignal, toolCallId }) =>
       await context.saveComposeDraft({ draft, toolCallId }, abortSignal),
     inputSchema: saveComposeDraftInputSchema,

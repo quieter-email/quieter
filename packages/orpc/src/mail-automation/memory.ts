@@ -18,7 +18,7 @@ import { and, count, desc, eq, inArray, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import {
-  recordAndRefreshAiMemory,
+  learnAiMemoryFromFeedback,
   replaceMailboxFeedbackMemories,
 } from "../ai-memory";
 
@@ -234,7 +234,7 @@ const recordAutoLabelFeedbackMemoryInBackground = async (input: {
   userId: string;
 }) => {
   try {
-    await recordAndRefreshAiMemory({
+    await learnAiMemoryFromFeedback({
       kind: "auto_label_feedback",
       mailboxId: input.mailboxId,
       metadata: {
@@ -344,8 +344,8 @@ export const recordMailAutoLabelFeedback = async (input: {
       ],
     });
 
-  void refreshAutoLabelMemoryInBackground(input.mailboxId, input.userId);
-  void recordAutoLabelFeedbackMemoryInBackground({
+  await refreshAutoLabelMemoryInBackground(input.mailboxId, input.userId);
+  await recordAutoLabelFeedbackMemoryInBackground({
     addedLabels: addLabelIds
       .map((labelId) => labelNames.get(labelId) ?? labelId)
       .join(", ")

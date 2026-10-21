@@ -9,6 +9,7 @@ import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
 
 export type MessageViewProps = {
   activeMailbox: MailboxCategory;
+  detailOnly?: boolean;
   composeDemoMode?: boolean;
   composeManagedDemoMode?: boolean;
   composePersistDrafts?: boolean;

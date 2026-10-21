@@ -36,7 +36,6 @@ import type { SettingsDestination } from "@quieter/app/features/settings/domain/
 import { authClient } from "@quieter/app/lib/auth";
 import { settingsRouteApi } from "@quieter/app/lib/route-apis";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -121,13 +120,7 @@ export const SettingsSidebar = ({
       key={title}
       aria-current={selected ? "page" : undefined}
       // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with compact settings-row spacing.
-      className={cn(
-        "h-6 w-full justify-start gap-2 px-2 text-left text-caption font-normal [&_svg]:size-3.5",
-        {
-          "text-fg": selected,
-          "text-muted-fg": !selected,
-        }
-      )}
+      className="h-6 justify-start px-2 text-left text-caption font-normal"
       // oxlint-enable shadcn/no-restyle
       onClick={() => {
         open(destination);

@@ -5,26 +5,31 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { ChatMessage } from "@quieter/app/features/chat/components/chat-message";
 import type { ChatToolApproval } from "@quieter/app/features/chat/domain/chat-tools";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
 
 type ChatTranscriptProps = {
   approvals: ChatToolApproval[];
+  docked: boolean;
   errorMessage?: string;
   isStreaming: boolean;
   messages: UIMessage[];
   onRetry?: () => void;
+  onSuggestion?: (text: string) => void;
 };
 
 const SCROLL_THRESHOLD = 120;
 
 export const ChatTranscript = ({
   approvals,
+  docked,
   errorMessage,
   isStreaming,
   messages,
   onRetry,
+  onSuggestion,
 }: ChatTranscriptProps) => {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -62,9 +67,14 @@ export const ChatTranscript = ({
   }, []);
 
   return (
-    <div className="relative max-h-[min(28rem,calc(100dvh-15rem))] min-h-0">
+    <div
+      className={cn("relative flex min-h-0 flex-col", {
+        "flex-1": docked,
+        "max-h-[min(28rem,calc(100dvh-15rem))]": !docked,
+      })}
+    >
       <div
-        className="max-h-[min(28rem,calc(100dvh-15rem))] overflow-y-auto overscroll-contain"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
         onScroll={() => {
           const viewport = viewportRef.current;
           if (viewport === null) {
@@ -86,6 +96,9 @@ export const ChatTranscript = ({
               isStreaming={isStreaming && message === messages.at(-1)}
               key={message.id}
               message={message}
+              onSuggestion={
+                message === messages.at(-1) ? onSuggestion : undefined
+              }
             />
           ))}
           {errorMessage === undefined || errorMessage === "" ? null : (

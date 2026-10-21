@@ -10,6 +10,9 @@ export const isChatToolPart = (
 ): part is ChatToolPart =>
   typeof part.type === "string" &&
   part.type.startsWith("tool-") &&
+  part.type !== "tool-memory" &&
+  part.type !== "tool-read_personal_context" &&
+  part.type !== "tool-suggest_replies" &&
   "toolCallId" in part;
 
 export const getToolName = (partType: string) =>

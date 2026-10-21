@@ -5,13 +5,6 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { ConsentPreferencesLink } from "@quieter/app/components/consent-preferences-link";
 import { useKeyboardShortcuts } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
 import {
-  SettingsCard,
-  SettingsRow,
-  SettingsRows,
-  SettingsSection,
-  settingsSurfaceVariants,
-} from "@quieter/app/features/settings/components/settings-layout";
-import {
   isDemoModeAvailable,
   setDemoModeEnabled,
   useDemoModeEnabled,
@@ -38,6 +31,15 @@ import {
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { ThemePicker } from "@quieter/ui/theme-picker";
 
+import { DefaultMailboxSetting } from "./default-mailbox-setting";
+import {
+  SettingsCard,
+  SettingsRow,
+  SettingsRows,
+  SettingsSection,
+  settingsSurfaceVariants,
+} from "./settings-layout";
+
 const COLOR_MODE_OPTIONS: { label: string; value: ConfigColorMode }[] = [
   { label: "Light", value: "light" },
   { label: "Dark", value: "dark" },
@@ -50,6 +52,7 @@ export const PreferencesSettingsPanel = () => {
   const { openKeyboardShortcuts } = useKeyboardShortcuts();
   return (
     <div className={settingsSurfaceVariants({ variant: "page" })}>
+      <DefaultMailboxSetting />
       <SettingsSection title="Appearance">
         <SettingsRows>
           <SettingsRow
@@ -91,8 +94,8 @@ export const PreferencesSettingsPanel = () => {
             Choose how Quieter looks on this device.
           </SettingsRow>
           <SettingsRow action={<ThemePicker />} title="Theme">
-            Pick a color palette. Your light and dark choices are remembered on
-            this device.
+            Choose a look for your workspace. Your light and dark choices are
+            remembered on this device.
           </SettingsRow>
           <SettingsRow
             action={

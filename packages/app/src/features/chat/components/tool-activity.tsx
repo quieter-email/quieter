@@ -44,16 +44,6 @@ const labels: Record<string, { complete: string; pending: string }> = {
   search_gmail: { complete: "Searched mail", pending: "Searching mail…" },
   send_mail: { complete: "Sent email", pending: "Sending email…" },
 };
-const changeQuestions: Record<string, string> = {
-  archive: "Archive this conversation?",
-  mark_read: "Mark as read?",
-  mark_unread: "Mark as unread?",
-  move_to_inbox: "Move to inbox?",
-  move_to_spam: "Move to spam?",
-  move_to_trash: "Move to trash?",
-  trash: "Move to trash?",
-};
-
 const ToolDetails = ({ input, draft }: { input: unknown; draft: boolean }) => {
   if (typeof input !== "object" || input === null) {
     return null;
@@ -122,7 +112,8 @@ export const ToolActivity = ({
   part: ChatToolPart;
 }) => {
   const name = getToolName(part.type);
-  const awaitingApproval = part.state === "approval-requested";
+  const awaitingApproval =
+    name === "send_mail" && part.state === "approval-requested";
   const output = part.state === "output-available" ? part.output : undefined;
   const returnedError =
     typeof output === "object" &&
@@ -157,19 +148,7 @@ export const ToolActivity = ({
     label = "Skipped";
   }
   if (awaitingApproval) {
-    label = "Apply this change?";
-    if (name === "send_mail") {
-      label = "Send this email?";
-    } else if (name === "save_compose_draft") {
-      label = "Save this draft?";
-    } else if (
-      typeof part.input === "object" &&
-      part.input !== null &&
-      "action" in part.input &&
-      typeof part.input.action === "string"
-    ) {
-      label = changeQuestions[part.input.action] ?? "Update this conversation?";
-    }
+    label = "Send this email?";
   }
   let errorText = "The action could not be completed. Try again.";
   if (part.state === "output-error") {
@@ -214,9 +193,8 @@ export const ToolActivity = ({
               }}
               size="compact"
               type="button"
-              variant="ghost"
             >
-              Apply
+              Send
             </Button>
             <Button
               disabled={isStreaming}
@@ -225,23 +203,18 @@ export const ToolActivity = ({
               }}
               size="compact"
               type="button"
-              variant="ghost"
+              variant="secondary"
             >
-              Skip
+              Cancel
             </Button>
           </>
         ) : null}
         <IconButtonTooltip label="Action details">
           <CollapsibleTrigger
             aria-label="Action details"
-            // oxlint-disable-next-line shadcn/no-restyle -- Details chevron keeps its compact icon treatment.
-            className="flex size-5 shrink-0 items-center justify-center rounded text-muted-fg hover:text-fg focus-visible:ring-1 focus-visible:ring-ring"
+            render={<Button size="icon-xs" variant="ghost" />}
           >
-            <HugeiconsIcon
-              aria-hidden
-              className="size-3"
-              icon={ArrowDown01Icon}
-            />
+            <HugeiconsIcon aria-hidden icon={ArrowDown01Icon} />
           </CollapsibleTrigger>
         </IconButtonTooltip>
       </div>

@@ -6,6 +6,7 @@ import type { VariantProps } from "class-variance-authority";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
+import { inputControlClassName } from "./input-chrome";
 
 export const Toolbar = ({
   className,
@@ -93,7 +94,8 @@ export const ToolbarInput = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Input>) => (
   <ToolbarPrimitive.Input
     className={cn(
-      "h-8 w-full min-w-32 rounded-md border border-border bg-bg px-3 text-body-sm text-fg shadow-sm transition-colors duration-150 ease-out squircle placeholder:text-muted-fg read-only:cursor-default read-only:bg-bg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive/45",
+      inputControlClassName,
+      "h-8 min-w-32 rounded-md border border-border bg-bg px-3 text-body-sm shadow-sm squircle read-only:cursor-default read-only:bg-bg",
       className
     )}
     {...props}

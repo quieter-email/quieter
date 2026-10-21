@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { waitUntil } from "cloudflare:workers";
 
 import {
   LimitedJsonRequestError,
@@ -36,7 +37,12 @@ export const Route = createFileRoute("/api/chat")({
         const { ChatRequestError, createAiChatResponse } =
           await import("@quieter/orpc/chat");
         try {
-          return await createAiChatResponse({ body, request, userId });
+          return await createAiChatResponse({
+            body,
+            request,
+            scheduleBackgroundTask: waitUntil,
+            userId,
+          });
         } catch (error) {
           if (error instanceof ChatRequestError) {
             return new Response(error.message, {

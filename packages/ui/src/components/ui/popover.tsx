@@ -4,6 +4,10 @@ import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
+import {
+  overlayBackdropClassName,
+  overlayTriggerClassName,
+} from "./overlay-chrome";
 
 export const Popover = PopoverPrimitive.Root;
 export const PopoverPortal = PopoverPrimitive.Portal;
@@ -13,11 +17,7 @@ export const PopoverTrigger = ({
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger>) => (
   <PopoverPrimitive.Trigger
-    className={cn(
-      "squircle",
-      className,
-      "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
-    )}
+    className={cn("squircle", className, overlayTriggerClassName)}
     {...props}
   />
 );
@@ -27,6 +27,7 @@ export const PopoverContent = ({
   alignOffset = 0,
   children,
   className,
+  collisionPadding,
   side = "bottom",
   sideOffset = 8,
   size = "default",
@@ -34,7 +35,7 @@ export const PopoverContent = ({
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Popup> &
   Pick<
     ComponentPropsWithoutRef<typeof PopoverPrimitive.Positioner>,
-    "align" | "alignOffset" | "side" | "sideOffset"
+    "align" | "alignOffset" | "collisionPadding" | "side" | "sideOffset"
   > & {
     size?: "default" | "sm";
   }) => (
@@ -43,6 +44,7 @@ export const PopoverContent = ({
       align={align}
       alignOffset={alignOffset}
       className="isolate z-50"
+      collisionPadding={collisionPadding}
       side={side}
       sideOffset={sideOffset}
     >
@@ -98,10 +100,7 @@ export const PopoverBackdrop = ({
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Backdrop>) => (
   <PopoverPrimitive.Backdrop
-    className={cn(
-      "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0",
-      className
-    )}
+    className={cn(overlayBackdropClassName, className)}
     {...props}
   />
 );

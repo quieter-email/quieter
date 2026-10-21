@@ -21,6 +21,7 @@ import { downloadAttachmentFromServer } from "@quieter/app/lib/gmail/attachments
 import type { MessageAttachment } from "@quieter/app/lib/mail";
 import { rpc } from "@quieter/app/lib/orpc";
 import { getErrorMessage } from "@quieter/app/lib/orpc-errors";
+import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { toast } from "@quieter/ui/toast";
 import { useQuery } from "@tanstack/react-query";
@@ -308,19 +309,17 @@ export const MessageAttachments = ({
           return (
             <Fragment key={attachmentKey}>
               {isCalendarInvite ? (
-                <button
+                <Button
                   aria-busy={isCalendarPending}
-                  className={cn(
-                    "inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md bg-muted px-2 text-left text-caption text-fg squircle",
-                    "transition-colors hover:bg-control-active",
-                    "disabled:cursor-progress disabled:opacity-65"
-                  )}
+                  className="max-w-full min-w-0"
                   disabled={isCalendarPending || areConnectorsLoading}
                   onClick={() => {
                     void handleCalendarAction(attachment);
                   }}
                   title={attachment.fileName}
+                  size="compact"
                   type="button"
+                  variant="secondary"
                 >
                   <span className="flex size-5 shrink-0 items-center justify-center text-muted-fg">
                     <HugeiconsIcon
@@ -335,16 +334,12 @@ export const MessageAttachments = ({
                   <span className="min-w-0 truncate font-medium">
                     {calendarActionLabel}
                   </span>
-                </button>
+                </Button>
               ) : null}
 
-              <button
+              <Button
                 aria-busy={isDownloadPending}
-                className={cn(
-                  "inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md bg-muted px-2 text-left text-caption text-fg squircle",
-                  "transition-colors hover:bg-control-active",
-                  "disabled:cursor-progress disabled:opacity-65"
-                )}
+                className="max-w-full min-w-0"
                 disabled={isDownloadPending}
                 onClick={() => {
                   void handleDownload(attachment);
@@ -354,7 +349,9 @@ export const MessageAttachments = ({
                     ? `Downloading ${attachment.fileName}`
                     : attachment.fileName
                 }
+                size="compact"
                 type="button"
+                variant="secondary"
               >
                 <span className="flex size-5 shrink-0 items-center justify-center text-muted-fg">
                   <HugeiconsIcon
@@ -382,7 +379,7 @@ export const MessageAttachments = ({
                     {attachment.fileName}
                   </span>
                 )}
-              </button>
+              </Button>
             </Fragment>
           );
         })}

@@ -2,7 +2,6 @@
 
 import { SidebarLeftIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { messageListHeaderControlVariants } from "@quieter/app/features/message-list/components/message-list-header-surfaces";
 import { getAppPresenceMotion } from "@quieter/app/features/motion/app-motion";
 import { Button } from "@quieter/ui/button";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
@@ -45,13 +44,9 @@ export const MessageListHeader = ({
             <IconButtonTooltip label="Open sidebar">
               <Button
                 aria-label="Open sidebar"
-                // oxlint-disable-next-line shadcn/require-static-classes -- Shared header control scale lives in message-list-header-surfaces.
-                className={messageListHeaderControlVariants({
-                  control: "toolbar",
-                })}
                 onClick={onOpenSidebar}
                 size="icon"
-                variant="ghost"
+                variant="outline"
               >
                 <HugeiconsIcon icon={SidebarLeftIcon} />
               </Button>

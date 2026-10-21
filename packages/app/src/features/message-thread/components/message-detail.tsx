@@ -21,6 +21,7 @@ import type { ReactNode } from "react";
 
 type MessageDetailProps = {
   activeMailbox: MailboxCategory;
+  detailOnly?: boolean;
   composeDemoMode?: boolean;
   composeManagedDemoMode?: boolean;
   composePersistDrafts?: boolean;
@@ -41,6 +42,7 @@ type MessageDetailProps = {
 
 export const MessageDetail = ({
   activeMailbox,
+  detailOnly,
   composeDemoMode,
   composeManagedDemoMode,
   composePersistDrafts,
@@ -94,6 +96,7 @@ export const MessageDetail = ({
       >
         <MessageView
           activeMailbox={activeMailbox}
+          detailOnly={detailOnly}
           composeDemoMode={composeDemoMode}
           composeManagedDemoMode={composeManagedDemoMode}
           composePersistDrafts={composePersistDrafts}

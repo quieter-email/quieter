@@ -30,6 +30,7 @@ import {
   DialogFooter,
   DialogCloseButton,
 } from "@quieter/ui/dialog";
+import { Field, FieldLabel } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { toast } from "@quieter/ui/toast";
@@ -398,11 +399,8 @@ export const ComposeEditor = ({
             <DialogTitle>Insert a link</DialogTitle>
           </DialogHeader>
           <DialogBody>
-            <label
-              className="space-y-2 text-caption"
-              htmlFor="compose-link-url"
-            >
-              Address
+            <Field>
+              <FieldLabel htmlFor="compose-link-url">Address</FieldLabel>
               <Input
                 id="compose-link-url"
                 onChange={(event) => {
@@ -411,7 +409,7 @@ export const ComposeEditor = ({
                 placeholder="https://example.com"
                 value={linkUrl}
               />
-            </label>
+            </Field>
           </DialogBody>
           <DialogFooter>
             <DialogCloseButton>Cancel</DialogCloseButton>

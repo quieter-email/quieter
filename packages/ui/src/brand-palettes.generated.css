@@ -1,0 +1,136 @@
+/* Generated from lib/brand-themes.ts. Run vp run generate:brand-palette-css. */
+:root[data-color-theme="04-porcelain"],
+.theme-swatch[data-color-theme="04-porcelain"] {
+  --theme-base: rgb(230 231 233);
+  --theme-accent: rgb(154 169 186);
+  --theme-ink: #0e0f10;
+  --theme-raised: rgb(245 246 248);
+  --theme-surface: rgb(253 253 254);
+  --theme-primary: #4e5877;
+  --theme-primary-fg: #ffffff;
+  --theme-glow: none;
+  --theme-panel-gradient: none;
+  --theme-radius: 10px;
+  --theme-gutter: 6px;
+  --theme-gutter-wide: 8px;
+  --theme-row-padding: 12px;
+}
+
+:root[data-color-theme="08-lilac"],
+.theme-swatch[data-color-theme="08-lilac"] {
+  --theme-base: rgb(224 222 233);
+  --theme-accent: rgb(160 149 187);
+  --theme-ink: #0e0f10;
+  --theme-raised: rgb(239 234 247);
+  --theme-surface: rgb(249 245 253);
+  --theme-primary: #65517d;
+  --theme-primary-fg: #fffaff;
+  --theme-glow: radial-gradient(ellipse at 6% 110%, color-mix(in srgb, var(--theme-accent) 28%, transparent), transparent 70%);
+  --theme-panel-gradient: none;
+  --theme-radius: 10px;
+  --theme-gutter: 6px;
+  --theme-gutter-wide: 8px;
+  --theme-row-padding: 12px;
+}
+
+:root[data-color-theme="10-sand"],
+.theme-swatch[data-color-theme="10-sand"] {
+  --theme-base: rgb(229 222 210);
+  --theme-accent: rgb(177 153 130);
+  --theme-ink: #28231f;
+  --theme-raised: rgb(243 237 226);
+  --theme-surface: rgb(252 248 240);
+  --theme-primary: #71543b;
+  --theme-primary-fg: #fffbf4;
+  --theme-glow: none;
+  --theme-panel-gradient: none;
+  --theme-radius: 4px;
+  --theme-gutter: 4px;
+  --theme-gutter-wide: 6px;
+  --theme-row-padding: 10px;
+}
+
+:root[data-color-theme="12-eclipse"],
+.theme-swatch[data-color-theme="12-eclipse"] {
+  --theme-base: rgb(10 11 14);
+  --theme-accent: rgb(40 45 68);
+  --theme-ink: #eeeef0;
+  --theme-raised: rgb(23 24 32);
+  --theme-surface: rgb(29 30 40);
+  --theme-primary: #e3dff1;
+  --theme-primary-fg: #1b1824;
+  --theme-glow: radial-gradient(ellipse at 6% 110%, color-mix(in srgb, var(--theme-accent) 28%, transparent), transparent 70%);
+  --theme-panel-gradient: none;
+  --theme-radius: 10px;
+  --theme-gutter: 6px;
+  --theme-gutter-wide: 8px;
+  --theme-row-padding: 12px;
+}
+
+:root[data-color-theme="graphite"],
+.theme-swatch[data-color-theme="graphite"] {
+  --theme-base: rgb(31 33 36);
+  --theme-accent: rgb(116 120 126);
+  --theme-ink: #eeefed;
+  --theme-raised: rgb(39 41 44);
+  --theme-surface: rgb(47 49 53);
+  --theme-primary: #e1e3df;
+  --theme-primary-fg: #202225;
+  --theme-glow: none;
+  --theme-panel-gradient: none;
+  --theme-radius: 4px;
+  --theme-gutter: 4px;
+  --theme-gutter-wide: 6px;
+  --theme-row-padding: 10px;
+}
+
+:root[data-color-theme="coffee"],
+.theme-swatch[data-color-theme="coffee"] {
+  --theme-base: rgb(35 30 26);
+  --theme-accent: rgb(144 120 92);
+  --theme-ink: #eee5d8;
+  --theme-raised: rgb(47 40 34);
+  --theme-surface: rgb(56 47 39);
+  --theme-primary: #d9c5a5;
+  --theme-primary-fg: #30251b;
+  --theme-glow: none;
+  --theme-panel-gradient: linear-gradient(180deg, var(--theme-surface), var(--theme-raised));
+  --theme-radius: 8px;
+  --theme-gutter: 6px;
+  --theme-gutter-wide: 10px;
+  --theme-row-padding: 14px;
+}
+
+:root[data-color-theme="moss"],
+.theme-swatch[data-color-theme="moss"] {
+  --theme-base: rgb(28 36 32);
+  --theme-accent: rgb(116 138 112);
+  --theme-ink: #e4e9df;
+  --theme-raised: rgb(37 47 41);
+  --theme-surface: rgb(44 56 48);
+  --theme-primary: #c4d1b8;
+  --theme-primary-fg: #253025;
+  --theme-glow: none;
+  --theme-panel-gradient: none;
+  --theme-radius: 14px;
+  --theme-gutter: 8px;
+  --theme-gutter-wide: 12px;
+  --theme-row-padding: 14px;
+}
+
+:root[data-color-theme="sage"],
+.theme-swatch[data-color-theme="sage"] {
+  --theme-base: rgb(222 228 218);
+  --theme-accent: rgb(140 157 132);
+  --theme-ink: #25312b;
+  --theme-raised: rgb(237 241 233);
+  --theme-surface: rgb(246 249 243);
+  --theme-primary: #4d6252;
+  --theme-primary-fg: #f7faf4;
+  --theme-glow: none;
+  --theme-panel-gradient: none;
+  --theme-radius: 14px;
+  --theme-gutter: 8px;
+  --theme-gutter-wide: 12px;
+  --theme-row-padding: 14px;
+}

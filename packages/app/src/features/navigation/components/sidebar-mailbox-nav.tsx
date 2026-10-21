@@ -15,7 +15,6 @@ import type { IconSvgElement } from "@hugeicons/react";
 import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
-import { cn } from "@quieter/ui/cn";
 
 const SIDEBAR_MAILBOX_ITEMS: readonly {
   id: MailboxCategory;
@@ -80,10 +79,7 @@ export const SidebarMailboxNav = ({
               active={isActive}
               aria-current={isActive ? "page" : undefined}
               // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom row spacing.
-              className={cn("w-full justify-start gap-3 px-3 text-left", {
-                "text-fg": isActive,
-                "text-muted-fg": !isActive,
-              })}
+              className="justify-start gap-3 px-3 text-left"
               // oxlint-enable shadcn/no-restyle
               onClick={() => {
                 if (item.id === "daily-brief") {

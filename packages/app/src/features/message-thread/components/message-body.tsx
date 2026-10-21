@@ -18,7 +18,7 @@ import type {
   ProcessedMailHtml,
 } from "@quieter/app/features/message-thread/domain/mail-html";
 import { useExternalImagesEnabled } from "@quieter/app/features/settings/domain/external-images-setting";
-import { Button } from "@quieter/ui/button";
+import { Button, buttonVariants } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { useColorMode } from "@quieter/ui/color-mode";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
@@ -58,21 +58,13 @@ const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
 
       <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
         {links.map((link) => (
-          <Button
+          <a
+            aria-label={link.label}
+            className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
+            href={link.href}
             key={link.href}
-            onClick={() => {
-              const openedWindow = window.open(
-                link.href,
-                "_blank",
-                "noopener,noreferrer"
-              );
-              if (openedWindow) {
-                openedWindow.opener = null;
-              }
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
+            rel="noopener noreferrer"
+            target="_blank"
           >
             {link.label}
             <HugeiconsIcon
@@ -80,7 +72,7 @@ const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
               className="size-3.5"
               icon={ArrowUpRight01Icon}
             />
-          </Button>
+          </a>
         ))}
       </div>
     </section>
