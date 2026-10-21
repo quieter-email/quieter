@@ -1,6 +1,6 @@
 {
   "name": "@quieter/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Quieter desktop email app",
   "homepage": "https://quieter.email",
@@ -13,7 +13,8 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "vp run @quieter/env#build && electron-vite dev",
-    "build": "vp run @quieter/env#build && electron-vite build",
+    "build": "vp run generate:icon && vp run @quieter/env#build && electron-vite build",
+    "generate:icon": "node ../../scripts/generate-desktop-icon.ts",
     "preview": "electron-vite preview",
     "package": "vp run build && electron-builder --dir",
     "dist": "vp run build && electron-builder --publish never"

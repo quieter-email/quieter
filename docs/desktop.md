@@ -42,6 +42,10 @@ vp run @quieter/desktop#dist
 
 `package:desktop` produces an unpacked application under `apps/desktop/release`; `dist` produces the host platform's installer (NSIS on Windows, DMG/ZIP on macOS, AppImage/DEB on Linux). All main and preload dependencies are bundled. Runtime backend configuration stays validated by `@quieter/env/desktop`. Packaged applications default to `https://quieter.email` and `wss://updates.quieter.email/mail/live`.
 
+The build generates the desktop's squircle icon from the shared brand artwork. Web icons keep their existing shape.
+
+Sender-logo URLs come from the web backend, using its `VITE_LOGO_DEV_PUBLISHABLE_KEY`. Desktop image requests from the main app frame send the configured backend origin as their referrer so domain-restricted image keys work as they do on the website. Private route paths and query parameters are excluded. Missing company or personal logos still use the shared initial fallback.
+
 The desktop build workflow runs only when started manually from GitHub Actions. It produces platform artifacts without publishing a release. Signing, Apple notarization, and release distribution require separate release credentials and authorization. There is no updater endpoint configured. Before distributing a build, deploy the matching server Electron plugin, `/desktop/auth`, and `/api/desktop/session` through the protected web deployment workflow. The Electron plugin uses existing auth tables; no migration is needed.
 
 Packaged error reporting uses the public `VITE_SENTRY_DSN` at build time, supplied by the manual workflow's repository variable. Main-process failures and renderer errors use the shared privacy filters. Local development reporting stays disabled unless `VITE_QUIETER_LOCAL_TELEMETRY=true` is explicitly set.
