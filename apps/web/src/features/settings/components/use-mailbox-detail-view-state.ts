@@ -74,7 +74,6 @@ export const useMailboxDetailViewState = (mailboxId: string) => {
   const mailboxes = groups.flatMap((group) => group.mailboxes);
   const selectedMailbox =
     mailboxes.find((mailbox) => mailbox.id === mailboxId) ?? null;
-  const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
   const isManagedManager =
     selectedMailbox?.provider === "managed" &&
     selectedMailbox.grantRole === "manager";
@@ -102,7 +101,6 @@ export const useMailboxDetailViewState = (mailboxId: string) => {
   return {
     areMailboxesPending,
     canMakeMailboxPrivate,
-    defaultMailboxId,
     detailGroup,
     detailManagedDivisions,
     detailManagedMembers,

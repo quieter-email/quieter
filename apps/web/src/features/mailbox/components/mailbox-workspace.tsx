@@ -372,6 +372,7 @@ const useMailboxWorkspaceRouteEffects = ({
       chatId: null,
       mailboxId: nextMailboxId,
       messageId: null,
+      view,
     });
   }, [
     compose,
@@ -882,10 +883,11 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     mailboxId,
     mailto,
     messageId,
+    opensDefaultMailbox,
     query,
     setMailboxSearch,
     threadId,
-    view,
+    view: requestedView,
   } = useMailboxRouteSearch();
   const { isMobileSidebarOpen, setIsMobileSidebarOpen } = useWorkspaceUiState();
   const isDemoMode = useDemoModeEnabled();
@@ -907,7 +909,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     selectedMailboxId,
     selectedMailboxProvider,
     selectedMailboxNeedsReconnect,
-    setDefaultMailboxMutation,
     updateMailboxSwitcherOrderMutation,
   } = useMailboxSelection({
     isDemoMode,
@@ -916,6 +917,12 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     mailboxId,
     queryClient,
   });
+  const view =
+    opensDefaultMailbox &&
+    defaultMailboxId === null &&
+    mailboxes.some((mailbox) => mailbox.provider !== "api")
+      ? "all-inboxes"
+      : requestedView;
   const { data: chats = [] } = useQuery(
     chatsQueryOptions(
       isSandboxMode || selectedMailboxProvider === "api"
@@ -1065,7 +1072,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       activeMailbox={activeMailbox}
       chatId={chatId ?? null}
       composeSession={composeWorkspace.composeSession}
-      defaultMailboxId={defaultMailboxId}
       isComposeMailbox={isComposeMailbox}
       isConnectingGmail={isStartingGmailConnection}
       isDemoMode={isDemoMode}
@@ -1110,11 +1116,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       onSelectMailboxId={selectMailboxId}
       onSelectView={selectView}
       onChatIdChange={changeChatId}
-      onSetDefaultMailbox={(nextMailboxId) => {
-        void setDefaultMailboxMutation.mutateAsync({
-          mailboxId: nextMailboxId,
-        });
-      }}
       query={query}
       reconnectError={gmailReconnectError}
       reconnectingMailboxId={reconnectingMailboxId}
