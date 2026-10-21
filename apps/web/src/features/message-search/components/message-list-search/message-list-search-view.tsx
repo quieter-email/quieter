@@ -17,6 +17,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 
 import { ArrowInteractionButton } from "#/components/arrow-interaction-button";
 import { SpinWhileActive } from "#/components/spin-while-active";
+import { AssistantSidebarTrigger } from "#/features/chat/components/assistant-sidebar-context";
 import { mailboxLabelSearchPillSurfaceClassNameByColor } from "#/features/message-labels/domain/mailbox-label-presentation";
 import { messageListSearchChipClassName } from "#/features/message-list/components/message-list-header-surfaces";
 import { normalizeLabelSelectionKey } from "#/features/message-search/state/message-list-search-state";
@@ -133,22 +134,6 @@ export const MessageListSearchView = ({
   return (
     <search className="block min-w-0">
       <div className="flex h-8 min-w-0 items-stretch gap-2">
-        <div className="flex self-stretch">
-          <IconButtonTooltip label="Refresh list">
-            <Button
-              aria-label="Refresh list"
-              disabled={isRefreshing}
-              onClick={() => void onRefresh()}
-              size="icon"
-              variant="outline"
-            >
-              <SpinWhileActive active={isRefreshing}>
-                <HugeiconsIcon icon={Refresh01Icon} />
-              </SpinWhileActive>
-            </Button>
-          </IconButtonTooltip>
-        </div>
-
         <div
           className="relative min-w-0 flex-1"
           onBlur={handleSearchFieldBlur}
@@ -600,16 +585,33 @@ export const MessageListSearchView = ({
         </div>
 
         <div className="flex self-stretch">
+          <IconButtonTooltip label="Refresh list">
+            <Button
+              aria-label="Refresh list"
+              disabled={isRefreshing}
+              onClick={() => void onRefresh()}
+              size="icon"
+              variant="toolbar"
+            >
+              <SpinWhileActive active={isRefreshing}>
+                <HugeiconsIcon icon={Refresh01Icon} />
+              </SpinWhileActive>
+            </Button>
+          </IconButtonTooltip>
+        </div>
+
+        <div className="flex self-stretch">
           <IconButtonTooltip label="Scroll to top">
             <ArrowInteractionButton
               aria-label="Scroll to top"
               onClick={onScrollToTop}
               size="icon"
               type="button"
-              variant="outline"
+              variant="toolbar"
             />
           </IconButtonTooltip>
         </div>
+        <AssistantSidebarTrigger className="data-[sidebar-open=true]:-ms-2" />
       </div>
     </search>
   );

@@ -215,6 +215,7 @@ export const MailboxMessagesPanel = ({
         {isMessageRouteOpen ? (
           <MessageDetail
             activeMailbox={activeMailbox}
+            detailOnly={detailOnly}
             composeDemoMode={isDemoMode}
             composeManagedDemoMode={isManagedDemoMode}
             composePersistDrafts={persistComposeDrafts}

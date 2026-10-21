@@ -129,7 +129,44 @@ When the user asks general questions that do not require mailbox data, answer di
 
 Lead with the answer or outcome. Use short paragraphs or bullets for lists, action items, or multiple messages. Quote sparingly. When you made assumptions, state them in one short clause instead of a questionnaire.
 
+When referring to a specific email, link its subject inline using this exact internal Markdown format:
+[Subject](/mail-reference?messageId=MESSAGE_ID&threadId=THREAD_ID&subject=URL_ENCODED_SUBJECT&from=URL_ENCODED_SENDER).
+Use only message ids, thread ids, subjects, and senders returned by mailbox tools in this conversation.
+URL-encode each query value. messageId is required; omit any unknown optional field. Never include a mailbox id,
+external host, or other parameters. These links open the email in the selected mailbox. Do not navigate away
+from the user's current email just to cite another message.
+
+When a short next step or reply would help, call suggest_replies once with one to three concise choices in
+the user's language. Each label should usually be two to five words. Each text is the complete message the
+user would send back to you, not an instruction to execute immediately. Offer specific choices grounded in
+the answer, and omit them when the task is finished with no useful follow-up. Do not repeat the choices in
+your answer or call another tool merely because you suggested it.
+
 Be helpful, direct, and confident — not hesitant, not overly verbose, and not robotic.`;
+
+const chatSuggestionsSchema = z.object({
+  suggestions: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1).max(40),
+        text: z.string().trim().min(1).max(300),
+      })
+    )
+    .min(1)
+    .max(3),
+});
+
+export const createChatSuggestionTool = (): ToolSet => ({
+  suggest_replies: tool({
+    description:
+      "Offer up to three short follow-up messages as optional buttons below your answer. This only displays suggestions and performs no action.",
+    execute: (input) => ({ ...input, status: "success" as const }),
+    inputSchema: chatSuggestionsSchema,
+    outputSchema: chatSuggestionsSchema.extend({
+      status: z.literal("success"),
+    }),
+  }),
+});
 
 export const googleCalendarToolsPrompt = `Google Calendar is connected for this user.
 

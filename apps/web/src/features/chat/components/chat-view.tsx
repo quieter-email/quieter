@@ -1,6 +1,8 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import type { ChatMailContext } from "@quieter/ai/chat-context";
+import type { ChatModel } from "@quieter/ai/chat-models";
 import {
   foregroundSnapshotSchema,
   isForegroundClientToolName,
@@ -31,10 +33,13 @@ import {
   cancelForegroundMessages,
   needsForegroundContinuation,
 } from "../domain/foreground-messages";
+import { useChatDictation } from "../domain/use-chat-dictation";
+import { useChatMailContext } from "../domain/use-chat-mail-context";
 import { useAgentWorkspace } from "../domain/workspace-context";
 import { executeWorkspaceTool } from "../domain/workspace-tools";
 import type { ChatViewProps } from "../types";
 import { ChatComposer } from "./chat-composer";
+import { ChatContextPicker } from "./chat-context-picker";
 import { ChatTranscript } from "./chat-transcript";
 
 type ChatData = RouterOutputs["chat"]["get"];
@@ -50,18 +55,32 @@ const ChatSession = ({
   }
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
-  const contextKey = JSON.stringify([
-    props.mailContext?.messageId,
-    props.mailContext?.query,
-    props.mailContext?.threadId,
-  ]);
-  const [dismissedContext, setDismissedContext] = useState<string | null>(null);
-  const contextDismissed = dismissedContext === contextKey;
+  const [model, setModel] = useState<ChatModel | "auto">("auto");
+  const mailContext = useChatMailContext(
+    workspace.mailboxId,
+    props.mailContext
+  );
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const dictation = useChatDictation({
+    chatId: props.chatId,
+    enabled: canUseAiChat && props.visible !== false,
+    mailboxId: workspace.mailboxId,
+    onTranscript: (text) => {
+      setInput((current) =>
+        current.trim() ? `${current.trimEnd()} ${text}` : text
+      );
+      inputRef.current?.focus();
+    },
+  });
   // oxlint-disable-next-line react/hook-use-state -- The session identity is fixed until this keyed component unmounts.
   const [tabId] = useState(() => crypto.randomUUID());
   const threadId = props.chatId ?? props.draftChatKey;
   const [busy, setBusy] = useState(false);
   const foregroundRef = useRef<ForegroundSnapshot | null>(null);
+  const requestContextRef = useRef<{
+    context: ChatMailContext;
+    model?: ChatModel;
+  } | null>(null);
   const mountedRef = useRef(true);
   const appliedReceipts = useRef(new Set<string>());
   const latestRef = useRef({ props });
@@ -115,6 +134,7 @@ const ChatSession = ({
           return {
             body: {
               category: latestRef.current.props.activeMailbox,
+              ...requestContextRef.current,
               foreground,
               mailboxId: workspace.mailboxId,
               message: messages.at(-1),
@@ -396,15 +416,31 @@ const ChatSession = ({
     !streaming &&
     approvals.length === 0 &&
     canUseAiChat;
-  const submit = async (resubmit?: { messageId: string; text: string }) => {
-    const text = (resubmit?.text ?? input).trim();
-    if (!text || streaming || busy || approvals.length > 0 || !canUseAiChat) {
+  const submit = async (
+    resubmit?: { messageId: string; text: string },
+    suggestion?: string
+  ) => {
+    const text = (resubmit?.text ?? suggestion ?? input).trim();
+    if (
+      !text ||
+      streaming ||
+      busy ||
+      approvals.length > 0 ||
+      !canUseAiChat ||
+      dictation.isRecording ||
+      dictation.isStarting ||
+      dictation.isTranscribing
+    ) {
       return;
     }
     setBusy(true);
     const generation = workspace.control.begin();
     const snapshot = workspace.read();
     try {
+      requestContextRef.current = {
+        context: mailContext.context,
+        ...(model === "auto" ? {} : { model }),
+      };
       foregroundRef.current = foregroundSnapshotSchema.parse({
         capabilities: [
           "navigate",
@@ -419,18 +455,15 @@ const ChatSession = ({
         exchangeId: crypto.randomUUID(),
         expiresAt: Date.now() + 120_000,
         generation,
-        query: snapshot.query,
-        selectedMessageId: snapshot.selectedMessageId,
-        selectedThreadId: snapshot.selectedThreadId,
+        query: mailContext.context.query,
+        selectedMessageId: mailContext.attachedMessageIds.includes(
+          snapshot.selectedMessageId ?? ""
+        )
+          ? snapshot.selectedMessageId
+          : undefined,
+        selectedThreadId: mailContext.context.threadId,
         tabId,
         view: snapshot.view,
-        ...(contextDismissed
-          ? {
-              query: undefined,
-              selectedMessageId: undefined,
-              selectedThreadId: undefined,
-            }
-          : {}),
       });
       if (resubmit === undefined) {
         setInput("");
@@ -452,15 +485,6 @@ const ChatSession = ({
     }
   };
 
-  let contextLabel: string | undefined;
-  if (!contextDismissed) {
-    if (props.mailContext?.threadId) {
-      contextLabel = "Current conversation";
-    } else if (props.mailContext?.query) {
-      contextLabel = `Search: ${props.mailContext.query}`;
-    }
-  }
-
   return (
     <div
       className="flex min-h-0 flex-1 flex-col"
@@ -473,6 +497,9 @@ const ChatSession = ({
           isStreaming={streaming}
           approvals={approvals}
           errorMessage={errorMessage}
+          onSuggestion={(text) => {
+            void submit(undefined, text);
+          }}
           onRetry={
             canRetry && lastUserMessage !== undefined
               ? () => {
@@ -492,13 +519,32 @@ const ChatSession = ({
       )}
       <ChatComposer
         input={input}
+        inputRef={inputRef}
+        model={model}
+        onModelChange={setModel}
+        recording={dictation.isRecording}
+        recordingSupported={dictation.isSupported}
+        startingRecording={dictation.isStarting}
+        transcribing={dictation.isTranscribing}
+        onToggleDictation={() => {
+          void dictation.toggle();
+        }}
         disabled={!canUseAiChat || busy || streaming || approvals.length > 0}
         streaming={streaming || approvals.length > 0}
         submitting={chat.status === "submitted"}
-        contextLabel={contextLabel}
-        onDismissContext={() => {
-          setDismissedContext(contextKey);
-        }}
+        contextItems={mailContext.contextItems}
+        contextPicker={
+          <ChatContextPicker
+            attachedMessageIds={mailContext.attachedMessageIds}
+            disabled={
+              !canUseAiChat || busy || streaming || approvals.length > 0
+            }
+            mailboxId={workspace.mailboxId}
+            initialCategory={props.activeMailbox}
+            onSelect={mailContext.handleAttach}
+          />
+        }
+        onRemoveContext={mailContext.handleRemove}
         onInputChange={setInput}
         onInputKeyDown={(event) => {
           if (

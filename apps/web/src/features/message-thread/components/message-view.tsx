@@ -18,6 +18,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domMax, m } from "motion/react";
 import { lazy, Suspense, useRef, useState } from "react";
 
+import { AssistantSidebarTrigger } from "#/features/chat/components/assistant-sidebar-context";
 import {
   buildComposeDraftFromMessageAction,
   buildComposeDraftFromSavedDraftMessage,
@@ -82,6 +83,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     composeSenderMailbox,
     composeSignature,
     currentUserEmail,
+    detailOnly = false,
     gmailLabels,
     hotkeyLinkedDraftMessage,
     hotkeyMessage,
@@ -266,6 +268,9 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               />
             </div>
           )}
+          <div className={cn("shrink-0", { "lg:hidden": !detailOnly })}>
+            <AssistantSidebarTrigger />
+          </div>
         </div>
 
         {apiSource !== null && apiSource !== undefined && (
