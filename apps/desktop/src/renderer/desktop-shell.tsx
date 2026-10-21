@@ -8,9 +8,11 @@ import { router } from "./router";
 
 export const DesktopShell = ({ children }: { children: ReactNode }) => {
   const headerRef = useRef<HTMLElement>(null);
-  const isAuth = useRouterState({
+  const isBrandedScreen = useRouterState({
     router,
-    select: (state) => state.location.pathname === "/auth",
+    select: (state) =>
+      state.location.pathname === "/auth" ||
+      state.location.pathname === "/onboarding",
   });
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export const DesktopShell = ({ children }: { children: ReactNode }) => {
       <header
         aria-label="Window title bar"
         className={cn("desktop-title-bar bg-bg text-muted-fg", {
-          dark: isAuth,
+          dark: isBrandedScreen,
         })}
         ref={headerRef}
       />

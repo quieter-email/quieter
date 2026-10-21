@@ -10,8 +10,8 @@ import {
   Mail01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { AuthLayout } from "@quieter/app/components/auth-layout";
 import { GoogleLogo } from "@quieter/app/components/google-logo";
-import { GuidedFlow } from "@quieter/app/features/guided-flow/components/guided-flow";
 import { getAppFlyInMotion } from "@quieter/app/features/motion/app-motion";
 import {
   isOnboardingIntentId,
@@ -53,26 +53,10 @@ import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { m, useReducedMotion } from "motion/react";
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { domAnimation, LazyMotion, m, useReducedMotion } from "motion/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const onboardingRouteApi = getRouteApi("/_app/onboarding");
-
-// Deferred: the welcome should paint before the shader compiles.
-const AtmosphericBackground = lazy(
-  async () =>
-    await import("@quieter/app/components/atmospheric-background").then(
-      ({ AtmosphericBackground: Component }) => ({ default: Component })
-    )
-);
 
 type OnboardingState = NonNullable<RouterOutputs["onboarding"]["getState"]>;
 
@@ -84,15 +68,15 @@ const ConnectedAddressList = ({
   <ul className="space-y-1">
     {mailboxes.map((mailbox) => (
       <li
-        className="flex items-center gap-2 text-body-sm text-fg"
+        className="flex min-w-0 items-center gap-2 text-body-sm text-fg"
         key={mailbox.id}
       >
         <HugeiconsIcon
           aria-hidden
-          className="size-3.5 text-success"
+          className="size-3.5 shrink-0 text-success"
           icon={CheckmarkCircle02Icon}
         />
-        {mailbox.emailAddress}
+        <span className="min-w-0 break-all">{mailbox.emailAddress}</span>
       </li>
     ))}
   </ul>
@@ -253,6 +237,7 @@ const GmailPlaybook = ({
           <ConnectedAddressList mailboxes={gmailMailboxes} />
           <Button
             disabled={isConnecting}
+            fullWidth
             onClick={onConnect}
             size="sm"
             type="button"
@@ -272,13 +257,16 @@ const GmailPlaybook = ({
         </p>
         <Button
           disabled={isConnecting}
+          fullWidth
           onClick={onConnect}
           size="sm"
           type="button"
           variant="outline"
         >
           <GoogleLogo className="size-4" />
-          {googleEmail?.trim() ? `Add ${googleEmail}` : "Add a Gmail mailbox"}
+          <span className="min-w-0 truncate">
+            {googleEmail?.trim() ? `Add ${googleEmail}` : "Add a Gmail mailbox"}
+          </span>
         </Button>
         {googleEmail?.trim() ? (
           <p className="text-micro text-muted-fg">
@@ -542,7 +530,6 @@ export const OnboardingScreen = () => {
   });
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
-  const [direction, setDirection] = useState<"back" | "forward">("forward");
   const step: 1 | 2 = stepParam === 2 ? 2 : 1;
   const selectedIntents = useMemo(
     () =>
@@ -787,37 +774,229 @@ export const OnboardingScreen = () => {
     : (["About you", "Setup"] as const);
 
   return (
-    <GuidedFlow
-      backdrop={
-        <Suspense fallback={null}>
-          <AtmosphericBackground
-            className="-z-10"
-            fadeBottom="canvas"
-            fadeTop="canvas"
-            grain={0.4}
-            intensity={0.5}
-          />
-        </Suspense>
-      }
-      activeStep={activeStep}
-      ariaLabel="Onboarding"
-      direction={direction}
-      headerEnd={
-        <div className="flex items-center gap-3">
-          <span className="text-caption text-muted-fg">
-            <span className="hidden sm:inline">Step </span>
-            {step} / {steps.length}
-          </span>
-          <FlowProgress
-            label="Onboarding progress"
-            max={steps.length}
-            value={step}
-          />
-        </div>
-      }
-      headerStart={
+    <AuthLayout
+      title={step === 1 ? "Welcome to Quieter" : "Set up what you need"}
+    >
+      <div className="mt-4 flex items-center justify-center gap-3">
+        <span className="text-caption text-muted-fg">
+          Step {step} of {steps.length}
+        </span>
+        <FlowProgress
+          label="Onboarding progress"
+          max={steps.length}
+          value={step}
+        />
+      </div>
+      <LazyMotion features={domAnimation}>
+        <m.div
+          key={activeStep}
+          {...getAppFlyInMotion({ animate: true, reducedMotion })}
+        >
+          {step === 1 ? (
+            <div>
+              <m.div
+                className="mt-6 space-y-4"
+                {...getAppFlyInMotion({
+                  animate: true,
+                  index: 1,
+                  reducedMotion,
+                })}
+              >
+                <Field>
+                  <FieldLabel htmlFor="onboarding-name">Name</FieldLabel>
+                  <Input
+                    autoComplete="name"
+                    id="onboarding-name"
+                    onChange={(event) => {
+                      setName(event.target.value);
+                    }}
+                    placeholder="Your name"
+                    value={name}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="onboarding-team">
+                    Team{" "}
+                    <span className="text-micro font-normal text-muted-fg">
+                      Optional
+                    </span>
+                  </FieldLabel>
+                  <Input
+                    id="onboarding-team"
+                    onChange={(event) => {
+                      setTeamName(event.target.value);
+                    }}
+                    placeholder={
+                      name.trim() ? `${name.trim()}'s team` : "Your team"
+                    }
+                    value={teamName}
+                  />
+                </Field>
+              </m.div>
+
+              <m.fieldset
+                className="mt-6"
+                {...getAppFlyInMotion({
+                  animate: true,
+                  index: 2,
+                  reducedMotion,
+                })}
+              >
+                <legend className="w-full text-center text-body font-medium text-fg">
+                  What brings you here?
+                </legend>
+                <p className="mt-1 text-center text-body-sm text-muted-fg">
+                  Choose any, or skip for now.
+                </p>
+                <div className="mt-4 space-y-1">
+                  {ONBOARDING_INTENT_OPTIONS.map((option) => {
+                    const checked = selectedIntents.includes(option.id);
+                    const inputId = `onboarding-intent-${option.id}`;
+                    return (
+                      <label
+                        className={cn(
+                          "flex cursor-pointer items-center gap-3 py-1.5 text-body transition-colors",
+                          {
+                            "text-fg": checked,
+                            "text-muted-fg hover:text-fg": !checked,
+                          }
+                        )}
+                        htmlFor={inputId}
+                        key={option.id}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          id={inputId}
+                          onCheckedChange={() => {
+                            toggleIntent(option.id);
+                          }}
+                        >
+                          <CheckboxIndicator />
+                        </Checkbox>
+                        <span className="min-w-0 flex-1">{option.title}</span>
+                        {"requiresManagedBilling" in option ? (
+                          <span className="shrink-0 text-micro text-muted-fg">
+                            {
+                              BILLING_FEATURES.organizationDomains
+                                .requirementLabel
+                            }
+                          </span>
+                        ) : null}
+                      </label>
+                    );
+                  })}
+                </div>
+              </m.fieldset>
+
+              <m.div
+                className="mt-6 space-y-4"
+                {...getAppFlyInMotion({
+                  animate: true,
+                  index: 3,
+                  reducedMotion,
+                })}
+              >
+                {isSingleStep && state?.hasAcceptedTerms === false ? (
+                  <TermsConsent
+                    accepted={termsAccepted}
+                    onAcceptedChange={setTermsAccepted}
+                  />
+                ) : null}
+                <div>
+                  {isSingleStep ? (
+                    <Button
+                      disabled={!canFinish}
+                      fullWidth
+                      onClick={() => {
+                        completeMutation.mutate({
+                          acceptedTerms: true,
+                          name: name.trim(),
+                          teamName: teamName.trim() || undefined,
+                        });
+                      }}
+                      pending={completeMutation.isPending}
+                      pendingLabel="Setting up…"
+                    >
+                      Finish
+                    </Button>
+                  ) : (
+                    <Button
+                      disabled={!canContinue}
+                      fullWidth
+                      onClick={() => {
+                        setStep(2);
+                      }}
+                    >
+                      Continue
+                      <HugeiconsIcon aria-hidden icon={ArrowRight01Icon} />
+                    </Button>
+                  )}
+                </div>
+              </m.div>
+            </div>
+          ) : (
+            <div>
+              <div className="mt-6 space-y-4">
+                {selectedIntents.length > 0 ? (
+                  <>{renderIntentPlaybooks()}</>
+                ) : (
+                  <p className="text-center text-body-sm text-muted-fg">
+                    Nothing selected yet. Finish now, or go back and pick what
+                    you came for.
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-6 space-y-4">
+                {state?.hasAcceptedTerms === false ? (
+                  <TermsConsent
+                    accepted={termsAccepted}
+                    onAcceptedChange={setTermsAccepted}
+                  />
+                ) : null}
+
+                {hasAnySetup ? null : (
+                  <p className="text-center text-micro text-muted-fg">
+                    You can set up as many mailboxes as you want later on.
+                  </p>
+                )}
+
+                <div>
+                  <Button
+                    disabled={!canFinish}
+                    fullWidth
+                    onClick={() => {
+                      completeMutation.mutate({
+                        acceptedTerms: true,
+                        name: name.trim(),
+                        teamName: teamName.trim() || undefined,
+                      });
+                    }}
+                    pending={completeMutation.isPending}
+                    pendingLabel="Setting up…"
+                  >
+                    Finish setup
+                  </Button>
+                </div>
+                <div className="flex justify-center">
+                  <Button
+                    onClick={() => {
+                      setStep(1);
+                    }}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+                    {steps[0]}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </m.div>
+      </LazyMotion>
+      <div className="mt-4 flex justify-center">
         <Button
-          className="-ml-2"
           disabled={signOutMutation.isPending}
           onClick={() => {
             signOutMutation.mutate(undefined, {
@@ -832,219 +1011,9 @@ export const OnboardingScreen = () => {
           size="sm"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
           Sign out
         </Button>
-      }
-      previous={
-        step === 2 ? (
-          <Button
-            onClick={() => {
-              setDirection("back");
-              setStep(1);
-            }}
-            size="sm"
-            variant="ghost"
-          >
-            <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
-            {steps[0]}
-          </Button>
-        ) : null
-      }
-    >
-      {step === 1 ? (
-        <div className="relative mx-auto max-w-xl">
-          <m.header
-            className="relative text-center"
-            {...getAppFlyInMotion({ animate: true, index: 0, reducedMotion })}
-          >
-            <h1
-              // oxlint-disable-next-line shadcn/no-arbitrary-values -- Hero display type shared with the status screen.
-              className="font-sans text-title-lg leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg"
-            >
-              Welcome to Quieter
-            </h1>
-          </m.header>
-
-          <m.div
-            className="mt-8 space-y-4"
-            {...getAppFlyInMotion({ animate: true, index: 1, reducedMotion })}
-          >
-            <Field>
-              <FieldLabel htmlFor="onboarding-name">Name</FieldLabel>
-              <Input
-                autoComplete="name"
-                id="onboarding-name"
-                onChange={(event) => {
-                  setName(event.target.value);
-                }}
-                placeholder="Your name"
-                value={name}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="onboarding-team">
-                Team{" "}
-                <span className="text-micro font-normal text-muted-fg">
-                  Optional
-                </span>
-              </FieldLabel>
-              <Input
-                id="onboarding-team"
-                onChange={(event) => {
-                  setTeamName(event.target.value);
-                }}
-                placeholder={
-                  name.trim() ? `${name.trim()}'s team` : "Your team"
-                }
-                value={teamName}
-              />
-            </Field>
-          </m.div>
-
-          <m.fieldset
-            className="mt-10"
-            {...getAppFlyInMotion({ animate: true, index: 2, reducedMotion })}
-          >
-            <legend className="text-body font-medium text-fg">
-              What are you planning to do with Quieter?
-            </legend>
-            <p className="mt-1 text-body/6 text-muted-fg">
-              Pick everything that applies. You can skip and decide later.
-            </p>
-            <div className="mt-4 space-y-1">
-              {ONBOARDING_INTENT_OPTIONS.map((option) => {
-                const checked = selectedIntents.includes(option.id);
-                const inputId = `onboarding-intent-${option.id}`;
-                return (
-                  <label
-                    className={cn(
-                      "flex cursor-pointer items-center gap-3 py-1.5 text-body transition-colors",
-                      {
-                        "text-fg": checked,
-                        "text-muted-fg hover:text-fg": !checked,
-                      }
-                    )}
-                    htmlFor={inputId}
-                    key={option.id}
-                  >
-                    <Checkbox
-                      checked={checked}
-                      id={inputId}
-                      onCheckedChange={() => {
-                        toggleIntent(option.id);
-                      }}
-                    >
-                      <CheckboxIndicator />
-                    </Checkbox>
-                    {option.title}
-                    {"requiresManagedBilling" in option ? (
-                      <span className="text-micro text-muted-fg">
-                        {BILLING_FEATURES.organizationDomains.requirementLabel}
-                      </span>
-                    ) : null}
-                  </label>
-                );
-              })}
-            </div>
-          </m.fieldset>
-
-          <m.div
-            className="mt-10 space-y-4"
-            {...getAppFlyInMotion({ animate: true, index: 3, reducedMotion })}
-          >
-            {isSingleStep && state?.hasAcceptedTerms === false ? (
-              <TermsConsent
-                accepted={termsAccepted}
-                onAcceptedChange={setTermsAccepted}
-              />
-            ) : null}
-            <div className="flex justify-end">
-              {isSingleStep ? (
-                <Button
-                  disabled={!canFinish}
-                  onClick={() => {
-                    completeMutation.mutate({
-                      acceptedTerms: true,
-                      name: name.trim(),
-                      teamName: teamName.trim() || undefined,
-                    });
-                  }}
-                  pending={completeMutation.isPending}
-                  pendingLabel="Setting up…"
-                >
-                  Finish
-                </Button>
-              ) : (
-                <Button
-                  disabled={!canContinue}
-                  onClick={() => {
-                    setDirection("forward");
-                    setStep(2);
-                  }}
-                >
-                  Continue
-                  <HugeiconsIcon aria-hidden icon={ArrowRight01Icon} />
-                </Button>
-              )}
-            </div>
-          </m.div>
-        </div>
-      ) : (
-        <div className="mx-auto max-w-xl">
-          <header>
-            <h1
-              // oxlint-disable-next-line shadcn/no-arbitrary-values -- Hero display type shared with the status screen.
-              className="font-sans text-title-md leading-[1.32] font-normal tracking-[-0.014em] text-balance text-fg"
-            >
-              Set up what you need
-            </h1>
-          </header>
-
-          <div className="mt-8 space-y-4">
-            {selectedIntents.length > 0 ? (
-              <>{renderIntentPlaybooks()}</>
-            ) : (
-              <p className="rounded-lg border border-border p-4 text-body-sm text-muted-fg">
-                Nothing selected yet. Finish now, or go back and pick what you
-                came for.
-              </p>
-            )}
-          </div>
-
-          <div className="mt-10 space-y-4">
-            {state?.hasAcceptedTerms === false ? (
-              <TermsConsent
-                accepted={termsAccepted}
-                onAcceptedChange={setTermsAccepted}
-              />
-            ) : null}
-
-            {hasAnySetup ? null : (
-              <p className="text-center text-micro text-muted-fg">
-                You can set up as many mailboxes as you want later on.
-              </p>
-            )}
-
-            <div className="flex justify-end">
-              <Button
-                disabled={!canFinish}
-                onClick={() => {
-                  completeMutation.mutate({
-                    acceptedTerms: true,
-                    name: name.trim(),
-                    teamName: teamName.trim() || undefined,
-                  });
-                }}
-                pending={completeMutation.isPending}
-                pendingLabel="Setting up…"
-              >
-                Finish setup
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </GuidedFlow>
+      </div>
+    </AuthLayout>
   );
 };
