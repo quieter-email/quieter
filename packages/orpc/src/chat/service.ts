@@ -1550,7 +1550,9 @@ export const createAiChatResponse = async (input: {
   ].join("\n\n");
 
   const usageId = crypto.randomUUID();
-  const model = createChatModel(validated.model);
+  const model = createChatModel(validated.model, {
+    allowFallbacks: false,
+  });
   input.request.signal.throwIfAborted();
   if (validated.kind === "continue" && persistedAssistantParts !== null) {
     const resolvedParts: ChatMessagePart[] = transcript.at(-1)?.parts ?? [];

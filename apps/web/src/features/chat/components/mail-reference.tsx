@@ -30,7 +30,7 @@ export const MailReference = ({
       (query) => query.data?.pages.flatMap((page) => page.messages) ?? []
     )
     .find((message) => message.id === reference.messageId);
-  const threadId = reference.threadId ?? cachedMessage?.threadId;
+  const threadId = cachedMessage?.threadId ?? reference.threadId;
   const { data: thread } = useQuery(
     getThreadWithDetailsOptions(
       workspace?.mailboxId ?? "",
@@ -43,7 +43,10 @@ export const MailReference = ({
     cachedMessage;
   const sender = parseSender(message?.from ?? reference.from);
   const senderLabel = sender.name || sender.email || sender.display;
-  const subject = reference.subject || (children ?? "Open email");
+  const subjectLabel = message
+    ? message.subject?.trim() || "Untitled mail"
+    : reference.subject;
+  const subject = subjectLabel || (children ?? "Open email");
   const openMessage = async () => {
     workspace?.control.cancel();
     try {
@@ -51,7 +54,7 @@ export const MailReference = ({
         {
           mailbox: "inbox",
           messageId: reference.messageId,
-          threadId: reference.threadId ?? null,
+          threadId: threadId ?? null,
           view: "inbox",
         },
         { replace: false }
@@ -72,9 +75,9 @@ export const MailReference = ({
       }}
       size="auto"
       title={
-        reference.from
-          ? `${reference.subject ?? "Email"}, ${reference.from}`
-          : reference.subject
+        senderLabel
+          ? `${subjectLabel ?? "Email"}, ${senderLabel}`
+          : subjectLabel
       }
       type="button"
       variant="outline"
@@ -86,9 +89,9 @@ export const MailReference = ({
       />
       <span className="flex min-w-0 flex-col">
         <span className="truncate">{subject}</span>
-        {reference.from ? (
+        {senderLabel ? (
           <span className="truncate text-caption text-muted-fg">
-            {reference.from}
+            {senderLabel}
           </span>
         ) : null}
       </span>

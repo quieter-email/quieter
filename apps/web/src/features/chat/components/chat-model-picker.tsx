@@ -88,6 +88,7 @@ export const ChatModelPicker = ({
       <PopoverContent
         align="start"
         className="flex max-h-(--available-height) w-90 flex-col"
+        collisionPadding={16}
         side="top"
         size="sm"
       >
@@ -116,7 +117,15 @@ export const ChatModelPicker = ({
         />
         <div className="mt-2 flex max-h-72 min-h-0 flex-col gap-2 overflow-y-auto">
           {autoMatches ? (
-            <div>
+            <div className="flex items-start gap-2">
+              <span className="flex w-24 shrink-0 items-center gap-1.5 py-1.5 text-caption text-muted-fg">
+                <HugeiconsIcon
+                  aria-hidden
+                  className="size-3.5 shrink-0"
+                  icon={SparklesIcon}
+                />
+                Automatic
+              </span>
               <Button
                 aria-pressed={model === "auto"}
                 onClick={() => {
@@ -125,7 +134,6 @@ export const ChatModelPicker = ({
                 size="compact"
                 variant="option"
               >
-                <HugeiconsIcon aria-hidden icon={SparklesIcon} />
                 Auto
               </Button>
             </div>
@@ -152,7 +160,7 @@ export const ChatModelPicker = ({
                     size="compact"
                     variant="option"
                   >
-                    {option.label.replace(/^(?:Gemini|DeepSeek) /u, "")}
+                    {option.label.replace(/^(?:Gemini|DeepSeek|GLM) /u, "")}
                   </Button>
                 ))}
               </div>

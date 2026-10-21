@@ -51,15 +51,15 @@ export const chatModels = [
   },
   {
     group: "google",
+    label: "Gemini Flash Lite",
+    value: "google/gemini-3.5-flash-lite",
+    versions: ["google/gemini-2.5-flash-lite", "google/gemini-3.1-flash-lite"],
+  },
+  {
+    group: "google",
     label: "Gemini Flash",
     value: "~google/gemini-flash-latest",
-    versions: [
-      "google/gemini-2.5-flash-lite",
-      "google/gemini-3.1-flash-lite",
-      "google/gemini-3.5-flash-lite",
-      "google/gemini-3.6-flash",
-      "google/gemini-3.7-flash",
-    ],
+    versions: ["google/gemini-3.6-flash", "google/gemini-3.7-flash"],
   },
   {
     group: "google",
@@ -78,6 +78,12 @@ export const chatModels = [
     label: "DeepSeek Pro",
     value: "~deepseek/deepseek-pro-latest",
     versions: ["deepseek/deepseek-v4-pro"],
+  },
+  {
+    group: "z-ai",
+    label: "GLM Flash",
+    value: "~z-ai/glm-flash-latest",
+    versions: [],
   },
   {
     group: "z-ai",

@@ -83,6 +83,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     composeSenderMailbox,
     composeSignature,
     currentUserEmail,
+    detailOnly = false,
     gmailLabels,
     hotkeyLinkedDraftMessage,
     hotkeyMessage,
@@ -267,7 +268,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               />
             </div>
           )}
-          <div className="shrink-0 lg:hidden">
+          <div className={cn("shrink-0", { "lg:hidden": !detailOnly })}>
             <AssistantSidebarTrigger />
           </div>
         </div>

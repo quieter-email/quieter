@@ -31,7 +31,7 @@ export const resolveConfiguredModel = (
 };
 
 /**
- * Interactive choices use each family's native latest alias. Auto selects
+ * Interactive choices follow each family's newest version. Auto selects
  * the family configured by QuieterChatModel, including existing pinned ids.
  * Server-only: clients must not import this module.
  */

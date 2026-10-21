@@ -47,10 +47,11 @@ export const readChatUsageCostUsd = (
  */
 export const createChatModel = (
   model: ChatModel,
-  options?: { prioritizeLatency?: boolean }
+  options?: { allowFallbacks?: boolean; prioritizeLatency?: boolean }
 ) => {
   const parsedModel = chatModelSchema.parse(model);
-  const fallbacks = resolveModelFallbacks(parsedModel);
+  const fallbacks =
+    options?.allowFallbacks === false ? [] : resolveModelFallbacks(parsedModel);
   return wrapLanguageModel({
     middleware: openRouterStreamMiddleware,
     model: getOpenRouterProvider().chat(parsedModel, {
