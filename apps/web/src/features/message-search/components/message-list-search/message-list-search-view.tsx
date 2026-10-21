@@ -591,7 +591,7 @@ export const MessageListSearchView = ({
               disabled={isRefreshing}
               onClick={() => void onRefresh()}
               size="icon"
-              variant="outline"
+              variant="toolbar"
             >
               <SpinWhileActive active={isRefreshing}>
                 <HugeiconsIcon icon={Refresh01Icon} />
@@ -607,7 +607,7 @@ export const MessageListSearchView = ({
               onClick={onScrollToTop}
               size="icon"
               type="button"
-              variant="outline"
+              variant="toolbar"
             />
           </IconButtonTooltip>
         </div>

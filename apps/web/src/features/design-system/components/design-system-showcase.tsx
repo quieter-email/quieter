@@ -1,6 +1,10 @@
 "use client";
 
-import { Delete02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
+import {
+  Delete02Icon,
+  Mail01Icon,
+  Refresh01Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import {
@@ -299,6 +303,13 @@ export const DesignSystemShowcase = () => {
             <IconButtonTooltip label="Mail">
               <Button aria-label="Mail" size="icon" variant="ghost">
                 <HugeiconsIcon aria-hidden icon={Mail01Icon} />
+              </Button>
+            </IconButtonTooltip>
+          </Row>
+          <Row label="Toolbar control">
+            <IconButtonTooltip label="Refresh">
+              <Button aria-label="Refresh" size="icon" variant="toolbar">
+                <HugeiconsIcon aria-hidden icon={Refresh01Icon} />
               </Button>
             </IconButtonTooltip>
           </Row>

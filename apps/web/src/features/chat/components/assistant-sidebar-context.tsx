@@ -31,7 +31,7 @@ export const AssistantSidebarTrigger = () => {
         }}
         size="icon"
         type="button"
-        variant="outline"
+        variant="toolbar"
       >
         <HugeiconsIcon aria-hidden icon={LayoutRightIcon} />
       </Button>
