@@ -3,6 +3,7 @@
 import { LayoutRightIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { createContext, use } from "react";
 
@@ -13,28 +14,47 @@ export const AssistantSidebarContext = createContext<{
   showNavigationTrigger: boolean;
 } | null>(null);
 
-export const AssistantSidebarTrigger = () => {
+export const AssistantSidebarTrigger = ({
+  className,
+}: {
+  className?: string;
+}) => {
   const sidebar = use(AssistantSidebarContext);
-  if (!sidebar || sidebar.open) {
+  if (!sidebar) {
     return null;
   }
 
   return (
-    <IconButtonTooltip label="Expand assistant sidebar">
-      <Button
-        aria-controls={sidebar.panelId}
-        aria-expanded={sidebar.open}
-        aria-label="Expand assistant sidebar"
-        data-assistant-launcher
-        onClick={(event) => {
-          sidebar.onOpen(event.currentTarget);
-        }}
-        size="icon"
-        type="button"
-        variant="toolbar"
-      >
-        <HugeiconsIcon aria-hidden icon={LayoutRightIcon} />
-      </Button>
-    </IconButtonTooltip>
+    <div
+      aria-hidden={sidebar.open}
+      className={cn(
+        // oxlint-disable-next-line shadcn/no-arbitrary-values -- Collapse the launcher's footprint and toolbar gap together with the sidebar.
+        "flex shrink-0 self-stretch overflow-hidden transition-[width,opacity,margin-inline-start] duration-200 ease-out motion-reduce:transition-none",
+        {
+          "pointer-events-none w-0 opacity-0": sidebar.open,
+          "w-8 opacity-100": !sidebar.open,
+        },
+        className
+      )}
+      data-sidebar-open={sidebar.open}
+      inert={sidebar.open}
+    >
+      <IconButtonTooltip label="Expand assistant sidebar">
+        <Button
+          aria-controls={sidebar.panelId}
+          aria-expanded={sidebar.open}
+          aria-label="Expand assistant sidebar"
+          data-assistant-launcher
+          onClick={(event) => {
+            sidebar.onOpen(event.currentTarget);
+          }}
+          size="icon"
+          type="button"
+          variant="toolbar"
+        >
+          <HugeiconsIcon aria-hidden icon={LayoutRightIcon} />
+        </Button>
+      </IconButtonTooltip>
+    </div>
   );
 };

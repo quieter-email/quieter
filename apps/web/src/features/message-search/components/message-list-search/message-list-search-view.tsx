@@ -611,7 +611,7 @@ export const MessageListSearchView = ({
             />
           </IconButtonTooltip>
         </div>
-        <AssistantSidebarTrigger />
+        <AssistantSidebarTrigger className="data-[sidebar-open=true]:-ms-2" />
       </div>
     </search>
   );
