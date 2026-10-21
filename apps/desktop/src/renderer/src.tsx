@@ -1,8 +1,12 @@
+import { clientEnv } from "@quieter/app/env";
 import { authClient, configureAppAuthClient } from "@quieter/app/lib/auth";
+import { shouldDiscardClientError } from "@quieter/app/lib/client-error-reporting";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { configureAppRuntime } from "@quieter/app/runtime";
+import { prepareReportedEvent } from "@quieter/observability";
 import { ColorModeProvider } from "@quieter/ui/color-mode";
 import { Toaster } from "@quieter/ui/toaster";
+import * as Sentry from "@sentry/react";
 import { RouterProvider } from "@tanstack/react-router";
 import { MotionConfig } from "motion/react";
 import { useEffect } from "react";
@@ -13,6 +17,18 @@ import { DesktopShell } from "./desktop-shell";
 import { router } from "./router";
 
 import "./styles.css";
+
+Sentry.init({
+  beforeSend: (event, hint) =>
+    shouldDiscardClientError(event, hint.originalException)
+      ? null
+      : prepareReportedEvent(event, hint.originalException),
+  dsn: clientEnv.VITE_SENTRY_DSN,
+  enabled:
+    clientEnv.VITE_SENTRY_DSN !== undefined &&
+    (!import.meta.env.DEV || clientEnv.VITE_QUIETER_LOCAL_TELEMETRY === "true"),
+  environment: import.meta.env.DEV ? "development" : "production",
+});
 
 configureAppRuntime({
   apiBaseURL: window.quieterDesktop.apiBaseURL,

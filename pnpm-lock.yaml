@@ -445,12 +445,21 @@ importers:
       '@quieter/env':
         specifier: workspace:*
         version: link:../../packages/env
+      '@quieter/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@quieter/orpc':
         specifier: workspace:*
         version: link:../../packages/orpc
       '@quieter/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@sentry/node':
+        specifier: 'catalog:'
+        version: 11.7.0(@babel/core@7.29.7(supports-color@10.2.2))
+      '@sentry/react':
+        specifier: ^11.7.0
+        version: 11.7.0(react@19.3.0)
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(@voidzero-dev/vite-plus-core@1.1.0(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1))
@@ -11368,7 +11377,7 @@ snapshots:
       '@sentry/core': 11.7.0
       dotenv: 17.4.2
       glob: 13.0.6
-      magic-string: 1.4.2
+      magic-string: 1.4.3
       oxc-parser: 0.152.0
       sentry: 0.45.0
       supports-color: 8.1.1
@@ -11380,7 +11389,7 @@ snapshots:
       '@sentry/core': 11.7.0
       dotenv: 17.4.2
       glob: 13.0.6
-      magic-string: 1.4.2
+      magic-string: 1.4.3
       oxc-parser: 0.152.0
       sentry: 0.45.0
       supports-color: 8.1.1

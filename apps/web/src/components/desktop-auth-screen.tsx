@@ -22,25 +22,9 @@ const routeApi = getRouteApi("/_app/desktop/auth");
 export const DesktopAuthScreen = () => {
   const { desktopAuth } = routeApi.useSearch();
   const { user } = routeApi.useLoaderData();
-  const [authorizationCode, setAuthorizationCode] = useState(() => {
-    const code = authClient.electron.getAuthorizationCode();
-    if (desktopAuth === null || !code) {
-      return null;
-    }
-    try {
-      const payload: unknown = JSON.parse(
-        atob(code.replaceAll("-", "+").replaceAll("_", "/"))
-      );
-      return typeof payload === "object" &&
-        payload !== null &&
-        "state" in payload &&
-        payload.state === desktopAuth.state
-        ? code
-        : null;
-    } catch {
-      return null;
-    }
-  });
+  const [authorizationCode, setAuthorizationCode] = useState(() =>
+    desktopAuth === null ? null : authClient.electron.getAuthorizationCode()
+  );
   const [copied, setCopied] = useState(false);
   // oxlint-disable-next-line react-doctor/query-mutation-missing-invalidation -- Transferring a browser session only updates the local handoff code.
   const transferMutation = useMutation({

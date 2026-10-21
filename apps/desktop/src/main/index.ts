@@ -9,7 +9,10 @@ import {
   DESKTOP_AUTH_CLIENT_ID,
   DESKTOP_AUTH_PROTOCOL_SCHEME,
 } from "@quieter/auth/desktop";
+import { createWebClientEnv } from "@quieter/env/client";
 import { createDesktopEnv } from "@quieter/env/desktop";
+import { prepareReportedEvent } from "@quieter/observability";
+import * as Sentry from "@sentry/node";
 import { createAuthClient } from "better-auth/client";
 import {
   app,
@@ -36,7 +39,19 @@ import {
 
 // oxlint-disable-next-line node/no-process-env -- Electron's main entrypoint is the environment bootstrap.
 const env = createDesktopEnv(process.env);
+const clientEnv = createWebClientEnv(import.meta.env);
 app.setName("Quieter");
+Sentry.init({
+  beforeSend: (event, hint) =>
+    prepareReportedEvent(event, hint.originalException),
+  defaultIntegrations: false,
+  dsn: clientEnv.VITE_SENTRY_DSN,
+  enabled:
+    clientEnv.VITE_SENTRY_DSN !== undefined &&
+    (app.isPackaged || clientEnv.VITE_QUIETER_LOCAL_TELEMETRY === "true"),
+  environment: app.isPackaged ? "production" : "development",
+  release: `quieter-desktop@${app.getVersion()}`,
+});
 const developmentURL = app.isPackaged ? undefined : env.ELECTRON_RENDERER_URL;
 const directory = import.meta.dirname;
 let mainWindow: BrowserWindow | null = null;
@@ -44,6 +59,7 @@ const credentials = createAuthStorage(() => {
   mainWindow?.webContents.send("better-auth:error", {
     message:
       "Your sign-in could not be saved securely. Check the available disk space and reopen Quieter.",
+    status: 500,
   });
 });
 let initialized = false;
@@ -55,7 +71,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  `connect-src 'self' ${DESKTOP_APP_ORIGIN} ${new URL(env.DESKTOP_MAIL_UPDATES_URL).origin}${developmentURL ? ` ${new URL(developmentURL).origin} ${new URL(developmentURL).origin.replace(/^http/u, "ws")}` : ""}`,
+  `connect-src 'self' ${DESKTOP_APP_ORIGIN} ${new URL(env.DESKTOP_MAIL_UPDATES_URL).origin}${clientEnv.VITE_SENTRY_DSN ? ` ${new URL(clientEnv.VITE_SENTRY_DSN).origin}` : ""}${developmentURL ? ` ${new URL(developmentURL).origin} ${new URL(developmentURL).origin.replace(/^http/u, "ws")}` : ""}`,
   "frame-src 'self' about: blob:",
   "worker-src 'self' blob:",
   "object-src 'none'",
@@ -202,11 +218,14 @@ const completeAuthentication = async (token: string): Promise<void> => {
       mainWindow?.webContents.send("better-auth:error", {
         message:
           result.error.message ?? "Sign-in could not be completed. Try again.",
+        status: result.error.status,
       });
     }
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { boundary: "desktop-auth" } });
     mainWindow?.webContents.send("better-auth:error", {
-      message: "This sign-in link has expired. Sign in again from Quieter.",
+      message: "Sign-in could not be completed. Please try again.",
+      status: 500,
     });
   }
 };
@@ -376,7 +395,12 @@ const installAppProtocol = (): void => {
       headers.set("content-security-policy", contentSecurityPolicy);
       headers.set("x-content-type-options", "nosniff");
       return new Response(response.body, { headers, status: response.status });
-    } catch {
+    } catch (error) {
+      if (!request.signal.aborted) {
+        Sentry.captureException(error, {
+          tags: { boundary: "desktop-protocol" },
+        });
+      }
       return Response.json(
         { message: "Something went wrong. Please try again." },
         { status: 502 }
@@ -508,7 +532,9 @@ const startApp = async (): Promise<void> => {
     for (const token of pendingTokens.splice(0)) {
       await completeAuthentication(token);
     }
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error, { tags: { boundary: "desktop-startup" } });
+    await Sentry.flush(2000);
     dialog.showErrorBox(
       "Quieter could not start",
       "Secure sign-in or the app window could not be initialized. Check your system keychain and reopen Quieter."
@@ -540,6 +566,7 @@ const flushCredentialsAndQuit = async (): Promise<void> => {
       "Quieter could not save your sign-in securely. You may need to sign in again next time."
     );
   } finally {
+    await Sentry.flush(2000);
     app.quit();
   }
 };

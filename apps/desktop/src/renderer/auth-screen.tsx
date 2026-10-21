@@ -15,10 +15,11 @@ export const DesktopAuthScreen = () => {
 
   useEffect(
     () =>
-      window.onAuthError(() => {
+      // oxlint-disable-next-line promise/prefer-await-to-callbacks -- Better Auth exposes an authentication event subscription.
+      window.onAuthError((error) => {
         setPending(false);
         setWaiting(false);
-        toastError(new Error("Desktop sign-in failed"));
+        toastError(error, { boundary: "desktop-auth" });
       }),
     []
   );
