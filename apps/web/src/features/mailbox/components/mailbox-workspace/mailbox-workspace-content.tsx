@@ -93,7 +93,6 @@ type MailboxWorkspaceContentProps = {
     mailboxId: string | null;
   };
   currentUserEmail: string | null;
-  defaultMailboxId: string | null;
   draftChatKey: string;
   isComposeMailbox: boolean;
   isSnippetMailbox: boolean;
@@ -123,7 +122,6 @@ type MailboxWorkspaceContentProps = {
   onSelectMailbox: (mailbox: MailboxCategory) => void;
   onSelectMailboxId: (mailboxId: string) => void;
   onSelectView: (view: MailboxWorkspaceView) => void;
-  onSetDefaultMailbox: (mailboxId: string | null) => void;
   onChatIdChange: (chatId: string) => void;
   persistComposeDrafts: boolean;
   reconnectError: string | null;
@@ -306,7 +304,6 @@ const MailboxWorkspaceContentInner = ({
   chats,
   composeSession,
   currentUserEmail,
-  defaultMailboxId,
   draftChatKey,
   isComposeMailbox,
   isSnippetMailbox,
@@ -333,7 +330,6 @@ const MailboxWorkspaceContentInner = ({
   onSelectMailbox,
   onSelectMailboxId,
   onSelectView,
-  onSetDefaultMailbox,
   onChatIdChange,
   persistComposeDrafts,
   reconnectError,
@@ -744,7 +740,6 @@ const MailboxWorkspaceContentInner = ({
               userId={userId}
               allInboxesActive={allInboxesActive}
               dailyBriefActive={briefActive}
-              defaultMailboxId={defaultMailboxId}
               groups={mailboxGroups}
               onComposeNewMail={onComposeNewMail}
               onMobileOpenChange={onMobileOpenChange}
@@ -770,7 +765,6 @@ const MailboxWorkspaceContentInner = ({
               onSelectMailbox={onSelectMailbox}
               onSelectMailboxId={onSelectMailboxId}
               onSelectView={onSelectView}
-              onSetDefaultMailbox={onSetDefaultMailbox}
               reconnectingMailboxId={reconnectingMailboxId}
               searchQuery={searchQuery}
               selectedMailbox={briefActive ? null : activeMailbox}

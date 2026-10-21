@@ -43,7 +43,6 @@ type MailSidebarProps = {
   userId?: string;
   allInboxesActive?: boolean;
   dailyBriefActive?: boolean;
-  defaultMailboxId: string | null;
   embedded?: boolean;
   groups: {
     id: string;
@@ -72,7 +71,6 @@ type MailSidebarProps = {
   onReconnectMailbox: (mailbox: { emailAddress: string; id: string }) => void;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
   onSelectMailboxId: (mailboxId: string) => void;
-  onSetDefaultMailbox: (mailboxId: string | null) => void;
   onSearch: (query: string) => void;
   onComposeNewMail: () => void;
   onManageLabels: (mailboxId?: string) => void;
@@ -396,7 +394,6 @@ const SidebarContent = ({
   dailyBriefActive,
   userId,
   animateEntrance,
-  defaultMailboxId,
   embedded = false,
   groups,
   onComposeNewMail,
@@ -409,7 +406,6 @@ const SidebarContent = ({
   isSnippetMailbox,
   onSelectMailboxId,
   onSelectView,
-  onSetDefaultMailbox,
   onSearch,
   reconnectingMailboxId,
   searchQuery,
@@ -443,13 +439,11 @@ const SidebarContent = ({
                   handleSelectView("all-inboxes");
                 }
           }
-          defaultMailboxId={defaultMailboxId}
           embedded={embedded}
           groups={groups}
           onReorderMailboxSwitcher={onReorderMailboxSwitcher}
           onReconnectMailbox={onReconnectMailbox}
           onSelectMailboxId={handleSelectMailboxId}
-          onSetDefaultMailbox={onSetDefaultMailbox}
           reconnectingMailboxId={reconnectingMailboxId}
           selectedMailboxId={selectedMailboxId}
           side={switcherSide}
