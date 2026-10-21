@@ -918,7 +918,9 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     queryClient,
   });
   const view =
-    opensDefaultMailbox && defaultMailboxId === null
+    opensDefaultMailbox &&
+    defaultMailboxId === null &&
+    mailboxes.some((mailbox) => mailbox.provider !== "api")
       ? "all-inboxes"
       : requestedView;
   const { data: chats = [] } = useQuery(
