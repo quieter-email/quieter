@@ -2,14 +2,13 @@
 
 import { autoLabelSettingsSchema } from "@quieter/mail/auto-label";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { ColorSwatch } from "@quieter/ui/color-swatch";
 import {
   Dialog,
   DialogBody,
   DialogContent,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
 import { Textarea } from "@quieter/ui/textarea";
@@ -46,18 +45,18 @@ export const AutoLabelEditor = ({
       }}
     >
       <DialogContent className="flex max-h-[90dvh] flex-col">
-        <form
-          aria-label={`Auto-label ${label.name}`}
-          className="flex min-h-0 flex-col"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setShowErrors(true);
-            if (parsed.success) {
-              void onSave(parsed.data);
-            }
-          }}
-        >
-          <DialogHeader className="shrink-0">
+        <DialogBody className="min-h-0 overflow-y-auto">
+          <form
+            aria-label={`Auto-label ${label.name}`}
+            className="flex min-h-0 flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setShowErrors(true);
+              if (parsed.success) {
+                void onSave(parsed.data);
+              }
+            }}
+          >
             <div className="flex min-w-0 items-center gap-2.5">
               <ColorSwatch
                 color={
@@ -74,12 +73,8 @@ export const AutoLabelEditor = ({
                 </DialogTitle>
               </div>
             </div>
-          </DialogHeader>
-          <DialogBody className="min-h-0 overflow-y-auto" spacing="3">
-            <label className="sr-only" htmlFor={`${id}-prompt`}>
-              AI prompt
-            </label>
             <Textarea
+              aria-label="AI prompt"
               aria-describedby={
                 showErrors && !parsed.success ? `${id}-error` : undefined
               }
@@ -103,28 +98,28 @@ export const AutoLabelEditor = ({
                 {parsed.error.issues[0]?.message}
               </p>
             ) : null}
-          </DialogBody>
-          <DialogFooter className="shrink-0">
-            <Button
-              disabled={isPending}
-              onClick={onCancel}
-              size="sm"
-              type="button"
-              variant="secondary"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={disabled}
-              pending={isPending}
-              pendingLabel="Saving…"
-              size="sm"
-              type="submit"
-            >
-              Save
-            </Button>
-          </DialogFooter>
-        </form>
+            <ActionFooter>
+              <Button
+                disabled={isPending}
+                onClick={onCancel}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={disabled}
+                pending={isPending}
+                pendingLabel="Saving…"
+                size="sm"
+                type="submit"
+              >
+                Save
+              </Button>
+            </ActionFooter>
+          </form>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );
