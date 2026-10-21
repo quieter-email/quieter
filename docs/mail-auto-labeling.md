@@ -6,7 +6,7 @@ The Labels workspace is one list of the mailbox's existing labels. Each label ha
 
 Both mailbox providers store the same nullable `autoLabel` settings on each label. Prompts can describe sender addresses, domains, recipient addresses, or the message's purpose. The classifier receives the stored From, To, Cc, and Bcc fields alongside the message content. Delivery addresses absent from those headers are unavailable.
 
-When an older configuration has fixed conditions, the editor converts them into readable instructions. Saving the prompt clears those fixed conditions so no hidden filters remain. Editing a prompt does not enable a paused label. An empty prompt uses the label name and description.
+When an older configuration has fixed conditions, the editor converts them into readable instructions. Saving a valid prompt clears those fixed conditions so no hidden filters remain. If the converted text exceeds the prompt limit, saving it unchanged preserves the original configuration without truncation. Editing a prompt does not enable a paused label. An empty prompt uses the label name and description.
 
 ## Earlier fixed conditions
 

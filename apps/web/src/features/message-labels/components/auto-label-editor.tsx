@@ -1,6 +1,7 @@
 "use client";
 
 import { autoLabelSettingsSchema } from "@quieter/mail/auto-label";
+import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
@@ -27,12 +28,16 @@ export const AutoLabelEditor = ({
   isPending: boolean;
   label: MailboxLabel;
   onCancel: () => void;
-  onSave: (prompt: string) => Promise<boolean>;
+  onSave: (settings: AutoLabelSettings) => Promise<boolean>;
 }) => {
   const id = useId();
-  const [prompt, setPrompt] = useState(() => getAutoLabelPrompt(label));
+  const initialPrompt = getAutoLabelPrompt(label);
+  const [prompt, setPrompt] = useState(initialPrompt);
   const [showErrors, setShowErrors] = useState(false);
   const parsed = autoLabelSettingsSchema.shape.prompt.safeParse(prompt);
+  const preservedSettings =
+    !parsed.success && prompt === initialPrompt ? label.autoLabel : null;
+  const hasValidationError = !parsed.success && preservedSettings === null;
   const disabled = !canManage || isPending;
 
   return (
@@ -52,8 +57,19 @@ export const AutoLabelEditor = ({
             onSubmit={(event) => {
               event.preventDefault();
               setShowErrors(true);
-              if (parsed.success) {
-                void onSave(parsed.data);
+              if (preservedSettings) {
+                void onSave(preservedSettings);
+              } else if (parsed.success) {
+                void onSave({
+                  domains: [],
+                  enabled: label.autoLabel?.enabled !== false,
+                  keywordScope: "anywhere",
+                  keywords: [],
+                  matchMode: "all",
+                  prompt: parsed.data,
+                  recipients: [],
+                  senders: [],
+                });
               }
             }}
           >
@@ -76,9 +92,9 @@ export const AutoLabelEditor = ({
             <Textarea
               aria-label="AI prompt"
               aria-describedby={
-                showErrors && !parsed.success ? `${id}-error` : undefined
+                showErrors && hasValidationError ? `${id}-error` : undefined
               }
-              aria-invalid={showErrors && !parsed.success}
+              aria-invalid={showErrors && hasValidationError}
               disabled={disabled}
               id={`${id}-prompt`}
               maxLength={4000}
@@ -89,7 +105,7 @@ export const AutoLabelEditor = ({
               rows={5}
               value={prompt}
             />
-            {showErrors && !parsed.success ? (
+            {showErrors && hasValidationError && !parsed.success ? (
               <p
                 className="text-caption text-destructive"
                 id={`${id}-error`}

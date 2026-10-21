@@ -781,17 +781,8 @@ export const LabelsWorkspacePanel = ({
           onCancel={() => {
             setAutomationLabelId(null);
           }}
-          onSave={async (prompt) =>
-            await saveLabelAutomation(automationLabel, {
-              domains: [],
-              enabled: automationLabel.autoLabel?.enabled !== false,
-              keywordScope: "anywhere",
-              keywords: [],
-              matchMode: "all",
-              prompt,
-              recipients: [],
-              senders: [],
-            })
+          onSave={async (settings) =>
+            await saveLabelAutomation(automationLabel, settings)
           }
         />
       ) : null}
