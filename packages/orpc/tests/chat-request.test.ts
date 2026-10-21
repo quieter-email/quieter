@@ -1,4 +1,6 @@
+import { MAX_CHAT_CONTEXT_MESSAGES } from "@quieter/ai/chat-context";
 import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
+import { resolveChatModel } from "@quieter/ai/model-config";
 import { describe, expect, test } from "vite-plus/test";
 import { z } from "zod";
 
@@ -53,7 +55,7 @@ describe("chat request validation", () => {
       foreground: body.foreground,
       kind: "message",
       mailboxId: body.mailboxId,
-      model: "google/gemini-3.7-flash",
+      model: body.model,
       threadId: body.threadId,
       trigger: "submit-message",
       userMessage: {
@@ -70,6 +72,42 @@ describe("chat request validation", () => {
     expect(() => validateChatRequest(body)).toThrow(
       /unrecognized key|invalid/iu
     );
+  });
+
+  test("accepts attached mail identifiers and removes duplicates", () => {
+    const body = validBody();
+    body.context = {
+      messageIds: [" message-1 ", "message-2", "message-1"],
+    };
+
+    expect(validateChatRequest(body).context?.messageIds).toStrictEqual([
+      "message-1",
+      "message-2",
+    ]);
+  });
+
+  test.each([
+    { messageIds: [""] },
+    { messageIds: ["x".repeat(257)] },
+    {
+      messageIds: Array.from(
+        { length: MAX_CHAT_CONTEXT_MESSAGES + 1 },
+        (_, index) => `message-${index}`
+      ),
+    },
+    { body: "untrusted mail content", messageIds: ["message-1"] },
+  ])("rejects invalid attached mail context: %o", (context) => {
+    const body = validBody();
+    body.context = context;
+
+    expect(() => validateChatRequest(body)).toThrow(z.ZodError);
+  });
+
+  test("rejects models outside the allowed catalog", () => {
+    const body = validBody();
+    body.model = "unapproved/model";
+
+    expect(() => validateChatRequest(body)).toThrow(z.ZodError);
   });
 
   test.each(["ask", "automatic"])(
@@ -115,7 +153,7 @@ describe("chat request validation", () => {
       foreground: body.foreground,
       kind: "message",
       mailboxId: body.mailboxId,
-      model: "google/gemini-3.7-flash",
+      model: resolveChatModel(),
       threadId: body.threadId,
       trigger: "submit-message",
       userMessage: {
@@ -169,6 +207,7 @@ describe("chat request validation", () => {
     const continued = validated.kind === "continue" ? validated : undefined;
     expect(continued?.toolDecisions.get("tool-1")?.approved).toBeTruthy();
     expect(continued?.assistantMessageId).toBe("assistant-1");
+    expect(continued?.model).toBe(body.model);
   });
 
   test("collects a denied decision from an assistant continuation message", () => {

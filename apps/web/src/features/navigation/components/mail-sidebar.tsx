@@ -5,6 +5,7 @@ import {
   Cancel01Icon,
   Edit01Icon,
   HelpCircleIcon,
+  LayoutRightIcon,
   NoteEditIcon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
@@ -21,8 +22,9 @@ import {
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 
+import { AssistantSidebarContext } from "#/features/chat/components/assistant-sidebar-context";
 import {
   loadComposeWorkspace,
   loadSnippetWorkspace,
@@ -391,6 +393,38 @@ const SidebarFooter = ({
   </SidebarEntrance>
 );
 
+const SidebarAssistantAction = ({
+  onRequestClose,
+}: {
+  onRequestClose?: () => void;
+}) => {
+  const assistant = use(AssistantSidebarContext);
+  if (
+    !assistant ||
+    assistant.open ||
+    (!assistant.showNavigationTrigger && !onRequestClose)
+  ) {
+    return null;
+  }
+  return (
+    <div className="px-2">
+      <SidebarNavItem
+        aria-controls={assistant.panelId}
+        aria-expanded={assistant.open}
+        data-assistant-launcher
+        onClick={(event) => {
+          assistant.onOpen(event.currentTarget);
+          onRequestClose?.();
+        }}
+        type="button"
+      >
+        <HugeiconsIcon aria-hidden icon={LayoutRightIcon} />
+        Open assistant
+      </SidebarNavItem>
+    </div>
+  );
+};
+
 const SidebarContent = ({
   allInboxesActive,
   dailyBriefActive,
@@ -497,13 +531,7 @@ const SidebarContent = ({
 
       {!embedded && (
         <>
-          {!onRequestClose &&
-          selectedMailboxId &&
-          selectedMailboxProvider !== "api" ? (
-            <div className="flex h-24 shrink-0 items-center px-2">
-              <div aria-hidden className="size-[50px]" data-assistant-dock />
-            </div>
-          ) : null}
+          <SidebarAssistantAction onRequestClose={onRequestClose} />
           <SidebarFooter
             animateEntrance={animateEntrance}
             onRequestClose={onRequestClose}

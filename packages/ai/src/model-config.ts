@@ -30,9 +30,9 @@ export const resolveConfiguredModel = (
 };
 
 /**
- * The model for interactive chat, configured through the QuieterChatModel
- * secret with the chat default as fallback. Server-only: clients never send
- * a model and must not import this module.
+ * The default for interactive chat when the client leaves model selection
+ * automatic, configured through the QuieterChatModel secret with the chat
+ * default as fallback. Server-only: clients must not import this module.
  */
 export const resolveChatModel = (): ChatModel =>
   resolveConfiguredModel(serverEnv.QUIETER_CHAT_MODEL, defaultChatModel);

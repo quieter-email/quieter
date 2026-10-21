@@ -18,6 +18,10 @@ import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
 import { useColorMode } from "@quieter/ui/color-mode";
 import {
+  ComposerContextChip,
+  PromptComposerFrame,
+} from "@quieter/ui/composer-chrome";
+import {
   Dialog,
   DialogCloseButton,
   DialogContent,
@@ -184,6 +188,7 @@ export const DesignSystemShowcase = () => {
   );
   const [boxChecked, setBoxChecked] = useState(true);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [showPromptContext, setShowPromptContext] = useState(true);
 
   return (
     <main className="@container min-h-dvh text-fg">
@@ -454,6 +459,44 @@ export const DesignSystemShowcase = () => {
               className="w-64"
               placeholder="Placeholder"
             />
+          </Row>
+          <Row label="Prompt composer">
+            <PromptComposerFrame className="w-80 max-w-full">
+              {showPromptContext ? (
+                <div className="flex min-w-0">
+                  <ComposerContextChip
+                    icon={
+                      <HugeiconsIcon
+                        aria-hidden
+                        className="size-3"
+                        icon={Mail01Icon}
+                      />
+                    }
+                    label="Planning the autumn release"
+                    onRemove={() => {
+                      setShowPromptContext(false);
+                    }}
+                  />
+                </div>
+              ) : null}
+              <Textarea
+                aria-label="Example assistant message"
+                placeholder="Ask about your mail…"
+                variant="prompt"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <Button
+                  onClick={() => {
+                    setShowPromptContext(true);
+                  }}
+                  size="compact"
+                  variant="ghost"
+                >
+                  Attach mail
+                </Button>
+                <Button size="compact">Send</Button>
+              </div>
+            </PromptComposerFrame>
           </Row>
           <Row label="Token field">
             <div className="w-80 rounded-md border border-border bg-input px-3 py-2 shadow-sm squircle focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">

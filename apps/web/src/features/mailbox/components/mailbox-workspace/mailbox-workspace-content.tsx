@@ -20,6 +20,7 @@ import {
   Suspense,
   useEffect,
   useEffectEvent,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -28,7 +29,11 @@ import type { ComponentProps, ReactNode } from "react";
 
 import { MobileHeader } from "#/components/mobile-header";
 import { AgentWorkspaceProvider } from "#/features/chat/components/agent-workspace";
-import { FloatingAssistant } from "#/features/chat/components/floating-assistant";
+import { AssistantSidebar } from "#/features/chat/components/assistant-sidebar";
+import {
+  AssistantSidebarContext,
+  AssistantSidebarTrigger,
+} from "#/features/chat/components/assistant-sidebar-context";
 import { useAgentWorkspace } from "#/features/chat/domain/workspace-context";
 import { DraftRecoveryNotice } from "#/features/compose/components/draft-recovery-notice";
 import { buildComposeDraftFromSavedDraftMessage } from "#/features/compose/domain/compose-actions";
@@ -386,23 +391,39 @@ const MailboxWorkspaceContentInner = ({
     messageId: string;
   } | null>(null);
   const pendingKeyboardOpenRef = useRef(false);
-  const [assistantSidebar, setAssistantSidebar] = useState(true);
+  const assistantPanelId = useId();
+  const assistantTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [assistantNarrow, setAssistantNarrow] = useState(false);
   const assistantAutoCollapsedRef = useRef(false);
+  const agentWorkspace = useAgentWorkspace();
+  const restoreAssistantTriggerFocus = () => {
+    window.requestAnimationFrame(() => {
+      const trigger = assistantTriggerRef.current;
+      if (
+        trigger?.isConnected === true &&
+        trigger.getClientRects().length > 0
+      ) {
+        trigger.focus();
+        return;
+      }
+      const visibleTrigger = [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          "[data-assistant-launcher]"
+        ),
+        ...document.querySelectorAll<HTMLButtonElement>(
+          'button[aria-label="Open sidebar"]'
+        ),
+      ].find((button) => button.getClientRects().length > 0);
+      visibleTrigger?.focus();
+    });
+  };
   useLayoutEffect(() => {
-    let floating = false;
     let closed = false;
     try {
-      floating = localStorage.getItem("quieter:assistant-mode") === "floating";
       closed =
         localStorage.getItem("quieter:assistant-sidebar-closed") === "true";
     } catch {
       // Use the default sidebar layout when storage is unavailable.
-    }
-    if (floating) {
-      // oxlint-disable-next-line react/set-state-in-effect -- Restore the optional browser preference before paint.
-      setAssistantSidebar(false);
-      return;
     }
     const wide = window.matchMedia("(min-width: 80rem)").matches;
     // oxlint-disable-next-line react/set-state-in-effect -- Load the chat only when the restored sidebar is visible.
@@ -413,15 +434,20 @@ const MailboxWorkspaceContentInner = ({
   }, []);
   const updateAssistantViewport = useEffectEvent((wide: boolean) => {
     setAssistantNarrow(!wide);
-    if (assistantSidebar) {
-      if (!wide && assistantOpen) {
-        assistantAutoCollapsedRef.current = true;
-        setAssistantOpen(false);
-      } else if (wide && assistantAutoCollapsedRef.current) {
-        assistantAutoCollapsedRef.current = false;
-        setAssistantOpened(true);
-        setAssistantOpen(true);
+    if (!wide && assistantOpen) {
+      if (
+        document.activeElement instanceof HTMLElement &&
+        document.activeElement.closest("[data-assistant-sidebar]") !== null
+      ) {
+        restoreAssistantTriggerFocus();
       }
+      assistantAutoCollapsedRef.current = true;
+      agentWorkspace?.control.cancel();
+      setAssistantOpen(false);
+    } else if (wide && assistantAutoCollapsedRef.current) {
+      assistantAutoCollapsedRef.current = false;
+      setAssistantOpened(true);
+      setAssistantOpen(true);
     }
   });
   useEffect(() => {
@@ -434,8 +460,7 @@ const MailboxWorkspaceContentInner = ({
     return () => {
       desktop.removeEventListener("change", update);
     };
-  }, [assistantSidebar]);
-  const agentWorkspace = useAgentWorkspace();
+  }, []);
   let mailboxContent: ReactNode;
   if (!selectedMailboxId) {
     mailboxContent = (
@@ -645,49 +670,54 @@ const MailboxWorkspaceContentInner = ({
       .find((mailbox) => mailbox.id === selectedMailboxId);
     const isReconnecting = reconnectingMailboxId === selectedMailboxId;
     mailboxContent = (
-      <WorkspaceSection
-        centered
-        // oxlint-disable-next-line shadcn/no-restyle -- Preserve the existing empty-state content inset.
-        className="px-8"
-      >
-        <m.div
-          className="max-w-md space-y-3 text-center"
-          {...workspaceContentMotion}
+      <WorkspaceSection>
+        <MobileHeader
+          leading="sidebar"
+          onLeadingClick={onOpenSidebar}
+          title="Mailbox"
         >
-          <h1 className="text-body-lg font-semibold tracking-tight text-fg">
-            Reconnect Google
-          </h1>
-          <p className="text-body text-muted-fg">
-            This account needs to reconnect through Google before Quieter can
-            load mail.
-          </p>
-          <div className="pt-1">
-            <Button
-              disabled={isReconnecting}
-              onClick={() => {
-                onReconnectMailbox({
-                  emailAddress: selectedMailbox?.emailAddress ?? "",
-                  id: selectedMailboxId,
-                });
-              }}
-              type="button"
-            >
-              <HugeiconsIcon
-                aria-hidden
-                className={cn("size-4", {
-                  "animate-spin": isReconnecting,
-                })}
-                icon={isReconnecting ? Loading03Icon : Mail01Icon}
-              />
-              Reconnect
-            </Button>
-            {reconnectError ? (
-              <Text className="mt-3" tone="destructive">
-                {reconnectError}
-              </Text>
-            ) : null}
-          </div>
-        </m.div>
+          <AssistantSidebarTrigger />
+        </MobileHeader>
+        <div className="flex min-h-0 flex-1 items-center justify-center px-8">
+          <m.div
+            className="max-w-md space-y-3 text-center"
+            {...workspaceContentMotion}
+          >
+            <h1 className="text-body-lg font-semibold tracking-tight text-fg">
+              Reconnect Google
+            </h1>
+            <p className="text-body text-muted-fg">
+              This account needs to reconnect through Google before Quieter can
+              load mail.
+            </p>
+            <div className="pt-1">
+              <Button
+                disabled={isReconnecting}
+                onClick={() => {
+                  onReconnectMailbox({
+                    emailAddress: selectedMailbox?.emailAddress ?? "",
+                    id: selectedMailboxId,
+                  });
+                }}
+                type="button"
+              >
+                <HugeiconsIcon
+                  aria-hidden
+                  className={cn("size-4", {
+                    "animate-spin": isReconnecting,
+                  })}
+                  icon={isReconnecting ? Loading03Icon : Mail01Icon}
+                />
+                Reconnect
+              </Button>
+              {reconnectError ? (
+                <Text className="mt-3" tone="destructive">
+                  {reconnectError}
+                </Text>
+              ) : null}
+            </div>
+          </m.div>
+        </div>
       </WorkspaceSection>
     );
   } else if (selectedView === "labels") {
@@ -699,6 +729,13 @@ const MailboxWorkspaceContentInner = ({
         animate={{ opacity: 1 }}
         transition={{ duration: 0.08, ease: "linear" }}
       >
+        <MobileHeader
+          leading="sidebar"
+          onLeadingClick={onOpenSidebar}
+          title="Labels"
+        >
+          <AssistantSidebarTrigger />
+        </MobileHeader>
         <LabelsWorkspacePanel
           canManage={
             selectedMailboxProvider !== "managed" ||
@@ -737,127 +774,16 @@ const MailboxWorkspaceContentInner = ({
 
   return (
     <LazyMotion features={domAnimation}>
-      <main className="pt-safe pr-safe pb-safe pl-safe relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-fg lg:p-0">
-        <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
-          {selectedMailboxId ? (
-            <MailSidebar
-              userId={userId}
-              allInboxesActive={allInboxesActive}
-              dailyBriefActive={briefActive}
-              defaultMailboxId={defaultMailboxId}
-              groups={mailboxGroups}
-              onComposeNewMail={onComposeNewMail}
-              onMobileOpenChange={onMobileOpenChange}
-              onReorderMailboxSwitcher={onReorderMailboxSwitcher}
-              onReconnectMailbox={onReconnectMailbox}
-              onSearch={onSearch}
-              onManageLabels={(sourceMailboxId) => {
-                if (sourceMailboxId) {
-                  void setMailboxSearch({
-                    chatId:
-                      sourceMailboxId === selectedMailboxId ? undefined : null,
-                    mailboxId: sourceMailboxId,
-                    messageId: null,
-                    query: null,
-                    threadId: null,
-                    view: "labels",
-                  });
-                } else {
-                  onSelectView("labels");
-                }
-              }}
-              onManageSnippets={onManageSnippets}
-              onSelectMailbox={onSelectMailbox}
-              onSelectMailboxId={onSelectMailboxId}
-              onSelectView={onSelectView}
-              onSetDefaultMailbox={onSetDefaultMailbox}
-              reconnectingMailboxId={reconnectingMailboxId}
-              searchQuery={searchQuery}
-              selectedMailbox={briefActive ? null : activeMailbox}
-              isSnippetMailbox={isSnippetMailbox}
-              selectedMailboxId={selectedMailboxId}
-              selectedMailboxProvider={selectedMailboxProvider}
-              isMobileOpen={layoutState.isMobileSidebarOpen}
-            />
-          ) : null}
-
-          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
-            <div className="relative min-h-0 flex-1">{mailboxContent}</div>
-            {!allInboxesActive &&
-            !isComposeMailbox &&
-            !isDemoMode &&
-            !isManagedDemoMode &&
-            selectedMailboxId !== null ? (
-              <DraftRecoveryNotice
-                mailboxId={selectedMailboxId}
-                onResume={onComposeDraftRequested}
-              />
-            ) : null}
-          </div>
-          {selectedMailboxId && selectedMailboxProvider !== "api" ? (
-            <FloatingAssistant
-              sidebar={assistantSidebar}
-              narrow={assistantNarrow}
-              focusRequest={assistantFocusRequest}
-              onToggleSidebar={() => {
-                const next = !assistantSidebar;
-                assistantAutoCollapsedRef.current = next && assistantNarrow;
-                setAssistantSidebar(next);
-                setAssistantOpened(true);
-                setAssistantFocusRequest((request) => request + 1);
-                setAssistantOpen(!next || !assistantNarrow);
-                try {
-                  localStorage.setItem(
-                    "quieter:assistant-mode",
-                    next ? "sidebar" : "floating"
-                  );
-                  localStorage.setItem(
-                    "quieter:assistant-sidebar-closed",
-                    "false"
-                  );
-                } catch {
-                  // Switching modes remains available without persistent storage.
-                }
-              }}
-              open={assistantOpen}
-              activeChatId={chatId}
-              chats={chats.map((chat) => ({
-                ...chat,
-                title: chat.title ?? "New chat",
-              }))}
-              onChatSelect={(id) => {
-                agentWorkspace?.control.cancel();
-                onSelectChat(id);
-              }}
-              onNewChat={() => {
-                agentWorkspace?.control.cancel();
-                onCreateChat();
-              }}
-              onDeleteChat={(deletedChatId) => {
-                agentWorkspace?.control.cancel();
-                onDeleteChat(deletedChatId);
-              }}
-              onRenameChat={onRenameChat}
-              onMinimize={() => {
-                assistantAutoCollapsedRef.current = false;
-                agentWorkspace?.control.cancel();
-                setAssistantOpen(false);
-                if (assistantSidebar) {
-                  try {
-                    localStorage.setItem(
-                      "quieter:assistant-sidebar-closed",
-                      "true"
-                    );
-                  } catch {
-                    // Closing remains available without persistent storage.
-                  }
-                }
-              }}
-              onOpen={() => {
-                setAssistantFocusRequest((request) => request + 1);
-                setAssistantOpened(true);
-                setAssistantOpen(true);
-                if (assistantSidebar) {
+      <AssistantSidebarContext
+        value={
+          selectedMailboxId && selectedMailboxProvider !== "api"
+            ? {
+                onOpen: (trigger) => {
+                  assistantTriggerRef.current = trigger;
+                  assistantAutoCollapsedRef.current = false;
+                  setAssistantFocusRequest((request) => request + 1);
+                  setAssistantOpened(true);
+                  setAssistantOpen(true);
                   try {
                     localStorage.setItem(
                       "quieter:assistant-sidebar-closed",
@@ -866,51 +792,173 @@ const MailboxWorkspaceContentInner = ({
                   } catch {
                     // Opening remains available without persistent storage.
                   }
-                }
-              }}
-            >
-              {assistantOpened ? (
-                <Suspense
-                  fallback={
-                    <p
-                      className="p-4 text-body-sm text-muted-fg"
-                      data-assistant-loading
-                    >
-                      Loading assistant…
-                    </p>
+                },
+                open: assistantOpen,
+                panelId: assistantPanelId,
+                showNavigationTrigger:
+                  isComposeMailbox ||
+                  isSnippetMailbox ||
+                  briefActive ||
+                  selectedView === "labels" ||
+                  selectedMailboxNeedsReconnect,
+              }
+            : null
+        }
+      >
+        <main className="pt-safe pr-safe pb-safe pl-safe relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-fg lg:p-0">
+          <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
+            {selectedMailboxId ? (
+              <MailSidebar
+                userId={userId}
+                allInboxesActive={allInboxesActive}
+                dailyBriefActive={briefActive}
+                defaultMailboxId={defaultMailboxId}
+                groups={mailboxGroups}
+                onComposeNewMail={onComposeNewMail}
+                onMobileOpenChange={onMobileOpenChange}
+                onReorderMailboxSwitcher={onReorderMailboxSwitcher}
+                onReconnectMailbox={onReconnectMailbox}
+                onSearch={onSearch}
+                onManageLabels={(sourceMailboxId) => {
+                  if (sourceMailboxId) {
+                    void setMailboxSearch({
+                      chatId:
+                        sourceMailboxId === selectedMailboxId
+                          ? undefined
+                          : null,
+                      mailboxId: sourceMailboxId,
+                      messageId: null,
+                      query: null,
+                      threadId: null,
+                      view: "labels",
+                    });
+                  } else {
+                    onSelectView("labels");
                   }
-                >
-                  {allInboxesActive && (
-                    <p className="border-b border-border px-4 py-2 text-caption text-muted-fg">
-                      Assistant for{" "}
-                      {mailboxes
-                        .find((mailbox) => mailbox.id === selectedMailboxId)
-                        ?.displayName?.trim() || currentUserEmail}
-                    </p>
-                  )}
-                  <ChatView
-                    docked={assistantSidebar}
-                    visible={assistantOpen}
-                    activeMailbox={activeMailbox ?? "inbox"}
-                    mailContext={chatContext}
-                    chatId={chatId}
-                    draftChatKey={draftChatKey}
+                }}
+                onManageSnippets={onManageSnippets}
+                onSelectMailbox={onSelectMailbox}
+                onSelectMailboxId={onSelectMailboxId}
+                onSelectView={onSelectView}
+                onSetDefaultMailbox={onSetDefaultMailbox}
+                reconnectingMailboxId={reconnectingMailboxId}
+                searchQuery={searchQuery}
+                selectedMailbox={briefActive ? null : activeMailbox}
+                isSnippetMailbox={isSnippetMailbox}
+                selectedMailboxId={selectedMailboxId}
+                selectedMailboxProvider={selectedMailboxProvider}
+                isMobileOpen={layoutState.isMobileSidebarOpen}
+              />
+            ) : null}
+
+            <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+              <div
+                aria-hidden={
+                  assistantOpen &&
+                  assistantNarrow &&
+                  selectedMailboxProvider !== "api"
+                }
+                inert={
+                  assistantOpen &&
+                  assistantNarrow &&
+                  selectedMailboxProvider !== "api"
+                }
+                className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent"
+              >
+                <div className="relative min-h-0 flex-1">{mailboxContent}</div>
+                {!allInboxesActive &&
+                !isComposeMailbox &&
+                !isDemoMode &&
+                !isManagedDemoMode &&
+                selectedMailboxId !== null ? (
+                  <DraftRecoveryNotice
                     mailboxId={selectedMailboxId}
-                    mailboxOrganizationId={
-                      mailboxGroups.find((group) =>
-                        group.mailboxes.some(
-                          (mailbox) => mailbox.id === selectedMailboxId
-                        )
-                      )?.id ?? ""
-                    }
-                    onChatIdChange={onChatIdChange}
+                    onResume={onComposeDraftRequested}
                   />
-                </Suspense>
+                ) : null}
+              </div>
+              {selectedMailboxId && selectedMailboxProvider !== "api" ? (
+                <AssistantSidebar
+                  id={assistantPanelId}
+                  focusRequest={assistantFocusRequest}
+                  open={assistantOpen}
+                  activeChatId={chatId}
+                  chats={chats.map((chat) => ({
+                    ...chat,
+                    title: chat.title ?? "New chat",
+                  }))}
+                  onChatSelect={(id) => {
+                    agentWorkspace?.control.cancel();
+                    onSelectChat(id);
+                  }}
+                  onNewChat={() => {
+                    agentWorkspace?.control.cancel();
+                    onCreateChat();
+                  }}
+                  onDeleteChat={(deletedChatId) => {
+                    agentWorkspace?.control.cancel();
+                    onDeleteChat(deletedChatId);
+                  }}
+                  onRenameChat={onRenameChat}
+                  onMinimize={() => {
+                    assistantAutoCollapsedRef.current = false;
+                    agentWorkspace?.control.cancel();
+                    setAssistantOpen(false);
+                    try {
+                      localStorage.setItem(
+                        "quieter:assistant-sidebar-closed",
+                        "true"
+                      );
+                    } catch {
+                      // Closing remains available without persistent storage.
+                    }
+                    restoreAssistantTriggerFocus();
+                  }}
+                >
+                  {assistantOpened ? (
+                    <Suspense
+                      fallback={
+                        <p
+                          className="p-4 text-body-sm text-muted-fg"
+                          data-assistant-loading
+                        >
+                          Loading assistant…
+                        </p>
+                      }
+                    >
+                      {allInboxesActive && (
+                        <p className="border-b border-border px-4 py-2 text-caption text-muted-fg">
+                          Assistant for{" "}
+                          {mailboxes
+                            .find((mailbox) => mailbox.id === selectedMailboxId)
+                            ?.displayName?.trim() || currentUserEmail}
+                        </p>
+                      )}
+                      <ChatView
+                        docked
+                        visible={assistantOpen}
+                        activeMailbox={activeMailbox ?? "inbox"}
+                        mailContext={chatContext}
+                        chatId={chatId}
+                        draftChatKey={draftChatKey}
+                        mailboxId={selectedMailboxId}
+                        mailboxOrganizationId={
+                          mailboxGroups.find((group) =>
+                            group.mailboxes.some(
+                              (mailbox) => mailbox.id === selectedMailboxId
+                            )
+                          )?.id ?? ""
+                        }
+                        onChatIdChange={onChatIdChange}
+                      />
+                    </Suspense>
+                  ) : null}
+                </AssistantSidebar>
               ) : null}
-            </FloatingAssistant>
-          ) : null}
-        </div>
-      </main>
+            </div>
+          </div>
+        </main>
+      </AssistantSidebarContext>
     </LazyMotion>
   );
 };
