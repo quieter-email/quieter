@@ -33,8 +33,10 @@ import {
 
 const sitePasswordPaths = new Set([
   "/api/auth/electron/token",
+  "/api/auth/get-session",
   "/api/auth/polar/webhooks",
   "/api/internal/gmail-credentials/rotate",
+  "/api/desktop/session",
   "/api/openapi",
   "/api/v1/mcp",
   "/api/v1/send",
