@@ -15,6 +15,10 @@ export const AuthLayout = ({
 }) => (
   <main className="dark relative isolate min-h-dvh w-full overflow-hidden bg-bg">
     <AtmosphericBackground variant="closing" />
+    <div
+      aria-hidden
+      className="auth-background-shade pointer-events-none absolute inset-0"
+    />
     <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center px-6 py-16">
       <div className="w-full max-w-[22rem]">
         <Brand

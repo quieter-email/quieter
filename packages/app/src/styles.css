@@ -62,6 +62,16 @@
   color-scheme: dark;
 }
 
+.auth-background-shade {
+  background: radial-gradient(
+    ellipse 85% 120% at 50% 80%,
+    color-mix(in srgb, var(--bg) 85%, transparent),
+    color-mix(in srgb, var(--bg) 80%, transparent) 25%,
+    color-mix(in srgb, var(--bg) 50%, transparent) 60%,
+    transparent
+  );
+}
+
 @keyframes loading-spinner-segment {
   from {
     stroke-dashoffset: 0;
