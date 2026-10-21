@@ -33,7 +33,7 @@ export const ThemePicker = () => {
         {selectedTheme && (
           <span
             aria-hidden="true"
-            className="theme-swatch size-4 shrink-0 rounded-sm border border-border [background:linear-gradient(135deg,var(--theme-base),var(--theme-accent),var(--theme-light))]"
+            className="theme-swatch size-4 shrink-0 rounded-sm border border-border"
             data-color-theme={selectedTheme}
           />
         )}
@@ -52,7 +52,7 @@ export const ThemePicker = () => {
                     <span className="flex items-center gap-2">
                       <span
                         aria-hidden="true"
-                        className="theme-swatch size-4 shrink-0 rounded-sm border border-border [background:linear-gradient(135deg,var(--theme-base),var(--theme-accent),var(--theme-light))]"
+                        className="theme-swatch size-4 shrink-0 rounded-sm border border-border"
                         data-color-theme={theme.name}
                       />
                       {theme.label}

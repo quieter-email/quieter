@@ -100,15 +100,15 @@ Semantic aliases such as `card` and `bg-surface` can share values while serving 
 
 Themes own their colors. Avoid per-caller dark-mode color patches and feature-local copies of the palette. Graphics, external brand artwork, user-selected label colors, and rendered email content have separate color requirements.
 
-Named brand palettes are defined once in `lib/brand-themes.ts`. Run `vp run generate:brand-palette-css` after changing them, and commit the resulting CSS. `vp run generate:assets` also regenerates that CSS before rendering artwork. Do not edit `brand-palettes.generated.css` directly. Silver's `cssInk` supplies a text color while its `ink` remains the artwork's SVG gradient.
+App themes are defined in `APP_THEMES` in `lib/brand-themes.ts`, separately from the logo artwork collection. The palette defines surfaces, primary action colors, optional gradients, corner radii, workspace gutters, and settings row padding. Dark, Light, Eclipse, Lilac haze, and Porcelain keep the default geometry. Run `vp run generate:brand-palette-css` after changing themes, and commit the resulting CSS. `vp run generate:assets` also regenerates that CSS before rendering artwork. Do not edit `brand-palettes.generated.css` directly.
 
 ### Space and shape
 
 Spacing uses the existing Tailwind scale with a 4px base, including half steps. There is no separate named spacing scale to invent. Repeated settings and workspace spacing belongs in those shared layouts. Unique viewport constraints and measured positions may use layout values without becoming global tokens.
 
-Workspace panels share a 6px outer gutter below the desktop breakpoint and 8px on desktop. `WorkspaceSection` owns this spacing for both full-page panels and grid cells. A layout wrapper that positions adjacent panels, including docked chat, imports `workspaceGutterClassName` from the same module and uses `--workspace-gutter`. Do not add another gutter between a trailing sidebar and the preceding panel's existing margin. Settings, Brief, Labels, Snippets and their loading states use the shared defaults.
+Workspace panels default to a 6px outer gutter below the desktop breakpoint and 8px on desktop. Themes can adjust these gutters and settings row padding through shared tokens. `WorkspaceSection` owns the gutter for both full-page panels and grid cells. A layout wrapper that positions adjacent panels, including docked chat, imports `workspaceGutterClassName` from the same module and uses `--workspace-gutter`. Do not add another gutter between a trailing sidebar and the preceding panel's existing margin. Settings, Brief, Labels, Snippets and their loading states use the shared tokens.
 
-The shared radius ladder is `xs` 8px, `sm` 10px, `md` 12px, `lg` 14px, and `xl` 16px. Larger existing steps remain available for intentionally larger shells. Controls own their radii; callers should not make the same checkbox rounder in one toolbar. Circular shapes can use `rounded-full`.
+The default radius ladder is `xs` 8px, `sm` 10px, `md` 12px, `lg` 14px, and `xl` 16px. The ladder follows the active theme's base radius. Larger existing steps remain available for intentionally larger shells. Controls own their radii; callers should not make the same checkbox rounder in one toolbar. Circular shapes can use `rounded-full`.
 
 Use `shadow-surface` for the existing workspace treatment and `shadow-elevation` where that elevated treatment is established. Ordinary component shadows are selected inside their implementation.
 
