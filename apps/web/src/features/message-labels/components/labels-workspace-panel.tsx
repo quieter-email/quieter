@@ -5,6 +5,7 @@ import {
   Delete01Icon,
   Edit01Icon,
   MoreVerticalIcon,
+  SparklesIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { AutoLabelSettings } from "@quieter/mail/auto-label";
@@ -42,6 +43,7 @@ import {
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
+import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -487,7 +489,7 @@ export const LabelsWorkspacePanel = ({
               ) : null}
               <Button
                 aria-haspopup="dialog"
-                aria-label={`Auto-label settings for ${label.name}`}
+                aria-label={`Edit AI prompt for ${label.name}`}
                 disabled={!canManage || updateLabelDetailsMutation.isPending}
                 onClick={() => {
                   setAutomationLabelId(label.id);
@@ -496,8 +498,33 @@ export const LabelsWorkspacePanel = ({
                 type="button"
                 variant="ghost"
               >
-                {label.autoLabel?.enabled === false ? "Paused" : "Auto-label"}
+                <HugeiconsIcon aria-hidden icon={SparklesIcon} />
+                Prompt
               </Button>
+              <IconButtonTooltip label={`Auto-label ${label.name}`}>
+                <Switch
+                  aria-label={`Auto-label ${label.name}`}
+                  checked={label.autoLabel?.enabled !== false}
+                  disabled={!canManage || updateLabelDetailsMutation.isPending}
+                  onCheckedChange={(enabled) => {
+                    void saveLabelAutomation(label, {
+                      ...(label.autoLabel ?? {
+                        domains: [],
+                        keywordScope: "anywhere",
+                        keywords: [],
+                        matchMode: "all",
+                        prompt: label.inclusionCriteria ?? "",
+                        recipients: [],
+                        senders: [],
+                      }),
+                      enabled,
+                    });
+                  }}
+                  size="sm"
+                >
+                  <SwitchThumb />
+                </Switch>
+              </IconButtonTooltip>
               <DropdownMenu>
                 <IconButtonTooltip label={`Options for ${label.name}`}>
                   <DropdownMenuTrigger
@@ -754,8 +781,17 @@ export const LabelsWorkspacePanel = ({
           onCancel={() => {
             setAutomationLabelId(null);
           }}
-          onSave={async (settings) =>
-            await saveLabelAutomation(automationLabel, settings)
+          onSave={async (prompt) =>
+            await saveLabelAutomation(automationLabel, {
+              domains: [],
+              enabled: automationLabel.autoLabel?.enabled !== false,
+              keywordScope: "anywhere",
+              keywords: [],
+              matchMode: "all",
+              prompt,
+              recipients: [],
+              senders: [],
+            })
           }
         />
       ) : null}
