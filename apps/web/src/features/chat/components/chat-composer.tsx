@@ -4,11 +4,9 @@ import {
   Mail01Icon,
   Mic01Icon,
   Search01Icon,
-  SparklesIcon,
   StopIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { chatModels } from "@quieter/ai/chat-models";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import { Button } from "@quieter/ui/button";
 import {
@@ -16,18 +14,10 @@ import {
   PromptComposerFrame,
 } from "@quieter/ui/composer-chrome";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectList,
-  SelectTrigger,
-  SelectValue,
-} from "@quieter/ui/select";
 import { Textarea } from "@quieter/ui/textarea";
 import type { KeyboardEvent, ReactNode, Ref, SubmitEvent } from "react";
 
-import { ModelLabLogo } from "./model-lab-logo";
+import { ChatModelPicker } from "./chat-model-picker";
 
 export type ChatContextItem = {
   id: string;
@@ -81,7 +71,6 @@ export const ChatComposer = ({
   transcribing,
 }: ChatComposerProps) => {
   const audioBusy = startingRecording || transcribing;
-  const selectedModel = chatModels.find((option) => option.value === model);
   let dictationIcon = Mic01Icon;
   if (audioBusy) {
     dictationIcon = Loading03Icon;
@@ -145,43 +134,11 @@ export const ChatComposer = ({
         ) : null}
         <div className="flex min-w-0 items-center justify-between gap-2">
           <div className="min-w-0">
-            <Select
+            <ChatModelPicker
               disabled={disabled}
-              items={[{ label: "Auto", value: "auto" }, ...chatModels]}
-              onValueChange={(value) => {
-                if (value !== null) {
-                  onModelChange(value);
-                }
-              }}
-              value={model}
-            >
-              <SelectTrigger
-                aria-label="Choose model"
-                className="max-w-full"
-                size="sm"
-                variant="ghost"
-              >
-                {selectedModel ? (
-                  <ModelLabLogo lab={selectedModel.group} />
-                ) : (
-                  <HugeiconsIcon aria-hidden icon={SparklesIcon} />
-                )}
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent align="start" side="top" size="compact">
-                <SelectList>
-                  <SelectItem value="auto">Auto</SelectItem>
-                  {chatModels.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      <span className="flex items-center gap-2">
-                        <ModelLabLogo lab={option.group} />
-                        <span>{option.label}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectList>
-              </SelectContent>
-            </Select>
+              model={model}
+              onModelChange={onModelChange}
+            />
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <IconButtonTooltip label={dictationLabel}>
