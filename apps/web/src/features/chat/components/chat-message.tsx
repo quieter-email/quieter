@@ -9,7 +9,11 @@ import type { UIMessage } from "ai";
 
 import { toastError } from "#/lib/error-toast";
 
-import { getAssistantProgress, getMessageText } from "../domain/chat-messages";
+import {
+  getAssistantProgress,
+  getMessageSuggestions,
+  getMessageText,
+} from "../domain/chat-messages";
 import { isChatToolPart } from "../domain/chat-tools";
 import type { ChatToolApproval } from "../domain/chat-tools";
 import { MarkdownContent } from "./markdown-content";
@@ -31,10 +35,12 @@ export const ChatMessage = ({
   approvals,
   isStreaming,
   message,
+  onSuggestion,
 }: {
   approvals: ChatToolApproval[];
   isStreaming: boolean;
   message: UIMessage;
+  onSuggestion?: (text: string) => void;
 }) => {
   const text = getMessageText(message.parts);
 
@@ -50,6 +56,7 @@ export const ChatMessage = ({
     approvals.map((approval) => [approval.toolCallId, approval] as const)
   );
   const progress = getAssistantProgress(message.parts, isStreaming);
+  const suggestions = getMessageSuggestions(message.parts);
 
   return (
     <article className="group/message min-w-0 space-y-1 text-body/relaxed text-fg">
@@ -80,6 +87,29 @@ export const ChatMessage = ({
           {progress}
         </p>
       )}
+      {onSuggestion !== undefined && suggestions.length > 0 ? (
+        <div
+          aria-label="Suggested replies"
+          className="flex flex-wrap gap-2 pt-2"
+        >
+          {suggestions.map((suggestion) => (
+            <Button
+              className="max-w-full"
+              disabled={isStreaming}
+              key={suggestion.text}
+              onClick={() => {
+                onSuggestion(suggestion.text);
+              }}
+              size="compact"
+              title={suggestion.text}
+              type="button"
+              variant="outline"
+            >
+              <span className="truncate">{suggestion.label}</span>
+            </Button>
+          ))}
+        </div>
+      ) : null}
       {!isStreaming && text !== "" ? (
         <div className="opacity-0 transition-opacity group-hover/message:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:opacity-100">
           <IconButtonTooltip label="Copy response">

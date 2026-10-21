@@ -18,6 +18,7 @@ type ChatTranscriptProps = {
   isStreaming: boolean;
   messages: UIMessage[];
   onRetry?: () => void;
+  onSuggestion?: (text: string) => void;
 };
 
 const SCROLL_THRESHOLD = 120;
@@ -29,6 +30,7 @@ export const ChatTranscript = ({
   isStreaming,
   messages,
   onRetry,
+  onSuggestion,
 }: ChatTranscriptProps) => {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -95,6 +97,9 @@ export const ChatTranscript = ({
               isStreaming={isStreaming && message === messages.at(-1)}
               key={message.id}
               message={message}
+              onSuggestion={
+                message === messages.at(-1) ? onSuggestion : undefined
+              }
             />
           ))}
           {errorMessage === undefined || errorMessage === "" ? null : (

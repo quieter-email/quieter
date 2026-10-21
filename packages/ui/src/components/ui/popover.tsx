@@ -27,6 +27,7 @@ export const PopoverContent = ({
   alignOffset = 0,
   children,
   className,
+  collisionPadding,
   side = "bottom",
   sideOffset = 8,
   size = "default",
@@ -34,7 +35,7 @@ export const PopoverContent = ({
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Popup> &
   Pick<
     ComponentPropsWithoutRef<typeof PopoverPrimitive.Positioner>,
-    "align" | "alignOffset" | "side" | "sideOffset"
+    "align" | "alignOffset" | "collisionPadding" | "side" | "sideOffset"
   > & {
     size?: "default" | "sm";
   }) => (
@@ -43,6 +44,7 @@ export const PopoverContent = ({
       align={align}
       alignOffset={alignOffset}
       className="isolate z-50"
+      collisionPadding={collisionPadding}
       side={side}
       sideOffset={sideOffset}
     >

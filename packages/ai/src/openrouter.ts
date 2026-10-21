@@ -41,21 +41,22 @@ export const readChatUsageCostUsd = (
     ?.usage?.cost;
 
 /**
- * Creates the language model for a chat model id with zero-data-retention
- * routing, big-provider failover, and OpenRouter usage accounting (token
- * costs) always enabled. Failover stays inside the provider constraints, so
- * every fallback serves under the same ZDR routing as the primary.
+ * Keeps zero-data-retention routing and usage accounting enabled. Latest
+ * family choices stay in that family; pinned configurations retain their
+ * provider-constrained failover order.
  */
 export const createChatModel = (
   model: ChatModel,
-  options?: { prioritizeLatency?: boolean }
+  options?: { allowFallbacks?: boolean; prioritizeLatency?: boolean }
 ) => {
   const parsedModel = chatModelSchema.parse(model);
+  const fallbacks =
+    options?.allowFallbacks === false ? [] : resolveModelFallbacks(parsedModel);
   return wrapLanguageModel({
     middleware: openRouterStreamMiddleware,
     model: getOpenRouterProvider().chat(parsedModel, {
       extraBody: {
-        models: resolveModelFallbacks(parsedModel),
+        ...(fallbacks.length > 0 ? { models: fallbacks } : {}),
         provider: {
           ...(options?.prioritizeLatency === true ? { sort: "latency" } : {}),
           zdr: true,
