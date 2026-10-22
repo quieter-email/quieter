@@ -120,3 +120,19 @@ export const createSstConfigEnv = (
     GMAIL_PUBSUB_ENABLED: missingGmailPubSubVariables.length === 0,
   };
 };
+
+export const createSstCommandEnv = (
+  runtimeEnv: RuntimeEnvironment = process.env
+) =>
+  createEnv({
+    emptyStringAsUndefined: true,
+    onValidationError: throwEnvironmentValidationError,
+    runtimeEnvStrict: {
+      QUIETER_BUILD_ID: runtimeEnv.QUIETER_BUILD_ID,
+      SST_STAGE: runtimeEnv.SST_STAGE,
+    },
+    server: {
+      QUIETER_BUILD_ID: z.string().optional(),
+      SST_STAGE: z.string().optional(),
+    },
+  });

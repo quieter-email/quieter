@@ -129,7 +129,7 @@ jobs:
 
       - name: Preview production changes
         timeout-minutes: 10
-        run: vp exec sst diff --config sst.config.ts --stage "$SST_STAGE"
+        run: vp run sst diff --config sst.config.ts --stage "$SST_STAGE"
 
       - name: Upload SST logs on failure
         if: failure()
@@ -163,7 +163,7 @@ jobs:
         run: vp run @quieter/database#db:deploy
 
       - name: Deploy prepared build with SST
-        run: vp exec sst deploy --config sst.config.ts --stage "$SST_STAGE"
+        run: vp run sst deploy --config sst.config.ts --stage "$SST_STAGE"
 
       - name: Verify production release
         timeout-minutes: 5

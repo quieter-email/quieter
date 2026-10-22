@@ -17,6 +17,7 @@ import {
   stage,
 } from "./stage";
 import type { SstLinkable } from "./types";
+import { deriveWebReleaseScope, WEB_RELEASE_SLOTS } from "./web-release-scope";
 
 const webSitePath = "apps/web";
 
@@ -154,49 +155,54 @@ export const createWeb = (
     ...runtimeEnvironment,
   };
   const releaseLinks = [...webSecretBindings, appDatabase, ...links];
-  const releases: Partial<Record<"a" | "b", sst.cloudflare.Worker>> = {};
+  let promotionManifest: $util.Input<string> | undefined;
   class RetainedWebTanStackStart extends WebTanStackStart {
     protected override buildPlan(outputPath: $util.Output<string>) {
       const plan = super.buildPlan(outputPath);
       if (deployment !== null) {
-        for (const slot of ["a", "b"] as const) {
-          releases[slot] = new sst.cloudflare.Worker(
-            slot === "a" ? "WebReleaseA" : "WebReleaseB",
-            {
-              assets: {
-                directory: $util
-                  .all([outputPath, plan])
-                  .apply(([directory, paths]) =>
-                    path.join(directory, paths.assets)
-                  ),
-              },
-              compatibility: {
-                date: COMPATIBILITY_DATE,
-                flags: ["nodejs_compat"],
-              },
-              dev: false,
-              environment,
-              handler: $util
+        const scope = deriveWebReleaseScope(deployment);
+        const promotionEtags: $util.Output<string>[] = [];
+        for (const { componentName, serviceName, slot } of WEB_RELEASE_SLOTS) {
+          const release = new sst.cloudflare.Worker(componentName, {
+            assets: {
+              directory: $util
                 .all([outputPath, plan])
                 .apply(([directory, paths]) =>
-                  path.join(directory, paths.server)
+                  path.join(directory, paths.assets)
                 ),
-              link: releaseLinks,
-              transform: {
-                worker(args, opts) {
-                  args.observability = cloudflareWorkerObservability;
-                  if (deployment.updateSlot !== slot) {
-                    opts.ignoreChanges = [
-                      ...(opts.ignoreChanges ?? []),
-                      ...Object.keys(args),
-                    ];
-                  }
-                },
+            },
+            compatibility: {
+              date: COMPATIBILITY_DATE,
+              flags: ["nodejs_compat"],
+            },
+            dev: false,
+            environment,
+            handler: $util
+              .all([outputPath, plan])
+              .apply(([directory, paths]) =>
+                path.join(directory, paths.server)
+              ),
+            link: releaseLinks,
+            transform: {
+              worker(args) {
+                args.observability = cloudflareWorkerObservability;
+                args.scriptName = serviceName;
               },
-              url: false,
-            }
-          );
+            },
+            url: false,
+          });
+          if (
+            scope.promotionSlots.some((promotion) => promotion.slot === slot)
+          ) {
+            promotionEtags.push(release.nodes.worker.etag);
+          }
         }
+        promotionManifest =
+          promotionEtags.length === 0
+            ? JSON.stringify(deployment.manifest)
+            : $util
+                .all(promotionEtags)
+                .apply(() => JSON.stringify(deployment.manifest));
       }
       return plan;
     }
@@ -222,14 +228,21 @@ export const createWeb = (
             if (deployment !== null) {
               workerArgs.bindings = $util
                 .output(workerArgs.bindings ?? [])
-                .apply((bindings) =>
-                  bindings.filter(
+                .apply((bindings) => [
+                  ...bindings.filter(
                     (binding) =>
                       binding.type === "service" ||
                       binding.name === "QUIETER_WEB_DEPLOYMENT" ||
                       binding.name === "SST_RESOURCE_App"
-                  )
-                );
+                  ),
+                  ...WEB_RELEASE_SLOTS.map(
+                    ({ componentName, serviceName }) => ({
+                      name: componentName,
+                      service: serviceName,
+                      type: "service" as const,
+                    })
+                  ),
+                ]);
             }
           },
         };
@@ -237,21 +250,15 @@ export const createWeb = (
           args.assets = undefined;
           args.handler = "packages/cloudflare/src/web-router.ts";
           // Keep legacy IAM resources until the old app has stopped serving traffic.
-          args.link = [
-            ...(deployment.manifest.previous === null &&
+          args.link =
+            deployment.manifest.previous === null &&
             deployment.updateSlot !== null
               ? links
-              : []),
-            ...Object.values(releases),
-          ];
+              : [];
           args.environment = {
-            QUIETER_WEB_DEPLOYMENT: $util
-              .all(
-                Object.values(releases).map(
-                  (release) => release.nodes.worker.etag
-                )
-              )
-              .apply(() => JSON.stringify(deployment.manifest)),
+            // SST resolves compatibility before buildPlan creates the releases.
+            QUIETER_WEB_DEPLOYMENT:
+              promotionManifest ?? JSON.stringify(deployment.manifest),
           };
         }
       },

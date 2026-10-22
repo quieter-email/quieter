@@ -38,6 +38,14 @@ export const webReleasePlanSchema = z
     ({ manifest, updateSlot }) =>
       updateSlot === null || updateSlot === manifest.current.slot,
     { message: "The updated release slot must match the current build." }
+  )
+  .refine(
+    ({ manifest, sourceBuildId, updateSlot }) =>
+      updateSlot === null
+        ? sourceBuildId === manifest.current.buildId
+        : manifest.previous === null ||
+          sourceBuildId === manifest.previous.buildId,
+    { message: "The release source must match the captured active build." }
   );
 
 export type DeploymentManifest = z.infer<typeof deploymentManifestSchema>;
