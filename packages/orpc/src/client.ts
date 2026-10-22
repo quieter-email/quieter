@@ -15,11 +15,13 @@ export type RouterInputs = InferClientInputs<AppRouterClient>;
 export type RouterOutputs = InferClientOutputs<AppRouterClient>;
 
 export const createOrpcClient = (options?: {
+  fetch?: typeof globalThis.fetch;
   url?: UrlSource;
   headers?: HeaderMap | (() => HeaderMap | Promise<HeaderMap>);
 }): AppRouterClient => {
   const headers = options?.headers;
   const link = new RPCLink<OrpcClientContext>({
+    fetch: options?.fetch,
     headers:
       headers === undefined
         ? undefined

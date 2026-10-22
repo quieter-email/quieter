@@ -1,5 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 
+import {
+  DEPLOYMENT_BUILD_HEADER,
+  DEPLOYMENT_STATUS_PATH,
+  deploymentManifestSchema,
+  deploymentStatusSchema,
+} from "@quieter/env/deployment";
 import { z } from "zod";
 
 import { checkDeployment } from "./check-deployment.ts";
@@ -7,6 +13,7 @@ import { checkDeployment } from "./check-deployment.ts";
 const recordSchema = z.object({
   account: z.string().regex(/^[a-f0-9]{32}$/u),
   buildId: z.string().regex(/^[\w.-]{1,128}$/u),
+  deployment: deploymentManifestSchema.optional(),
   release: z.string().regex(/^[a-f0-9]{40}-\d+$/u),
   script: z.string().regex(/^[\w-]+$/u),
   version: z.uuid(),
@@ -99,6 +106,34 @@ export const recoverWeb = async (input: {
       const markerText = await response.text();
       const buildId = markerText.trim();
       await checkDeployment("https://quieter.email", buildId);
+      const statusResponse = await fetch(
+        `https://quieter.email${DEPLOYMENT_STATUS_PATH}`,
+        {
+          cache: "no-store",
+          redirect: "error",
+          signal: AbortSignal.timeout(15_000),
+        }
+      );
+      let deployment: z.infer<typeof deploymentManifestSchema> | undefined;
+      if (statusResponse.status !== 404) {
+        if (
+          !statusResponse.ok ||
+          statusResponse.headers
+            .get("content-type")
+            ?.includes("application/json") !== true
+        ) {
+          throw new Error("Cannot verify the current release slots.");
+        }
+        const status = deploymentStatusSchema.parse(
+          await statusResponse.json()
+        );
+        if (status.current.buildId !== buildId) {
+          throw new Error(
+            "The active release changed during health verification."
+          );
+        }
+        deployment = deploymentManifestSchema.parse(status);
+      }
       const latest = deploymentsSchema.parse(
         await api(`scripts/${script}/deployments`)
       );
@@ -117,6 +152,7 @@ export const recoverWeb = async (input: {
       const record = recordSchema.parse({
         account,
         buildId,
+        deployment,
         release,
         script,
         version,
@@ -138,6 +174,65 @@ export const recoverWeb = async (input: {
       throw new Error(
         "Account, domain or current version changed. Inspect production before retrying recovery."
       );
+    }
+    const statusResponse = await fetch(
+      `https://quieter.email${DEPLOYMENT_STATUS_PATH}`,
+      {
+        cache: "no-store",
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000),
+      }
+    );
+    if (statusResponse.status === 404) {
+      if (record.deployment !== undefined) {
+        throw new Error(
+          "The release router is unavailable. Inspect production before recovery."
+        );
+      }
+    } else {
+      if (
+        !statusResponse.ok ||
+        statusResponse.headers
+          .get("content-type")
+          ?.includes("application/json") !== true
+      ) {
+        throw new Error("Cannot verify the currently retained releases.");
+      }
+      const current = deploymentStatusSchema.parse(await statusResponse.json());
+      const target = record.deployment?.current;
+      if (target === undefined || target.buildId !== record.buildId) {
+        throw new Error(
+          "This recovery record predates release retention. Use a reviewed forward fix."
+        );
+      }
+      let retained = null;
+      if (current.current.buildId === target.buildId) {
+        retained = current.current;
+      } else if (
+        current.previous?.buildId === target.buildId &&
+        current.previous.expiresAt > current.serverTime
+      ) {
+        retained = current.previous;
+      }
+      if (retained === null || retained.slot !== target.slot) {
+        throw new Error(
+          "The recovery release expired or its slot was reused. Use a reviewed forward fix."
+        );
+      }
+      const healthResponse = await fetch("https://quieter.email/api/health", {
+        cache: "no-store",
+        headers: { [DEPLOYMENT_BUILD_HEADER]: target.buildId },
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000),
+      });
+      const health = z
+        .object({ buildId: z.string(), healthy: z.literal(true) })
+        .parse(await healthResponse.json());
+      if (!healthResponse.ok || health.buildId !== target.buildId) {
+        throw new Error(
+          "The retained release is unhealthy. Recovery was not applied."
+        );
+      }
     }
     await api(`scripts/${script}/deployments`, {
       annotations: {

@@ -1,3 +1,4 @@
+import { appFetch } from "@quieter/app/runtime";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Field, FieldLabel } from "@quieter/ui/field";
@@ -30,7 +31,7 @@ const parseWaitlistResponse = (value: unknown): WaitlistResponse => {
 };
 
 const addToWaitlist = async (formData: FormData): Promise<WaitlistResponse> => {
-  const response = await fetch("/api/waitlist", {
+  const response = await appFetch("/api/waitlist", {
     body: formData,
     headers: {
       accept: "application/json",

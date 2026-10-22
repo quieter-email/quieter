@@ -30,6 +30,7 @@ import {
   isValidSitePasswordToken,
   sitePasswordCookieName,
 } from "#/lib/site-password.server";
+import { deploymentFetch } from "#/lib/stale-deployment";
 
 const sitePasswordPaths = new Set([
   "/api/auth/electron/token",
@@ -363,6 +364,7 @@ export const startInstance = createStart(() => ({
     sitePasswordMiddleware,
     csrfMiddleware,
   ],
+  serverFns: { fetch: deploymentFetch },
 }));
 
 const normalizePathname = (pathname: string) => {
