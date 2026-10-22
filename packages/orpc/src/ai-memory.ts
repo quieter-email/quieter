@@ -23,6 +23,7 @@ import { getBillingCreditUsage } from "@quieter/billing/credits";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
 import type { DatabaseExecutor } from "@quieter/database/client";
+import { retryIdempotentDatabaseQuery } from "@quieter/database/retry";
 import {
   aiMemory,
   aiMemoryChangeSet,
@@ -2347,25 +2348,28 @@ export const processPendingAiMemoryEvents = async ({
     return { failed: 0, processed: 0 };
   }
   const cutoff = new Date(Date.now() - 120_000);
-  const pending = await db
-    .select({ id: userAiContextEvent.id })
-    .from(userAiContextEvent)
-    .where(
-      and(
-        isNull(userAiContextEvent.mergedAt),
-        isNull(userAiContextEvent.skippedAt),
-        userId === undefined
-          ? undefined
-          : eq(userAiContextEvent.userId, userId),
-        or(
-          isNull(userAiContextEvent.processingAt),
-          lt(userAiContextEvent.processingAt, cutoff)
-        ),
-        allowLocal ? undefined : lt(userAiContextEvent.updatedAt, cutoff)
-      )
-    )
-    .orderBy(userAiContextEvent.updatedAt)
-    .limit(4);
+  const pending = await retryIdempotentDatabaseQuery(
+    async () =>
+      await db
+        .select({ id: userAiContextEvent.id })
+        .from(userAiContextEvent)
+        .where(
+          and(
+            isNull(userAiContextEvent.mergedAt),
+            isNull(userAiContextEvent.skippedAt),
+            userId === undefined
+              ? undefined
+              : eq(userAiContextEvent.userId, userId),
+            or(
+              isNull(userAiContextEvent.processingAt),
+              lt(userAiContextEvent.processingAt, cutoff)
+            ),
+            allowLocal ? undefined : lt(userAiContextEvent.updatedAt, cutoff)
+          )
+        )
+        .orderBy(userAiContextEvent.updatedAt)
+        .limit(4)
+  );
   let processed = 0;
   let failed = 0;
   for (const event of pending) {

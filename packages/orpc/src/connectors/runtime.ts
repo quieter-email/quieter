@@ -101,6 +101,18 @@ const googleCalendarEventResponseSchema = z.object({
   summary: z.string().optional(),
 });
 
+const googleCalendarEventListResponseSchema = z.object({
+  items: z
+    .array(
+      googleCalendarEventResponseSchema.extend({
+        recurringEventId: z.string().optional(),
+        status: z.string().optional(),
+      })
+    )
+    .optional(),
+  nextPageToken: z.string().optional(),
+});
+
 const getGoogleCalendarOAuthClient = () => ({
   clientId: requireServerEnv("GOOGLE_CALENDAR_CLIENT_ID"),
   clientSecret: requireServerEnv("GOOGLE_CALENDAR_CLIENT_SECRET"),
@@ -426,6 +438,45 @@ export const runAuthorizedConnector = async <TValue>(
   return await runner(refreshedAccessToken, input.signal);
 };
 
+const findGoogleCalendarEventByUid = async (input: {
+  accessToken: string;
+  iCalUID: string;
+  signal?: AbortSignal;
+}) => {
+  let pageToken: string | undefined;
+  do {
+    const parameters = new URLSearchParams({
+      iCalUID: input.iCalUID,
+      showDeleted: "false",
+      singleEvents: "false",
+    });
+    if (pageToken) {
+      parameters.set("pageToken", pageToken);
+    }
+    const response = await fetch(
+      `${GOOGLE_CALENDAR_API_URL}/calendars/primary/events?${parameters}`,
+      {
+        headers: { authorization: `Bearer ${input.accessToken}` },
+        signal: input.signal,
+      }
+    );
+    if (!response.ok) {
+      throw await createGoogleApiError(response);
+    }
+    const events = googleCalendarEventListResponseSchema.parse(
+      await response.json()
+    );
+    const existing = events.items?.find(
+      (event) => !event.recurringEventId && event.status !== "cancelled"
+    );
+    if (existing) {
+      return existing;
+    }
+    pageToken = events.nextPageToken;
+  } while (pageToken);
+  return null;
+};
+
 export const postGoogleCalendarEvent = async (input: {
   accessToken: string;
   event: GoogleCalendarEventDraft;
@@ -471,6 +522,19 @@ export const postGoogleCalendarEvent = async (input: {
       });
     }
   }
+  const importUid =
+    input.importEvent === true ? input.event.iCalUID : undefined;
+  if (importUid) {
+    const existing = await findGoogleCalendarEventByUid({
+      accessToken: input.accessToken,
+      iCalUID: importUid,
+      signal: input.signal,
+    });
+    // Adding an invitation must preserve edits and newer revisions already on the calendar.
+    if (existing) {
+      return existing;
+    }
+  }
   const response = await fetch(
     `${GOOGLE_CALENDAR_API_URL}/calendars/primary/events${input.importEvent === true ? "/import" : ""}`,
     {
@@ -485,7 +549,24 @@ export const postGoogleCalendarEvent = async (input: {
   );
 
   if (!response.ok) {
-    throw await createGoogleApiError(response);
+    const error = await createGoogleApiError(response);
+    if (
+      importUid &&
+      (error.status === 409 ||
+        (error.status === 400 &&
+          error.message.startsWith("Invalid sequence value.")))
+    ) {
+      // An invitation can arrive through another client between the lookup and import.
+      const existing = await findGoogleCalendarEventByUid({
+        accessToken: input.accessToken,
+        iCalUID: importUid,
+        signal: input.signal,
+      });
+      if (existing) {
+        return existing;
+      }
+    }
+    throw error;
   }
 
   return googleCalendarEventResponseSchema.parse(await response.json());
