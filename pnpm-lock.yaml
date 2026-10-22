@@ -410,6 +410,19 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
 
+  .agents/skills/poteto-mode/scripts:
+    dependencies:
+      commander:
+        specifier: 14.0.0
+        version: 14.0.0
+    devDependencies:
+      bun-types:
+        specifier: latest
+        version: 1.4.4
+      typescript:
+        specifier: latest
+        version: 7.0.2
+
   apps/desktop:
     devDependencies:
       '@better-auth/core':
@@ -6133,6 +6146,9 @@ packages:
     resolution: {integrity: sha512-zhaCDicdLuWN5UbN5IMnFqNMhNfo919sH85y2/ea+5Yg9TsTkeZxpL+JLbp6cgYFS4sRLp3YV4S6yDuqVWHYOw==}
     engines: {node: '>=6'}
 
+  bun-types@1.4.4:
+    resolution: {integrity: sha512-yjrJh5oGX7mMPKGd19YXyIjmEuj4G4zNC30bs7PM9Az7NQ3ndF3j6hbeRdvJTRQEhJ/FYQwW0a2moweEi2hMxQ==}
+
   bytes@3.1.2:
     resolution: {integrity: sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg==}
     engines: {node: '>= 0.8'}
@@ -6255,6 +6271,10 @@ packages:
 
   comma-separated-tokens@1.0.8:
     resolution: {integrity: sha512-GHuDRO12Sypu2cV70d1dkA2EUmXHgntrzbpvOB+Qy+49ypNfGgFQIC2fhhXbnyrJRynDCAARsT7Ou0M6hirpfw==}
+
+  commander@14.0.0:
+    resolution: {integrity: sha512-2uM9rYjPvyq39NwLRqaiLtWHyDC1FvryJDa2ATTVims5YAS4PupsEQsDvP14FqhFr0P49CYDugi59xaxJlTXRA==}
+    engines: {node: '>=20'}
 
   commander@5.1.0:
     resolution: {integrity: sha512-P0CysNDQ7rtVw4QIQtm+MRxV66vKFSvlsQvGYXZWR3qFU0jlMKHZZZgw8e+8DSah4UDKMqnknRDQz+xuQXQ/Zg==}
@@ -13189,6 +13209,11 @@ snapshots:
 
   builtin-modules@3.3.0: {}
 
+  bun-types@1.4.4:
+    dependencies:
+      '@types/node': 26.6.5
+      undici-types: 8.9.0
+
   bytes@3.1.2: {}
 
   bytestreamjs@2.0.1: {}
@@ -13307,6 +13332,8 @@ snapshots:
       delayed-stream: 1.0.0
 
   comma-separated-tokens@1.0.8: {}
+
+  commander@14.0.0: {}
 
   commander@5.1.0: {}
 

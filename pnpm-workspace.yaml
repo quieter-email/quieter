@@ -1,6 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - ".agents/skills/poteto-mode/scripts"
 
 autoInstallPeers: false
 strictPeerDependencies: true
