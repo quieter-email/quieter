@@ -7,6 +7,7 @@ directories:
 files:
   - out/**
   - package.json
+  - resources/icon.png
 asar: true
 protocols:
   - name: Quieter sign in

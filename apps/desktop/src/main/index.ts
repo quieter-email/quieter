@@ -413,6 +413,7 @@ const createWindow = async (): Promise<void> => {
   mainWindow = new BrowserWindow({
     autoHideMenuBar: true,
     height: 900,
+    icon: path.join(app.getAppPath(), "resources/icon.png"),
     minHeight: 620,
     minWidth: 900,
     show: false,
@@ -505,7 +506,27 @@ const startApp = async (): Promise<void> => {
         );
       }
     );
-    // oxlint-disable promise/prefer-await-to-callbacks -- Electron's response interception API requires callbacks.
+    // oxlint-disable promise/prefer-await-to-callbacks -- Electron's header interception API requires callbacks.
+    // Packaged app schemes cannot supply the HTTPS referrer expected by image services.
+    session.defaultSession.webRequest.onBeforeSendHeaders(
+      { urls: ["https://*/*"] },
+      (details, callback) => {
+        if (
+          details.webContentsId === mainWindow?.webContents.id &&
+          details.frame === mainWindow?.webContents.mainFrame &&
+          details.resourceType === "image"
+        ) {
+          callback({
+            requestHeaders: {
+              ...details.requestHeaders,
+              Referer: `${new URL(env.DESKTOP_SERVER_URL).origin}/`,
+            },
+          });
+          return;
+        }
+        callback({});
+      }
+    );
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       if (isTrustedRendererURL(details.url, developmentURL)) {
         callback({
