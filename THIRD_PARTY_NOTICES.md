@@ -1,5 +1,9 @@
 # Third-party notices
 
+## Pstack
+
+The pstack skills under `.agents/skills/` are from [Lauren Tan's pstack](https://github.com/cursor/plugins/tree/main/pstack), through the [standalone mirror](https://github.com/backnotprop/pstack) at commit `e44668c2aad92eacf4e84df47984121fefb11b82`. The imported skills and their hashes are recorded in `skills-lock.json`. Their MIT license is included in [pstack-LICENSE.txt](.agents/skills/pstack-LICENSE.txt).
+
 ## Fluid Functionalism
 
 Parts of Quieter's measured interaction-surface targeting and animation logic are adapted from [Fluid Functionalism](https://github.com/mickadesign/fluid-functionalism) at commit `08c5f951f072fcccd26316321b83bcf2cdc0bbc0`.

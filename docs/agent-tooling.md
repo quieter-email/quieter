@@ -1,5 +1,7 @@
 # Agent debugging tools
 
+For the shared Codex and Cursor engineering workflows, see [Pstack](pstack.md).
+
 Application credentials, agent access, and feature acceptance are separate checks. A local app can run while an agent has no access to its provider logs. Sentry and PostHog capture remain off locally by default; agents still need authenticated inspection access.
 
 Run `vp run agent:doctor` to check required Codex MCP configuration and saved OAuth status without printing headers, tokens, or command arguments. Exit code 1 means configuration or authentication is missing. Exit code 0 only means those inventory checks passed. It does not establish that the active task can discover tools or make authorized provider calls.
