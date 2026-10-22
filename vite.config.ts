@@ -537,6 +537,7 @@ export default defineConfig({
   test: {
     exclude: [
       ...configDefaults.exclude,
+      ".agents/**",
       ".scratch/**",
       "packages/cloudflare/tests/**",
     ],

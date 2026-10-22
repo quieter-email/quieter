@@ -13,18 +13,6 @@
       "skillPath": "skills/use-ai-sdk/SKILL.md",
       "computedHash": "0883204d11b055e968dee697c5858e68064c27dfd4deb6310212895daa65c5ad"
     },
-    "algorithmic-art": {
-      "source": "anthropics/skills",
-      "sourceType": "github",
-      "skillPath": "skills/algorithmic-art/SKILL.md",
-      "computedHash": "987b24aa98171a0d3690420173b2cdb6eaafd57981ed716b5d50371affa82ea3"
-    },
-    "animation-best-practices": {
-      "source": "millionco/react-doctor",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/animation-best-practices/SKILL.md",
-      "computedHash": "c36885f99411661a4451a8c414be39b873bca70e4e82c46506c7ee621a9d5b88"
-    },
     "animation-vocabulary": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
@@ -37,11 +25,33 @@
       "skillPath": "skills/apple-design/SKILL.md",
       "computedHash": "0d19303902efa64eace10e6b183eb29ef3220d424c1a7fd1eafc52adde216932"
     },
-    "apply-dependency-prs": {
-      "source": "fjrevoredo/mini-diarium",
+    "architect": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": ".agents/skills/apply-dependency-prs/SKILL.md",
-      "computedHash": "bbd2f4834c6452d77ac67c9a48d0b3a85152bb83812d6871ef84ebb48963e7c1"
+      "skillPath": "skills/architect/SKILL.md",
+      "computedHash": "ad09b69df9ba7f74c0933a34d774eca19e4b3481cdea0d281be476dd4a4eb3a3"
+    },
+    "arena": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/arena/SKILL.md",
+      "computedHash": "ef9abffa811f86fe4a8a74115b0930cf77f9c02342a80dce2bde483e695a4140"
+    },
+    "automate-me": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/automate-me/SKILL.md",
+      "computedHash": "db5e92ed6146a77131280bb1b564b7c99465d456c983966dfbd1d182b65e102d"
+    },
+    "benchmark-checklist": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/benchmark-checklist/SKILL.md",
+      "computedHash": "0413fcdbb5e8b5c93b1e626e1ecce5d0bf06fbc1d89555ddb44fd7450842b264"
     },
     "better-auth-best-practices": {
       "source": "better-auth/skills",
@@ -55,59 +65,40 @@
       "skillPath": "security/SKILL.md",
       "computedHash": "ed38caef4b297cc399d717258d6ea4e6ecb8894c453c83450064c7e7c6e5cc02"
     },
-    "brand-guidelines": {
-      "source": "anthropics/skills",
+    "blast-radius": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": "skills/brand-guidelines/SKILL.md",
-      "computedHash": "c82f0b24cdcc7e2693a963d30c810558b7bb89ed84508b2328228d21256ef865"
+      "skillPath": "skills/blast-radius/SKILL.md",
+      "computedHash": "5b02650462b32f80d62c057c636d738ebaaa5da4b78b9056272b549fbc09eb90"
     },
-    "canvas-design": {
-      "source": "anthropics/skills",
+    "bro": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": "skills/canvas-design/SKILL.md",
-      "computedHash": "4e8bbc31d3b159efdd32d31a63ba8cd5a44d84911e924c1f2c709c50cbcdd0ec"
+      "skillPath": "skills/bro/SKILL.md",
+      "computedHash": "33f023f92c4e4ec96049908962310c48826afc871b346a2751f493213249a013"
     },
-    "claude-api": {
-      "source": "anthropics/skills",
+    "correct": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": "skills/claude-api/SKILL.md",
-      "computedHash": "2897c00d1ddc1bec51bdd57e716be7cc45ccfd96f857a5d87375c777fdef3e58"
+      "skillPath": "skills/correct/SKILL.md",
+      "computedHash": "f23e86ec27e1f0e1df814087be36b030c11e387f8a774478a83a18b9234ad529"
     },
-    "coding-guidelines": {
-      "source": "fjrevoredo/mini-diarium",
+    "create-formal-verification-skill": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": ".agents/skills/coding-guidelines/SKILL.md",
-      "computedHash": "5aec8481de78884af32ee3ac1efda3c0d355b2ca7c46717dc6ce5f5f1d476b88"
+      "skillPath": "skills/create-formal-verification-skill/SKILL.md",
+      "computedHash": "067fb98e2ff2400bcc7d64f972268449ebd11977b8c10d5fbbf25e0c7fad239c"
     },
-    "create-auth-skill": {
-      "source": "better-auth/skills",
+    "create-verification-skill": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": "better-auth/create-auth/SKILL.md",
-      "computedHash": "393e8d2d795fa5797c9a4e0665f29183ea2e140233db59746d510340a10456e6"
-    },
-    "diagram-maintainer": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/diagram-maintainer/SKILL.md",
-      "computedHash": "f3f461cc2b2ccfed8b3e3594ac73598519163cf19ced41f2eb7305ffa684d506"
-    },
-    "doc-coauthoring": {
-      "source": "anthropics/skills",
-      "sourceType": "github",
-      "skillPath": "skills/doc-coauthoring/SKILL.md",
-      "computedHash": "62cd7744438ee2aecc986c520bb603988a78ff6aaaf70a471bf4584fe0b78dae"
-    },
-    "docx": {
-      "source": "anthropics/skills",
-      "sourceType": "github",
-      "skillPath": "skills/docx/SKILL.md",
-      "computedHash": "150be87ff7b18f273ad07da303adb1cf2ca21cc3e76db7a2cf0373405178a278"
-    },
-    "domain-web": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/domain-web/SKILL.md",
-      "computedHash": "d149408567c4daeb43fcf71fd516060f6fb7dfb831c49142a17ffe6c1d1d3531"
+      "skillPath": "skills/create-verification-skill/SKILL.md",
+      "computedHash": "a6822e7f226894238401e46028846655178df707c1f820d701c79aa9bddff255"
     },
     "email-and-password-best-practices": {
       "source": "better-auth/skills",
@@ -121,17 +112,18 @@
       "skillPath": "skills/emil-design-eng/SKILL.md",
       "computedHash": "87067d79205fdedc6d682891027dd9c7335486c4b4dc2e785638941a9d2e6061"
     },
+    "figure-it-out": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/figure-it-out/SKILL.md",
+      "computedHash": "3320630b1f357fe33f18fccb1b6a09b6896b929aaf745a9153884849fd32ee2e"
+    },
     "find-animation-opportunities": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/find-animation-opportunities/SKILL.md",
       "computedHash": "c6b1d0f6d03a11f8772b1cef4ca5cc88301ae8641ac2697c85ffa87eb458e40a"
-    },
-    "flathub-maintenance": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/flathub-maintenance/SKILL.md",
-      "computedHash": "8797321cfcc3f730c66a9415965e1cd120b2bf822b898c07682ef8fc7fb0c09b"
     },
     "frontend-design": {
       "source": "anthropics/skills",
@@ -139,113 +131,67 @@
       "skillPath": "skills/frontend-design/SKILL.md",
       "computedHash": "516bd2154eb843a8240e43d5b285229129853114ad7075a5e141e1c08e408c84"
     },
+    "how": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/how/SKILL.md",
+      "computedHash": "59b7162b52e1b3f3a7abc3671e84da170aa6a595bf5c670ed6c2c84f00701adc"
+    },
     "improve-animations": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/improve-animations/SKILL.md",
       "computedHash": "9cd956e91139211efa5e17fc5e1675b9a3f711ef38cbc92aa8f3fa5b626b7e12"
     },
-    "internal-comms": {
-      "source": "anthropics/skills",
+    "in-your-own-words": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": "skills/internal-comms/SKILL.md",
-      "computedHash": "cf3dba93fd569d7380505db211f89a467869c1a2ef301941148d06f33ed17332"
+      "skillPath": "skills/in-your-own-words/SKILL.md",
+      "computedHash": "2528d14039f6d36cadb0c9fd702daa0b3a997a482b070fd8e588295be2d9e2b0"
     },
-    "m01-ownership": {
-      "source": "fjrevoredo/mini-diarium",
+    "interrogate": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": ".agents/skills/m01-ownership/SKILL.md",
-      "computedHash": "40ee119397748829904475e81bafcb4e16d0ed474d1d92fc9d1a9bf45e461c2a"
+      "skillPath": "skills/interrogate/SKILL.md",
+      "computedHash": "894d4648b4b6dd78d8bc6bbcf0d5b14aeab9efcff134d1cba703457c636def13"
     },
-    "m02-resource": {
-      "source": "fjrevoredo/mini-diarium",
+    "ketchup": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": ".agents/skills/m02-resource/SKILL.md",
-      "computedHash": "06c2cb0985dd7bc33f89e9ba58f25d2ad6814268e13a0cac3afd8e0e20f53ebb"
+      "skillPath": "skills/ketchup/SKILL.md",
+      "computedHash": "59a5c599d1ad4e5fc07ed240e11a5c14f96a29fc4f7b78b354e14ead190ebdba"
     },
-    "m03-mutability": {
-      "source": "fjrevoredo/mini-diarium",
+    "maintain-formal-verification-skill": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": ".agents/skills/m03-mutability/SKILL.md",
-      "computedHash": "4702dc283d5921427bdf620097fa66b5102f44961c8278390cc065c3475b6604"
+      "skillPath": "skills/maintain-formal-verification-skill/SKILL.md",
+      "computedHash": "ed5087650258f536c953b2d579be20e2b1abad619e125a99c063fc844ab61450"
     },
-    "m04-zero-cost": {
-      "source": "fjrevoredo/mini-diarium",
+    "maintain-verification-skill": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": ".agents/skills/m04-zero-cost/SKILL.md",
-      "computedHash": "95fd1808fe1240025f9bb448e17cf96a58102c94fe547a2087f2c0ab71117878"
+      "skillPath": "skills/maintain-verification-skill/SKILL.md",
+      "computedHash": "b6c9efcc0f68a0ee648f267242cc356821032189f1d87f09dd98df8ca063c975"
     },
-    "m05-type-driven": {
-      "source": "fjrevoredo/mini-diarium",
+    "make-bot-ui": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": ".agents/skills/m05-type-driven/SKILL.md",
-      "computedHash": "fcdf631b21da764c89c57c40c9bb3907e468c1a8b77ddaab9db0aad6989268c9"
+      "skillPath": "skills/make-bot-ui/SKILL.md",
+      "computedHash": "61d41129544eaf4b6e49bbfa2854886aab05d103f396c320f10c393739222742"
     },
-    "m06-error-handling": {
-      "source": "fjrevoredo/mini-diarium",
+    "no-comments": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": ".agents/skills/m06-error-handling/SKILL.md",
-      "computedHash": "83ea4e20be18f063983b98fe764f4110f35b5101033ddbc933fc298e9d4b8f36"
-    },
-    "m07-concurrency": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/m07-concurrency/SKILL.md",
-      "computedHash": "b8d9a2048345a6d91def369fbc36340b7c47c3cefae974d5aab80aa3c1a0e46c"
-    },
-    "m09-domain": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/m09-domain/SKILL.md",
-      "computedHash": "9d59c8d205e895a2a120d5f800048e2917f50b17a7be7fd52ec38306285910cc"
-    },
-    "m10-performance": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/m10-performance/SKILL.md",
-      "computedHash": "6945acaf86bd024e6cade6b71d23026e4969909592eb12ea03e75ed6d3b3a25e"
-    },
-    "m11-ecosystem": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/m11-ecosystem/SKILL.md",
-      "computedHash": "bf80e501b0acba4fc732fe7282758807372f2a91850fbfd052b7e873915bded2"
-    },
-    "m12-lifecycle": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/m12-lifecycle/SKILL.md",
-      "computedHash": "66895917c0d6ce31b365ecfd930db3682698a0b90794b22c3b7ef4c6c13b1ba6"
-    },
-    "m13-domain-error": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/m13-domain-error/SKILL.md",
-      "computedHash": "20c8eca5a93c0f1ceed93200a96c7c1cb8c0a7cac8118b77e5a3697cfeb5c81d"
-    },
-    "m14-mental-model": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/m14-mental-model/SKILL.md",
-      "computedHash": "604d74ca5f78f8fbca78eb190b6c5ca77ac36d999c3304c965cff89df625e3d1"
-    },
-    "m15-anti-pattern": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/m15-anti-pattern/SKILL.md",
-      "computedHash": "f1734c43801554dd73419f6586af343c04bdf33361318b658641c0c22d094842"
-    },
-    "manual-planning": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/manual-planning/SKILL.md",
-      "computedHash": "a0b921b0ae448280dc7cdcf3bc6bd6b19bbcbf792095a49d0369b7e0c32440ed"
-    },
-    "mcp-builder": {
-      "source": "anthropics/skills",
-      "sourceType": "github",
-      "skillPath": "skills/mcp-builder/SKILL.md",
-      "computedHash": "6498a736a8dc5c645047c8a875b8ea7417e2ad97146f005200e50d20a9337ada"
+      "skillPath": "skills/no-comments/SKILL.md",
+      "computedHash": "94081acfbfb102ffa1272e34f61828dcdd19381ed06e2319ba64454ec35df90f"
     },
     "organization-best-practices": {
       "source": "better-auth/skills",
@@ -253,29 +199,193 @@
       "skillPath": "better-auth/organization/SKILL.md",
       "computedHash": "fa7a76e45a1f9632e6d63e92b476cf566e64f6e93a2c8ee00bc77b4a74008fbd"
     },
-    "pdf": {
-      "source": "anthropics/skills",
-      "sourceType": "github",
-      "skillPath": "skills/pdf/SKILL.md",
-      "computedHash": "37226d4220d844377e6b2a386c51a011df4cd130855ff0b80bcc22f9c28abd57"
-    },
     "pick-ui-library": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/pick-ui-library/SKILL.md",
       "computedHash": "ea55da7f0aa6c4eb2890c1ed558cd89413180f809c8af52fbc01629a49947bfb"
     },
-    "pptx": {
-      "source": "anthropics/skills",
+    "poteto-help": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": "skills/pptx/SKILL.md",
-      "computedHash": "2275e4d8dba1790d52f6619b3e2fed04edc948beef545a2ad18e4a1be644426d"
+      "skillPath": "skills/poteto-help/SKILL.md",
+      "computedHash": "d8e588d58960cba764065a49315dbd4e9db0633d213014f9a593293c5832a0b2"
     },
-    "pre-release": {
-      "source": "fjrevoredo/mini-diarium",
+    "poteto-mode": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": ".agents/skills/pre-release/SKILL.md",
-      "computedHash": "34b93878c22ae8c4422e2f7044e1b6f80b83d24aa7fad07f31036f19f7aec6f3"
+      "skillPath": "skills/poteto-mode/SKILL.md",
+      "computedHash": "817b37eee439622832845e3d9a93c2f483073cb73f1ba44c67888709a7c0488b"
+    },
+    "principle-attack-the-premise": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-attack-the-premise/SKILL.md",
+      "computedHash": "52c5d2df15c8354fbdade99ad9ad203b3b25febc87537dd519e7e625bb3e6940"
+    },
+    "principle-boundary-discipline": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-boundary-discipline/SKILL.md",
+      "computedHash": "ef41b691cc5131b600f21915b97efd17c61d7b49bc2c3a3b65f8b9d063ea0f65"
+    },
+    "principle-build-the-lever": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-build-the-lever/SKILL.md",
+      "computedHash": "15b0b2a603a55faa8a12b25f04b1f1532019e4f605c78fc14b9edbd4290398f1"
+    },
+    "principle-encode-lessons-in-structure": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-encode-lessons-in-structure/SKILL.md",
+      "computedHash": "6c4769efa049cb2fa3957e9e1b4fbb8cf0061c00f31795f21ada296484a37417"
+    },
+    "principle-exhaust-the-design-space": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-exhaust-the-design-space/SKILL.md",
+      "computedHash": "d0613cb7162dca3937ab7c6ef9736dd42557edbcdabd77eb97d4050c93cbffa8"
+    },
+    "principle-experience-first": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-experience-first/SKILL.md",
+      "computedHash": "298790b1cda88add6fccb19546414fe85a8cc3d43867194d8c699b00420836ec"
+    },
+    "principle-explain-the-number": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-explain-the-number/SKILL.md",
+      "computedHash": "944a8daaecb5abfca42d1d5406f50e9b9e958f8099169ac229630ce7a1c662a3"
+    },
+    "principle-fix-root-causes": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-fix-root-causes/SKILL.md",
+      "computedHash": "307d375ef02bb20c4904ade197f9ede31b49ff6d4407ee613efd5a07fe0d0ad9"
+    },
+    "principle-foundational-thinking": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-foundational-thinking/SKILL.md",
+      "computedHash": "8897b60a116beceafedbe8c5b7384f8d301b81abd0725364c41431dda4a0bf47"
+    },
+    "principle-guard-the-context-window": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-guard-the-context-window/SKILL.md",
+      "computedHash": "89af7bbe0d31d60bd10f054abba0d3fb5099940a49f7e8fa62684d0113ace53c"
+    },
+    "principle-laziness-protocol": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-laziness-protocol/SKILL.md",
+      "computedHash": "ec025788ec29629cee202f1dbb3e0a10e8e97d6fdd8a9b92c3a3f2f914af4f85"
+    },
+    "principle-make-operations-idempotent": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-make-operations-idempotent/SKILL.md",
+      "computedHash": "cdf6de05f9ed7fa60d329f028097f40beffba85b24e1da1503553c614f9523f1"
+    },
+    "principle-migrate-callers-then-delete-legacy-apis": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-migrate-callers-then-delete-legacy-apis/SKILL.md",
+      "computedHash": "cc8802031d139a7a4074302b66595d56c6df9882365fe6927c34775dd1af1b69"
+    },
+    "principle-minimize-reader-load": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-minimize-reader-load/SKILL.md",
+      "computedHash": "b9239d0ec6e7ac93e687aa123b64600716ee911b054915c6cb5208358c7e2294"
+    },
+    "principle-model-the-domain": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-model-the-domain/SKILL.md",
+      "computedHash": "22c7b9188efc9259a3cfcc4194556dabe220621b67bc95b55da4a03c352243ab"
+    },
+    "principle-never-block-on-the-human": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-never-block-on-the-human/SKILL.md",
+      "computedHash": "55ad38f862384c5f6ec88e36c11f35f5c2e2905c879366f9b1baded6fe96b31f"
+    },
+    "principle-outcome-oriented-execution": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-outcome-oriented-execution/SKILL.md",
+      "computedHash": "ff17ea55335750db55a95214c418c344d50df46bb35786aa761e35c51c0a5a38"
+    },
+    "principle-prove-it-works": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-prove-it-works/SKILL.md",
+      "computedHash": "27586b472b1739abeb3dc3743933e0c83d65ff93b6fe5941e107ebe5a2039fa7"
+    },
+    "principle-redesign-from-first-principles": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-redesign-from-first-principles/SKILL.md",
+      "computedHash": "07c0dbfec8993a8321136ddbcbcef241e0e45ebf11f4755883b0f82497cdf7b4"
+    },
+    "principle-separate-before-serializing-shared-state": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-separate-before-serializing-shared-state/SKILL.md",
+      "computedHash": "c0aeded6850456b06d886f6332c2d760700489272e3aed92c307802c7133fb9c"
+    },
+    "principle-sequence-verifiable-units": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-sequence-verifiable-units/SKILL.md",
+      "computedHash": "8e139cd9fa9897acc809486873faa68c80805472adba202f88f82e6b6816643b"
+    },
+    "principle-subtract-before-you-add": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-subtract-before-you-add/SKILL.md",
+      "computedHash": "f844ee88e48eb55395d789679a4529f06d23d1994cb2f7ed33a5f03a2cfb832a"
+    },
+    "principle-test-behavior-not-implementation": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-test-behavior-not-implementation/SKILL.md",
+      "computedHash": "7e8b080f15d204db1d28b82c07b869bbe7e10e7da99a2e97b3510bea4e77de26"
+    },
+    "principle-type-system-discipline": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/principle-type-system-discipline/SKILL.md",
+      "computedHash": "6f6a325bcf1d45af7f233ca173af30b7f47f5d47a0e6d8c0eba0c1e5d77a9faa"
     },
     "react-doctor": {
       "source": "millionco/react-doctor",
@@ -283,11 +393,19 @@
       "skillPath": "skills/react-doctor/SKILL.md",
       "computedHash": "aca464d6c4a12bd96dcea7dbeb0d9fe7188259f1251caef3227dfe9344d209ed"
     },
-    "remotion-best-practices": {
-      "source": "millionco/react-doctor",
+    "recall": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": ".agents/skills/remotion-best-practices/SKILL.md",
-      "computedHash": "821a6be39b7314d1f297cf7e3e3162235d9771b6be8e8e8994d52fbbe0b9448e"
+      "skillPath": "skills/recall/SKILL.md",
+      "computedHash": "d503ce2dfc4060aebb4470860e1f7c0e68eb42d37594fb23257542ef8cc371e1"
+    },
+    "reflect": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/reflect/SKILL.md",
+      "computedHash": "e589c9821a1ca9276c6fe63ff08c334716f4ddaca58294263eed319639705394"
     },
     "review-animations": {
       "source": "emilkowalski/skills",
@@ -295,65 +413,12 @@
       "skillPath": "skills/review-animations/SKILL.md",
       "computedHash": "6f8d633d7884c1390eff7af4bfaf7a450e798f117e1d49a555e00819dc877f64"
     },
-    "rust-call-graph": {
-      "source": "fjrevoredo/mini-diarium",
+    "setup-pstack": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": ".agents/skills/rust-call-graph/SKILL.md",
-      "computedHash": "41efd34b87e2397b83af61c8a771261986e59627aaca4895e9c65e44406a5225"
-    },
-    "rust-code-navigator": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/rust-code-navigator/SKILL.md",
-      "computedHash": "a3fc99213b41daed24a90e39bd34498571f072500dc12f978ae5e97b7eb12df0"
-    },
-    "rust-daily": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/rust-daily/SKILL.md",
-      "computedHash": "f05480130f89924a17ea87c9434dc8252515c7e7b0a51e661d2b576576c24fcf"
-    },
-    "rust-deps-visualizer": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/rust-deps-visualizer/SKILL.md",
-      "computedHash": "19b397cb28319a912d62cbad6c33fdb024ef3f8916f4bc693cc6125406edabe5"
-    },
-    "rust-learner": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/rust-learner/SKILL.md",
-      "computedHash": "61453342609f7fc3575f7ab72f2898ed993ad59223eeac46ea493794f9880878"
-    },
-    "rust-refactor-helper": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/rust-refactor-helper/SKILL.md",
-      "computedHash": "0dcbec9380651de430ce900f95e5ebcd93bb85cd371911df9f098a5baf29c50e"
-    },
-    "rust-skill-creator": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/rust-skill-creator/SKILL.md",
-      "computedHash": "c9ea80eb2e0f84b6af172f4260960ded66485a7aaf2725a23b12c3671fa0eac5"
-    },
-    "rust-symbol-analyzer": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/rust-symbol-analyzer/SKILL.md",
-      "computedHash": "6014f13bcb77d9ca5a676be25121451ef462e5c7343cb2a3fff30f0d4d121ed6"
-    },
-    "rust-trait-explorer": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/rust-trait-explorer/SKILL.md",
-      "computedHash": "e3a9f3c4cfdc8534ea0f963e55c5f871e710a9b2fe0ddb09a77701d15dd7ac8a"
-    },
-    "security-stance": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".claude/skills/security-stance/SKILL.md",
-      "computedHash": "595943f66f94b2826aebe197880eb6238b41c842e1e4cc0692304818cdb7e039"
+      "skillPath": "skills/setup-pstack/SKILL.md",
+      "computedHash": "f383430a27f9a5d7baecb48e1949977ab6cc00d9abbb2828b3ebf33b5d8fd20c"
     },
     "shadcn": {
       "source": "shadcn/ui",
@@ -361,41 +426,47 @@
       "skillPath": "skills/shadcn/SKILL.md",
       "computedHash": "4f78ff7cd3a4f637b6fe30dbbab4a80a19dd63fa62d9352bed461ccfdbcbbf43"
     },
-    "skill-creator": {
-      "source": "anthropics/skills",
+    "sharpen": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": "skills/skill-creator/SKILL.md",
-      "computedHash": "7e3c9cd74e9e2b4828527a857170e86310f2dab5ea8030a9043df2c7e6c88857"
+      "skillPath": "skills/sharpen/SKILL.md",
+      "computedHash": "5442e4b563730a1e6728ddea995c27817ee64b1b41a6730f2e86217804f0b216"
     },
-    "slack-gif-creator": {
-      "source": "anthropics/skills",
+    "show-me-your-work": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": "skills/slack-gif-creator/SKILL.md",
-      "computedHash": "a36e1ceb3f07eb37bdc259f1bfb18e48cc0e809b2e1651cb2369286cd66b2107"
+      "skillPath": "skills/show-me-your-work/SKILL.md",
+      "computedHash": "52633c8dd95efd2aff62c87963561e4b24c2d7dcd1a8c1f0d1d1232d5aba5608"
     },
-    "solidjs": {
-      "source": "fjrevoredo/mini-diarium",
+    "swarm": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": ".agents/skills/solidjs/SKILL.md",
-      "computedHash": "c8d4b1f3573b6422266da881c4c1a6b46d7ffb6b8d24de4541592a1788e3de01"
+      "skillPath": "skills/swarm/SKILL.md",
+      "computedHash": "540564bca3238c234885895dd95c83f0f08dffec11e14cb7f3d585ef7f4fc6a1"
     },
-    "tauri-v2": {
-      "source": "fjrevoredo/mini-diarium",
+    "tdd": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": ".agents/skills/tauri-v2/SKILL.md",
-      "computedHash": "935eb05b3433da8e576e0cc4c66166eb0a970d42b10787dc98d8113c20e4a53c"
+      "skillPath": "skills/tdd/SKILL.md",
+      "computedHash": "e2e272042cd38211874f68d3a0de8b7fcfd2062e65ccef3bfd1160c42139599f"
     },
-    "template-skill": {
-      "source": "anthropics/skills",
+    "teach": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": "template/SKILL.md",
-      "computedHash": "daf176f2cd0030d321982d3e813fd1a794a0b4744c5a92d2931a37001bb40fb9"
+      "skillPath": "skills/teach/SKILL.md",
+      "computedHash": "7a3e8b62b1dcc6af322e241f92eda2869e9f99a066afbb17b5b3c6d2e4759d36"
     },
-    "theme-factory": {
-      "source": "anthropics/skills",
+    "technical-writing": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": "skills/theme-factory/SKILL.md",
-      "computedHash": "e9ec1fe85faa729e9f3d1731cd7e4e485f98c099ccc7c1c0d198f473aa4b654a"
+      "skillPath": "skills/technical-writing/SKILL.md",
+      "computedHash": "f3b48e75d92520de30a636d074915e20e6348db5fb2a50e1d2013cd75b20c8e0"
     },
     "tiptap": {
       "source": "fjrevoredo/mini-diarium",
@@ -409,23 +480,25 @@
       "skillPath": "better-auth/twoFactor/SKILL.md",
       "computedHash": "c4f3a299c62c1985b774b7c28e53b7e55c565dbf973fd52b08899e4bcfffa3f9"
     },
+    "typescript-best-practices": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
+      "sourceType": "github",
+      "skillPath": "skills/typescript-best-practices/SKILL.md",
+      "computedHash": "36f8d1838fef4895e25efbac756412766828656ddb38f08e197c1084c3e92357"
+    },
     "ultracite": {
       "source": "haydenbleasel/ultracite",
       "sourceType": "github",
       "skillPath": "skills/ultracite/SKILL.md",
       "computedHash": "432f74a03949c62a3fa7778d1cd967687b06d327b791abfcccecd6333b74e252"
     },
-    "unsafe-checker": {
-      "source": "fjrevoredo/mini-diarium",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/unsafe-checker/SKILL.md",
-      "computedHash": "46dfc90e16c7d0350ccdfda224ddb8c5dea8bf83589729ecd6c0e122a5659b8a"
-    },
     "unslop": {
-      "source": "cursor/plugins",
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": "pstack/skills/unslop/SKILL.md",
-      "computedHash": "d8593c3deff559acd5933ebb3023dab22c939b9adcac5deda75beeb0277342a0"
+      "skillPath": "skills/unslop/SKILL.md",
+      "computedHash": "4069ec6c10a0228152079f52706221dc469a9e30a3040398eefd1e9c18fe6cf2"
     },
     "vercel-composition-patterns": {
       "source": "vercel-labs/agent-skills",
@@ -451,29 +524,18 @@
       "skillPath": "skills/react-view-transitions/SKILL.md",
       "computedHash": "c8952fc9127fa0564d0cb71dccb4215a5608ac933b5831104f09173a97a46f85"
     },
-    "web-artifacts-builder": {
-      "source": "anthropics/skills",
-      "sourceType": "github",
-      "skillPath": "skills/web-artifacts-builder/SKILL.md",
-      "computedHash": "fdddbe9bb720ea1aea9292ee513ec10b2a8f4912e2c343bdc246ab3febd7c9b3"
-    },
     "web-design-guidelines": {
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/web-design-guidelines/SKILL.md",
       "computedHash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
     },
-    "webapp-testing": {
-      "source": "anthropics/skills",
+    "why": {
+      "source": "backnotprop/pstack",
+      "ref": "e44668c2aad92eacf4e84df47984121fefb11b82",
       "sourceType": "github",
-      "skillPath": "skills/webapp-testing/SKILL.md",
-      "computedHash": "3f14af7f5690695209c22fbf8c8d133769a86d64892602c09bb13f135e14e857"
-    },
-    "xlsx": {
-      "source": "anthropics/skills",
-      "sourceType": "github",
-      "skillPath": "skills/xlsx/SKILL.md",
-      "computedHash": "cb7fba2177d0d35d14b3244272b25d1b05246e99b3468a087fe06c84193dbd20"
+      "skillPath": "skills/why/SKILL.md",
+      "computedHash": "184bef6df5ada332f8d2ffae3bb6e7a993225ca6c39784059dde26ddb15c1a9c"
     }
   }
 }
