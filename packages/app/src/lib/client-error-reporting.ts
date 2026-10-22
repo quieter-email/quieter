@@ -31,6 +31,7 @@ export const isExpectedClientError = (error: unknown): boolean => {
     const candidate = current as ErrorLike;
     if (
       candidate.code === MAILBOX_SCOPE_REPAIR_REQUIRED ||
+      candidate.code === "DEPLOYMENT_RETIRED" ||
       candidate.message === GMAIL_REAUTHORIZATION_MESSAGE
     ) {
       return true;

@@ -10,6 +10,7 @@ const entrypoints = [
   path.join(packageRoot, "src", "gmail-maintenance-worker.ts"),
   path.join(packageRoot, "src", "mail-maintenance-worker.ts"),
   path.join(packageRoot, "src", "worker.ts"),
+  path.join(packageRoot, "src", "web-router.ts"),
 ];
 
 await rm(outputDirectory, { force: true, recursive: true });

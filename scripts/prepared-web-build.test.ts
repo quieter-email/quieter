@@ -20,6 +20,17 @@ describe("prepared SST build", () => {
       const cwd = path.join(directory, "apps/web");
       await mkdir(cwd, { recursive: true });
       await mkdir(path.join(directory, ".sst"));
+      await writeFile(
+        path.join(directory, ".sst/web-deployment.json"),
+        JSON.stringify({
+          manifest: {
+            current: { buildId: "test-build", slot: "a" },
+            previous: null,
+          },
+          sourceBuildId: "test-build",
+          updateSlot: null,
+        })
+      );
       const configPath = path.join(directory, "wrangler.json");
       await writeFile(configPath, '{"vars":{"stage":"test"}}');
       await writeFile(

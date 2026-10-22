@@ -65,6 +65,7 @@ const buildId =
   process.env.QUIETER_BUILD_ID ??
   process.env.GITHUB_SHA ??
   Date.now().toString(36);
+process.env.QUIETER_BUILD_ID = buildId;
 
 /** Served from `/assets/` because that prefix bypasses the site password gate. */
 const emitBuildId = (): Plugin => ({
@@ -129,6 +130,7 @@ export default defineConfig(({ command }) => {
 
   return {
     build: {
+      assetsDir: `_releases/${buildId}/assets`,
       chunkSizeWarningLimit: 1200,
       rolldownOptions: {
         // Supplied by the Workers runtime itself, so no bundler can resolve it.

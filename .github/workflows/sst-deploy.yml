@@ -93,6 +93,9 @@ jobs:
           vp run @quieter/observability#build
           vp run quieter#build
 
+      - name: Prepare web release routing
+        run: vp exec node scripts/web-release.ts prepare https://quieter.email "$QUIETER_BUILD_ID"
+
       # Emergency web recoveries change the live worker outside SST, so state
       # needs a refresh afterwards. Normal deploys only go through SST, in
       # which case the ~100s refresh is pure overhead and skipped.
@@ -126,7 +129,7 @@ jobs:
 
       - name: Preview production changes
         timeout-minutes: 10
-        run: vp exec sst diff --config sst.config.ts --stage "$SST_STAGE"
+        run: vp run sst diff --config sst.config.ts --stage "$SST_STAGE"
 
       - name: Upload SST logs on failure
         if: failure()
@@ -150,6 +153,9 @@ jobs:
           retention-days: 90
           overwrite: true
 
+      - name: Verify web release routing has not drifted
+        run: vp exec node scripts/web-release.ts verify https://quieter.email "$QUIETER_BUILD_ID"
+
       - name: Apply production database migrations
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
@@ -157,7 +163,7 @@ jobs:
         run: vp run @quieter/database#db:deploy
 
       - name: Deploy prepared build with SST
-        run: vp exec sst deploy --config sst.config.ts --stage "$SST_STAGE"
+        run: vp run sst deploy --config sst.config.ts --stage "$SST_STAGE"
 
       - name: Verify production release
         timeout-minutes: 5

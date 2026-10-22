@@ -22,6 +22,7 @@ const receiptPath = path.resolve("../../.sst/prepared-web.json");
 const configuration = createHash("sha256")
   .update(await readFile(configPath))
   .update(buildId)
+  .update(await readFile(path.resolve("../../.sst/web-deployment.json")))
   .digest("hex");
 
 if (mode !== "diff" && mode !== "refresh" && mode !== "deploy") {

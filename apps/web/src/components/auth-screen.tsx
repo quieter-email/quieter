@@ -14,6 +14,7 @@ import {
 } from "@quieter/app/lib/preview-personas";
 import type { PreviewPersona } from "@quieter/app/lib/preview-personas";
 import { queryPersister } from "@quieter/app/lib/query-persister";
+import { appFetch } from "@quieter/app/runtime";
 import { desktopAuthQuerySchema } from "@quieter/auth/desktop";
 import type { DesktopAuthQuery } from "@quieter/auth/desktop";
 import { Button } from "@quieter/ui/button";
@@ -418,7 +419,7 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
     };
 
     try {
-      const response = await fetch("/api/preview-persona", {
+      const response = await appFetch("/api/preview-persona", {
         body: JSON.stringify({ persona }),
         credentials: "same-origin",
         headers: { "content-type": "application/json" },

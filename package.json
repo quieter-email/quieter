@@ -22,6 +22,7 @@
     "dev:setup": "vp run @quieter/env#build && node scripts/setup-local.ts && vp run env:doctor",
     "dev:prepare": "vp run @quieter/env#build && vp run @quieter/observability#build && node --env-file=.env.local scripts/prepare-local-workers.ts",
     "dev:workers": "vp run dev:prepare && vp run @quieter/cloudflare#dev",
+    "dev:skew": "vp run @quieter/env#build && node scripts/preview-skew.ts",
     "dev:full": "vp run dev:prepare && vp run --parallel --filter=@quieter/web --filter=@quieter/cloudflare dev",
     "dev:linked": "node scripts/local-linked-secrets.ts && vp run dev:full",
     "dev:sst": "vp run @quieter/env#build && node --env-file-if-exists=.env.sst.local scripts/run-sst.ts dev --config sst.local.config.ts --mode mono",
