@@ -72,6 +72,14 @@ transcript_dirs() {
 		[ -d "$d" ] && printf '%s\n' "$d"
 	done
 }
+if stat -c '%Y' . >/dev/null 2>&1; then
+	stat_flags=(-c '%Y')
+elif stat -f '%m' . >/dev/null 2>&1; then
+	stat_flags=(-f '%m')
+else
+	echo "error: cannot read transcript modification times with stat" >&2
+	exit 1
+fi
 now=$(date +%s)
 
 echo "# base: $base"
@@ -114,10 +122,12 @@ git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r wt;
 	last="-"; last_ts=0
 	dirs=$( { transcript_dirs "$main_wt"; transcript_dirs "$wt"; } | sort -u)
 	if [ -n "$dirs" ]; then
-		f=$(printf '%s\n' "$dirs" | tr '\n' '\0' | xargs -0 rg -l -e "${wt}/" -e "${wt}\"" 2>/dev/null \
-			| xargs stat -f '%m %N' 2>/dev/null | sort -rn | head -1)
-		if [ -n "$f" ]; then last_ts=$(echo "$f" | awk '{print $1}')
-			last=$(date -r "$last_ts" '+%Y-%m-%d' 2>/dev/null); fi
+		f=$(printf '%s\n' "$dirs" | tr '\n' '\0' | xargs -0 rg -l -0 -F -e "${wt}/" -e "${wt}\"" 2>/dev/null \
+			| xargs -0 stat "${stat_flags[@]}" 2>/dev/null | sort -rn | head -1)
+		if [ -n "$f" ]; then last_ts="$f"
+			last=$(date -d "@$last_ts" '+%Y-%m-%d' 2>/dev/null \
+				|| date -r "$last_ts" '+%Y-%m-%d' 2>/dev/null \
+				|| printf '%s' "$last_ts"); fi
 	fi
 	recent=$([ "$last_ts" -gt 0 ] 2>/dev/null && [ $(( (now - last_ts) / 86400 )) -le 4 ] && echo yes || echo no)
 

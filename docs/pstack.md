@@ -2,7 +2,7 @@
 
 Pstack's 56 skills are installed for this repository in `.agents/skills/`, which both Codex and Cursor discover. They travel with the checkout.
 
-The source is the [standalone mirror](https://github.com/backnotprop/pstack) of [Lauren Tan's pstack](https://github.com/cursor/plugins/tree/main/pstack). The mirror adapts Cursor tool names, model configuration, and supporting references for Codex and other agents. `skills-lock.json` records the source commit and file hashes. The bundled [MIT license](../.agents/skills/pstack-LICENSE.txt) applies to these skills.
+The source is the [standalone mirror](https://github.com/backnotprop/pstack) of [Lauren Tan's pstack](https://github.com/cursor/plugins/tree/main/pstack). The mirror adapts Cursor tool names, model configuration, and supporting references for Codex and other agents. `skills-lock.json` records the upstream source commit and hashes. The bundled [MIT license](../.agents/skills/pstack-LICENSE.txt) applies to these skills.
 
 ## Use it
 
@@ -31,13 +31,14 @@ List installed skills and their agent visibility:
 vp dlx -- skills@1.7.4 list --agent codex cursor
 ```
 
-Restore the locked versions in a fresh checkout:
+The skill files are tracked, so a fresh checkout already includes them. Run `vp install` to install dependencies for the bundled tools along with the application's dependencies. The optional `watch-pr` and `orch` CLIs require [Bun](https://bun.sh/docs/installation) as their runtime and can be inspected without making provider changes:
 
 ```sh
-vp dlx -- skills@1.7.4 experimental_install
+vp exec bun .agents/skills/poteto-mode/scripts/watch-pr/watch-pr --help
+vp exec bun .agents/skills/poteto-mode/scripts/orch/orch.ts --help
 ```
 
-To update pstack, install a reviewed mirror commit, then inspect and commit the skill files and lockfile:
+This checkout adapts the upstream files for the Vite+ workspace, GNU/BSD transcript timestamps, installed plan paths, and pinned public help guides. An upstream reinstall overwrites those adaptations. To update pstack, install a reviewed mirror commit, reapply the adaptations, then inspect and commit the skill files and lockfile:
 
 ```sh
 vp dlx -- skills@1.7.4 add https://github.com/backnotprop/pstack/tree/REVIEWED_COMMIT/skills --agent codex cursor --skill '*' --yes

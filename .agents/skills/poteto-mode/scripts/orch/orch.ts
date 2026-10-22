@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-import { ensureDependenciesInstalled } from "../bootstrap.ts";
 import {
   NotFoundError,
   UsageError,
@@ -18,7 +17,6 @@ import {
   type Verdict,
 } from "./store.ts";
 
-ensureDependenciesInstalled();
 const {
   Command: CommanderCommand,
   CommanderError,
