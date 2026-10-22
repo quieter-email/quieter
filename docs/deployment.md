@@ -12,7 +12,7 @@ Use GitHub's merge queue button, or `gh pr merge <number> --auto --squash`, to r
 
 Production deploys run through `.github/workflows/sst-deploy.yml` on pushes to `main` or a manual workflow dispatch. It calls `.github/workflows/ci-main.yml` as the same reusable verification workflow used by pull requests. SST is the source of truth for application runtime secrets; the protected GitHub `production` environment supplies deployment and operational credentials plus non-secret deployment configuration.
 
-The release workflow runs the existing CI checks, creates `apps/web/.cloudflare/output/v0/workers/default/assets`, refreshes SST state, and runs `sst diff` to prepare the production web build with SST-resolved configuration. The directory must exist on fresh runners because the Cloudflare provider reads it during refresh, before SST builds the site. The workflow also creates the former `apps/web/dist/client` directory because refresh can reference that path from the previously deployed state while migrating to the new output format. Both directories are created before the conditional refresh and before `sst diff`, which also refreshes first. Unknown preview inputs can prevent SST from invoking the build; when no receipt exists, protected deployment builds and records one fresh artifact with the resolved SST bindings. Source-map upload must succeed during preparation. Neither `diff` nor `refresh` publishes the new Worker. An existing receipt requires exact reuse and refuses missing or changed output without rebuilding.
+The release workflow runs the existing CI checks, captures release routing in `.sst/web-deployment.json`, creates `apps/web/.cloudflare/output/v0/workers/default/assets`, conditionally refreshes SST state, and runs `sst diff` to prepare the production web build with SST-resolved configuration. The routing receipt is created once from the live public deployment status and reused during preview and deployment. It contains build identifiers, slots, and expiration times, with no secrets. An unexpected response fails preparation; a missing status endpoint permits the initial router installation. The asset directory must exist on fresh runners because the Cloudflare provider reads it during refresh, before SST builds the site. The workflow also creates the former `apps/web/dist/client` directory because refresh can reference that path from the previously deployed state while migrating to the new output format. Both directories are created before the conditional refresh and before `sst diff`, which also refreshes first. Unknown preview inputs can prevent SST from invoking the build; when no receipt exists, protected deployment builds and records one fresh artifact with the resolved SST bindings. Source-map upload must succeed during preparation. Neither `diff` nor `refresh` publishes the new Worker. An existing receipt requires exact reuse and refuses missing or changed output without rebuilding.
 
 The Cloudflare Vite plugin builds the web app into `.cloudflare/output/v0/workers/default`, with the server modules in `bundle` and browser assets in `assets`. The `WebTanStackStart` adapter reads `manifest.mainModule` from `worker.config.json` and passes those output paths to SST. SST remains the sole deployer and owns the linked secret bindings; do not deploy this web output with `cf deploy`. `SST_WRANGLER_PATH` remains SST's configuration input contract, which `apps/web/cloudflare.config.ts` translates for the plugin.
 
@@ -22,7 +22,21 @@ Preparation can occur during preview or protected deployment. Migrations remain 
 
 After SST finishes, `scripts/check-deployment.ts` verifies the server build ID, a read-only database query, the static build marker, server-rendered `/about` HTML, and its JavaScript/CSS assets. The public `/api/health` endpoint returns only a build ID and health status, caches successful database checks for 30 seconds per isolate, and bounds database statements to two seconds. It never returns credentials or user data. A failed check fails the release workflow.
 
-Open tabs check the build marker on focus and every minute while visible. A different build opens the reload dialog; the user decides when to reload. Network failures do not claim a new version exists, and no automatic reload occurs. Existing tabs still require backend compatibility until they reload.
+### Open tabs and retained releases
+
+Cloudflare's [version overrides](https://developers.cloudflare.com/workers/versions-and-deployments/version-overrides/) target only versions in the active deployment, with a limit of two versions. SST's regular script upload immediately promotes a version. Two private release Workers avoid a gap in old-version routing during that upload, while SST continues to own deployment and bindings. Requests between the router and app Workers use [HTTP service bindings](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/http/).
+
+The existing public `Web` Worker and custom domains remain the entry point. In production, this Worker routes to two private SST-managed app Workers, `WebReleaseA` and `WebReleaseB`. Each private Worker owns its server bundle, static assets, linked secrets, and application permissions. The public router receives only service bindings and nonsecret release metadata. Neither private Worker has a public URL. During the first router installation, SST keeps the former public app's IAM resources until it has stopped serving requests, strips those credentials from the router's runtime bindings, and removes the legacy IAM resources on the next deployment.
+
+Each deployment freezes all script inputs for the current slot and uploads the prepared build into the other slot. Only after that upload finishes does SST promote the new router manifest. The previous build remains usable for 12 hours after preparation, or until another deployment reuses its slot. Two fixed slots bound retained resources without a cleanup job. The release server validates the selected build before serving requests, so an old router still pointing at a reused slot returns a reload-required response instead of executing incompatible application code. A failed or partially propagated deployment can therefore retire the oldest tab early while the current build continues running.
+
+Keep IAM policies, credentials, and linked resources compatible with both served releases throughout that window; retaining a Worker script does not freeze changes to its external resources.
+
+Immediately before migrations, the workflow rereads the public deployment status and latest build marker, then compares them with the captured predecessor or same-release current build. A changed build or slot fails the workflow before migrations or SST publication. Bootstrap also verifies that the status endpoint is still absent and the legacy marker is unchanged. The original expiration deadline remains fixed throughout preparation and verification.
+
+Browser API and server-function requests include the tab's compiled build identifier. Browser asset URLs include `/_releases/<build-id>/assets/`; those files belong to the same private Worker as that build's server. Document navigation selects the latest build, with no cross-tab affinity cookie. Unpinned external API requests also select the current release. Unknown or expired pins return HTTP 409, `x-quieter-reload: 1`, and a noncached reload message. The router strips provider version-override headers before forwarding requests.
+
+Open tabs check `/assets/deployment.json` on focus and while visible. This noncached public response contains the latest build, retained predecessor, expiration deadline, and fresh server time. Before advertising a predecessor, the router checks its private status endpoint with that build's pin. An expired or reused slot is omitted, including after recovery restores a historical router manifest. The probe takes at most three seconds; unexpected failures return HTTP 503 so tabs do not mistake an outage for eviction. A newer release shows a reload toast while the pinned build is retained. Expiration, slot eviction, or a confirmed reload-required response opens the blocking reload dialog. Network failures do not claim a release expired, and no automatic reload occurs. The first router deployment cannot add request pinning to browser bundles already loaded before this mechanism existed.
 
 ### Web recovery
 
@@ -34,13 +48,33 @@ For a compatible web-only failure, run **Recover Web Release** on `main`:
 2. Inspect the web Worker's current active version UUID in Cloudflare and enter it.
 3. Confirm that restoring the previous web code is compatible with the current database, bindings and background jobs.
 
-The workflow uses the protected production environment and the same concurrency group as deployments. It verifies the artifact came from a completed production workflow on `main`, checks the domain's Worker and expected active version, restores the recorded version through Cloudflare, and reruns health checks. No Git history changes or database rollback occur. It is intentionally manual; smoke-test failure does not authorize an infrastructure rollback.
+The workflow uses the protected production environment and the same concurrency group as deployments. It verifies the artifact came from a completed production workflow on `main`, checks the domain's Worker and expected active version, verifies the recorded target build and slot are still retained, probes that build's pinned health endpoint, restores the recorded public router version through Cloudflare, and reruns health checks. No Git history changes or database rollback occur. It is intentionally manual; smoke-test failure does not authorize an infrastructure rollback.
+
+The artifact's 90-day storage period is an audit window, not a promise that its app code remains deployable. Recovery refuses expired or reused slots before changing the public router. Once the router is installed, records created before release retention are also refused because their original app bindings and permissions may have been retired. Use a reviewed forward fix when the target is unavailable. A successful recovery makes the restored build current; the next normal deployment reads that live manifest before choosing which slot to update.
 
 Do not use this button after incompatible schema, binding, Durable Object, queue or background-job changes. Use a reviewed forward fix through SST. Cloudflare can refuse version rollback when dependent resources changed. If restoration succeeds but checks fail, inspect the live state before retrying. The next normal deployment detects the recovery and runs `sst refresh` before planning, reconciling emergency provider changes with SST state. A recovered web release does not establish that background jobs are healthy.
 
 ### Local verification
 
 Run `vp check --fix`, `vp test`, and the existing web/handler build checks. `vp exec node scripts/check-deployment.ts <origin> <build-id>` also works against a running local Worker with development bindings. Keep production credentials out of local files. Live production deployment and recovery run only through the protected workflows; unit tests simulate provider failures and artifact tampering without touching production.
+
+For a repeatable two-build browser check, create two ignored output snapshots with distinct build IDs. From PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force .scratch | Out-Null
+$env:QUIETER_BUILD_ID = "local-a"
+vp run @quieter/web#build
+Copy-Item apps/web/.cloudflare/output .scratch/skew-a -Recurse
+$env:QUIETER_BUILD_ID = "local-b"
+vp run @quieter/web#build
+Copy-Item apps/web/.cloudflare/output .scratch/skew-b -Recurse
+Remove-Item Env:QUIETER_BUILD_ID
+vp run dev:skew .scratch/skew-a .scratch/skew-b
+```
+
+Use fresh snapshot directory names when repeating the copy. `dev:skew` accepts a current snapshot, an optional previous snapshot, and an optional port. It chooses a free loopback port by default, validates the approved `.env.local`, and writes private bindings and editable configurations under `.scratch/skew-preview-<port>`. It starts the real router and both built app Workers through local Wrangler, records the child PID, and disables background processing and telemetry. Ctrl+C stops its process tree.
+
+Keep a tab open on the first current build. In the printed router configuration, edit the JSON string in `vars.QUIETER_WEB_DEPLOYMENT` to swap `current` and `previous`, keeping slot `a` with the first snapshot and `b` with the second. Give `previous` an `expiresAt` timestamp in the future. Wrangler reloads the router and the existing tab shows the update toast while its API calls and lazy assets still use the first build. Set that predecessor's expiry in the past, or remove it, to verify the blocking reload dialog. Reload and confirm the new build is used. Never use production snapshots or credentials for this preview.
 
 ## GitHub environment contract
 
