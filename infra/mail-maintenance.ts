@@ -16,6 +16,12 @@ export const createMailMaintenanceResources = (
   return new sst.cloudflare.Cron("MailMaintenance", {
     schedules: ["* * * * *"],
     worker: {
+      build: {
+        esbuild: {
+          // SST bundles for Node; browser exports mix AWS SDK stubs with Node runtimeConfig.
+          conditions: ["workerd", "worker", "module", "node"],
+        },
+      },
       compatibility: {
         date: COMPATIBILITY_DATE,
         flags: ["nodejs_compat"],

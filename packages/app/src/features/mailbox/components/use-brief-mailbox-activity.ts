@@ -7,7 +7,7 @@ import {
   isManagedSandboxMailboxId,
 } from "@quieter/app/lib/sandbox-mailbox";
 import * as Sentry from "@sentry/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 
 export const useBriefMailboxActivity = (
   sources: readonly {
@@ -17,26 +17,44 @@ export const useBriefMailboxActivity = (
   enabled = true
 ) => {
   const lastRecordedAt = useRef(new Map<string, number>());
+  const lastAttemptedAt = useRef(new Map<string, number>());
+  const pendingRequests = useRef(new Map<string, AbortController>());
 
-  useEffect(() => {
-    if (!enabled || document.visibilityState !== "visible") {
+  const recordActivity = useEffectEvent((resume = false) => {
+    if (
+      !enabled ||
+      document.visibilityState !== "visible" ||
+      !navigator.onLine
+    ) {
       return;
     }
     const now = Date.now();
-    const recordActivity = async (mailboxId: string) => {
+    const recordMailboxActivity = async (
+      mailboxId: string,
+      controller: AbortController
+    ) => {
       try {
-        await rpc.dailyBrief.activity({
-          mailboxId,
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        });
+        await rpc.dailyBrief.activity(
+          {
+            mailboxId,
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          },
+          { signal: controller.signal }
+        );
+        lastRecordedAt.current.set(mailboxId, Date.now());
       } catch (error) {
         if (
+          !controller.signal.aborted &&
           !isExpectedClientError(error) &&
           !(error instanceof ORPCError && error.status < 500)
         ) {
           Sentry.captureException(error, {
             tags: { boundary: "brief-mailbox-activity" },
           });
+        }
+      } finally {
+        if (pendingRequests.current.get(mailboxId) === controller) {
+          pendingRequests.current.delete(mailboxId);
         }
       }
     };
@@ -55,12 +73,46 @@ export const useBriefMailboxActivity = (
       if (
         isGmailSandboxMailboxId(mailboxId) ||
         isManagedSandboxMailboxId(mailboxId) ||
-        now - (lastRecordedAt.current.get(mailboxId) ?? 0) < 3_600_000
+        pendingRequests.current.has(mailboxId) ||
+        now - (lastRecordedAt.current.get(mailboxId) ?? 0) < 3_600_000 ||
+        (!resume &&
+          now - (lastAttemptedAt.current.get(mailboxId) ?? 0) < 60_000)
       ) {
         continue;
       }
-      lastRecordedAt.current.set(mailboxId, now);
-      void recordActivity(mailboxId);
+      const controller = new AbortController();
+      lastAttemptedAt.current.set(mailboxId, now);
+      pendingRequests.current.set(mailboxId, controller);
+      void recordMailboxActivity(mailboxId, controller);
     }
+  });
+
+  useEffect(() => {
+    recordActivity();
   }, [enabled, sources]);
+
+  useEffect(() => {
+    const requests = pendingRequests.current;
+    const resume = () => {
+      recordActivity(true);
+    };
+    const pause = () => {
+      for (const controller of requests.values()) {
+        controller.abort();
+      }
+      requests.clear();
+      lastAttemptedAt.current.clear();
+    };
+    window.addEventListener("online", resume);
+    window.addEventListener("pageshow", resume);
+    window.addEventListener("pagehide", pause);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      window.removeEventListener("online", resume);
+      window.removeEventListener("pageshow", resume);
+      window.removeEventListener("pagehide", pause);
+      document.removeEventListener("visibilitychange", resume);
+      pause();
+    };
+  }, []);
 };
