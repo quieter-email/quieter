@@ -1,4 +1,10 @@
 import type { AutoLabelSettings } from "@quieter/mail/auto-label";
+import type {
+  CapturedMailSnapshot,
+  MailCaptureHistoryPage,
+  MailCaptureIdPage,
+  MailMessageAnalysis,
+} from "@quieter/mail/capture";
 import type { DailyBriefItem } from "@quieter/mail/daily-brief";
 import type {
   DeliveryEvent,
@@ -1128,6 +1134,90 @@ export const gmailWatchState = pgTable(
   ]
 );
 
+export const gmailCaptureState = pgTable(
+  "gmailCaptureState",
+  {
+    bootstrapCompletedAt: timestamp("bootstrapCompletedAt"),
+    bootstrapMessageIds: jsonb("bootstrapMessageIds").$type<string[]>(),
+    bootstrapOffset: integer("bootstrapOffset").notNull().default(0),
+    coverageGapAt: timestamp("coverageGapAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    historyChangeOffset: integer("historyChangeOffset").notNull().default(0),
+    historyId: text("historyId"),
+    historyPageToken: text("historyPageToken"),
+    lastCapturedAt: timestamp("lastCapturedAt"),
+    lastErrorAt: timestamp("lastErrorAt"),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    leaseId: text("leaseId"),
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    pendingHistoryPage:
+      jsonb("pendingHistoryPage").$type<MailCaptureHistoryPage>(),
+    pendingRecoveryPage: jsonb(
+      "pendingRecoveryPage"
+    ).$type<MailCaptureIdPage>(),
+    phase: text("phase")
+      .$type<"pending" | "bootstrap" | "history" | "recovery" | "reconcile">()
+      .notNull()
+      .default("pending"),
+    reconcileAfterMessageId: text("reconcileAfterMessageId"),
+    recoveryAfter: timestamp("recoveryAfter"),
+    recoveryBefore: timestamp("recoveryBefore"),
+    recoveryOffset: integer("recoveryOffset").notNull().default(0),
+    recoveryPageToken: text("recoveryPageToken"),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "gmail_capture_state_phase_check",
+      sql`${table.phase} in ('pending', 'bootstrap', 'history', 'recovery', 'reconcile')`
+    ),
+    check(
+      "gmail_capture_state_history_check",
+      sql`${table.historyId} is null or ${table.historyId} ~ '^[0-9]+$'`
+    ),
+    index("gmail_capture_state_progress_idx").on(
+      table.phase,
+      table.lastCapturedAt
+    ),
+  ]
+);
+
+export const gmailCapturedMessage = pgTable(
+  "gmailCapturedMessage",
+  {
+    analysis: jsonb("analysis").$type<MailMessageAnalysis>(),
+    capturedAt: timestamp("capturedAt").notNull(),
+    deletedAt: timestamp("deletedAt"),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    messageId: text("messageId").notNull(),
+    providerRevision: text("providerRevision").notNull(),
+    snapshot: jsonb("snapshot").$type<CapturedMailSnapshot>(),
+    source: text("source")
+      .$type<"bootstrap" | "history" | "on_demand" | "recovery">()
+      .notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.messageId] }),
+    check(
+      "gmail_captured_message_revision_check",
+      sql`${table.providerRevision} ~ '^[0-9]+$'`
+    ),
+    check(
+      "gmail_captured_message_content_check",
+      sql`(${table.deletedAt} is null and ${table.snapshot} is not null and ${table.analysis} is not null) or (${table.deletedAt} is not null and ${table.snapshot} is null and ${table.analysis} is null)`
+    ),
+    index("gmail_captured_message_mailbox_captured_idx").on(
+      table.mailboxId,
+      table.capturedAt
+    ),
+  ]
+);
+
 export const gmailAutoLabelSettings = pgTable("gmailAutoLabelSettings", {
   createdAt: timestamp("createdAt").notNull(),
   enabled: boolean("enabled").notNull().default(false),
@@ -1817,6 +1907,7 @@ export const mailboxDivisionGrant = pgTable(
 export const managedMailMessage = pgTable(
   "managedMailMessage",
   {
+    analysis: jsonb("analysis").$type<MailMessageAnalysis>(),
     bcc: text("bcc"),
     bccNormalized: text("bccNormalized").notNull().default(""),
     bodyHtml: text("bodyHtml"),
@@ -3000,6 +3091,8 @@ export const tables = {
   dailyBriefSettings,
   gmailAutoLabelEvent,
   gmailAutoLabelSettings,
+  gmailCaptureState,
+  gmailCapturedMessage,
   gmailCredential,
   gmailLabel,
   gmailOAuthState,

@@ -9,6 +9,7 @@ import {
   managedMailMessage,
   mailboxVerificationCode,
 } from "@quieter/database/schema";
+import { analyzeMailMessage } from "@quieter/mail/capture";
 import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
 import { reportError } from "@quieter/observability";
@@ -272,6 +273,7 @@ const ingestManagedMessageForMailbox = async (input: {
     const [message] = await tx
       .insert(managedMailMessage)
       .values({
+        analysis: analyzeMailMessage(input.parsed),
         bcc: input.parsed.bcc ?? null,
         bccNormalized: normalizeManagedSearchValue(input.parsed.bcc),
         bodyHtml: input.parsed.bodyHtml ?? null,
@@ -354,6 +356,36 @@ const ingestManagedMessageForMailbox = async (input: {
         .where(eq(mailbox.id, input.targetMailboxId));
     }
 
+    if (message === undefined) {
+      const [existing] = await tx
+        .select({
+          bodyHtml: managedMailMessage.bodyHtml,
+          bodyText: managedMailMessage.bodyText,
+          from: managedMailMessage.from,
+          headers: managedMailMessage.headers,
+          id: managedMailMessage.id,
+        })
+        .from(managedMailMessage)
+        .where(
+          and(
+            eq(managedMailMessage.mailboxId, input.targetMailboxId),
+            eq(managedMailMessage.providerMessageId, input.providerMessageId),
+            isNull(managedMailMessage.analysis)
+          )
+        )
+        .for("update");
+      if (existing !== undefined) {
+        await tx
+          .update(managedMailMessage)
+          .set({ analysis: analyzeMailMessage(existing) })
+          .where(
+            and(
+              eq(managedMailMessage.mailboxId, input.targetMailboxId),
+              eq(managedMailMessage.id, existing.id)
+            )
+          );
+      }
+    }
     return message;
   });
 
