@@ -1843,13 +1843,15 @@ export const createAiChatResponse = async (input: {
           ) {
             const generated =
               chunk.toolName === "open_compose"
-                ? openComposeInputSchema.parse(chunk.input)
-                : editComposeInputSchema.parse(chunk.input);
-            await recordAiGeneratedMailBody({
-              bodyText: generated.bodyText,
-              mailboxId,
-              userId: input.userId,
-            });
+                ? openComposeInputSchema.safeParse(chunk.input)
+                : editComposeInputSchema.safeParse(chunk.input);
+            if (generated.success) {
+              await recordAiGeneratedMailBody({
+                bodyText: generated.data.bodyText,
+                mailboxId,
+                userId: input.userId,
+              });
+            }
           }
           if (
             persistedAssistantParts !== null &&

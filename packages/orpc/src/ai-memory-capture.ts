@@ -116,10 +116,17 @@ const resolveMemoryActor = async (
       return null;
     }
     if (selected.provider === "managed") {
-      await getAuthorizedManagedMailbox({
-        mailboxId: selected.id,
-        userId: ownerUserId,
-      });
+      try {
+        await getAuthorizedManagedMailbox({
+          mailboxId: selected.id,
+          userId: ownerUserId,
+        });
+      } catch (error) {
+        if (error instanceof ORPCError && error.code === "NOT_FOUND") {
+          return null;
+        }
+        throw error;
+      }
     }
     return { memoryScope: "user" as const, userId: ownerUserId };
   }
@@ -174,13 +181,20 @@ const resolveMemoryActor = async (
   if (userId === undefined) {
     return null;
   }
-  const authorized = await getAuthorizedManagedMailbox({
-    mailboxId: selected.id,
-    userId,
-  });
-  return authorized.role === "manager"
-    ? { memoryScope: "mailbox" as const, userId }
-    : null;
+  try {
+    const authorized = await getAuthorizedManagedMailbox({
+      mailboxId: selected.id,
+      userId,
+    });
+    return authorized.role === "manager"
+      ? { memoryScope: "mailbox" as const, userId }
+      : null;
+  } catch (error) {
+    if (error instanceof ORPCError && error.code === "NOT_FOUND") {
+      return null;
+    }
+    throw error;
+  }
 };
 
 export const getMailboxMemoryActor = async (input: {
@@ -301,7 +315,7 @@ export const captureMailboxMessageMemory = async (input: {
           )
           .digest("hex")
       : null;
-    return await recordAiMemoryEvent({
+    const event = await recordAiMemoryEvent({
       eventKey: isDraft
         ? `draft:${input.message.draftId ?? input.message.id}:${revision}`
         : `message:${input.message.id}`,
@@ -314,6 +328,24 @@ export const captureMailboxMessageMemory = async (input: {
       },
       userId: actor.userId,
     });
+    if (input.source !== "open" && input.source !== "ai_read") {
+      return event;
+    }
+    const engagement = await recordAiMemoryEvent({
+      eventKey: `engagement:${input.source}:${input.message.id}`,
+      kind: "mail_action",
+      mailboxId: input.mailboxId,
+      metadata: {
+        ...metadata,
+        action: input.source,
+        memoryScope: actor.memoryScope,
+        messageContextOnly: true,
+        observationKind: "mail_action",
+        targetCount: 1,
+      },
+      userId: actor.userId,
+    });
+    return event ?? engagement;
   } catch (error) {
     reportError(new Error("Mail context could not be recorded."), {
       operation: "ai-memory:capture-mail",
@@ -330,27 +362,41 @@ export const queueMailboxMessageMemory = async (input: {
   messageIds: string[];
   userId: string;
 }) => {
-  const actor = await getMailboxMemoryActor({
-    actorUserId: input.userId,
-    mailboxId: input.mailboxId,
-  });
+  let actor: Awaited<ReturnType<typeof getMailboxMemoryActor>>;
+  try {
+    actor = await getMailboxMemoryActor({
+      actorUserId: input.userId,
+      mailboxId: input.mailboxId,
+    });
+  } catch {
+    reportError(new Error("Mail action context could not be queued."), {
+      operation: "ai-memory:queue-mail",
+    });
+    return;
+  }
   if (actor === null) {
     return;
   }
   for (const messageId of new Set(input.messageIds)) {
-    await recordAiMemoryEvent({
-      eventKey: `message:${messageId}`,
-      kind: "mail_action",
-      mailboxId: input.mailboxId,
-      metadata: {
-        hydrateMessage: true,
-        memoryScope: actor.memoryScope,
-        messageId,
-        observationKind: "mail_capture",
-        source: "action",
-      },
-      userId: actor.userId,
-    });
+    try {
+      await recordAiMemoryEvent({
+        eventKey: `message:${messageId}`,
+        kind: "mail_action",
+        mailboxId: input.mailboxId,
+        metadata: {
+          hydrateMessage: true,
+          memoryScope: actor.memoryScope,
+          messageId,
+          observationKind: "mail_capture",
+          source: "action",
+        },
+        userId: actor.userId,
+      });
+    } catch {
+      reportError(new Error("Mail action context could not be queued."), {
+        operation: "ai-memory:queue-mail",
+      });
+    }
   }
 };
 
@@ -466,6 +512,7 @@ export const hydrateMailMemoryEvent = async (input: {
     from: message.from,
     mailboxId: input.mailboxId,
     providerMessageId: message.id,
+    userId: input.userId,
   });
   return await buildMailMemoryEvidence({ message, selected, source: "action" });
 };

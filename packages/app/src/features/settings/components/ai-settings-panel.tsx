@@ -116,12 +116,16 @@ const AiMemoryLearning = ({ settings }: { settings: AiSettings }) => {
           let progress = "Learning is up to date.";
           let badge = "Up to date";
           if (mailbox.pendingCount > 0) {
-            progress = `${mailbox.pendingCount} observations are still being learned.`;
+            progress =
+              mailbox.pendingCount === 1
+                ? "1 observation is still being learned."
+                : `${mailbox.pendingCount} observations are still being learned.`;
             badge = "Learning";
           }
           if (mailbox.failedCount > 0) {
             progress =
               "Some learning could not finish and will retry automatically.";
+            badge = "Retrying";
           }
           if (mailbox.needsBalance) {
             progress = "Add AI credit to finish learning.";
@@ -136,7 +140,15 @@ const AiMemoryLearning = ({ settings }: { settings: AiSettings }) => {
             <SettingsRow
               action={
                 mailbox.status === "completed" ? (
-                  <Pill tone={mailbox.pendingCount > 0 ? "neutral" : "success"}>
+                  <Pill
+                    tone={
+                      mailbox.pendingCount > 0 ||
+                      mailbox.failedCount > 0 ||
+                      mailbox.needsBalance
+                        ? "neutral"
+                        : "success"
+                    }
+                  >
                     {badge}
                   </Pill>
                 ) : (

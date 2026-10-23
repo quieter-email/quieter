@@ -26,9 +26,11 @@ import {
 
 import { purgePersonalAiMemory } from "../src/ai-memory";
 import {
+  captureMailboxMessageMemory,
   getMailboxMemoryBootstrap,
   listMailboxMemoryBootstraps,
   processPendingMailMemoryBootstrap,
+  queueMailboxMessageMemory,
   queueMailboxMemoryBootstrap,
   retryMailboxMemoryBootstrap,
 } from "../src/ai-memory-capture";
@@ -237,6 +239,57 @@ describe.skipIf(state.databaseUrl === undefined)(
           ])
         );
       expect(ignored).toHaveLength(0);
+    });
+
+    test("retains distinct opens and AI reads without duplicating synced mail evidence", async () => {
+      const mailboxId = await createMailbox();
+      const message = {
+        bodyText: "Please review the revised launch plan.",
+        from: "colleague@example.test",
+        id: "engagement-message",
+        threadId: "engagement-thread",
+        to: "owner@example.test",
+      };
+      for (const source of [
+        "sync",
+        "open",
+        "open",
+        "ai_read",
+        "ai_read",
+      ] as const) {
+        await captureMailboxMessageMemory({ mailboxId, message, source });
+      }
+      await queueMailboxMessageMemory({
+        mailboxId,
+        messageIds: [message.id, message.id],
+        userId,
+      });
+      const events = await db
+        .select()
+        .from(userAiContextEvent)
+        .where(eq(userAiContextEvent.mailboxId, mailboxId));
+      const content = events.filter(
+        (event) => event.metadata.messageContextOnly !== true
+      );
+      expect(content).toHaveLength(1);
+      expect(content[0]?.metadata).toMatchObject({
+        observationKind: "received_message",
+        source: "sync",
+      });
+      const engagement = events.filter(
+        (event) => event.metadata.messageContextOnly === true
+      );
+      expect(engagement).toHaveLength(2);
+      expect(engagement.map((event) => event.metadata)).toMatchObject(
+        expect.arrayContaining([
+          expect.objectContaining({ action: "open", source: "open" }),
+          expect.objectContaining({ action: "ai_read", source: "ai_read" }),
+        ])
+      );
+      for (const event of engagement) {
+        expect(event.metadata.bodyText).toContain("revised launch plan");
+        expect(event.metadata.observationKind).toBe("mail_action");
+      }
     });
 
     test.each(["completed", "processing"] as const)(

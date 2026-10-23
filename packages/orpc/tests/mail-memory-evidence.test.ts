@@ -1,9 +1,11 @@
+import { ORPCError } from "@orpc/server";
 import type { mailbox } from "@quieter/database/schema";
 /* oxlint-disable eslint/require-await -- The database mock resolves local fixtures without I/O. */
 import type {
   getMessageWithDetails,
   listGmailMessageIds,
 } from "@quieter/gmail";
+import type { reportError } from "@quieter/observability";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import type { isAiGeneratedMailBody } from "../src/ai-mail-authorship";
@@ -28,7 +30,9 @@ const state = vi.hoisted(() => ({
   authorizeManaged: vi.fn<typeof getAuthorizedManagedMailbox>(),
   getMessage: vi.fn<typeof getMessageWithDetails>(),
   isGenerated: vi.fn<typeof isAiGeneratedMailBody>(),
+  lookup: vi.fn<() => Promise<MailboxFixture[]>>(),
   record: vi.fn<typeof recordAiMemoryEvent>(),
+  report: vi.fn<typeof reportError>(),
   selected: undefined as MailboxFixture | undefined,
 }));
 
@@ -38,11 +42,14 @@ vi.mock("@quieter/database/client", () => ({
     select: () => ({
       from: () => ({
         where: () => ({
-          limit: async () => (state.selected ? [state.selected] : []),
+          limit: state.lookup,
         }),
       }),
     }),
   },
+}));
+vi.mock(import("@quieter/observability"), () => ({
+  reportError: state.report,
 }));
 vi.mock(import("../src/ai-memory"), () => ({
   getPersonalAiMemoryScopeConfig:
@@ -91,6 +98,10 @@ describe("mail evidence capture", () => {
       provider: "gmail",
     };
     state.record.mockReset().mockResolvedValue(null);
+    state.lookup
+      .mockReset()
+      .mockImplementation(async () => (state.selected ? [state.selected] : []));
+    state.report.mockReset();
     state.getMessage.mockReset().mockResolvedValue(message);
     state.isGenerated.mockReset().mockResolvedValue(false);
     state.authorizeManaged.mockReset();
@@ -148,7 +159,7 @@ describe("mail evidence capture", () => {
     }
   });
 
-  test("uses one evidence identity when the same mail is opened, synced, or queued", async () => {
+  test("keeps message evidence deduplicated while preserving separate engagement", async () => {
     await captureMailboxMessageMemory({
       mailboxId: "mailbox-1",
       message,
@@ -159,13 +170,21 @@ describe("mail evidence capture", () => {
       message,
       source: "open",
     });
+    await captureMailboxMessageMemory({
+      mailboxId: "mailbox-1",
+      message,
+      source: "ai_read",
+    });
     await queueMailboxMessageMemory({
       mailboxId: "mailbox-1",
       messageIds: [message.id],
       userId: "owner-1",
     });
+    const content = state.record.mock.calls.filter(
+      ([observation]) => observation.metadata.messageContextOnly !== true
+    );
     const identities = new Set(
-      state.record.mock.calls.map(([observation]) =>
+      content.map(([observation]) =>
         JSON.stringify([
           observation.kind,
           observation.eventKey,
@@ -176,6 +195,118 @@ describe("mail evidence capture", () => {
       )
     );
     expect(identities.size).toBe(1);
+    const engagement = state.record.mock.calls
+      .map(([observation]) => observation)
+      .filter(
+        (observation) => observation.metadata.messageContextOnly === true
+      );
+    expect(engagement).toHaveLength(2);
+    expect(engagement.map((observation) => observation.eventKey)).not.toContain(
+      content[0]?.[0].eventKey
+    );
+    expect(engagement.map((observation) => observation.metadata)).toMatchObject(
+      expect.arrayContaining([
+        expect.objectContaining({ action: "open", source: "open" }),
+        expect.objectContaining({ action: "ai_read", source: "ai_read" }),
+      ])
+    );
+  });
+
+  test.each(["owner-1", null])(
+    "skips inaccessible managed mail without blocking durable captures, owner %s",
+    async (managedOwnerUserId) => {
+      state.selected = {
+        ...state.selected,
+        emailAddress: "managed@example.test",
+        id: "mailbox-1",
+        managedOwnerUserId,
+        ownerUserId: null,
+        provider: "managed",
+      };
+      state.authorizeManaged.mockRejectedValue(new ORPCError("NOT_FOUND"));
+      for (const source of ["received", "sync", "bootstrap"] as const) {
+        await expect(
+          captureMailboxMessageMemory({
+            actorUserId: managedOwnerUserId ?? "manager-1",
+            mailboxId: "mailbox-1",
+            message,
+            source,
+          })
+        ).resolves.toBeNull();
+      }
+      expect(state.record).not.toHaveBeenCalled();
+      expect(state.report).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each(["received", "sync", "bootstrap"] as const)(
+    "preserves retryable recording failures for %s captures",
+    async (source) => {
+      const error = new Error("Database connection failed");
+      state.record.mockRejectedValue(error);
+      await expect(
+        captureMailboxMessageMemory({
+          mailboxId: "mailbox-1",
+          message,
+          source,
+        })
+      ).rejects.toBe(error);
+      expect(state.report).toHaveBeenCalledOnce();
+    }
+  );
+
+  test("preserves unexpected managed authorization failures on durable capture", async () => {
+    state.selected = {
+      ...state.selected,
+      emailAddress: "managed@example.test",
+      id: "mailbox-1",
+      managedOwnerUserId: "owner-1",
+      ownerUserId: null,
+      provider: "managed",
+    };
+    const error = new ORPCError("INTERNAL_SERVER_ERROR");
+    state.authorizeManaged.mockRejectedValue(error);
+    await expect(
+      captureMailboxMessageMemory({
+        mailboxId: "mailbox-1",
+        message,
+        source: "received",
+      })
+    ).rejects.toBe(error);
+    expect(state.record).not.toHaveBeenCalled();
+  });
+
+  test("contains mailbox lookup failures when queuing after a mail action", async () => {
+    const error = new Error("Database query included private mailbox data");
+    state.lookup.mockRejectedValue(error);
+    await expect(
+      queueMailboxMessageMemory({
+        mailboxId: "mailbox-1",
+        messageIds: [message.id],
+        userId: "owner-1",
+      })
+    ).resolves.toBeUndefined();
+    expect(state.record).not.toHaveBeenCalled();
+    expect(state.report).toHaveBeenCalledOnce();
+    expect(String(state.report.mock.calls.at(0)?.[0])).not.toContain(
+      error.message
+    );
+  });
+
+  test("attempts remaining message captures after a queue failure", async () => {
+    state.record.mockRejectedValueOnce(new Error("Temporary database failure"));
+    await expect(
+      queueMailboxMessageMemory({
+        mailboxId: "mailbox-1",
+        messageIds: ["first", "second", "first"],
+        userId: "owner-1",
+      })
+    ).resolves.toBeUndefined();
+    expect(state.record).toHaveBeenCalledTimes(2);
+    expect(
+      state.record.mock.calls.map(([event]) => event.metadata.messageId)
+    ).toContain("second");
+    expect(state.report).toHaveBeenCalledOnce();
   });
 
   test("hydrates actual sent text while removing quoted incoming voice", async () => {

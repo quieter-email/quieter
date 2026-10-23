@@ -391,7 +391,7 @@ export const selectAiMemoryContext = ({
       [
         render("learned"),
         omitted > 0
-          ? `${omitted} additional matching memories did not fit. Use read_personal_context to search or page through further context when needed.`
+          ? `${omitted} additional matching memories did not fit.${agent === "chat" ? " Use read_personal_context to search or page through further context when needed." : ""}`
           : "",
       ]
         .filter(Boolean)

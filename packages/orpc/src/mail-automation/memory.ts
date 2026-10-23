@@ -14,7 +14,7 @@ import type {
 } from "@quieter/database/schema";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
-import { and, count, desc, eq, inArray, max, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import {
@@ -43,26 +43,6 @@ export const getSenderSource = (from?: string | null) => {
     /[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+/iu
   )?.[0];
   return address?.toLowerCase().slice(0, 320) ?? null;
-};
-
-export const enrichMailAutoLabelFeedbackSource = async (input: {
-  from?: string;
-  mailboxId: string;
-  providerMessageId: string;
-}) => {
-  const source = getSenderSource(input.from);
-  if (source === null) {
-    return;
-  }
-  await db
-    .update(mailAutoLabelFeedback)
-    .set({ source })
-    .where(
-      and(
-        eq(mailAutoLabelFeedback.mailboxId, input.mailboxId),
-        eq(mailAutoLabelFeedback.providerMessageId, input.providerMessageId)
-      )
-    );
 };
 
 export const loadMailAutoLabelSenderHistory = async (input: {
@@ -208,9 +188,13 @@ export const buildAutoLabelMemoryProfile = (
 
 export const refreshAutoLabelMemoryProfile = async (
   mailboxId: string,
-  userId: string
+  userId: string,
+  expectedRevision?: number
 ) => {
-  const config = await getMailboxAiMemoryScopeConfig(mailboxId);
+  let revision = expectedRevision;
+  if (revision === undefined) {
+    ({ revision } = await getMailboxAiMemoryScopeConfig(mailboxId));
+  }
   const rows = await db
     .select({
       added:
@@ -233,7 +217,7 @@ export const refreshAutoLabelMemoryProfile = async (
   const profile = buildAutoLabelMemoryProfile(rows);
   await replaceMailboxFeedbackMemories({
     agent: "auto_label",
-    expectedRevision: config.revision,
+    expectedRevision: revision,
     mailboxId,
     memories: profile.rules.map((rule) => {
       const label = rule.labelName ?? rule.labelId;
@@ -271,13 +255,69 @@ export const refreshAutoLabelMemoryProfile = async (
 
 const refreshAutoLabelMemoryInBackground = async (
   mailboxId: string,
-  userId: string
+  userId: string,
+  expectedRevision?: number
 ) => {
   try {
-    await refreshAutoLabelMemoryProfile(mailboxId, userId);
+    await refreshAutoLabelMemoryProfile(mailboxId, userId, expectedRevision);
   } catch (error: unknown) {
     reportError(error, { operation: "mail-automation:refresh-memory" });
   }
+};
+
+export const enrichMailAutoLabelFeedbackSource = async (input: {
+  from?: string;
+  mailboxId: string;
+  providerMessageId: string;
+  userId: string;
+}) => {
+  const source = getSenderSource(input.from);
+  if (source === null) {
+    return;
+  }
+  const { getMailboxMemoryActor } = await import("../ai-memory-capture");
+  const [actor, config] = await Promise.all([
+    getMailboxMemoryActor({
+      actorUserId: input.userId,
+      mailboxId: input.mailboxId,
+    }),
+    getMailboxAiMemoryScopeConfig(input.mailboxId),
+  ]);
+  if (actor === null) {
+    return;
+  }
+  const enriched = await db
+    .update(mailAutoLabelFeedback)
+    .set({ source })
+    .where(
+      and(
+        eq(mailAutoLabelFeedback.mailboxId, input.mailboxId),
+        eq(mailAutoLabelFeedback.providerMessageId, input.providerMessageId),
+        isNull(mailAutoLabelFeedback.source)
+      )
+    )
+    .returning({ id: mailAutoLabelFeedback.id });
+  if (enriched.length === 0) {
+    const [existing] = await db
+      .select({ id: mailAutoLabelFeedback.id })
+      .from(mailAutoLabelFeedback)
+      .where(
+        and(
+          eq(mailAutoLabelFeedback.mailboxId, input.mailboxId),
+          eq(mailAutoLabelFeedback.providerMessageId, input.providerMessageId),
+          eq(mailAutoLabelFeedback.source, source)
+        )
+      )
+      .limit(1);
+    if (existing === undefined) {
+      return;
+    }
+  }
+  await refreshAutoLabelMemoryProfile(
+    input.mailboxId,
+    actor.userId,
+    config.revision
+  );
 };
 
 const recordAutoLabelFeedbackMemoryInBackground = async (input: {

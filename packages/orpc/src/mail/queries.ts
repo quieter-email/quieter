@@ -255,55 +255,39 @@ export const queriesMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
-    if (selectedMailbox.provider === "managed") {
-      const thread = await getManagedThread({
-        ...input,
-        userId: context.userId,
-      });
-      await Promise.all(
-        thread.messages.map(
-          async (message) =>
-            await captureMailboxMessageMemory({
-              actorUserId: context.userId,
-              mailboxId: input.mailboxId,
-              message,
-              source: "open",
-            })
-        )
-      );
-      return thread;
+    const thread =
+      selectedMailbox.provider === "managed"
+        ? await getManagedThread({ ...input, userId: context.userId })
+        : await callGmail(
+            context,
+            input.mailboxId,
+            async (accessToken, signal) =>
+              await getThreadWithDetails(accessToken, input.threadId, signal)
+          ).catch((error: unknown) => {
+            if (isGmailServiceError(error) && error.status === 404) {
+              throw new ORPCError("NOT_FOUND", {
+                message: "Message thread not found.",
+              });
+            }
+            throw error;
+          });
+    const capture = Promise.all(
+      thread.messages.map(
+        async (message) =>
+          await captureMailboxMessageMemory({
+            actorUserId: context.userId,
+            mailboxId: input.mailboxId,
+            message,
+            source: "open",
+          })
+      )
+    );
+    if (context.scheduleBackgroundTask) {
+      context.scheduleBackgroundTask(capture);
+    } else {
+      await capture;
     }
-
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken, signal) => {
-        const thread = await getThreadWithDetails(
-          accessToken,
-          input.threadId,
-          signal
-        );
-        await Promise.all(
-          thread.messages.map(
-            async (message) =>
-              await captureMailboxMessageMemory({
-                actorUserId: context.userId,
-                mailboxId: input.mailboxId,
-                message,
-                source: "open",
-              })
-          )
-        );
-        return thread;
-      }
-    ).catch((error: unknown) => {
-      if (isGmailServiceError(error) && error.status === 404) {
-        throw new ORPCError("NOT_FOUND", {
-          message: "Message thread not found.",
-        });
-      }
-      throw error;
-    });
+    return thread;
   },
   listMessageDeliveryStatuses: async ({
     context,

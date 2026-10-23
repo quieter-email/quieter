@@ -233,12 +233,12 @@ const finishIngestion = async (input: {
   providerMessageId: string;
   threadId: string;
 }) => {
-  await captureManagedMessageMemory({
-    mailboxId: input.mailboxId,
-    messageId: input.messageId,
-    source: "received",
-  });
   const results = await Promise.allSettled([
+    captureManagedMessageMemory({
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+      source: "received",
+    }),
     publishMailUpdate({
       mailboxId: input.mailboxId,
       threadIds: [input.threadId],
