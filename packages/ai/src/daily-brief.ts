@@ -71,7 +71,7 @@ export const generateDailyBrief = async (input: {
     onUsage: input.onUsage,
     prompt: JSON.stringify({
       candidates: input.candidates.slice(0, 24),
-      memoryContext: input.memoryContext?.slice(0, 4000) ?? null,
+      memoryContext: input.memoryContext,
       now: input.now,
       preferences: input.preferences?.slice(0, 2000) ?? null,
       urgentOnly: input.urgentOnly,

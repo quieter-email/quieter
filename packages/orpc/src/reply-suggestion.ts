@@ -11,6 +11,7 @@ import { compile } from "html-to-text";
 import { z } from "zod";
 
 import { assertCanUseAi } from "./ai-access";
+import { recordAiGeneratedMailBody } from "./ai-mail-authorship";
 import { loadAiAgentContext, serializeAiAgentContext } from "./ai-memory";
 import type { MailRequestContext } from "./gmail-request";
 import { learnAiMemoryFromMailAction } from "./mail/feedback";
@@ -33,7 +34,6 @@ export const requestReplySuggestion = async ({
   input: z.infer<typeof replySuggestionInputSchema>;
 }): Promise<ReplySuggestion> => {
   let usageReport: Promise<void> | undefined;
-  let generating = false;
   try {
     const mailbox = await assertAccessibleMailbox({
       mailboxId: input.mailboxId,
@@ -108,16 +108,14 @@ export const requestReplySuggestion = async ({
     const memory = await loadAiAgentContext({
       agent: "reply_suggestion",
       mailboxId: mailbox.id,
-      query: [target.from, target.subject, target.snippet]
+      query: [target.from, target.to, target.cc, target.subject, target.snippet]
         .filter(Boolean)
         .join(" ")
         .slice(0, 2000),
-      semantic: false,
       userId: context.userId,
     });
     const model = resolveBackgroundModel();
     const requestId = randomUUID();
-    generating = true;
     const suggestion = await suggestReply({
       abortSignal: context.signal,
       memoryContext: serializeAiAgentContext(memory),
@@ -144,6 +142,13 @@ export const requestReplySuggestion = async ({
       },
       replyToMessageId: target.id,
     });
+    if (suggestion.status === "suggested") {
+      await recordAiGeneratedMailBody({
+        bodyText: suggestion.bodyText,
+        mailboxId: mailbox.id,
+        userId: context.userId,
+      });
+    }
     await learnAiMemoryFromMailAction({
       action: "reply_requested",
       mailboxId: mailbox.id,
@@ -167,10 +172,9 @@ export const requestReplySuggestion = async ({
     ) {
       throw error;
     }
-    reportError(
-      generating ? new Error("Reply suggestion generation failed.") : error,
-      { operation: "ai:suggest-reply" }
-    );
+    reportError(new Error("Reply suggestion generation failed."), {
+      operation: "ai:suggest-reply",
+    });
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
       message: "Could not suggest a reply right now. Please try again.",
     });

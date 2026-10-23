@@ -18,6 +18,7 @@ import { and, count, desc, eq, inArray, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import {
+  getMailboxAiMemoryScopeConfig,
   learnAiMemoryFromFeedback,
   replaceMailboxFeedbackMemories,
 } from "../ai-memory";
@@ -38,10 +39,58 @@ export type AutoLabelMemoryProfile = {
 };
 
 export const getSenderSource = (from?: string | null) => {
-  const domain = from?.match(
-    /[A-Z0-9._%+-]+@(?<domain>[A-Z0-9.-]+\.[A-Z]{2,})/iu
-  )?.groups?.domain;
-  return domain?.toLowerCase().slice(0, 253) ?? null;
+  const address = from?.match(
+    /[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+/iu
+  )?.[0];
+  return address?.toLowerCase().slice(0, 320) ?? null;
+};
+
+export const enrichMailAutoLabelFeedbackSource = async (input: {
+  from?: string;
+  mailboxId: string;
+  providerMessageId: string;
+}) => {
+  const source = getSenderSource(input.from);
+  if (source === null) {
+    return;
+  }
+  await db
+    .update(mailAutoLabelFeedback)
+    .set({ source })
+    .where(
+      and(
+        eq(mailAutoLabelFeedback.mailboxId, input.mailboxId),
+        eq(mailAutoLabelFeedback.providerMessageId, input.providerMessageId)
+      )
+    );
+};
+
+export const loadMailAutoLabelSenderHistory = async (input: {
+  from?: string | null;
+  mailboxId: string;
+}) => {
+  const source = getSenderSource(input.from);
+  if (source === null) {
+    return null;
+  }
+  const history = await db
+    .select({
+      label: mailAutoLabelFeedback.labelName,
+      labelId: mailAutoLabelFeedback.labelId,
+      signal: mailAutoLabelFeedback.signal,
+    })
+    .from(mailAutoLabelFeedback)
+    .where(
+      and(
+        eq(mailAutoLabelFeedback.mailboxId, input.mailboxId),
+        eq(mailAutoLabelFeedback.source, source)
+      )
+    )
+    .orderBy(desc(mailAutoLabelFeedback.updatedAt))
+    .limit(12);
+  return history.length === 0
+    ? null
+    : `Recent manual label decisions for this exact sender, treated as evidence:\n${JSON.stringify(history)}`;
 };
 
 const toMemoryKeyPart = (value: string) =>
@@ -161,6 +210,7 @@ export const refreshAutoLabelMemoryProfile = async (
   mailboxId: string,
   userId: string
 ) => {
+  const config = await getMailboxAiMemoryScopeConfig(mailboxId);
   const rows = await db
     .select({
       added:
@@ -183,6 +233,7 @@ export const refreshAutoLabelMemoryProfile = async (
   const profile = buildAutoLabelMemoryProfile(rows);
   await replaceMailboxFeedbackMemories({
     agent: "auto_label",
+    expectedRevision: config.revision,
     mailboxId,
     memories: profile.rules.map((rule) => {
       const label = rule.labelName ?? rule.labelId;
@@ -197,11 +248,15 @@ export const refreshAutoLabelMemoryProfile = async (
         importance: rule.source ? 4 : 3,
         key: `${toMemoryKeyPart(rule.labelId)}:${toMemoryKeyPart(rule.source ?? "all")}`,
         metadata: {
+          correspondents:
+            rule.source?.includes("@") === true ? [rule.source] : [],
           labelId: rule.labelId,
           policy: rule.policy,
         },
         reinforcementCount: rule.count,
-        sourceDomains: rule.source ? [rule.source] : [],
+        sourceDomains: rule.source
+          ? [rule.source.split("@").at(-1) ?? rule.source]
+          : [],
         summary: `${rule.policy === "prefer" ? "Prefers" : "Avoids"} “${label}”${rule.source ? ` for ${rule.source}` : ""}`,
         topics: [
           "email-labeling",

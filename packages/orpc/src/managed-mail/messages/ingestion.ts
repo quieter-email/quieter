@@ -26,6 +26,7 @@ import {
   sql,
 } from "drizzle-orm";
 
+import { captureManagedMessageMemory } from "../../ai-memory-capture";
 import { markDailyBriefUrgentPending } from "../../daily-brief";
 import { publishMailUpdate } from "../../mail-updates";
 import {
@@ -232,6 +233,11 @@ const finishIngestion = async (input: {
   providerMessageId: string;
   threadId: string;
 }) => {
+  await captureManagedMessageMemory({
+    mailboxId: input.mailboxId,
+    messageId: input.messageId,
+    source: "received",
+  });
   const results = await Promise.allSettled([
     publishMailUpdate({
       mailboxId: input.mailboxId,

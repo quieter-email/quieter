@@ -6,7 +6,6 @@ import {
   mutateGmailThread,
   getGmailMessageThreadAssociations,
 } from "@quieter/gmail";
-import { reportError } from "@quieter/observability";
 
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
@@ -58,7 +57,7 @@ const recordMetadataAction = async (
     gmailContext?: GmailActionContext | null;
     input: { mailboxId: string };
   },
-  operation: MetadataOperation,
+  operation: MetadataOperation | `move:${string}`,
   messageIds: string[]
 ) => {
   if (messageIds.length === 0) {
@@ -81,25 +80,14 @@ const recordMetadataAction = async (
     userId: context.userId,
   };
   if (accessToken) {
-    const learn = async (eventId?: string) => {
-      try {
-        await learnAiMemoryFromGmailAction({ ...action, accessToken, eventId });
-      } catch (error) {
-        reportError(error, { operation: "mail:learn-action-context" });
-      }
-    };
-    if (
-      (operation === "read" || operation === "unread") &&
-      context.scheduleBackgroundTask
-    ) {
-      const observation = await learnAiMemoryFromMailAction(action);
-      if (observation?.status === "recorded") {
-        context.scheduleBackgroundTask(learn(observation.eventId));
-      }
-    } else {
-      await learn();
-    }
+    await learnAiMemoryFromGmailAction({ ...action, accessToken });
   } else {
+    const { queueMailboxMessageMemory } = await import("../ai-memory-capture");
+    await queueMailboxMessageMemory({
+      mailboxId: input.mailboxId,
+      messageIds,
+      userId: context.userId,
+    });
     await learnAiMemoryFromMailAction(action);
   }
 };
@@ -308,13 +296,11 @@ export const mutationsMailOperations = {
           messageIds
         );
       } else if (input.command.kind === "move" && messageIds.length > 0) {
-        await learnAiMemoryFromMailAction({
-          action: `move:${input.command.destination}`,
-          mailboxId: input.mailboxId,
-          messageIds,
-          targetCount: messageIds.length,
-          userId: context.userId,
-        });
+        await recordMetadataAction(
+          { context, input },
+          `move:${input.command.destination}`,
+          messageIds
+        );
       }
       return {
         syncToken:

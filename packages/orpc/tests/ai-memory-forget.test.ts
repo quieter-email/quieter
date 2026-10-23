@@ -52,7 +52,17 @@ vi.mock(import("@quieter/database/client"), async (original) => {
         return () => ({ where: mocks.deleted });
       }
       if (property === "insert") {
-        return mocks.inserted;
+        return (table: unknown) => ({
+          values: () => {
+            if (table === aiMemoryChangeSet) {
+              mocks.inserted();
+            }
+            return { onConflictDoUpdate: async () => {} };
+          },
+        });
+      }
+      if (property === "update") {
+        return () => ({ set: () => ({ where: async () => {} }) });
       }
       return Reflect.get(target, property, receiver);
     },

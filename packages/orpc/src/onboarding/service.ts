@@ -228,4 +228,29 @@ export const completeOnboarding = async (input: {
       }
     }
   });
+  const connectedMailboxes = await db
+    .select({ id: mailbox.id })
+    .from(mailbox)
+    .where(
+      and(
+        eq(mailbox.status, "connected"),
+        or(
+          and(
+            eq(mailbox.provider, "gmail"),
+            eq(mailbox.ownerUserId, input.userId)
+          ),
+          and(
+            eq(mailbox.provider, "managed"),
+            eq(mailbox.managedOwnerUserId, input.userId)
+          )
+        )
+      )
+    );
+  const { queueMailboxMemoryBootstrap } = await import("../ai-memory-capture");
+  for (const selected of connectedMailboxes) {
+    await queueMailboxMemoryBootstrap({
+      mailboxId: selected.id,
+      userId: input.userId,
+    });
+  }
 };

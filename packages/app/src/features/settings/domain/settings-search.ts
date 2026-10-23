@@ -67,11 +67,21 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   {
     description: "AI & personalization / Personalization",
     id: "view-memory",
-    keywords: "view saved memories knowledge context personalization",
+    keywords:
+      "view search add edit delete saved memories knowledge context personalization tone style people",
     scope: "personal",
     section: "what-quieter-remembers",
     tab: "ai",
     title: "What Quieter remembers",
+  },
+  {
+    description: "AI & personalization / Personalization",
+    id: "learn-from-mail",
+    keywords: "learn recent received sent mail writing style onboarding retry",
+    scope: "personal",
+    section: "learn-from-recent-mail",
+    tab: "ai",
+    title: "Learn from recent mail",
   },
   {
     description: "AI & personalization / Personalization",
