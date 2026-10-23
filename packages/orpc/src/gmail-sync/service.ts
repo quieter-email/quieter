@@ -49,11 +49,13 @@ import {
   serializeAiAgentContext,
 } from "../ai-memory";
 import type { AiAgentMemoryCandidates } from "../ai-memory";
+import { captureMailboxMessageMemory } from "../ai-memory-capture";
 import { markDailyBriefUrgentPending } from "../daily-brief";
 import { syncGmailLabels } from "../gmail-labels";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
+import { loadMailAutoLabelSenderHistory } from "../mail-automation/memory";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
 import {
   listPendingMailboxVerificationCodeMessageIds,
@@ -366,17 +368,24 @@ const processAutoLabelMessage = async ({
           ? []
           : await classifyMailMessage({
               labels: aiLabels,
-              memoryContext: serializeAiAgentContext(
-                await loadAiAgentContext({
-                  agent: "auto_label",
-                  candidates: autoLabelContext.memoryCandidates,
-                  includeUserScope: false,
+              memoryContext: [
+                serializeAiAgentContext(
+                  await loadAiAgentContext({
+                    agent: "auto_label",
+                    candidates: autoLabelContext.memoryCandidates,
+                    includeUserScope: true,
+                    mailboxId,
+                    query: buildMailMemoryQuery(message),
+                    userId,
+                  })
+                ),
+                await loadMailAutoLabelSenderHistory({
+                  from: message.from,
                   mailboxId,
-                  query: buildMailMemoryQuery(message),
-                  semantic: false,
-                  userId,
-                })
-              ),
+                }),
+              ]
+                .filter(Boolean)
+                .join("\n\n"),
               message,
               model: autoLabelContext.model,
               onUsage: (reportedUsage) => {
@@ -495,7 +504,7 @@ const processMessageIds = async ({
   organizationId: string | null;
   userId: string;
 }) => {
-  if ((!autoLabelEnabled && !extractCodes) || messageIds.length === 0) {
+  if (messageIds.length === 0) {
     return;
   }
 
@@ -535,6 +544,16 @@ const processMessageIds = async ({
         };
 
         await Promise.all([
+          loadMessage().then(async (message) => {
+            if (message) {
+              await captureMailboxMessageMemory({
+                actorUserId: userId,
+                mailboxId,
+                message,
+                source: "sync",
+              });
+            }
+          }),
           autoLabelEnabled
             ? processAutoLabelMessage({
                 accessToken,
@@ -718,7 +737,6 @@ const processHistoryRecoveryPage = async ({
   }
 
   const page = await listGmailMessageIds(accessToken, {
-    mailbox: "inbox",
     maxResults: 25,
     pageToken: state.recoveryPageToken ?? undefined,
     query: `after:${Math.floor(state.recoveryAfter.getTime() / 1000)} before:${Math.floor(
@@ -781,7 +799,7 @@ const processMailboxHistory = async ({
           mailAutomationContextPromise ??= Promise.all([
             Promise.resolve(loadAiConfiguration()),
             loadAiAgentMemoryCandidates({
-              includeUserScope: false,
+              includeUserScope: true,
               mailboxId,
               userId,
             }),

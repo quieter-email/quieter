@@ -4,10 +4,8 @@ import { describe, expect, test } from "vite-plus/test";
 import {
   calculateAiMemorySalience,
   getAiMemoryRetirementReason,
-  loadAiAgentContext,
   rankAiMemoryCandidates,
 } from "../src/ai-memory";
-import { buildAiMemoryDocument } from "../src/ai-memory-embedding";
 
 type Memory = typeof aiMemory.$inferSelect;
 const memory = (overrides: Partial<Memory> = {}): Memory => ({
@@ -118,23 +116,21 @@ describe("AI memory retrieval ranking", () => {
     expect(ranked).toHaveLength(1);
   });
 
-  test("recalls a semantically matched memory without lexical overlap", () => {
+  test("includes general writing guidance without requiring a keyword match", () => {
     const ranked = rankAiMemoryCandidates({
       agent: "compose",
       candidates: [
         memory({
           content: "Use a warm, informal tone with close collaborators",
-          importance: 2,
+          metadata: { agents: ["all"], category: "writing_style" },
         }),
       ],
       now: new Date("2026-08-04T00:00:00Z"),
       query: "Draft a note to my cofounder",
-      semanticScores: new Map([["memory-1", 0.82]]),
     });
-
-    expect(ranked.map(({ memory: candidate }) => candidate.id)).toStrictEqual([
-      "memory-1",
-    ]);
+    expect(ranked.map(({ memory: candidate }) => candidate.id)).toContain(
+      "memory-1"
+    );
   });
 
   test("decays weak inferred knowledge and retires it conservatively", () => {
@@ -156,72 +152,5 @@ describe("AI memory retrieval ranking", () => {
     );
     expect(getAiMemoryRetirementReason(stale, now)).toBe("stale_low_signal");
     expect(getAiMemoryRetirementReason(reinforced, now)).toBeNull();
-  });
-});
-
-describe("AI memory embedding documents", () => {
-  test("embeds the readable memory together with its retrieval tags", () => {
-    expect(
-      buildAiMemoryDocument(
-        memory({
-          content: "Prefer concise replies",
-          metadata: {
-            agents: ["all"],
-            sourceDomains: ["acme.com"],
-            topics: ["replies"],
-          },
-          summary: "Concise replies",
-        })
-      )
-    ).toBe("Concise replies\nPrefer concise replies\nreplies\nacme.com");
-  });
-
-  test("omits absent retrieval tags instead of emitting blank lines", () => {
-    expect(
-      buildAiMemoryDocument(
-        memory({ content: "Prefer concise replies", metadata: {} })
-      )
-    ).toBe("Concise replies\nPrefer concise replies");
-  });
-});
-
-describe("cached automation memory isolation", () => {
-  test("excludes candidates belonging to another mailbox or user", async () => {
-    const context = await loadAiAgentContext({
-      agent: "auto_label",
-      candidates: [
-        memory({
-          importance: 5,
-          kind: "instruction",
-          mailboxId: "other",
-          scope: "mailbox",
-          scopeKey: "mailbox:other",
-        }),
-        memory({
-          importance: 5,
-          kind: "instruction",
-          scopeKey: "user:other",
-          userId: "other",
-        }),
-      ],
-      mailboxId: "mailbox-1",
-      query: "Prefer concise replies",
-      semantic: false,
-      userId: "user-1",
-    });
-    expect(context).toStrictEqual({ instructions: null, memory: null });
-  });
-
-  test("excludes personal memory when automation uses mailbox scope only", async () => {
-    const context = await loadAiAgentContext({
-      agent: "useful_detail",
-      candidates: [memory({ importance: 5, kind: "instruction" })],
-      includeUserScope: false,
-      mailboxId: "mailbox-1",
-      query: "Prefer concise replies",
-      semantic: false,
-      userId: "user-1",
-    });
-    expect(context).toStrictEqual({ instructions: null, memory: null });
   });
 });

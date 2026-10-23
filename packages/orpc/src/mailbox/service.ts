@@ -1213,6 +1213,8 @@ export const completeGmailOAuth = async (input: {
     tokenInfo,
     tokenResponse,
   });
+  const { queueMailboxMemoryBootstrap } = await import("../ai-memory-capture");
+  await queueMailboxMemoryBootstrap({ mailboxId, userId: session.user.id });
 
   return {
     mailboxId,

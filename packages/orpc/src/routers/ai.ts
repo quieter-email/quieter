@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
-import { AI_MEMORY_REQUEST_MAX_LENGTH } from "@quieter/ai/ai-memory";
+import {
+  AI_MEMORY_CATEGORIES,
+  AI_MEMORY_CONTENT_MAX_LENGTH,
+  AI_MEMORY_REQUEST_MAX_LENGTH,
+} from "@quieter/ai/ai-memory";
 import { AUTO_LABEL_MODEL } from "@quieter/ai/classify-gmail-message";
 import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import {
@@ -11,13 +15,13 @@ import {
 import type { ParsedMailSearch } from "@quieter/ai/parse-mail-search";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
-import { user } from "@quieter/database/schema";
+import { user, userAiContextEvent } from "@quieter/database/schema";
 import {
   isMailSearchFilterSupported,
   normalizeStructuredMailSearch,
 } from "@quieter/mail/search";
 import { reportError } from "@quieter/observability";
-import { eq } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { assertCanUseAi } from "../ai-access";
@@ -29,12 +33,19 @@ import {
   getPersonalAiMemoryScopeConfig,
   listMailboxAiMemory,
   listPersonalAiMemory,
+  loadAiAgentContext,
   purgeMailboxAiMemory,
   purgePersonalAiMemory,
   requestAiMemoryUpdate,
-  undoAiMemoryChange,
+  saveAiMemory,
+  searchAiMemory,
+  serializeAiAgentContext,
   updateAiMemoryScopeConfig,
 } from "../ai-memory";
+import {
+  listMailboxMemoryBootstraps,
+  retryMailboxMemoryBootstrap,
+} from "../ai-memory-capture";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
   replySuggestionInputSchema,
@@ -71,10 +82,52 @@ const serializeModels = () => {
 };
 
 const loadSettings = async (userId: string) => {
-  const memoryConfig = await getPersonalAiMemoryScopeConfig(userId);
+  const [memoryConfig, learning] = await Promise.all([
+    getPersonalAiMemoryScopeConfig(userId),
+    listMailboxMemoryBootstraps(userId),
+  ]);
+  const pending =
+    learning.length === 0
+      ? []
+      : await db
+          .select({
+            failedCount:
+              sql<number>`count(*) filter (where ${userAiContextEvent.lastError} is not null)`.mapWith(
+                Number
+              ),
+            mailboxId: userAiContextEvent.mailboxId,
+            needsBalance: sql<boolean>`bool_or(${userAiContextEvent.lastError} like '%usage balance%')`,
+            pendingCount: count(),
+          })
+          .from(userAiContextEvent)
+          .where(
+            and(
+              eq(userAiContextEvent.userId, userId),
+              inArray(
+                userAiContextEvent.mailboxId,
+                learning.map((item) => item.mailboxId)
+              ),
+              eq(sql`${userAiContextEvent.metadata}->>'memoryScope'`, "user"),
+              isNull(userAiContextEvent.mergedAt),
+              isNull(userAiContextEvent.skippedAt)
+            )
+          )
+          .groupBy(userAiContextEvent.mailboxId);
+  const pendingByMailbox = new Map(
+    pending.map((item) => [item.mailboxId, item])
+  );
   return {
     memory: {
       enabled: memoryConfig.activeLearningEnabled,
+      learning: learning.map((item) => {
+        const queued = pendingByMailbox.get(item.mailboxId);
+        return {
+          ...item,
+          failedCount: queued?.failedCount ?? 0,
+          needsBalance: queued?.needsBalance ?? false,
+          pendingCount: queued?.pendingCount ?? 0,
+        };
+      }),
       revision: memoryConfig.revision,
     },
     models: serializeModels(),
@@ -150,20 +203,17 @@ export const aiRouter = {
   forgetMemory: protectedProcedure
     .input(memoryTargetSchema.extend({ memoryId: z.string().trim().min(1) }))
     .handler(async ({ context, input }) => {
-      await assertMemoryTarget(input, context.userId, true);
-      const change = await forgetAiMemory({
-        mailboxId: input.mailboxId,
-        memoryId: input.memoryId,
-        scope: input.scope,
-        userId: context.userId,
-      });
-      if (!change) {
-        throw new ORPCError("NOT_FOUND", { message: "Memory not found." });
+      try {
+        await assertMemoryTarget(input, context.userId, true);
+        return await forgetAiMemory({
+          mailboxId: input.mailboxId,
+          memoryId: input.memoryId,
+          scope: input.scope,
+          userId: context.userId,
+        });
+      } catch (error) {
+        throw toUserMemoryError(error);
       }
-      return {
-        memory: await loadTargetMemory(input, context.userId),
-        summary: change.summary,
-      };
     }),
 
   interactMemory: protectedProcedure
@@ -237,6 +287,14 @@ export const aiRouter = {
               ? undefined
               : ["archived", "read", "unread"],
           availableLabels: input.availableLabels ?? [],
+          memoryContext: serializeAiAgentContext(
+            await loadAiAgentContext({
+              agent: "search",
+              mailboxId: mailbox.id,
+              query: input.query,
+              userId: context.userId,
+            })
+          ),
           model: searchModel,
           onUsage: (usage) => {
             void reportAiUsage({
@@ -276,10 +334,77 @@ export const aiRouter = {
       });
     }),
 
+  learnFromMail: protectedProcedure
+    .input(z.object({ mailboxId: mailboxIdSchema }))
+    .handler(async ({ context, input }) => {
+      try {
+        return await retryMailboxMemoryBootstrap({
+          mailboxId: input.mailboxId,
+          userId: context.userId,
+        });
+      } catch (error) {
+        throw toUserMemoryError(error);
+      }
+    }),
+
+  memories: protectedProcedure
+    .route({ method: "GET" })
+    .input(
+      memoryTargetSchema.extend({
+        category: z.enum(AI_MEMORY_CATEGORIES).optional(),
+        cursor: z.string().trim().min(1).max(1000).optional(),
+        limit: z.number().int().min(1).max(50).default(20),
+        query: z.string().trim().max(500).optional(),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      try {
+        await assertMemoryTarget(input, context.userId, false);
+        return await searchAiMemory({ ...input, userId: context.userId });
+      } catch (error) {
+        throw toUserMemoryError(error);
+      }
+    }),
+
   resetPersonalization: protectedProcedure.handler(async ({ context }) => {
     await purgePersonalAiMemory(context.userId);
     return { deleted: true };
   }),
+
+  saveMemory: protectedProcedure
+    .input(
+      memoryTargetSchema
+        .extend({
+          category: z.enum(AI_MEMORY_CATEGORIES),
+          content: z.string().trim().min(1).max(AI_MEMORY_CONTENT_MAX_LENGTH),
+          correspondents: z
+            .array(z.email().trim().max(320))
+            .max(20)
+            .default([]),
+          memoryId: z.string().trim().min(1).max(200).optional(),
+          version: z.number().int().positive().optional(),
+        })
+        .superRefine((memory, context) => {
+          if (
+            (memory.memoryId === undefined) !==
+            (memory.version === undefined)
+          ) {
+            context.addIssue({
+              code: "custom",
+              message: "Reload this memory before saving your changes.",
+              path: ["version"],
+            });
+          }
+        })
+    )
+    .handler(async ({ context, input }) => {
+      try {
+        await assertMemoryTarget(input, context.userId, true);
+        return await saveAiMemory({ ...input, userId: context.userId });
+      } catch (error) {
+        throw toUserMemoryError(error);
+      }
+    }),
 
   settings: protectedProcedure
     .route({ method: "GET" })
@@ -288,26 +413,6 @@ export const aiRouter = {
   suggestReply: protectedProcedure
     .input(replySuggestionInputSchema)
     .handler(requestReplySuggestion),
-
-  undoMemoryChange: protectedProcedure
-    .input(memoryTargetSchema.extend({ changeSetId: z.string().trim().min(1) }))
-    .handler(async ({ context, input }) => {
-      try {
-        await assertMemoryTarget(input, context.userId, true);
-        const change = await undoAiMemoryChange({
-          changeSetId: input.changeSetId,
-          mailboxId: input.mailboxId,
-          scope: input.scope,
-          userId: context.userId,
-        });
-        return {
-          memory: await loadTargetMemory(input, context.userId),
-          summary: change.summary,
-        };
-      } catch (error) {
-        throw toUserMemoryError(error);
-      }
-    }),
 
   updateLearningGuidance: protectedProcedure
     .input(

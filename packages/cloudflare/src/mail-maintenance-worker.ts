@@ -1,6 +1,8 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { cleanupRateLimitBuckets } from "@quieter/orpc/abuse-protection";
+import { purgeExpiredAiGeneratedMailBodies } from "@quieter/orpc/ai-mail-authorship";
 import { processPendingAiMemoryEvents } from "@quieter/orpc/ai-memory";
+import { processPendingMailMemoryBootstrap } from "@quieter/orpc/ai-memory-capture";
 import { runDueDailyBriefs } from "@quieter/orpc/daily-brief";
 import { cleanupGmailComposeOperations } from "@quieter/orpc/gmail-compose-retention";
 import { recoverMailSends } from "@quieter/orpc/mail-send";
@@ -18,6 +20,8 @@ export default withSentryReporting({
         const results = await Promise.allSettled([
           recoverMailSends(),
           processPendingAiMemoryEvents(),
+          processPendingMailMemoryBootstrap(),
+          purgeExpiredAiGeneratedMailBodies(),
           cleanupGmailComposeOperations(),
           cleanupMailObjects(),
           cleanupRateLimitBuckets(),

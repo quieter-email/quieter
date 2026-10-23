@@ -189,7 +189,11 @@ const input = {
     getAutoLabelContext: async () => ({
       availableLabelIds: new Set<string>(),
       labels: [],
-      memoryCandidates: [],
+      memoryCandidates: {
+        includeUserScope: true,
+        mailboxId: "mailbox-1",
+        userId: "user-1",
+      },
       model: "fixture-model",
     }),
     getBudgetStatus: fixtures.budget,
@@ -371,7 +375,11 @@ describe("Gmail automation retry recovery", () => {
                   ]
                 : []),
             ],
-            memoryCandidates: [],
+            memoryCandidates: {
+              includeUserScope: true,
+              mailboxId: "mailbox-1",
+              userId: "user-1",
+            },
             model: "fixture-model",
           }),
         },

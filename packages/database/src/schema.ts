@@ -260,8 +260,19 @@ export type AiMemoryIndexJobStatus =
   | "pending"
   | "processing";
 export const AI_MEMORY_EMBEDDING_DIMENSIONS = 1024;
+export type AiMemoryCategory =
+  | "identity"
+  | "writing_style"
+  | "relationships"
+  | "preferences"
+  | "work"
+  | "interests"
+  | "activity"
+  | "labeling";
 export type AiMemoryMetadata = {
   agents?: string[];
+  category?: AiMemoryCategory;
+  correspondents?: string[];
   sourceDomains?: string[];
   topics?: string[];
   [key: string]: unknown;
@@ -666,6 +677,37 @@ export const userAiContextEvent = pgTable(
   ]
 );
 
+export const aiGeneratedMailBody = pgTable(
+  "aiGeneratedMailBody",
+  {
+    bodyDigest: text("bodyDigest").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    check(
+      "ai_generated_mail_body_digest_check",
+      sql`${table.bodyDigest} ~ '^[0-9a-f]{64}$'`
+    ),
+    unique("ai_generated_mail_body_mailbox_user_digest_unique").on(
+      table.mailboxId,
+      table.userId,
+      table.bodyDigest
+    ),
+    index("ai_generated_mail_body_mailbox_digest_idx").on(
+      table.mailboxId,
+      table.bodyDigest
+    ),
+    index("ai_generated_mail_body_expiration_idx").on(table.expiresAt),
+  ]
+);
+
 export const aiMemory = pgTable(
   "aiMemory",
   {
@@ -756,6 +798,15 @@ export const aiMemory = pgTable(
       table.updatedAt
     ),
     index("ai_memory_expiration_idx").on(table.status, table.expiresAt),
+    index("ai_memory_scope_category_idx").on(
+      table.scopeKey,
+      sql`(${table.metadata}->>'category')`
+    ),
+    index("ai_memory_metadata_idx").using("gin", table.metadata),
+    index("ai_memory_text_idx").using(
+      "gin",
+      sql`to_tsvector('simple', ${table.content} || ' ' || ${table.summary})`
+    ),
     index("ai_memory_embedding_pending_idx")
       .on(table.scopeKey, table.updatedAt)
       .where(sql`${table.status} = 'active' and ${table.embedding} is null`),
@@ -769,12 +820,7 @@ export const aiMemory = pgTable(
   ]
 );
 
-/**
- * Retired. Memory embeddings live on `aiMemory.embedding`, so no external
- * index needs an outbox. The table is kept only so the expand deploy stays
- * safe; a contract migration drops it once every environment is past this
- * release.
- */
+// Retained for an expand/contract deployment. Plain-text memory does not use this table.
 export const aiMemoryIndexJob = pgTable(
   "aiMemoryIndexJob",
   {
@@ -908,6 +954,44 @@ export const aiMemoryScopeConfig = pgTable(
       sql`char_length(${table.learningPrompt}) <= 6000`
     ),
     unique("ai_memory_scope_config_scope_key_unique").on(table.scopeKey),
+  ]
+);
+
+export const aiMemoryMailboxState = pgTable(
+  "aiMemoryMailboxState",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    lastError: text("lastError"),
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    processingAt: timestamp("processingAt"),
+    receivedComplete: boolean("receivedComplete").notNull().default(false),
+    receivedCount: integer("receivedCount").notNull().default(0),
+    receivedCursor: text("receivedCursor"),
+    sentComplete: boolean("sentComplete").notNull().default(false),
+    sentCount: integer("sentCount").notNull().default(0),
+    sentCursor: text("sentCursor"),
+    status: text("status")
+      .$type<"pending" | "processing" | "completed" | "failed">()
+      .notNull()
+      .default("pending"),
+    updatedAt: timestamp("updatedAt").notNull(),
+    userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    check(
+      "ai_memory_mailbox_state_status_check",
+      sql`${table.status} in ('pending', 'processing', 'completed', 'failed')`
+    ),
+    check(
+      "ai_memory_mailbox_state_count_check",
+      sql`${table.receivedCount} >= 0 and ${table.sentCount} >= 0`
+    ),
+    index("ai_memory_mailbox_state_status_updated_idx").on(
+      table.status,
+      table.updatedAt
+    ),
   ]
 );
 
@@ -2983,9 +3067,11 @@ export const apikey = pgTable(
 
 export const tables = {
   account,
+  aiGeneratedMailBody,
   aiMemory,
   aiMemoryChangeSet,
   aiMemoryIndexJob,
+  aiMemoryMailboxState,
   aiMemoryScopeConfig,
   apikey,
   billingCreditUsageEvent,

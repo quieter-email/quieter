@@ -4,7 +4,9 @@
   "type": "module",
   "exports": {
     "./daily-brief": "./src/daily-brief.ts",
+    "./ai-mail-authorship": "./src/ai-mail-authorship.ts",
     "./ai-memory": "./src/ai-memory.ts",
+    "./ai-memory-capture": "./src/ai-memory-capture.ts",
     "./managed-mail/rule-backfills": "./src/managed-mail/rules/backfill.ts",
     "./mail-send": "./src/mail-send.ts",
     "./managed-mail/storage": "./src/managed-mail/messages/raw-object-lifecycle.ts",

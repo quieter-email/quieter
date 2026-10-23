@@ -21,6 +21,7 @@ import {
 } from "vite-plus/test";
 
 import type { assertCanUseAi } from "../src/ai-access";
+import { isAiGeneratedMailBody } from "../src/ai-mail-authorship";
 import type * as AiMemoryModule from "../src/ai-memory";
 import { createAiChatResponse } from "../src/chat/service";
 import type { hasConnectedConnector } from "../src/connectors/runtime";
@@ -216,7 +217,9 @@ describe.skipIf(state.databaseUrl === undefined)(
         status: "success",
         target: "message",
       });
-      state.learn.mockReset().mockResolvedValue({ status: "recorded" });
+      state.learn
+        .mockReset()
+        .mockResolvedValue({ explicit: false, status: "recorded" });
       state.send.mockReset().mockResolvedValue({
         draftCleanupHandled: true,
         id: "sent-message",
@@ -410,6 +413,68 @@ describe.skipIf(state.databaseUrl === undefined)(
         state: "output-available",
       });
     });
+
+    test.each(["open_compose", "edit_compose"] as const)(
+      "records generated %s text before the browser receives the action",
+      async (toolName) => {
+        await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
+        const bodyText = `Hey Jo,\n\nHere is the ${toolName} reply.`;
+        state.model.mockReturnValue(
+          new MockLanguageModelV4({
+            doStream: {
+              stream: convertArrayToReadableStream([
+                { type: "stream-start", warnings: [] },
+                {
+                  input: JSON.stringify({
+                    bodyText,
+                    ...(toolName === "edit_compose"
+                      ? { draftId: "visible-draft", expectedDraftRevision: 1 }
+                      : {}),
+                  }),
+                  toolCallId: "compose-action",
+                  toolName,
+                  type: "tool-call",
+                },
+                {
+                  finishReason: { raw: undefined, unified: "tool-calls" },
+                  type: "finish",
+                  usage: {
+                    inputTokens: {
+                      cacheRead: 0,
+                      cacheWrite: 0,
+                      noCache: 1,
+                      total: 1,
+                    },
+                    outputTokens: { reasoning: 0, text: 1, total: 1 },
+                  },
+                },
+              ]),
+            },
+          })
+        );
+        const response = await createAiChatResponse({
+          body: {
+            category: "inbox",
+            foreground,
+            mailboxId: state.mailboxId,
+            message: {
+              id: userMessageId,
+              parts: [{ text: "Draft a brief response", type: "text" }],
+              role: "user",
+            },
+            threadId,
+            trigger: "submit-message",
+          },
+          request: new Request("https://example.test/api/chat"),
+          userId,
+        });
+        const stream = await response.text();
+        expect(stream).toContain(toolName);
+        await expect(
+          isAiGeneratedMailBody({ bodyText, mailboxId: state.mailboxId })
+        ).resolves.toBeTruthy();
+      }
+    );
 
     test("concurrent approvals execute once and keep the result after model failure", async () => {
       const responses = await Promise.allSettled([

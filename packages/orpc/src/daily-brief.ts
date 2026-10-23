@@ -35,7 +35,6 @@ import { assertCanUseAi } from "./ai-access";
 import {
   learnAiMemoryFromMailAction,
   loadAiAgentContext,
-  loadAiAgentMemoryCandidates,
   serializeAiAgentContext,
 } from "./ai-memory";
 import {
@@ -104,25 +103,13 @@ export const loadDailyBriefMemoryContext = async ({
   mailboxId,
   userId,
   query,
-}: Scope & { query: string }) => {
-  const candidates = await loadAiAgentMemoryCandidates({ mailboxId, userId });
-  return await loadAiAgentContext({
+}: Scope & { query: string }) =>
+  await loadAiAgentContext({
     agent: "daily_brief",
-    candidates: candidates.filter(
-      (candidate) =>
-        (candidate.scope === "mailbox" &&
-          candidate.mailboxId === mailboxId &&
-          candidate.scopeKey === `mailbox:${mailboxId}`) ||
-        (candidate.scope === "user" &&
-          candidate.userId === userId &&
-          candidate.scopeKey === `user:${userId}`)
-    ),
     mailboxId,
     query,
-    semantic: false,
     userId,
   });
-};
 
 const loadSettings = async ({ mailboxId, userId }: Scope) => {
   const settings = await db
@@ -669,8 +656,7 @@ const generateEdition = async ({
           mailboxId: claimed.mailboxId,
           query: candidates
             .map((candidate) => `${candidate.subject} ${candidate.fromName}`)
-            .join(" ")
-            .slice(0, 2000),
+            .join(" "),
           userId: claimed.userId,
         })
       : null;

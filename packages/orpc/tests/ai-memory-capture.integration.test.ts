@@ -146,7 +146,7 @@ describe.skipIf(state.databaseUrl === undefined)(
           .select()
           .from(userAiContextEvent)
           .where(eq(userAiContextEvent.userId, userId))
-      ).resolves.toHaveLength(0);
+      ).resolves.toMatchObject([{ metadata: {}, processingAt: null }]);
     });
 
     test("checks the current learning setting after acquiring the reset lock", async () => {
@@ -161,6 +161,7 @@ describe.skipIf(state.databaseUrl === undefined)(
             (id, "scopeKey", scope, "userId", "activeLearningEnabled", "createdAt", "updatedAt")
           VALUES
             (${crypto.randomUUID()}, ${`user:${userId}`}, 'user', ${userId}, false, now(), now())
+          ON CONFLICT ("scopeKey") DO UPDATE SET "activeLearningEnabled" = false
         `;
       });
       await locked.promise;
@@ -189,7 +190,7 @@ describe.skipIf(state.databaseUrl === undefined)(
           .select()
           .from(userAiContextEvent)
           .where(eq(userAiContextEvent.userId, userId))
-      ).resolves.toHaveLength(0);
+      ).resolves.toMatchObject([{ metadata: {}, processingAt: null }]);
       await db
         .delete(aiMemoryScopeConfig)
         .where(eq(aiMemoryScopeConfig.userId, userId));
