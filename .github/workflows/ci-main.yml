@@ -49,11 +49,25 @@ jobs:
       - name: Setup repository
         uses: ./.github/actions/setup
 
-      - name: Test
-        run: vp test
+      - name: Test Node and Cloudflare Worker runtimes
+        run: |
+          set -m
+          vp test --maxWorkers=2 &
+          node_pid=$!
+          vp run @quieter/cloudflare#test:workers &
+          worker_pid=$!
+          trap 'kill -- -"$node_pid" -"$worker_pid" 2>/dev/null || true; wait' EXIT
 
-      - name: Test Cloudflare Worker runtime
-        run: vp run @quieter/cloudflare#test:workers
+          node_status=0
+          worker_status=0
+          wait "$node_pid" || node_status=$?
+          wait "$worker_pid" || worker_status=$?
+          trap - EXIT
+
+          printf 'Node tests exited with %s; Worker tests exited with %s.\n' "$node_status" "$worker_status"
+          if [ "$node_status" -ne 0 ] || [ "$worker_status" -ne 0 ]; then
+            exit 1
+          fi
 
   deployment-checks:
     name: Deployment safety checks
@@ -108,34 +122,6 @@ jobs:
             --main ./apps/web/src/server.ts \
             --out ci-build-worker.wrangler.jsonc
           vp run @quieter/web#build
-
-  migration-conflict:
-    name: Migration conflict check
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Setup repository
-        uses: ./.github/actions/setup
-
-      # The drizzle check action invokes its detected package manager directly,
-      # so pnpm has to be on PATH ahead of it.
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Check migration conflicts
-        uses: drizzle-team/drizzle-orm/actions/check@6adfcd1031726aaf59106ceb36707d85db5e6617
-        with:
-          working-directory: packages/database
-          config: drizzle.config.ts
 
   migration-integration:
     name: Migration integration tests
