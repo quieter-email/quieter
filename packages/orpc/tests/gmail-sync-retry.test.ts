@@ -33,6 +33,22 @@ const fixtures = vi.hoisted(() => ({
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The fake executes predicates against in-memory rows rather than producing SQL.
 vi.mock("drizzle-orm", async (importOriginal) => {
   const original = await importOriginal<typeof drizzleOrm>();
+  const sql = Object.assign(
+    (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const [column] = values;
+      const inequality = /^\s*<>\s*'(?<expected>[^']+)'/u.exec(
+        strings[1] ?? ""
+      );
+      if (
+        column instanceof original.Column &&
+        inequality?.groups?.expected !== undefined
+      ) {
+        return (row: Row) => row[column.name] !== inequality.groups?.expected;
+      }
+      return original.sql(strings, ...values);
+    },
+    original.sql
+  );
   return {
     ...original,
     and:
@@ -58,7 +74,7 @@ vi.mock("drizzle-orm", async (importOriginal) => {
     exists: (query: { matches: (outerRow: Row) => boolean }) => (row: Row) =>
       query.matches(row),
     isNotNull: (column: { name: string }) => (row: Row) =>
-      row[column.name] !== null,
+      row[column.name] !== null && row[column.name] !== undefined,
     isNull: (column: { name: string }) => (row: Row) =>
       row[column.name] === null,
     lte: (column: { name: string }, value: Date) => (row: Row) => {
@@ -69,6 +85,7 @@ vi.mock("drizzle-orm", async (importOriginal) => {
       (...predicates: Predicate[]) =>
       (row: Row, outerRow?: Row) =>
         predicates.some((predicate) => predicate(row, outerRow)),
+    sql,
   };
 });
 
@@ -237,9 +254,12 @@ describe("Gmail automation retry recovery", () => {
       emailAddress: "mailbox@example.test",
       historyPageToken: null,
       id: input.mailboxId,
+      lastCapturedAt: new Date(),
       lastErrorAt: null,
       lastReconciledAt: new Date(),
       mailboxId: input.mailboxId,
+      pendingHistoryPage: null,
+      phase: "history",
       provider: "gmail",
       recoveryAfter: null,
       recoveryPageToken: null,
@@ -410,4 +430,16 @@ describe("Gmail automation retry recovery", () => {
       expect(jobs).toHaveLength(0);
     }
   );
+
+  test("schedules unfinished capture independently of automation failure backoff", async () => {
+    Object.assign(fixtures.rows[0] ?? {}, { attemptCount: 1 });
+    Object.assign(fixtures.mailboxes[0] ?? {}, {
+      lastErrorAt: new Date(),
+      phase: "bootstrap",
+    });
+
+    const jobs = await listGmailPubSubMaintenanceJobs();
+
+    expect(jobs.some((job) => job.mailboxId === input.mailboxId)).toBeTruthy();
+  });
 });

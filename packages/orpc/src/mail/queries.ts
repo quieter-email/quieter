@@ -13,6 +13,7 @@ import { parseDraftMessage } from "@quieter/gmail/compose";
 
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
+import { writeGmailCapturedMessage } from "../mail-capture";
 import { assertUserOrganizationMember } from "../mail-domain/service";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { getManagedMessageAttachment } from "../managed-mail/messages/attachments";
@@ -239,7 +240,18 @@ export const queriesMailOperations = {
       context,
       input.mailboxId,
       async (accessToken, signal) =>
-        await getThreadWithDetails(accessToken, input.threadId, signal)
+        await getThreadWithDetails(
+          accessToken,
+          input.threadId,
+          signal,
+          async (snapshot) => {
+            await writeGmailCapturedMessage({
+              mailboxId: input.mailboxId,
+              snapshot,
+              source: "on_demand",
+            });
+          }
+        )
     ).catch((error: unknown) => {
       if (isGmailServiceError(error) && error.status === 404) {
         throw new ORPCError("NOT_FOUND", {

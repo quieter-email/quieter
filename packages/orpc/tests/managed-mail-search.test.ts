@@ -10,6 +10,7 @@ const NOW = new Date("2026-06-29T12:00:00.000Z");
 const message = (
   input: Partial<ManagedMessageRecord> = {}
 ): ManagedMessageRecord => ({
+  analysis: null,
   bcc: null,
   bccNormalized: "",
   bodyHtml: null,
