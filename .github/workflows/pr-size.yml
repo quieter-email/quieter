@@ -3,72 +3,31 @@ name: PR Size
 on:
   workflow_dispatch:
   pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: read
 
+env:
+  PR_SIZE_LABELS_JSON: >-
+    [{"name":"size:XS","color":"0e8a16","description":"0-9 effective changed lines (test files excluded in mixed PRs)."},
+     {"name":"size:S","color":"5ebd3e","description":"10-29 effective changed lines (test files excluded in mixed PRs)."},
+     {"name":"size:M","color":"fbca04","description":"30-99 effective changed lines (test files excluded in mixed PRs)."},
+     {"name":"size:L","color":"fe7d37","description":"100-499 effective changed lines (test files excluded in mixed PRs)."},
+     {"name":"size:XL","color":"d93f0b","description":"500-999 effective changed lines (test files excluded in mixed PRs)."},
+     {"name":"size:XXL","color":"b60205","description":"1,000+ effective changed lines (test files excluded in mixed PRs)."}]
+
 jobs:
-  prepare-config:
-    name: Prepare PR size config
-    runs-on: ubuntu-24.04
-    outputs:
-      labels_json: ${{ steps.config.outputs.labels_json }}
-    steps:
-      - id: config
-        name: Build PR size label config
-        uses: actions/github-script@v9
-        with:
-          result-encoding: string
-          script: |
-            const managedLabels = [
-              {
-                name: "size:XS",
-                color: "0e8a16",
-                description: "0-9 effective changed lines (test files excluded in mixed PRs).",
-              },
-              {
-                name: "size:S",
-                color: "5ebd3e",
-                description: "10-29 effective changed lines (test files excluded in mixed PRs).",
-              },
-              {
-                name: "size:M",
-                color: "fbca04",
-                description: "30-99 effective changed lines (test files excluded in mixed PRs).",
-              },
-              {
-                name: "size:L",
-                color: "fe7d37",
-                description: "100-499 effective changed lines (test files excluded in mixed PRs).",
-              },
-              {
-                name: "size:XL",
-                color: "d93f0b",
-                description: "500-999 effective changed lines (test files excluded in mixed PRs).",
-              },
-              {
-                name: "size:XXL",
-                color: "b60205",
-                description: "1,000+ effective changed lines (test files excluded in mixed PRs).",
-              },
-            ];
-
-            core.setOutput("labels_json", JSON.stringify(managedLabels));
-
   sync-label-definitions:
     name: Sync PR size label definitions
-    needs: prepare-config
     if: github.event_name != 'pull_request_target'
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
       issues: write
     steps:
       - name: Ensure PR size labels exist
         uses: actions/github-script@v9
-        env:
-          PR_SIZE_LABELS_JSON: ${{ needs.prepare-config.outputs.labels_json }}
         with:
           script: |
             const managedLabels = JSON.parse(process.env.PR_SIZE_LABELS_JSON ?? "[]");
@@ -116,9 +75,8 @@ jobs:
 
   label:
     name: Label PR size
-    needs: prepare-config
     if: github.event_name == 'pull_request_target'
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
       issues: read
@@ -138,8 +96,6 @@ jobs:
 
       - name: Sync PR size label
         uses: actions/github-script@v9
-        env:
-          PR_SIZE_LABELS_JSON: ${{ needs.prepare-config.outputs.labels_json }}
         with:
           script: |
             const { execFileSync } = require("node:child_process");

@@ -23,8 +23,89 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  prior-checks:
+    name: Find verified commit
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 2
+    permissions:
+      actions: read
+    outputs:
+      reuse: ${{ steps.evidence.outputs.reuse }}
+    steps:
+      - name: Find successful merge queue verification
+        id: evidence
+        uses: actions/github-script@v9
+        with:
+          script: |
+            core.setOutput("reuse", "false");
+            if (context.eventName !== "push" || context.ref !== "refs/heads/main") {
+              core.info("Running fresh release verification.");
+              return;
+            }
+
+            try {
+              const { owner, repo } = context.repo;
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: "ci-main.yml",
+                event: "merge_group",
+                head_sha: context.sha,
+                per_page: 100,
+              });
+              const runs = data.workflow_runs;
+              if (runs.length === 0 || data.total_count !== runs.length || runs.some((run) =>
+                run.status !== "completed" || !Number.isFinite(Date.parse(run.updated_at)))) {
+                core.info("No complete merge queue evidence; running all checks.");
+                return;
+              }
+
+              runs.sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at) || b.id - a.id);
+              const { data: run } = await github.rest.actions.getWorkflowRun({
+                owner, repo, run_id: runs[0].id,
+              });
+              if (run.event !== "merge_group" || run.head_sha !== context.sha ||
+                !Number.isInteger(run.id) || run.id < 1 ||
+                !Number.isInteger(run.run_attempt) || run.run_attempt < 1 ||
+                run.path !== ".github/workflows/ci-main.yml" ||
+                run.head_repository?.full_name !== `${owner}/${repo}` ||
+                !run.head_branch?.startsWith("gh-readonly-queue/main/") ||
+                run.status !== "completed" || run.conclusion !== "success") {
+                core.info("Latest verification is not successful evidence for this commit; running all checks.");
+                return;
+              }
+
+              const { data: jobs } = await github.rest.actions.listJobsForWorkflowRun({
+                owner, repo, run_id: run.id, filter: "latest", per_page: 100,
+              });
+              if (jobs.jobs.length === 0 || jobs.total_count !== jobs.jobs.length ||
+                jobs.jobs.some((job) => job.status !== "completed" || job.conclusion !== "success" ||
+                  job.run_id !== run.id || job.run_attempt !== run.run_attempt)) {
+                core.info("Verification jobs are incomplete or unsuccessful; running all checks.");
+                return;
+              }
+
+              const { data: current } = await github.rest.actions.getWorkflowRun({
+                owner, repo, run_id: run.id,
+              });
+              if (current.run_attempt !== run.run_attempt || current.updated_at !== run.updated_at ||
+                current.status !== "completed" || current.conclusion !== "success") {
+                core.info("Verification changed during lookup; running all checks.");
+                return;
+              }
+
+              const url = `https://github.com/${owner}/${repo}/actions/runs/${run.id}`;
+              await core.summary.addHeading("Reused verification")
+                .addLink(`Successful merge queue checks for ${context.sha}`, url).write();
+              core.setOutput("reuse", "true");
+            } catch (error) {
+              core.warning(`Could not confirm prior verification; running all checks. ${error.message}`);
+            }
+
   verify:
     name: Verify release
+    needs: prior-checks
+    if: ${{ !cancelled() && needs.prior-checks.outputs.reuse != 'true' }}
     uses: ./.github/workflows/ci-main.yml
     permissions:
       contents: read
@@ -32,8 +113,12 @@ jobs:
 
   deploy:
     name: Deploy production
-    needs: verify
-    if: github.ref == 'refs/heads/main'
+    needs: [prior-checks, verify]
+    if: >-
+      ${{ !cancelled() && github.ref == 'refs/heads/main' &&
+          (needs.verify.result == 'success' ||
+           (needs.prior-checks.result == 'success' &&
+            needs.prior-checks.outputs.reuse == 'true' && needs.verify.result == 'skipped')) }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: production
     permissions:
@@ -81,6 +166,9 @@ jobs:
 
       - name: Setup repository
         uses: ./.github/actions/setup
+
+      - name: Install infrastructure type definitions
+        run: vp exec sst install --stage "$SST_STAGE"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
