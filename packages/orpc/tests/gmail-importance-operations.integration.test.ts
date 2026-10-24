@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { classifyMailImportance } from "@quieter/ai/mail-importance";
 import { db } from "@quieter/database/client";
 import {
+  gmailComposeOperation,
   mailbox,
   mailMessageImportance,
   organization,
@@ -199,6 +200,87 @@ describe.skipIf(databaseUrl === undefined)(
       expect(classifyMailImportance).not.toHaveBeenCalled();
       expect(listLabels).not.toHaveBeenCalled();
     });
+
+    test.each([
+      {
+        headers: [{ name: "List-Id", value: "Updates <updates.example.com>" }],
+        key: "list:updates.example.com",
+      },
+      { headers: [], key: "sender:updates@example.com" },
+    ])(
+      "Important retains unsubscribe targets and scopes remembered $key to its mailbox",
+      async ({ headers, key }) => {
+        const mailboxId = await createMailbox();
+        const otherMailboxId = await createMailbox();
+        const snapshot = message(randomUUID(), {
+          headers: [
+            { name: "From", value: "Updates <updates@example.com>" },
+            ...headers,
+            {
+              name: "List-Unsubscribe",
+              value:
+                "<mailto:remove@example.com?subject=Stop>, <https://example.com/unsubscribe>",
+            },
+          ],
+        });
+        providerThreads.set(snapshot.threadId, [snapshot]);
+        for (const id of [mailboxId, otherMailboxId]) {
+          await queriesMailOperations.getThread({
+            context,
+            input: { mailboxId: id, threadId: snapshot.threadId },
+          });
+          await db
+            .update(mailMessageImportance)
+            .set({ manualImportant: true })
+            .where(eq(mailMessageImportance.mailboxId, id));
+        }
+        credentialRequests.mockClear();
+        const available = await queriesMailOperations.listThreads({
+          context,
+          input: { category: "important", mailboxId },
+        });
+        expect(available.messages).toContainEqual(
+          expect.objectContaining({
+            id: snapshot.id,
+            isImportant: true,
+            unsubscribeKey: key,
+            unsubscribeMailto: "mailto:remove@example.com?subject=Stop",
+            unsubscribeUrl: "https://example.com/unsubscribe",
+          })
+        );
+        expect(available.messages[0]?.unsubscribeStatus).toBeUndefined();
+        const operationKey = `unsubscribe:v1:${createHash("sha256").update(key).digest("hex")}`;
+        await db.insert(gmailComposeOperation).values({
+          createdAt: now,
+          id: randomUUID(),
+          kind: "send",
+          mailboxId,
+          messageHeaderId: `<${randomUUID()}@example.com>`,
+          operationKey,
+          requestHash: operationKey,
+          response: { id: "accepted-unsubscribe", threadId: "receipt-thread" },
+          status: "accepted",
+          updatedAt: now,
+        });
+        const remembered = await queriesMailOperations.listThreads({
+          context,
+          input: { category: "important", mailboxId },
+        });
+        expect(remembered.messages).toContainEqual(
+          expect.objectContaining({
+            id: snapshot.id,
+            unsubscribeStatus: "requested",
+          })
+        );
+        const other = await queriesMailOperations.listThreads({
+          context,
+          input: { category: "important", mailboxId: otherMailboxId },
+        });
+        expect(other.messages[0]?.unsubscribeStatus).toBeUndefined();
+        expect(other.messages[0]?.unsubscribeKey).toBe(key);
+        expect(credentialRequests).not.toHaveBeenCalled();
+      }
+    );
 
     test("whole-thread changes include every current incoming member of a partial capture", async () => {
       const mailboxId = await createMailbox();

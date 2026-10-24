@@ -89,8 +89,13 @@ export const mergeMessagePreservingLoadedDetails = (
     syncedMessage.threadIsImportant ?? currentMessage.threadIsImportant,
   threadMessageCount:
     syncedMessage.threadMessageCount ?? currentMessage.threadMessageCount,
+  unsubscribeKey: syncedMessage.unsubscribeKey ?? currentMessage.unsubscribeKey,
   unsubscribeMailto:
     syncedMessage.unsubscribeMailto ?? currentMessage.unsubscribeMailto,
+  unsubscribeStatus:
+    currentMessage.unsubscribeStatus === "requested"
+      ? "requested"
+      : syncedMessage.unsubscribeStatus,
   unsubscribeUrl: syncedMessage.unsubscribeUrl ?? currentMessage.unsubscribeUrl,
 });
 

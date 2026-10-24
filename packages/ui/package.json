@@ -62,7 +62,8 @@
     "./toolbar": "./src/components/ui/toolbar.tsx",
     "./workspace-sidebar": "./src/components/ui/workspace-sidebar.tsx",
     "./workspace-section": "./src/components/ui/workspace-section.tsx",
-    "./tooltip": "./src/components/ui/tooltip.tsx"
+    "./tooltip": "./src/components/ui/tooltip.tsx",
+    "./success-pulse": "./src/components/ui/success-pulse.tsx"
   },
   "dependencies": {
     "@base-ui/react": "catalog:",

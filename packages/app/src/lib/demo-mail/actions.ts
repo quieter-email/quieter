@@ -1,4 +1,3 @@
-import { ORPCError } from "@orpc/client";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import type { MailboxActions } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
 import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
@@ -9,6 +8,7 @@ import {
 } from "@quieter/app/lib/mail/inbox-query/data";
 import { formatMailSender } from "@quieter/mail/compose/sender";
 import type { MailCommand } from "@quieter/mail/data-plane";
+import { getUnsubscribeKey } from "@quieter/mail/unsubscribe";
 
 export type DemoMessageStore = {
   updateMessages: (
@@ -157,11 +157,36 @@ export const createDemoActions = (
         { destination: "inbox", kind: "move" }
       );
     },
-    // oxlint-disable-next-line require-await -- Keep the same rejected-Promise contract as live actions.
-    unsubscribeFromMessage: async () => {
-      throw new ORPCError("BAD_REQUEST", {
-        message: "Unsubscribing is unavailable in the demo.",
+    unsubscribeFromMessage: async (id) => {
+      let newlyRequested = false;
+      store.updateMessages((messages) => {
+        const selected = messages.find((message) => message.id === id);
+        const key =
+          selected?.unsubscribeKey ??
+          getUnsubscribeKey([{ name: "From", value: selected?.from ?? "" }]);
+        if (
+          !key ||
+          !selected?.unsubscribeMailto ||
+          selected.unsubscribeStatus === "requested"
+        ) {
+          return messages;
+        }
+        newlyRequested = true;
+        return messages.map((message) =>
+          (message.unsubscribeKey ??
+            getUnsubscribeKey([
+              { name: "From", value: message.from ?? "" },
+            ])) === key
+            ? {
+                ...message,
+                unsubscribeKey: key,
+                unsubscribeStatus: "requested",
+              }
+            : message
+        );
       });
+      await invalidate();
+      return newlyRequested;
     },
     untrashMessage: async (id) => {
       await apply([id], "message", { destination: "inbox", kind: "move" });

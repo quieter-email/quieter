@@ -95,6 +95,47 @@ describe("demo mail", () => {
     ]);
   });
 
+  test("unsubscribe remembers matching senders and keeps other senders available", async () => {
+    let messages: MessageListItem[] = [
+      {
+        from: "List <updates@example.com>",
+        id: "first",
+        threadId: "first",
+        unsubscribeMailto: "mailto:remove@example.com?token=first",
+      },
+      {
+        from: "updates@example.com",
+        id: "second",
+        threadId: "second",
+        unsubscribeMailto: "mailto:remove@example.com?token=second",
+      },
+      {
+        from: "other@example.com",
+        id: "other",
+        threadId: "other",
+        unsubscribeMailto: "mailto:remove@example.com",
+      },
+    ];
+    const actions = createDemoActions(
+      {
+        updateMessages: (update) => {
+          messages = update(messages);
+        },
+      },
+      vi.fn<() => Promise<void>>().mockResolvedValue()
+    );
+    await expect(actions.unsubscribeFromMessage("first")).resolves.toBeTruthy();
+    expect(
+      messages
+        .filter((message) => message.unsubscribeStatus === "requested")
+        .map((message) => message.id)
+    ).toContain("second");
+    expect(
+      messages.find((message) => message.id === "other")?.unsubscribeStatus
+    ).toBeUndefined();
+    await expect(actions.unsubscribeFromMessage("second")).resolves.toBeFalsy();
+  });
+
   test("negated named labels and pagination preserve complete thread labels", () => {
     const messages: MessageListItem[] = [
       {

@@ -4,6 +4,7 @@ import {
   Delete02Icon,
   Mail01Icon,
   Refresh01Icon,
+  Tick01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
@@ -69,6 +70,7 @@ import {
   SettingsPageHeader,
   SettingsSectionLayout,
 } from "@quieter/ui/settings-layout";
+import { SuccessPulse } from "@quieter/ui/success-pulse";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Textarea } from "@quieter/ui/textarea";
 import { ThemePicker } from "@quieter/ui/theme-picker";
@@ -185,6 +187,7 @@ const copySampleKey = async () => {
 
 export const DesignSystemShowcase = () => {
   const { colorMode, setColorMode } = useColorMode();
+  const [successPulse, setSuccessPulse] = useState(false);
   const [checked, setChecked] = useState(true);
   const [tokenFieldValue, setTokenFieldValue] = useState(
     "When it's a bug, use @Tracker to file it."
@@ -268,6 +271,26 @@ export const DesignSystemShowcase = () => {
           </div>
         </Section>
 
+        <Section title="Success feedback">
+          <Button
+            disabled={successPulse}
+            onClick={() => {
+              setSuccessPulse(true);
+            }}
+            type="button"
+            variant="secondary"
+          >
+            <SuccessPulse
+              active={successPulse}
+              onComplete={() => {
+                setSuccessPulse(false);
+              }}
+            >
+              <HugeiconsIcon aria-hidden icon={Tick01Icon} />
+            </SuccessPulse>
+            Try success pulse
+          </Button>
+        </Section>
         <Section title="Buttons">
           <Row label="Variants">
             <Button type="button">Primary</Button>

@@ -29,6 +29,7 @@ import type {
   MessagePart,
 } from "@quieter/mail/messages";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
+import { getUnsubscribeKey } from "@quieter/mail/unsubscribe";
 import { z } from "zod";
 
 const headerSchema = z.object({
@@ -1023,6 +1024,7 @@ const toMessageListItem = async (
     threadLabelIds: options.threadSummary?.labelIds,
     threadMessageCount: options.threadSummary?.messageCount,
     to: getHeader(message, "To"),
+    unsubscribeKey: getUnsubscribeKey(message.payload?.headers ?? []),
     unsubscribeMailto: unsubscribeTargets.mailto,
     unsubscribeUrl: unsubscribeTargets.url,
   };

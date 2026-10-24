@@ -9,6 +9,8 @@ import type { RetainedListMessage } from "@quieter/app/features/mailbox/componen
 import { useMailboxMessages } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-messages";
 import { useMailboxPendingActions } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-pending-actions";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
+import { rememberRequestedUnsubscribe } from "@quieter/app/lib/mail/inbox-query/query-cache";
+import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { orpc } from "@quieter/app/lib/orpc";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -118,10 +120,45 @@ export const useMailboxListController = ({
         },
         setThreadActionsPending,
         unsubscribeFromMessage: async (targetMessageId) => {
-          await unsubscribeFromMessage({
-            mailboxId,
-            messageId: targetMessageId,
-          });
+          try {
+            const result = await unsubscribeFromMessage({
+              mailboxId,
+              messageId: targetMessageId,
+            });
+            await rememberRequestedUnsubscribe(
+              queryClient,
+              mailboxId,
+              result.key,
+              targetMessageId
+            );
+            setSelection((current) =>
+              current.retainedMessage?.message.unsubscribeKey === result.key ||
+              current.retainedMessage?.message.id === targetMessageId
+                ? {
+                    ...current,
+                    retainedMessage: {
+                      ...current.retainedMessage,
+                      message: {
+                        ...current.retainedMessage.message,
+                        unsubscribeKey: result.key,
+                        unsubscribeStatus: "requested",
+                      },
+                    },
+                  }
+                : current
+            );
+            return result.newlyRequested;
+          } catch (error) {
+            await Promise.all([
+              queryClient.invalidateQueries({
+                queryKey: ["messages", mailboxId],
+              }),
+              queryClient.invalidateQueries({
+                queryKey: getMailboxThreadQueriesKey(mailboxId),
+              }),
+            ]);
+            throw error;
+          }
         },
       }),
     [

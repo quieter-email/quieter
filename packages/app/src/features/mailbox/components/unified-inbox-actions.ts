@@ -61,7 +61,7 @@ export const createUnifiedInboxActions = ({
         "This message is no longer available. Refresh your inboxes."
       );
     }
-    await context.mailboxActions[action](message.id);
+    return await context.mailboxActions[action](message.id);
   };
   const runThreadAction = async (action: ThreadAction, id: string) => {
     const context = contextsByThreadId.get(id);
@@ -227,9 +227,8 @@ export const createUnifiedInboxActions = ({
     unmarkThreadsAsSpam: async (threads) => {
       await runBulkAction("unmarkThreadsAsSpam", threads);
     },
-    unsubscribeFromMessage: async (id) => {
-      await runMessageAction("unsubscribeFromMessage", id);
-    },
+    unsubscribeFromMessage: async (id) =>
+      (await runMessageAction("unsubscribeFromMessage", id)) === true,
     untrashMessage: async (id) => {
       await runMessageAction("untrashMessage", id);
     },

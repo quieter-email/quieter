@@ -62,6 +62,8 @@ export type MessageListItem = {
     senderAddress: string;
     senderMailboxId: string | null;
   };
+  unsubscribeKey?: string;
+  unsubscribeStatus?: "requested" | "confirming";
   unsubscribeMailto?: string;
   unsubscribeUrl?: string;
   senderAvatarUrls?: { light: string; dark: string };

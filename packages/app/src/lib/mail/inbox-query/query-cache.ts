@@ -26,6 +26,7 @@ import {
   normalizeSearchQuery,
 } from "@quieter/app/lib/mail/inbox-query/keys";
 import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query";
+import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { persistQueryByKey } from "@quieter/app/lib/query-persister";
 import type { QueryClient } from "@tanstack/react-query";
 
@@ -351,4 +352,45 @@ export const applyResolvedThreadMetadataToCaches = (
   );
 
   return [...touchedQueryKeys, threadQueryKey];
+};
+
+export const rememberRequestedUnsubscribe = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  key: string,
+  messageId: string
+) => {
+  const threadQueriesKey = getMailboxThreadQueriesKey(mailboxId);
+  await Promise.all([
+    queryClient.cancelQueries({ queryKey: ["messages", mailboxId] }),
+    queryClient.cancelQueries({ queryKey: threadQueriesKey }),
+  ]);
+  const matches = (message: MessageListItem) =>
+    message.id === messageId || message.unsubscribeKey === key;
+  const update = (message: MessageListItem): MessageListItem => ({
+    ...message,
+    unsubscribeKey: key,
+    unsubscribeStatus: "requested",
+  });
+  const touched: (readonly unknown[])[] = updateMessagesInCachedMailboxQueries(
+    queryClient,
+    mailboxId,
+    matches,
+    update
+  );
+  for (const [
+    queryKey,
+    data,
+  ] of queryClient.getQueriesData<ThreadMessagesResult>({
+    queryKey: threadQueriesKey,
+  })) {
+    const next = updateMessagesInThreadData(data, matches, update);
+    if (next !== data) {
+      queryClient.setQueryData(queryKey, next);
+      touched.push(queryKey);
+    }
+  }
+  await persistQueryKeys(queryClient, touched);
+  void queryClient.invalidateQueries({ queryKey: ["messages", mailboxId] });
+  void queryClient.invalidateQueries({ queryKey: threadQueriesKey });
 };

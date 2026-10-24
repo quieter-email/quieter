@@ -4,10 +4,12 @@ import { organizationMailSendIdempotency } from "@quieter/database/schema";
 import {
   extractListUnsubscribeTargets,
   getGmailMessageMetadata,
-  sendRawMessage,
 } from "@quieter/gmail";
-import { buildPlainTextMessage } from "@quieter/mail/compose/mime";
-import { splitMailAddressList } from "@quieter/mail/compose/schema";
+import {
+  findInvalidMailAddresses,
+  splitMailAddressList,
+} from "@quieter/mail/compose/schema";
+import { getUnsubscribeKey } from "@quieter/mail/unsubscribe";
 import { reportError } from "@quieter/observability";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -16,6 +18,7 @@ import {
   getGmailComposeSendStatus,
   saveGmailDraft,
   sendGmailMessage,
+  sendGmailUnsubscribe,
 } from "../gmail-compose";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
@@ -33,9 +36,11 @@ import type { MailInputs } from "./inputs";
 
 const parseListUnsubscribeMailto = (value: string) => {
   let url: URL;
+  let path: string;
 
   try {
     url = new URL(value);
+    path = decodeURIComponent(url.pathname);
   } catch {
     throw new ORPCError("BAD_REQUEST", {
       message: "This message does not expose a valid unsubscribe address.",
@@ -50,12 +55,17 @@ const parseListUnsubscribeMailto = (value: string) => {
 
   const recipients = [
     ...new Set([
-      ...splitMailAddressList(decodeURIComponent(url.pathname)),
+      ...splitMailAddressList(path),
       ...splitMailAddressList(url.searchParams.get("to") ?? ""),
     ]),
   ];
 
-  if (recipients.length === 0) {
+  if (
+    recipients.length === 0 ||
+    recipients.some(
+      (recipient) => findInvalidMailAddresses(recipient).length > 0
+    )
+  ) {
     throw new ORPCError("BAD_REQUEST", {
       message: "This message does not expose a valid unsubscribe address.",
     });
@@ -295,32 +305,49 @@ export const composeMailOperations = {
         });
       }
 
-      const raw = Buffer.from(
-        await buildPlainTextMessage(
-          parseListUnsubscribeMailto(unsubscribeMailto)
-        )
-      ).toString("base64url");
-
-      await sendRawMessage(accessToken, raw);
-
-      await learnAiMemoryFromMailAction({
-        action: "unsubscribe",
-        mailboxId: input.mailboxId,
-        metadata: {
-          senderDomain:
-            message.payload?.headers
-              ?.find((header) => header.name.toLowerCase() === "from")
-              ?.value.match(/@(?<domain>[a-z0-9.-]+\.[a-z]{2,})/iu)
-              ?.groups?.domain?.toLowerCase() ?? null,
-          subject:
-            message.payload?.headers?.find(
-              (header) => header.name.toLowerCase() === "subject"
-            )?.value ?? null,
+      const key = getUnsubscribeKey(message.payload?.headers ?? []);
+      if (key === undefined) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "This message does not identify a mailing list or sender.",
+        });
+      }
+      const result = await sendGmailUnsubscribe(
+        accessToken,
+        input.mailboxId,
+        {
+          key,
+          message: parseListUnsubscribeMailto(unsubscribeMailto),
         },
-        targetCount: 1,
-        userId: context.userId,
-      });
+        signal
+      );
 
-      return { sent: true };
+      if (!result.idempotent) {
+        await learnAiMemoryFromMailAction({
+          action: "unsubscribe",
+          mailboxId: input.mailboxId,
+          metadata: {
+            senderDomain:
+              message.payload?.headers
+                ?.find((header) => header.name.toLowerCase() === "from")
+                ?.value.match(/@(?<domain>[a-z0-9.-]+\.[a-z]{2,})/iu)
+                ?.groups?.domain?.toLowerCase() ?? null,
+            subject:
+              message.payload?.headers?.find(
+                (header) => header.name.toLowerCase() === "subject"
+              )?.value ?? null,
+          },
+          targetCount: 1,
+          userId: context.userId,
+        }).catch((error: unknown) => {
+          reportError(error, {
+            operation: "Could not record unsubscribe learning.",
+          });
+        });
+      }
+      return {
+        key,
+        newlyRequested: !result.idempotent,
+        status: "requested" as const,
+      };
     }),
 };
