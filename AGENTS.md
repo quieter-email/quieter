@@ -4,6 +4,7 @@
 
 ## Boundaries
 
+- Use pstack for every request unless the user explicitly asks not to use it. Start with [the pstack entry skill](.agents/skills/poteto-mode/SKILL.md) and follow its applicable skills and playbooks.
 - Use Vite+ (`vp`) for all dependency installs, package management, and project script execution. Do not invoke the underlying package manager directly.
 - Manage credentials, tokens, encryption keys, and other sensitive configuration through SST Secret resources and linked secret bindings whenever the platform supports it. Do not deploy them as ordinary environment variables or Wrangler configuration values; test-only type-generation fixtures are exempt.
 - Do not make `packages/*` depend on `apps/*`.
