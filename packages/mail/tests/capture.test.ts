@@ -121,4 +121,19 @@ describe("deterministic retained mail analysis", () => {
       headers: true,
     });
   });
+
+  test("normalizes null characters for JSON storage while preserving mail text", () => {
+    const content = "before\0after\n😀";
+    const bounded = boundMailCaptureContent({
+      bodyHtml: content,
+      bodyText: content,
+      headers: [{ name: "X-\0Test", value: content }],
+    });
+    expect(bounded.bodyText).toBe("before\uFFFDafter\n😀");
+    expect(bounded.bodyHtml).toBe(bounded.bodyText);
+    expect(bounded.headers[0]).toMatchObject({
+      name: "X-\uFFFDTest",
+      value: bounded.bodyText,
+    });
+  });
 });
