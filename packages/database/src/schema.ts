@@ -5,7 +5,6 @@ import type {
   MailCaptureIdPage,
   MailMessageAnalysis,
 } from "@quieter/mail/capture";
-import type { DailyBriefItem } from "@quieter/mail/daily-brief";
 import type {
   DeliveryEvent,
   DeliveryStatus,
@@ -31,6 +30,24 @@ import {
 } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { defineRelations } from "drizzle-orm/relations";
+
+type DailyBriefItem = {
+  id: string;
+  title: string;
+  summary: string;
+  reason: string;
+  group: string;
+  priority: number;
+  urgent: boolean;
+  urgentAddition?: boolean;
+  sources: {
+    messageId: string;
+    threadId: string;
+    subject: string;
+    fromName?: string;
+  }[];
+  deferredUntil: string | null;
+};
 
 export type MailDomainStatus = "failed" | "pending_dns" | "verified";
 export type MailDomainMode = "send_and_receive" | "send_only";
@@ -1215,6 +1232,81 @@ export const gmailCapturedMessage = pgTable(
       table.mailboxId,
       table.capturedAt
     ),
+  ]
+);
+
+export const mailMessageImportance = pgTable(
+  "mailMessageImportance",
+  {
+    aiImportant: boolean("aiImportant"),
+    attemptCount: integer("attemptCount").notNull().default(0),
+    classifierVersion: text("classifierVersion").notNull(),
+    contentHash: text("contentHash").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    lastError: text("lastError"),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    leaseId: text("leaseId"),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    manualActorUserId: text("manualActorUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    manualImportant: boolean("manualImportant"),
+    manualUpdatedAt: timestamp("manualUpdatedAt"),
+    messageId: text("messageId").notNull(),
+    nextAttemptAt: timestamp("nextAttemptAt").notNull(),
+    receivedAt: timestamp("receivedAt").notNull(),
+    state: text("state")
+      .$type<
+        | "pending"
+        | "processing"
+        | "completed"
+        | "paused"
+        | "error"
+        | "cancelled"
+      >()
+      .notNull()
+      .default("pending"),
+    threadId: text("threadId").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.messageId] }),
+    index("mail_importance_due_idx").on(table.state, table.nextAttemptAt),
+    index("mail_importance_thread_idx").on(table.mailboxId, table.threadId),
+  ]
+);
+
+export const mailImportanceAttempt = pgTable(
+  "mailImportanceAttempt",
+  {
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    messageId: text("messageId").notNull(),
+    model: text("model").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    usage: jsonb("usage").$type<{
+      promptTokens: number;
+      completionTokens: number;
+      cachedTokens: number;
+      cacheWriteTokens: number;
+      costUsd?: number;
+    }>(),
+    usageReportAttemptedAt: timestamp("usageReportAttemptedAt"),
+    usageReportedAt: timestamp("usageReportedAt"),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("mail_importance_attempt_unreported_idx").on(table.usageReportedAt),
   ]
 );
 
@@ -3106,6 +3198,8 @@ export const tables = {
   mailAutomationMemoryProfile,
   mailDomain,
   mailDomainConnectAttempt,
+  mailImportanceAttempt,
+  mailMessageImportance,
   mailSnippet,
   mailbox,
   mailboxAction,

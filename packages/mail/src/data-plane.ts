@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const mailCategorySchema = z.enum([
   "inbox",
+  "important",
   "unread",
   "archive",
   "sent",
@@ -17,6 +18,7 @@ export type MailMessageSummary = {
   id: string;
   categories: MailCategory[];
   isUnread: boolean;
+  isImportant?: boolean;
 };
 
 export type MailThreadSummary = {
@@ -31,6 +33,7 @@ export type MailThreadSummary = {
   attachmentCount: number;
   categories: MailCategory[];
   isUnread: boolean;
+  isImportant?: boolean;
   customLabelIds: string[];
   draftId?: string;
 };
@@ -53,6 +56,7 @@ export type MailboxCapabilities = {
   canManageKnowledge: boolean;
   canManageLabels: boolean;
   canMarkRead: boolean;
+  canSetImportance: boolean;
   canMoveToInbox: boolean;
   canMoveToSpam: boolean;
   canMoveToTrash: boolean;
@@ -62,6 +66,7 @@ export type MailboxCapabilities = {
 
 export type MailCommand =
   | { kind: "set-read"; read: boolean }
+  | { kind: "set-importance"; important: boolean }
   | { kind: "move"; destination: "archive" | "inbox" | "spam" | "trash" }
   | { kind: "delete-permanently" }
   | { kind: "set-labels"; addIds: string[]; removeIds: string[] };
@@ -82,6 +87,7 @@ export type MailMutationTargetResult = {
 export type MailMutationResult = {
   targets: MailMutationTargetResult[];
   syncToken?: MailSyncToken;
+  confirmedThreadSummaries?: MailThreadSummary[];
   badgeDelta?: Partial<Record<MailCategory, number>>;
 };
 
@@ -113,6 +119,7 @@ export const getMailboxCapabilities = (input: {
       canMoveToSpam: false,
       canMoveToTrash: false,
       canSend: false,
+      canSetImportance: false,
       canSetSenderName: false,
       categories: ["sent"],
     };
@@ -132,9 +139,11 @@ export const getMailboxCapabilities = (input: {
     canMoveToSpam: canRespond,
     canMoveToTrash: canRespond,
     canSend: canRespond,
+    canSetImportance: canRespond,
     canSetSenderName: input.provider === "managed" && canRespond,
     categories: [
       "inbox",
+      "important",
       "unread",
       "archive",
       "sent",

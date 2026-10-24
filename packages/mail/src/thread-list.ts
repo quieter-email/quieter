@@ -127,6 +127,7 @@ export type ThreadParticipant = {
 };
 
 export type ThreadListEntry = {
+  isImportant: boolean;
   threadId: string;
   anchorMessage: MessageListItem;
   messages: MessageListItem[];
@@ -175,6 +176,7 @@ const createThreadEntry = (message: MessageListItem): ThreadListEntry => {
     anchorMessage: message,
     attachmentCount:
       message.threadAttachmentCount ?? message.attachments?.length ?? 0,
+    isImportant: message.threadIsImportant ?? message.isImportant ?? false,
     messageCount: Math.max(1, message.threadMessageCount ?? 0),
     messages: [message],
     participants: [participant],
@@ -191,6 +193,8 @@ const updateThreadEntry = (
   message: MessageListItem
 ) => {
   existingThread.messages.push(message);
+  existingThread.isImportant ||=
+    message.threadIsImportant ?? message.isImportant ?? false;
   existingThread.threadLabelIds = getThreadLabelIds(existingThread.messages);
   existingThread.messageCount = Math.max(
     existingThread.messageCount,

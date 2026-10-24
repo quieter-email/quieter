@@ -2,6 +2,7 @@
 
 import {
   Archive02Icon,
+  Flag01Icon,
   Delete01Icon,
   Delete02Icon,
   Edit01Icon,
@@ -260,8 +261,12 @@ const createFolderEntries = (
   isBusy: boolean
 ): MenuEntry[] => {
   const entries: MenuEntry[] = [];
-  const showArchive = props.mailbox === "inbox" || props.mailbox === "unread";
-  const showMarkAsSpam = props.mailbox === "inbox";
+  const showArchive =
+    props.mailbox === "inbox" ||
+    props.mailbox === "unread" ||
+    props.mailbox === "important";
+  const showMarkAsSpam =
+    props.mailbox === "inbox" || props.mailbox === "important";
   const isArchiveMailbox = props.mailbox === "archive";
   const isSpamMailbox = props.mailbox === "spam";
   const isTrashMailbox = props.mailbox === "trash";
@@ -350,6 +355,23 @@ const createMessageActionEntries = ({
 
   if (readStateEntry !== null) {
     entries.push(readStateEntry);
+  }
+  if (props.actions.onSetImportance) {
+    const important =
+      props.message.threadIsImportant ?? props.message.isImportant ?? false;
+    entries.push({
+      disabled: isBusy,
+      icon: Flag01Icon,
+      id: "toggle-importance",
+      label: important ? "Mark as not important" : "Mark as important",
+      onAction: () => {
+        void props.actions.onSetImportance?.(
+          props.message.threadId,
+          !important
+        );
+      },
+      type: "item",
+    });
   }
   if (labelsEntry !== null) {
     entries.push(labelsEntry);

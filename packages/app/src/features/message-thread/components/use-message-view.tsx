@@ -199,6 +199,9 @@ export const useMessageViewData = ({
   );
   const isActionPending =
     pendingActions.isMessageActionPending(message.id) ||
+    visibleMessages.some((entry) =>
+      pendingActions.isMessageActionPending(entry.id)
+    ) ||
     pendingActions.isThreadActionPending(message.threadId);
   const hotkeyMessage = visibleMessages.at(-1) ?? message;
   const hotkeyLinkedDraftMessage =

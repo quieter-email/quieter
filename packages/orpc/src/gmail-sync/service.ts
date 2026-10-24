@@ -50,13 +50,13 @@ import {
   serializeAiAgentContext,
 } from "../ai-memory";
 import type { AiAgentMemoryCandidates } from "../ai-memory";
-import { markDailyBriefUrgentPending } from "../daily-brief";
 import { syncGmailLabels } from "../gmail-labels";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
 import { processGmailMailCapture } from "../mail-capture";
+import { processPendingMailImportance } from "../mail-importance";
 import {
   listPendingMailboxVerificationCodeMessageIds,
   processMailVerificationCode,
@@ -481,7 +481,6 @@ const processMessageIds = async ({
   automationRuntime,
   autoLabelEnabled,
   extractCodes,
-  markUrgent = true,
   mailboxId,
   messageIds,
   organizationId,
@@ -491,7 +490,6 @@ const processMessageIds = async ({
   automationRuntime: MailAutomationRuntime;
   autoLabelEnabled: boolean;
   extractCodes: boolean;
-  markUrgent?: boolean;
   mailboxId: string;
   messageIds: string[];
   organizationId: string | null;
@@ -561,13 +559,6 @@ const processMessageIds = async ({
       }
     })
   );
-  if (extractCodes && markUrgent && eligibleInboxMessageIds.size > 0) {
-    try {
-      await markDailyBriefUrgentPending({ mailboxId });
-    } catch (error) {
-      reportError(error, { operation: "gmail-sync:daily-brief-pending" });
-    }
-  }
 };
 
 export const retryPendingAutomationMessages = async ({
@@ -631,7 +622,6 @@ export const retryPendingAutomationMessages = async ({
     automationRuntime,
     extractCodes: true,
     mailboxId,
-    markUrgent: false,
     messageIds: pendingCodeMessageIds,
     organizationId,
     userId,
@@ -765,6 +755,9 @@ const processMailboxHistory = async ({
     async (accessToken) =>
       await processGmailMailCapture({ accessToken, mailboxId })
   );
+  if (!capture.busy) {
+    await processPendingMailImportance({ limit: 8, mailboxId });
+  }
   if (capture.busy || capture.needsContinuation) {
     return capture;
   }

@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./daily-brief": "./src/daily-brief.ts",
     "./delivery": "./src/delivery.ts",
     "./live-sync": "./src/live-sync.ts",
     "./data-plane": "./src/data-plane.ts",

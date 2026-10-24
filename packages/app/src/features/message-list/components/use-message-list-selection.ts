@@ -79,6 +79,17 @@ export const useMessageListSelection = ({
     }
     return anchorId;
   })();
+  if (
+    selectionState.scopeKey !== selectionScopeKey ||
+    selectionState.selectedThreadIds.size !== selectedThreadIds.size ||
+    selectionState.selectionAnchorThreadId !== selectionAnchorThreadId
+  ) {
+    setSelectionState({
+      scopeKey: selectionScopeKey,
+      selectedThreadIds,
+      selectionAnchorThreadId,
+    });
+  }
   const selectedThreads = useMemo(
     () =>
       [...selectedThreadIds].flatMap((threadId) => {

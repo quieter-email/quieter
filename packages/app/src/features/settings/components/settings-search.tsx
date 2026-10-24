@@ -68,8 +68,7 @@ export const SettingsSearch = ({
             teams.some((team) => team.id === mailbox.organizationId) &&
             (mailbox.provider === "gmail" ||
               (mailbox.provider === "managed" &&
-                (mailbox.grantRole === "manager" ||
-                  entry.section === "brief")));
+                mailbox.grantRole === "manager"));
           if (!accessible) {
             return [];
           }

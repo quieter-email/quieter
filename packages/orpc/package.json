@@ -3,7 +3,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./daily-brief": "./src/daily-brief.ts",
     "./ai-memory": "./src/ai-memory.ts",
     "./managed-mail/rule-backfills": "./src/managed-mail/rules/backfill.ts",
     "./mail-send": "./src/mail-send.ts",
@@ -36,7 +35,8 @@
     "./gmail-pubsub": "./src/gmail-sync/service.ts",
     "./waitlist": "./src/waitlist.ts",
     "./mail-updates": "./src/mail-updates.ts",
-    "./verification-codes": "./src/verification-codes.ts"
+    "./verification-codes": "./src/verification-codes.ts",
+    "./mail-importance": "./src/mail-importance.ts"
   },
   "dependencies": {
     "@ai-sdk/mcp": "catalog:",

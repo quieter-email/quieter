@@ -22,12 +22,14 @@ type MergeRefreshedMailboxPagesOptions = {
 };
 
 export type MessageMetadataMutationResult = {
+  isImportant?: boolean;
   id: string;
   labelIds?: string[];
   isUnread: boolean;
 };
 
 export type ThreadMetadataMutationResult = {
+  isImportant?: boolean;
   threadId: string;
   messages: MessageMetadataMutationResult[];
 };
@@ -78,10 +80,13 @@ export const mergeMessagePreservingLoadedDetails = (
   draftAnchor: syncedMessage.draftAnchor ?? currentMessage.draftAnchor,
   draftId: syncedMessage.draftId ?? currentMessage.draftId,
   inlineImages: syncedMessage.inlineImages ?? currentMessage.inlineImages,
+  isImportant: syncedMessage.isImportant ?? currentMessage.isImportant,
   senderAvatarUrls:
     syncedMessage.senderAvatarUrls ?? currentMessage.senderAvatarUrls,
   threadAttachmentCount:
     syncedMessage.threadAttachmentCount ?? currentMessage.threadAttachmentCount,
+  threadIsImportant:
+    syncedMessage.threadIsImportant ?? currentMessage.threadIsImportant,
   threadMessageCount:
     syncedMessage.threadMessageCount ?? currentMessage.threadMessageCount,
   unsubscribeMailto:
@@ -381,10 +386,19 @@ const areLabelIdsEquivalent = (
 
 export const applyMessageMetadata = (
   message: MessageListItem,
-  next: { labelIds?: string[]; isUnread: boolean; threadLabelIds?: string[] }
+  next: {
+    labelIds?: string[];
+    isUnread: boolean;
+    threadLabelIds?: string[];
+    isImportant?: boolean;
+    threadIsImportant?: boolean;
+  }
 ): MessageListItem => {
   const threadLabelIds = next.threadLabelIds ?? message.threadLabelIds;
   if (
+    message.isImportant === (next.isImportant ?? message.isImportant) &&
+    message.threadIsImportant ===
+      (next.threadIsImportant ?? message.threadIsImportant) &&
     message.isUnread === next.isUnread &&
     areLabelIdsEquivalent(message.labelIds, next.labelIds) &&
     areLabelIdsEquivalent(message.threadLabelIds, threadLabelIds)
@@ -394,8 +408,10 @@ export const applyMessageMetadata = (
 
   return {
     ...message,
+    isImportant: next.isImportant ?? message.isImportant,
     isUnread: next.isUnread,
     labelIds: next.labelIds,
+    threadIsImportant: next.threadIsImportant ?? message.threadIsImportant,
     threadLabelIds,
   };
 };
@@ -579,6 +595,17 @@ export const applySyncDeltaToQueryData = (
 
 export const getMailCommandUpdater =
   (command: MailCommand) => (message: MessageListItem) => {
+    if (command.kind === "set-importance") {
+      if (
+        message.labelIds?.some(
+          (id) => id === MAILBOX_LABELS.sent || id === MAILBOX_LABELS.drafts
+        ) ??
+        false
+      ) {
+        return message;
+      }
+      return { ...message, isImportant: command.important };
+    }
     if (command.kind === "set-read") {
       return command.read
         ? markMessageReadLocally(message)

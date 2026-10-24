@@ -5,11 +5,19 @@ import {
   mutateGmailMessage,
   mutateGmailThread,
   getGmailMessageThreadAssociations,
+  getThreadWithDetails,
+  isGmailServiceError,
 } from "@quieter/gmail";
+import type { MailMutationResult } from "@quieter/mail/data-plane";
 import { reportError } from "@quieter/observability";
 
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
+import {
+  refreshGmailCapturedMessageMetadata,
+  writeGmailCapturedMessage,
+} from "../mail-capture";
+import { setMailImportance } from "../mail-importance";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
   updateManagedThreadLabels,
@@ -157,6 +165,11 @@ const mutateMessage = async (
       input.messageId,
       change
     );
+    await refreshGmailCapturedMessageMetadata({
+      accessToken,
+      mailboxId: input.mailboxId,
+      messageIds: [result.id],
+    });
     let gmailContext: GmailActionContext | null | undefined;
     if (typeof operation !== "string") {
       gmailContext = await recordGmailLabelFeedback({
@@ -242,6 +255,11 @@ const mutateThread = async (
       change = operation;
     }
     const result = await mutateGmailThread(accessToken, input.threadId, change);
+    await refreshGmailCapturedMessageMetadata({
+      accessToken,
+      mailboxId: input.mailboxId,
+      messageIds: result.messages.map((message) => message.id),
+    });
     let gmailContext: GmailActionContext | null | undefined;
     if (typeof operation !== "string") {
       gmailContext = await recordGmailLabelFeedback({
@@ -268,14 +286,84 @@ export const mutationsMailOperations = {
   }: {
     context: MailRequestContext;
     input: MailInputs["applyChanges"];
-  }) => {
+  }): Promise<MailMutationResult> => {
     const selectedMailbox = await assertAccessibleMailbox({
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    if (input.command.kind === "set-importance") {
+      let { targets } = input;
+      if (selectedMailbox.provider === "gmail") {
+        targets = await callGmail(
+          context,
+          input.mailboxId,
+          async (accessToken, signal) => {
+            const threadIds = [
+              ...new Set(input.targets.map((target) => target.threadId)),
+            ];
+            const incomingIdsByThread = new Map<string, string[]>();
+            for (let offset = 0; offset < threadIds.length; offset += 4) {
+              await Promise.all(
+                threadIds.slice(offset, offset + 4).map(async (threadId) => {
+                  const thread = await getThreadWithDetails(
+                    accessToken,
+                    threadId,
+                    signal,
+                    async (snapshot) => {
+                      await writeGmailCapturedMessage({
+                        mailboxId: input.mailboxId,
+                        snapshot,
+                        source: "on_demand",
+                      });
+                    }
+                  );
+                  incomingIdsByThread.set(
+                    threadId,
+                    thread.messages
+                      .filter(
+                        (message) =>
+                          message.labelIds?.some((label) =>
+                            ["SENT", "DRAFT"].includes(label)
+                          ) !== true
+                      )
+                      .map((message) => message.id)
+                  );
+                })
+              );
+            }
+            return input.targets.map((target) => {
+              if (target.messageIds.length > 0) {
+                return target;
+              }
+              const messageIds = incomingIdsByThread.get(target.threadId) ?? [];
+              if (messageIds.length === 0) {
+                throw new ORPCError("BAD_REQUEST", {
+                  message: "This thread has no incoming messages to update.",
+                });
+              }
+              return { ...target, messageIds };
+            });
+          }
+        ).catch((error: unknown) => {
+          if (isGmailServiceError(error) && error.status === 404) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Message thread not found.",
+            });
+          }
+          throw error;
+        });
+      }
+      return await setMailImportance({
+        actorUserId: context.userId,
+        important: input.command.important,
+        mailboxId: input.mailboxId,
+        targets,
+      });
+    }
     if (selectedMailbox.provider === "managed") {
       const result = await applyManagedMessageChanges({
         ...input,
+        command: input.command,
         userId: context.userId,
       });
       const messageIds = [
@@ -350,10 +438,12 @@ export const mutationsMailOperations = {
         const messageIds = [
           ...new Set(validTargets.flatMap((target) => target.messageIds)),
         ];
-        const targetResults = input.targets.map((target) => ({
-          status: validTargets.includes(target) ? "applied" : "failed",
-          threadId: target.threadId,
-        }));
+        const targetResults: MailMutationResult["targets"] = input.targets.map(
+          (target): MailMutationResult["targets"][number] => ({
+            status: validTargets.includes(target) ? "applied" : "failed",
+            threadId: target.threadId,
+          })
+        );
         if (messageIds.length === 0) {
           return { targets: targetResults };
         }
@@ -373,6 +463,11 @@ export const mutationsMailOperations = {
               : { addLabelIds: ["UNREAD"] },
             signal
           );
+          await refreshGmailCapturedMessageMetadata({
+            accessToken,
+            mailboxId: input.mailboxId,
+            messageIds,
+          });
           await recordMetadataAction(
             { accessToken, context, input },
             input.command.read ? "read" : "unread",
@@ -388,6 +483,11 @@ export const mutationsMailOperations = {
             },
             signal
           );
+          await refreshGmailCapturedMessageMetadata({
+            accessToken,
+            mailboxId: input.mailboxId,
+            messageIds,
+          });
           const gmailContext = await recordGmailLabelFeedback({
             accessToken,
             addLabelIds: input.command.addIds,
@@ -405,8 +505,9 @@ export const mutationsMailOperations = {
             messageIds
           );
         } else if (
-          input.command.destination === "trash" ||
-          input.command.destination === "inbox"
+          input.command.kind === "move" &&
+          (input.command.destination === "trash" ||
+            input.command.destination === "inbox")
         ) {
           const change =
             input.command.destination === "trash" ? "trash" : "untrash";
@@ -434,6 +535,11 @@ export const mutationsMailOperations = {
                 signal
               );
             } catch (error) {
+              await refreshGmailCapturedMessageMetadata({
+                accessToken,
+                mailboxId: input.mailboxId,
+                messageIds: appliedMessageIds,
+              });
               await recordMetadataAction(
                 { accessToken, context, input },
                 "untrash",
@@ -442,7 +548,7 @@ export const mutationsMailOperations = {
               throw error;
             }
           }
-        } else {
+        } else if (input.command.kind === "move") {
           await batchModifyMessages(
             accessToken,
             messageIds,
@@ -453,6 +559,11 @@ export const mutationsMailOperations = {
           );
         }
         if (input.command.kind === "move" && appliedMessageIds.length > 0) {
+          await refreshGmailCapturedMessageMetadata({
+            accessToken,
+            mailboxId: input.mailboxId,
+            messageIds: appliedMessageIds,
+          });
           await learnAiMemoryFromGmailAction({
             accessToken,
             action: `move:${input.command.destination}`,

@@ -40,6 +40,15 @@ export const createDemoActions = (
             ? []
             : [message];
         }
+        if (
+          command.kind === "set-importance" &&
+          (message.labelIds?.some(
+            (id) => id === MAILBOX_LABELS.sent || id === MAILBOX_LABELS.drafts
+          ) ??
+            false)
+        ) {
+          return [message];
+        }
         return [update(message)];
       })
     );
@@ -59,6 +68,7 @@ export const createDemoActions = (
         { destination: "archive", kind: "move" }
       );
     },
+    canSetImportance: true,
     deleteDraft: async (message) => {
       await apply([message.id], "message", { kind: "delete-permanently" });
     },
@@ -119,6 +129,19 @@ export const createDemoActions = (
         threads.map((thread) => thread.threadId),
         "thread",
         { destination: "trash", kind: "move" }
+      );
+    },
+    setMessageImportance: async (id, important) => {
+      await apply([id], "message", { important, kind: "set-importance" });
+    },
+    setThreadImportance: async (id, important) => {
+      await apply([id], "thread", { important, kind: "set-importance" });
+    },
+    setThreadsImportance: async (threads, important) => {
+      await apply(
+        threads.map((thread) => thread.threadId),
+        "thread",
+        { important, kind: "set-importance" }
       );
     },
     unmarkMessageAsSpam: async (id) => {

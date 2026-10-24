@@ -8,13 +8,24 @@ import {
   isGmailServiceError,
   listDraftsWithDetails,
   listMessagesWithDetails,
+  listLabels,
 } from "@quieter/gmail";
 import { parseDraftMessage } from "@quieter/gmail/compose";
+import type { MailboxSyncDelta } from "@quieter/mail/messages";
+import {
+  parseStructuredSearchQuery,
+  serializeStructuredSearchState,
+} from "@quieter/mail/search";
 
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
 import { writeGmailCapturedMessage } from "../mail-capture";
 import { assertUserOrganizationMember } from "../mail-domain/service";
+import {
+  hydrateMailImportance,
+  listCapturedImportantMessages,
+  processPendingMailImportance,
+} from "../mail-importance";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { getManagedMessageAttachment } from "../managed-mail/messages/attachments";
 import { getManagedDraft } from "../managed-mail/messages/get-draft";
@@ -252,14 +263,27 @@ export const queriesMailOperations = {
             });
           }
         )
-    ).catch((error: unknown) => {
-      if (isGmailServiceError(error) && error.status === 404) {
-        throw new ORPCError("NOT_FOUND", {
-          message: "Message thread not found.",
-        });
-      }
-      throw error;
-    });
+    )
+      .then(async (thread) => {
+        context.scheduleBackgroundTask?.(
+          processPendingMailImportance({ limit: 4, mailboxId: input.mailboxId })
+        );
+        return {
+          ...thread,
+          messages: await hydrateMailImportance(
+            input.mailboxId,
+            thread.messages
+          ),
+        };
+      })
+      .catch((error: unknown) => {
+        if (isGmailServiceError(error) && error.status === 404) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Message thread not found.",
+          });
+        }
+        throw error;
+      });
   },
   listMessageDeliveryStatuses: async ({
     context,
@@ -312,7 +336,36 @@ export const queriesMailOperations = {
       });
     }
 
-    return await callGmail(
+    if (input.category === "important") {
+      const search = parseStructuredSearchQuery(input.query ?? "");
+      if (search.filters.some((filter) => filter.type === "label")) {
+        const labels = await callGmail(
+          context,
+          input.mailboxId,
+          async (accessToken, signal) => await listLabels(accessToken, signal)
+        );
+        const labelIdsByName = new Map(
+          labels.map((label) => [label.name.toLocaleLowerCase(), label.id])
+        );
+        search.filters = search.filters.map((filter) =>
+          filter.type === "label"
+            ? {
+                ...filter,
+                value:
+                  labels.find((label) => label.id === filter.value)?.id ??
+                  labelIdsByName.get(filter.value.toLocaleLowerCase()) ??
+                  filter.value,
+              }
+            : filter
+        );
+        return await listCapturedImportantMessages({
+          ...input,
+          query: serializeStructuredSearchState(search),
+        });
+      }
+      return await listCapturedImportantMessages(input);
+    }
+    const page = await callGmail(
       context,
       input.mailboxId,
       async (accessToken, signal) =>
@@ -331,6 +384,13 @@ export const queriesMailOperations = {
               signal,
             })
     );
+    return {
+      ...page,
+      historyId: page.historyId
+        ? `gmail:${page.historyId}:${selectedMailbox.contentRevision}`
+        : undefined,
+      messages: await hydrateMailImportance(input.mailboxId, page.messages),
+    };
   },
   syncMailbox: async ({
     context,
@@ -338,7 +398,7 @@ export const queriesMailOperations = {
   }: {
     context: MailRequestContext;
     input: MailInputs["syncMailbox"];
-  }) => {
+  }): Promise<MailboxSyncDelta> => {
     if (isOrganizationApiMailboxId(input.mailboxId)) {
       const organizationId = parseOrganizationApiMailboxId(input.mailboxId);
       if (organizationId === null || organizationId.length === 0) {
@@ -376,15 +436,45 @@ export const queriesMailOperations = {
       };
     }
 
-    return await callGmail(
+    if (input.category === "important") {
+      const historyId = `app:${selectedMailbox.contentRevision}`;
+      const hasChanges = historyId !== input.startHistoryId;
+      return {
+        hasChanges,
+        historyId,
+        refreshFirstPage: hasChanges,
+        removedMessageIds: [],
+        requiresFullRefresh: hasChanges,
+        updatedMessages: [],
+      };
+    }
+    const token = /^gmail:(?<provider>\d+):(?<revision>\d+)$/u.exec(
+      input.startHistoryId
+    );
+    const appChanged =
+      token?.groups?.revision !== String(selectedMailbox.contentRevision);
+    const delta = await callGmail(
       context,
       input.mailboxId,
       async (accessToken, signal) =>
         await getMailboxSyncDelta(accessToken, {
           mailbox: input.category,
           signal,
-          startHistoryId: input.startHistoryId,
+          startHistoryId: token?.groups?.provider ?? input.startHistoryId,
         })
     );
+    return {
+      ...delta,
+      hasChanges: delta.hasChanges || appChanged,
+      historyId: delta.historyId
+        ? `gmail:${delta.historyId}:${selectedMailbox.contentRevision}`
+        : undefined,
+      refreshFirstPage: delta.refreshFirstPage || appChanged,
+      requiresFullRefresh: delta.requiresFullRefresh || appChanged,
+      updatedMessages: await hydrateMailImportance(
+        input.mailboxId,
+        delta.updatedMessages
+      ),
+    };
   },
 };
