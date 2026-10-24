@@ -26,7 +26,8 @@
     "./updates": "./src/updates.ts",
     "./visual-email": "./src/visual-email.ts",
     "./auto-label": "./src/auto-label.ts",
-    "./auto-label-matching": "./src/auto-label-matching.ts"
+    "./auto-label-matching": "./src/auto-label-matching.ts",
+    "./capture": "./src/capture.ts"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
