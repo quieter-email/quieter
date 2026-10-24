@@ -4,6 +4,7 @@ import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
   mailbox,
+  mailMessageImportance,
   managedMailAttachment,
   managedMailLabel,
   managedMailMessage,
@@ -15,7 +16,11 @@ import type {
   ManagedMailMailboxState,
 } from "@quieter/database/schema";
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
-import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
+import type {
+  MailCommand,
+  MailMutationTarget,
+  MailMutationTargetResult,
+} from "@quieter/mail/data-plane";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import type {
   ListMessagesPageResult,
@@ -39,6 +44,7 @@ import {
   sql,
 } from "drizzle-orm";
 
+import { hydrateMailImportance } from "../../mail-importance";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
   getOrganizationMailDelivery,
@@ -169,6 +175,13 @@ const toMessageListItem = async (
 });
 
 const getCategoryCondition = (category: MailboxCategory) => {
+  if (category === "important") {
+    return and(
+      eq(managedMailMessage.direction, "inbound"),
+      inArray(managedMailMessage.mailboxState, ["active", "archived"]),
+      sql`exists (select 1 from ${mailMessageImportance} i inner join ${managedMailMessage} m on m."mailboxId" = i."mailboxId" and m.id = i."messageId" where i."mailboxId" = ${managedMailMessage.mailboxId} and i."threadId" = ${managedMailMessage.threadId} and coalesce(i."manualImportant", i."aiImportant", false) and m.direction = 'inbound' and m."mailboxState" in ('active', 'archived'))`
+    );
+  }
   if (category === "inbox") {
     return and(
       eq(managedMailMessage.direction, "inbound"),
@@ -386,19 +399,22 @@ export const listManagedMessages = async (input: {
 
   return {
     historyId: String(selectedMailbox.contentRevision),
-    messages: await Promise.all(
-      pageRecords.map(
-        async (record) =>
-          await toMessageListItem(record, {
-            attachmentCount:
-              attachmentCountByThreadId.get(record.threadId) ?? 0,
-            labelIds: labelIdsByThreadId.get(record.threadId) ?? [],
-            threadLabelIds: [
-              ...(threadLabelIdsByThreadId.get(record.threadId) ?? []),
-            ],
-            threadMessageCount:
-              messageCountByThreadId.get(record.threadId) ?? 1,
-          })
+    messages: await hydrateMailImportance(
+      input.mailboxId,
+      await Promise.all(
+        pageRecords.map(
+          async (record) =>
+            await toMessageListItem(record, {
+              attachmentCount:
+                attachmentCountByThreadId.get(record.threadId) ?? 0,
+              labelIds: labelIdsByThreadId.get(record.threadId) ?? [],
+              threadLabelIds: [
+                ...(threadLabelIdsByThreadId.get(record.threadId) ?? []),
+              ],
+              threadMessageCount:
+                messageCountByThreadId.get(record.threadId) ?? 1,
+            })
+        )
       )
     ),
     nextPageToken: (() => {
@@ -516,7 +532,10 @@ export const getManagedThread = async (input: {
     ...new Set(messages.flatMap((message) => message.labelIds ?? [])),
   ];
   return {
-    messages: messages.map((message) => ({ ...message, threadLabelIds })),
+    messages: await hydrateMailImportance(
+      input.mailboxId,
+      messages.map((message) => ({ ...message, threadLabelIds }))
+    ),
     snippet: messages.at(-1)?.snippet,
     subject: messages.find((message) => !!message.subject)?.subject,
     threadId: input.threadId,
@@ -642,7 +661,7 @@ const updateManagedMessageState = async (input: {
 };
 
 export const applyManagedMessageChanges = async (input: {
-  command: MailCommand;
+  command: Exclude<MailCommand, { kind: "set-importance" }>;
   mailboxId: string;
   targets: MailMutationTarget[];
   userId: string;
@@ -690,7 +709,7 @@ export const applyManagedMessageChanges = async (input: {
     const appliedMessageIds = [
       ...new Set(validTargets.flatMap((target) => target.messageIds)),
     ];
-    const targets = input.targets.map((target) => ({
+    const targets = input.targets.map((target): MailMutationTargetResult => ({
       status: validTargets.includes(target) ? "applied" : "failed",
       threadId: target.threadId,
     }));

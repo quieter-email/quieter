@@ -12,7 +12,6 @@ import {
 import { analyzeMailMessage } from "@quieter/mail/capture";
 import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
-import { reportError } from "@quieter/observability";
 import {
   and,
   desc,
@@ -27,7 +26,10 @@ import {
   sql,
 } from "drizzle-orm";
 
-import { markDailyBriefUrgentPending } from "../../daily-brief";
+import {
+  ensureMailImportanceWork,
+  processPendingMailImportance,
+} from "../../mail-importance";
 import { publishMailUpdate } from "../../mail-updates";
 import {
   processMailVerificationCode,
@@ -137,16 +139,12 @@ const runPostIngestionProcessing = async (input: {
     }
     const results = await Promise.allSettled([
       processManagedVerificationCode(input),
+      processPendingMailImportance({ limit: 1, mailboxId: input.mailboxId }),
       processManagedMailAutomation({
         mailboxId: input.mailboxId,
         messageId: input.messageId,
       }),
     ]);
-    try {
-      await markDailyBriefUrgentPending({ mailboxId: input.mailboxId });
-    } catch (error) {
-      reportError(error, { operation: "managed-mail:daily-brief-pending" });
-    }
     const failed = results.find((result) => result.status === "rejected");
     if (failed) {
       throw failed.reason;
@@ -347,6 +345,19 @@ const ingestManagedMessageForMailbox = async (input: {
     }
 
     if (message !== undefined) {
+      await ensureMailImportanceWork(tx, {
+        mailboxId: message.mailboxId,
+        message: {
+          ...input.parsed,
+          attachments: undefined,
+          date: input.parsed.date?.toISOString(),
+          id: message.id,
+          threadId: message.threadId,
+        },
+        messageId: message.id,
+        receivedAt: sentAt,
+        threadId: message.threadId,
+      });
       await tx
         .update(mailbox)
         .set({

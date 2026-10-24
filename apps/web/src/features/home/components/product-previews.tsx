@@ -196,45 +196,42 @@ export const LabelsPreview = () => (
   </div>
 );
 
-const highlights = [
+const importantMessages = [
   {
-    description: "Alex is ready. Send a timeline by Friday.",
-    title: "The proposal is approved",
-    tone: "home-brief-blue",
+    description: "Alex: Approved. Can you send a timeline by Friday?",
+    title: "Re: Project proposal",
   },
   {
-    description: "Flights and hotel details are in your inbox.",
-    title: "Your trip is confirmed",
-    tone: "home-brief-cyan",
+    description: "Travel desk: Your flights and hotel are confirmed.",
+    title: "Your trip confirmation",
   },
   {
-    description: "A quick reply is all that is left.",
+    description: "Sam: Does Thursday morning work for you?",
     title: "Coffee with Sam",
-    tone: "home-brief-gold",
   },
 ] as const;
 
-export const BriefPreview = () => (
+export const ImportantPreview = () => (
   <div
     aria-hidden="true"
-    className="home-panel home-panel-raised home-brief-art"
+    className="home-panel home-panel-raised home-important-art"
     inert
   >
-    <div className="home-brief-toolbar">
+    <div className="home-important-toolbar">
       <span>
         <Brand className="size-[18px]" />
-        Your daily brief
+        Important
       </span>
-      <span className="home-brief-date">Tuesday, 8 September</span>
+      <span className="home-important-date">3 conversations</span>
     </div>
-    <p className="home-brief-greeting">Good morning, Leander.</p>
-    <div className="home-brief-items">
-      {highlights.map((highlight) => (
-        <div className="home-brief-item" key={highlight.title}>
-          <span className={cn("home-brief-dot", highlight.tone)} />
+    <p className="home-important-greeting">Mail worth your attention.</p>
+    <div className="home-important-items">
+      {importantMessages.map((message) => (
+        <div className="home-important-item" key={message.title}>
+          <span className="home-important-dot" />
           <div>
-            <p>{highlight.title}</p>
-            <span>{highlight.description}</span>
+            <p>{message.title}</p>
+            <span>{message.description}</span>
           </div>
         </div>
       ))}

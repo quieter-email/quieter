@@ -117,6 +117,11 @@ export const createUnifiedInboxActions = ({
     archiveThreads: async (threads) => {
       await runBulkAction("archiveThreads", threads);
     },
+    get canSetImportance() {
+      return [...contextsByThreadId.values()].some(
+        (context) => context.mailboxActions.canSetImportance
+      );
+    },
     deleteDraft: async (message) => {
       const context = contextsByMessageId.get(message.id);
       const original = originalMessageById.get(message.id);
@@ -165,6 +170,53 @@ export const createUnifiedInboxActions = ({
     },
     moveThreadsToTrash: async (threads) => {
       await runBulkAction("moveThreadsToTrash", threads);
+    },
+    setMessageImportance: async (id, important) => {
+      const context = contextsByMessageId.get(id);
+      const original = originalMessageById.get(id);
+      if (!context || !original) {
+        throw new Error("This message is no longer available.");
+      }
+      await context.mailboxActions.setMessageImportance(original.id, important);
+    },
+    setThreadImportance: async (id, important) => {
+      const context = contextsByThreadId.get(id);
+      const original = originalThreadById.get(id);
+      if (!context || !original) {
+        throw new Error("This conversation is no longer available.");
+      }
+      await context.mailboxActions.setThreadImportance(
+        original.threadId,
+        important
+      );
+    },
+    setThreadsImportance: async (threads, important) => {
+      const groups = new Map<
+        string,
+        { context: MessageListMailboxContext; threads: ThreadListEntry[] }
+      >();
+      for (const thread of threads) {
+        const context = contextsByThreadId.get(thread.threadId);
+        const original = originalThreadById.get(thread.threadId);
+        if (!context || !original || !context.mailboxActions.canSetImportance) {
+          throw new Error("A selected conversation cannot be updated.");
+        }
+        const group = groups.get(context.mailboxId) ?? { context, threads: [] };
+        group.threads.push(original);
+        groups.set(context.mailboxId, group);
+      }
+      const results = await Promise.allSettled(
+        [...groups.values()].map(async ({ context, threads: originals }) => {
+          await context.mailboxActions.setThreadsImportance(
+            originals,
+            important
+          );
+        })
+      );
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure?.status === "rejected") {
+        throw failure.reason;
+      }
     },
     unmarkMessageAsSpam: async (id) => {
       await runMessageAction("unmarkMessageAsSpam", id);

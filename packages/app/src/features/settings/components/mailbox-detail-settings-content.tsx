@@ -4,7 +4,6 @@ import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { GmailMailboxDetailSections } from "@quieter/app/features/settings/components/gmail-mailbox-detail-sections";
 import { GmailMailboxNameSettings } from "@quieter/app/features/settings/components/gmail-mailbox-name-settings";
-import { MailboxBriefSettings } from "@quieter/app/features/settings/components/mailbox-brief-settings";
 import { MailboxDetailGeneralSection } from "@quieter/app/features/settings/components/mailbox-detail-general-section";
 import type {
   ManagedMailboxAccessModeInput,
@@ -150,10 +149,6 @@ export const MailboxDetailSettingsContent = ({
           key={`signature-${mailbox.id}`}
           mailbox={mailbox}
         />
-      )}
-
-      {(isGmail || mailbox.provider === "managed") && (
-        <MailboxBriefSettings key={`brief-${mailbox.id}`} mailbox={mailbox} />
       )}
 
       {isGmail && (

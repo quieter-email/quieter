@@ -41,6 +41,7 @@ export const BILLING_USAGE_KINDS = [
   "aiChat",
   "aiMemory",
   "autoLabel",
+  "importance",
   "usefulDetails",
   "verificationCode",
   "inboundMail",
@@ -166,6 +167,7 @@ export const getBillingCreditUsage = async (
   const usageKind = sql<BillingUsageKind>`case
     when ${and(eq(billingCreditUsageEvent.category, "mail"), eq(sql`${billingCreditUsageEvent.metadata}->>'direction'`, "inbound"))} then 'inboundMail'
     when ${and(eq(billingCreditUsageEvent.category, "mail"), eq(sql`${billingCreditUsageEvent.metadata}->>'direction'`, "outbound"))} then 'outboundMail'
+    when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "importance"))} then 'importance'
     when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "autoLabel"))} then 'autoLabel'
     when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "aiMemory"))} then 'aiMemory'
     when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "usefulDetails"))} then 'usefulDetails'

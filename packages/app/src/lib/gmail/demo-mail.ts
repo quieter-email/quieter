@@ -29,7 +29,7 @@ export const LANDING_DEMO_MAILBOX_ID = "landing:mailbox";
 const DEMO_EMAIL_ADDRESS = "inbox@quieter.com";
 
 const DEMO_MAIL_STORAGE_KEY = "quieter:demo-mail-state";
-const DEMO_MAIL_STATE_VERSION = 5;
+const DEMO_MAIL_STATE_VERSION = 6;
 
 type DemoMailState = {
   version: number;
@@ -63,6 +63,7 @@ const createInitialDemoState = (): DemoMailState => ({
         "Your April payout reconciliation is ready.\n\nThere are two failed transfers that need review before the end of the week. The CSV includes the payout IDs, transfer amounts, and current retry status.",
       date: daysAgo(0.08),
       from: "Stripe <notifications@stripe.com>",
+      isImportant: true,
       isUnread: true,
       labelIds: [MAILBOX_LABELS.inbox, "UNREAD", "Label_Finance"],
       snippet:
@@ -110,6 +111,7 @@ const createInitialDemoState = (): DemoMailState => ({
         "Hi everyone,\n\nI drafted the customer onboarding checklist in Notion. The sections that still need owner names are highlighted in yellow.",
       date: daysAgo(0.92),
       from: "Mara Quill <mara@notion.so>",
+      isImportant: true,
       labelIds: [MAILBOX_LABELS.inbox],
       snippet:
         "I drafted the customer onboarding checklist in Notion. The sections that still need owner names are highlighted.",
@@ -190,6 +192,7 @@ const createInitialDemoState = (): DemoMailState => ({
         "Your weekly usage summary is attached.\n\nToken volume increased 18% week over week, mostly from background classification jobs.",
       date: daysAgo(2.25),
       from: "OpenAI <support@openai.com>",
+      isImportant: true,
       labelIds: [MAILBOX_LABELS.inbox, "Label_Finance"],
       snippet:
         "Your weekly usage summary is attached. Token volume increased 18% week over week.",
@@ -238,7 +241,8 @@ const createInitialDemoState = (): DemoMailState => ({
         "Milo shared the Q2 launch folder with you. It contains the press screenshots, brand exports, and customer quote approvals.",
       date: daysAgo(4.1),
       from: "Dropbox <no-reply@dropbox.com>",
-      labelIds: [MAILBOX_LABELS.inbox],
+      isImportant: true,
+      labelIds: [MAILBOX_LABELS.archive],
       snippet:
         "Milo shared the Q2 launch folder with you. It contains the press screenshots, brand exports, and approvals.",
       subject: "Q2 launch folder shared with you",
@@ -460,9 +464,13 @@ const invalidateSandboxMail = async (
   mailboxId: string
 ) => {
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: ["messages", mailboxId] }),
+    queryClient.invalidateQueries({
+      queryKey: ["messages", mailboxId],
+      refetchType: "all",
+    }),
     queryClient.invalidateQueries({
       queryKey: getMailboxThreadQueriesKey(mailboxId),
+      refetchType: "all",
     }),
     ...(mailboxId === DEMO_MAILBOX_ID
       ? [queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() })]

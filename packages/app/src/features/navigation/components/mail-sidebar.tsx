@@ -44,7 +44,6 @@ import { UnifiedSidebarLabelNav } from "./unified-sidebar-label-nav";
 type MailSidebarProps = {
   userId?: string;
   allInboxesActive?: boolean;
-  dailyBriefActive?: boolean;
   embedded?: boolean;
   groups: {
     id: string;
@@ -182,7 +181,6 @@ const SidebarHelpMenu = ({
 
 const SidebarInboxSection = ({
   allInboxesActive = false,
-  dailyBriefActive = false,
   userId = "preview",
   animateEntrance,
   embedded,
@@ -193,7 +191,6 @@ const SidebarInboxSection = ({
   onRequestClose,
   onSearch,
   onSelectMailbox,
-  onSelectView,
   isSnippetMailbox,
   searchQuery,
   selectedMailbox,
@@ -203,7 +200,6 @@ const SidebarInboxSection = ({
   SidebarContentProps,
   | "animateEntrance"
   | "allInboxesActive"
-  | "dailyBriefActive"
   | "userId"
   | "embedded"
   | "groups"
@@ -213,7 +209,6 @@ const SidebarInboxSection = ({
   | "onRequestClose"
   | "onSearch"
   | "onSelectMailbox"
-  | "onSelectView"
   | "isSnippetMailbox"
   | "searchQuery"
   | "selectedMailbox"
@@ -275,20 +270,6 @@ const SidebarInboxSection = ({
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto p-1">
         <SidebarMailboxNav
           animateEntrance={animateEntrance}
-          brief={
-            embedded !== true &&
-            groups.some((group) =>
-              group.mailboxes.some((mailbox) => mailbox.provider !== "api")
-            )
-              ? {
-                  active: dailyBriefActive,
-                  onSelect: () => {
-                    onSelectView("daily-brief");
-                    onRequestClose?.();
-                  },
-                }
-              : undefined
-          }
           mailboxProvider={selectedMailboxProvider}
           onSelectMailbox={handleSelectMailbox}
           selectedMailbox={selectedMailbox}
@@ -438,7 +419,6 @@ const SidebarAssistantAction = ({
 
 const SidebarContent = ({
   allInboxesActive,
-  dailyBriefActive,
   userId,
   animateEntrance,
   embedded = false,
@@ -515,7 +495,6 @@ const SidebarContent = ({
       <SidebarInboxSection
         userId={userId}
         allInboxesActive={allInboxesActive}
-        dailyBriefActive={dailyBriefActive}
         animateEntrance={animateEntrance}
         embedded={embedded}
         groups={groups}
@@ -528,7 +507,6 @@ const SidebarContent = ({
         onRequestClose={onRequestClose}
         onSearch={onSearch}
         onSelectMailbox={onSelectMailbox}
-        onSelectView={onSelectView}
         isSnippetMailbox={isSnippetMailbox}
         searchQuery={searchQuery}
         selectedMailbox={selectedMailbox}

@@ -196,6 +196,15 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     replyTarget.display?.trim() ||
     replyTarget.email?.trim() ||
     "sender";
+  const setMessageImportance = mailboxActions.canSetImportance
+    ? async (messageId: string, important: boolean) => {
+        try {
+          await mailboxActions.setMessageImportance(messageId, important);
+        } catch (error) {
+          toastError(error, { boundary: "message-importance" });
+        }
+      }
+    : undefined;
   const showInlineCompose = canComposeFromMailbox && activeMailbox !== "drafts";
   const showReplyAll = hasDistinctReplyAllRecipients(
     hotkeyMessage,
@@ -264,7 +273,12 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                 isUnread={threadIsUnread}
                 mailbox={activeMailbox}
                 mailboxId={mailboxId}
-                message={message}
+                message={{
+                  ...message,
+                  threadIsImportant:
+                    message.threadIsImportant ??
+                    threadMessages.some((item) => item.isImportant === true),
+                }}
                 threadLabelIds={threadLabelIds}
               />
             </div>
@@ -306,6 +320,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             onComposeDraftRequested={
               canComposeFromMailbox ? openInlineCompose : undefined
             }
+            onSetImportance={setMessageImportance}
             onUnsubscribe={
               mailboxProvider === "gmail"
                 ? mailboxActions.unsubscribeFromMessage
@@ -330,6 +345,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           onComposeDraftRequested={
             canComposeFromMailbox ? openInlineCompose : undefined
           }
+          onSetImportance={setMessageImportance}
           onUnsubscribe={
             mailboxProvider === "gmail"
               ? mailboxActions.unsubscribeFromMessage

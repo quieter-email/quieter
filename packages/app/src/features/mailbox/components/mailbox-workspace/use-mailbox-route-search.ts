@@ -7,6 +7,7 @@ import { useNavigate } from "@tanstack/react-router";
 
 const MAILBOX_ROUTE_CATEGORIES = [
   "inbox",
+  "important",
   "unread",
   "archive",
   "spam",

@@ -29,7 +29,6 @@ import {
   loadSnippetWorkspace,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
 import { UnifiedInboxPanel } from "@quieter/app/features/mailbox/components/unified-inbox-panel";
-import { useBriefMailboxActivity } from "@quieter/app/features/mailbox/components/use-brief-mailbox-activity";
 import type { MailboxWorkspaceView } from "@quieter/app/features/mailbox/domain/mailbox-workspace-view";
 import { LabelsWorkspacePanel } from "@quieter/app/features/message-labels/components/labels-workspace-panel";
 import { MailSidebar } from "@quieter/app/features/navigation/components/mail-sidebar";
@@ -66,12 +65,6 @@ const messagePanelsClassName = cn(
   workspaceGutterClassName,
   "absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,max(34%,405px))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-(--workspace-gutter)"
 );
-
-const DailyBriefPanel = lazy(async () => {
-  const { DailyBriefPanel: Panel } =
-    await import("@quieter/app/features/daily-brief/components/daily-brief-panel");
-  return { default: Panel };
-});
 
 type MailboxSidebarGroups = ComponentProps<typeof MailSidebar>["groups"];
 type MailboxSidebarChats = { id: string; title: string | null }[];
@@ -346,21 +339,7 @@ const MailboxWorkspaceContentInner = ({
 }: MailboxWorkspaceContentProps) => {
   const messageId = useMailboxMessageId() ?? null;
   const setMailboxSearch = useMailboxSearchActions();
-  const allInboxesActive =
-    selectedView === "all-inboxes" || selectedView === "all-inboxes-brief";
-  const briefActive =
-    selectedView === "daily-brief" || selectedView === "all-inboxes-brief";
-  useBriefMailboxActivity(
-    selectedMailboxId === null ? [] : [{ mailboxId: selectedMailboxId }],
-    !isDemoMode &&
-      !isManagedDemoMode &&
-      !isComposeMailbox &&
-      !isSnippetMailbox &&
-      !briefActive &&
-      !selectedMailboxNeedsReconnect &&
-      selectedMailboxProvider !== "api" &&
-      (!allInboxesActive || messageId !== null)
-  );
+  const allInboxesActive = selectedView === "all-inboxes";
   const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);
   const senderMailboxes = mailboxes
     .filter(
@@ -527,39 +506,6 @@ const MailboxWorkspaceContentInner = ({
           />
         </Suspense>
       </div>
-    );
-  } else if (briefActive) {
-    mailboxContent = (
-      <Suspense
-        fallback={
-          <WorkspaceSection>
-            <p className="p-6 text-body text-muted-fg">Loading Brief…</p>
-          </WorkspaceSection>
-        }
-      >
-        <DailyBriefPanel
-          key={allInboxesActive ? "all-inboxes-brief" : selectedMailboxId}
-          combined={allInboxesActive}
-          mailboxes={
-            allInboxesActive
-              ? mailboxes
-              : mailboxes.filter((mailbox) => mailbox.id === selectedMailboxId)
-          }
-          onOpenSidebar={onOpenSidebar}
-          onComposeDraftRequested={onComposeDraftRequested}
-          onOpenSource={(sourceMailboxId, sourceMessageId, sourceThreadId) => {
-            void setMailboxSearch({
-              chatId: null,
-              mailbox: "inbox",
-              mailboxId: sourceMailboxId,
-              messageId: sourceMessageId,
-              query: null,
-              threadId: sourceThreadId,
-              view: "inbox",
-            });
-          }}
-        />
-      </Suspense>
     );
   } else if (allInboxesActive) {
     mailboxContent = (
@@ -792,7 +738,6 @@ const MailboxWorkspaceContentInner = ({
                 showNavigationTrigger:
                   isComposeMailbox ||
                   isSnippetMailbox ||
-                  briefActive ||
                   selectedView === "labels" ||
                   selectedMailboxNeedsReconnect,
               }
@@ -805,7 +750,6 @@ const MailboxWorkspaceContentInner = ({
               <MailSidebar
                 userId={userId}
                 allInboxesActive={allInboxesActive}
-                dailyBriefActive={briefActive}
                 groups={mailboxGroups}
                 onComposeNewMail={onComposeNewMail}
                 onMobileOpenChange={onMobileOpenChange}
@@ -835,7 +779,7 @@ const MailboxWorkspaceContentInner = ({
                 onSelectView={onSelectView}
                 reconnectingMailboxId={reconnectingMailboxId}
                 searchQuery={searchQuery}
-                selectedMailbox={briefActive ? null : activeMailbox}
+                selectedMailbox={activeMailbox}
                 isSnippetMailbox={isSnippetMailbox}
                 selectedMailboxId={selectedMailboxId}
                 selectedMailboxProvider={selectedMailboxProvider}
@@ -960,8 +904,7 @@ export const MailboxWorkspaceContent = (
 ) => (
   <AgentWorkspaceProvider
     key={
-      props.selectedView === "all-inboxes" ||
-      props.selectedView === "all-inboxes-brief"
+      props.selectedView === "all-inboxes"
         ? `all-inboxes:${props.userId}`
         : (props.selectedMailboxId ?? "empty")
     }

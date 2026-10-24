@@ -38,6 +38,7 @@ type CachedMessagesQuery = {
 
 const isMailboxCategory = (value: unknown): value is MailboxCategory =>
   value === "inbox" ||
+  value === "important" ||
   value === "unread" ||
   value === "archive" ||
   value === "spam" ||
@@ -318,8 +319,10 @@ export const applyResolvedThreadMetadataToCaches = (
         queryClient,
         mailboxId,
         applyMessageMetadata(previousMessage, {
+          isImportant: updatedMessage.isImportant,
           isUnread: updatedMessage.isUnread,
           labelIds: updatedMessage.labelIds,
+          threadIsImportant: updatedThread.isImportant,
           threadLabelIds,
         })
       )
@@ -336,8 +339,10 @@ export const applyResolvedThreadMetadataToCaches = (
           const nextMessage = updatesById.get(message.id);
           return nextMessage
             ? applyMessageMetadata(message, {
+                isImportant: nextMessage.isImportant,
                 isUnread: nextMessage.isUnread,
                 labelIds: nextMessage.labelIds,
+                threadIsImportant: updatedThread.isImportant,
                 threadLabelIds,
               })
             : message;

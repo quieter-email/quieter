@@ -660,6 +660,13 @@ const MessageRowSurface = ({
       }}
       transition={rowPressTransition}
     >
+      {thread.isImportant && (
+        // Importance is a mail-domain treatment on this specialized row, separate from primary selection.
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-0 rounded-lg bg-linear-to-l from-q-yellow/10 via-q-yellow/5 to-transparent"
+        />
+      )}
       <m.span
         animate={{ opacity: surfaceOpacity }}
         aria-hidden
@@ -700,12 +707,12 @@ const MessageRowSurface = ({
           isPending={isActionPending}
           mailboxId={mailboxId}
           mailbox={activeMailbox}
-          message={anchorMessage}
+          message={{ ...anchorMessage, threadIsImportant: thread.isImportant }}
           threadLabelIds={thread.threadLabelIds}
           triggerClassName="relative flex h-full min-w-0 flex-1 active:scale-100"
         >
           <button
-            aria-label={openAriaLabel}
+            aria-label={`${openAriaLabel}${thread.isImportant ? ", Important" : ""}`}
             title={
               badge !== undefined && badge !== null ? openAriaLabel : undefined
             }
