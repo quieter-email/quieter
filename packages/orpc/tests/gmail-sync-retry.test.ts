@@ -23,7 +23,6 @@ const fixtures = vi.hoisted(() => ({
   classify: vi.fn<typeof classifyMailMessage>(),
   getMessage: vi.fn<typeof getMessageWithDetails>(),
   mailboxes: [] as Row[],
-  markUrgent: vi.fn<() => Promise<void>>(),
   mutate: vi.fn<typeof mutateGmailMessage>(),
   pendingCodeMessageIds: [] as string[],
   processCode: vi.fn<typeof processMailVerificationCode>(),
@@ -195,9 +194,6 @@ vi.mock(import("../src/verification-codes"), () => ({
   processMailVerificationCode: fixtures.processCode,
   reportPendingMailboxVerificationCodeUsage: vi.fn<() => Promise<void>>(),
 }));
-vi.mock(import("../src/daily-brief"), () => ({
-  markDailyBriefUrgentPending: fixtures.markUrgent,
-}));
 
 const input = {
   accessToken: "fixture-token",
@@ -233,7 +229,6 @@ describe("Gmail automation retry recovery", () => {
     fixtures.rows.length = 0;
     fixtures.mailboxes.length = 0;
     fixtures.pendingCodeMessageIds.length = 0;
-    fixtures.markUrgent.mockReset().mockResolvedValue();
     fixtures.processCode.mockReset().mockResolvedValue();
     fixtures.budget.mockReset().mockResolvedValue({
       allowed: true,
@@ -305,7 +300,6 @@ describe("Gmail automation retry recovery", () => {
     expect(fixtures.processCode).toHaveBeenCalledWith(
       expect.objectContaining({ messageId: "previously-received-message" })
     );
-    expect(fixtures.markUrgent).not.toHaveBeenCalled();
   });
 
   test("keeps future deferrals pending while budget remains denied", async () => {

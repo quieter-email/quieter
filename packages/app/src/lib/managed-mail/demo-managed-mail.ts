@@ -28,8 +28,8 @@ export const DEMO_MANAGED_MAILBOX_ID = "demo:managed-mailbox";
 const DEMO_MANAGED_EMAIL_ADDRESS = "support@quieter.com";
 const DEMO_MANAGED_MAILBOX_NAME = "Managed demo";
 const DEMO_MANAGED_MAIL_STORAGE_KEY = "quieter:managed-demo-mail-state";
-const DEMO_MANAGED_MAIL_STATE_VERSION = 3;
-const MANAGED_DEMO_THREAD_QUERY_VERSION = 3;
+const DEMO_MANAGED_MAIL_STATE_VERSION = 4;
+const MANAGED_DEMO_THREAD_QUERY_VERSION = 4;
 
 const DEMO_MANAGED_LABEL_IDS = {
   billing: "demo-managed-label-billing",
@@ -97,6 +97,7 @@ const createInitialDemoState = (): ManagedDemoMailState => ({
         "Hi,\n\nOur finance team keeps getting redirected after login. Can you confirm whether SSO is enabled for our account?\n\nThanks,\nJordan",
       date: daysAgo(0.2),
       from: "Jordan Lee <jordan@linear.app>",
+      isImportant: true,
       labelIds: labelIds(
         MAILBOX_LABELS.inbox,
         MAILBOX_LABELS.unread,
@@ -121,6 +122,18 @@ const createInitialDemoState = (): ManagedDemoMailState => ({
       threadId: "managed-demo-thread-support",
       to: "Jordan Lee <jordan@linear.app>",
     }),
+    createMessage("managed-demo-msg-support-followup", {
+      bodyHtml: "<p>Thank you. The billing portal is working again.</p>",
+      bodyText: "Thank you. The billing portal is working again.",
+      date: daysAgo(0.1),
+      from: "Jordan Lee <jordan@linear.app>",
+      isImportant: false,
+      labelIds: labelIds(MAILBOX_LABELS.inbox),
+      snippet: "Thank you. The billing portal is working again.",
+      subject: "Re: Cannot access billing portal",
+      threadId: "managed-demo-thread-support",
+      to: DEMO_MANAGED_EMAIL_ADDRESS,
+    }),
     createMessage("managed-demo-msg-3", {
       bodyHtml:
         "<p>Hello,</p><p>Please confirm receipt of invoice 4821 and let us know the expected payment date.</p><p>Regards,<br>Accounts Payable</p>",
@@ -128,11 +141,8 @@ const createInitialDemoState = (): ManagedDemoMailState => ({
         "Hello,\n\nPlease confirm receipt of invoice 4821 and let us know the expected payment date.\n\nRegards,\nAccounts Payable",
       date: daysAgo(1.1),
       from: "Accounts Payable <billing@stripe.com>",
-      labelIds: labelIds(
-        MAILBOX_LABELS.inbox,
-        MAILBOX_LABELS.unread,
-        DEMO_MANAGED_LABEL_IDS.billing
-      ),
+      isImportant: true,
+      labelIds: labelIds(MAILBOX_LABELS.unread, DEMO_MANAGED_LABEL_IDS.billing),
       snippet: "Please confirm receipt of invoice 4821.",
       subject: "Invoice 4821 due next week",
       threadId: "managed-demo-thread-billing",
@@ -145,6 +155,7 @@ const createInitialDemoState = (): ManagedDemoMailState => ({
         "Team,\n\nWe need the managed mailbox live before the partner launch on Monday. Can you confirm the DNS checklist is complete?\n\nMorgan",
       date: daysAgo(0.05),
       from: "Morgan Ellis <morgan@notion.so>",
+      isImportant: true,
       labelIds: labelIds(
         MAILBOX_LABELS.inbox,
         MAILBOX_LABELS.unread,
@@ -176,6 +187,7 @@ const createInitialDemoState = (): ManagedDemoMailState => ({
       bodyText: "Claim your reward immediately.",
       date: daysAgo(3),
       from: "Prize Desk <rewards@promo-claim.net>",
+      isImportant: true,
       isUnread: false,
       labelIds: labelIds(MAILBOX_LABELS.spam),
       snippet: "Claim your reward immediately.",
@@ -264,6 +276,7 @@ const invalidateManagedDemoMail = async (queryClient: QueryClient) => {
   await Promise.all([
     queryClient.invalidateQueries({
       queryKey: ["messages", DEMO_MANAGED_MAILBOX_ID],
+      refetchType: "all",
     }),
     queryClient.invalidateQueries({
       queryKey: [
@@ -271,6 +284,7 @@ const invalidateManagedDemoMail = async (queryClient: QueryClient) => {
         MANAGED_DEMO_THREAD_QUERY_VERSION,
         DEMO_MANAGED_MAILBOX_ID,
       ],
+      refetchType: "all",
     }),
     queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() }),
     queryClient.invalidateQueries({

@@ -7,6 +7,7 @@ import {
   gmailWatchState,
   mailbox,
   mailboxVerificationCode,
+  mailMessageImportance,
   member,
   organization,
   user,
@@ -30,9 +31,20 @@ import {
   processGmailMailCapture,
   writeGmailCapturedMessage,
 } from "../src/mail-capture";
+import type { processPendingMailImportance } from "../src/mail-importance";
 
 const { databaseUrl } = vi.hoisted(() => ({
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
+}));
+const importanceProcessor = vi.hoisted(() =>
+  vi.fn<typeof processPendingMailImportance>()
+);
+let stalledImportance: PromiseWithResolvers<null> | undefined;
+let stalledMaintenance: Promise<unknown> | undefined;
+
+vi.mock(import("../src/mail-importance"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  processPendingMailImportance: importanceProcessor,
 }));
 
 vi.mock(import("@quieter/env/server"), async (importOriginal) => {
@@ -116,7 +128,12 @@ describe.skipIf(databaseUrl === undefined)(
       );
     });
 
-    afterEach(() => {
+    afterEach(async () => {
+      stalledImportance?.resolve(null);
+      await stalledMaintenance;
+      stalledImportance = undefined;
+      stalledMaintenance = undefined;
+      importanceProcessor.mockReset();
       vi.unstubAllGlobals();
     });
 
@@ -481,6 +498,46 @@ describe.skipIf(databaseUrl === undefined)(
         .from(gmailCaptureState)
         .where(eq(gmailCaptureState.mailboxId, mailboxId));
       expect(capture?.leaseId).toBe("other-worker");
+    });
+
+    test("finishes live mail processing while importance work remains stalled", async () => {
+      const mailboxId = await createMailbox();
+      installProvider({ arrivalId: "live-arrival", initialMessageIds: [] });
+      await db.insert(gmailWatchState).values({
+        createdAt: now,
+        historyId: "100",
+        mailboxId,
+        updatedAt: now,
+        watchExpirationAt: new Date(Date.now() + 7 * 24 * 60 * 60_000),
+        watchRenewedAt: new Date(),
+      });
+      const pending = Promise.withResolvers<null>();
+      stalledImportance = pending;
+      importanceProcessor.mockImplementation(async () => {
+        await pending.promise;
+      });
+      stalledMaintenance = maintainGmailPubSubMailbox({
+        mailboxId,
+        topicName: "projects/fixture/topics/mail",
+      });
+      await expect(stalledMaintenance).resolves.toMatchObject({
+        status: "maintained",
+      });
+      const codes = await db
+        .select({ messageId: mailboxVerificationCode.messageId })
+        .from(mailboxVerificationCode)
+        .where(eq(mailboxVerificationCode.mailboxId, mailboxId));
+      expect(codes).toContainEqual({ messageId: "live-arrival" });
+      const [importance] = await db
+        .select()
+        .from(mailMessageImportance)
+        .where(
+          and(
+            eq(mailMessageImportance.mailboxId, mailboxId),
+            eq(mailMessageImportance.messageId, "live-arrival")
+          )
+        );
+      expect(importance).toMatchObject({ aiImportant: null, state: "pending" });
     });
 
     test("fences a provider response after its processing lease is replaced", async () => {

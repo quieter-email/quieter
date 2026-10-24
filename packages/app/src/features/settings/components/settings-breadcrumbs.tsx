@@ -102,17 +102,13 @@ export const SettingsBreadcrumbs = () => {
           const mailboxSections = [
             "signature",
             "intelligence",
-            "brief",
             "connection",
             "access",
           ];
           if (mailboxSections.includes(section)) {
             crumbs.push({
               id: "mailbox-section",
-              label:
-                section === "brief"
-                  ? "Brief"
-                  : section.charAt(0).toUpperCase() + section.slice(1),
+              label: section.charAt(0).toUpperCase() + section.slice(1),
               search: { ...mailboxSearch, mailboxId, section },
             });
           }

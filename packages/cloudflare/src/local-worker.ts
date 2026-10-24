@@ -54,7 +54,6 @@ export default {
       try {
         const input = z
           .object({
-            dailyBrief: z.boolean().optional(),
             fresh: z.boolean().optional(),
             ownerEmail: z.email(),
           })
@@ -68,7 +67,6 @@ export default {
           await withRequestDatabaseClient(
             async () =>
               await seedLocalManagedMail(input.data.ownerEmail, {
-                dailyBrief: input.data.dailyBrief,
                 fresh: input.data.fresh,
               })
           )
@@ -130,16 +128,16 @@ export default {
         return requestErrorResponse(error, "local-maintenance");
       }
     }
-    if (url.pathname === "/__dev/briefs") {
+    if (url.pathname === "/__dev/importance") {
       try {
-        const { runDueDailyBriefs } = await import("@quieter/orpc/daily-brief");
-        return Response.json(
-          await withRequestDatabaseClient(
-            async () => await runDueDailyBriefs({ limit: 1 })
-          )
-        );
+        const { processPendingMailImportance } =
+          await import("@quieter/orpc/mail-importance");
+        await withRequestDatabaseClient(async () => {
+          await processPendingMailImportance({ limit: 1 });
+        });
+        return Response.json({ processed: true });
       } catch (error) {
-        return requestErrorResponse(error, "local-daily-briefs");
+        return requestErrorResponse(error, "local-mail-importance");
       }
     }
     if (url.pathname === "/__dev/memory") {

@@ -3,7 +3,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./daily-brief": "./src/daily-brief.ts",
     "./action-specification": "./src/action-specification.ts",
     "./ai-memory": "./src/ai-memory.ts",
     "./chat-agent": "./src/chat-agent.ts",
@@ -24,7 +23,8 @@
     "./transcription-format": "./src/transcription-format.ts",
     "./chat-transcript": "./src/chat-transcript.ts",
     "./errors": "./src/errors.ts",
-    "./model-config": "./src/model-config.ts"
+    "./model-config": "./src/model-config.ts",
+    "./mail-importance": "./src/mail-importance.ts"
   },
   "dependencies": {
     "@openrouter/ai-sdk-provider": "catalog:",

@@ -140,6 +140,11 @@ const usageBreakdownConfig = [
   },
   {
     className: "bg-q-yellow",
+    kind: "importance",
+    label: "Important mail",
+  },
+  {
+    className: "bg-q-yellow",
     kind: "usefulDetails",
     label: "Previous inbox details",
   },

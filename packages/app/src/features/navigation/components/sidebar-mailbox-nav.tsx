@@ -8,7 +8,7 @@ import {
   InboxIcon,
   Mail01Icon,
   MailSend02Icon,
-  News01Icon,
+  Flag01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { IconSvgElement } from "@hugeicons/react";
@@ -21,6 +21,7 @@ const SIDEBAR_MAILBOX_ITEMS: readonly {
   icon: IconSvgElement;
   label: string;
 }[] = [
+  { icon: Flag01Icon, id: "important", label: "Important" },
   { icon: InboxIcon, id: "inbox", label: "Inbox" },
   { icon: Mail01Icon, id: "unread", label: "Unread" },
   { icon: Archive02Icon, id: "archive", label: "Archive" },
@@ -35,10 +36,6 @@ const API_MAILBOX_ITEMS = SIDEBAR_MAILBOX_ITEMS.filter(
 
 type SidebarMailboxNavProps = {
   animateEntrance: boolean;
-  brief?: {
-    active: boolean;
-    onSelect: () => void;
-  };
   mailboxProvider: "api" | "gmail" | "managed" | null;
   selectedMailbox: MailboxCategory | null;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
@@ -46,27 +43,17 @@ type SidebarMailboxNavProps = {
 
 export const SidebarMailboxNav = ({
   animateEntrance,
-  brief,
   mailboxProvider,
   onSelectMailbox,
   selectedMailbox,
 }: SidebarMailboxNavProps) => {
   const mailboxItems =
     mailboxProvider === "api" ? API_MAILBOX_ITEMS : SIDEBAR_MAILBOX_ITEMS;
-  const items = brief
-    ? [
-        { icon: News01Icon, id: "daily-brief" as const, label: "Brief" },
-        ...mailboxItems,
-      ]
-    : mailboxItems;
 
   return (
     <nav aria-label="Mailboxes" className="flex flex-col">
-      {items.map((item, index) => {
-        const isActive =
-          item.id === "daily-brief"
-            ? brief?.active === true
-            : selectedMailbox === item.id;
+      {mailboxItems.map((item, index) => {
+        const isActive = selectedMailbox === item.id;
 
         return (
           <SidebarEntrance
@@ -82,11 +69,7 @@ export const SidebarMailboxNav = ({
               className="justify-start gap-3 px-3 text-left"
               // oxlint-enable shadcn/no-restyle
               onClick={() => {
-                if (item.id === "daily-brief") {
-                  brief?.onSelect();
-                } else {
-                  onSelectMailbox(item.id);
-                }
+                onSelectMailbox(item.id);
               }}
               size="sm"
               type="button"

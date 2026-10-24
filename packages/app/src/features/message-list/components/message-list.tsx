@@ -2,6 +2,7 @@
 
 import {
   Archive02Icon,
+  Flag01Icon,
   Delete01Icon,
   Delete02Icon,
   InboxIcon,
@@ -45,6 +46,7 @@ const buildDraftListEntry = (
   anchorMessage: message,
   attachmentCount:
     message.threadAttachmentCount ?? message.attachments?.length ?? 0,
+  isImportant: false,
   messageCount: Math.max(1, message.threadMessageCount ?? 0),
   messages: [message],
   participants: [],
@@ -189,7 +191,8 @@ const buildMessageListHotkeys = (
       enabled:
         context.actionHotkeysEnabled &&
         (context.activeMailbox === "inbox" ||
-          context.activeMailbox === "unread"),
+          context.activeMailbox === "unread" ||
+          context.activeMailbox === "important"),
     },
   },
   {
@@ -286,7 +289,11 @@ const buildMessageListBulkActions = ({
   mailboxActions,
   mailboxProvider,
   runActionThreads,
+  actionThreads,
+  canSetImportance,
 }: {
+  actionThreads: ThreadListEntry[];
+  canSetImportance: boolean;
   activeMailbox: MailboxCategory;
   mailboxActions: MessageListProps["mailboxActions"];
   mailboxProvider: MessageListProps["mailboxProvider"];
@@ -318,8 +325,32 @@ const buildMessageListBulkActions = ({
   }
 
   const actions: MessageListBulkAction[] = [];
+  if (canSetImportance) {
+    const important =
+      actionThreads.length > 0 &&
+      actionThreads.every((thread) => thread.isImportant);
+    actions.push({
+      icon: Flag01Icon,
+      id: "toggle-importance",
+      label: important ? "Mark as not important" : "Mark as important",
+      onSelect: async () => {
+        await runActionThreads(
+          async (threads) => {
+            await mailboxActions.setThreadsImportance(threads, !important);
+          },
+          (threads) =>
+            `${formatConversationCount(threads.length)} marked as ${important ? "not important" : "important"}.`
+        );
+      },
+      promoted: true,
+    });
+  }
 
-  if (activeMailbox === "inbox" || activeMailbox === "unread") {
+  if (
+    activeMailbox === "inbox" ||
+    activeMailbox === "unread" ||
+    activeMailbox === "important"
+  ) {
     actions.push({
       icon: Archive02Icon,
       id: "archive-threads",
@@ -634,7 +665,22 @@ const useMessageListInteractions = ({
 
   return {
     bulkActions: buildMessageListBulkActions({
+      actionThreads: getActionThreads(
+        selection.selectedThreads,
+        selection.focusedThread
+      ),
       activeMailbox: props.activeMailbox,
+      canSetImportance:
+        getActionThreads(
+          selection.selectedThreads,
+          selection.focusedThread
+        ).every(
+          (thread) =>
+            (
+              props.mailboxContextsByThreadId?.get(thread.threadId)
+                ?.mailboxActions ?? props.mailboxActions
+            ).canSetImportance
+        ) && props.mailboxActions.canSetImportance,
       mailboxActions: props.mailboxActions,
       mailboxProvider: actionMailboxProvider,
       runActionThreads,

@@ -2,7 +2,7 @@
 
 import {
   AssistantPreview,
-  BriefPreview,
+  ImportantPreview,
   ComposePreview,
   LabelsPreview,
 } from "./product-previews";
@@ -26,18 +26,22 @@ export const AiSection = () => (
       </Reveal>
     </section>
     <div className="home-feature home-paired-features">
-      <section aria-labelledby="home-brief-title">
+      <section aria-labelledby="home-important-title">
         <Reveal className="home-paired-feature" stagger={0.18}>
-          <RevealChild as="h2" className="home-heading" id="home-brief-title">
-            Your Daily Brief.
+          <RevealChild
+            as="h2"
+            className="home-heading"
+            id="home-important-title"
+          >
+            What matters, together.
           </RevealChild>
           <RevealChild as="p" className="home-description">
-            Coming soon. A Daily Brief of what needs your attention.
+            Important mail, picked out as it arrives.
             <br />
-            Catch up without opening every email.
+            You decide what deserves your attention.
           </RevealChild>
           <RevealChild>
-            <BriefPreview />
+            <ImportantPreview />
           </RevealChild>
         </Reveal>
       </section>

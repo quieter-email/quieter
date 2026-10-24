@@ -9,44 +9,57 @@ import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import { z } from "zod";
 
 export const mailInputSchemas = {
-  applyChanges: z.object({
-    command: z.discriminatedUnion("kind", [
-      z.object({ kind: z.literal("set-read"), read: z.boolean() }),
-      z.object({
-        destination: z.enum(["archive", "inbox", "spam", "trash"]),
-        kind: z.literal("move"),
-      }),
-      z.object({ kind: z.literal("delete-permanently") }),
-      z.object({
-        addIds: z.array(z.string()),
-        kind: z.literal("set-labels"),
-        removeIds: z.array(z.string()),
-      }),
-    ]),
-    mailboxId: z.string().trim().min(1),
-    targets: z
-      .array(
+  applyChanges: z
+    .object({
+      command: z.discriminatedUnion("kind", [
+        z.object({ kind: z.literal("set-read"), read: z.boolean() }),
+        z.object({ important: z.boolean(), kind: z.literal("set-importance") }),
         z.object({
-          messageIds: z.array(z.string().trim().min(1)).min(1).max(1000),
-          threadId: z.string().trim().min(1),
-        })
-      )
-      .min(1)
-      .max(1000)
-      .superRefine((targets, context) => {
-        if (
-          targets.reduce(
-            (count, target) => count + target.messageIds.length,
-            0
-          ) > 1000
-        ) {
-          context.addIssue({
-            code: "custom",
-            message: "A mail command can include at most 1,000 messages.",
-          });
-        }
-      }),
-  }),
+          destination: z.enum(["archive", "inbox", "spam", "trash"]),
+          kind: z.literal("move"),
+        }),
+        z.object({ kind: z.literal("delete-permanently") }),
+        z.object({
+          addIds: z.array(z.string()),
+          kind: z.literal("set-labels"),
+          removeIds: z.array(z.string()),
+        }),
+      ]),
+      mailboxId: z.string().trim().min(1),
+      targets: z
+        .array(
+          z.object({
+            messageIds: z.array(z.string().trim().min(1)).max(1000),
+            threadId: z.string().trim().min(1),
+          })
+        )
+        .min(1)
+        .max(1000)
+        .superRefine((targets, context) => {
+          if (
+            targets.reduce(
+              (count, target) => count + target.messageIds.length,
+              0
+            ) > 1000
+          ) {
+            context.addIssue({
+              code: "custom",
+              message: "A mail command can include at most 1,000 messages.",
+            });
+          }
+        }),
+    })
+    .superRefine((input, context) => {
+      if (
+        input.command.kind !== "set-importance" &&
+        input.targets.some((target) => target.messageIds.length === 0)
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "A mail command must include messages.",
+        });
+      }
+    }),
   createLabel: z.object({
     autoLabel: autoLabelSettingsSchema.nullable().optional(),
     color: mailboxLabelColorSchema.optional(),
@@ -142,7 +155,15 @@ export const mailInputSchemas = {
     message: composeMessageInputSchema,
   }),
   syncMailbox: z.object({
-    category: z.enum(["inbox", "unread", "archive", "spam", "sent", "trash"]),
+    category: z.enum([
+      "inbox",
+      "important",
+      "unread",
+      "archive",
+      "spam",
+      "sent",
+      "trash",
+    ]),
     mailboxId: z.string().trim().min(1),
     startHistoryId: z.string().min(1),
   }),

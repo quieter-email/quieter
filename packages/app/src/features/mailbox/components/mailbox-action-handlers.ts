@@ -1,7 +1,12 @@
 "use client";
 
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
-import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import type {
+  MailboxCategory,
+  MessageListItem,
+  ThreadMessagesResult,
+} from "@quieter/app/lib/mail";
+import type { MessagesQueryData } from "@quieter/app/lib/mail/inbox-query/data";
 import {
   applyBulkChangesInMailbox,
   updateMessageInMailbox,
@@ -9,6 +14,8 @@ import {
   deleteDraftInMailbox,
 } from "@quieter/app/lib/mail/inbox-query/index";
 import type { MailMetadataOperation } from "@quieter/app/lib/mail/inbox-query/index";
+import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-keys";
+import { mailboxesQueryOptions } from "@quieter/app/lib/mailboxes-query";
 import type { MailCommand } from "@quieter/mail/data-plane";
 import type { QueryClient } from "@tanstack/react-query";
 
@@ -191,7 +198,10 @@ export const createMailboxActionHandlers = ({
       queryClient,
       mailboxId,
       threads.map((thread) => ({
-        messageIds: thread.messages.map((message) => message.id),
+        messageIds:
+          command.kind === "set-importance"
+            ? []
+            : thread.messages.map((message) => message.id),
         threadId: thread.threadId,
       })),
       command
@@ -201,6 +211,49 @@ export const createMailboxActionHandlers = ({
     if (failed) {
       throw new Error("Could not update some messages.");
     }
+  };
+
+  const setImportance = async (
+    id: string,
+    scope: "message" | "thread",
+    important: boolean
+  ) => {
+    let threadId = id;
+    if (scope === "message") {
+      const message =
+        queryClient
+          .getQueriesData<MessagesQueryData>({
+            queryKey: ["messages", mailboxId],
+          })
+          .flatMap(
+            ([, data]) => data?.pages.flatMap((page) => page.messages) ?? []
+          )
+          .find((candidate) => candidate.id === id) ??
+        queryClient
+          .getQueriesData<ThreadMessagesResult>({
+            queryKey: getMailboxThreadQueriesKey(mailboxId),
+          })
+          .flatMap(([, data]) => data?.messages ?? [])
+          .find((candidate) => candidate.id === id);
+      if (!message) {
+        throw new Error("This message is no longer available.");
+      }
+      ({ threadId } = message);
+    }
+    await runAction(scope, id, async () => {
+      const result = await applyBulkChangesInMailbox(
+        queryClient,
+        mailboxId,
+        [{ messageIds: scope === "thread" ? [] : [id], threadId }],
+        { important, kind: "set-importance" }
+      );
+      const failed = result.targets.find(
+        (target) => target.status === "failed"
+      );
+      if (failed) {
+        throw new Error("Could not update this conversation.");
+      }
+    });
   };
 
   const deleteDraft = async (message: MessageListItem) => {
@@ -265,6 +318,15 @@ export const createMailboxActionHandlers = ({
         kind: "move",
       });
     },
+    get canSetImportance() {
+      return (
+        queryClient
+          .getQueryData(mailboxesQueryOptions().queryKey)
+          ?.groups.flatMap((group) => group.mailboxes)
+          .find((mailbox) => mailbox.id === mailboxId)?.capabilities
+          .canSetImportance === true
+      );
+    },
     deleteDraft,
     deleteDrafts,
     markMessageAsRead: async (messageId: string) => {
@@ -307,6 +369,21 @@ export const createMailboxActionHandlers = ({
       await runBulkMailboxCommand(threads, {
         destination: "trash",
         kind: "move",
+      });
+    },
+    setMessageImportance: async (id: string, important: boolean) => {
+      await setImportance(id, "message", important);
+    },
+    setThreadImportance: async (id: string, important: boolean) => {
+      await setImportance(id, "thread", important);
+    },
+    setThreadsImportance: async (
+      threads: ThreadListEntry[],
+      important: boolean
+    ) => {
+      await runBulkMailboxCommand(threads, {
+        important,
+        kind: "set-importance",
       });
     },
     unmarkMessageAsSpam: async (messageId: string) => {

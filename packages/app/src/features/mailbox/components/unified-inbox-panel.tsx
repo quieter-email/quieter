@@ -6,7 +6,6 @@ import type {
 } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
 import { useMailboxListController } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-list-controller";
 import { createUnifiedInboxActions } from "@quieter/app/features/mailbox/components/unified-inbox-actions";
-import { useBriefMailboxActivity } from "@quieter/app/features/mailbox/components/use-brief-mailbox-activity";
 import {
   buildUnifiedInboxEntries,
   defaultMailboxColor,
@@ -283,12 +282,6 @@ export const UnifiedInboxPanel = ({
     }))
   );
   const visibleEntries = pending ? [] : entries;
-  useBriefMailboxActivity(
-    visibleEntries,
-    activeMessageId === null ||
-      (typeof window !== "undefined" &&
-        window.matchMedia("(min-width: 1024px)").matches)
-  );
   const failedSources = connectedStates.filter(
     ({ state }) => state !== undefined && state.error !== null
   );
@@ -424,6 +417,7 @@ export const UnifiedInboxPanel = ({
             anchorMessage: message,
             attachmentCount:
               message.threadAttachmentCount ?? message.attachments?.length ?? 0,
+            isImportant: false,
             messageCount: Math.max(1, message.threadMessageCount ?? 0),
             messages: [message],
             participants: [],
