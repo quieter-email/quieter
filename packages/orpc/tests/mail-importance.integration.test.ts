@@ -59,6 +59,16 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => {
     },
   };
 });
+vi.mock(import("@quieter/env/public"), async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    publicEnv: {
+      ...original.publicEnv,
+      VITE_LOGO_DEV_PUBLISHABLE_KEY: "fixture-logo-key",
+    },
+  };
+});
 vi.mock(import("@quieter/ai/mail-importance"), () => ({
   classifyMailImportance: vi.fn<typeof classifyMailImportance>(),
 }));
@@ -342,6 +352,44 @@ describe.skipIf(databaseUrl === undefined)(
           }),
         ])
       );
+    });
+
+    test("Important messages retain themed sender logos and authenticated brand headers", async () => {
+      const mailboxId = await createMailbox();
+      const snapshot = await capture(mailboxId, {
+        headers: [
+          { name: "From", value: "Brand <alerts@important-brand.example>" },
+          {
+            name: "Authentication-Results",
+            value: "mx.example; dmarc=pass header.from=important-brand.example",
+          },
+          { name: "BIMI-Selector", value: "v=BIMI1; s=alerts" },
+        ],
+      });
+      await processPendingMailImportance({ limit: 1, mailboxId });
+      const fetch = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(Response.json({ Answer: [] }));
+      try {
+        const page = await listCapturedImportantMessages({ mailboxId });
+        const message = page.messages.find((item) => item.id === snapshot.id);
+        for (const theme of ["light", "dark"] as const) {
+          expect(message?.senderAvatarUrls?.[theme]).toMatch(
+            /^https:\/\/img\.logo\.dev\/important-brand\.example\?/u
+          );
+          const url = new URL(message?.senderAvatarUrls?.[theme] ?? "");
+          expect(url.searchParams.get("theme")).toBe(theme);
+        }
+        expect(
+          fetch.mock.calls.map(([input]) =>
+            new URL(
+              input instanceof Request ? input.url : input
+            ).searchParams.get("name")
+          )
+        ).toContain("alerts._bimi.important-brand.example");
+      } finally {
+        fetch.mockRestore();
+      }
     });
 
     test.each(["valid", "invalid"])(
