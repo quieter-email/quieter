@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 import {
   analyzeMailMessage,
   boundMailCaptureContent,
+  MAIL_CAPTURE_BODY_LIMIT,
   parseMailUnsubscribeTarget,
 } from "../src/capture";
 
@@ -93,5 +94,31 @@ describe("deterministic retained mail analysis", () => {
     expect(bounded.headers.length).toBeLessThan(headers.length);
     expect(bounded.truncation).toMatchObject({ bodyText: true, headers: true });
     expect(analysis.truncated).toBeTruthy();
+  });
+
+  test("retains complete Unicode characters at body and header boundaries", () => {
+    const content = `a${"😀".repeat(MAIL_CAPTURE_BODY_LIMIT)}`;
+    const bounded = boundMailCaptureContent({
+      bodyHtml: content,
+      bodyText: content,
+      headers: [
+        { name: `X${"😀".repeat(256)}`, value: `v${"😀".repeat(8192)}` },
+      ],
+    });
+
+    for (const text of [
+      bounded.bodyHtml,
+      bounded.bodyText,
+      bounded.headers[0]?.name,
+      bounded.headers[0]?.value,
+    ]) {
+      expect(text).toContain("😀");
+      expect(text?.isWellFormed()).toBeTruthy();
+    }
+    expect(bounded.truncation).toMatchObject({
+      bodyHtml: true,
+      bodyText: true,
+      headers: true,
+    });
   });
 });

@@ -1140,15 +1140,15 @@ export const maintainGmailPubSubMailbox = async (input: {
       return { status: "skipped" as const };
     }
 
+    await renewMailboxWatch({
+      mailboxId: gmailMailbox.id,
+      topicName: input.topicName,
+      userId: gmailMailbox.ownerUserId,
+    });
     const result = await processMailboxHistory({
       mailboxId: gmailMailbox.id,
       maxHistoryPages: 2,
       organizationId: gmailMailbox.organizationId,
-      userId: gmailMailbox.ownerUserId,
-    });
-    await renewMailboxWatch({
-      mailboxId: gmailMailbox.id,
-      topicName: input.topicName,
       userId: gmailMailbox.ownerUserId,
     });
     if (result.busy) {

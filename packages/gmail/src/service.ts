@@ -1,5 +1,8 @@
 import { serverEnv } from "@quieter/env/server";
-import { boundMailCaptureContent } from "@quieter/mail/capture";
+import {
+  boundMailCaptureContent,
+  truncateMailCaptureText,
+} from "@quieter/mail/capture";
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
 import type { MailCategory as MailboxCategory } from "@quieter/mail/data-plane";
@@ -1916,8 +1919,8 @@ const toGmailCapturedSnapshot = (
     ...bounded,
     attachments: attachments.slice(0, 128).map((attachment) => ({
       ...attachment,
-      fileName: attachment.fileName.slice(0, 512),
-      mimeType: attachment.mimeType.slice(0, 256),
+      fileName: truncateMailCaptureText(attachment.fileName, 512),
+      mimeType: truncateMailCaptureText(attachment.mimeType, 256),
     })),
     id: message.id,
     internalDate: message.internalDate ?? null,
