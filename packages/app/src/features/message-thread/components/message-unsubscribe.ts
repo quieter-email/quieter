@@ -4,14 +4,27 @@ export type MessageUnsubscribeTarget =
   | {
       kind: "mailto";
     }
+  | { kind: "confirming" }
   | {
       kind: "url";
       url: string;
     };
 
+export const messageUnsubscribeLabels = {
+  confirming: "Check unsubscribe request",
+  mailto: "Unsubscribe",
+  url: "Open unsubscribe page",
+} as const;
+
 export const getMessageUnsubscribeTarget = (
   message: MessageListItem
 ): MessageUnsubscribeTarget | null => {
+  if (message.unsubscribeStatus === "requested") {
+    return null;
+  }
+  if (message.unsubscribeStatus === "confirming") {
+    return { kind: "confirming" };
+  }
   if (
     message.unsubscribeMailto !== null &&
     message.unsubscribeMailto !== undefined &&

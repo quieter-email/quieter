@@ -1,5 +1,6 @@
 "use client";
 
+import { toastError } from "@quieter/app/lib/error-toast";
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
 import type {
   MailboxCategory,
@@ -39,7 +40,7 @@ type MailboxActionHandlerArgs = {
   setMessageActionsPending: (messageIds: string[], pending: boolean) => void;
   setThreadActionPending: (threadId: string, pending: boolean) => void;
   setThreadActionsPending: (threadIds: string[], pending: boolean) => void;
-  unsubscribeFromMessageMutation: (messageId: string) => Promise<void>;
+  unsubscribeFromMessageMutation: (messageId: string) => Promise<boolean>;
   mailboxId: string;
 };
 
@@ -399,9 +400,18 @@ export const createMailboxActionHandlers = ({
       });
     },
     unsubscribeFromMessage: async (messageId: string) => {
-      await runAction("message", messageId, async () => {
-        await unsubscribeFromMessageMutation(messageId);
-      });
+      if (isMessageActionPending(messageId)) {
+        return false;
+      }
+      setMessageActionPending(messageId, true);
+      try {
+        return await unsubscribeFromMessageMutation(messageId);
+      } catch (error) {
+        toastError(error, { boundary: "unsubscribe" });
+        return false;
+      } finally {
+        setMessageActionPending(messageId, false);
+      }
     },
     untrashMessage: async (messageId: string) => {
       await runMailboxMessageAction(messageId, "untrash");

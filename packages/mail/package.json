@@ -27,6 +27,7 @@
     "./visual-email": "./src/visual-email.ts",
     "./auto-label": "./src/auto-label.ts",
     "./auto-label-matching": "./src/auto-label-matching.ts",
+    "./unsubscribe": "./src/unsubscribe.ts",
     "./capture": "./src/capture.ts"
   },
   "dependencies": {

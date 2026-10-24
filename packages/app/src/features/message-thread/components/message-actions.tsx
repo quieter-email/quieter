@@ -23,8 +23,10 @@ import type {
 import type { ThreadActionHandlers } from "@quieter/app/features/message-thread/components/message-action-handlers";
 import {
   getMessageUnsubscribeTarget,
+  messageUnsubscribeLabels,
   openUnsubscribeUrl,
 } from "@quieter/app/features/message-thread/components/message-unsubscribe";
+import { toastError } from "@quieter/app/lib/error-toast";
 import { isMessageUnread } from "@quieter/app/lib/mail";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
 import { cn } from "@quieter/ui/cn";
@@ -239,19 +241,23 @@ const createUnsubscribeEntry = (
   unsubscribeTarget: NonNullable<ReturnType<typeof getMessageUnsubscribeTarget>>
 ): MenuAction => ({
   disabled:
-    unsubscribeTarget.kind === "mailto"
-      ? isBusy || !props.actions.onUnsubscribe
-      : false,
+    unsubscribeTarget.kind !== "url" &&
+    (isBusy || !props.actions.onUnsubscribe),
   icon: NotificationOff01Icon,
   id: "unsubscribe",
-  label: "Unsubscribe",
+  label: messageUnsubscribeLabels[unsubscribeTarget.kind],
   onAction: () => {
-    if (unsubscribeTarget.kind === "mailto") {
-      void props.actions.onUnsubscribe?.(props.message.id);
-      return;
-    }
-
-    openUnsubscribeUrl(unsubscribeTarget.url);
+    void (async () => {
+      try {
+        if (unsubscribeTarget.kind === "url") {
+          openUnsubscribeUrl(unsubscribeTarget.url);
+          return;
+        }
+        await props.actions.onUnsubscribe?.(props.message.id);
+      } catch (error) {
+        toastError(error, { boundary: "unsubscribe" });
+      }
+    })();
   },
   type: "item",
 });

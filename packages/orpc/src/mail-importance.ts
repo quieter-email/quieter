@@ -16,6 +16,7 @@ import {
   managedMailMessage,
   organization,
 } from "@quieter/database/schema";
+import { extractListUnsubscribeTargets } from "@quieter/gmail";
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
 import type {
@@ -30,6 +31,7 @@ import type {
 } from "@quieter/mail/messages";
 import type { MailSearchExpression } from "@quieter/mail/search-expression";
 import { parseMailSearchExpression } from "@quieter/mail/search-expression";
+import { getUnsubscribeKey } from "@quieter/mail/unsubscribe";
 import { reportError } from "@quieter/observability";
 import type { SQL } from "drizzle-orm";
 import {
@@ -68,12 +70,19 @@ const CLASSIFIER_VERSION = "1";
 
 const importanceMessage = (
   message: AutomationMailMessage | CapturedMailSnapshot
-): AutomationMailMessage => {
+): AutomationMailMessage &
+  Pick<
+    MessageListItem,
+    "unsubscribeKey" | "unsubscribeMailto" | "unsubscribeUrl"
+  > => {
   if (!("providerRevision" in message)) {
     return message;
   }
   const header = new Map(
     message.headers.map((item) => [item.name.toLowerCase(), item.value])
+  );
+  const unsubscribe = extractListUnsubscribeTargets(
+    header.get("list-unsubscribe")
   );
   return {
     ...message,
@@ -82,6 +91,9 @@ const importanceMessage = (
     snippet: (message.bodyText ?? "").slice(0, 2000),
     subject: header.get("subject"),
     to: header.get("to"),
+    unsubscribeKey: getUnsubscribeKey(message.headers),
+    unsubscribeMailto: unsubscribe.mailto,
+    unsubscribeUrl: unsubscribe.url,
   };
 };
 
@@ -167,7 +179,7 @@ const loadImportanceSources = async (
   threadIds?: string[]
 ): Promise<
   {
-    message: AutomationMailMessage & { threadId: string };
+    message: ReturnType<typeof importanceMessage> & { threadId: string };
     incoming: boolean;
     eligible: boolean;
     receivedAt: Date;
@@ -1057,6 +1069,9 @@ export const listCapturedImportantMessages = async (input: {
         ],
         threadMessageCount: members.length,
         to: message.to ?? undefined,
+        unsubscribeKey: message.unsubscribeKey,
+        unsubscribeMailto: message.unsubscribeMailto,
+        unsubscribeUrl: message.unsubscribeUrl,
       },
     ];
   });

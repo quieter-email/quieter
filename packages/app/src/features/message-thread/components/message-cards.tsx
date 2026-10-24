@@ -5,6 +5,7 @@ import {
   Edit01Icon,
   NotificationOff01Icon,
   Flag01Icon,
+  Tick01Icon,
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -20,11 +21,13 @@ import { MessageBody } from "@quieter/app/features/message-thread/components/mes
 import { MessageInspectorPanel } from "@quieter/app/features/message-thread/components/message-inspector-panel";
 import {
   getMessageUnsubscribeTarget,
+  messageUnsubscribeLabels,
   openUnsubscribeUrl,
 } from "@quieter/app/features/message-thread/components/message-unsubscribe";
 import type { MessageUnsubscribeTarget } from "@quieter/app/features/message-thread/components/message-unsubscribe";
 import type { MessageViewProps } from "@quieter/app/features/message-thread/components/message-view-types";
 import { CopyVerificationCode } from "@quieter/app/features/verification-codes/components/copy-verification-code";
+import { toastError } from "@quieter/app/lib/error-toast";
 import {
   formatMessageDate,
   parseSender,
@@ -35,6 +38,7 @@ import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { SuccessPulse } from "@quieter/ui/success-pulse";
 import { TooltipGroup } from "@quieter/ui/tooltip";
 import { domAnimation, LazyMotion } from "motion/react";
 import { useState } from "react";
@@ -54,7 +58,7 @@ type MessageHeaderContentProps = {
 
 type MessageUnsubscribeAction = {
   kind: MessageUnsubscribeTarget["kind"];
-  onClick: () => void;
+  onClick: () => Promise<boolean>;
 };
 
 const formatEnvelopeValue = (value?: string) => {
@@ -64,30 +68,30 @@ const formatEnvelopeValue = (value?: string) => {
 
 const getMessageUnsubscribeAction = (
   message: MessageListItem,
-  onUnsubscribe?: (messageId: string) => void | Promise<void>
+  onUnsubscribe?: (messageId: string) => Promise<boolean>
 ): MessageUnsubscribeAction | undefined => {
   const target = getMessageUnsubscribeTarget(message);
   if (!target) {
     return undefined;
   }
 
-  if (target.kind === "mailto") {
+  if (target.kind !== "url") {
     if (!onUnsubscribe) {
       return undefined;
     }
 
     return {
-      kind: "mailto",
-      onClick: () => {
-        void onUnsubscribe(message.id);
-      },
+      kind: target.kind,
+      onClick: async () => await onUnsubscribe(message.id),
     };
   }
 
   return {
     kind: "url",
-    onClick: () => {
+    onClick: async () => {
       openUnsubscribeUrl(target.url);
+      await Promise.resolve();
+      return false;
     },
   };
 };
@@ -278,14 +282,35 @@ const MessageHeaderActions = ({
   message: MessageListItem;
   onSetImportance?: (messageId: string, important: boolean) => Promise<void>;
 }) => {
-  const handleUnsubscribe = () => {
-    onUnsubscribe?.onClick();
+  const [unsubscribePhase, setUnsubscribePhase] = useState<
+    "idle" | "pending" | "success"
+  >("idle");
+  let unsubscribeLabel: string =
+    messageUnsubscribeLabels[onUnsubscribe?.kind ?? "mailto"];
+  if (unsubscribePhase === "success") {
+    unsubscribeLabel = "Unsubscribe requested";
+  }
+  const handleUnsubscribe = async () => {
+    if (!onUnsubscribe || unsubscribePhase !== "idle") {
+      return;
+    }
+    setUnsubscribePhase("pending");
+    try {
+      setUnsubscribePhase((await onUnsubscribe.onClick()) ? "success" : "idle");
+    } catch (error) {
+      toastError(error, { boundary: "unsubscribe" });
+      setUnsubscribePhase("idle");
+    }
   };
 
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center justify-start gap-1 opacity-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover/message:opacity-100 focus-within:opacity-100 @md:justify-end pointer-coarse:opacity-100",
+        "flex flex-wrap items-center justify-start gap-1 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover/message:opacity-100 focus-within:opacity-100 @md:justify-end pointer-coarse:opacity-100",
+        {
+          "opacity-0": unsubscribePhase === "idle",
+          "opacity-100": unsubscribePhase !== "idle",
+        },
         className
       )}
     >
@@ -332,17 +357,36 @@ const MessageHeaderActions = ({
             </Button>
           </IconButtonTooltip>
         )}
-      {onUnsubscribe !== undefined && (
-        <IconButtonTooltip label="Unsubscribe">
+      {(onUnsubscribe !== undefined || unsubscribePhase !== "idle") && (
+        <IconButtonTooltip label={unsubscribeLabel}>
           <Button
-            aria-label="Unsubscribe"
-            disabled={isPending === true && onUnsubscribe.kind === "mailto"}
-            onClick={handleUnsubscribe}
+            aria-label={unsubscribeLabel}
+            disabled={
+              unsubscribePhase !== "idle" ||
+              (isPending === true && onUnsubscribe?.kind !== "url")
+            }
+            onClick={() => {
+              void handleUnsubscribe();
+            }}
             size="icon-sm"
             type="button"
             variant="ghost"
           >
-            <HugeiconsIcon aria-hidden icon={NotificationOff01Icon} />
+            <SuccessPulse
+              active={unsubscribePhase === "success"}
+              onComplete={() => {
+                setUnsubscribePhase("idle");
+              }}
+            >
+              <HugeiconsIcon
+                aria-hidden
+                icon={
+                  unsubscribePhase === "success"
+                    ? Tick01Icon
+                    : NotificationOff01Icon
+                }
+              />
+            </SuccessPulse>
           </Button>
         </IconButtonTooltip>
       )}
@@ -457,7 +501,7 @@ const ThreadMessageCard = ({
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onSetImportance?: (messageId: string, important: boolean) => Promise<void>;
-  onUnsubscribe?: (messageId: string) => void | Promise<void>;
+  onUnsubscribe?: (messageId: string) => Promise<boolean>;
   onToggleExpanded: () => void;
   verificationCode?: string;
 }) => {
@@ -564,7 +608,7 @@ export const SingleMessageCard = ({
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onSetImportance?: (messageId: string, important: boolean) => Promise<void>;
-  onUnsubscribe?: (messageId: string) => void | Promise<void>;
+  onUnsubscribe?: (messageId: string) => Promise<boolean>;
   verificationCode?: string;
 }) => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
@@ -656,7 +700,7 @@ export const ThreadMessageList = ({
   messages: MessageListItem[];
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onSetImportance?: (messageId: string, important: boolean) => Promise<void>;
-  onUnsubscribe?: (messageId: string) => void | Promise<void>;
+  onUnsubscribe?: (messageId: string) => Promise<boolean>;
   verificationCodes: RouterOutputs["mail"]["listVerificationCodes"]["items"];
 }) => {
   const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>(() => {

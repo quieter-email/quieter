@@ -35,7 +35,10 @@ const createReadOnlyMailboxActions = (): MailboxActions =>
     unmarkMessageAsSpam: noopMailboxAction,
     unmarkThreadAsSpam: noopMailboxAction,
     unmarkThreadsAsSpam: noopMailboxAction,
-    unsubscribeFromMessage: noopMailboxAction,
+    unsubscribeFromMessage: async () => {
+      await Promise.resolve();
+      return false;
+    },
     untrashMessage: noopMailboxAction,
     untrashThread: noopMailboxAction,
     untrashThreads: noopMailboxAction,
@@ -75,7 +78,7 @@ export const resolveMailboxActions = ({
   setMessageActionsPending: (ids: string[], pending: boolean) => void;
   setThreadActionPending: (id: string, pending: boolean) => void;
   setThreadActionsPending: (ids: string[], pending: boolean) => void;
-  unsubscribeFromMessage: (targetMessageId: string) => Promise<void>;
+  unsubscribeFromMessage: (targetMessageId: string) => Promise<boolean>;
 }): MailboxActions => {
   if (mailboxProvider === "api") {
     return createReadOnlyMailboxActions();
@@ -101,8 +104,6 @@ export const resolveMailboxActions = ({
     setMessageActionsPending,
     setThreadActionPending,
     setThreadActionsPending,
-    unsubscribeFromMessageMutation: async (targetMessageId) => {
-      await unsubscribeFromMessage(targetMessageId);
-    },
+    unsubscribeFromMessageMutation: unsubscribeFromMessage,
   });
 };

@@ -139,16 +139,19 @@ export const buildMimeMessage = async (
 
 export const buildPlainTextMessage = async ({
   body,
+  messageId,
   subject,
   to,
 }: {
   body: string;
+  messageId?: string;
   subject: string;
   to: string;
 }): Promise<string> => {
   const raw = await new MailComposer({
     disableFileAccess: true,
     disableUrlAccess: true,
+    messageId,
     newline: "\r\n",
     subject,
     text: body,

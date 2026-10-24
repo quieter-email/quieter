@@ -18,7 +18,7 @@ export type ThreadActionHandlers = {
   onMarkAsSpam?: (threadId: string) => void | Promise<void>;
   onMarkAsUnread?: (threadId: string) => void | Promise<void>;
   onOpenDraft?: (message: MessageListItem) => void | Promise<void>;
-  onUnsubscribe?: (messageId: string) => void | Promise<void>;
+  onUnsubscribe?: (messageId: string) => Promise<boolean>;
   onUpdateLabels?: (
     threadId: string,
     changes: LabelChanges

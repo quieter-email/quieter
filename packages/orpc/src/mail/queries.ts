@@ -15,6 +15,7 @@ import type { MailboxSyncDelta } from "@quieter/mail/messages";
 import type { MailSearchFilter } from "@quieter/mail/search";
 import type { MailSearchExpression } from "@quieter/mail/search-expression";
 
+import { hydrateUnsubscribeStatus } from "../gmail-compose";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
 import { writeGmailCapturedMessage } from "../mail-capture";
@@ -269,9 +270,9 @@ export const queriesMailOperations = {
         );
         return {
           ...thread,
-          messages: await hydrateMailImportance(
+          messages: await hydrateUnsubscribeStatus(
             input.mailboxId,
-            thread.messages
+            await hydrateMailImportance(input.mailboxId, thread.messages)
           ),
         };
       })
@@ -370,10 +371,17 @@ export const queriesMailOperations = {
             filter.value;
         }
       }
-      return await listCapturedImportantMessages({
+      const page = await listCapturedImportantMessages({
         ...input,
         searchExpression,
       });
+      return {
+        ...page,
+        messages: await hydrateUnsubscribeStatus(
+          input.mailboxId,
+          page.messages
+        ),
+      };
     }
     const page = await callGmail(
       context,
@@ -399,7 +407,10 @@ export const queriesMailOperations = {
       historyId: page.historyId
         ? `gmail:${page.historyId}:${selectedMailbox.contentRevision}`
         : undefined,
-      messages: await hydrateMailImportance(input.mailboxId, page.messages),
+      messages: await hydrateUnsubscribeStatus(
+        input.mailboxId,
+        await hydrateMailImportance(input.mailboxId, page.messages)
+      ),
     };
   },
   syncMailbox: async ({
@@ -481,9 +492,9 @@ export const queriesMailOperations = {
         : undefined,
       refreshFirstPage: delta.refreshFirstPage || appChanged,
       requiresFullRefresh: delta.requiresFullRefresh || appChanged,
-      updatedMessages: await hydrateMailImportance(
+      updatedMessages: await hydrateUnsubscribeStatus(
         input.mailboxId,
-        delta.updatedMessages
+        await hydrateMailImportance(input.mailboxId, delta.updatedMessages)
       ),
     };
   },

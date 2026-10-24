@@ -18,9 +18,11 @@ import type { GmailDraft, GmailMessage } from "@quieter/gmail";
 import { parseDraftMessage } from "@quieter/gmail/compose";
 import {
   buildMimeMessage,
+  buildPlainTextMessage,
   normalizeComposeBodyHtml,
 } from "@quieter/mail/compose/mime";
 import type { composeDraftInputSchema } from "@quieter/mail/compose/schema";
+import type { MessageListItem } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import { and, eq, inArray, lt, or } from "drizzle-orm";
 import type { z } from "zod";
@@ -237,7 +239,12 @@ const recordComposeFailure = async (
   await db
     .update(gmailComposeOperation)
     .set({ status: rejected ? "rejected" : "unknown", updatedAt: new Date() })
-    .where(eq(gmailComposeOperation.id, operation.id));
+    .where(
+      and(
+        eq(gmailComposeOperation.id, operation.id),
+        inArray(gmailComposeOperation.status, ["submitting", "unknown"])
+      )
+    );
   if (rejected) {
     if (
       operation.draftId &&
@@ -263,7 +270,8 @@ const recordComposeFailure = async (
 
 const acceptComposeOperation = async (
   operation: ComposeOperation,
-  response: NonNullable<ComposeOperation["response"]>
+  response: NonNullable<ComposeOperation["response"]>,
+  strict = false
 ) => {
   await db
     .update(gmailComposeOperation)
@@ -271,6 +279,9 @@ const acceptComposeOperation = async (
     .where(eq(gmailComposeOperation.id, operation.id))
     .catch((error: unknown) => {
       reportError(error, { operation: "compose:gmail-persist-acceptance" });
+      if (strict) {
+        throw error;
+      }
     });
 };
 
@@ -863,4 +874,122 @@ export const getGmailComposeSendStatus = async (
     };
   }
   return { status: "pending" };
+};
+
+export const hydrateUnsubscribeStatus = async <Message extends MessageListItem>(
+  mailboxId: string,
+  messages: Message[]
+): Promise<Message[]> => {
+  const operationKeys = [
+    ...new Set(
+      messages.flatMap((message) =>
+        message.unsubscribeKey
+          ? [
+              `unsubscribe:v1:${createHash("sha256").update(message.unsubscribeKey).digest("hex")}`,
+            ]
+          : []
+      )
+    ),
+  ];
+  if (operationKeys.length === 0) {
+    return messages;
+  }
+  const operations = await db
+    .select({
+      operationKey: gmailComposeOperation.operationKey,
+      status: gmailComposeOperation.status,
+    })
+    .from(gmailComposeOperation)
+    .where(
+      and(
+        eq(gmailComposeOperation.mailboxId, mailboxId),
+        eq(gmailComposeOperation.kind, "send"),
+        inArray(gmailComposeOperation.operationKey, operationKeys),
+        inArray(gmailComposeOperation.status, [
+          "accepted",
+          "submitting",
+          "unknown",
+        ])
+      )
+    );
+  const statuses = new Map(
+    operations.map((operation) => [operation.operationKey, operation.status])
+  );
+  return messages.map((message) => {
+    const status = message.unsubscribeKey
+      ? statuses.get(
+          `unsubscribe:v1:${createHash("sha256").update(message.unsubscribeKey).digest("hex")}`
+        )
+      : undefined;
+    if (status === undefined) {
+      return message;
+    }
+    return {
+      ...message,
+      unsubscribeStatus: status === "accepted" ? "requested" : "confirming",
+    };
+  });
+};
+
+export const sendGmailUnsubscribe = async (
+  accessToken: string,
+  mailboxId: string,
+  input: {
+    key: string;
+    message: { body: string; subject: string; to: string };
+  },
+  signal?: AbortSignal
+): Promise<{ idempotent: boolean }> => {
+  const requestSignal = signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(45_000)])
+    : AbortSignal.timeout(45_000);
+  const operationKey = `unsubscribe:v1:${createHash("sha256").update(input.key).digest("hex")}`;
+  const operation = await prepareComposeOperation({
+    kind: "send",
+    mailboxId,
+    operationKey,
+    requestHash: operationKey,
+  });
+  if (operation.status === "accepted") {
+    return { idempotent: true };
+  }
+  if (operation.status === "submitting" || operation.status === "unknown") {
+    const sent = await findGmailComposeSentMessage(
+      accessToken,
+      operation.messageHeaderId,
+      requestSignal
+    );
+    if (sent) {
+      await acceptComposeOperation(
+        operation,
+        { id: sent.id, threadId: sent.threadId },
+        true
+      );
+      return { idempotent: true };
+    }
+    throw new ORPCError("CONFLICT", {
+      data: { deliveryUncertain: true },
+      message: UNCERTAIN_SEND_MESSAGE,
+    });
+  }
+  const raw = Buffer.from(
+    await buildPlainTextMessage({
+      ...input.message,
+      messageId: operation.messageHeaderId,
+    })
+  ).toString("base64url");
+  requestSignal.throwIfAborted();
+  await claimComposeOperation(operation);
+  let sent: GmailMessage;
+  try {
+    sent = await sendRawMessage(accessToken, raw, undefined, requestSignal);
+  } catch (error) {
+    return await recordComposeFailure(operation, error);
+  }
+  await acceptComposeOperation(
+    operation,
+    { id: sent.id, threadId: sent.threadId },
+    true
+  );
+  return { idempotent: false };
 };
