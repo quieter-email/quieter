@@ -16,6 +16,7 @@
     "./natural-language-search": "./src/natural-language-search.ts",
     "./raw-message": "./src/raw-message.ts",
     "./search": "./src/search.ts",
+    "./search-expression": "./src/search-expression.ts",
     "./send-mime": "./src/send-mime.ts",
     "./send": "./src/send.ts",
     "./sender-avatar": "./src/sender-avatar.ts",

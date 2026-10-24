@@ -12,10 +12,8 @@ import {
 } from "@quieter/gmail";
 import { parseDraftMessage } from "@quieter/gmail/compose";
 import type { MailboxSyncDelta } from "@quieter/mail/messages";
-import {
-  parseStructuredSearchQuery,
-  serializeStructuredSearchState,
-} from "@quieter/mail/search";
+import type { MailSearchFilter } from "@quieter/mail/search";
+import type { MailSearchExpression } from "@quieter/mail/search-expression";
 
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
@@ -24,6 +22,7 @@ import { assertUserOrganizationMember } from "../mail-domain/service";
 import {
   hydrateMailImportance,
   listCapturedImportantMessages,
+  parseCapturedImportanceSearch,
   processPendingMailImportance,
 } from "../mail-importance";
 import { assertAccessibleMailbox } from "../mailbox/service";
@@ -337,8 +336,25 @@ export const queriesMailOperations = {
     }
 
     if (input.category === "important") {
-      const search = parseStructuredSearchQuery(input.query ?? "");
-      if (search.filters.some((filter) => filter.type === "label")) {
+      const searchExpression = parseCapturedImportanceSearch(input.query);
+      const pending: MailSearchExpression[] = searchExpression
+        ? [searchExpression]
+        : [];
+      const labelFilters: MailSearchFilter[] = [];
+      while (pending.length > 0) {
+        const expression = pending.pop();
+        if (
+          expression?.type === "filter" &&
+          expression.filter.type === "label"
+        ) {
+          labelFilters.push(expression.filter);
+        } else if (expression?.type === "and" || expression?.type === "or") {
+          pending.push(expression.left, expression.right);
+        } else if (expression?.type === "not") {
+          pending.push(expression.operand);
+        }
+      }
+      if (labelFilters.length > 0) {
         const labels = await callGmail(
           context,
           input.mailboxId,
@@ -347,23 +363,17 @@ export const queriesMailOperations = {
         const labelIdsByName = new Map(
           labels.map((label) => [label.name.toLocaleLowerCase(), label.id])
         );
-        search.filters = search.filters.map((filter) =>
-          filter.type === "label"
-            ? {
-                ...filter,
-                value:
-                  labels.find((label) => label.id === filter.value)?.id ??
-                  labelIdsByName.get(filter.value.toLocaleLowerCase()) ??
-                  filter.value,
-              }
-            : filter
-        );
-        return await listCapturedImportantMessages({
-          ...input,
-          query: serializeStructuredSearchState(search),
-        });
+        for (const filter of labelFilters) {
+          filter.value =
+            labels.find((label) => label.id === filter.value)?.id ??
+            labelIdsByName.get(filter.value.toLocaleLowerCase()) ??
+            filter.value;
+        }
       }
-      return await listCapturedImportantMessages(input);
+      return await listCapturedImportantMessages({
+        ...input,
+        searchExpression,
+      });
     }
     const page = await callGmail(
       context,

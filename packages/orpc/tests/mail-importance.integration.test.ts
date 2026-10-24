@@ -675,6 +675,7 @@ describe.skipIf(databaseUrl === undefined)(
       ["attachments", []],
       ["itinerary", ["picnic"]],
       ["headersecret", ["launch"]],
+      ["alice@example.com", ["launch", "picnic"]],
       ["https://example.com/roadmap", ["launch"]],
       ['"https://example.com/roadmap"', ["launch"]],
       ['"said \\"yes\\" today"', ["launch"]],
@@ -689,7 +690,7 @@ describe.skipIf(databaseUrl === undefined)(
             bodyText:
               'Please review the approval for this budget. Launch decision. He said "yes" today. https://example.com/roadmap',
             headers: [
-              { name: "From", value: "Alice <alice@example.com>" },
+              { name: "From", value: "alice@example.com" },
               { name: "Subject", value: "Forecast" },
               { name: "X-Reference", value: "headersecret" },
             ],
@@ -711,7 +712,7 @@ describe.skipIf(databaseUrl === undefined)(
               },
             ],
             bodyText: "The picnic was cancelled.",
-            headers: [{ name: "From", value: "Alice <alice@example.com>" }],
+            headers: [{ name: "From", value: "alice@example.com" }],
             threadId: "picnic",
           }),
         ];

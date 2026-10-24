@@ -28,7 +28,8 @@ import type {
   ListMessagesPageResult,
   MessageListItem,
 } from "@quieter/mail/messages";
-import { parseStructuredSearchQuery } from "@quieter/mail/search";
+import type { MailSearchExpression } from "@quieter/mail/search-expression";
+import { parseMailSearchExpression } from "@quieter/mail/search-expression";
 import { reportError } from "@quieter/observability";
 import type { SQL } from "drizzle-orm";
 import {
@@ -851,73 +852,95 @@ export const processPendingMailImportance = async (
   await reportPendingMailImportanceUsage(input.mailboxId);
 };
 
-const capturedImportanceSearch = (query: string | undefined) => {
-  const search = parseStructuredSearchQuery(query?.trim() ?? "");
-  const conditions: SQL[] = [];
-  if (search.text) {
-    const pattern = `%${search.text.replaceAll(/[%_\\]/gu, "\\$&")}%`;
-    conditions.push(
-      ilike(
-        sql`concat(${gmailCapturedMessage.snapshot}->>'bodyText', ' ', ${gmailCapturedMessage.snapshot}->>'bodyHtml', ' ', ${gmailCapturedMessage.snapshot}->'headers', ' ', ${gmailCapturedMessage.snapshot}->'attachments')`,
-        pattern
-      )
-    );
-  }
-  for (const filter of search.filters) {
-    const pattern = `%${filter.value.replaceAll(/[%_\\]/gu, "\\$&")}%`;
-    let condition: SQL | undefined;
-    if (["from", "to", "cc", "bcc", "subject"].includes(filter.type)) {
-      condition = sql`exists (select 1 from jsonb_array_elements(${gmailCapturedMessage.snapshot}->'headers') h where lower(h->>'name') = ${filter.type} and h->>'value' ilike ${pattern})`;
-    } else if (filter.type === "content") {
-      condition = ilike(
-        sql`coalesce(${gmailCapturedMessage.snapshot}->>'bodyText', '')`,
-        pattern
-      );
-    } else if (filter.type === "filename") {
-      condition = sql`exists (select 1 from jsonb_array_elements(${gmailCapturedMessage.snapshot}->'attachments') a where a->>'fileName' ilike ${pattern})`;
-    } else if (filter.type === "has" && filter.value === "attachment") {
-      condition = sql`jsonb_array_length(${gmailCapturedMessage.snapshot}->'attachments') > 0`;
-    } else if (filter.type === "is") {
-      if (filter.value === "read" || filter.value === "unread") {
-        condition = sql`${gmailCapturedMessage.snapshot}->'labelIds' ? 'UNREAD'`;
-        if (filter.value === "read") {
-          condition = sql`not (${condition})`;
-        }
-      } else if (filter.value === "archived") {
-        condition = sql`not (${gmailCapturedMessage.snapshot}->'labelIds' ? 'INBOX')`;
-      }
-    } else if (filter.type === "label") {
-      condition = sql`${gmailCapturedMessage.snapshot}->'labelIds' ? ${filter.value}`;
-    } else if (
-      ["before", "after", "newer_than", "older_than"].includes(filter.type)
-    ) {
-      const date =
-        filter.type === "before" || filter.type === "after"
-          ? parseAbsoluteDate(filter.value)
-          : parseRelativeDate(filter.value, new Date());
-      if (date) {
-        condition =
-          filter.type === "before" || filter.type === "older_than"
-            ? lt(
-                sql`to_timestamp(nullif(${gmailCapturedMessage.snapshot}->>'internalDate', '')::numeric / 1000)`,
-                sql`${date.toISOString()}::timestamptz`
-              )
-            : gte(
-                sql`to_timestamp(nullif(${gmailCapturedMessage.snapshot}->>'internalDate', '')::numeric / 1000)`,
-                sql`${date.toISOString()}::timestamptz`
-              );
-      }
+export const parseCapturedImportanceSearch = (
+  query: string | undefined
+): MailSearchExpression | null => {
+  try {
+    return parseMailSearchExpression(query ?? "");
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new ORPCError("BAD_REQUEST", { message: error.message });
     }
-    if (!condition) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: "This search contains an invalid filter value.",
-      });
-    }
-    conditions.push(
-      filter.negated === true ? sql`not (${condition})` : condition
-    );
+    throw error;
   }
-  return and(...conditions);
+};
+
+const capturedImportanceSearch = (expression: MailSearchExpression): SQL => {
+  if (expression.type === "and" || expression.type === "or") {
+    const left = capturedImportanceSearch(expression.left);
+    const right = capturedImportanceSearch(expression.right);
+    return expression.type === "and"
+      ? sql`(${left}) and (${right})`
+      : sql`(${left}) or (${right})`;
+  }
+  if (expression.type === "not") {
+    return sql`not (${capturedImportanceSearch(expression.operand)})`;
+  }
+  if (expression.type === "text") {
+    const document = sql`jsonb_to_tsvector('simple', jsonb_build_array(
+      ${gmailCapturedMessage.snapshot}->>'bodyText',
+      ${gmailCapturedMessage.snapshot}->>'bodyHtml',
+      (select jsonb_agg(jsonb_build_array(h->>'value', regexp_replace(h->>'value', '[^[:alnum:]]+', ' ', 'g')))
+        from jsonb_array_elements(${gmailCapturedMessage.snapshot}->'headers') h),
+      (select jsonb_agg(jsonb_build_array(a->>'fileName', regexp_replace(a->>'fileName', '[^[:alnum:]]+', ' ', 'g')))
+        from jsonb_array_elements(${gmailCapturedMessage.snapshot}->'attachments') a)
+    ), '["string"]')`;
+    const query = expression.phrase
+      ? sql`phraseto_tsquery('simple', ${expression.value})`
+      : sql`plainto_tsquery('simple', ${expression.value})`;
+    return sql`${document} @@ ${query}`;
+  }
+  const { filter } = expression;
+  const pattern = `%${filter.value.replaceAll(/[%_\\]/gu, "\\$&")}%`;
+  let condition: SQL | undefined;
+  if (["from", "to", "cc", "bcc", "subject"].includes(filter.type)) {
+    condition = sql`exists (select 1 from jsonb_array_elements(${gmailCapturedMessage.snapshot}->'headers') h where lower(h->>'name') = ${filter.type} and h->>'value' ilike ${pattern})`;
+  } else if (filter.type === "content") {
+    condition = ilike(
+      sql`coalesce(${gmailCapturedMessage.snapshot}->>'bodyText', '')`,
+      pattern
+    );
+  } else if (filter.type === "filename") {
+    condition = sql`exists (select 1 from jsonb_array_elements(${gmailCapturedMessage.snapshot}->'attachments') a where a->>'fileName' ilike ${pattern})`;
+  } else if (filter.type === "has" && filter.value === "attachment") {
+    condition = sql`jsonb_array_length(${gmailCapturedMessage.snapshot}->'attachments') > 0`;
+  } else if (filter.type === "is") {
+    if (filter.value === "read" || filter.value === "unread") {
+      condition = sql`${gmailCapturedMessage.snapshot}->'labelIds' ? 'UNREAD'`;
+      if (filter.value === "read") {
+        condition = sql`not (${condition})`;
+      }
+    } else if (filter.value === "archived") {
+      condition = sql`not (${gmailCapturedMessage.snapshot}->'labelIds' ? 'INBOX')`;
+    }
+  } else if (filter.type === "label") {
+    condition = sql`${gmailCapturedMessage.snapshot}->'labelIds' ? ${filter.value}`;
+  } else if (
+    ["before", "after", "newer_than", "older_than"].includes(filter.type)
+  ) {
+    const date =
+      filter.type === "before" || filter.type === "after"
+        ? parseAbsoluteDate(filter.value)
+        : parseRelativeDate(filter.value, new Date());
+    if (date && !Number.isNaN(date.getTime())) {
+      condition =
+        filter.type === "before" || filter.type === "older_than"
+          ? lt(
+              sql`to_timestamp(nullif(${gmailCapturedMessage.snapshot}->>'internalDate', '')::numeric / 1000)`,
+              sql`${date.toISOString()}::timestamptz`
+            )
+          : gte(
+              sql`to_timestamp(nullif(${gmailCapturedMessage.snapshot}->>'internalDate', '')::numeric / 1000)`,
+              sql`${date.toISOString()}::timestamptz`
+            );
+    }
+  }
+  if (!condition) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This search contains an invalid filter value.",
+    });
+  }
+  return filter.negated === true ? sql`not (${condition})` : condition;
 };
 
 export const listCapturedImportantMessages = async (input: {
@@ -926,7 +949,12 @@ export const listCapturedImportantMessages = async (input: {
   pageToken?: string;
   matchingMessageIds?: string[];
   query?: string;
+  searchExpression?: MailSearchExpression | null;
 }): Promise<ListMessagesPageResult> => {
+  const expression =
+    input.searchExpression === undefined
+      ? parseCapturedImportanceSearch(input.query)
+      : input.searchExpression;
   const cursorSchema = z.object({
     messageId: z.string(),
     receivedAt: z.iso.datetime(),
@@ -964,7 +992,7 @@ export const listCapturedImportantMessages = async (input: {
         input.matchingMessageIds
           ? inArray(gmailCapturedMessage.messageId, input.matchingMessageIds)
           : undefined,
-        capturedImportanceSearch(input.query)
+        expression ? capturedImportanceSearch(expression) : undefined
       )
     )
     .orderBy(threadId, desc(receivedAt), desc(gmailCapturedMessage.messageId))
