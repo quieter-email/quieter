@@ -334,18 +334,21 @@ describe.skipIf(databaseUrl === undefined)(
           attachments: [
             {
               attachmentId: "unicode-file",
-              fileName: `f${"😀".repeat(512)}`,
-              mimeType: `m${"😀".repeat(256)}`,
+              fileName: `f\0f${"😀".repeat(512)}`,
+              mimeType: `m\0m${"😀".repeat(256)}`,
               size: 0,
             },
           ],
           bodyHtml: null,
-          bodyText: `b${"😀".repeat(512_000)}`,
+          bodyText: `b\0b${"😀".repeat(512_000)}`,
           headers: [
-            { name: `X${"😀".repeat(256)}`, value: `v${"😀".repeat(8192)}` },
+            {
+              name: `X\0X${"😀".repeat(256)}`,
+              value: `v\0v${"😀".repeat(8192)}`,
+            },
             {
               name: "From",
-              value: `n${"😀".repeat(512)} <sender@example.com>`,
+              value: `n\0n${"😀".repeat(512)} <sender@example.com>`,
             },
           ],
           id: "unicode-message",

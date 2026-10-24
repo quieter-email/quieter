@@ -69,7 +69,10 @@ export const truncateMailCaptureText = (
   limit: number
 ): string => {
   const prefix = value.slice(0, limit);
-  return prefix.replace(/\p{Surrogate}$/u, "").toWellFormed();
+  return prefix
+    .replace(/\p{Surrogate}$/u, "")
+    .replaceAll("\0", "\uFFFD")
+    .toWellFormed();
 };
 
 export const boundMailCaptureContent = (input: {
