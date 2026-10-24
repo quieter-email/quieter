@@ -31,6 +31,7 @@ import type {
 } from "@quieter/mail/messages";
 import type { MailSearchExpression } from "@quieter/mail/search-expression";
 import { parseMailSearchExpression } from "@quieter/mail/search-expression";
+import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
 import { getUnsubscribeKey } from "@quieter/mail/unsubscribe";
 import { reportError } from "@quieter/observability";
 import type { SQL } from "drizzle-orm";
@@ -71,6 +72,7 @@ const CLASSIFIER_VERSION = "1";
 const importanceMessage = (
   message: AutomationMailMessage | CapturedMailSnapshot
 ): AutomationMailMessage &
+  Partial<Pick<CapturedMailSnapshot, "headers">> &
   Pick<
     MessageListItem,
     "unsubscribeKey" | "unsubscribeMailto" | "unsubscribeUrl"
@@ -1036,17 +1038,17 @@ export const listCapturedImportantMessages = async (input: {
       )
     : [];
   const byId = new Map(sources.map((source) => [source.message.id, source]));
-  const messages = page.flatMap((row): MessageListItem[] => {
-    const source = byId.get(row.messageId);
-    if (!source) {
-      return [];
-    }
-    const members = sources.filter(
-      (item) => item.message.threadId === row.threadId
-    );
-    const { message } = source;
-    return [
-      {
+  const messages = await Promise.all(
+    page.map(async (row): Promise<MessageListItem | null> => {
+      const source = byId.get(row.messageId);
+      if (!source) {
+        return null;
+      }
+      const members = sources.filter(
+        (item) => item.message.threadId === row.threadId
+      );
+      const { message } = source;
+      return {
         from: message.from ?? undefined,
         id: row.messageId,
         internalDate: String(row.receivedAt.getTime()),
@@ -1054,6 +1056,9 @@ export const listCapturedImportantMessages = async (input: {
           (member) => member.message.labelIds?.includes("UNREAD") === true
         ),
         labelIds: message.labelIds,
+        senderAvatarUrls: await getSenderAvatarUrls(message.from ?? undefined, {
+          headers: message.headers ?? [],
+        }),
         snippet: message.snippet ?? undefined,
         subject: message.subject ?? undefined,
         threadAttachmentCount: members.reduce(
@@ -1072,9 +1077,9 @@ export const listCapturedImportantMessages = async (input: {
         unsubscribeKey: message.unsubscribeKey,
         unsubscribeMailto: message.unsubscribeMailto,
         unsubscribeUrl: message.unsubscribeUrl,
-      },
-    ];
-  });
+      };
+    })
+  );
   const last = page.at(-1);
   const [selected] = await db
     .select({ revision: mailbox.contentRevision })
@@ -1082,7 +1087,10 @@ export const listCapturedImportantMessages = async (input: {
     .where(eq(mailbox.id, input.mailboxId));
   return {
     historyId: `app:${selected.revision}`,
-    messages: await hydrateMailImportance(input.mailboxId, messages),
+    messages: await hydrateMailImportance(
+      input.mailboxId,
+      messages.filter((message) => message !== null)
+    ),
     nextPageToken:
       rows.length > limit && last
         ? Buffer.from(

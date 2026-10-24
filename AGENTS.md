@@ -12,6 +12,8 @@
 - Put shared components in `packages/ui`; app code consumes `@quieter/ui`.
 - Do not import Base UI or Vaul directly from app code.
 - Keep provider details behind package boundaries. Use provider-neutral mail contracts in UI and application-facing code.
+- Before adding another path for existing behavior, trace a working path from its data source through adapters and enrichment to the final consumer. Reuse the complete established contract; sharing a component or type does not prove that the inputs or behavior are equivalent.
+- Verify alternate paths against the established path with representative inputs, including optional metadata and derived behavior. Fix missing behavior at its source instead of adding consumer-specific fallbacks.
 - Keep Gmail REST calls, credential decryption, and token refresh server-side.
 - Read environment variables through `@quieter/env`; do not add ad hoc env parsing or direct custom-variable reads outside required bootstraps.
 - Give every Worker request its own database client through `withRequestDatabaseClient`; never share I/O-bound clients across requests.
