@@ -414,6 +414,9 @@ describe.skipIf(databaseUrl === undefined)(
       ['-label:"Project Updates"', false],
       ["label:Unknown", false],
       ["-label:Unknown", true],
+      ['(label:"Project Updates" OR label:Other) review', true],
+      ['NOT (label:"Project Updates" OR label:Other)', false],
+      ['{label:Other label:"Project Updates"} -missing', true],
     ])(
       "Important search resolves label names and preserves negation for %s",
       async (query, included) => {

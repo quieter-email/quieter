@@ -657,6 +657,132 @@ describe.skipIf(databaseUrl === undefined)(
       );
     });
 
+    test.each([
+      ["alice forecast approval", ["launch"]],
+      ['"budget approval"', ["reversed"]],
+      ['"approval budget"', []],
+      ['"launch decision"', ["launch"]],
+      ["budget OR picnic", ["launch", "reversed", "picnic"]],
+      ["alice AND (budget OR picnic)", ["launch", "picnic"]],
+      ["{budget picnic} -review", ["reversed", "picnic"]],
+      ['budget NOT "launch decision"', ["reversed"]],
+      ['budget -"launch decision"', ["reversed"]],
+      [
+        "(from:alice OR subject:picnic) label:Label_work -content:cancelled",
+        ["launch"],
+      ],
+      ["fileName", []],
+      ["attachments", []],
+      ["itinerary", ["picnic"]],
+      ["headersecret", ["launch"]],
+      ["https://example.com/roadmap", ["launch"]],
+      ['"https://example.com/roadmap"', ["launch"]],
+      ['"said \\"yes\\" today"', ["launch"]],
+      ['"today alice"', []],
+    ])(
+      "Important free-text expression %s searches message content",
+      async (query, expected) => {
+        const mailboxId = await createMailbox();
+        const otherMailboxId = await createMailbox();
+        const snapshots = [
+          await capture(mailboxId, {
+            bodyText:
+              'Please review the approval for this budget. Launch decision. He said "yes" today. https://example.com/roadmap',
+            headers: [
+              { name: "From", value: "Alice <alice@example.com>" },
+              { name: "Subject", value: "Forecast" },
+              { name: "X-Reference", value: "headersecret" },
+            ],
+            labelIds: ["INBOX", "Label_work"],
+            threadId: "launch",
+          }),
+          await capture(mailboxId, {
+            bodyText: "Budget approval arrived.",
+            headers: [{ name: "From", value: "Bob <bob@example.com>" }],
+            threadId: "reversed",
+          }),
+          await capture(mailboxId, {
+            attachments: [
+              {
+                attachmentId: "fixture",
+                fileName: "itinerary.pdf",
+                mimeType: "application/pdf",
+                size: 10,
+              },
+            ],
+            bodyText: "The picnic was cancelled.",
+            headers: [{ name: "From", value: "Alice <alice@example.com>" }],
+            threadId: "picnic",
+          }),
+        ];
+        for (const label of ["SPAM", "TRASH", "SENT", "DRAFT"]) {
+          await capture(mailboxId, {
+            ...snapshots[0],
+            id: randomUUID(),
+            labelIds: [label],
+            threadId: randomUUID(),
+          });
+        }
+        const deleted = await capture(mailboxId, {
+          ...snapshots[0],
+          id: randomUUID(),
+          threadId: randomUUID(),
+        });
+        await db
+          .update(gmailCapturedMessage)
+          .set({ analysis: null, deletedAt: now, snapshot: null })
+          .where(
+            and(
+              eq(gmailCapturedMessage.mailboxId, mailboxId),
+              eq(gmailCapturedMessage.messageId, deleted.id)
+            )
+          );
+        await capture(otherMailboxId, {
+          ...snapshots[0],
+          id: randomUUID(),
+          threadId: randomUUID(),
+        });
+        await db
+          .update(mailMessageImportance)
+          .set({ aiImportant: true })
+          .where(
+            inArray(mailMessageImportance.mailboxId, [
+              mailboxId,
+              otherMailboxId,
+            ])
+          );
+        const unimportant = await capture(mailboxId, {
+          ...snapshots[0],
+          id: randomUUID(),
+          threadId: randomUUID(),
+        });
+        const page = await listCapturedImportantMessages({ mailboxId, query });
+        expect(
+          page.messages.map((item) => item.threadId).toSorted()
+        ).toStrictEqual(expected.toSorted());
+        expect(page.messages.map((item) => item.id)).not.toContain(
+          unimportant.id
+        );
+      }
+    );
+
+    test.each([
+      "%%",
+      "-%%",
+      "in:anywhere",
+      "from:(alice OR bob)",
+      "launch OR",
+      "(launch",
+    ])(
+      "Important search rejects malformed or unsupported expressions %s",
+      async (query) => {
+        const mailboxId = await createMailbox();
+        await expect(
+          listCapturedImportantMessages({ mailboxId, query })
+        ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      }
+    );
+
     test("managed Important uses the latest eligible anchor for an important archived member", async () => {
       const mailboxId = await createMailbox("managed");
       const threadId = randomUUID();
