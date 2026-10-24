@@ -64,6 +64,14 @@ export type MailCaptureIdPage = {
   nextPageToken: string | null;
 };
 
+export const truncateMailCaptureText = (
+  value: string,
+  limit: number
+): string => {
+  const prefix = value.slice(0, limit);
+  return prefix.replace(/\p{Surrogate}$/u, "").toWellFormed();
+};
+
 export const boundMailCaptureContent = (input: {
   bodyText?: string | null;
   bodyHtml?: string | null;
@@ -79,9 +87,9 @@ export const boundMailCaptureContent = (input: {
       headersTruncated = true;
       break;
     }
-    const name = header.name.slice(0, 256);
-    const value = header.value.slice(
-      0,
+    const name = truncateMailCaptureText(header.name, 256);
+    const value = truncateMailCaptureText(
+      header.value,
       Math.max(
         0,
         Math.min(
@@ -95,8 +103,14 @@ export const boundMailCaptureContent = (input: {
     headers.push({ name, value });
   }
   return {
-    bodyHtml: input.bodyHtml?.slice(0, MAIL_CAPTURE_BODY_LIMIT) ?? null,
-    bodyText: input.bodyText?.slice(0, MAIL_CAPTURE_BODY_LIMIT) ?? null,
+    bodyHtml:
+      typeof input.bodyHtml === "string"
+        ? truncateMailCaptureText(input.bodyHtml, MAIL_CAPTURE_BODY_LIMIT)
+        : null,
+    bodyText:
+      typeof input.bodyText === "string"
+        ? truncateMailCaptureText(input.bodyText, MAIL_CAPTURE_BODY_LIMIT)
+        : null,
     headers,
     truncation: {
       bodyHtml: (input.bodyHtml?.length ?? 0) > MAIL_CAPTURE_BODY_LIMIT,
@@ -153,8 +167,8 @@ export const analyzeMailMessage = (input: {
     bounded.headers
       .filter((header) => header.name.toLowerCase() === name)
       .map((header) => header.value);
-  const from = (input.from ?? headerValues("from")[0] ?? "").slice(
-    0,
+  const from = truncateMailCaptureText(
+    input.from ?? headerValues("from")[0] ?? "",
     MAIL_CAPTURE_HEADER_VALUE_LIMIT
   );
   const senders = addressParser(from, { flatten: true });
@@ -167,7 +181,7 @@ export const analyzeMailMessage = (input: {
       ? {
           address,
           domain: address.slice(address.lastIndexOf("@") + 1),
-          name: sender.name.trim().slice(0, 512) || null,
+          name: truncateMailCaptureText(sender.name.trim(), 512) || null,
         }
       : null;
   const headerTargets: MailMessageAnalysis["unsubscribe"]["headerTargets"] = [];
@@ -209,7 +223,7 @@ export const analyzeMailMessage = (input: {
     }
     seenBodyTargets.add(target.target);
     bodyCandidates.push({
-      label: label.slice(0, 256),
+      label: truncateMailCaptureText(label, 256),
       source,
       target: target.target,
     });
@@ -264,7 +278,7 @@ export const analyzeMailMessage = (input: {
     /<(?<listId>[^<>\s]+)>/u.exec(listHeader)?.groups?.listId?.toLowerCase() ??
     null;
   return {
-    listId: listId?.slice(0, 512) ?? null,
+    listId: listId === null ? null : truncateMailCaptureText(listId, 512),
     sender: normalizedSender,
     truncated,
     unsubscribe: {

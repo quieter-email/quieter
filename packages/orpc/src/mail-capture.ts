@@ -17,6 +17,7 @@ import {
 import {
   analyzeMailMessage,
   boundMailCaptureContent,
+  truncateMailCaptureText,
 } from "@quieter/mail/capture";
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
@@ -63,12 +64,12 @@ export const writeGmailCapturedMessage = async (input: {
     ...bounded,
     attachments: input.snapshot.attachments.slice(0, 128).map((attachment) => ({
       ...attachment,
-      fileName: attachment.fileName.slice(0, 512),
-      mimeType: attachment.mimeType.slice(0, 256),
+      fileName: truncateMailCaptureText(attachment.fileName, 512),
+      mimeType: truncateMailCaptureText(attachment.mimeType, 256),
     })),
     labelIds: input.snapshot.labelIds
       .slice(0, 512)
-      .map((label) => label.slice(0, 256)),
+      .map((label) => truncateMailCaptureText(label, 256)),
     truncation: {
       attachments:
         input.snapshot.truncation.attachments ||

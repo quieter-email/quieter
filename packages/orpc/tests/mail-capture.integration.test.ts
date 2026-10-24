@@ -4,6 +4,7 @@ import { db } from "@quieter/database/client";
 import {
   gmailCapturedMessage,
   gmailCaptureState,
+  gmailWatchState,
   mailbox,
   member,
   organization,
@@ -21,6 +22,7 @@ import {
   vi,
 } from "vite-plus/test";
 
+import { maintainGmailPubSubMailbox } from "../src/gmail-sync/service";
 import {
   deleteGmailCapturedMessage,
   getMailCaptureStatus,
@@ -41,11 +43,17 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => {
       DATABASE_URL: databaseUrl,
       QUIETER_DEPLOYMENT_ENV: "local" as const,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: false,
-      QUIETER_LOCAL_GMAIL_WATCH_OWNER: "production" as const,
-      QUIETER_LOCAL_PROVIDER_MODE: "observe" as const,
+      QUIETER_LOCAL_GMAIL_WATCH_OWNER: "local" as const,
+      QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS: "capture@example.com",
+      QUIETER_LOCAL_PROVIDER_MODE: "write" as const,
     },
   };
 });
+
+vi.mock(import("../src/gmail-mailbox-access"), () => ({
+  runAuthorizedGmailMailbox: async (_input, runner) =>
+    await runner("synthetic-token"),
+}));
 
 const drainCapture = async (mailboxId: string) => {
   for (let step = 0; step < 30; step += 1) {
@@ -316,6 +324,103 @@ describe.skipIf(databaseUrl === undefined)(
       expect(isolated[0]?.snapshot?.bodyText).toContain(
         "Private retained content"
       );
+    });
+
+    test("persists long Unicode content and metadata without invalid JSON strings", async () => {
+      const mailboxId = await createMailbox();
+      await writeGmailCapturedMessage({
+        mailboxId,
+        snapshot: {
+          attachments: [
+            {
+              attachmentId: "unicode-file",
+              fileName: `f${"😀".repeat(512)}`,
+              mimeType: `m${"😀".repeat(256)}`,
+              size: 0,
+            },
+          ],
+          bodyHtml: null,
+          bodyText: `b${"😀".repeat(512_000)}`,
+          headers: [
+            { name: `X${"😀".repeat(256)}`, value: `v${"😀".repeat(8192)}` },
+            {
+              name: "From",
+              value: `n${"😀".repeat(512)} <sender@example.com>`,
+            },
+          ],
+          id: "unicode-message",
+          internalDate: String(now.getTime()),
+          labelIds: ["INBOX"],
+          providerRevision: "95",
+          threadId: "unicode-thread",
+          truncation: {
+            attachments: false,
+            bodyHtml: false,
+            bodyText: false,
+            headers: false,
+          },
+        },
+        source: "on_demand",
+      });
+      const [retained] = await db
+        .select()
+        .from(gmailCapturedMessage)
+        .where(eq(gmailCapturedMessage.mailboxId, mailboxId));
+      expect(retained?.snapshot?.bodyText).toContain("😀");
+      expect(
+        retained?.snapshot?.attachments[0]?.fileName.isWellFormed()
+      ).toBeTruthy();
+      expect(retained?.analysis?.sender?.name?.isWellFormed()).toBeTruthy();
+    });
+
+    test("renews the watch even when the same captured message keeps failing", async () => {
+      const mailboxId = await createMailbox();
+      installProvider({ initialMessageIds: ["failing-message"] });
+      const providerFetch = globalThis.fetch;
+      const expiration = new Date(Date.now() + 7 * 24 * 60 * 60_000);
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          const url = new URL(request.url);
+          if (url.pathname.endsWith("/watch") && request.method === "POST") {
+            return Response.json({
+              expiration: String(expiration.getTime()),
+              historyId: "120",
+            });
+          }
+          if (url.pathname.endsWith("/messages/failing-message")) {
+            return Response.json(
+              { error: { code: 400, message: "Synthetic capture failure" } },
+              { status: 400 }
+            );
+          }
+          return await providerFetch(input, init);
+        })
+      );
+      await db
+        .insert(gmailWatchState)
+        .values({ createdAt: now, historyId: "90", mailboxId, updatedAt: now });
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await db
+          .update(gmailWatchState)
+          .set({ watchExpirationAt: new Date(0), watchRenewedAt: new Date(0) })
+          .where(eq(gmailWatchState.mailboxId, mailboxId));
+        await expect(
+          maintainGmailPubSubMailbox({
+            mailboxId,
+            topicName: "projects/fixture/topics/mail",
+          })
+        ).rejects.toThrow(/capture failure/u);
+        const [watch] = await db
+          .select()
+          .from(gmailWatchState)
+          .where(eq(gmailWatchState.mailboxId, mailboxId));
+        expect(watch?.watchExpirationAt?.getTime()).toBe(expiration.getTime());
+        expect(watch?.historyId).toBe("90");
+        expect(watch?.lastErrorAt).toBeInstanceOf(Date);
+      }
     });
 
     test("fences a provider response after its processing lease is replaced", async () => {
