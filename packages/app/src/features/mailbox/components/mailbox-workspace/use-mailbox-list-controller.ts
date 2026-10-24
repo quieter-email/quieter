@@ -132,8 +132,9 @@ export const useMailboxListController = ({
               targetMessageId
             );
             setSelection((current) =>
-              current.retainedMessage?.message.unsubscribeKey === result.key ||
-              current.retainedMessage?.message.id === targetMessageId
+              current.scopeKey === scopeKey &&
+              (current.retainedMessage?.message.unsubscribeKey === result.key ||
+                current.retainedMessage?.message.id === targetMessageId)
                 ? {
                     ...current,
                     retainedMessage: {
@@ -172,6 +173,7 @@ export const useMailboxListController = ({
       mailboxProvider,
       normalizedSearchQuery,
       queryClient,
+      scopeKey,
       setMessageActionsPending,
       setThreadActionsPending,
       unsubscribeFromMessage,
