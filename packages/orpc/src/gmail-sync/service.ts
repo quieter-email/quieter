@@ -760,17 +760,20 @@ const processMailboxHistory = async ({
   organizationId: string | null;
   userId: string;
 }) => {
-  const capture = await runAuthorizedGmailMailbox(
-    { mailboxId, userId },
-    async (accessToken) =>
-      await processGmailMailCapture({ accessToken, mailboxId })
-  );
-  if (capture.busy || capture.needsContinuation) {
-    return capture;
+  let captureNeedsContinuation = false;
+  try {
+    const capture = await runAuthorizedGmailMailbox(
+      { mailboxId, userId },
+      async (accessToken) =>
+        await processGmailMailCapture({ accessToken, mailboxId })
+    );
+    captureNeedsContinuation = capture.needsContinuation;
+  } catch (error) {
+    reportError(error, { operation: "gmail-sync:mail-capture" });
   }
   const leaseId = await claimMailboxProcessingLease(mailboxId);
   if (!leaseId) {
-    return { busy: true, needsContinuation: false };
+    return { busy: true, needsContinuation: captureNeedsContinuation };
   }
 
   try {
@@ -950,7 +953,10 @@ const processMailboxHistory = async ({
       }
     );
 
-    return { busy: false, needsContinuation };
+    return {
+      busy: false,
+      needsContinuation: needsContinuation || captureNeedsContinuation,
+    };
   } catch (error) {
     await recordWatchError(mailboxId, error);
     throw error;
