@@ -269,7 +269,9 @@ export const SidebarLabelNav = ({
           <IconButtonTooltip label={`Manage ${labelNounPlural}`}>
             <Button
               aria-label={`Manage ${labelNounPlural}`}
-              onClick={onManageLabels}
+              onClick={() => {
+                onManageLabels();
+              }}
               size="icon-xs"
               type="button"
               variant="ghost"
