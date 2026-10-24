@@ -7,6 +7,7 @@ import { shouldReportAiTaskFailure } from "@quieter/ai/errors";
 import { db } from "@quieter/database/client";
 import {
   gmailAutoLabelEvent,
+  gmailCaptureState,
   gmailWatchState,
   mailboxAutomationSettings,
   mailbox,
@@ -55,6 +56,7 @@ import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
+import { processGmailMailCapture } from "../mail-capture";
 import {
   listPendingMailboxVerificationCodeMessageIds,
   processMailVerificationCode,
@@ -758,9 +760,20 @@ const processMailboxHistory = async ({
   organizationId: string | null;
   userId: string;
 }) => {
+  let captureNeedsContinuation = false;
+  try {
+    const capture = await runAuthorizedGmailMailbox(
+      { mailboxId, userId },
+      async (accessToken) =>
+        await processGmailMailCapture({ accessToken, mailboxId })
+    );
+    captureNeedsContinuation = capture.needsContinuation;
+  } catch (error) {
+    reportError(error, { operation: "gmail-sync:mail-capture" });
+  }
   const leaseId = await claimMailboxProcessingLease(mailboxId);
   if (!leaseId) {
-    return { busy: true, needsContinuation: false };
+    return { busy: true, needsContinuation: captureNeedsContinuation };
   }
 
   try {
@@ -940,7 +953,10 @@ const processMailboxHistory = async ({
       }
     );
 
-    return { busy: false, needsContinuation };
+    return {
+      busy: false,
+      needsContinuation: needsContinuation || captureNeedsContinuation,
+    };
   } catch (error) {
     await recordWatchError(mailboxId, error);
     throw error;
@@ -1012,19 +1028,29 @@ const renewMailboxWatch = async ({
 };
 
 // Renew expiring watches; each maintenance run also reconciles missed notifications.
-export const listGmailPubSubMaintenanceJobs = async (limit = 500) =>
-  await db
+export const listGmailPubSubMaintenanceJobs = async (limit = 500) => {
+  const captureDue = or(
+    isNull(gmailCaptureState.mailboxId),
+    isNotNull(gmailCaptureState.historyPageToken),
+    isNotNull(gmailCaptureState.pendingHistoryPage),
+    sql`${gmailCaptureState.phase} <> 'history'`,
+    isNull(gmailCaptureState.lastCapturedAt),
+    lte(gmailCaptureState.lastCapturedAt, sql`now() - interval '2 hours'`)
+  );
+  return await db
     .select({
       emailAddress: mailbox.emailAddress,
       mailboxId: mailbox.id,
     })
     .from(mailbox)
     .leftJoin(gmailWatchState, eq(gmailWatchState.mailboxId, mailbox.id))
+    .leftJoin(gmailCaptureState, eq(gmailCaptureState.mailboxId, mailbox.id))
     .where(
       and(
         eq(mailbox.provider, "gmail"),
         eq(mailbox.status, "connected"),
         or(
+          captureDue,
           isNull(gmailWatchState.mailboxId),
           isNull(gmailWatchState.watchExpirationAt),
           lte(
@@ -1090,6 +1116,7 @@ export const listGmailPubSubMaintenanceJobs = async (limit = 500) =>
           )
         ),
         or(
+          captureDue,
           isNull(gmailWatchState.lastErrorAt),
           lte(gmailWatchState.lastErrorAt, sql`now() - interval '1 hour'`)
         )
@@ -1100,6 +1127,7 @@ export const listGmailPubSubMaintenanceJobs = async (limit = 500) =>
       asc(gmailWatchState.lastReconciledAt)
     )
     .limit(limit);
+};
 
 export const maintainGmailPubSubMailbox = async (input: {
   mailboxId: string;

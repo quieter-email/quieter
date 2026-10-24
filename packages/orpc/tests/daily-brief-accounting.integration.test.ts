@@ -38,6 +38,7 @@ import {
   runDueDailyBriefs,
 } from "../src/daily-brief";
 import { processGmailPubSubNotification } from "../src/gmail-sync/service";
+import type { processGmailMailCapture } from "../src/mail-capture";
 import type { queriesMailOperations } from "../src/mail/queries";
 import type { processMailVerificationCode } from "../src/verification-codes";
 
@@ -89,6 +90,12 @@ vi.mock(import("../src/gmail-mailbox-access"), async (original) => ({
     _input: { mailboxId: string; userId: string },
     runner: (accessToken: string) => Promise<Value>
   ): Promise<Value> => await runner("fixture-token"),
+}));
+vi.mock(import("../src/mail-capture"), async (original) => ({
+  ...(await original()),
+  processGmailMailCapture: vi
+    .fn<typeof processGmailMailCapture>()
+    .mockResolvedValue({ busy: false, needsContinuation: false }),
 }));
 vi.mock(import("../src/verification-codes"), async (original) => ({
   ...(await original()),

@@ -78,6 +78,7 @@ export const mailInputSchemas = {
     draftId: z.string().trim().min(1),
     mailboxId: z.string().trim().min(1),
   }),
+  getMailCaptureStatus: z.object({ mailboxId: z.string().trim().min(1) }),
   getMessageDelivery: z.object({
     mailboxId: z.string().trim().min(1),
     messageId: z.string().trim().min(1),

@@ -29,6 +29,7 @@ import {
   markGmailMailboxNeedsReconnect,
   refreshAuthorizedGmailAccessToken,
 } from "./gmail-mailbox-access";
+import { writeGmailCapturedMessage } from "./mail-capture";
 
 const isGmailAuthError = (error: unknown) =>
   isGmailServiceError(error) &&
@@ -163,7 +164,14 @@ export const readGmailThreadForUser = async (
     const thread = await getThreadWithDetails(
       accessToken,
       input.threadId,
-      input.signal
+      input.signal,
+      async (snapshot) => {
+        await writeGmailCapturedMessage({
+          mailboxId: input.mailboxId,
+          snapshot,
+          source: "on_demand",
+        });
+      }
     );
     const includedMessages = thread.messages.slice(-THREAD_MESSAGE_LIMIT);
 

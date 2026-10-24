@@ -9,6 +9,7 @@ import type {
   PersistedMailboxProvider,
 } from "@quieter/database/schema";
 import {
+  gmailCaptureState,
   gmailCredential,
   gmailOAuthState,
   mailbox,
@@ -958,6 +959,7 @@ const persistGmailOAuthMailbox = async (input: {
   encryptedRefreshToken: string;
   emailAddress: string;
   existingMailboxId: string | null;
+  historyId: string;
   mailboxId: string;
   organizationId: string;
   ownerUserId: string;
@@ -1003,6 +1005,15 @@ const persistGmailOAuthMailbox = async (input: {
         input.tokenResponse.access_token
       );
       await mailboxWrite;
+      await database
+        .insert(gmailCaptureState)
+        .values({
+          createdAt: now,
+          historyId: input.historyId,
+          mailboxId: input.mailboxId,
+          updatedAt: now,
+        })
+        .onConflictDoNothing();
       await database
         .insert(gmailCredential)
         .values({
@@ -1065,7 +1076,15 @@ const exchangeAndValidateGmailOAuthGrant = async (input: {
 
   assertGoogleGmailScopes(tokenResponse.scope);
 
-  return { emailAddress, tokenInfo, tokenResponse };
+  if (!profile.historyId || !/^\d+$/u.test(profile.historyId)) {
+    throw new Error("Mailbox has no reliable capture baseline.");
+  }
+  return {
+    emailAddress,
+    historyId: profile.historyId,
+    tokenInfo,
+    tokenResponse,
+  };
 };
 
 const resolveGmailOAuthMailboxIdentity = (input: {
@@ -1173,7 +1192,7 @@ export const completeGmailOAuth = async (input: {
     });
   }
 
-  const { emailAddress, tokenInfo, tokenResponse } =
+  const { emailAddress, historyId, tokenInfo, tokenResponse } =
     await exchangeAndValidateGmailOAuthGrant({
       code: input.code,
       codeVerifier: oauthState.codeVerifier,
@@ -1207,6 +1226,7 @@ export const completeGmailOAuth = async (input: {
     emailAddress,
     encryptedRefreshToken,
     existingMailboxId,
+    historyId,
     mailboxId,
     organizationId,
     ownerUserId: session.user.id,

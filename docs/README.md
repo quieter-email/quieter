@@ -7,6 +7,7 @@
 - [Design system](design-system.md)
 - [Responsive mail baseline](responsive-mail.md)
 - [Live mail and browser caching](mail-live-updates.md)
+- [Server-side mail capture](mail-capture.md)
 - [Database safety](database-safety.md)
 - [Outbound mail feedback](outbound-mail-feedback.md)
 - [Deployment and operations](deployment.md)
