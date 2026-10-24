@@ -664,7 +664,7 @@ const MessageRowSurface = ({
         // Importance is a mail-domain treatment on this specialized row, separate from primary selection.
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-0 z-0 rounded-lg bg-linear-to-l from-q-yellow/10 via-q-yellow/5 to-transparent"
+          className="pointer-events-none absolute inset-y-0 right-0 z-0 w-1/3 rounded-lg bg-linear-to-l from-q-yellow/8 via-q-yellow/4 to-transparent"
         />
       )}
       <m.span
