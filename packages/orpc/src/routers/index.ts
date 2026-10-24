@@ -25,12 +25,6 @@ export const appRouter = {
         default: connectorsRouter,
       }))
   ),
-  dailyBrief: lazy(
-    async () =>
-      await import("./daily-brief").then(({ dailyBriefRouter }) => ({
-        default: dailyBriefRouter,
-      }))
-  ),
   mail: lazy(
     async () =>
       await import("./mail").then(({ mailRouter }) => ({ default: mailRouter }))

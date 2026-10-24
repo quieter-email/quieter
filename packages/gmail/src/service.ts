@@ -310,6 +310,9 @@ const isMessageInMailbox = (
   mailbox: MailboxCategory,
   labelIds: string[] | undefined
 ): boolean => {
+  if (mailbox === "important") {
+    return false;
+  }
   if (mailbox === "archive") {
     return isMessageArchived(labelIds);
   }
@@ -1065,7 +1068,9 @@ const listMessages = async (
         fields: GMAIL_MESSAGE_LIST_FIELDS,
         includeSpamTrash: includesSpamTrash ? true : undefined,
         labelIds:
-          options?.mailbox !== undefined && options.mailbox !== "archive"
+          options?.mailbox !== undefined &&
+          options.mailbox !== "archive" &&
+          options.mailbox !== "important"
             ? [MAILBOX_LABELS[options.mailbox]]
             : undefined,
         maxResults: options?.maxResults ?? 20,
@@ -1098,7 +1103,9 @@ const listThreads = async (
         fields: GMAIL_THREAD_LIST_FIELDS,
         includeSpamTrash: includesSpamTrash ? true : undefined,
         labelIds:
-          options?.mailbox !== undefined && options.mailbox !== "archive"
+          options?.mailbox !== undefined &&
+          options.mailbox !== "archive" &&
+          options.mailbox !== "important"
             ? [MAILBOX_LABELS[options.mailbox]]
             : undefined,
         maxResults: options?.maxResults ?? 15,
@@ -2377,7 +2384,9 @@ export const getMailboxSyncDelta = async (
   }
 ): Promise<MailboxSyncDelta> => {
   const mailboxLabel =
-    options.mailbox === "archive" ? undefined : MAILBOX_LABELS[options.mailbox];
+    options.mailbox === "archive" || options.mailbox === "important"
+      ? undefined
+      : MAILBOX_LABELS[options.mailbox];
   const state: MailboxSyncDeltaState = {
     changedMessageIds: new Set<string>(),
     mailboxAdditionCandidateIds: new Set<string>(),

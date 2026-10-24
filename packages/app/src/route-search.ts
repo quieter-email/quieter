@@ -22,6 +22,7 @@ const optionalLiteralSearchValue = <T extends string>(literal: T) =>
 
 const mailboxSearchCategories = [
   "inbox",
+  "important",
   "unread",
   "archive",
   "spam",

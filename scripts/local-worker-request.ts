@@ -4,12 +4,12 @@ import { requireServerEnv } from "@quieter/env/server";
 assertLocalEnvFile(".env.local");
 const action = process.argv[2] ?? "health";
 if (
-  !["health", "maintenance", "mail-recovery", "briefs", "memory"].includes(
+  !["health", "maintenance", "mail-recovery", "importance", "memory"].includes(
     action
   )
 ) {
   throw new Error(
-    "Use dev:trigger health, maintenance, mail-recovery, briefs, or memory."
+    "Use dev:trigger health, maintenance, mail-recovery, importance, or memory."
   );
 }
 const response = await fetch(`http://127.0.0.1:8787/__dev/${action}`, {
@@ -21,7 +21,7 @@ const response = await fetch(`http://127.0.0.1:8787/__dev/${action}`, {
   },
   method: action === "health" ? "GET" : "POST",
   signal: AbortSignal.timeout(
-    ["briefs", "memory"].includes(action) ? 180_000 : 30_000
+    ["importance", "memory"].includes(action) ? 180_000 : 30_000
   ),
 });
 if (!response.ok) {

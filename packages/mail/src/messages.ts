@@ -27,6 +27,8 @@ export type MessagePart = {
 };
 
 export type MessageListItem = {
+  isImportant?: boolean;
+  threadIsImportant?: boolean;
   receivedAt?: string;
   id: string;
   threadId: string;
@@ -200,10 +202,22 @@ export const hasRenderableMessageBody = (message: {
   (message.bodyText?.trim() ?? "").length > 0;
 
 export const isMessageInMailbox = (
-  message: { labelIds?: string[] },
+  message: {
+    labelIds?: string[];
+    isImportant?: boolean;
+    threadIsImportant?: boolean;
+  },
   mailbox: MailCategory
 ): boolean => {
   const { labelIds } = message;
+  if (mailbox === "important") {
+    return (
+      (message.threadIsImportant ?? message.isImportant ?? false) &&
+      labelIds?.some((label) =>
+        ["SPAM", "TRASH", "DRAFT", "SENT"].includes(label)
+      ) !== true
+    );
+  }
   if (mailbox === "archive") {
     return isMessageArchived(labelIds);
   }

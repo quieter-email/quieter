@@ -1,4 +1,5 @@
 import type { MailboxActions } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
+import { toastError } from "@quieter/app/lib/error-toast";
 import type { MessageListItem } from "@quieter/app/lib/mail";
 
 export type LabelChanges = {
@@ -7,6 +8,10 @@ export type LabelChanges = {
 };
 
 export type ThreadActionHandlers = {
+  onSetImportance?: (
+    threadId: string,
+    important: boolean
+  ) => void | Promise<void>;
   onArchive?: (threadId: string) => void | Promise<void>;
   onDeleteDraft?: (message: MessageListItem) => void | Promise<void>;
   onMarkAsRead?: (threadId: string) => void | Promise<void>;
@@ -42,6 +47,17 @@ export const createMailboxThreadMessageActionHandlers = ({
   supportsReadState?: boolean;
   supportsUnsubscribe?: boolean;
 }): ThreadActionHandlers => ({
+  ...(mailboxActions.canSetImportance
+    ? {
+        onSetImportance: async (threadId: string, important: boolean) => {
+          try {
+            await mailboxActions.setThreadImportance(threadId, important);
+          } catch (error) {
+            toastError(error, { boundary: "message-importance" });
+          }
+        },
+      }
+    : {}),
   ...(supportsArchive
     ? {
         onArchive: async (threadId: string) => {

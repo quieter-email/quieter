@@ -56,66 +56,77 @@ export const applyBulkChangesInMailbox = async (
   command: MailCommand
 ) => {
   let result: Awaited<ReturnType<typeof rpc.mail.applyChanges>> | undefined;
-  const messageIds = new Set(targets.flatMap((target) => target.messageIds));
   const updater = getMailCommandUpdater(command);
-  await runMailMutation(queryClient, {
-    apply: () => {
+  const apply = (
+    appliedTargets: MailMutationTarget[],
+    confirmed?: NonNullable<typeof result>
+  ) => {
+    for (const target of appliedTargets) {
+      const messageIds = new Set(target.messageIds);
+      const wholeThread =
+        command.kind === "set-importance" && messageIds.size === 0;
+      const summary = confirmed?.targets.find(
+        (item) => item.threadId === target.threadId
+      )?.summary;
+      const update = (message: MessageListItem) => {
+        const next =
+          wholeThread || messageIds.has(message.id)
+            ? updater(message)
+            : message;
+        if (command.kind !== "set-importance") {
+          return next;
+        }
+        return {
+          ...next,
+          threadIsImportant:
+            summary?.isImportant ??
+            (wholeThread
+              ? command.important
+              : command.important || (message.threadIsImportant ?? false)),
+        };
+      };
       for (const message of findMessagesInCachedMailboxQueries(
         queryClient,
         mailboxId,
-        (candidate) => messageIds.has(candidate.id)
+        (candidate) =>
+          candidate.threadId === target.threadId &&
+          (command.kind === "set-importance" || messageIds.has(candidate.id))
       )) {
         applyMessageToCachedMailboxQueries(
           queryClient,
           mailboxId,
-          updater(message)
+          update(message)
         );
       }
-      for (const target of targets) {
-        queryClient.setQueryData(
-          getThreadQueryKey(mailboxId, target.threadId),
-          (current: ThreadMessagesResult | undefined) =>
-            updateMessagesInThreadData(
-              current,
-              (message) => messageIds.has(message.id),
-              updater
-            )
-        );
-      }
+      queryClient.setQueryData(
+        getThreadQueryKey(mailboxId, target.threadId),
+        (current: ThreadMessagesResult | undefined) =>
+          updateMessagesInThreadData(
+            current,
+            (message) =>
+              command.kind === "set-importance" || messageIds.has(message.id),
+            update
+          )
+      );
+    }
+  };
+  await runMailMutation(queryClient, {
+    apply: () => {
+      apply(targets);
     },
     execute: async () => {
       result = await rpc.mail.applyChanges({ command, mailboxId, targets });
+      const confirmed = result;
       const applied = new Set(
-        result.targets
+        confirmed.targets
           .filter((target) => target.status === "applied")
           .map((target) => target.threadId)
       );
       return () => {
-        for (const message of findMessagesInCachedMailboxQueries(
-          queryClient,
-          mailboxId,
-          (candidate) =>
-            applied.has(candidate.threadId) && messageIds.has(candidate.id)
-        )) {
-          applyMessageToCachedMailboxQueries(
-            queryClient,
-            mailboxId,
-            updater(message)
-          );
-        }
-        for (const target of targets.filter((item) =>
-          applied.has(item.threadId)
-        )) {
-          queryClient.setQueryData(
-            getThreadQueryKey(mailboxId, target.threadId),
-            (current: ThreadMessagesResult | undefined) =>
-              updateMessagesInThreadData(
-                current,
-                (message) => messageIds.has(message.id),
-                updater
-              )
-          );
-        }
+        apply(
+          targets.filter((target) => applied.has(target.threadId)),
+          confirmed
+        );
       };
     },
     mailboxId,
@@ -124,6 +135,21 @@ export const applyBulkChangesInMailbox = async (
   if (!result) {
     throw new Error("Mail update did not complete.");
   }
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey:
+        command.kind === "set-importance"
+          ? ["messages", mailboxId]
+          : ["messages", mailboxId, "important"],
+    }),
+    ...(command.kind === "set-read"
+      ? []
+      : [
+          queryClient.invalidateQueries({
+            queryKey: getMailboxThreadQueriesKey(mailboxId),
+          }),
+        ]),
+  ]);
   return result;
 };
 
@@ -425,6 +451,20 @@ export const updateMessageInMailbox = async (
       return applyMessageLabelChangesLocally(message, changes);
     },
   });
+  if (operation !== "read" && operation !== "unread") {
+    await Promise.all([
+      args.queryClient.invalidateQueries({
+        queryKey: ["messages", args.mailboxId, "important"],
+      }),
+      args.queryClient.invalidateQueries({
+        queryKey: getMailboxThreadQueriesKey(args.mailboxId),
+      }),
+    ]);
+  } else {
+    await args.queryClient.invalidateQueries({
+      queryKey: ["messages", args.mailboxId, "important"],
+    });
+  }
 };
 
 export const updateThreadInMailbox = async (
@@ -478,6 +518,20 @@ export const updateThreadInMailbox = async (
       return applyThreadLabelChangesLocally(message, changes);
     },
   });
+  if (operation !== "read" && operation !== "unread") {
+    await Promise.all([
+      args.queryClient.invalidateQueries({
+        queryKey: ["messages", args.mailboxId, "important"],
+      }),
+      args.queryClient.invalidateQueries({
+        queryKey: getMailboxThreadQueriesKey(args.mailboxId),
+      }),
+    ]);
+  } else {
+    await args.queryClient.invalidateQueries({
+      queryKey: ["messages", args.mailboxId, "important"],
+    });
+  }
 };
 
 export const deleteDraftInMailbox = async (

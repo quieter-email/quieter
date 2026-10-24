@@ -8,7 +8,6 @@ if (ownerEmail === undefined || !ownerEmail.includes("@")) {
 }
 const response = await fetch("http://127.0.0.1:8787/__dev/mail/seed", {
   body: JSON.stringify({
-    dailyBrief: mode === "--brief",
     fresh: mode === "--fresh",
     ownerEmail,
   }),
