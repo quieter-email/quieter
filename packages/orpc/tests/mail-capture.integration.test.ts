@@ -6,6 +6,7 @@ import {
   gmailCaptureState,
   gmailWatchState,
   mailbox,
+  mailboxVerificationCode,
   member,
   organization,
   user,
@@ -376,9 +377,12 @@ describe.skipIf(databaseUrl === undefined)(
       expect(retained?.analysis?.sender?.name?.isWellFormed()).toBeTruthy();
     });
 
-    test("renews the watch even when the same captured message keeps failing", async () => {
+    test("renews the watch and processes live mail while capture keeps failing", async () => {
       const mailboxId = await createMailbox();
-      installProvider({ initialMessageIds: ["failing-message"] });
+      installProvider({
+        arrivalId: "live-arrival",
+        initialMessageIds: ["failing-message"],
+      });
       const providerFetch = globalThis.fetch;
       const expiration = new Date(Date.now() + 7 * 24 * 60 * 60_000);
       vi.stubGlobal(
@@ -401,9 +405,12 @@ describe.skipIf(databaseUrl === undefined)(
           return await providerFetch(input, init);
         })
       );
-      await db
-        .insert(gmailWatchState)
-        .values({ createdAt: now, historyId: "90", mailboxId, updatedAt: now });
+      await db.insert(gmailWatchState).values({
+        createdAt: now,
+        historyId: "100",
+        mailboxId,
+        updatedAt: now,
+      });
 
       for (let attempt = 0; attempt < 2; attempt += 1) {
         await db
@@ -415,15 +422,65 @@ describe.skipIf(databaseUrl === undefined)(
             mailboxId,
             topicName: "projects/fixture/topics/mail",
           })
-        ).rejects.toThrow(/capture failure/u);
+        ).resolves.toMatchObject({ status: "maintained" });
         const [watch] = await db
           .select()
           .from(gmailWatchState)
           .where(eq(gmailWatchState.mailboxId, mailboxId));
         expect(watch?.watchExpirationAt?.getTime()).toBe(expiration.getTime());
-        expect(watch?.historyId).toBe("90");
-        expect(watch?.lastErrorAt).toBeInstanceOf(Date);
+        expect(watch?.historyId).toBe("120");
+        expect(watch?.lastReconciledAt).toBeInstanceOf(Date);
+        const [capture] = await db
+          .select()
+          .from(gmailCaptureState)
+          .where(eq(gmailCaptureState.mailboxId, mailboxId));
+        expect(capture?.lastErrorAt).toBeInstanceOf(Date);
+        expect(capture?.bootstrapOffset).toBe(0);
       }
+      const codes = await db
+        .select({ messageId: mailboxVerificationCode.messageId })
+        .from(mailboxVerificationCode)
+        .where(eq(mailboxVerificationCode.mailboxId, mailboxId));
+      expect(codes).toContainEqual({ messageId: "live-arrival" });
+      await expect(
+        getMailCaptureStatus({ mailboxId, userId: ownerId })
+      ).resolves.toMatchObject({ state: "retrying" });
+    });
+
+    test("processes live mail while another worker holds the capture lease", async () => {
+      const mailboxId = await createMailbox();
+      installProvider({ arrivalId: "live-arrival", initialMessageIds: [] });
+      await db.insert(gmailCaptureState).values({
+        createdAt: now,
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+        leaseId: "other-worker",
+        mailboxId,
+        updatedAt: now,
+      });
+      await db.insert(gmailWatchState).values({
+        createdAt: now,
+        historyId: "100",
+        mailboxId,
+        updatedAt: now,
+        watchExpirationAt: new Date(Date.now() + 7 * 24 * 60 * 60_000),
+        watchRenewedAt: new Date(),
+      });
+      await expect(
+        maintainGmailPubSubMailbox({
+          mailboxId,
+          topicName: "projects/fixture/topics/mail",
+        })
+      ).resolves.toMatchObject({ status: "pending" });
+      const codes = await db
+        .select({ messageId: mailboxVerificationCode.messageId })
+        .from(mailboxVerificationCode)
+        .where(eq(mailboxVerificationCode.mailboxId, mailboxId));
+      expect(codes).toContainEqual({ messageId: "live-arrival" });
+      const [capture] = await db
+        .select()
+        .from(gmailCaptureState)
+        .where(eq(gmailCaptureState.mailboxId, mailboxId));
+      expect(capture?.leaseId).toBe("other-worker");
     });
 
     test("fences a provider response after its processing lease is replaced", async () => {
