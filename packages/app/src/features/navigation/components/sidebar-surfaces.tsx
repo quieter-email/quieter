@@ -4,7 +4,7 @@ import { appMotionDuration } from "@quieter/app/features/motion/app-motion";
 import { cn } from "@quieter/ui/cn";
 import { cva } from "class-variance-authority";
 import { m, useReducedMotion } from "motion/react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 const sidebarSurfaceVariants = cva("squircle rounded-md", {
@@ -33,42 +33,14 @@ export const SidebarEntrance = ({
   index = 0,
 }: SidebarEntranceProps) => {
   const reducedMotion = useReducedMotion();
-  // react-doctor-disable-next-line react-hooks-js/refs -- Entrance animation is intentionally captured only on mount.
-  const shouldAnimate = useRef(animateEntrance).current;
-  const [isAnimating, setIsAnimating] = useState(animateEntrance);
-  let initial:
-    | false
-    | {
-        filter?: string;
-        opacity: number;
-        transform?: string;
-      } = false;
-  if (shouldAnimate) {
-    initial =
-      reducedMotion === true
-        ? { opacity: 0 }
-        : {
-            filter: "blur(8px)",
-            opacity: 0,
-            transform: "translate3d(-20px, 0, 0)",
-          };
-  }
+  // oxlint-disable-next-line react/hook-use-state -- Preserve the entrance preference for this mount.
+  const [shouldAnimate] = useState(animateEntrance);
 
   return (
     <m.div
-      animate={{
-        filter: "blur(0px)",
-        opacity: 1,
-        transform: "translate3d(0, 0, 0)",
-      }}
-      className={cn(
-        { "will-change-[transform,opacity,filter]": isAnimating },
-        className
-      )}
-      initial={initial}
-      onAnimationComplete={() => {
-        setIsAnimating(false);
-      }}
+      animate={{ opacity: 1 }}
+      className={className}
+      initial={shouldAnimate ? { opacity: 0 } : false}
       transition={{
         delay: shouldAnimate && reducedMotion !== true ? index * 0.075 : 0,
         duration: reducedMotion === true ? appMotionDuration.feedback : 0.5,

@@ -254,6 +254,7 @@ type ThreadListSummary = {
   labelIds: string[];
   messageCount: number;
   attachmentCount: number;
+  attachmentNames: string[];
 };
 
 const GMAIL_BATCH_MESSAGE_CHUNK_SIZE = 25;
@@ -1020,6 +1021,7 @@ const toMessageListItem = async (
     snippet: decodeMimeHeaderValue(message.snippet),
     subject: getHeader(message, "Subject"),
     threadAttachmentCount: options.threadSummary?.attachmentCount,
+    threadAttachmentNames: options.threadSummary?.attachmentNames,
     threadId: message.threadId,
     threadLabelIds: options.threadSummary?.labelIds,
     threadMessageCount: options.threadSummary?.messageCount,
@@ -1643,12 +1645,12 @@ const getThreadListSummaries = async (
       (message) =>
         options?.includeDrafts === true || !hasDraftLabel(message.labelIds)
     );
-    let attachmentCount = 0;
-    for (const message of messages) {
-      attachmentCount += extractMessageAttachments(message.payload).length;
-    }
+    const attachments = messages.flatMap((message) =>
+      extractMessageAttachments(message.payload)
+    );
     summariesByThreadId.set(thread.id, {
-      attachmentCount,
+      attachmentCount: attachments.length,
+      attachmentNames: attachments.map((attachment) => attachment.fileName),
       labelIds: [
         ...new Set(
           threadMessages.flatMap(
@@ -1704,15 +1706,15 @@ export const listMessagesWithDetails = async (
     if (anchor === undefined) {
       return [];
     }
-    let attachmentCount = 0;
-    for (const message of messages) {
-      attachmentCount += extractMessageAttachments(message.payload).length;
-    }
+    const attachments = messages.flatMap((message) =>
+      extractMessageAttachments(message.payload)
+    );
     return [
       {
         anchor,
         summary: {
-          attachmentCount,
+          attachmentCount: attachments.length,
+          attachmentNames: attachments.map((attachment) => attachment.fileName),
           labelIds: [
             ...new Set(
               (thread.messages ?? []).flatMap(
@@ -2369,6 +2371,7 @@ const buildMailboxSyncUpdatedMessages = async (
       return {
         ...updatedMessage,
         threadAttachmentCount: threadSummary.attachmentCount,
+        threadAttachmentNames: threadSummary.attachmentNames,
         threadMessageCount: threadSummary.messageCount,
       };
     }),

@@ -152,22 +152,43 @@ export const listDemoMail = (
         return filter.negated === true ? !matched : matched;
       });
     });
-  const threadLabels = new Map<string, Set<string>>();
+  const threadSummaries = new Map<
+    string,
+    { attachmentNames: string[]; labelIds: Set<string>; messageCount: number }
+  >();
   for (const message of messages) {
-    const labelsForThread =
-      threadLabels.get(message.threadId) ?? new Set<string>();
+    const summary = threadSummaries.get(message.threadId) ?? {
+      attachmentNames: [],
+      labelIds: new Set<string>(),
+      messageCount: 0,
+    };
     for (const id of message.labelIds ?? []) {
-      labelsForThread.add(id);
+      summary.labelIds.add(id);
     }
-    threadLabels.set(message.threadId, labelsForThread);
+    if (
+      input.category === "drafts" ||
+      message.labelIds?.includes(MAILBOX_LABELS.drafts) !== true
+    ) {
+      summary.attachmentNames.push(
+        ...(message.attachments?.map((attachment) => attachment.fileName) ?? [])
+      );
+      summary.messageCount += 1;
+    }
+    threadSummaries.set(message.threadId, summary);
   }
   const offset = Number(input.pageToken ?? 0);
   const start = Number.isSafeInteger(offset) && offset >= 0 ? offset : 0;
   const limit = Math.min(100, Math.max(1, input.maxResults ?? 50));
-  const page = matching.slice(start, start + limit).map((message) => ({
-    ...message,
-    threadLabelIds: [...(threadLabels.get(message.threadId) ?? [])],
-  }));
+  const page = matching.slice(start, start + limit).map((message) => {
+    const summary = threadSummaries.get(message.threadId);
+    return {
+      ...message,
+      threadAttachmentCount: summary?.attachmentNames.length,
+      threadAttachmentNames: summary?.attachmentNames,
+      threadLabelIds: [...(summary?.labelIds ?? [])],
+      threadMessageCount: summary?.messageCount,
+    };
+  });
   return {
     historyId: input.historyId,
     messages: page,

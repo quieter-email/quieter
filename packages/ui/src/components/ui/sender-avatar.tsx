@@ -15,6 +15,7 @@ const senderAvatarVariants = cva(
       size: {
         default: "size-9 text-body",
         sm: "size-8 text-body-sm",
+        xs: "size-7 text-caption",
       },
     },
   }

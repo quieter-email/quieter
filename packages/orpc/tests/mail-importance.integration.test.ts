@@ -10,7 +10,10 @@ import {
   mailboxGrant,
   mailImportanceAttempt,
   mailMessageImportance,
+  managedMailAttachment,
+  managedMailLabel,
   managedMailMessage,
+  managedMailMessageLabel,
   member,
   organization,
   user,
@@ -682,12 +685,28 @@ describe.skipIf(databaseUrl === undefined)(
       const mailboxId = await createMailbox();
       const otherMailboxId = await createMailbox();
       const archived = await capture(mailboxId, {
+        attachments: [
+          {
+            attachmentId: "launch-summary",
+            fileName: "launch-summary.pdf",
+            mimeType: "application/pdf",
+            size: 100,
+          },
+        ],
         id: "archived",
         internalDate: String(now.getTime() - 1000),
         labelIds: [],
         threadId: "archive-thread",
       });
       const anchor = await capture(mailboxId, {
+        attachments: [
+          {
+            attachmentId: "notes",
+            fileName: "notes.txt",
+            mimeType: "text/plain",
+            size: 50,
+          },
+        ],
         id: "latest-anchor",
         labelIds: ["INBOX", "UNREAD"],
         threadId: archived.threadId,
@@ -713,7 +732,18 @@ describe.skipIf(databaseUrl === undefined)(
             eq(gmailCapturedMessage.messageId, deleted.id)
           )
         );
-      await capture(otherMailboxId, { id: "foreign" });
+      await capture(otherMailboxId, {
+        attachments: [
+          {
+            attachmentId: "private",
+            fileName: "private.pdf",
+            mimeType: "application/pdf",
+            size: 100,
+          },
+        ],
+        id: "foreign",
+        threadId: archived.threadId,
+      });
       await db
         .update(mailMessageImportance)
         .set({ aiImportant: true, state: "completed" })
@@ -749,6 +779,13 @@ describe.skipIf(databaseUrl === undefined)(
           threadMessageCount: 2,
         },
       ]);
+      expect(first.messages[0]?.threadAttachmentNames).toContain(
+        "launch-summary.pdf"
+      );
+      expect(first.messages[0]?.threadAttachmentNames).toContain("notes.txt");
+      expect(first.messages[0]?.threadAttachmentNames).not.toContain(
+        "private.pdf"
+      );
       expect(first.nextPageToken).toBeDefined();
       const second = await listCapturedImportantMessages({
         mailboxId,
@@ -942,6 +979,71 @@ describe.skipIf(databaseUrl === undefined)(
           updatedAt: now,
         },
       ]);
+      const labelIds = [randomUUID(), randomUUID()];
+      await db.insert(managedMailLabel).values(
+        labelIds.map((id) => ({
+          createdAt: now,
+          id,
+          mailboxId,
+          name: id,
+          normalizedName: id,
+          updatedAt: now,
+        }))
+      );
+      await db.insert(managedMailMessageLabel).values(
+        labelIds.map((labelId) => ({
+          createdAt: now,
+          id: randomUUID(),
+          labelId,
+          mailboxId,
+          messageId: earlierId,
+          source: "manual" as const,
+        }))
+      );
+      await db.insert(managedMailAttachment).values([
+        {
+          createdAt: now,
+          fileName: "launch.pdf",
+          id: randomUUID(),
+          mailboxId,
+          messageId: earlierId,
+          mimeType: "application/pdf",
+          normalizedFileName: "launch.pdf",
+          size: 100,
+        },
+        {
+          createdAt: now,
+          fileName: "notes.txt",
+          id: randomUUID(),
+          mailboxId,
+          messageId: latestId,
+          mimeType: "text/plain",
+          normalizedFileName: "notes.txt",
+          size: 50,
+        },
+        {
+          createdAt: now,
+          fileName: "notes.txt",
+          id: randomUUID(),
+          mailboxId,
+          messageId: earlierId,
+          mimeType: "text/plain",
+          normalizedFileName: "notes.txt",
+          size: 75,
+        },
+        {
+          contentId: "signature",
+          createdAt: now,
+          fileName: "signature.png",
+          id: randomUUID(),
+          inline: true,
+          mailboxId,
+          messageId: latestId,
+          mimeType: "image/png",
+          normalizedFileName: "signature.png",
+          size: 25,
+        },
+      ]);
       await setMailImportance({
         actorUserId: responderId,
         important: true,
@@ -961,6 +1063,17 @@ describe.skipIf(databaseUrl === undefined)(
           threadMessageCount: 2,
         },
       ]);
+      const attachmentNames = page.messages[0]?.threadAttachmentNames ?? [];
+      expect(attachmentNames).toContain("launch.pdf");
+      expect(attachmentNames).toContain("notes.txt");
+      expect(attachmentNames).not.toContain("signature.png");
+      expect(
+        attachmentNames.filter((name) => name === "notes.txt")
+      ).toHaveLength(2);
+      expect(page.messages[0]?.threadAttachmentCount).toBe(3);
+      expect(page.messages[0]?.threadLabelIds).toStrictEqual(
+        expect.arrayContaining(labelIds)
+      );
       await db
         .update(managedMailMessage)
         .set({ mailboxState: "trash" })

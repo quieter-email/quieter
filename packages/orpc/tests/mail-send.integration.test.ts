@@ -53,6 +53,10 @@ import {
   cancelManagedRuleBackfill,
   updateManagedRule,
 } from "../src/managed-mail/rules/service";
+import {
+  getOrganizationApiMailboxId,
+  listOrganizationApiMailMessages,
+} from "../src/organization-api-mail";
 import { sendOrganizationMailMessage } from "../src/organization-mail";
 import { recordOrganizationMailFeedback } from "../src/organization-mail-delivery";
 import type { assertOrganizationOwnsVerifiedSenderDomain } from "../src/organization-mail-policy";
@@ -993,6 +997,7 @@ describe.skipIf(state.databaseUrl === undefined)(
     );
 
     test("API sends retain file and inline bytes in the managed Sent mailbox", async () => {
+      const userId = await createMailboxActor();
       await db
         .update(mailbox)
         .set({ includeApiSentMessages: true })
@@ -1048,6 +1053,14 @@ describe.skipIf(state.databaseUrl === undefined)(
             : new TextEncoder().encode("document bytes")
         );
       }
+      const apiPage = await listOrganizationApiMailMessages({
+        category: "sent",
+        mailboxId: getOrganizationApiMailboxId(organizationId),
+        userId,
+      });
+      const attachmentNames = apiPage.messages[0]?.threadAttachmentNames;
+      expect(attachmentNames).toContain("document.txt");
+      expect(attachmentNames).not.toContain("photo.png");
     });
 
     test("garbage collection retains referenced MIME and removes abandoned uploads", async () => {

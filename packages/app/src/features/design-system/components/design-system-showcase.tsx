@@ -58,6 +58,7 @@ import { Input } from "@quieter/ui/input";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import {
   MailListRowDetails,
+  MailListRowMetadata,
   mailListRowFrameVariants,
 } from "@quieter/ui/mail-list-row";
 import { Pill } from "@quieter/ui/pill";
@@ -515,9 +516,7 @@ export const DesignSystemShowcase = () => {
 
         <Section title="Sender avatars">
           <Row label="Sizes">
-            <Button size="xs" type="button">
-              Extra small
-            </Button>
+            <SenderAvatar fallbackLabel="S" size="xs" />
             <SenderAvatar fallbackLabel="N" size="sm" />
             <SenderAvatar fallbackLabel="A" />
           </Row>
@@ -564,11 +563,12 @@ export const DesignSystemShowcase = () => {
               <MailListRowDetails
                 active
                 metadata={
-                  <Pill size="xs" tone="neutral">
-                    <span className="inline-flex items-center gap-1 tabular-nums">
-                      <Icon aria-hidden icon={FileAttachmentIcon} size={12} />2
-                    </span>
-                  </Pill>
+                  <MailListRowMetadata
+                    attachmentCount={2}
+                    attachmentNames={["Project brief.pdf", "Budget.xlsx"]}
+                    layout="adaptive"
+                    messageCount={4}
+                  />
                 }
                 badge={
                   <Pill size="xs" tone="purple">
@@ -580,6 +580,19 @@ export const DesignSystemShowcase = () => {
                 senderEmail="alex@example.test"
                 senderPrefix="To "
                 subject="A longer subject stays on one line and truncates when the list gets narrower"
+                subjectTrailing={
+                  <>
+                    <Pill size="xs" tone="blue">
+                      Work
+                    </Pill>
+                    <Pill size="xs" tone="purple">
+                      Projects
+                    </Pill>
+                    <Pill size="xs" tone="green">
+                      Follow up
+                    </Pill>
+                  </>
+                }
                 timestamp="Yesterday"
               />
             </div>

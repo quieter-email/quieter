@@ -1064,6 +1064,12 @@ export const listCapturedImportantMessages = async (input: {
           (count, member) => count + (member.message.attachments?.length ?? 0),
           0
         ),
+        threadAttachmentNames: members.flatMap(
+          (member) =>
+            member.message.attachments?.map(
+              (attachment) => attachment.fileName
+            ) ?? []
+        ),
         threadId: row.threadId,
         threadIsImportant: true,
         threadLabelIds: [

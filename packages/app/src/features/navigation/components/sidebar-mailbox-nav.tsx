@@ -52,6 +52,13 @@ export const SidebarMailboxNav = ({
 
   return (
     <nav aria-label="Mailboxes" className="flex flex-col">
+      <SidebarEntrance
+        animateEntrance={animateEntrance}
+        className="mt-2 mb-1 flex items-center justify-between px-2"
+        index={3}
+      >
+        <p className="text-caption font-medium text-muted-fg">Mail</p>
+      </SidebarEntrance>
       {mailboxItems.map((item, index) => {
         const isActive = selectedMailbox === item.id;
 
