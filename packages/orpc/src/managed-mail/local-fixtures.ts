@@ -7,10 +7,11 @@ import { and, asc, eq } from "drizzle-orm";
 
 import { getLocalMailStorage, LOCAL_MAIL_BUCKET } from "./local-storage";
 import { recordInboundManagedMessage } from "./messages/ingestion";
+import { buildLocalRenderingFixtures } from "./rendering-fixtures";
 
 export const seedLocalManagedMail = async (
   ownerEmail: string,
-  options: { fresh?: boolean } = {}
+  options: { fresh?: boolean; rendering?: boolean } = {}
 ) => {
   if (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local") {
     throw new Error("Mail fixtures are only available in local development.");
@@ -83,6 +84,39 @@ export const seedLocalManagedMail = async (
     throw new Error(
       "The existing fixture mailbox no longer matches this local account."
     );
+  }
+  if (options.rendering === true) {
+    const messages = [];
+    for (const fixture of buildLocalRenderingFixtures({
+      address,
+      receivedAt: now,
+      suffix,
+    })) {
+      const key = `fixtures/${suffix}/${fixture.messageKey}.eml`;
+      const providerMessageId = `local-${fixture.messageKey}-${suffix}`;
+      await storage.put(key, fixture.raw);
+      await recordInboundManagedMessage({
+        providerMessageId,
+        rawMessage: fixture.raw,
+        rawObjectBucket: LOCAL_MAIL_BUCKET,
+        rawObjectKey: key,
+        rawObjectProvider: "r2",
+        rawSizeBytes: fixture.raw.byteLength,
+        receivedAt: now,
+        recipients: [address],
+      });
+      messages.push({
+        messageKey: fixture.messageKey,
+        providerMessageId,
+        subject: fixture.subject,
+      });
+    }
+    return {
+      mailboxId,
+      messages,
+      storage: "local",
+      url: `http://localhost:3000/?mailboxId=${mailboxId}&mailbox=inbox&query=&view=inbox`,
+    };
   }
   const messageKey =
     options.fresh === true ? crypto.randomUUID() : "welcome-v1";
