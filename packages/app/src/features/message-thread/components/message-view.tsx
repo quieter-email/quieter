@@ -9,7 +9,6 @@ import {
   MailReplyAll02Icon,
   SparklesIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import {
   buildComposeDraftFromMessageAction,
@@ -41,7 +40,13 @@ import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query"
 import { orpc } from "@quieter/app/lib/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import {
+  ComposerActionBar,
+  ComposerEditorFrame,
+} from "@quieter/ui/composer-chrome";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domMax, m } from "motion/react";
@@ -86,6 +91,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     composeSignature,
     currentUserEmail,
     detailOnly = false,
+    showDesktopBack = false,
     gmailLabels,
     hotkeyLinkedDraftMessage,
     hotkeyMessage,
@@ -229,7 +235,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
       <header className="w-full border-b p-3 @sm:px-5 @sm:py-4">
         <div className="flex min-w-0 items-center gap-3">
           {onBackToList ? (
-            <div className="shrink-0 lg:hidden">
+            <div className={cn("shrink-0", { "lg:hidden": !showDesktopBack })}>
               <IconButtonTooltip label="Back to list">
                 <Button
                   aria-label="Back to list"
@@ -238,17 +244,21 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                   type="button"
                   variant="ghost"
                 >
-                  <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+                  <Icon aria-hidden icon={ArrowLeft01Icon} />
                 </Button>
               </IconButtonTooltip>
             </div>
           ) : null}
-          <h1
-            // oxlint-disable-next-line shadcn/no-arbitrary-values -- Optical tracking for the thread subject.
-            className="min-w-0 flex-1 truncate font-sans text-body-lg leading-5.5 font-normal tracking-[-0.01em] text-fg"
+          <Text
+            as="h1"
+            className="min-w-0 flex-1"
+            size="sm"
+            title={subject}
+            truncate
+            weight="medium"
           >
             {subject}
-          </h1>
+          </Text>
           {!isSingleMessageThread && (
             <p className="shrink-0 text-caption text-muted-fg">
               {visibleMessages.length}{" "}
@@ -400,17 +410,21 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                   ) : null}
                   <Suspense
                     fallback={
-                      <output
-                        aria-label="Loading inline composer"
-                        aria-live="polite"
-                        className="grid min-h-64 place-items-center rounded-xl border border-border bg-control text-body text-muted-fg"
-                      >
-                        <HugeiconsIcon
-                          aria-hidden
-                          className="size-5 animate-spin"
-                          icon={Loading03Icon}
-                        />
-                      </output>
+                      <ComposerEditorFrame className="min-h-64">
+                        <output
+                          aria-label="Loading inline composer"
+                          aria-live="polite"
+                          className="grid flex-1 place-items-center"
+                        >
+                          <Icon
+                            aria-hidden
+                            size={20}
+                            tone="muted"
+                            animation="spin"
+                            icon={Loading03Icon}
+                          />
+                        </output>
+                      </ComposerEditorFrame>
                     }
                   >
                     <InlineComposeSurface
@@ -436,54 +450,121 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               ) : (
                 <m.div
                   animate={{ opacity: 1 }}
-                  className="flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-border bg-control p-1.5 squircle"
                   exit={{ opacity: 0 }}
                   initial={{ opacity: 0 }}
                   key="inline-reply-bar"
                   transition={inlineComposeFadeTransition}
                 >
-                  <Button
-                    disabled={!hotkeyLinkedDraftMessage && isBodyRefreshPending}
-                    // oxlint-disable-next-line shadcn/no-restyle -- Inline reply bar keeps its input-like metrics.
-                    className="min-w-44 flex-1 justify-start px-3"
-                    onClick={() => {
-                      openInlineCompose(
-                        hotkeyLinkedDraftMessage
-                          ? buildComposeDraftFromSavedDraftMessage(
-                              hotkeyLinkedDraftMessage
-                            )
-                          : buildComposeDraftFromMessageAction({
-                              action: "reply",
-                              currentUserEmail,
-                              existingDraftMessage: hotkeyLinkedDraftMessage,
-                              message: hotkeyMessage,
-                            })
-                      );
-                    }}
-                    type="button"
-                    variant="ghost"
-                  >
-                    <HugeiconsIcon
-                      aria-hidden
-                      icon={
-                        hotkeyLinkedDraftMessage ? Edit01Icon : MailReply02Icon
+                  <ComposerActionBar>
+                    <Button
+                      disabled={
+                        !hotkeyLinkedDraftMessage && isBodyRefreshPending
                       }
-                    />
-                    {hotkeyLinkedDraftMessage
-                      ? "Continue draft"
-                      : `Reply to ${replyTargetLabel}`}
-                  </Button>
-                  {showReplyAll ? (
-                    <IconButtonTooltip label="Reply all">
+                      className="min-w-44 flex-1"
+                      onClick={() => {
+                        openInlineCompose(
+                          hotkeyLinkedDraftMessage
+                            ? buildComposeDraftFromSavedDraftMessage(
+                                hotkeyLinkedDraftMessage
+                              )
+                            : buildComposeDraftFromMessageAction({
+                                action: "reply",
+                                currentUserEmail,
+                                existingDraftMessage: hotkeyLinkedDraftMessage,
+                                message: hotkeyMessage,
+                              })
+                        );
+                      }}
+                      type="button"
+                      size="auto"
+                      variant="ghost"
+                    >
+                      <Icon
+                        aria-hidden
+                        icon={
+                          hotkeyLinkedDraftMessage
+                            ? Edit01Icon
+                            : MailReply02Icon
+                        }
+                      />
+                      <Text
+                        as="span"
+                        className="min-w-0"
+                        size="sm"
+                        tone="muted"
+                        truncate
+                      >
+                        {hotkeyLinkedDraftMessage
+                          ? "Continue draft"
+                          : `Reply to ${replyTargetLabel}`}
+                      </Text>
+                    </Button>
+                    {showReplyAll ? (
+                      <IconButtonTooltip label="Reply all">
+                        <Button
+                          aria-label="Reply all"
+                          disabled={isBodyRefreshPending}
+                          onClick={() => {
+                            openInlineCompose(
+                              buildComposeDraftFromMessageAction({
+                                action: "reply-all",
+                                currentUserEmail,
+                                existingDraftMessage: hotkeyLinkedDraftMessage,
+                                message: hotkeyMessage,
+                              })
+                            );
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Icon aria-hidden icon={MailReplyAll02Icon} />
+                          <span className="hidden @sm:inline">Reply all</span>
+                        </Button>
+                      </IconButtonTooltip>
+                    ) : null}
+                    {!hotkeyLinkedDraftMessage &&
+                    composeDemoMode !== true &&
+                    composeManagedDemoMode !== true ? (
                       <Button
-                        aria-label="Reply all"
+                        disabled={
+                          suggestReply.isPending ||
+                          isBodyRefreshPending ||
+                          isActionPending
+                        }
+                        onClick={requestSuggestedReply}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Icon
+                          aria-hidden
+                          animation={
+                            suggestReply.isPending ? "spin" : undefined
+                          }
+                          icon={
+                            suggestReply.isPending
+                              ? Loading03Icon
+                              : SparklesIcon
+                          }
+                        />
+                        <span aria-live="polite">
+                          {suggestReply.isPending
+                            ? "Suggesting reply…"
+                            : "Suggest reply"}
+                        </span>
+                      </Button>
+                    ) : null}
+                    <IconButtonTooltip label="Forward">
+                      <Button
+                        aria-label="Forward"
                         disabled={isBodyRefreshPending}
                         onClick={() => {
                           openInlineCompose(
                             buildComposeDraftFromMessageAction({
-                              action: "reply-all",
+                              action: "forward",
                               currentUserEmail,
-                              existingDraftMessage: hotkeyLinkedDraftMessage,
+                              existingDraftMessage: null,
                               message: hotkeyMessage,
                             })
                           );
@@ -492,63 +573,11 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                         type="button"
                         variant="ghost"
                       >
-                        <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
-                        <span className="hidden @sm:inline">Reply all</span>
+                        <Icon aria-hidden icon={ArrowRightDoubleIcon} />
+                        <span className="hidden @sm:inline">Forward</span>
                       </Button>
                     </IconButtonTooltip>
-                  ) : null}
-                  {!hotkeyLinkedDraftMessage &&
-                  composeDemoMode !== true &&
-                  composeManagedDemoMode !== true ? (
-                    <Button
-                      disabled={
-                        suggestReply.isPending ||
-                        isBodyRefreshPending ||
-                        isActionPending
-                      }
-                      onClick={requestSuggestedReply}
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <HugeiconsIcon
-                        aria-hidden
-                        className={cn({
-                          "animate-spin": suggestReply.isPending,
-                        })}
-                        icon={
-                          suggestReply.isPending ? Loading03Icon : SparklesIcon
-                        }
-                      />
-                      <span aria-live="polite">
-                        {suggestReply.isPending
-                          ? "Suggesting reply…"
-                          : "Suggest reply"}
-                      </span>
-                    </Button>
-                  ) : null}
-                  <IconButtonTooltip label="Forward">
-                    <Button
-                      aria-label="Forward"
-                      disabled={isBodyRefreshPending}
-                      onClick={() => {
-                        openInlineCompose(
-                          buildComposeDraftFromMessageAction({
-                            action: "forward",
-                            currentUserEmail,
-                            existingDraftMessage: null,
-                            message: hotkeyMessage,
-                          })
-                        );
-                      }}
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
-                      <span className="hidden @sm:inline">Forward</span>
-                    </Button>
-                  </IconButtonTooltip>
+                  </ComposerActionBar>
                 </m.div>
               )}
             </AnimatePresence>

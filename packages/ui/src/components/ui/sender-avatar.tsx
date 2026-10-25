@@ -1,15 +1,30 @@
 "use client";
 
-import { cn } from "@quieter/ui/cn";
-import { useColorMode } from "@quieter/ui/color-mode";
+import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
 import { useState } from "react";
 
-type SenderAvatarProps = {
+import { cn } from "../../lib/cn";
+import { useColorMode } from "./color-mode";
+
+const senderAvatarVariants = cva(
+  "relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg font-medium text-muted-fg",
+  {
+    defaultVariants: { size: "default" },
+    variants: {
+      size: {
+        default: "size-9 text-body",
+        sm: "size-8 text-body-sm",
+      },
+    },
+  }
+);
+
+type SenderAvatarProps = VariantProps<typeof senderAvatarVariants> & {
   avatarUrlLight?: string;
   avatarUrlDark?: string;
   fallbackLabel: string;
   className?: string;
-  labelClassName?: string;
 };
 
 type AvatarStatus = "error" | "loaded";
@@ -19,7 +34,7 @@ export const SenderAvatar = ({
   avatarUrlLight,
   className,
   fallbackLabel,
-  labelClassName,
+  size = "default",
 }: SenderAvatarProps) => {
   const { colorMode } = useColorMode();
   const [avatarStatusByUrl, setAvatarStatusByUrl] = useState<
@@ -44,12 +59,12 @@ export const SenderAvatar = ({
   return (
     <div
       className={cn(
-        "relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg text-body font-medium text-muted-fg",
+        senderAvatarVariants({ size }),
         { "bg-muted/80": showFallback },
         className
       )}
     >
-      {showFallback && <span className={labelClassName}>{fallbackLabel}</span>}
+      {showFallback && <span>{fallbackLabel}</span>}
 
       {canRenderAvatar && activeAvatarUrl ? (
         <img

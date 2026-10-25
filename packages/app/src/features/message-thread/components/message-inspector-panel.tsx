@@ -1,7 +1,6 @@
 "use client";
 
 import { Loading03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { MessageDeliverySection } from "@quieter/app/features/message-delivery/components/message-delivery-section";
 import type { MessageListItem } from "@quieter/app/lib/mail";
 import { getMessageInspectorOptions } from "@quieter/app/lib/mail/message-inspector-query";
@@ -16,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
 import { Pill } from "@quieter/ui/pill";
 import { Text } from "@quieter/ui/text";
 import { useQuery } from "@tanstack/react-query";
@@ -49,11 +49,7 @@ export const MessageInspectorPanel = ({
   if (isInspectorPending) {
     inspectorBody = (
       <div className="flex items-center gap-2 text-body text-muted-fg">
-        <HugeiconsIcon
-          aria-hidden
-          className="animate-spin"
-          icon={Loading03Icon}
-        />
+        <Icon aria-hidden animation="spin" icon={Loading03Icon} />
         <span>Loading message details…</span>
       </div>
     );
@@ -183,11 +179,7 @@ export const ApiSourceAction = ({
         variant="outline"
       >
         {isPending && (
-          <HugeiconsIcon
-            aria-hidden
-            className="size-3.5 animate-spin"
-            icon={Loading03Icon}
-          />
+          <Icon aria-hidden size={14} animation="spin" icon={Loading03Icon} />
         )}
         Create mailbox
       </Button>

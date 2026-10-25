@@ -1,0 +1,84 @@
+{
+  "scenario": "Keyboard open a scrolled conversation, resize while the list is hidden, then use Back to list.",
+  "fixture": "440 synthetic messages cloned through the existing demo-mail storage contract, restored after verification.",
+  "results": [
+    {
+      "path": "mailbox",
+      "initialWidth": 1440,
+      "finalWidth": 700,
+      "originatingRowIndex": 40,
+      "returnedRowIndex": 40,
+      "beforeRowHeight": 48,
+      "afterRowHeight": 68,
+      "renderedRowHeights": [68],
+      "virtualExtent": 5508,
+      "uniformVirtualExtent": true,
+      "contiguousRows": true,
+      "focusRestored": true,
+      "focusedRowVisible": true,
+      "retainedRoute": {
+        "mailbox": "inbox",
+        "mailboxId": "demo:mailbox"
+      }
+    },
+    {
+      "path": "mailbox",
+      "initialWidth": 700,
+      "finalWidth": 1440,
+      "originatingRowIndex": 44,
+      "returnedRowIndex": 44,
+      "beforeRowHeight": 68,
+      "afterRowHeight": 48,
+      "renderedRowHeights": [48],
+      "virtualExtent": 3888,
+      "uniformVirtualExtent": true,
+      "contiguousRows": true,
+      "focusRestored": true,
+      "focusedRowVisible": true,
+      "retainedRoute": {
+        "mailbox": "inbox",
+        "mailboxId": "demo:mailbox"
+      }
+    },
+    {
+      "path": "unified",
+      "initialWidth": 1440,
+      "finalWidth": 700,
+      "originatingRowIndex": 41,
+      "returnedRowIndex": 41,
+      "beforeRowHeight": 48,
+      "afterRowHeight": 68,
+      "renderedRowHeights": [68],
+      "virtualExtent": 4624,
+      "uniformVirtualExtent": true,
+      "contiguousRows": true,
+      "focusRestored": true,
+      "focusedRowVisible": true,
+      "retainedRoute": {
+        "mailbox": "inbox",
+        "mailboxId": "demo:mailbox",
+        "view": "all-inboxes"
+      }
+    },
+    {
+      "path": "unified",
+      "initialWidth": 700,
+      "finalWidth": 1440,
+      "originatingRowIndex": 44,
+      "returnedRowIndex": 44,
+      "beforeRowHeight": 68,
+      "afterRowHeight": 48,
+      "renderedRowHeights": [48],
+      "virtualExtent": 4560,
+      "uniformVirtualExtent": true,
+      "contiguousRows": true,
+      "focusRestored": true,
+      "focusedRowVisible": true,
+      "retainedRoute": {
+        "mailbox": "inbox",
+        "mailboxId": "demo:mailbox",
+        "view": "all-inboxes"
+      }
+    }
+  ]
+}

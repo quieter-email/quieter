@@ -1,7 +1,6 @@
 "use client";
 
 import { Loading03Icon, Tag01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type {
   MessageLabelsTarget,
   MessageLabelsUpdate,
@@ -21,6 +20,7 @@ import {
   DropdownMenuSubmenuContent,
   DropdownMenuSubmenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { Icon } from "@quieter/ui/icon";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -65,11 +65,7 @@ const MessageLabelsMenuItems = ({
   if (areLabelsPending) {
     return (
       <div className="flex items-center gap-2 px-2.5 py-2 text-body text-muted-fg">
-        <HugeiconsIcon
-          aria-hidden
-          className="size-4 animate-spin"
-          icon={Loading03Icon}
-        />
+        <Icon aria-hidden animation="spin" icon={Loading03Icon} />
         <span>Loading labels…</span>
       </div>
     );
@@ -135,11 +131,7 @@ export const MessageLabelsSubmenu = ({
     >
       <DropdownMenuSubmenuTrigger disabled={disabled}>
         <span className="flex min-w-0 items-center gap-2">
-          <HugeiconsIcon
-            aria-hidden
-            className="size-4 shrink-0"
-            icon={Tag01Icon}
-          />
+          <Icon aria-hidden icon={Tag01Icon} />
           <span className="truncate">{label}</span>
         </span>
       </DropdownMenuSubmenuTrigger>

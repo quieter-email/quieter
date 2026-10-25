@@ -8,7 +8,6 @@ import {
   LayoutRightIcon,
   Tick01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -18,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import {
@@ -169,9 +169,10 @@ export const AssistantSidebar = ({
                     ? activeChat.title?.trim() || "New chat"
                     : "New chat"}
                 </span>
-                <HugeiconsIcon
+                <Icon
                   aria-hidden
-                  className="size-3.5 text-muted-fg"
+                  size={14}
+                  tone="muted"
                   icon={ArrowDown01Icon}
                 />
               </DropdownMenuTrigger>
@@ -238,11 +239,7 @@ export const AssistantSidebar = ({
                             type="submit"
                             variant="ghost"
                           >
-                            <HugeiconsIcon
-                              aria-hidden
-                              className="size-3.5"
-                              icon={Tick01Icon}
-                            />
+                            <Icon aria-hidden size={14} icon={Tick01Icon} />
                           </Button>
                         </IconButtonTooltip>
                       </form>
@@ -251,11 +248,7 @@ export const AssistantSidebar = ({
                         closeOnSelect={false}
                         onSelect={startRename}
                       >
-                        <HugeiconsIcon
-                          aria-hidden
-                          className="size-3.5"
-                          icon={Edit01Icon}
-                        />
+                        <Icon aria-hidden size={14} icon={Edit01Icon} />
                         Rename conversation
                       </DropdownMenuItem>
                     )}
@@ -265,11 +258,7 @@ export const AssistantSidebar = ({
                       }}
                       tone="destructive"
                     >
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-3.5"
-                        icon={Delete02Icon}
-                      />
+                      <Icon aria-hidden size={14} icon={Delete02Icon} />
                       Delete conversation
                     </DropdownMenuItem>
                   </>
@@ -284,7 +273,7 @@ export const AssistantSidebar = ({
                 type="button"
                 variant="ghost"
               >
-                <HugeiconsIcon aria-hidden icon={Add01Icon} />
+                <Icon aria-hidden icon={Add01Icon} />
               </Button>
             </IconButtonTooltip>
             <div className="ml-auto flex items-center gap-1">
@@ -298,7 +287,7 @@ export const AssistantSidebar = ({
                   type="button"
                   variant="ghost"
                 >
-                  <HugeiconsIcon aria-hidden icon={LayoutRightIcon} />
+                  <Icon aria-hidden icon={LayoutRightIcon} />
                 </Button>
               </IconButtonTooltip>
             </div>

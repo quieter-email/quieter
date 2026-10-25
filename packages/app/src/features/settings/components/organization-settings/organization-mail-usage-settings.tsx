@@ -5,7 +5,6 @@ import {
   Delete02Icon,
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   getOrganizationMailUsageQueryKey,
   organizationMailUsageQueryOptions,
@@ -24,6 +23,7 @@ import { orpc } from "@quieter/app/lib/orpc";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { Fieldset } from "@quieter/ui/fieldset";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
   NumberField,
@@ -90,11 +90,7 @@ const ManagedUsageLoading = ({ message }: { message: string }) => (
   <section className={settingsSurfaceVariants({ variant: "insetSection" })}>
     <SettingsRowText title="Usage">
       <span className="inline-flex items-center gap-2">
-        <HugeiconsIcon
-          aria-hidden
-          className="size-4 animate-spin"
-          icon={Loading03Icon}
-        />
+        <Icon aria-hidden animation="spin" icon={Loading03Icon} />
         {message}
       </span>
     </SettingsRowText>
@@ -353,7 +349,7 @@ const ManagedUsageMilestoneRow = ({
             size="icon-sm"
             variant="ghost"
           >
-            <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+            <Icon aria-hidden icon={Delete02Icon} />
           </Button>
         </IconButtonTooltip>
       )}
@@ -473,7 +469,7 @@ const ManagedUsageSettingsControls = ({
             size="sm"
             variant="outline"
           >
-            <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+            <Icon aria-hidden icon={Add01Icon} />
             Add
           </Button>
         )}
@@ -515,11 +511,7 @@ const ManagedUsageSettingsControls = ({
                 size="sm"
               >
                 {isSaving && (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                 )}
                 Save changes
               </Button>

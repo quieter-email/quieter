@@ -5,7 +5,6 @@ import {
   Loading03Icon,
   Logout03Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { getFullOrganizationQueryKey } from "@quieter/app/features/settings/components/organization-settings/domain";
 import type { FullOrganization } from "@quieter/app/features/settings/components/organization-settings/domain";
 import { authClient } from "@quieter/app/lib/auth";
@@ -19,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
 import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
@@ -102,7 +102,7 @@ export const LeaveOrganizationDialog = ({
         size="sm"
         variant="destructive"
       >
-        <HugeiconsIcon aria-hidden className="size-4" icon={Logout03Icon} />
+        <Icon aria-hidden icon={Logout03Icon} />
         Leave
       </Button>
 
@@ -173,17 +173,9 @@ export const LeaveOrganizationDialog = ({
                 variant="destructive"
               >
                 {leaveOrganizationMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                 ) : (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Logout03Icon}
-                  />
+                  <Icon aria-hidden icon={Logout03Icon} />
                 )}
                 Leave
               </Button>
@@ -271,7 +263,7 @@ export const DeleteOrganizationDialog = ({
         size="sm"
         variant="destructive"
       >
-        <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+        <Icon aria-hidden icon={Delete02Icon} />
         Delete
       </Button>
 
@@ -344,17 +336,9 @@ export const DeleteOrganizationDialog = ({
                 variant="destructive"
               >
                 {deleteOrganizationMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                 ) : (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Delete02Icon}
-                  />
+                  <Icon aria-hidden icon={Delete02Icon} />
                 )}
                 Delete
               </Button>

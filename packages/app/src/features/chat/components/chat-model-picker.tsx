@@ -1,9 +1,9 @@
 import { ArrowDown01Icon, SparklesIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { chatModelGroups, chatModels } from "@quieter/ai/chat-models";
 import type { ChatModel, ChatModelGroup } from "@quieter/ai/chat-models";
 import { ModelLabLogo } from "@quieter/app/features/chat/components/model-lab-logo";
 import { Button } from "@quieter/ui/button";
+import { Icon } from "@quieter/ui/icon";
 import { Input } from "@quieter/ui/input";
 import {
   Popover,
@@ -79,10 +79,10 @@ export const ChatModelPicker = ({
         {selectedModel ? (
           <ModelLabLogo lab={selectedModel.group} />
         ) : (
-          <HugeiconsIcon aria-hidden icon={SparklesIcon} />
+          <Icon aria-hidden icon={SparklesIcon} />
         )}
         <span className="truncate">{selectedModel?.label ?? "Auto"}</span>
-        <HugeiconsIcon aria-hidden icon={ArrowDown01Icon} />
+        <Icon aria-hidden icon={ArrowDown01Icon} />
       </PopoverTrigger>
       <PopoverContent
         align="start"
@@ -118,9 +118,10 @@ export const ChatModelPicker = ({
           {autoMatches ? (
             <div className="flex items-start gap-2">
               <span className="flex w-24 shrink-0 items-center gap-1.5 py-1.5 text-caption text-muted-fg">
-                <HugeiconsIcon
+                <Icon
                   aria-hidden
-                  className="size-3.5 shrink-0"
+                  size={14}
+
                   icon={SparklesIcon}
                 />
                 Automatic

@@ -5,7 +5,6 @@ import {
   Calendar03Icon,
   Image01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   applyEmailPreferences,
   fixNonReadableColors,
@@ -21,6 +20,7 @@ import { useExternalImagesEnabled } from "@quieter/app/features/settings/domain/
 import { Button, buttonVariants } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { useColorMode } from "@quieter/ui/color-mode";
+import { Icon } from "@quieter/ui/icon";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 type MessageBodyProps = {
@@ -47,7 +47,7 @@ const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
           aria-hidden
           className="flex size-8 shrink-0 items-center justify-center rounded-md bg-bg-raised/90 text-muted-fg shadow-xs ring-1 ring-border/55"
         >
-          <HugeiconsIcon className="size-4 shrink-0" icon={Calendar03Icon} />
+          <Icon icon={Calendar03Icon} />
         </div>
         <p className="min-w-0 text-body/snug text-muted-fg">
           {links.length === 1
@@ -67,11 +67,7 @@ const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
             target="_blank"
           >
             {link.label}
-            <HugeiconsIcon
-              aria-hidden
-              className="size-3.5"
-              icon={ArrowUpRight01Icon}
-            />
+            <Icon aria-hidden size={14} icon={ArrowUpRight01Icon} />
           </a>
         ))}
       </div>
@@ -204,7 +200,7 @@ const HtmlMessageBodyContent = ({
               aria-hidden
               className="flex size-8 shrink-0 items-center justify-center rounded-md bg-bg-raised/90 text-muted-fg shadow-xs ring-1 ring-border/55"
             >
-              <HugeiconsIcon className="size-4 shrink-0" icon={Image01Icon} />
+              <Icon icon={Image01Icon} />
             </div>
             <p className="min-w-0 text-body/snug text-muted-fg">
               Remote images are hidden for security reasons.

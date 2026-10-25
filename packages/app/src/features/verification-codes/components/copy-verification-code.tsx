@@ -1,10 +1,10 @@
 "use client";
 
 import { Copy01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { Button } from "@quieter/ui/button";
 import type { ButtonProps } from "@quieter/ui/button";
+import { Icon } from "@quieter/ui/icon";
 import { toast } from "@quieter/ui/toast";
 
 export const CopyVerificationCode = ({
@@ -43,7 +43,7 @@ export const CopyVerificationCode = ({
       variant="outline"
     >
       {code}
-      <HugeiconsIcon aria-hidden className="size-3" icon={Copy01Icon} />
+      <Icon aria-hidden size={12} icon={Copy01Icon} />
     </Button>
   );
 };

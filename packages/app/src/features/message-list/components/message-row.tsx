@@ -4,8 +4,6 @@ import {
   FileAttachmentIcon,
   MessageMultiple01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { SenderAvatar } from "@quieter/app/components/sender-avatar";
 import {
   DELIVERY_PILL_TONES,
   getDeliveryStatusLabel,
@@ -32,7 +30,16 @@ import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import type { RouterOutputs } from "@quieter/orpc";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
+import {
+  MailListRowDetails,
+  MailListRowSelectionMark,
+  mailListRowFrameVariants,
+  mailListRowParts,
+} from "@quieter/ui/mail-list-row";
 import { Pill } from "@quieter/ui/pill";
+import { SenderAvatar } from "@quieter/ui/sender-avatar";
+import { Text } from "@quieter/ui/text";
 import { m, useReducedMotion } from "motion/react";
 import type { FocusEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useState } from "react";
@@ -132,6 +139,7 @@ const rowPressTransition = {
 } as const;
 
 type MessageRowProps = {
+  wideCompactRows?: boolean;
   activeMailbox: MessageListProps["activeMailbox"];
   badge?: ReactNode;
   deliveryStatus?: MessageDeliveryStatus | null;
@@ -213,11 +221,11 @@ const MessageRowSelectionButton = ({
   };
 
   return (
-    <div className="relative z-10 ml-2 flex h-full shrink-0 items-center justify-center @sm:ml-3">
+    <div className={mailListRowParts.selectionCell}>
       <button
         aria-label={selectionAriaLabel}
         aria-pressed={isSelected}
-        className="relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:pointer-events-none"
+        className={mailListRowParts.selectionButton}
         disabled={isActionPending}
         onKeyDown={handleSelectionKeyDown}
         onMouseDown={handleSelectionPress}
@@ -235,7 +243,7 @@ const MessageRowSelectionButton = ({
             opacity: showCheckbox ? 0 : 1,
             scale: reducedMotion !== false || !showCheckbox ? 1 : 0.92,
           }}
-          className="block"
+          className="flex items-center justify-center"
           initial={false}
           transition={{
             duration: appMotionDuration.feedback,
@@ -245,7 +253,7 @@ const MessageRowSelectionButton = ({
           <SenderAvatar
             avatarUrlDark={thread.anchorMessage.senderAvatarUrls?.dark}
             avatarUrlLight={thread.anchorMessage.senderAvatarUrls?.light}
-            className="size-9.5 rounded-lg"
+            size="sm"
             fallbackLabel={senderInitial}
           />
         </m.span>
@@ -263,28 +271,7 @@ const MessageRowSelectionButton = ({
             ease: appEaseOut,
           }}
         >
-          <span
-            className={cn(
-              // oxlint-disable-next-line shadcn/no-arbitrary-values -- Bulk-select checkbox sizing with explicit transition properties.
-              "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
-              {
-                "border-border": !isSelected,
-                "border-primary bg-primary text-primary-fg": isSelected,
-              }
-            )}
-          >
-            <svg
-              className="size-3.5"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              viewBox="0 0 14 14"
-            >
-              <path d="M3 7.5 5.75 10 11 4.75" />
-            </svg>
-          </span>
+          <MailListRowSelectionMark selected={isSelected} />
         </m.span>
       </button>
     </div>
@@ -292,12 +279,13 @@ const MessageRowSelectionButton = ({
 };
 
 const MessageRowDetails = ({
+  wideCompactRows,
   badge,
   date,
   deliveryStatus,
   gmailLabels,
+  isActive,
   isDraftMailbox,
-  metaTextClassName,
   senderEmail,
   senderLabel,
   subject,
@@ -310,8 +298,8 @@ const MessageRowDetails = ({
   date: string;
   deliveryStatus?: MessageDeliveryStatus | null;
   gmailLabels: MailboxLabel[];
+  isActive: boolean;
   isDraftMailbox: boolean;
-  metaTextClassName: string;
   senderEmail: string;
   senderLabel: string;
   subject: string;
@@ -319,104 +307,83 @@ const MessageRowDetails = ({
   threaded: boolean;
   unread: boolean;
   verificationCode?: string;
+  wideCompactRows?: boolean;
 }) => (
-  <div className="pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
-    <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden">
-      <div className="flex w-full min-w-0 items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
-          {badge !== undefined && badge !== null && (
-            <span className="inline-flex shrink-0 items-center justify-center">
-              {badge}
-            </span>
-          )}
-          <p className="min-w-0 truncate text-left text-body-sm/4.5 text-fg">
-            {isDraftMailbox && (
-              <span className="font-medium text-muted-fg">To </span>
-            )}
-            <span
-              className={cn({
-                "font-medium": !unread,
-                "font-semibold": unread,
-              })}
-            >
-              {senderLabel}
-            </span>
-            {senderEmail && (
-              <span className="ml-2 hidden text-micro text-muted-fg @sm:inline">
-                {senderEmail}
-              </span>
-            )}
-          </p>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-2">
-          {deliveryStatus !== undefined && deliveryStatus !== null && (
-            <Pill
-              tone={DELIVERY_PILL_TONES[getDeliveryStatusTone(deliveryStatus)]}
-            >
-              {getDeliveryStatusLabel(deliveryStatus)}
-            </Pill>
-          )}
-          {(thread.attachmentCount > 0 || threaded) && (
-            <span
-              className="inline-flex h-4.5 shrink-0 items-center gap-1 rounded-sm border border-border bg-muted px-1 text-micro font-medium text-muted-fg tabular-nums squircle"
-              title={getMessageRowCountsTitle(thread)}
-            >
+  <MailListRowDetails
+    active={isActive}
+    badge={badge}
+    layout={wideCompactRows === true ? "adaptive" : "stacked"}
+    metadata={
+      <>
+        {deliveryStatus !== undefined && deliveryStatus !== null && (
+          <Pill
+            tone={DELIVERY_PILL_TONES[getDeliveryStatusTone(deliveryStatus)]}
+          >
+            {getDeliveryStatusLabel(deliveryStatus)}
+          </Pill>
+        )}
+        {(thread.attachmentCount > 0 || threaded) && (
+          <Pill
+            size="xs"
+            tone="neutral"
+            title={getMessageRowCountsTitle(thread)}
+          >
+            <span className="inline-flex items-center gap-1 tabular-nums">
               {thread.attachmentCount > 0 && (
                 <span className="inline-flex items-center gap-1">
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-3"
-                    icon={FileAttachmentIcon}
-                  />
+                  <Icon aria-hidden size={12} icon={FileAttachmentIcon} />
                   <span>{thread.attachmentCount}</span>
                 </span>
               )}
               {threaded && (
                 <span className="inline-flex items-center gap-1">
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-3"
-                    icon={MessageMultiple01Icon}
-                  />
+                  <Icon aria-hidden size={12} icon={MessageMultiple01Icon} />
                   <span>{thread.messageCount}</span>
                 </span>
               )}
             </span>
-          )}
-          <span className={metaTextClassName} suppressHydrationWarning>
-            {date || "--"}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex w-full min-w-0 items-center gap-1.5">
-        <p
-          className={cn("min-w-0 flex-1 truncate text-left text-body-sm/4.5", {
-            "font-medium text-fg": unread,
-            "text-muted-fg": !unread,
-          })}
-        >
-          {isDraftMailbox ? (
-            <>
-              <span className="mr-2 font-medium text-destructive">Draft</span>
-              {subject}
-            </>
-          ) : (
-            subject
-          )}
-        </p>
-        {verificationCode && <CopyVerificationCode code={verificationCode} />}
+          </Pill>
+        )}
+      </>
+    }
+    sender={senderLabel}
+    senderEmail={senderEmail}
+    senderPrefix={isDraftMailbox ? "To " : undefined}
+    subject={
+      isDraftMailbox ? (
+        <>
+          <Text
+            as="span"
+            className="mr-2"
+            size="sm"
+            tone="destructive"
+            weight="medium"
+          >
+            Draft
+          </Text>
+          {subject}
+        </>
+      ) : (
+        subject
+      )
+    }
+    subjectTrailing={
+      <>
+        {verificationCode && (
+          <CopyVerificationCode code={verificationCode} size="xs" />
+        )}
         <MessageLabels
-          className="hidden shrink-0 @sm:flex"
+          className="hidden @sm:flex"
           compact
           labelIds={thread.threadLabelIds}
           labels={gmailLabels}
           limit={2}
         />
-      </div>
-    </div>
-  </div>
+      </>
+    }
+    timestamp={date || "--"}
+    unread={unread}
+  />
 );
 
 const useMessageRowHandlers = ({
@@ -523,6 +490,7 @@ const useMessageRowHandlers = ({
 };
 
 type MessageRowSurfaceProps = {
+  wideCompactRows?: boolean;
   activeMailbox: MessageListProps["activeMailbox"];
   anchorMessage: ThreadListEntry["anchorMessage"];
   badge?: ReactNode;
@@ -537,7 +505,6 @@ type MessageRowSurfaceProps = {
   mailboxActions: MessageListProps["mailboxActions"];
   mailboxId: string;
   mailboxProvider: MessageListProps["mailboxProvider"];
-  metaTextClassName: string;
   onKeyboardOpen?: () => void;
   onOpenDraft: MessageListProps["onOpenDraft"];
   onThreadFocus: (threadId: string | null) => void;
@@ -564,6 +531,7 @@ type MessageRowSurfaceProps = {
 };
 
 const MessageRowSurface = ({
+  wideCompactRows,
   activeMailbox,
   anchorMessage,
   badge,
@@ -578,7 +546,6 @@ const MessageRowSurface = ({
   mailboxActions,
   mailboxId,
   mailboxProvider,
-  metaTextClassName,
   onKeyboardOpen,
   onOpenDraft,
   onThreadFocus,
@@ -629,7 +596,10 @@ const MessageRowSurface = ({
       animate={{
         scale: reducedMotion !== false || !isPressed ? 1 : 0.97,
       }}
-      className="group/row relative flex h-17 items-stretch rounded-lg"
+      className={mailListRowFrameVariants({
+        accent: thread.isImportant ? "yellow" : undefined,
+        layout: wideCompactRows === true ? "adaptive" : "stacked",
+      })}
       initial={false}
       onBlurCapture={handleRowBlurCapture}
       onFocusCapture={handleRowFocusCapture}
@@ -660,26 +630,16 @@ const MessageRowSurface = ({
       }}
       transition={rowPressTransition}
     >
-      {thread.isImportant && (
-        // Importance is a mail-domain treatment on this specialized row, separate from primary selection.
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 right-0 z-0 w-1/3 rounded-lg bg-linear-to-l from-q-yellow/8 via-q-yellow/4 to-transparent"
-        />
-      )}
       <m.span
         animate={{ opacity: surfaceOpacity }}
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 rounded-lg bg-muted"
+        className={mailListRowParts.overlay}
         initial={false}
         transition={{ duration: appMotionDuration.feedback, ease: appEaseOut }}
       />
 
       {unread && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute top-1/2 left-0 z-20 h-8 w-0.75 -translate-y-1/2 rounded-r-full bg-primary"
-        />
+        <span aria-hidden className={mailListRowParts.unreadIndicator} />
       )}
       <MessageRowSelectionButton
         isActionPending={isActionPending}
@@ -717,7 +677,7 @@ const MessageRowSurface = ({
               badge !== undefined && badge !== null ? openAriaLabel : undefined
             }
             aria-current={isActive ? "true" : undefined}
-            className="absolute inset-0 z-10 rounded-lg border border-transparent text-left focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
+            className={mailListRowParts.trigger}
             data-message-row-trigger
             onClick={handleRowClick}
             onKeyDown={handleRowKeyDown}
@@ -737,12 +697,13 @@ const MessageRowSurface = ({
             type="button"
           />
           <MessageRowDetails
+            wideCompactRows={wideCompactRows}
             badge={badge}
             date={date}
             deliveryStatus={deliveryStatus}
             gmailLabels={gmailLabels}
+            isActive={isActive}
             isDraftMailbox={isDraftMailbox}
-            metaTextClassName={metaTextClassName}
             senderEmail={senderEmail}
             senderLabel={senderLabel}
             subject={subject}
@@ -758,6 +719,7 @@ const MessageRowSurface = ({
 };
 
 const MessageRowContent = ({
+  wideCompactRows,
   activeMailbox,
   badge,
   deliveryStatus,
@@ -799,11 +761,6 @@ const MessageRowContent = ({
   const isActionPending =
     pendingActions.isMessageActionPending(anchorMessage.id) ||
     pendingActions.isThreadActionPending(thread.threadId);
-  const metaTextClassName = cn("shrink-0 text-caption tabular-nums", {
-    "font-semibold text-fg/90": unread,
-    "text-fg/75": isActive && !unread,
-    "text-muted-fg": !unread,
-  });
   const surfaceOpacity = getMessageRowSurfaceOpacity(
     isActive,
     isHovered,
@@ -822,6 +779,7 @@ const MessageRowContent = ({
   );
   return (
     <MessageRowSurface
+      wideCompactRows={wideCompactRows}
       activeMailbox={activeMailbox}
       anchorMessage={anchorMessage}
       badge={badge}
@@ -836,7 +794,6 @@ const MessageRowContent = ({
       mailboxActions={mailboxActions}
       mailboxId={mailboxId}
       mailboxProvider={mailboxProvider}
-      metaTextClassName={metaTextClassName}
       onKeyboardOpen={onKeyboardOpen}
       onOpenDraft={onOpenDraft}
       onThreadFocus={onThreadFocus}
@@ -865,6 +822,7 @@ const MessageRowContent = ({
 };
 
 export const MessageRow = ({
+  wideCompactRows,
   activeMailbox,
   badge,
   className,
@@ -895,6 +853,7 @@ export const MessageRow = ({
 
   const element = (
     <MessageRowContent
+      wideCompactRows={wideCompactRows}
       activeMailbox={activeMailbox}
       badge={badge}
       deliveryStatus={deliveryStatus}

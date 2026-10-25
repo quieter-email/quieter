@@ -1,12 +1,13 @@
 "use client";
 
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type { CalendarEvent } from "@quieter/calendar";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Pill } from "@quieter/ui/pill";
+import { Text } from "@quieter/ui/text";
 
 import { addCalendarDays } from "../domain/calendar-event-form";
 
@@ -57,7 +58,9 @@ export const CalendarEventDetails = ({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b border-border px-5 py-4">
-        <h2 className="flex-1 text-body-sm font-medium">Event details</h2>
+        <Text as="h2" className="flex-1" size="sm" truncate weight="medium">
+          Event details
+        </Text>
         <IconButtonTooltip label="Close event details">
           <Button
             aria-label="Close event details"
@@ -65,7 +68,7 @@ export const CalendarEventDetails = ({
             size="icon-sm"
             variant="ghost"
           >
-            <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
+            <Icon aria-hidden icon={Cancel01Icon} />
           </Button>
         </IconButtonTooltip>
       </div>
@@ -74,9 +77,9 @@ export const CalendarEventDetails = ({
           <Pill size="xs" tone="neutral">
             {calendarName}
           </Pill>
-          <h3 className="text-title-sm font-medium wrap-break-word">
+          <Text as="h3" size="lg" truncate weight="medium">
             {event.title || "Untitled event"}
-          </h3>
+          </Text>
           {event.permissions.edit ? null : (
             <p className="text-caption text-muted-fg">
               This event is read only.

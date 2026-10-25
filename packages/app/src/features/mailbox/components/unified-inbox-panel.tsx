@@ -60,6 +60,7 @@ type SourceState = {
 type ConnectedMailbox = UnifiedInboxMailbox & { provider: "gmail" | "managed" };
 
 type UnifiedInboxPanelProps = {
+  wideCompactRows: boolean;
   activeMailbox: MailboxCategory;
   mailboxes: UnifiedInboxMailbox[];
   userId: string;
@@ -172,6 +173,7 @@ const UnifiedInboxSource = ({
 };
 
 export const UnifiedInboxPanel = ({
+  wideCompactRows,
   activeMailbox,
   activeMailboxId,
   activeMessageId,
@@ -727,6 +729,7 @@ export const UnifiedInboxPanel = ({
         );
       })}
       <MessageList
+        wideCompactRows={wideCompactRows}
         activeMailbox={activeMailbox}
         activeMessageId={
           activeMailboxId !== null && activeMessageId !== null

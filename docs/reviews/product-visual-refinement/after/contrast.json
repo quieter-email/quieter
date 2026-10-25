@@ -1,0 +1,75 @@
+{
+  "failures": [],
+  "measurements": [
+    {
+      "actionMinimum": 4.95,
+      "focusMinimum": 4.62,
+      "pillMinimum": 5.5,
+      "textMinimum": 5.61,
+      "theme": "light"
+    },
+    {
+      "actionMinimum": 8.05,
+      "focusMinimum": 13.63,
+      "pillMinimum": 5.78,
+      "textMinimum": 6.84,
+      "theme": "dark"
+    },
+    {
+      "actionMinimum": 7.03,
+      "focusMinimum": 5.68,
+      "pillMinimum": 5.01,
+      "textMinimum": 7.77,
+      "theme": "04-porcelain"
+    },
+    {
+      "actionMinimum": 6.73,
+      "focusMinimum": 5.22,
+      "pillMinimum": 4.69,
+      "textMinimum": 7.44,
+      "theme": "08-lilac"
+    },
+    {
+      "actionMinimum": 6.71,
+      "focusMinimum": 5.18,
+      "pillMinimum": 4.67,
+      "textMinimum": 5.78,
+      "theme": "10-sand"
+    },
+    {
+      "actionMinimum": 8.14,
+      "focusMinimum": 12.68,
+      "pillMinimum": 6.1,
+      "textMinimum": 8.09,
+      "theme": "12-eclipse"
+    },
+    {
+      "actionMinimum": 6.3,
+      "focusMinimum": 10.09,
+      "pillMinimum": 4.81,
+      "textMinimum": 6.77,
+      "theme": "graphite"
+    },
+    {
+      "actionMinimum": 6.18,
+      "focusMinimum": 7.78,
+      "pillMinimum": 4.8,
+      "textMinimum": 6.31,
+      "theme": "coffee"
+    },
+    {
+      "actionMinimum": 6.02,
+      "focusMinimum": 7.67,
+      "pillMinimum": 4.57,
+      "textMinimum": 6.04,
+      "theme": "moss"
+    },
+    {
+      "actionMinimum": 6.26,
+      "focusMinimum": 5.09,
+      "pillMinimum": 4.8,
+      "textMinimum": 5.22,
+      "theme": "sage"
+    }
+  ]
+}

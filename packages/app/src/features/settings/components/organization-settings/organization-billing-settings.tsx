@@ -1,7 +1,6 @@
 "use client";
 
 import { Loading03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   BillingCreditSummary,
   BillingProductCard,
@@ -21,6 +20,7 @@ import { orpc } from "@quieter/app/lib/orpc";
 import { openExternalUrl } from "@quieter/app/runtime";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export const OrganizationBillingSettings = ({
@@ -70,11 +70,7 @@ export const OrganizationBillingSettings = ({
           settingsSurfaceVariants({ variant: "value" })
         )}
       >
-        <HugeiconsIcon
-          aria-hidden
-          className="size-4 animate-spin"
-          icon={Loading03Icon}
-        />
+        <Icon aria-hidden animation="spin" icon={Loading03Icon} />
         Loading billing…
       </section>
     );
@@ -99,7 +95,7 @@ export const OrganizationBillingSettings = ({
           settingsSurfaceVariants({ variant: "value" })
         )}
       >
-        <HugeiconsIcon aria-hidden className="size-4" icon={Loading03Icon} />
+        <Icon aria-hidden icon={Loading03Icon} />
         Could not load billing.
       </section>
     );
@@ -129,11 +125,7 @@ export const OrganizationBillingSettings = ({
               variant="outline"
             >
               {portalMutation.isPending && (
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-4 animate-spin"
-                  icon={Loading03Icon}
-                />
+                <Icon aria-hidden animation="spin" icon={Loading03Icon} />
               )}
               Manage billing
             </Button>

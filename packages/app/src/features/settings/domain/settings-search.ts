@@ -38,6 +38,15 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Appearance",
   },
   {
+    description: "Preferences / Mail layout",
+    id: "mail-layout",
+    keywords: "mail layout one two panels split reading inbox list",
+    scope: "personal",
+    section: "mail-layout",
+    tab: "appearance",
+    title: "Mail layout",
+  },
+  {
     description: "Preferences / Allow external images",
     id: "reading",
     keywords: "remote external images messages",

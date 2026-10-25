@@ -1,12 +1,12 @@
 "use client";
 
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
 import { Button } from "./button";
 import { Field, FieldError, FieldLabel } from "./field";
+import { Icon } from "./icon";
 import { IconButtonTooltip } from "./icon-button-tooltip";
 
 export const PromptComposerFrame = ({
@@ -16,6 +16,19 @@ export const PromptComposerFrame = ({
   <div
     className={cn(
       "flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-control p-2 shadow-sm",
+      className
+    )}
+    {...props}
+  />
+);
+
+export const ComposerActionBar = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<"div">) => (
+  <div
+    className={cn(
+      "flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-border bg-control p-1.5 squircle",
       className
     )}
     {...props}
@@ -46,7 +59,7 @@ export const ComposerContextChip = ({
         size="icon-xs"
         variant="ghost"
       >
-        <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
+        <Icon aria-hidden icon={Cancel01Icon} />
       </Button>
     </IconButtonTooltip>
   </span>

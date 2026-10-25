@@ -11,9 +11,9 @@ The product uses `@quieter/ui` for reusable appearance and app components for do
 | Tailwind class merging | `packages/ui/src/lib/cn.ts` |
 | Component implementations | `packages/ui/src/components/ui/` |
 | Public component imports | `packages/ui/package.json` exports |
-| Working compositions | `apps/web/src/features/design-system/components/design-system-showcase.tsx` |
-| Settings anchors and domain wrappers | `apps/web/src/features/settings/components/settings-layout.tsx` |
-| Motion orchestration | `apps/web/src/features/motion/` |
+| Working compositions | `packages/app/src/features/design-system/components/design-system-showcase.tsx` |
+| Settings anchors and domain wrappers | `packages/app/src/features/settings/components/settings-layout.tsx` |
+| Motion orchestration | `packages/app/src/features/motion/` |
 
 Before changing a UI, read the relevant component and its closest existing caller. A component's actual props are the contract. Do not assume APIs from upstream shadcn examples match this codebase.
 
@@ -25,6 +25,10 @@ Before changing a UI, read the relevant component and its closest existing calle
 | Selectable setup card | `Button variant="card"` |
 | Compact toggle chip or segmented option | `Button variant="chip"` or `variant="option"` with `aria-pressed` |
 | Icon action | Icon-sized `Button`, concise `aria-label`, `IconButtonTooltip` |
+| Product icon | `Icon` from `@quieter/ui/icon`, with `size`, `tone`, and `animation` props |
+| Product heading or text treatment | `Text`, with semantic `as`, `size`, `tone`, `weight`, and `truncate` props |
+| Mail-list presentation | `MailListRowDetails` and `mailListRowFrameVariants`, with `stacked` or `adaptive` layout |
+| Sender logo or fallback | `SenderAvatar`, with `sm` for mail rows and message headers |
 | Field | `Field`, `FieldLabel`, `Input`, `Textarea`, validation components |
 | Compound mailbox address | `InputGroup`, `Input chrome="attached"`, `InputAddon`, attached `SelectTrigger` |
 | Choice or boolean | `Select`, `Checkbox`, `Switch`, `RadioGroup`, `Toggle` |
@@ -33,11 +37,13 @@ Before changing a UI, read the relevant component and its closest existing calle
 | Overlay finishing actions | Shared overlay footer or `ActionFooter` |
 | Workspace panel | `WorkspaceSection`, `WorkspaceSidebar` |
 | Settings | Shared `settings-layout` components; app wrappers add anchors |
-| Composer | `composer-chrome` components |
+| Composer | `composer-chrome` components, including `ComposerActionBar` for reply actions |
 | Tokenized editor | `TokenField` |
 | Menu, tooltip, popover | Shared menu, tooltip, popover components |
 
 Settings feature code imports its local `settings-layout` adapter when it needs anchored rows or sections. The adapter re-exports shared components and adds search-anchor behavior; it does not define another visual system.
+
+Mail layout is a device preference owned by `features/settings/domain/mail-layout-setting.ts`. Two panels is the default. One panel reuses the existing mailbox and All inboxes list/detail paths, with selection kept in the route. Narrow screens always show one panel. Shared `MailListRowDetails` owns the row's responsive arrangement, type, and truncation. Wide rows align sender, address, subject, labels, metadata, and date in six columns, including when optional content is absent. Rows fill the list width with square corners and subtle separators. `mailListRowParts` owns the interactive row recipes. App code supplies formatted content and metadata slots. The virtualizer measures rendered row height and restores scroll and focus after a hidden list reappears at another width.
 
 ## Appearance and layout
 
@@ -62,7 +68,7 @@ Do not create a variant just to encode a feature name, another hex value, or one
 
 ### Type
 
-Use the custom type scale on semantic HTML or the shared text components. Direct semantic headings with type utilities are supported; wrapping every text node in `Text` is unnecessary.
+Use shared `Text` props for repeated product headings and text treatments. Specialized semantic HTML can use the same custom type scale directly. Wrapping every text node in `Text` is unnecessary.
 
 | Utility           | Size | Use                                    |
 | ----------------- | ---- | -------------------------------------- |
@@ -77,7 +83,7 @@ Use the custom type scale on semantic HTML or the shared text components. Direct
 | `text-caption`    | 12px | Metadata                               |
 | `text-micro`      | 11px | Small labels and pills                 |
 
-The type tokens include line heights and heading tracking. Prefer those defaults before adding leading or tracking. `font-sans` uses Geist and `font-mono` uses Geist Mono. New scale steps must also be registered in `lib/cn.ts` so text colors do not evict font sizes during merging.
+The type tokens include line heights and heading tracking. Prefer those defaults before adding leading or tracking. `font-sans` uses self-hosted Geist and `font-mono` uses self-hosted Geist Mono in web and desktop. Compact workspace headings use 16px, dense UI uses 13px, and metadata uses 12px. Use medium weight for headings and row labels, regular weight for supporting text, and semantic colors to distinguish their roles. Truncate workspace and row titles to one line when space is limited. Help and instructions wrap normally, with 20px line height for settings descriptions. New scale steps must also be registered in `lib/cn.ts` so text colors do not evict font sizes during merging.
 
 ### Colors
 
@@ -87,10 +93,10 @@ The type tokens include line heights and heading tracking. Prefer those defaults
 | Raised workspace and panels | `bg-raised`, `bg-surface` |
 | Cards and popovers | `card`, `card-fg`, `popover`, `popover-fg` |
 | Fields and interaction ladder | `input`, `control`, `control-hover`, `control-active` |
-| Main action | `primary`, `primary-fg` |
+| Main action | `primary`, `primary-hover`, `primary-active`, `primary-fg` |
 | Secondary action | `secondary`, `secondary-hover`, `secondary-active`, `secondary-fg` |
 | Muted content and menu highlights | `muted`, `muted-fg`, `accent`, `accent-fg` |
-| State | `success`, `warning`, `destructive`, with their foreground pairs |
+| State | `success`, `warning`, `destructive`, with their foreground pairs; destructive actions also use `destructive-hover` and `destructive-active` |
 | Edges and focus | `border`, `border-strong`, `ring` |
 | Categorical colors | `q-gray`, `q-blue`, `q-cyan`, `q-green`, `q-yellow`, `q-orange`, `q-red`, `q-pink`, `q-purple` |
 
@@ -106,9 +112,9 @@ App themes are defined in `APP_THEMES` in `lib/brand-themes.ts`, separately from
 
 Spacing uses the existing Tailwind scale with a 4px base, including half steps. There is no separate named spacing scale to invent. Repeated settings and workspace spacing belongs in those shared layouts. Unique viewport constraints and measured positions may use layout values without becoming global tokens.
 
-Workspace panels default to a 6px outer gutter below the desktop breakpoint and 8px on desktop. Themes can adjust these gutters and settings row padding through shared tokens. `WorkspaceSection` owns the gutter for both full-page panels and grid cells. A layout wrapper that positions adjacent panels, including docked chat, imports `workspaceGutterClassName` from the same module and uses `--workspace-gutter`. Do not add another gutter between a trailing sidebar and the preceding panel's existing margin. Settings, Labels, Snippets and their loading states use the shared tokens.
+Workspace panels are edge to edge below the desktop breakpoint, with no outer gutter, border, rounding, or shadow. Desktop panels keep an 8px gutter and their existing frame. Themes can adjust desktop gutters and settings row padding through shared tokens. `WorkspaceSection` owns the gutter for both full-page panels and grid cells. A layout wrapper that positions adjacent panels, including docked chat, imports `workspaceGutterClassName` from the same module and uses `--workspace-gutter`. Do not add another gutter between a trailing sidebar and the preceding panel's existing margin. Settings, Labels, Snippets and their loading states use the shared tokens. Internal cards and controls keep their own borders and rounding.
 
-The default radius ladder is `xs` 8px, `sm` 10px, `md` 12px, `lg` 14px, and `xl` 16px. The ladder follows the active theme's base radius. Larger existing steps remain available for intentionally larger shells. Controls own their radii; callers should not make the same checkbox rounder in one toolbar. Circular shapes can use `rounded-full`.
+The default radius ladder is `xs` 8px, `sm` 10px, `md` 12px, `lg` 14px, and `xl` 16px. The ladder follows the active theme's base radius. Larger existing steps remain available for intentionally larger shells. Controls own their radii. Supported browsers apply the existing superellipse corner shaping globally, and `squircle` can reassert it within a local override.
 
 Use `shadow-surface` for the existing workspace treatment and `shadow-elevation` where that elevated treatment is established. Ordinary component shadows are selected inside their implementation.
 

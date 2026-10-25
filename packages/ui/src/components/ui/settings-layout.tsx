@@ -1,11 +1,12 @@
 "use client";
 
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { cva } from "class-variance-authority";
 import type { ReactNode, Ref } from "react";
 
 import { cn } from "../../lib/cn";
+import { Icon } from "./icon";
+import { Text } from "./text";
 
 export const settingsSurfaceVariants = cva("", {
   variants: {
@@ -31,8 +32,8 @@ export const settingsSurfaceVariants = cva("", {
       page: "@container space-y-8",
       rowShell:
         "squircle relative flex w-full items-center gap-4 px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
-      title: "text-body-sm font-normal text-fg",
-      value: "text-caption/4 text-muted-fg",
+      title: "truncate text-body-sm font-medium text-fg",
+      value: "text-body-sm/5 text-muted-fg",
     },
   },
 });
@@ -49,11 +50,11 @@ export const SettingsPageHeader = ({
   <div className="@container">
     <header className="flex flex-col gap-3 @md:flex-row @md:items-end @md:justify-between">
       <div className="min-w-0">
-        <h1 className="font-sans text-title-sm font-normal tracking-tight text-fg">
+        <Text as="h1" size="lg" truncate weight="medium">
           {title}
-        </h1>
+        </Text>
         {children !== undefined && children !== null ? (
-          <div className="mt-2 max-w-2xl text-body/6 text-muted-fg">
+          <div className="mt-2 max-w-2xl text-body-sm/5 text-muted-fg">
             {children}
           </div>
         ) : null}
@@ -81,10 +82,12 @@ export const SettingsSectionLayout = ({
       (description !== undefined && description !== null)) && (
       <div>
         {(title ?? "") === "" ? null : (
-          <h2 className="text-body font-normal text-fg">{title}</h2>
+          <Text as="h2" size="sm" truncate weight="medium">
+            {title}
+          </Text>
         )}
         {description !== undefined && description !== null ? (
-          <div className="mt-1 max-w-3xl text-body/6 text-muted-fg">
+          <div className="mt-1 max-w-3xl text-body-sm/5 text-muted-fg">
             {description}
           </div>
         ) : null}
@@ -105,7 +108,7 @@ export const SettingsCard = ({
 }) => (
   <div
     className={cn(
-      "@container overflow-hidden rounded-lg border border-border bg-bg-raised/60 squircle",
+      "@container overflow-hidden rounded-lg border border-border bg-bg-surface squircle",
       {
         "flex min-h-15 items-center justify-between gap-4 px-4 py-(--settings-row-padding) @md:px-6":
           variant === "error",
@@ -276,7 +279,7 @@ export const SettingsNavigationRow = ({
   <button
     className={cn(
       settingsSurfaceVariants({ variant: "rowShell" }),
-      "group border border-transparent text-left transition-colors squircle first:rounded-t-lg last:rounded-b-lg hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none focus-visible:ring-inset",
+      "group border border-transparent text-left transition-colors squircle first:rounded-t-lg last:rounded-b-lg hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none focus-visible:ring-inset",
       { "pointer-events-none": disabled }
     )}
     disabled={disabled}
@@ -296,7 +299,12 @@ export const SettingsNavigationRow = ({
       </div>
     ) : null}
     <span className="min-w-0 flex-1">
-      <span className="block truncate text-body-sm font-normal text-fg">
+      <span
+        className={cn(
+          "block truncate",
+          settingsSurfaceVariants({ variant: "title" })
+        )}
+      >
         {title}
       </span>
       <span
@@ -313,9 +321,10 @@ export const SettingsNavigationRow = ({
         {meta}
       </span>
     ) : null}
-    <HugeiconsIcon
+    <Icon
       aria-hidden
-      className="size-4 shrink-0 text-muted-fg transition-transform group-hover:translate-x-0.5 group-hover:text-fg"
+      tone="muted"
+      className="group-hover:translate-x-0.5 group-hover:text-fg"
       icon={ArrowRight01Icon}
     />
   </button>

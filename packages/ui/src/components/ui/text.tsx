@@ -17,11 +17,16 @@ const textVariants = cva("", {
       caption: "text-caption",
       lg: "text-body-lg",
       micro: "text-micro",
+      sm: "text-body-sm",
+      title: "text-title-sm",
     },
     tone: {
       default: "text-fg",
       destructive: "text-destructive",
       muted: "text-muted-fg",
+    },
+    truncate: {
+      true: "truncate",
     },
     weight: {
       medium: "font-medium",
@@ -35,14 +40,15 @@ export const Text = ({
   className,
   size,
   tone,
+  truncate,
   weight,
   ...props
 }: ComponentPropsWithoutRef<"p"> &
   VariantProps<typeof textVariants> & {
-    as?: "div" | "p" | "span";
+    as?: "div" | "h1" | "h2" | "h3" | "p" | "span";
   }) => (
   <Tag
-    className={cn(textVariants({ size, tone, weight }), className)}
+    className={cn(textVariants({ size, tone, truncate, weight }), className)}
     {...props}
   />
 );

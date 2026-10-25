@@ -6,7 +6,6 @@ import {
   RefreshIcon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
@@ -56,6 +55,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Pill } from "@quieter/ui/pill";
@@ -69,6 +69,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -810,13 +811,19 @@ const CalendarWorkspaceContent = ({
           title="Calendar"
         />
         <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
-          <h2 className="min-w-0 flex-1 basis-32 text-title-sm font-medium sm:basis-auto">
+          <Text
+            as="h2"
+            className="min-w-0 flex-1 basis-32 sm:basis-auto"
+            size="lg"
+            truncate
+            weight="medium"
+          >
             {new Intl.DateTimeFormat(undefined, {
               month: "long",
               timeZone: "UTC",
               year: "numeric",
             }).format(new Date(`${date}T12:00:00Z`))}
-          </h2>
+          </Text>
           <div className="flex items-center gap-1">
             <IconButtonTooltip label="Previous date range">
               <Button
@@ -840,7 +847,7 @@ const CalendarWorkspaceContent = ({
                 size="icon-sm"
                 variant="ghost"
               >
-                <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+                <Icon aria-hidden icon={ArrowLeft01Icon} />
               </Button>
             </IconButtonTooltip>
             <IconButtonTooltip label="Next date range">
@@ -865,7 +872,7 @@ const CalendarWorkspaceContent = ({
                 size="icon-sm"
                 variant="ghost"
               >
-                <HugeiconsIcon aria-hidden icon={ArrowRight01Icon} />
+                <Icon aria-hidden icon={ArrowRight01Icon} />
               </Button>
             </IconButtonTooltip>
           </div>
@@ -945,7 +952,7 @@ const CalendarWorkspaceContent = ({
                   />
                 }
               >
-                <HugeiconsIcon aria-hidden icon={Search01Icon} />
+                <Icon aria-hidden icon={Search01Icon} />
               </PopoverTrigger>
             </IconButtonTooltip>
             <PopoverContent align="end">
@@ -974,7 +981,7 @@ const CalendarWorkspaceContent = ({
               size="icon-sm"
               variant="ghost"
             >
-              <HugeiconsIcon aria-hidden icon={RefreshIcon} />
+              <Icon aria-hidden icon={RefreshIcon} />
             </Button>
           </IconButtonTooltip>
           {!preview && !online ? (

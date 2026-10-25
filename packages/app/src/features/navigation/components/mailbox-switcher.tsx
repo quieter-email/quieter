@@ -24,13 +24,13 @@ import {
   Mail01Icon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   appEaseOut,
   appMotionDuration,
 } from "@quieter/app/features/motion/app-motion";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
@@ -482,11 +482,7 @@ const MailboxTeam = ({
                   ease: appEaseOut,
                 }}
               >
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-3"
-                  icon={ArrowRight01Icon}
-                />
+                <Icon aria-hidden size={12} icon={ArrowRight01Icon} />
               </m.span>
               <span className="min-w-0 flex-1 truncate text-caption text-muted-fg">
                 {group.name}
@@ -509,7 +505,7 @@ const MailboxTeam = ({
                   to="/settings"
                   variant="ghost"
                 >
-                  <HugeiconsIcon aria-hidden icon={Settings01Icon} />
+                  <Icon aria-hidden icon={Settings01Icon} />
                 </LinkButton>
               </IconButtonTooltip>
             )}
@@ -895,7 +891,7 @@ export const MailboxSwitcherDropdown = ({
                     }}
                     variant="ghost"
                   >
-                    <HugeiconsIcon aria-hidden icon={Mail01Icon} />
+                    <Icon aria-hidden icon={Mail01Icon} />
                     All inboxes
                   </Button>
                 ) : null}
@@ -968,7 +964,7 @@ export const MailboxSwitcherDropdown = ({
                                           <button
                                             aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
                                             // oxlint-disable-next-line shadcn/no-arbitrary-values -- Explicit transition properties for the reconnect affordance.
-                                            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-1.5 text-caption font-medium text-destructive transition-[color,transform] duration-100 hover:text-destructive/80 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:scale-100"
+                                            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-1.5 text-caption font-medium text-destructive transition-[color,transform] duration-100 hover:text-destructive/80 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:scale-100"
                                             data-mailbox-switcher-navigation-action
                                             disabled={isReconnecting}
                                             onClick={(event) => {
@@ -977,11 +973,14 @@ export const MailboxSwitcherDropdown = ({
                                             }}
                                             type="button"
                                           >
-                                            <HugeiconsIcon
+                                            <Icon
                                               aria-hidden
-                                              className={cn("size-3.5", {
-                                                "animate-spin": isReconnecting,
-                                              })}
+                                              size={14}
+                                              animation={
+                                                isReconnecting
+                                                  ? "spin"
+                                                  : undefined
+                                              }
                                               icon={
                                                 isReconnecting
                                                   ? Loading03Icon
@@ -1040,11 +1039,7 @@ export const MailboxSwitcherDropdown = ({
                       variant="ghost"
                     >
                       Manage mailboxes
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-4"
-                        icon={Settings01Icon}
-                      />
+                      <Icon aria-hidden icon={Settings01Icon} />
                     </LinkButton>
                   </div>
                 )}
@@ -1081,10 +1076,7 @@ export const MailboxSwitcherDropdown = ({
                       aria-hidden
                       className="flex min-h-7 items-center gap-2 px-2 py-1 text-caption text-muted-fg"
                     >
-                      <HugeiconsIcon
-                        className="size-3"
-                        icon={ArrowRight01Icon}
-                      />
+                      <Icon size={12} icon={ArrowRight01Icon} />
                       {group?.name}
                     </div>
                   );

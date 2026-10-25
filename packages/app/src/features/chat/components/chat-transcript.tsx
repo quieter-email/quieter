@@ -1,11 +1,11 @@
 "use client";
 
 import { Alert02Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { ChatMessage } from "@quieter/app/features/chat/components/chat-message";
 import type { ChatToolApproval } from "@quieter/app/features/chat/domain/chat-tools";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
@@ -103,9 +103,10 @@ export const ChatTranscript = ({
           ))}
           {errorMessage === undefined || errorMessage === "" ? null : (
             <div className="flex items-start gap-2" role="alert">
-              <HugeiconsIcon
+              <Icon
                 aria-hidden
-                className="mt-0.5 size-4 shrink-0 text-destructive"
+                tone="destructive"
+                className="mt-0.5"
                 icon={Alert02Icon}
               />
               <p className="min-w-0 flex-1 text-body-sm text-destructive">
@@ -139,11 +140,7 @@ export const ChatTranscript = ({
               type="button"
               variant="outline"
             >
-              <HugeiconsIcon
-                aria-hidden
-                className="size-3.5"
-                icon={ArrowDown01Icon}
-              />
+              <Icon aria-hidden size={14} icon={ArrowDown01Icon} />
             </Button>
           </IconButtonTooltip>
         </div>

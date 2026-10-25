@@ -9,7 +9,6 @@ import {
   Loading03Icon,
   MailSend02Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
 import {
   ComposeEditor,
@@ -57,6 +56,7 @@ import {
   ComposerFrame,
 } from "@quieter/ui/composer-chrome";
 import { Field, FieldControl, FieldError, FieldLabel } from "@quieter/ui/field";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
   Popover,
@@ -713,7 +713,7 @@ const ReadyComposeSurface = ({
                                           : (senderEmail ??
                                             "Choose a sending address")}
                                       </span>
-                                      <HugeiconsIcon
+                                      <Icon
                                         aria-hidden
                                         data-icon="inline-end"
                                         icon={ArrowDown01Icon}
@@ -1040,9 +1040,9 @@ const ReadyComposeSurface = ({
                             className="flex max-w-full min-w-0 items-center gap-2 rounded-lg border border-border bg-control px-2 py-1 text-body-sm"
                             key={attachment.id}
                           >
-                            <HugeiconsIcon
+                            <Icon
                               aria-hidden
-                              className="size-4 shrink-0"
+
                               icon={Attachment01Icon}
                             />
                             <span className="truncate">{attachment.name}</span>
@@ -1065,7 +1065,7 @@ const ReadyComposeSurface = ({
                                 type="button"
                                 variant="ghost"
                               >
-                                <HugeiconsIcon icon={Cancel01Icon} />
+                                <Icon icon={Cancel01Icon} />
                               </Button>
                             </IconButtonTooltip>
                           </li>
@@ -1092,12 +1092,9 @@ const ReadyComposeSurface = ({
                           variant="primary"
                         >
                           {state.draft.saveStatus === "sending" ? (
-                            <HugeiconsIcon
-                              className="animate-spin"
-                              icon={Loading03Icon}
-                            />
+                            <Icon animation="spin" icon={Loading03Icon} />
                           ) : (
-                            <HugeiconsIcon icon={MailSend02Icon} />
+                            <Icon icon={MailSend02Icon} />
                           )}
                           {state.draft.sendUncertain === true
                             ? "Check delivery"
@@ -1119,7 +1116,7 @@ const ReadyComposeSurface = ({
                               size="icon"
                               type="button"
                             >
-                              <HugeiconsIcon icon={Attachment01Icon} />
+                              <Icon icon={Attachment01Icon} />
                             </ToolbarButton>
                           </IconButtonTooltip>
                           <ComposeEditorDictationButton />
@@ -1147,7 +1144,7 @@ const ReadyComposeSurface = ({
                               size="icon"
                               type="button"
                             >
-                              <HugeiconsIcon icon={Delete02Icon} />
+                              <Icon icon={Delete02Icon} />
                             </ToolbarButton>
                           </IconButtonTooltip>
                           <IconButtonTooltip label="Close composer">
@@ -1165,7 +1162,7 @@ const ReadyComposeSurface = ({
                               size="icon"
                               type="button"
                             >
-                              <HugeiconsIcon icon={Cancel01Icon} />
+                              <Icon icon={Cancel01Icon} />
                             </ToolbarButton>
                           </IconButtonTooltip>
                         </>
@@ -1199,10 +1196,7 @@ const ReadyComposeSurface = ({
               role="alert"
               tone="destructive"
             >
-              <HugeiconsIcon
-                className="mt-0.5 mr-2 size-4 shrink-0"
-                icon={AlertCircleIcon}
-              />
+              <Icon className="mt-0.5 mr-2" icon={AlertCircleIcon} />
               <span className="min-w-0 wrap-break-word">
                 {state.draft.errorMessage}
                 {compose.canSaveDraftCopy ? (
@@ -1396,11 +1390,7 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
           </>
         ) : (
           <>
-            <HugeiconsIcon
-              aria-hidden
-              className="animate-spin"
-              icon={Loading03Icon}
-            />
+            <Icon aria-hidden animation="spin" icon={Loading03Icon} />
             <Text>Loading draft…</Text>
           </>
         )}

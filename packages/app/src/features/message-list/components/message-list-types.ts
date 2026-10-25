@@ -32,6 +32,7 @@ export type MessageListMailboxContext = {
 };
 
 export type MessageListProps = {
+  wideCompactRows?: boolean;
   activeMailbox: MailboxCategory;
   activeMessageId?: string | null;
   mailboxId: string;

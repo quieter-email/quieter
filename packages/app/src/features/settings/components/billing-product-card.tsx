@@ -4,7 +4,6 @@ import {
   CheckmarkCircle02Icon,
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   SettingsCard,
   settingsSurfaceVariants,
@@ -14,6 +13,7 @@ import { BILLING_PRODUCTS, GMAIL_MAILBOX_LIMITS } from "@quieter/billing/plans";
 import type { BillingProductId } from "@quieter/billing/plans";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { Pill } from "@quieter/ui/pill";
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
@@ -52,11 +52,7 @@ export const BillingProductCard = ({
       variant={product.highlight ? "default" : "outline"}
     >
       {isStartingCheckout && (
-        <HugeiconsIcon
-          aria-hidden
-          className="size-4 animate-spin"
-          icon={Loading03Icon}
-        />
+        <Icon aria-hidden animation="spin" icon={Loading03Icon} />
       )}
       {(() => {
         if (isCurrent) {
@@ -130,9 +126,10 @@ export const BillingProductCard = ({
       <ul className="mt-4 flex flex-col gap-2 text-body text-muted-fg">
         {product.features.map((feature) => (
           <li className="flex items-start gap-2" key={feature}>
-            <HugeiconsIcon
+            <Icon
               aria-hidden
-              className="mt-0.5 size-4 shrink-0 text-fg/60"
+              tone="subtle"
+              className="mt-0.5"
               icon={CheckmarkCircle02Icon}
             />
             <span>{feature}</span>

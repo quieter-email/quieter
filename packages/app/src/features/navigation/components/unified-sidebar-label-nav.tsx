@@ -1,7 +1,6 @@
 "use client";
 
 import { MoreVerticalIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { useUnifiedInboxPreferences } from "@quieter/app/features/mailbox/domain/unified-inbox";
 import {
   SIDEBAR_LABEL_VISIBILITY_EVENT,
@@ -29,6 +28,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { useQueries } from "@tanstack/react-query";
 import type { ComponentProps } from "react";
@@ -138,11 +138,7 @@ export const UnifiedSidebarLabelNav = ({
                 aria-label="Labels options"
                 render={<Button size="icon-xs" variant="ghost" />}
               >
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-3.5"
-                  icon={MoreVerticalIcon}
-                />
+                <Icon aria-hidden size={14} icon={MoreVerticalIcon} />
               </DropdownMenuTrigger>
             </IconButtonTooltip>
             <DropdownMenuContent align="end" size="compact">

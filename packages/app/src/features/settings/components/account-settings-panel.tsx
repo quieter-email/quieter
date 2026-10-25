@@ -7,7 +7,6 @@ import {
   Key02Icon,
   Logout03Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { setDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import { setManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
 import { authClient } from "@quieter/app/lib/auth";
@@ -30,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
 import { SpinnerIcon } from "@quieter/ui/spinner-icon";
 import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
@@ -129,7 +129,7 @@ const renderPasskeyList = (
           {removingPasskeyId === passkey.id ? (
             <SpinnerIcon />
           ) : (
-            <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+            <Icon aria-hidden icon={Delete02Icon} />
           )}
           Remove
         </Button>
@@ -252,7 +252,7 @@ const AccountNameSettings = ({
             {updateUserMutation.isPending ? (
               <SpinnerIcon />
             ) : (
-              <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+              <Icon aria-hidden icon={Edit01Icon} />
             )}
             Save
           </Button>
@@ -385,7 +385,7 @@ const AccountEmailSettings = ({ currentEmail }: { currentEmail: string }) => {
             {changeEmailMutation.isPending ? (
               <SpinnerIcon />
             ) : (
-              <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+              <Icon aria-hidden icon={Edit01Icon} />
             )}
             Save
           </Button>
@@ -566,11 +566,7 @@ const PasskeySettings = ({
                 {addPasskeyMutation.isPending ? (
                   <SpinnerIcon />
                 ) : (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Key02Icon}
-                  />
+                  <Icon aria-hidden icon={Key02Icon} />
                 )}
                 Add passkey
               </Button>
@@ -663,7 +659,7 @@ const DeleteAccountDialog = () => {
         size="sm"
         variant="destructive"
       >
-        <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+        <Icon aria-hidden icon={Delete02Icon} />
         Delete account
       </Button>
 
@@ -735,11 +731,7 @@ const DeleteAccountDialog = () => {
                 {deleteAccountMutation.isPending ? (
                   <SpinnerIcon />
                 ) : (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Delete02Icon}
-                  />
+                  <Icon aria-hidden icon={Delete02Icon} />
                 )}
                 Delete
               </Button>
@@ -873,11 +865,7 @@ export const AccountSettingsPanel = ({
                 {signOutMutation.isPending ? (
                   <SpinnerIcon />
                 ) : (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Logout03Icon}
-                  />
+                  <Icon aria-hidden icon={Logout03Icon} />
                 )}
                 Sign out
               </Button>

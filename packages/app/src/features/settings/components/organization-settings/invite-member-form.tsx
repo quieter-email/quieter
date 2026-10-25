@@ -1,7 +1,6 @@
 "use client";
 
 import { Loading03Icon, UserAdd01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { getFullOrganizationQueryKey } from "@quieter/app/features/settings/components/organization-settings/domain";
 import type { FullOrganization } from "@quieter/app/features/settings/components/organization-settings/domain";
 import { settingsSurfaceVariants } from "@quieter/app/features/settings/components/settings-layout";
@@ -9,6 +8,7 @@ import { authClient } from "@quieter/app/lib/auth";
 import { getErrorMessage } from "@quieter/app/lib/orpc-errors";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
@@ -134,13 +134,9 @@ export const InviteMemberForm = ({
         type="submit"
       >
         {inviteMemberMutation.isPending ? (
-          <HugeiconsIcon
-            aria-hidden
-            className="size-4 animate-spin"
-            icon={Loading03Icon}
-          />
+          <Icon aria-hidden animation="spin" icon={Loading03Icon} />
         ) : (
-          <HugeiconsIcon aria-hidden className="size-4" icon={UserAdd01Icon} />
+          <Icon aria-hidden icon={UserAdd01Icon} />
         )}
         Invite
       </Button>

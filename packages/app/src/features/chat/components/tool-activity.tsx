@@ -4,7 +4,6 @@ import {
   CheckmarkCircle02Icon,
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   approvalRequiredToolNames,
   isCalendarWriteToolName,
@@ -22,6 +21,7 @@ import {
   CollapsiblePanel,
   CollapsibleTrigger,
 } from "@quieter/ui/collapsible";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 
 const labels: Record<string, { complete: string; pending: string }> = {
@@ -270,12 +270,11 @@ export const ToolActivity = ({
     >
       <div className="flex min-h-7 items-center gap-2 text-caption">
         {awaitingApproval ? null : (
-          <HugeiconsIcon
+          <Icon
             aria-hidden
-            className={cn("size-3.5 shrink-0 text-muted-fg", {
-              "animate-spin motion-reduce:animate-none": pending,
-              "text-destructive": failed,
-            })}
+            animation={pending ? "spin" : undefined}
+            size={14}
+            tone={failed ? "destructive" : "muted"}
             icon={icon}
           />
         )}
@@ -291,7 +290,7 @@ export const ToolActivity = ({
             aria-label="Action details"
             render={<Button size="icon-xs" variant="ghost" />}
           >
-            <HugeiconsIcon aria-hidden icon={ArrowDown01Icon} />
+            <Icon aria-hidden icon={ArrowDown01Icon} />
           </CollapsibleTrigger>
         </IconButtonTooltip>
       </div>

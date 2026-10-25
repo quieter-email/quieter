@@ -1,9 +1,9 @@
 "use client";
 
 import { LayoutRightIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { createContext, use } from "react";
 
@@ -52,7 +52,7 @@ export const AssistantSidebarTrigger = ({
           type="button"
           variant="toolbar"
         >
-          <HugeiconsIcon aria-hidden icon={LayoutRightIcon} />
+          <Icon aria-hidden icon={LayoutRightIcon} />
         </Button>
       </IconButtonTooltip>
     </div>

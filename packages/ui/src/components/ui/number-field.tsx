@@ -36,7 +36,7 @@ export const NumberFieldInput = ({
 }: ComponentPropsWithoutRef<typeof NumberFieldPrimitive.Input>) => (
   <NumberFieldPrimitive.Input
     className={cn(
-      "h-8 w-full border-0 bg-transparent px-3 text-center text-body text-fg shadow-none transition-colors duration-150 ease-out placeholder:text-muted-fg read-only:bg-transparent focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive/45",
+      "h-8 w-full border-0 bg-transparent px-3 text-center text-body text-fg shadow-none transition-colors duration-150 ease-out placeholder:text-muted-fg read-only:bg-transparent focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive",
       className
     )}
     {...props}
@@ -44,7 +44,7 @@ export const NumberFieldInput = ({
 );
 
 const numberFieldButtonVariants = cva(
-  "flex size-8 shrink-0 items-center justify-center bg-control text-muted-fg transition-transform duration-100 ease-out hover:bg-control-hover hover:text-fg focus-visible:bg-control-hover focus-visible:text-fg focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] active:bg-control-active disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100",
+  "flex size-8 shrink-0 items-center justify-center bg-control text-muted-fg transition-transform duration-100 ease-out hover:bg-control-hover hover:text-fg focus-visible:bg-control-hover focus-visible:text-fg focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised active:scale-[0.97] active:bg-control-active disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100",
   {
     variants: {
       side: {
