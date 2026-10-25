@@ -17,6 +17,12 @@ import {
 } from "./input-chrome";
 
 export const inputVariants = cva(inputControlClassName, {
+  compoundVariants: [
+    {
+      chrome: "inline",
+      className: "h-5 min-w-0 p-0 text-body",
+    },
+  ],
   defaultVariants: {
     chrome: "default",
     size: "default",
@@ -27,6 +33,8 @@ export const inputVariants = cva(inputControlClassName, {
       default:
         "squircle rounded-md border border-border bg-input shadow-none read-only:cursor-default read-only:bg-input",
       ghost: "border-0 bg-transparent shadow-none read-only:bg-transparent",
+      inline:
+        "rounded-none border-0 bg-transparent shadow-none read-only:bg-transparent",
     },
     size: inputControlSizeVariants,
   },

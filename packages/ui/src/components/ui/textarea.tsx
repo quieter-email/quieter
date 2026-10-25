@@ -16,6 +16,9 @@ const textareaVariants = cva(
       variant: "default",
     },
     variants: {
+      autoSize: {
+        true: "[field-sizing:content] max-h-96 min-h-40 resize-none overflow-y-auto",
+      },
       variant: {
         // Auto-growing composer field, e.g. the chat input.
         composer: composerStyles,
@@ -29,13 +32,14 @@ const textareaVariants = cva(
 );
 
 export const Textarea = ({
+  autoSize,
   className,
   variant,
   ...props
 }: ComponentPropsWithRef<"textarea"> &
   VariantProps<typeof textareaVariants>) => (
   <textarea
-    className={cn(textareaVariants({ variant }), className)}
+    className={cn(textareaVariants({ autoSize, variant }), className)}
     {...props}
   />
 );
