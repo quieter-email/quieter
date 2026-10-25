@@ -165,7 +165,11 @@ export const containsProhibitedMemorySecret = (value: string) => {
   if (/\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/u.test(value.replaceAll(" ", ""))) {
     return true;
   }
-  return [...value.matchAll(/(?:\d[ -]?){13,19}/gu)].some((match) => {
+  const paymentText = value.replaceAll(
+    /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/giu,
+    " "
+  );
+  return [...paymentText.matchAll(/(?:\d[ -]?){13,19}/gu)].some((match) => {
     const digits = match[0].replaceAll(/\D/gu, "");
     return (
       digits.length >= 13 && digits.length <= 19 && passesLuhnCheck(digits)

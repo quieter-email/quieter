@@ -1,6 +1,6 @@
 import type { ListMessagesPageResult } from "@quieter/app/lib/mail";
 import { connectMailUpdates } from "@quieter/app/lib/mail-updates";
-import { rpc } from "@quieter/app/lib/orpc";
+import { orpc, rpc } from "@quieter/app/lib/orpc";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
   afterEach,
@@ -46,11 +46,12 @@ class Socket extends EventTarget {
     mailboxId = "mailbox",
     eventId = crypto.randomUUID(),
     revision?: string,
-    type = "mailbox.changed"
+    type = "mailbox.changed",
+    threadIds?: string[]
   ) {
     this.dispatchEvent(
       new MessageEvent("message", {
-        data: JSON.stringify({ eventId, mailboxId, revision, type }),
+        data: JSON.stringify({ eventId, mailboxId, revision, threadIds, type }),
       })
     );
   }
@@ -307,6 +308,71 @@ describe("mail connection lifecycle", () => {
     expect(otherCodes.getCurrentResult().data).toBe("other previous");
     unsubscribeCodes();
     unsubscribeOtherCodes();
+    client.clear();
+  });
+
+  test("thread notifications refresh action results without changing other threads or mailboxes", async () => {
+    const client = new QueryClient();
+    let result = "initial";
+    const observers = [
+      { mailboxId: "mailbox", threadId: "first" },
+      { mailboxId: "mailbox", threadId: "second" },
+      { mailboxId: "mailbox", threadId: "unmentioned" },
+      { mailboxId: "other", threadId: "first" },
+    ].map(
+      (input) =>
+        new QueryObserver(client, {
+          initialData: result,
+          queryFn: () => result,
+          queryKey: orpc.mailAgent.threadResults.key({ input, type: "query" }),
+          staleTime: Infinity,
+        })
+    );
+    const unsubscribes = observers.map((observer) =>
+      observer.subscribe(() => {})
+    );
+    dispose = connectMailUpdates(client);
+    await vi.advanceTimersByTimeAsync(0);
+    const [socket] = Socket.instances;
+    socket.open();
+    await vi.advanceTimersByTimeAsync(1000);
+    result = "queued";
+    socket.notify(
+      "mailbox",
+      crypto.randomUUID(),
+      undefined,
+      "details.changed",
+      ["first"]
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(observers[0]?.getCurrentResult().data).toBe("queued");
+    expect(observers[1]?.getCurrentResult().data).toBe("initial");
+    expect(observers[2]?.getCurrentResult().data).toBe("initial");
+    expect(observers[3]?.getCurrentResult().data).toBe("initial");
+
+    result = "completed";
+    socket.notify(
+      "mailbox",
+      crypto.randomUUID(),
+      undefined,
+      "details.changed",
+      ["first"]
+    );
+    socket.notify(
+      "mailbox",
+      crypto.randomUUID(),
+      undefined,
+      "details.changed",
+      ["second"]
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(observers[0]?.getCurrentResult().data).toBe("completed");
+    expect(observers[1]?.getCurrentResult().data).toBe("completed");
+    expect(observers[2]?.getCurrentResult().data).toBe("initial");
+    expect(observers[3]?.getCurrentResult().data).toBe("initial");
+    for (const unsubscribe of unsubscribes) {
+      unsubscribe();
+    }
     client.clear();
   });
 

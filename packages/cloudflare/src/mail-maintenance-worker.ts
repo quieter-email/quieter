@@ -4,6 +4,7 @@ import { purgeExpiredAiGeneratedMailBodies } from "@quieter/orpc/ai-mail-authors
 import { processPendingAiMemoryEvents } from "@quieter/orpc/ai-memory";
 import { processPendingMailMemoryBootstrap } from "@quieter/orpc/ai-memory-capture";
 import { cleanupGmailComposeOperations } from "@quieter/orpc/gmail-compose-retention";
+import { drainMailAgentRuns } from "@quieter/orpc/mail-agent";
 import { processPendingMailImportance } from "@quieter/orpc/mail-importance";
 import { recoverMailSends } from "@quieter/orpc/mail-send";
 import { retryPendingManagedVerificationCodes } from "@quieter/orpc/managed-mail/ingestion";
@@ -28,6 +29,7 @@ export default withSentryReporting({
           processManagedRuleBackfills(),
           retryPendingManagedVerificationCodes(),
           cleanupMailboxVerificationCodes(),
+          drainMailAgentRuns({ limit: 2 }),
           processPendingMailImportance({ limit: 20 }),
         ]);
         const failed = results.find((result) => result.status === "rejected");

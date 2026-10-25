@@ -40,6 +40,7 @@ const laterBillingSubscription = alias(
 export const BILLING_USAGE_KINDS = [
   "aiChat",
   "aiMemory",
+  "mailAction",
   "autoLabel",
   "importance",
   "usefulDetails",
@@ -170,6 +171,7 @@ export const getBillingCreditUsage = async (
     when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "importance"))} then 'importance'
     when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "autoLabel"))} then 'autoLabel'
     when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "aiMemory"))} then 'aiMemory'
+    when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "mailAction"))} then 'mailAction'
     when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "usefulDetails"))} then 'usefulDetails'
     when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "verificationCode"))} then 'verificationCode'
     when ${eq(billingCreditUsageEvent.category, "ai")} then 'aiChat'

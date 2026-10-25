@@ -869,6 +869,8 @@ export const createCalendarChatTools = (
   }),
 });
 
+export const personalContextQuerySchema = z.string().trim().min(1).max(500);
+
 const personalContextCursorSchema = z.object({
   afterId: z.string().min(1).max(256),
   startedAt: z.iso.datetime(),
@@ -923,7 +925,7 @@ export const createPersonalContextChatTool = (
         description:
           "Use exactly the previous result's nextCursor for the next page. Omit for the first page.",
       }),
-      query: z.string().trim().min(1).max(500).optional().meta({
+      query: personalContextQuerySchema.optional().meta({
         description:
           "Search for context relevant to a task, person, or topic. Omit to read a complete unfiltered overview. Keep unchanged during pagination.",
       }),

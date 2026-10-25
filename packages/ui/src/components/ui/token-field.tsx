@@ -33,6 +33,7 @@ type TokenFieldProps = {
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
   placeholder?: string;
   ref?: Ref<HTMLDivElement>;
+  size?: "default" | "prompt";
   suggestionsLabel?: string;
   suggestionsSide?: "bottom" | "top";
   tokens: TokenFieldToken[];
@@ -48,7 +49,15 @@ const getTokenClassName = (token: TokenFieldToken) =>
   );
 
 const getTokenSignature = (tokens: TokenFieldToken[]) =>
-  tokens.map((token) => token.text).join("\0");
+  JSON.stringify(
+    tokens.map((token) => [
+      token.text,
+      token.label,
+      token.tone,
+      token.iconSrc,
+      token.iconClassName,
+    ])
+  );
 
 const CARET_MOVE_KEYS = new Set([
   "ArrowDown",
@@ -150,6 +159,7 @@ export const TokenField = ({
   onKeyDown,
   placeholder,
   ref,
+  size = "default",
   suggestionsLabel = "Mentions",
   suggestionsSide = "bottom",
   tokens,
@@ -409,7 +419,10 @@ export const TokenField = ({
         className={cn(
           "w-full break-words whitespace-pre-wrap text-fg outline-none",
           "data-[empty=true]:before:pointer-events-none data-[empty=true]:before:text-muted-fg data-[empty=true]:before:content-[attr(data-placeholder)]",
-          { "cursor-not-allowed opacity-50": disabled },
+          {
+            "cursor-not-allowed opacity-50": disabled,
+            "max-h-72 min-h-32 overflow-y-auto": size === "prompt",
+          },
           className
         )}
         contentEditable={!disabled}

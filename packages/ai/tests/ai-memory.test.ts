@@ -184,6 +184,23 @@ describe("dynamic AI memory", () => {
     ).toBeTruthy();
   });
 
+  test("keeps message identifiers whose numeric fragments resemble a payment number", () => {
+    expect(
+      containsProhibitedMemorySecret("632ab275-ff86-4734-9284-034d733d6f7e")
+    ).toBeFalsy();
+    expect(
+      containsProhibitedMemorySecret(
+        "Message 632ab275-ff86-4734-9284-034d733d6f7e was received."
+      )
+    ).toBeFalsy();
+    expect(containsProhibitedMemorySecret("4242-4242-4242-4242")).toBeTruthy();
+    expect(
+      containsProhibitedMemorySecret(
+        "Message 632ab275-ff86-4734-9284-034d733d6f7e contains card 4242-4242-4242-4242"
+      )
+    ).toBeTruthy();
+  });
+
   test("keeps exact contact scopes distinct and stable across repeated normalization", () => {
     const operation = {
       action: "add" as const,

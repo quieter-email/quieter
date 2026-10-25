@@ -247,7 +247,7 @@ sequenceDiagram
 
 ### 5. Mail maintenance
 
-`infra/mail-maintenance.ts` provisions `MailMaintenance` every minute. Its handler, `packages/cloudflare/src/mail-maintenance-worker.ts`, runs send recovery, storage cleanup, rate-limit cleanup, and managed rule backfills within a request-scoped database client. The local `vp run dev:trigger mail-recovery` command invokes the same maintenance operations. Managed inbox rules remain supported; custom actions are no longer created or executed by the new application.
+`infra/mail-maintenance.ts` provisions `MailMaintenance` every minute. Its handler, `packages/cloudflare/src/mail-maintenance-worker.ts`, runs send recovery, storage cleanup, rate-limit cleanup, managed rule backfills, and reviewed mailbox Actions within a request-scoped database client. The local `vp run dev:trigger mail-recovery` command invokes maintenance operations; `vp run dev:trigger actions` drains one action alone. New actions use the additive `mailboxAgent*` tables and the existing mail/connector adapters. The retired custom graph tables remain rollback data. Connector credentials reach the Worker only through linked SST Secrets.
 
 Organization mailbox cleanup records raw-object cleanup jobs in the same transaction that moves Gmail mailboxes and deletes managed mailboxes. Object deletion runs after commit; failures are reported and retained for maintenance retries. Cleanup workers atomically claim due jobs and preserve objects referenced by managed messages, API messages, or send reservations, including legacy S3 message references.
 

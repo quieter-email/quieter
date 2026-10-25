@@ -27,6 +27,7 @@ export const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
 const permanentGoogleTokenErrors = new Set(["invalid_grant", "invalid_token"]);
 const permanentLinearTokenErrors = new Set(["invalid_grant", "invalid_token"]);
 type ConnectorAuthorizationInput = {
+  retryUnauthorized?: boolean;
   signal?: AbortSignal;
   userId: string;
 } & (
@@ -382,7 +383,11 @@ export const runAuthorizedConnector = async <TValue>(
   try {
     return await runner(accessToken, input.signal);
   } catch (error) {
-    if (!(error instanceof ConnectorHttpError) || error.status !== 401) {
+    if (
+      input.retryUnauthorized === false ||
+      !(error instanceof ConnectorHttpError) ||
+      error.status !== 401
+    ) {
       throw error;
     }
   }
@@ -486,10 +491,12 @@ export const getLinearIdentityFromAccessToken = async (accessToken: string) => {
 
 /** A refreshed token for the caller's own Linear connection, for the MCP client. */
 export const getLinearAccessTokenForUser = async (input: {
+  connectionId?: string;
   userId: string;
   signal?: AbortSignal;
 }) =>
   await getAuthorizedConnectorAccessToken({
+    connectionId: input.connectionId,
     provider: LINEAR_CONNECTOR_PROVIDER,
     signal: input.signal,
     userId: input.userId,
