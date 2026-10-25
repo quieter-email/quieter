@@ -1,4 +1,9 @@
 import { ORPCError } from "@orpc/server";
+import { googleCalendarListEventsInputSchema } from "@quieter/ai/chat-agent";
+import type {
+  GoogleCalendarListEventsInput,
+  GoogleCalendarListEventsResult,
+} from "@quieter/ai/chat-agent";
 import { db } from "@quieter/database/client";
 import { connectorCredential } from "@quieter/database/schema";
 import type { ConnectorProvider } from "@quieter/database/schema";
@@ -113,6 +118,45 @@ const googleCalendarEventListResponseSchema = z.object({
   nextPageToken: z.string().optional(),
 });
 
+const calendarReadDateSchema = z.union([
+  z.object({ date: z.iso.date() }),
+  z.object({
+    dateTime: z.iso.datetime({ offset: true }),
+    timeZone: z.string().optional(),
+  }),
+]);
+
+const calendarReadResponseSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        attendees: z
+          .array(
+            z.object({
+              responseStatus: z
+                .enum(["accepted", "declined", "needsAction", "tentative"])
+                .optional(),
+              self: z.boolean().optional(),
+            })
+          )
+          .optional(),
+        description: z.string().optional(),
+        end: calendarReadDateSchema.optional(),
+        id: z.string().min(1),
+        location: z.string().optional(),
+        start: calendarReadDateSchema.optional(),
+        status: z
+          .enum(["cancelled", "confirmed", "tentative"])
+          .default("confirmed"),
+        summary: z.string().optional(),
+        transparency: z.enum(["opaque", "transparent"]).default("opaque"),
+      })
+    )
+    .default([]),
+  nextPageToken: z.string().optional(),
+  timeZone: z.string().min(1),
+});
+
 const getGoogleCalendarOAuthClient = () => ({
   clientId: requireServerEnv("GOOGLE_CALENDAR_CLIENT_ID"),
   clientSecret: requireServerEnv("GOOGLE_CALENDAR_CLIENT_SECRET"),
@@ -153,11 +197,13 @@ export const normalizeOAuthScope = (scope: string | string[]) =>
   Array.isArray(scope) ? scope.join(" ") : scope;
 
 class ConnectorHttpError extends Error {
+  readonly reason: "invalid_sequence" | undefined;
   readonly status: number;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, reason?: "invalid_sequence") {
     super(message);
     this.name = "ConnectorHttpError";
+    this.reason = reason;
     this.status = status;
   }
 }
@@ -175,10 +221,13 @@ const createGoogleApiError = async (response: Response) => {
       return null;
     }
   })();
-  const message =
-    parsedBody?.error.message ??
-    (body || `Google Calendar request failed with status ${response.status}.`);
-  return new ConnectorHttpError(message, response.status);
+  return new ConnectorHttpError(
+    `Google Calendar request failed with status ${response.status}.`,
+    response.status,
+    parsedBody?.error.message?.startsWith("Invalid sequence value.") === true
+      ? "invalid_sequence"
+      : undefined
+  );
 };
 
 const hasCachedConnectorAccessToken = (record: {
@@ -553,8 +602,7 @@ export const postGoogleCalendarEvent = async (input: {
     if (
       importUid &&
       (error.status === 409 ||
-        (error.status === 400 &&
-          error.message.startsWith("Invalid sequence value.")))
+        (error.status === 400 && error.reason === "invalid_sequence"))
     ) {
       // An invitation can arrive through another client between the lookup and import.
       const existing = await findGoogleCalendarEventByUid({
@@ -744,3 +792,103 @@ export const createGoogleCalendarEventForUser = async (input: {
       };
     }
   );
+
+export const listGoogleCalendarEventsForUser = async (
+  input: GoogleCalendarListEventsInput & {
+    signal?: AbortSignal;
+    userId: string;
+  }
+): Promise<GoogleCalendarListEventsResult> => {
+  const range = googleCalendarListEventsInputSchema.parse(input);
+  input.signal?.throwIfAborted();
+  return await runAuthorizedConnector(
+    {
+      provider: GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
+      signal:
+        input.signal === undefined
+          ? AbortSignal.timeout(20_000)
+          : AbortSignal.any([input.signal, AbortSignal.timeout(20_000)]),
+      userId: input.userId,
+    },
+    async (accessToken, signal) => {
+      const parameters = new URLSearchParams({
+        fields:
+          "timeZone,nextPageToken,items(id,summary,description,location,start,end,status,transparency,attendees(self,responseStatus))",
+        maxAttendees: "1",
+        maxResults: String(range.maxResults),
+        orderBy: "startTime",
+        showDeleted: "false",
+        singleEvents: "true",
+        timeMax: range.timeMax,
+        timeMin: range.timeMin,
+      });
+      if (range.pageToken !== undefined) {
+        parameters.set("pageToken", range.pageToken);
+      }
+      if (range.query !== undefined) {
+        parameters.set("q", range.query);
+      }
+      const response = await fetch(
+        `${GOOGLE_CALENDAR_API_URL}/calendars/primary/events?${parameters}`,
+        { headers: { authorization: `Bearer ${accessToken}` }, signal }
+      );
+      if (!response.ok) {
+        throw await createGoogleApiError(response);
+      }
+      const calendar = calendarReadResponseSchema.parse(await response.json());
+      const fetchedAt = new Date();
+      const events = calendar.items
+        .filter((event) => event.status !== "cancelled")
+        .slice(0, range.maxResults)
+        .flatMap((event) => {
+          if (
+            event.start === undefined ||
+            event.end === undefined ||
+            event.status === "cancelled"
+          ) {
+            return [];
+          }
+          return [
+            {
+              description: event.description?.slice(0, 1000),
+              detailsTruncated:
+                (event.description?.length ?? 0) > 1000 ||
+                (event.location?.length ?? 0) > 300 ||
+                (event.summary?.length ?? 0) > 300,
+              end: event.end,
+              id: event.id,
+              location: event.location?.slice(0, 300),
+              responseStatus: event.attendees?.find(
+                (attendee) => attendee.self === true
+              )?.responseStatus,
+              start: event.start,
+              status: event.status,
+              summary: event.summary?.slice(0, 300),
+              transparency: event.transparency,
+            },
+          ];
+        });
+      return {
+        calendarId: "primary",
+        currentDate: new Intl.DateTimeFormat("en-CA", {
+          day: "2-digit",
+          month: "2-digit",
+          timeZone: calendar.timeZone,
+          year: "numeric",
+        }).format(fetchedAt),
+        events,
+        fetchedAt: fetchedAt.toISOString(),
+        nextPageToken: calendar.nextPageToken,
+        partial:
+          calendar.nextPageToken !== undefined ||
+          calendar.items.filter((event) => event.status !== "cancelled")
+            .length > events.length,
+        query: range.query,
+        status: "success",
+        timeMax: range.timeMax,
+        timeMin: range.timeMin,
+        timeZone: calendar.timeZone,
+      };
+    }
+  );
+};

@@ -3,10 +3,13 @@ import { db } from "@quieter/database/client";
 import {
   chat,
   chatMessage,
+  gmailCapturedMessage,
   mailbox,
   organization,
   user,
 } from "@quieter/database/schema";
+import { analyzeMailMessage } from "@quieter/mail/capture";
+import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import { MockLanguageModelV4, convertArrayToReadableStream } from "ai/test";
 import { eq } from "drizzle-orm";
@@ -21,6 +24,7 @@ import {
 } from "vite-plus/test";
 
 import type { assertCanUseAi } from "../src/ai-access";
+import { isAiGeneratedMailBody } from "../src/ai-mail-authorship";
 import type * as AiMemoryModule from "../src/ai-memory";
 import { createAiChatResponse } from "../src/chat/service";
 import type { hasConnectedConnector } from "../src/connectors/runtime";
@@ -29,12 +33,14 @@ import type { composeMailOperations } from "../src/mail/compose";
 import type { assertAccessibleMailbox } from "../src/mailbox/service";
 
 const state = vi.hoisted(() => ({
+  context: vi.fn<typeof AiMemoryModule.loadAiAgentContext>(),
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
   learn: vi.fn<typeof AiMemoryModule.learnAiMemoryFromChatMessage>(),
   mailboxId: crypto.randomUUID(),
   model: vi.fn<() => MockLanguageModelV4>(),
   modify: vi.fn<typeof modifyMailForUser>(),
   organizationId: crypto.randomUUID(),
+  otherMailboxId: crypto.randomUUID(),
   send: vi.fn<typeof composeMailOperations.sendMessage>(),
 }));
 vi.mock(import("@quieter/env/server"), async (original) => {
@@ -65,9 +71,7 @@ vi.mock(import("../src/ai-access"), () => ({
 vi.mock("../src/ai-memory", async (original) => ({
   ...(await original<typeof AiMemoryModule>()),
   learnAiMemoryFromChatMessage: state.learn,
-  loadAiAgentContext: vi
-    .fn<typeof AiMemoryModule.loadAiAgentContext>()
-    .mockResolvedValue({ instructions: null, memory: null }),
+  loadAiAgentContext: state.context,
 }));
 vi.mock(import("../src/mailbox/service"), () => ({
   assertAccessibleMailbox: vi
@@ -150,18 +154,23 @@ describe.skipIf(state.databaseUrl === undefined)(
         name: "Chat test",
         slug: state.organizationId,
       });
-      await db.insert(mailbox).values({
-        accessMode: "private",
-        createdAt: now,
-        emailAddress: "fixture@example.com",
-        id: state.mailboxId,
-        organizationId: state.organizationId,
-        ownerUserId: userId,
-        provider: "gmail",
-        updatedAt: now,
-      });
+      await db.insert(mailbox).values(
+        [state.mailboxId, state.otherMailboxId].map((id) => ({
+          accessMode: "private" as const,
+          createdAt: now,
+          emailAddress: `${id}@example.com`,
+          id,
+          organizationId: state.organizationId,
+          ownerUserId: userId,
+          provider: "gmail" as const,
+          updatedAt: now,
+        }))
+      );
     });
     beforeEach(async () => {
+      state.context
+        .mockReset()
+        .mockResolvedValue({ instructions: null, memory: null });
       threadId = crypto.randomUUID();
       assistantId = crypto.randomUUID();
       userMessageId = crypto.randomUUID();
@@ -216,7 +225,9 @@ describe.skipIf(state.databaseUrl === undefined)(
         status: "success",
         target: "message",
       });
-      state.learn.mockReset().mockResolvedValue({ status: "recorded" });
+      state.learn
+        .mockReset()
+        .mockResolvedValue({ explicit: false, status: "recorded" });
       state.send.mockReset().mockResolvedValue({
         draftCleanupHandled: true,
         id: "sent-message",
@@ -273,6 +284,207 @@ describe.skipIf(state.databaseUrl === undefined)(
         request: new Request("https://example.test/api/chat"),
         userId,
       });
+
+    test.each([false, true])(
+      "prefetches correspondent memory without attaching passive selection, explicit attachment %s",
+      async (attached) => {
+        await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
+        const selectedThreadId = `selected-${crypto.randomUUID()}`;
+        const snapshot: CapturedMailSnapshot = {
+          attachments: [],
+          bodyHtml: null,
+          bodyText: "Retained message body must not enter chat preparation.",
+          headers: [
+            {
+              name: "fRoM",
+              value: "=?UTF-8?Q?Sam_Sch=C3=B6ne?= <sam@example.test>",
+            },
+            { name: "To", value: "User <user@example.test>" },
+            { name: "Date", value: new Date().toUTCString() },
+          ],
+          id: crypto.randomUUID(),
+          internalDate: attached ? null : String(Date.now()),
+          labelIds: ["INBOX"],
+          providerRevision: "1",
+          threadId: selectedThreadId,
+          truncation: {
+            attachments: false,
+            bodyHtml: false,
+            bodyText: false,
+            headers: false,
+          },
+        };
+        const now = new Date();
+        await db.insert(gmailCapturedMessage).values(
+          [state.mailboxId, state.otherMailboxId].map((mailboxId) => {
+            const message = {
+              ...snapshot,
+              ...(mailboxId === state.otherMailboxId
+                ? { headers: [{ name: "From", value: "other@example.test" }] }
+                : {}),
+            };
+            return {
+              analysis: analyzeMailMessage(message),
+              capturedAt: now,
+              mailboxId,
+              messageId: message.id,
+              providerRevision: message.providerRevision,
+              snapshot: message,
+              source: "history" as const,
+              updatedAt: now,
+            };
+          })
+        );
+        const memory = "Use a formal tone with Sam.";
+        const otherMemory = "Use a casual tone with the other inbox sender.";
+        // oxlint-disable-next-line eslint/require-await -- The async loader stub returns an in-memory fixture.
+        state.context.mockImplementation(async ({ query }) => ({
+          instructions: null,
+          memory:
+            [
+              query.includes("Sam Schöne <sam@example.test>") ? memory : null,
+              query.includes("other@example.test") ? otherMemory : null,
+            ]
+              .filter(Boolean)
+              .join("\n") || null,
+        }));
+        const model = state.model();
+        const response = await createAiChatResponse({
+          body: {
+            category: "inbox",
+            context: attached ? { threadId: selectedThreadId } : undefined,
+            foreground: { ...foreground, selectedThreadId },
+            mailboxId: state.mailboxId,
+            message: {
+              id: crypto.randomUUID(),
+              parts: [{ text: "Help me plan my day", type: "text" }],
+              role: "user",
+            },
+            model: "openai/gpt-5.6-luna",
+            threadId,
+            trigger: "submit-message",
+          },
+          request: new Request("https://example.test/api/chat"),
+          userId,
+        });
+        await response.text();
+
+        const prompt = JSON.stringify(model.doStreamCalls[0]?.prompt);
+        expect(prompt.includes(selectedThreadId)).toBe(attached);
+        expect(prompt.includes(memory)).toBeTruthy();
+        expect(prompt).not.toContain(otherMemory);
+        expect(prompt).not.toContain(snapshot.bodyText);
+      }
+    );
+
+    test("prefetches recent thread correspondents by message date across retained history", async () => {
+      await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
+      const selectedThreadId = `selected-${crypto.randomUUID()}`;
+      const correspondents = [
+        { address: "stale@example.test", date: "2026-01-01T12:00:00Z" },
+        { address: "older@example.test", date: "2026-02-01T12:00:00Z" },
+        { address: "prior@example.test", date: "2026-03-01T12:00:00Z" },
+        { address: "april@example.test", date: "2026-04-01T12:00:00Z" },
+        { address: "may@example.test", date: "2026-05-01T12:00:00Z" },
+        { address: "recent@example.test", date: "2026-06-01T12:00:00Z" },
+        {
+          address: "header-date@example.test",
+          date: "2026-07-01T12:00:00Z",
+          internalDate: null,
+        },
+        {
+          address: "malformed@example.test",
+          date: "invalid date",
+          internalDate: "9".repeat(256),
+        },
+        {
+          address: "infinite@example.test",
+          date: "infinity",
+          internalDate: null,
+        },
+        {
+          address: "undated@example.test",
+          date: "invalid date",
+          internalDate: null,
+        },
+      ];
+      await db.insert(gmailCapturedMessage).values(
+        correspondents.map((correspondent, position) => {
+          const snapshot: CapturedMailSnapshot = {
+            attachments: [],
+            bodyHtml: null,
+            bodyText: "Retained bodies stay outside correspondent context.",
+            headers: [
+              { name: "From", value: correspondent.address },
+              {
+                name: "Date",
+                value: Number.isNaN(Date.parse(correspondent.date))
+                  ? correspondent.date
+                  : new Date(correspondent.date).toUTCString(),
+              },
+            ],
+            id: crypto.randomUUID(),
+            internalDate:
+              correspondent.internalDate === undefined
+                ? String(Date.parse(correspondent.date))
+                : correspondent.internalDate,
+            labelIds: ["SENT"],
+            providerRevision: "1",
+            threadId: selectedThreadId,
+            truncation: {
+              attachments: false,
+              bodyHtml: false,
+              bodyText: false,
+              headers: false,
+            },
+          };
+          const capturedAt = new Date(Date.UTC(2026, 9, 20 - position));
+          return {
+            analysis: analyzeMailMessage(snapshot),
+            capturedAt,
+            mailboxId: state.mailboxId,
+            messageId: snapshot.id,
+            providerRevision: snapshot.providerRevision,
+            snapshot,
+            source: "history" as const,
+            updatedAt: capturedAt,
+          };
+        })
+      );
+      // oxlint-disable-next-line eslint/require-await -- The async loader stub returns an in-memory fixture.
+      state.context.mockImplementation(async ({ query }) => ({
+        instructions: null,
+        memory: correspondents
+          .filter(({ address }) => query.includes(address))
+          .map(({ address }) => `Use a concise tone with ${address}.`)
+          .join("\n"),
+      }));
+      const model = state.model();
+      const response = await createAiChatResponse({
+        body: {
+          category: "inbox",
+          foreground: { ...foreground, selectedThreadId },
+          mailboxId: state.mailboxId,
+          message: {
+            id: crypto.randomUUID(),
+            parts: [{ text: "Help me reply", type: "text" }],
+            role: "user",
+          },
+          model: "openai/gpt-5.6-luna",
+          threadId,
+          trigger: "submit-message",
+        },
+        request: new Request("https://example.test/api/chat"),
+        userId,
+      });
+      await response.text();
+
+      const prompt = JSON.stringify(model.doStreamCalls[0]?.prompt);
+      expect(prompt).toContain("recent@example.test");
+      expect(prompt).toContain("header-date@example.test");
+      expect(prompt).not.toContain(selectedThreadId);
+      expect(prompt).not.toContain("Retained bodies");
+    });
 
     test("claims an approved stored send once and preserves it after generation failure", async () => {
       await db
@@ -410,6 +622,68 @@ describe.skipIf(state.databaseUrl === undefined)(
         state: "output-available",
       });
     });
+
+    test.each(["open_compose", "edit_compose"] as const)(
+      "records generated %s text before the browser receives the action",
+      async (toolName) => {
+        await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
+        const bodyText = `Hey Jo,\n\nHere is the ${toolName} reply.`;
+        state.model.mockReturnValue(
+          new MockLanguageModelV4({
+            doStream: {
+              stream: convertArrayToReadableStream([
+                { type: "stream-start", warnings: [] },
+                {
+                  input: JSON.stringify({
+                    bodyText,
+                    ...(toolName === "edit_compose"
+                      ? { draftId: "visible-draft", expectedDraftRevision: 1 }
+                      : {}),
+                  }),
+                  toolCallId: "compose-action",
+                  toolName,
+                  type: "tool-call",
+                },
+                {
+                  finishReason: { raw: undefined, unified: "tool-calls" },
+                  type: "finish",
+                  usage: {
+                    inputTokens: {
+                      cacheRead: 0,
+                      cacheWrite: 0,
+                      noCache: 1,
+                      total: 1,
+                    },
+                    outputTokens: { reasoning: 0, text: 1, total: 1 },
+                  },
+                },
+              ]),
+            },
+          })
+        );
+        const response = await createAiChatResponse({
+          body: {
+            category: "inbox",
+            foreground,
+            mailboxId: state.mailboxId,
+            message: {
+              id: userMessageId,
+              parts: [{ text: "Draft a brief response", type: "text" }],
+              role: "user",
+            },
+            threadId,
+            trigger: "submit-message",
+          },
+          request: new Request("https://example.test/api/chat"),
+          userId,
+        });
+        const stream = await response.text();
+        expect(stream).toContain(toolName);
+        await expect(
+          isAiGeneratedMailBody({ bodyText, mailboxId: state.mailboxId })
+        ).resolves.toBeTruthy();
+      }
+    );
 
     test("concurrent approvals execute once and keep the result after model failure", async () => {
       const responses = await Promise.allSettled([

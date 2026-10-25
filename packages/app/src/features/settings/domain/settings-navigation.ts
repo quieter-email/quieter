@@ -2,7 +2,7 @@ import type { SettingsTab } from "@quieter/app/features/settings/domain/settings
 
 export const SETTINGS_TITLES = {
   account: "Account",
-  ai: "AI & personalization",
+  ai: "Memories",
   appearance: "Preferences",
   connectors: "Connected apps",
   development: "Development",

@@ -30,8 +30,10 @@ import {
   serializeAiAgentContext,
 } from "../ai-memory";
 import type { AiAgentMemoryCandidates } from "../ai-memory";
+import { getMailboxMemoryActor } from "../ai-memory-capture";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
+import { loadManagedAutomationLabelHistory } from "../mail-automation/history";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
 import { updateManagedMessageLabelAssignments } from "./labels/repository";
 
@@ -40,8 +42,10 @@ const AUTO_LABEL_RETRY_MAX_MS = 1000 * 60 * 60 * 24;
 
 type ManagedAutoLabelContext = {
   availableLabelIds: Set<string>;
+  historyLabels: Pick<MailAutoLabelCandidate, "id" | "name">[];
   labels: MailAutoLabelCandidate[];
-  memoryCandidates: AiAgentMemoryCandidates;
+  memoryCandidates: AiAgentMemoryCandidates | null;
+  memoryUserId: string | null;
   model: string;
 };
 
@@ -117,6 +121,9 @@ const getManagedAutoLabelCandidates = async (input: {
   mailboxId: string;
   userId: string;
 }): Promise<ManagedAutoLabelContext> => {
+  const memoryActor = await getMailboxMemoryActor({
+    mailboxId: input.mailboxId,
+  });
   const [labels, aiConfiguration, memoryCandidates] = await Promise.all([
     db
       .select({
@@ -128,11 +135,12 @@ const getManagedAutoLabelCandidates = async (input: {
       .from(managedMailLabel)
       .where(eq(managedMailLabel.mailboxId, input.mailboxId)),
     Promise.resolve(loadAiConfiguration()),
-    loadAiAgentMemoryCandidates({
-      includeUserScope: false,
-      mailboxId: input.mailboxId,
-      userId: input.userId,
-    }),
+    memoryActor === null
+      ? null
+      : loadAiAgentMemoryCandidates({
+          mailboxId: input.mailboxId,
+          userId: memoryActor.userId,
+        }),
   ]);
 
   const candidates = labels
@@ -147,8 +155,10 @@ const getManagedAutoLabelCandidates = async (input: {
 
   return {
     availableLabelIds: new Set(candidates.map((label) => label.id)),
+    historyLabels: labels.map(({ id, name }) => ({ id, name })),
     labels: candidates,
     memoryCandidates,
+    memoryUserId: memoryActor?.userId ?? null,
     model: aiConfiguration.autoLabelModel,
   };
 };
@@ -291,22 +301,38 @@ const processManagedAutoLabelMessage = async (input: {
         }
       }
 
+      const { memoryCandidates, memoryUserId } = input.autoLabelContext;
+      const [memoryContext, labelHistory] = await Promise.all([
+        aiLabels.length === 0 ||
+        memoryCandidates === null ||
+        memoryUserId === null
+          ? null
+          : loadAiAgentContext({
+              agent: "auto_label",
+              candidates: memoryCandidates,
+              mailboxId: input.mailboxId,
+              query: buildMailMemoryQuery(message),
+              userId: memoryUserId,
+            }),
+        aiLabels.length === 0
+          ? null
+          : loadManagedAutomationLabelHistory({
+              labels: input.autoLabelContext.historyLabels,
+              mailboxId: input.mailboxId,
+              message,
+              provider: "managed",
+            }),
+      ]);
       const aiLabelIds =
         aiLabels.length === 0
           ? []
           : await classifyMailMessage({
+              labelHistory,
               labels: aiLabels,
-              memoryContext: serializeAiAgentContext(
-                await loadAiAgentContext({
-                  agent: "auto_label",
-                  candidates: input.autoLabelContext.memoryCandidates,
-                  includeUserScope: false,
-                  mailboxId: input.mailboxId,
-                  query: buildMailMemoryQuery(message),
-                  semantic: false,
-                  userId: input.userId,
-                })
-              ),
+              memoryContext:
+                memoryContext === null
+                  ? null
+                  : serializeAiAgentContext(memoryContext),
               message,
               model: input.autoLabelContext.model,
               onUsage: (reportedUsage) => {

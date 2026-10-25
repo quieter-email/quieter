@@ -47,7 +47,6 @@ describe.skipIf(state.databaseUrl === undefined)(
     const now = new Date();
     const records = Array.from({ length: 231 }, (_, index) => {
       const id = `overview-${userId}-record-${index.toString().padStart(3, "0")}`;
-      const personal = index % 2 === 0;
       return {
         content: `Context ${index}: ${"personal detail ".repeat(60)}`,
         createdAt: now,
@@ -55,14 +54,17 @@ describe.skipIf(state.databaseUrl === undefined)(
         key: id,
         kind: index % 3 === 0 ? ("instruction" as const) : ("learned" as const),
         lastConfirmedAt: now,
-        mailboxId: personal ? null : mailboxId,
-        metadata: { agents: ["auto_label"], topics: ["unrelated topic"] },
-        scope: personal ? ("user" as const) : ("mailbox" as const),
-        scopeKey: personal ? `user:${userId}` : `mailbox:${mailboxId}`,
+        metadata: {
+          agents: ["auto_label"],
+          sourceMailboxId: index % 2 === 0 ? mailboxId : otherMailboxId,
+          topics: ["unrelated topic"],
+        },
+        scope: "user" as const,
+        scopeKey: `user:${userId}`,
         source: "explicit" as const,
         summary: `Context ${index}`,
         updatedAt: now,
-        userId: personal ? userId : null,
+        userId,
       };
     });
 
@@ -189,7 +191,6 @@ describe.skipIf(state.databaseUrl === undefined)(
         expect(reviewed.find((item) => item.id === record.id)).toMatchObject({
           content: record.content,
           kind: record.kind,
-          scope: record.scope,
         });
       }
       const stored = await db

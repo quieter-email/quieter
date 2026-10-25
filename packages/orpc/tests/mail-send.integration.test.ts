@@ -16,8 +16,13 @@ import {
   organizationMailSendIdempotency,
   organizationMailUsageSettings,
   user,
+  userAiContextEvent,
 } from "@quieter/database/schema";
-import type { MailSendSnapshot } from "@quieter/database/schema";
+import type {
+  MailboxGrantRole,
+  MailSendSnapshot,
+} from "@quieter/database/schema";
+import { composeMessageInputSchema } from "@quieter/mail/compose/schema";
 import { managedMailboxRuleDefinitionSchema } from "@quieter/mail/mailbox-organization";
 import { parseRawMailAttachments } from "@quieter/mail/raw-message";
 import { sendMessageInputSchema } from "@quieter/mail/send";
@@ -32,11 +37,13 @@ import {
   vi,
 } from "vite-plus/test";
 
+import { recordAiGeneratedMailBody } from "../src/ai-mail-authorship";
 import { recoverMailSends, sendPreparedMail } from "../src/mail-send";
 import {
   cleanupMailObjects,
   storeRawMailObject,
 } from "../src/managed-mail/messages/raw-object-lifecycle";
+import { sendManagedMailboxMessage } from "../src/managed-mail/messages/send";
 import { processManagedRuleBackfills } from "../src/managed-mail/rules/backfill";
 import { applyManagedRulesToMessage } from "../src/managed-mail/rules/evaluator";
 import {
@@ -53,6 +60,7 @@ import { hashRequest } from "../src/request-hash";
 
 const state = vi.hoisted(() => ({
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
+  failMemoryCapture: false,
   failProjection: false,
   objects: new Map<string, Uint8Array<ArrayBuffer>>(),
   send: vi.fn<() => Promise<{ MessageId: string }>>(),
@@ -113,6 +121,18 @@ vi.mock(import("../src/managed-mail/messages/outbound"), async (original) => {
     },
   };
 });
+vi.mock(import("../src/ai-memory"), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    recordAiMemoryEvent: async (input) => {
+      if (state.failMemoryCapture) {
+        throw new Error("Memory persistence unavailable");
+      }
+      return await actual.recordAiMemoryEvent(input);
+    },
+  };
+});
 vi.mock(
   import("../src/managed-mail/messages/raw-object"),
   async (original) => ({
@@ -165,6 +185,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         .mockReset()
         .mockResolvedValue({ MessageId: crypto.randomUUID() });
       state.failProjection = false;
+      state.failMemoryCapture = false;
       const now = new Date();
       await db.insert(organization).values({
         createdAt: now,
@@ -231,17 +252,18 @@ describe.skipIf(state.databaseUrl === undefined)(
       await db.$client.end();
     });
 
-    const createRuleFixture = async () => {
+    const createMailboxActor = async ({
+      role = "manager",
+    }: { role?: MailboxGrantRole } = {}) => {
       const now = new Date();
       const userId = crypto.randomUUID();
-      const messageId = crypto.randomUUID();
       userIds.push(userId);
       await db.insert(user).values({
         createdAt: now,
         email: `${userId}@example.com`,
         emailVerified: true,
         id: userId,
-        name: "Rule owner",
+        name: "Mail sender",
         updatedAt: now,
       });
       await db.insert(member).values({
@@ -255,10 +277,45 @@ describe.skipIf(state.databaseUrl === undefined)(
         createdAt: now,
         id: crypto.randomUUID(),
         mailboxId,
-        role: "manager",
+        role,
         updatedAt: now,
         userId,
       });
+      return userId;
+    };
+
+    const createSendFixture = async ({ shared = false } = {}) => {
+      const userId = await createMailboxActor();
+      await db
+        .update(mailbox)
+        .set({
+          accessMode: shared ? "shared" : "private",
+          managedOwnerUserId: shared ? null : userId,
+        })
+        .where(eq(mailbox.id, mailboxId));
+      return {
+        mailboxId,
+        message: composeMessageInputSchema.parse({
+          attachments: [],
+          bodyHtml:
+            "<p>I will send the revised plan tomorrow.</p><blockquote>A quoted request</blockquote>",
+          bodyText:
+            "I will send the revised plan tomorrow.\n> A quoted request",
+          inlineImages: [],
+          localId: crypto.randomUUID(),
+          recipients: { bcc: "", cc: "", to: "recipient@example.com" },
+          saveStatus: "saved",
+          subject: "Revised plan",
+          updatedAt: Date.now(),
+        }),
+        userId,
+      };
+    };
+
+    const createRuleFixture = async () => {
+      const userId = await createMailboxActor();
+      const now = new Date();
+      const messageId = crypto.randomUUID();
       await db.insert(managedMailMessage).values({
         bodyText: "Message",
         createdAt: now,
@@ -295,6 +352,277 @@ describe.skipIf(state.databaseUrl === undefined)(
       }
       return { definition, messageId, now, rule, userId };
     };
+
+    test("recovered managed sends capture their original author's writing once", async () => {
+      const input = await createSendFixture();
+      const { userId } = input;
+      const replayingUserId = await createMailboxActor({ role: "responder" });
+      state.failProjection = true;
+      const sent = await sendManagedMailboxMessage(input);
+      await expect(
+        db
+          .select()
+          .from(userAiContextEvent)
+          .where(eq(userAiContextEvent.mailboxId, mailboxId))
+      ).resolves.toHaveLength(0);
+      state.failProjection = false;
+      await Promise.all([
+        recoverMailSends(),
+        sendManagedMailboxMessage({ ...input, userId: replayingUserId }),
+      ]);
+      await recoverMailSends();
+      await expect(
+        db
+          .select()
+          .from(organizationMailSendIdempotency)
+          .where(eq(organizationMailSendIdempotency.id, sent.id))
+      ).resolves.toMatchObject([
+        { snapshot: { actorUserId: userId }, status: "completed" },
+      ]);
+      const observations = await db
+        .select()
+        .from(userAiContextEvent)
+        .where(eq(userAiContextEvent.mailboxId, mailboxId));
+      expect(observations).toHaveLength(1);
+      expect(observations[0]).toMatchObject({
+        metadata: {
+          authorship: "observed_outbound",
+          bodyText: "I will send the revised plan tomorrow.",
+          memoryScope: "user",
+          messageId: sent.id,
+          observationKind: "sent_message",
+          sender: request.snapshot.sender,
+          userAuthored: null,
+        },
+        userId,
+      });
+      expect(observations[0]?.metadata.from).toContain(request.snapshot.sender);
+      expect(state.send).toHaveBeenCalledOnce();
+    });
+
+    test("recovered managed sends retain generated-writing provenance", async () => {
+      const input = await createSendFixture();
+      await recordAiGeneratedMailBody({
+        ...input.message,
+        mailboxId,
+        userId: input.userId,
+      });
+      state.failProjection = true;
+      const sent = await sendManagedMailboxMessage(input);
+      state.failProjection = false;
+      await recoverMailSends();
+      await expect(
+        db
+          .select()
+          .from(userAiContextEvent)
+          .where(eq(userAiContextEvent.mailboxId, mailboxId))
+      ).resolves.toMatchObject([
+        {
+          metadata: {
+            aiGenerated: true,
+            authorship: "ai_generated",
+            messageId: sent.id,
+            userAuthored: false,
+          },
+          userId: input.userId,
+        },
+      ]);
+    });
+
+    test.each([
+      {
+        name: "the private mailbox changes owners",
+        revoke: async (_actorUserId: string) => {
+          const nextOwnerUserId = await createMailboxActor();
+          await db
+            .update(mailbox)
+            .set({ managedOwnerUserId: nextOwnerUserId })
+            .where(eq(mailbox.id, mailboxId));
+        },
+        shared: false,
+      },
+      {
+        name: "the author loses team membership",
+        revoke: async (actorUserId: string) => {
+          await db
+            .delete(member)
+            .where(
+              and(
+                eq(member.organizationId, organizationId),
+                eq(member.userId, actorUserId)
+              )
+            );
+        },
+        shared: false,
+      },
+      {
+        name: "the shared mailbox author loses their grant",
+        revoke: async (actorUserId: string) => {
+          await createMailboxActor();
+          await db
+            .delete(mailboxGrant)
+            .where(
+              and(
+                eq(mailboxGrant.mailboxId, mailboxId),
+                eq(mailboxGrant.userId, actorUserId)
+              )
+            );
+        },
+        shared: true,
+      },
+    ])(
+      "send recovery skips learning when $name",
+      async ({ revoke, shared }) => {
+        const input = await createSendFixture({ shared });
+        state.failProjection = true;
+        const sent = await sendManagedMailboxMessage(input);
+        await revoke(input.userId);
+        state.failProjection = false;
+        await recoverMailSends();
+        await expect(
+          db
+            .select()
+            .from(organizationMailSendIdempotency)
+            .where(eq(organizationMailSendIdempotency.id, sent.id))
+        ).resolves.toMatchObject([{ status: "completed" }]);
+        await expect(
+          db
+            .select()
+            .from(userAiContextEvent)
+            .where(eq(userAiContextEvent.mailboxId, mailboxId))
+        ).resolves.toHaveLength(0);
+      }
+    );
+
+    test("shared managed sends capture the acting user's private evidence", async () => {
+      const input = await createSendFixture({ shared: true });
+      state.failProjection = true;
+      const sent = await sendManagedMailboxMessage(input);
+      state.failProjection = false;
+      await recoverMailSends();
+      await expect(
+        db
+          .select()
+          .from(userAiContextEvent)
+          .where(eq(userAiContextEvent.mailboxId, mailboxId))
+      ).resolves.toMatchObject([
+        {
+          metadata: { memoryScope: "user", messageId: sent.id },
+          userId: input.userId,
+        },
+      ]);
+    });
+
+    test("shared responders never learn under another manager's identity", async () => {
+      const input = await createSendFixture({ shared: true });
+      const responderUserId = await createMailboxActor({ role: "responder" });
+      state.failProjection = true;
+      const sent = await sendManagedMailboxMessage({
+        ...input,
+        userId: responderUserId,
+      });
+      state.failProjection = false;
+      await recoverMailSends();
+      await expect(
+        db
+          .select()
+          .from(userAiContextEvent)
+          .where(eq(userAiContextEvent.mailboxId, mailboxId))
+      ).resolves.toMatchObject([
+        {
+          metadata: { memoryScope: "user", messageId: sent.id },
+          userId: responderUserId,
+        },
+      ]);
+    });
+
+    test.each(["legacy", "api"] as const)(
+      "%s sends never infer an author from mailbox managers",
+      async (kind) => {
+        const { userId } = await createSendFixture({ shared: true });
+        request.snapshot = {
+          ...request.snapshot,
+          actorUserId: kind === "api" ? userId : undefined,
+          kind: kind === "api" ? "api" : "mailbox",
+        };
+        state.failProjection = true;
+        await sendPreparedMail(request);
+        state.failProjection = false;
+        await recoverMailSends();
+        await expect(
+          db
+            .select()
+            .from(userAiContextEvent)
+            .where(eq(userAiContextEvent.mailboxId, mailboxId))
+        ).resolves.toHaveLength(0);
+      }
+    );
+
+    test("memory persistence failures leave accepted sends recoverable", async () => {
+      const input = await createSendFixture();
+      state.failMemoryCapture = true;
+      const sent = await sendManagedMailboxMessage(input);
+      await expect(
+        db
+          .select()
+          .from(organizationMailSendIdempotency)
+          .where(eq(organizationMailSendIdempotency.id, sent.id))
+      ).resolves.toMatchObject([{ status: "accepted" }]);
+      state.failMemoryCapture = false;
+      await Promise.all([recoverMailSends(), sendManagedMailboxMessage(input)]);
+      await expect(
+        db
+          .select()
+          .from(organizationMailSendIdempotency)
+          .where(eq(organizationMailSendIdempotency.id, sent.id))
+      ).resolves.toMatchObject([{ status: "completed" }]);
+      await expect(
+        db
+          .select()
+          .from(userAiContextEvent)
+          .where(eq(userAiContextEvent.mailboxId, mailboxId))
+      ).resolves.toMatchObject([
+        { metadata: { messageId: sent.id }, userId: input.userId },
+      ]);
+      expect(state.send).toHaveBeenCalledOnce();
+    });
+
+    test("a fresh send attempt records its verified retrying actor", async () => {
+      const input = await createSendFixture({ shared: true });
+      const retryingUserId = await createMailboxActor();
+      state.send.mockRejectedValueOnce(
+        new SESv2ServiceException({
+          $fault: "client",
+          $metadata: { httpStatusCode: 400 },
+          message: "Rejected",
+          name: "MessageRejected",
+        })
+      );
+      await expect(sendManagedMailboxMessage(input)).rejects.toMatchObject({
+        code: "BAD_GATEWAY",
+      });
+      await expect(
+        db
+          .select()
+          .from(userAiContextEvent)
+          .where(eq(userAiContextEvent.mailboxId, mailboxId))
+      ).resolves.toHaveLength(0);
+      const sent = await sendManagedMailboxMessage({
+        ...input,
+        userId: retryingUserId,
+      });
+      await expect(
+        db
+          .select()
+          .from(userAiContextEvent)
+          .where(eq(userAiContextEvent.mailboxId, mailboxId))
+      ).resolves.toMatchObject([
+        {
+          metadata: { memoryScope: "user", messageId: sent.id },
+          userId: retryingUserId,
+        },
+      ]);
+    });
 
     test.each(["rejected", "unknown", "concurrent"] as const)(
       "rule forwards recover after %s delivery without repeating completed actions",
@@ -561,6 +889,8 @@ describe.skipIf(state.databaseUrl === undefined)(
     });
 
     test("a lost provider response blocks resend until authenticated feedback confirms it", async () => {
+      const { userId } = await createSendFixture();
+      request.snapshot.actorUserId = userId;
       state.send.mockRejectedValueOnce(
         new Error("Connection reset after submission")
       );
@@ -570,6 +900,12 @@ describe.skipIf(state.databaseUrl === undefined)(
       await expect(sendPreparedMail(request)).rejects.toMatchObject({
         code: "CONFLICT",
       });
+      await expect(
+        db
+          .select()
+          .from(userAiContextEvent)
+          .where(eq(userAiContextEvent.mailboxId, mailboxId))
+      ).resolves.toHaveLength(0);
       await recordOrganizationMailFeedback({
         eventType: "sent",
         occurredAt: new Date(),
@@ -585,6 +921,14 @@ describe.skipIf(state.databaseUrl === undefined)(
         messageId: "accepted-after-timeout",
         sent: true,
       });
+      await expect(
+        db
+          .select()
+          .from(userAiContextEvent)
+          .where(eq(userAiContextEvent.mailboxId, mailboxId))
+      ).resolves.toMatchObject([
+        { metadata: { observationKind: "sent_message" }, userId },
+      ]);
       expect(state.send).toHaveBeenCalledOnce();
     });
 
@@ -709,11 +1053,6 @@ describe.skipIf(state.databaseUrl === undefined)(
     test("garbage collection retains referenced MIME and removes abandoned uploads", async () => {
       await sendPreparedMail(request);
       const orphan = await storeRawMailObject(new Uint8Array([2]));
-      await db
-        .update(mailObjectCleanup)
-        .set({ notBefore: new Date(0) })
-        .where(inArray(mailObjectCleanup.key, [...state.objects.keys()]));
-      await cleanupMailObjects();
       const [message] = await db
         .select()
         .from(managedMailMessage)
@@ -723,6 +1062,16 @@ describe.skipIf(state.databaseUrl === undefined)(
             eq(managedMailMessage.direction, "outbound")
           )
         );
+      await db
+        .update(mailObjectCleanup)
+        .set({ notBefore: new Date(0) })
+        .where(
+          inArray(mailObjectCleanup.key, [
+            orphan.key,
+            message.rawObjectKey ?? "",
+          ])
+        );
+      await cleanupMailObjects();
       expect(state.objects.has(orphan.key)).toBeFalsy();
       expect(state.objects.has(message?.rawObjectKey ?? "")).toBeTruthy();
     });

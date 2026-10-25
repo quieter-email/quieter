@@ -15,12 +15,14 @@ import { chatModelSchema } from "@quieter/ai/chat-models";
 import {
   createForegroundClientTools,
   createForegroundServerTools,
+  editComposeInputSchema,
   editComposeOutputSchema,
   foregroundComposeDraftSchema,
   foregroundSnapshotSchema,
   getWorkspaceOutputSchema,
   isForegroundClientToolName,
   navigateOutputSchema,
+  openComposeInputSchema,
   openComposeOutputSchema,
   saveComposeDraftOutputSchema,
   sendMailInputSchema,
@@ -38,9 +40,15 @@ import {
 import { createChatModel } from "@quieter/ai/openrouter";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
-import { chat as chatTable, chatMessage } from "@quieter/database/schema";
+import {
+  chat as chatTable,
+  chatMessage,
+  gmailCapturedMessage,
+} from "@quieter/database/schema";
 import type { ChatMessagePart } from "@quieter/database/schema";
+import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
+import { decodeMimeHeaderValue } from "@quieter/mail/message-content";
 import type { MailboxCategory } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import {
@@ -52,10 +60,11 @@ import {
   toUIMessageStream,
 } from "ai";
 import type { TextStreamPart, UIMessage, UIMessageChunk } from "ai";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { assertCanUseAi } from "../ai-access";
+import { recordAiGeneratedMailBody } from "../ai-mail-authorship";
 import {
   learnAiMemoryFromChatMessage,
   loadAiAgentContext,
@@ -65,6 +74,7 @@ import {
   createGoogleCalendarEventForUser,
   GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
   hasConnectedConnector,
+  listGoogleCalendarEventsForUser,
 } from "../connectors/runtime";
 import {
   getMailboxOverviewForUser,
@@ -901,11 +911,77 @@ const prepareChatContext = async (input: {
   mailboxId: string;
   userId: string;
   memoryQuery: string;
+  selectedThreadId?: string;
+  signal: AbortSignal;
 }) => {
+  let participants = "";
+  const selectedThreadId = input.context.threadId ?? input.selectedThreadId;
+  if (selectedThreadId !== undefined) {
+    try {
+      input.signal.throwIfAborted();
+      const internalDate = sql`${gmailCapturedMessage.snapshot}->>'internalDate'`;
+      const dateHeader = sql`(
+        select header->>'value'
+        from jsonb_array_elements(${gmailCapturedMessage.snapshot}->'headers') as header
+        where lower(header->>'name') = 'date'
+        limit 1
+      )`;
+      const messageTimestamp = sql`
+        case
+          when ${internalDate} ~ '^[0-9]{1,15}$' then (${internalDate})::bigint
+          when ${internalDate} is null and pg_input_is_valid(${dateHeader}, 'timestamp with time zone') then
+            case when isfinite((${dateHeader})::timestamptz)
+              then extract(epoch from (${dateHeader})::timestamptz) * 1000
+              else 0
+            end
+          else 0
+        end
+      `;
+      const messages = await db
+        .select({
+          headers: sql<
+            CapturedMailSnapshot["headers"]
+          >`${gmailCapturedMessage.snapshot}->'headers'`,
+        })
+        .from(gmailCapturedMessage)
+        .where(
+          and(
+            eq(gmailCapturedMessage.mailboxId, input.mailboxId),
+            isNull(gmailCapturedMessage.deletedAt),
+            sql`${gmailCapturedMessage.snapshot}->>'threadId' = ${selectedThreadId}`
+          )
+        )
+        .orderBy(desc(messageTimestamp), desc(gmailCapturedMessage.messageId))
+        .limit(4);
+      participants = messages
+        .toReversed()
+        .flatMap(({ headers }) =>
+          ["from", "to", "cc"].map((name) =>
+            decodeMimeHeaderValue(
+              headers.find((header) => header.name.toLowerCase() === name)
+                ?.value
+            )
+          )
+        )
+        .filter(Boolean)
+        .join(" ")
+        .slice(0, 3000);
+    } catch {
+      input.signal.throwIfAborted();
+      reportError(
+        new Error("Selected mail personalization could not be loaded."),
+        {
+          operation: "chat:prepare-personal-context",
+        }
+      );
+    }
+  }
   const aiContext = await loadAiAgentContext({
     agent: "chat",
     mailboxId: input.mailboxId,
-    query: input.memoryQuery,
+    query: [input.memoryQuery, participants, input.context.query]
+      .filter(Boolean)
+      .join(" "),
     userId: input.userId,
   });
   return {
@@ -996,6 +1072,9 @@ export const createAiChatResponse = async (input: {
   let persistedAssistantParts: ChatMessagePart[] | null = null;
   let shouldGenerateTitle = false;
   let titlePrompt = "";
+  let memoryUpdateResult: Awaited<
+    ReturnType<typeof learnAiMemoryFromChatMessage>
+  > | null = null;
 
   if (validated.kind === "message") {
     assistantMessageId = validated.foreground.exchangeId;
@@ -1010,7 +1089,7 @@ export const createAiChatResponse = async (input: {
     ];
     const updateChatMemory = async () => {
       try {
-        await learnAiMemoryFromChatMessage({
+        return await learnAiMemoryFromChatMessage({
           bodyText: validated.userMessage.text,
           mailboxId,
           messageId: validated.userMessage.id,
@@ -1064,7 +1143,7 @@ export const createAiChatResponse = async (input: {
       // The previous attempt was aborted before its answer was persisted;
       // reuse the stored user message instead of duplicating it.
       transcript = toCanonicalTranscript(rows);
-      await updateChatMemory();
+      memoryUpdateResult = await updateChatMemory();
       const [reserved] = await db
         .insert(chatMessage)
         .values({
@@ -1102,7 +1181,7 @@ export const createAiChatResponse = async (input: {
           "This chat message has already been submitted."
         );
       }
-      await updateChatMemory();
+      memoryUpdateResult = await updateChatMemory();
       const now = new Date();
       shouldGenerateTitle = !rows.some((row) => row.role === "user");
       titlePrompt = validated.userMessage.text;
@@ -1307,6 +1386,8 @@ export const createAiChatResponse = async (input: {
         context: validated.context ?? {},
         mailboxId,
         memoryQuery,
+        selectedThreadId: validated.foreground.selectedThreadId,
+        signal: input.request.signal,
         userId: input.userId,
       }),
       checkConnector(GOOGLE_CALENDAR_CONNECTOR_PROVIDER),
@@ -1321,10 +1402,10 @@ export const createAiChatResponse = async (input: {
   const tools = {
     ...createChatSuggestionTool(),
     ...createPersonalContextChatTool({
-      readPersonalContext: async ({ cursor }) =>
+      readPersonalContext: async ({ cursor, query }) =>
         await loadAiAgentContext({
           mailboxId,
-          overview: { cursor },
+          overview: { cursor, query },
           userId: input.userId,
         }),
     }),
@@ -1430,6 +1511,12 @@ export const createAiChatResponse = async (input: {
           createGoogleCalendarEvent: async (event, signal) =>
             await createGoogleCalendarEventForUser({
               event,
+              signal,
+              userId: input.userId,
+            }),
+          listGoogleCalendarEvents: async (range, signal) =>
+            await listGoogleCalendarEventsForUser({
+              ...range,
               signal,
               userId: input.userId,
             }),
@@ -1545,7 +1632,18 @@ export const createAiChatResponse = async (input: {
       : [
           `The following user-authored instructions and learned memory were loaded through Quieter's authorized AI context. Follow them unless they conflict with the current request, safety rules, or verified mailbox data.\n\n${preparedContext.serializedAiContext}`,
         ]),
-    ...(hasGoogleCalendarConnector ? [googleCalendarToolsPrompt] : []),
+    ...(memoryUpdateResult?.explicit === true
+      ? [
+          memoryUpdateResult.status === "refreshed"
+            ? "The explicit memory change requested in the latest user message was applied successfully before this response. You may confirm it briefly. Do not claim any additional memory changes."
+            : "The explicit memory request in the latest user message did not change saved information. Do not claim that it was saved, updated, or forgotten. Explain briefly that no saved information changed and continue with any other parts of the request.",
+        ]
+      : []),
+    ...(hasGoogleCalendarConnector
+      ? [
+          `${googleCalendarToolsPrompt}\n\nThe current UTC time is ${new Date().toISOString()}.`,
+        ]
+      : []),
     linearToolsPrompt,
   ].join("\n\n");
 
@@ -1769,6 +1867,23 @@ export const createAiChatResponse = async (input: {
         TextStreamPart<typeof tools>
       >({
         async transform(chunk, controller) {
+          if (
+            chunk.type === "tool-call" &&
+            (chunk.toolName === "open_compose" ||
+              chunk.toolName === "edit_compose")
+          ) {
+            const generated =
+              chunk.toolName === "open_compose"
+                ? openComposeInputSchema.safeParse(chunk.input)
+                : editComposeInputSchema.safeParse(chunk.input);
+            if (generated.success) {
+              await recordAiGeneratedMailBody({
+                bodyText: generated.data.bodyText,
+                mailboxId,
+                userId: input.userId,
+              });
+            }
+          }
           if (
             persistedAssistantParts !== null &&
             (chunk.type === "tool-result" ||

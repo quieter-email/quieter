@@ -26,6 +26,8 @@ vi.mock(import("@quieter/database/client"), async (original) => {
         return () => ({
           from: (table: unknown) => {
             const query = {
+              catch: async () =>
+                await Promise.resolve(mocks.rows.get(table)?.shift() ?? []),
               for: () => query,
               orderBy: () => query,
               // oxlint-disable unicorn/no-thenable, promise/prefer-await-to-callbacks -- Mirrors an awaited Drizzle query.
@@ -52,7 +54,17 @@ vi.mock(import("@quieter/database/client"), async (original) => {
         return () => ({ where: mocks.deleted });
       }
       if (property === "insert") {
-        return mocks.inserted;
+        return (table: unknown) => ({
+          values: () => {
+            if (table === aiMemoryChangeSet) {
+              mocks.inserted();
+            }
+            return { onConflictDoUpdate: async () => {} };
+          },
+        });
+      }
+      if (property === "update") {
+        return () => ({ set: () => ({ where: async () => {} }) });
       }
       return Reflect.get(target, property, receiver);
     },
@@ -84,7 +96,7 @@ const storedSecret = {
   embeddedAt: null,
   embedding: null,
   expiresAt: null,
-  id: "legacy-code",
+  id: "saved-code",
   importance: 3,
   key: "verification-code",
   kind: "learned",
@@ -115,7 +127,7 @@ describe("sensitive chat memory erasure", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.rows.clear();
-    mocks.rows.set(aiMemory, [[storedSecret], [], [storedSecret]]);
+    mocks.rows.set(aiMemory, [[storedSecret], [storedSecret]]);
     mocks.rows.set(user, [[{ id: "owner" }]]);
     mocks.rows.set(aiMemoryChangeSet, [[]]);
     mocks.plan.mockResolvedValue([storedSecret.id]);
@@ -134,7 +146,7 @@ describe("sensitive chat memory erasure", () => {
     });
   });
 
-  test("erases legacy archived memory without journaling the secret-bearing message", async () => {
+  test("erases archived memory without journaling the secret-bearing message", async () => {
     await expect(learnAiMemoryFromChatMessage(request)).resolves.toMatchObject({
       status: "refreshed",
     });
@@ -146,13 +158,12 @@ describe("sensitive chat memory erasure", () => {
   test("rejects a changed target and a target removed by a concurrent reset", async () => {
     mocks.rows.set(aiMemory, [
       [storedSecret],
-      [],
       [{ ...storedSecret, version: 2 }],
     ]);
     await expect(learnAiMemoryFromChatMessage(request)).rejects.toMatchObject({
       code: "CONFLICT",
     });
-    mocks.rows.set(aiMemory, [[storedSecret], [], []]);
+    mocks.rows.set(aiMemory, [[storedSecret], []]);
     await expect(learnAiMemoryFromChatMessage(request)).rejects.toMatchObject({
       code: "CONFLICT",
     });

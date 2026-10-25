@@ -107,7 +107,7 @@ Repository checks cannot validate account-level state. After changing Worker inf
 
 Production migration history is never adopted or rewritten automatically. Automated production migrations reject destructive SQL unless the migration explicitly opts in with `-- quieter:contract`, which requires the same review as a manual procedure.
 
-The `vector` extension must be enabled on a database before the memory-embedding migration runs against it. Neither the runtime role nor the migration role can create extensions, so enable it once per database through the PlanetScale control plane. Until it is enabled, the migration fails rather than silently shipping without semantic recall.
+The historical migration chain includes vector columns, so a fresh database still needs the `vector` extension before that migration. The current memory runtime uses categorized plain text and SQL recall. It requires no embedding service or embedding credential. Retired vector columns stay inert until a separately reviewed contract migration can remove them after older workers have been replaced.
 
 ## Failure behavior
 

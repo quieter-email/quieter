@@ -79,8 +79,6 @@ vi.mock(import("../src/mail-importance"), async (original) => ({
 }));
 vi.mock(import("../src/mail/feedback"), () => ({
   learnAiMemoryFromMailAction: fixture.learn,
-  learnAiMemoryFromSentMessage:
-    vi.fn<typeof feedback.learnAiMemoryFromSentMessage>(),
 }));
 
 const databaseUrl = process.env.MIGRATION_TEST_DATABASE_URL;

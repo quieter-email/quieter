@@ -13,16 +13,13 @@ export const SettingsLoadingPage = ({
       <p className="text-caption text-muted-fg">Back to mail</p>
       <div className="space-y-3">
         <p className="text-caption text-muted-fg">Personal</p>
-        {[
-          "Account",
-          "Preferences",
-          "AI & personalization",
-          "Connected apps",
-        ].map((label) => (
-          <p className="text-body" key={label}>
-            {label}
-          </p>
-        ))}
+        {["Account", "Preferences", "Memories", "Connected apps"].map(
+          (label) => (
+            <p className="text-body" key={label}>
+              {label}
+            </p>
+          )
+        )}
       </div>
       <div className="space-y-3">
         <p className="text-caption text-muted-fg">Team settings</p>

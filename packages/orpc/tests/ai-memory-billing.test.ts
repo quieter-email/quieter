@@ -35,7 +35,6 @@ vi.mock(import("@quieter/ai/ai-memory"), async (original) => ({
 const request = {
   mailboxId: "billing-mailbox",
   request: "Remember that I prefer short replies.",
-  scope: "user" as const,
   userId: "user",
 };
 

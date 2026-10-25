@@ -38,6 +38,7 @@ export {
   GOOGLE_CALENDAR_SCOPES,
   hasConnectedConnector,
   createGoogleCalendarEventForUser,
+  listGoogleCalendarEventsForUser,
   LINEAR_CONNECTOR_PROVIDER,
   LINEAR_SCOPES,
 } from "./runtime";

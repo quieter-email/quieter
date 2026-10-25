@@ -7,6 +7,7 @@ import type { reportError } from "@quieter/observability";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import type { assertCanUseAi } from "../src/ai-access";
+import type { recordAiGeneratedMailBody } from "../src/ai-mail-authorship";
 import type * as AiMemoryModule from "../src/ai-memory";
 import type { learnAiMemoryFromMailAction } from "../src/mail/feedback";
 import type { queriesMailOperations } from "../src/mail/queries";
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   access: vi.fn<typeof assertAccessibleMailbox>(),
   billing: vi.fn<typeof assertCanUseAi>(),
   generate: vi.fn<typeof suggestReply>(),
+  generatedBody: vi.fn<typeof recordAiGeneratedMailBody>(),
   learn: vi.fn<typeof learnAiMemoryFromMailAction>(),
   memory: vi.fn<typeof AiMemoryModule.loadAiAgentContext>(),
   reportError: vi.fn<typeof reportError>(),
@@ -31,6 +33,9 @@ vi.mock(import("../src/mailbox/service"), () => ({
   assertAccessibleMailbox: mocks.access,
 }));
 vi.mock(import("../src/ai-access"), () => ({ assertCanUseAi: mocks.billing }));
+vi.mock(import("../src/ai-mail-authorship"), () => ({
+  recordAiGeneratedMailBody: mocks.generatedBody,
+}));
 vi.mock(import("../src/mail/feedback"), async (original) => ({
   ...(await original()),
   learnAiMemoryFromMailAction: mocks.learn,

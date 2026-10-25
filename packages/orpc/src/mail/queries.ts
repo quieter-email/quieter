@@ -15,6 +15,11 @@ import type { MailboxSyncDelta } from "@quieter/mail/messages";
 import type { MailSearchFilter } from "@quieter/mail/search";
 import type { MailSearchExpression } from "@quieter/mail/search-expression";
 
+import {
+  captureMailboxDraftMemory,
+  captureMailboxMessageMemory,
+  queueMailboxMessageMemory,
+} from "../ai-memory-capture";
 import { hydrateUnsubscribeStatus } from "../gmail-compose";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
@@ -106,7 +111,14 @@ export const queriesMailOperations = {
       userId: context.userId,
     });
     if (selectedMailbox.provider === "managed") {
-      return await getManagedDraft({ ...input, userId: context.userId });
+      const draft = await getManagedDraft({ ...input, userId: context.userId });
+      await captureMailboxDraftMemory({
+        draft,
+        draftId: input.draftId,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      return draft;
     }
     return await callGmail(
       context,
@@ -130,6 +142,16 @@ export const queriesMailOperations = {
           });
         }
         const parsed = parseDraftMessage(draft, { bodyHtml, bodyText });
+        await captureMailboxDraftMemory({
+          draft: {
+            ...parsed,
+            bodyHtml: bodyHtml ?? parsed.bodyHtml,
+            bodyText: bodyText ?? parsed.bodyText,
+          },
+          draftId: draft.id,
+          mailboxId: input.mailboxId,
+          userId: context.userId,
+        });
         return {
           ...parsed,
           attachments: parsed.attachments.map((asset) => ({
@@ -208,6 +230,11 @@ export const queriesMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    await queueMailboxMessageMemory({
+      mailboxId: input.mailboxId,
+      messageIds: [input.messageId],
+      userId: context.userId,
+    });
     if (selectedMailbox.provider === "managed") {
       return await getManagedMessageInspector({
         ...input,
@@ -240,50 +267,62 @@ export const queriesMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
-    if (selectedMailbox.provider === "managed") {
-      return await getManagedThread({
-        ...input,
-        userId: context.userId,
-      });
-    }
-
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken, signal) =>
-        await getThreadWithDetails(
-          accessToken,
-          input.threadId,
-          signal,
-          async (snapshot) => {
-            await writeGmailCapturedMessage({
-              mailboxId: input.mailboxId,
-              snapshot,
-              source: "on_demand",
-            });
-          }
-        )
-    )
-      .then(async (thread) => {
-        context.scheduleBackgroundTask?.(
-          processPendingMailImportance({ limit: 4, mailboxId: input.mailboxId })
-        );
-        return {
-          ...thread,
-          messages: await hydrateUnsubscribeStatus(
+    const thread =
+      selectedMailbox.provider === "managed"
+        ? await getManagedThread({ ...input, userId: context.userId })
+        : await callGmail(
+            context,
             input.mailboxId,
-            await hydrateMailImportance(input.mailboxId, thread.messages)
-          ),
-        };
-      })
-      .catch((error: unknown) => {
-        if (isGmailServiceError(error) && error.status === 404) {
-          throw new ORPCError("NOT_FOUND", {
-            message: "Message thread not found.",
+            async (accessToken, signal) =>
+              await getThreadWithDetails(
+                accessToken,
+                input.threadId,
+                signal,
+                async (snapshot) => {
+                  await writeGmailCapturedMessage({
+                    mailboxId: input.mailboxId,
+                    snapshot,
+                    source: "on_demand",
+                  });
+                }
+              )
+          ).catch((error: unknown) => {
+            if (isGmailServiceError(error) && error.status === 404) {
+              throw new ORPCError("NOT_FOUND", {
+                message: "Message thread not found.",
+              });
+            }
+            throw error;
           });
-        }
-        throw error;
-      });
+    const capture = Promise.all(
+      thread.messages.map(
+        async (message) =>
+          await captureMailboxMessageMemory({
+            actorUserId: context.userId,
+            mailboxId: input.mailboxId,
+            message,
+            source: "open",
+          })
+      )
+    );
+    if (context.scheduleBackgroundTask) {
+      context.scheduleBackgroundTask(capture);
+    } else {
+      await capture;
+    }
+    if (selectedMailbox.provider === "managed") {
+      return thread;
+    }
+    context.scheduleBackgroundTask?.(
+      processPendingMailImportance({ limit: 4, mailboxId: input.mailboxId })
+    );
+    return {
+      ...thread,
+      messages: await hydrateUnsubscribeStatus(
+        input.mailboxId,
+        await hydrateMailImportance(input.mailboxId, thread.messages)
+      ),
+    };
   },
   listMessageDeliveryStatuses: async ({
     context,

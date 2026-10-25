@@ -23,6 +23,7 @@ import type { SendMessageResult } from "@quieter/mail/send";
 import { reportError } from "@quieter/observability";
 import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
 
+import { captureManagedMessageMemory } from "./ai-memory-capture";
 import { assertLocalMailSend } from "./local-managed-mail";
 import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/outbound";
 import { readRawMailObject } from "./managed-mail/messages/raw-object";
@@ -104,6 +105,19 @@ const completeMailSend = async (operation: MailSend) => {
   const failed = results.find((result) => result.status === "rejected");
   if (failed) {
     throw failed.reason;
+  }
+  if (
+    snapshot.kind === "mailbox" &&
+    snapshot.mailboxId &&
+    snapshot.actorUserId
+  ) {
+    await captureManagedMessageMemory({
+      actorUserId: snapshot.actorUserId,
+      failureMode: "retry",
+      mailboxId: snapshot.mailboxId,
+      messageId: operation.id,
+      source: "sent",
+    });
   }
   await db.transaction(async (tx) => {
     if (
@@ -272,6 +286,14 @@ export const sendPreparedMail = async (input: {
       .update(organizationMailSendIdempotency)
       .set({
         attemptedAt: new Date(),
+        snapshot:
+          operation.snapshot?.kind === "mailbox" &&
+          input.snapshot.kind === "mailbox"
+            ? {
+                ...operation.snapshot,
+                actorUserId: input.snapshot.actorUserId,
+              }
+            : operation.snapshot,
         status: "submitting",
         updatedAt: new Date(),
       })

@@ -31,6 +31,7 @@ import {
   vi,
 } from "vite-plus/test";
 
+import { saveAiMemory } from "../src/ai-memory";
 import { getMailAutomationAiBudgetStatus } from "../src/mail-automation/ai-budget";
 import { writeGmailCapturedMessage } from "../src/mail-capture";
 import {
@@ -237,6 +238,75 @@ describe.skipIf(databaseUrl === undefined)(
       });
       return snapshot;
     };
+
+    test.each(["gmail", "managed", "shared"] as const)(
+      "%s background importance keeps personal context separate from billing ownership",
+      async (mode) => {
+        const mailboxId = await createMailbox(
+          mode === "gmail" ? "gmail" : "managed"
+        );
+        await saveAiMemory({
+          category: "preferences",
+          content:
+            "My private billing preferences prioritize invoice reminders.",
+          userId: ownerId,
+        });
+        await saveAiMemory({
+          category: "preferences",
+          content:
+            "My private recipient preferences prioritize launch decisions.",
+          userId: responderId,
+        });
+        if (mode === "gmail") {
+          await db
+            .update(mailbox)
+            .set({ ownerUserId: responderId })
+            .where(eq(mailbox.id, mailboxId));
+          await capture(mailboxId);
+        } else {
+          if (mode === "managed") {
+            await db
+              .update(mailbox)
+              .set({ accessMode: "private", managedOwnerUserId: responderId })
+              .where(eq(mailbox.id, mailboxId));
+          } else {
+            await db.insert(mailboxGrant).values({
+              createdAt: now,
+              id: randomUUID(),
+              mailboxId,
+              role: "manager",
+              updatedAt: now,
+              userId: ownerId,
+            });
+          }
+          const messageId = randomUUID();
+          await db.insert(managedMailMessage).values({
+            bodyText: "Please review the launch decision.",
+            createdAt: now,
+            direction: "inbound",
+            from: "colleague@example.com",
+            id: messageId,
+            mailboxId,
+            providerMessageId: randomUUID(),
+            sentAt: now,
+            subject: "Launch decision",
+            threadId: messageId,
+            updatedAt: now,
+          });
+        }
+        await processPendingMailImportance({ limit: 1, mailboxId });
+        expect(classifyMailImportance).toHaveBeenCalledOnce();
+        const context = vi.mocked(classifyMailImportance).mock.calls[0]?.[0]
+          .context;
+        const personalContext: unknown = expect.stringContaining(
+          "private recipient preferences"
+        );
+        expect(context).toStrictEqual(
+          mode === "shared" ? null : personalContext
+        );
+        expect(context ?? "").not.toContain("private billing preferences");
+      }
+    );
 
     test.each([true, false])(
       "manual importance %s survives delayed classification",

@@ -12,6 +12,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { assertCanUseAi } from "../ai-access";
+import { recordAiGeneratedMailBody } from "../ai-mail-authorship";
 import { loadAiAgentContext, serializeAiAgentContext } from "../ai-memory";
 import {
   cancelForegroundExchangeParts,
@@ -356,14 +357,15 @@ export const chatRouter = {
           ? await (async () => {
               const { formatTranscribedEmail } =
                 await import("@quieter/ai/format-transcribed-email");
-              const memoryContext = await loadAiAgentContext({
-                agent: "compose",
-                mailboxId: input.mailboxId,
-                query: text,
-                userId: context.userId,
-              });
+              let formatted: string;
               try {
-                return await formatTranscribedEmail({
+                const memoryContext = await loadAiAgentContext({
+                  agent: "compose",
+                  mailboxId: input.mailboxId,
+                  query: text,
+                  userId: context.userId,
+                });
+                formatted = await formatTranscribedEmail({
                   memoryContext: serializeAiAgentContext(memoryContext),
                   onUsage: (usage) => {
                     void reportAiUsage({
@@ -388,12 +390,24 @@ export const chatRouter = {
                   },
                   transcript: text,
                 });
-              } catch (error: unknown) {
-                reportError(error, {
+              } catch {
+                reportError(new Error("Dictated email formatting failed."), {
                   operation: "chat:format-transcribed-email",
                 });
                 return text;
               }
+              try {
+                await recordAiGeneratedMailBody({
+                  bodyText: formatted,
+                  mailboxId: input.mailboxId,
+                  userId: context.userId,
+                });
+              } catch {
+                throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                  message: "Could not prepare that email. Please try again.",
+                });
+              }
+              return formatted;
             })()
           : text;
 

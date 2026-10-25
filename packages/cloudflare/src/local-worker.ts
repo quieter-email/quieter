@@ -153,14 +153,20 @@ export default {
         }
         const { processPendingAiMemoryEvents } =
           await import("@quieter/orpc/ai-memory");
+        const { processPendingMailMemoryBootstrap } =
+          await import("@quieter/orpc/ai-memory-capture");
         return Response.json(
-          await withRequestDatabaseClient(
-            async () =>
-              await processPendingAiMemoryEvents({
-                allowLocal: true,
-                userId: input.data.userId,
-              })
-          )
+          await withRequestDatabaseClient(async () => {
+            const bootstrap = await processPendingMailMemoryBootstrap({
+              allowLocal: true,
+              userId: input.data.userId,
+            });
+            const memory = await processPendingAiMemoryEvents({
+              allowLocal: true,
+              userId: input.data.userId,
+            });
+            return { bootstrap, ...memory };
+          })
         );
       } catch (error) {
         return requestErrorResponse(error, "local-memory");

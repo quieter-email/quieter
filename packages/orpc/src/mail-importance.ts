@@ -59,6 +59,7 @@ import {
   recordAiMemoryEvent,
   serializeAiAgentContext,
 } from "./ai-memory";
+import { getMailboxMemoryActor } from "./ai-memory-capture";
 import { getMailAutomationAiBudgetStatus } from "./mail-automation/ai-budget";
 import { publishMailUpdate } from "./mail-updates";
 import { assertAccessibleMailbox } from "./mailbox/service";
@@ -512,7 +513,6 @@ export const setMailImportance = async (input: {
         mailboxId: input.mailboxId,
         metadata: {
           action: input.important ? "mark_important" : "mark_not_important",
-          memoryScope: "mailbox",
           senders: result.sources
             .slice(0, 3)
             .map(({ message }) => (message.from ?? "").slice(0, 180))
@@ -745,11 +745,7 @@ export const processPendingMailImportance = async (
       }
       const [owner] = await db
         .select({
-          accessMode: mailbox.accessMode,
-          contextUserId: sql<string>`coalesce(${mailbox.ownerUserId}, ${mailbox.managedOwnerUserId}, ${organization.billingOwnerUserId})`,
-          managedOwnerUserId: mailbox.managedOwnerUserId,
           organizationId: mailbox.organizationId,
-          ownerUserId: mailbox.ownerUserId,
           userId: organization.billingOwnerUserId,
         })
         .from(mailbox)
@@ -775,15 +771,18 @@ export const processPendingMailImportance = async (
           .where(claim);
         continue;
       }
-      const context = await loadAiAgentContext({
-        agent: "mail_importance",
-        includeUserScope:
-          owner.accessMode === "private" || owner.ownerUserId !== null,
+      const memoryActor = await getMailboxMemoryActor({
         mailboxId: job.mailboxId,
-        query: buildMailMemoryQuery(source.message),
-        semantic: false,
-        userId: owner.contextUserId,
       });
+      const context =
+        memoryActor === null
+          ? null
+          : await loadAiAgentContext({
+              agent: "mail_importance",
+              mailboxId: job.mailboxId,
+              query: buildMailMemoryQuery(source.message),
+              userId: memoryActor.userId,
+            });
       attemptId = randomUUID();
       await db.insert(mailImportanceAttempt).values({
         createdAt: new Date(),
@@ -795,7 +794,7 @@ export const processPendingMailImportance = async (
         userId: owner.userId,
       });
       const decision = await classifyMailImportance({
-        context: serializeAiAgentContext(context),
+        context: context === null ? null : serializeAiAgentContext(context),
         message: source.message,
         onUsage: (report) => {
           usage = report;
