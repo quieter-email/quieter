@@ -34,7 +34,7 @@ Throughput checkpoint. Capture the baseline first, then verify shared changes in
 - [x] Keep the golden importance accent visible over selected row backgrounds.
 - [x] Keep unsubscribe confirmation present and make the importance icon reflect its saved state.
 - [x] Verify both layouts, both inbox paths, narrow screens, and resizing; refresh review images.
-- [ ] Publish the completed PR update.
+- [x] Publish the completed PR update.
 
 Throughput checkpoint. Ground persistence and both mailbox paths before implementation. Geometry and typography are complete; one writer now owns the mail-layout source changes so row and visibility decisions stay coherent. Read-only architecture candidates write separate scratch artifacts. The lead owns browser verification, screenshots, and publication. The existing list controllers, provider adapters, route state, and enrichment remain the source of mail behavior.
 
@@ -45,11 +45,11 @@ Throughput checkpoint. Ground persistence and both mailbox paths before implemen
 - [x] Plan the fix.
 - [x] Verify on the same surface.
 - [x] Stage the commits so the failing repro lands before the fix in git history. Skip a visual-value regression test because it would freeze presentation, and retain the existing broken screenshot as the before artifact.
-- [ ] Run Opening a PR. Update the existing PR.
+- [x] Run Opening a PR. Update the existing PR.
 - [x] Frame. Separate Settings shell repair, shared logo and column presentation, and shader investigation into distinct writable paths.
 - [x] Fan out.
 - [x] Aggregate.
-- [ ] Report.
+- [x] Report.
 
 Done means Add mailbox uses shared Settings composition at desktop and mobile widths, its existing Gmail and managed-mail contracts still work, both mail layouts use smaller shared logos, wide rows align their columns, and the onboarding shader is present or its actual failure is repaired. The lead owns live Chrome reproduction and final captures. The Settings writer owns only the Add mailbox view and its local store. The row writer owns the shared sender avatar and row presentation. The shader investigator initially reads only. No provider mutations, billing, deployment, or production access is required.
 
@@ -60,4 +60,4 @@ Done means Add mailbox uses shared Settings composition at desktop and mobile wi
 - [x] Verify desktop and mobile geometry, then show the live preview.
 - [x] Merge current main and repeat checks affected by its new calendar package.
 - [x] Refresh the complete gallery and audit the final evidence.
-- [ ] Publish the update.
+- [x] Publish the update.
