@@ -3,13 +3,13 @@
 - [x] Read the Principles section of the poteto-mode skill.
 - [x] Phase A: Frame
 - [x] Phase B: Design the workflow
-- [ ] Phase C: Run the loop
-- [ ] Capture the existing product using the established preview personas.
-- [ ] Refine shared typography, geometry, semantic contrast, and icon treatment.
-- [ ] Apply the same hierarchy to product navigation, mail, compose, chat, and settings.
-- [ ] Capture matching light, dark, and narrow screenshots and inspect real interactions.
-- [ ] Phase D: Keep the audit trail
-- [ ] Phase E: Verify and hand back
+- [x] Phase C: Run the loop
+- [x] Capture the existing product using the established preview personas.
+- [x] Refine shared typography, geometry, semantic contrast, and icon treatment.
+- [x] Apply the same hierarchy to product navigation, mail, compose, chat, and settings.
+- [x] Capture matching light, dark, and narrow screenshots and inspect real interactions.
+- [x] Phase D: Keep the audit trail
+- [x] Phase E: Verify and hand back
 - [ ] Commit, synchronize with main, push, and open a PR with the visual comparisons.
 
 The change is complete when the shared visual system addresses all five reported concerns, representative product screens render without clipping in light, dark, and narrow layouts, keyboard and overlay interactions still work, relevant checks pass, and the PR contains matched screenshots with synthetic content.

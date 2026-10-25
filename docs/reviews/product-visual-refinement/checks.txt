@@ -1,0 +1,36 @@
+$ vp check --fix
+  ! react(refs): Cannot access refs during render
+  ! react(incompatible-library): Use of incompatible library
+Found 0 errors and 3 warnings in 951 files (24.3s, 8 threads)
+pass: Formatting completed for checked files (26.8s)
+
+$ vp test
+ Test Files  159 passed | 26 skipped (185)
+      Tests  1114 passed | 276 skipped (1390)
+
+$ vp run check:boundaries
+$ node scripts/check-import-boundaries.ts ⊘ cache disabled
+Import boundaries passed for 761 source files and manifests.
+
+$ vp run @quieter/web#build
+✓ built in 14.21s
+✓ built in 3.32s
+Worker JavaScript: 17.17 MB, 3.84 MB gzip
+vp run: 0/2 cache hit (0%). (Run `vp run --last-details` for full details)
+
+$ vp run @quieter/desktop#build
+✓ built in 673ms
+✓ built in 13ms
+✓ built in 1.06s
+vp run: 0/3 cache hit (0%). (Run `vp run --last-details` for full details)
+
+Chrome manual checks
+Search and invalid-input keyboard focus are visible with an opaque 2px ring and 2px offset.
+Tab stays in the sample dialog. Escape closes it and restores focus to Open dialog.
+Narrow conversation subjects wrap to two lines. Dialog actions fill the footer width.
+Landing page content and access form render; marketing sources were not edited.
+
+Independent visual review
+GPT-6 Astra reviewed source and representative screenshot pairs.
+The remaining old focus styles in rich editing and structured search were fixed.
+Browser captures do not verify native Electron runtime or provider-dependent operations.

@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+
+import { z } from "zod";
 
 type CaptureScenario = {
   name: string;
@@ -10,8 +12,9 @@ type CaptureScenario = {
   full?: boolean;
 };
 
-const [phase, originValue = "http://localhost:3024", outputValue] =
-  process.argv.slice(2);
+const [phase, originValue = "http://localhost:3024", outputValue] = process.argv
+  .slice(2)
+  .filter((value) => value !== "--contrast-only");
 if (phase !== "before" && phase !== "after") {
   throw new Error("Choose before or after as the first argument.");
 }
@@ -27,12 +30,13 @@ const output = path.resolve(
 );
 mkdirSync(output, { recursive: true });
 const session = `quieter-visual-review-${phase}`;
+const contrastOnly = process.argv.includes("--contrast-only");
 
 const browser = (...args: readonly string[]) => {
   try {
     return execFileSync(
       "vp",
-      ["dlx", "--", "agent-browser", "--session", session, ...args],
+      ["dlx", "--", "agent-browser@0.39.2", "--session", session, ...args],
       { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
     );
   } catch (error) {
@@ -184,7 +188,7 @@ const capture = ({
   browser(
     "wait",
     "--fn",
-    "!document.querySelector('[aria-label^=\"Loading\"]')"
+    "!document.querySelector('[aria-label^=\"Loading\"]') && !document.body.innerText.includes('Loading teams')"
   );
   for (const step of scenario.steps ?? []) {
     browser(...step);
@@ -207,71 +211,117 @@ const capture = ({
 
 try {
   browser("close");
-  browser("set", "viewport", "1440", "960");
   browser("set", "media", "light", "reduced-motion");
-  browser("open", new URL("/auth", origin).href);
-  browser("wait", "--text", "User with Gmail");
-  browser("find", "role", "button", "click", "--name", "Reject All", "--exact");
+  if (!contrastOnly) {
+    browser("set", "viewport", "1440", "960");
+    browser("set", "media", "light", "reduced-motion");
+    browser("open", new URL("/auth", origin).href);
+    browser("wait", "--text", "User with Gmail");
+    browser(
+      "find",
+      "role",
+      "button",
+      "click",
+      "--name",
+      "Reject All",
+      "--exact"
+    );
+    browser(
+      "wait",
+      "--fn",
+      "!document.querySelector('[aria-label=\"Cookie consent\"]')"
+    );
+    browser("screenshot", path.resolve(output, "auth-dark.png"));
+    captures.push("auth-dark.png");
+    browser(
+      "find",
+      "role",
+      "button",
+      "click",
+      "--name",
+      "User with Gmail",
+      "--exact"
+    );
+    browser("wait", '[aria-label^="Open conversation:"]');
+    for (const theme of ["light", "dark"] as const) {
+      for (const scenario of scenarios) {
+        capture({ scenario, theme });
+      }
+    }
+    for (const name of [
+      "inbox",
+      "conversation",
+      "compose",
+      "preferences",
+      "label-dialog",
+    ]) {
+      const scenario = scenarios.find((item) => item.name === name);
+      if (!scenario) {
+        throw new Error(`Missing capture scenario ${name}.`);
+      }
+      capture({
+        narrow: true,
+        scenario,
+        theme: name === "compose" || name === "preferences" ? "dark" : "light",
+      });
+    }
+    browser("cookies", "clear");
+    browser("eval", "localStorage.clear()");
+    browser("set", "viewport", "1440", "960");
+    browser("open", new URL("/auth", origin).href);
+    browser("wait", "--text", "Onboarding user");
+    browser(
+      "find",
+      "role",
+      "button",
+      "click",
+      "--name",
+      "Onboarding user",
+      "--exact"
+    );
+    browser("wait", "--text", "What brings you here");
+    browser("screenshot", path.resolve(output, "onboarding-dark.png"));
+    captures.push("onboarding-dark.png");
+  }
+  browser("open", new URL("/design-system", origin).href);
+  browser("wait", "h1");
   browser(
     "wait",
     "--fn",
-    "!document.querySelector('[aria-label=\"Cookie consent\"]')"
+    "getComputedStyle(document.documentElement).getPropertyValue('--q-blue').trim() !== '' && document.fonts.status === 'loaded'"
   );
-  browser("screenshot", path.resolve(output, "auth-dark.png"));
-  captures.push("auth-dark.png");
-  browser(
-    "find",
-    "role",
-    "button",
-    "click",
-    "--name",
-    "User with Gmail",
-    "--exact"
-  );
-  browser("wait", '[aria-label^="Open conversation:"]');
-  for (const theme of ["light", "dark"] as const) {
-    for (const scenario of scenarios) {
-      capture({ scenario, theme });
-    }
-  }
-  for (const name of [
-    "inbox",
-    "conversation",
-    "compose",
-    "preferences",
-    "label-dialog",
-  ]) {
-    const scenario = scenarios.find((item) => item.name === name);
-    if (!scenario) {
-      throw new Error(`Missing capture scenario ${name}.`);
-    }
-    capture({
-      narrow: true,
-      scenario,
-      theme: name === "compose" || name === "preferences" ? "dark" : "light",
-    });
-  }
-  browser("cookies", "clear");
-  browser("eval", "localStorage.clear()");
-  browser("set", "viewport", "1440", "960");
-  browser("open", new URL("/auth", origin).href);
-  browser("wait", "--text", "Onboarding user");
-  browser(
-    "find",
-    "role",
-    "button",
-    "click",
-    "--name",
-    "Onboarding user",
-    "--exact"
-  );
-  browser("wait", "--text", "What brings you here");
-  browser("screenshot", path.resolve(output, "onboarding-dark.png"));
-  captures.push("onboarding-dark.png");
+  const contrast = z
+    .object({
+      data: z.object({
+        result: z.looseObject({ failures: z.array(z.unknown()) }),
+      }),
+      success: z.literal(true),
+    })
+    .parse(
+      JSON.parse(
+        browser(
+          "eval",
+          "--json",
+          readFileSync(
+            new URL("measure-product-contrast.js", import.meta.url),
+            "utf-8"
+          )
+        )
+      )
+    );
   writeFileSync(
-    path.resolve(output, "captures.json"),
-    `${JSON.stringify({ captures, origin: origin.origin, phase }, null, 2)}\n`
+    path.resolve(output, "contrast.json"),
+    `${JSON.stringify(contrast.data.result, null, 2)}\n`
   );
+  if (contrast.data.result.failures.length > 0) {
+    throw new Error(JSON.stringify(contrast.data.result.failures));
+  }
+  if (!contrastOnly) {
+    writeFileSync(
+      path.resolve(output, "captures.json"),
+      `${JSON.stringify({ captures, origin: origin.origin, phase }, null, 2)}\n`
+    );
+  }
 } finally {
   browser("close");
 }
