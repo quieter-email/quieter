@@ -96,3 +96,13 @@ All 94 gallery image references resolve to files in the review directory.
 The final contrast artifact contains ten themes and zero sampled failures.
 The final shader, narrow managed address, persistent message controls,
 full-width dark inbox, and repaired Add mailbox screens were visually inspected.
+
+Pre-merge review correction
+The remaining automated review finding identified a real landing-page palette
+leak. Chrome reproduced Access hover at oklch(0.3 0.007 264), while main uses
+oklch(0.24 0.003 264). Existing blue, cyan, and yellow marketing artwork also
+inherited product-token changes. A scoped web stylesheet rule preserves those
+original marketing roles and the active control color without editing home
+feature sources or changing product colors. Chrome now matches main for all
+sampled marketing roles. See landing-palette-runtime.json. The targeted CSS
+format check passes. An independent final-head shipping verification follows.
