@@ -14,6 +14,8 @@ export const connectorsRouter = {
     .input(
       z.object({
         attachmentId: z.string().trim().min(1),
+        calendarId: z.string().trim().min(1).optional(),
+        connectionId: z.string().trim().min(1).optional(),
         mailboxId: mailboxIdSchema,
         messageId: z.string().trim().min(1),
       })
@@ -30,6 +32,7 @@ export const connectorsRouter = {
   disconnect: protectedProcedure
     .input(
       z.object({
+        connectionId: z.string().trim().min(1).optional(),
         provider: connectorProviderSchema,
       })
     )

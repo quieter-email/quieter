@@ -48,6 +48,7 @@
     "@quieter/ai": "workspace:*",
     "@quieter/auth": "workspace:*",
     "@quieter/billing": "workspace:*",
+    "@quieter/calendar": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
     "@quieter/gmail": "workspace:*",

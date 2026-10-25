@@ -2,6 +2,7 @@ import {
   editComposeInputSchema,
   getWorkspaceInputSchema,
   navigateInputSchema,
+  navigateCalendarInputSchema,
   openComposeInputSchema,
 } from "@quieter/ai/chat-tools";
 import type { WorkspaceBridge } from "@quieter/app/features/chat/components/agent-workspace";
@@ -27,6 +28,16 @@ export const executeWorkspaceTool = async (
       }
       return workspace.read();
     }
+    case "navigate_calendar": {
+      await workspace.navigateCalendar(
+        navigateCalendarInputSchema.parse(input),
+        generation
+      );
+      if (!workspace.control.isCurrent(generation)) {
+        throw new Error("The request was stopped.");
+      }
+      return workspace.read();
+    }
     case "open_compose": {
       const draft = await workspace.openCompose(
         openComposeInputSchema.parse(input),
@@ -35,6 +46,9 @@ export const executeWorkspaceTool = async (
       return { ...draft, generation };
     }
     case "edit_compose": {
+      if (workspace.read().workspace === "calendar") {
+        throw new Error("Open Mail before editing an email draft.");
+      }
       const { draftId, expectedDraftRevision, ...values } =
         editComposeInputSchema.parse(input);
       const compose = workspace.getCompose();

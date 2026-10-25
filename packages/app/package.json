@@ -293,7 +293,10 @@
     "./route-search": "./src/route-search.ts",
     "./runtime": "./src/runtime.ts",
     "./session-user": "./src/session-user.ts",
-    "./styles.css": "./src/styles.css"
+    "./styles.css": "./src/styles.css",
+    "./features/calendar/components/calendar-workspace": "./src/features/calendar/components/calendar-workspace.tsx",
+    "./lib/calendar-query": "./src/lib/calendar-query.ts",
+    "./lib/calendar-cache-lifecycle": "./src/lib/calendar-cache-lifecycle.ts"
   },
   "dependencies": {
     "@ai-sdk/provider-utils": "5.0.59",
@@ -314,6 +317,7 @@
     "@quieter/ai": "workspace:*",
     "@quieter/auth": "workspace:*",
     "@quieter/billing": "workspace:*",
+    "@quieter/calendar": "workspace:*",
     "@quieter/env": "workspace:*",
     "@quieter/mail": "workspace:*",
     "@quieter/orpc": "workspace:*",

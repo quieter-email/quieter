@@ -1,0 +1,19 @@
+{
+  "name": "@quieter/calendar",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/contracts.ts",
+    "./time": "./src/time.ts"
+  },
+  "dependencies": {
+    "@js-temporal/polyfill": "^0.5.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@quieter/config": "workspace:*",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

@@ -1,3 +1,8 @@
+import {
+  calendarDateSchema,
+  calendarTimeZoneSchema,
+  calendarViewSchema,
+} from "@quieter/calendar";
 import { z } from "zod";
 
 import { MAILBOX_WORKSPACE_VIEWS } from "./features/mailbox/domain/mailbox-workspace-view";
@@ -80,6 +85,15 @@ const searchQueryParam = () =>
   );
 
 export const mailboxSearchSchema = z.object({
+  calendarConnectionId: optionalMinLengthSearchString(),
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- Zod requires an explicit fallback for invalid optional URL fields.
+  calendarDate: calendarDateSchema.optional().catch(undefined),
+  calendarEventId: optionalMinLengthSearchString(),
+  calendarId: optionalMinLengthSearchString(),
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- Zod requires an explicit fallback for invalid optional URL fields.
+  calendarTimeZone: calendarTimeZoneSchema.optional().catch(undefined),
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- Zod requires an explicit fallback for invalid optional URL fields.
+  calendarView: calendarViewSchema.optional().catch(undefined),
   chatId: optionalMinLengthSearchString(),
   compose: optionalLiteralSearchValue("mailto"),
   gmailLink: optionalLiteralSearchValue("complete"),
@@ -90,6 +104,7 @@ export const mailboxSearchSchema = z.object({
   query: searchQueryParam(),
   threadId: optionalMinLengthSearchString(),
   view: mailboxWorkspaceViewSearch(),
+  workspace: optionalLiteralSearchValue("calendar"),
 });
 
 export const settingsSearchSchema = z.object({

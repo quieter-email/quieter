@@ -3,6 +3,7 @@
 import { MailtoProtocolHandler } from "@quieter/app/components/mailto-protocol-handler";
 import { KeyboardShortcutsProvider } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
 import { authClient } from "@quieter/app/lib/auth";
+import { bindCalendarCache } from "@quieter/app/lib/calendar-cache-lifecycle";
 import { bindMailCache } from "@quieter/app/lib/mail-cache-lifecycle";
 import { disposeMailMutations } from "@quieter/app/lib/mail-mutations";
 import { useMailUpdates } from "@quieter/app/lib/mail-updates";
@@ -37,8 +38,10 @@ const SessionQueryProvider = ({
   useLayoutEffect(() => {
     setQueryPersistenceUser(userId, queryClient);
     const unbind = bindMailCache(queryClient);
+    const unbindCalendar = bindCalendarCache(queryClient, userId);
     return () => {
       unbind();
+      unbindCalendar();
       disposeMailMutations(queryClient);
       queryClient.clear();
     };

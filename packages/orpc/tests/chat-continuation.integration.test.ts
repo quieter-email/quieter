@@ -285,9 +285,14 @@ describe.skipIf(state.databaseUrl === undefined)(
         userId,
       });
 
-    test.each([false, true])(
-      "prefetches correspondent memory without attaching passive selection, explicit attachment %s",
-      async (attached) => {
+    test.each([
+      { attached: false, workspace: "mail" },
+      { attached: true, workspace: "mail" },
+      { attached: false, workspace: "calendar" },
+      { attached: true, workspace: "calendar" },
+    ] as const)(
+      "$workspace recalls personal context with explicit mail attachment $attached",
+      async ({ attached, workspace }) => {
         await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
         const selectedThreadId = `selected-${crypto.randomUUID()}`;
         const snapshot: CapturedMailSnapshot = {
@@ -337,27 +342,60 @@ describe.skipIf(state.databaseUrl === undefined)(
         );
         const memory = "Use a formal tone with Sam.";
         const otherMemory = "Use a casual tone with the other inbox sender.";
+        const personalMemory = "Leave a recovery break after long meetings.";
         // oxlint-disable-next-line eslint/require-await -- The async loader stub returns an in-memory fixture.
-        state.context.mockImplementation(async ({ query }) => ({
+        state.context.mockImplementation(async ({ mailboxId, query }) => ({
           instructions: null,
           memory:
             [
+              mailboxId === undefined ? personalMemory : null,
               query.includes("Sam Schöne <sam@example.test>") ? memory : null,
               query.includes("other@example.test") ? otherMemory : null,
             ]
               .filter(Boolean)
               .join("\n") || null,
         }));
-        const model = state.model();
+        const model = new MockLanguageModelV4({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: "stream-start", warnings: [] },
+              { id: "answer", type: "text-start" },
+              {
+                delta: "I can help plan your day.",
+                id: "answer",
+                type: "text-delta",
+              },
+              { id: "answer", type: "text-end" },
+              {
+                finishReason: { raw: undefined, unified: "stop" },
+                type: "finish",
+                usage: {
+                  inputTokens: {
+                    cacheRead: 0,
+                    cacheWrite: 0,
+                    noCache: 1,
+                    total: 1,
+                  },
+                  outputTokens: { reasoning: 0, text: 1, total: 1 },
+                },
+              },
+            ]),
+          },
+        });
+        state.model.mockReturnValue(model);
+        const messageText =
+          workspace === "calendar" && attached
+            ? "Remember that I prefer meetings after lunch. Help me plan my day."
+            : "Help me plan my day";
         const response = await createAiChatResponse({
           body: {
             category: "inbox",
             context: attached ? { threadId: selectedThreadId } : undefined,
-            foreground: { ...foreground, selectedThreadId },
+            foreground: { ...foreground, selectedThreadId, workspace },
             mailboxId: state.mailboxId,
             message: {
               id: crypto.randomUUID(),
-              parts: [{ text: "Help me plan my day", type: "text" }],
+              parts: [{ text: messageText, type: "text" }],
               role: "user",
             },
             model: "openai/gpt-5.6-luna",
@@ -371,9 +409,22 @@ describe.skipIf(state.databaseUrl === undefined)(
 
         const prompt = JSON.stringify(model.doStreamCalls[0]?.prompt);
         expect(prompt.includes(selectedThreadId)).toBe(attached);
-        expect(prompt.includes(memory)).toBeTruthy();
+        expect(prompt.includes(memory)).toBe(workspace === "mail" || attached);
+        expect(prompt.includes(personalMemory)).toBe(workspace === "calendar");
         expect(prompt).not.toContain(otherMemory);
         expect(prompt).not.toContain(snapshot.bodyText);
+        expect(state.learn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            bodyText: messageText,
+            mailboxId: state.mailboxId,
+            userId,
+          })
+        );
+        expect(
+          state.context.mock.calls.some(([context]) =>
+            context.query.includes("sam@example.test")
+          )
+        ).toBe(workspace === "mail" || attached);
       }
     );
 

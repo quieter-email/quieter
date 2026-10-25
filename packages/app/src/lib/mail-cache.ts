@@ -27,6 +27,7 @@ export const createMailCache = (
   const now = options.now ?? Date.now;
   let userId: string | undefined;
   let generation = 0;
+  let userGeneration = 0;
   let initialized = false;
   const protectedKeys = new Set<string>();
   let database: ReturnType<typeof openDB<MailCacheDatabase>> | undefined;
@@ -123,6 +124,55 @@ export const createMailCache = (
         protectedKeys.add(key);
       } else {
         protectedKeys.delete(key);
+      }
+    },
+    async removeCalendarScope(connectionId: string, calendarId?: string) {
+      const owner = userId;
+      const ownerGeneration = userGeneration;
+      generation += 1;
+      if (!owner) {
+        return;
+      }
+      try {
+        await initialization;
+        const db = await open();
+        if (ownerGeneration !== userGeneration) {
+          return;
+        }
+        const tx = db.transaction(["entries", "values"], "readwrite");
+        const completion = (async () => {
+          try {
+            await tx.done;
+          } catch {
+            /* Persistence is optional. */
+          }
+        })();
+        const entries = await tx
+          .objectStore("entries")
+          .index("userId")
+          .getAll(owner);
+        for (const entry of entries) {
+          const key = entry.key.slice(owner.length + 1);
+          if (!key.startsWith("quieter-cache-")) {
+            continue;
+          }
+          const parts: unknown = JSON.parse(key.slice("quieter-cache-".length));
+          if (
+            Array.isArray(parts) &&
+            parts[0] === "calendar" &&
+            parts[1] === owner &&
+            parts[2] === "connection" &&
+            parts[3] === connectionId &&
+            (calendarId === undefined ||
+              (parts[4] === "calendar" && parts[5] === calendarId))
+          ) {
+            await tx.objectStore("entries").delete(entry.key);
+            await tx.objectStore("values").delete(entry.key);
+          }
+        }
+        await completion;
+      } catch {
+        /* Persistence is optional. */
       }
     },
     async removeItem(key: string) {
@@ -287,6 +337,7 @@ export const createMailCache = (
       initialized = true;
       userId = next;
       generation += 1;
+      userGeneration += 1;
       protectedKeys.clear();
       const previous = initialization;
       initialization = (async () => {

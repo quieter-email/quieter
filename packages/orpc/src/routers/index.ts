@@ -15,6 +15,12 @@ export const appRouter = {
         default: billingRouter,
       }))
   ),
+  calendar: lazy(
+    async () =>
+      await import("./calendar").then(({ calendarRouter }) => ({
+        default: calendarRouter,
+      }))
+  ),
   chat: lazy(
     async () =>
       await import("./chat").then(({ chatRouter }) => ({ default: chatRouter }))

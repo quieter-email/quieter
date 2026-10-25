@@ -15,6 +15,27 @@ const mailState: MailboxRouteState = {
 };
 
 describe("mailbox route search", () => {
+  test("returns from Calendar to the same mail selection and conversation", () => {
+    const calendar = applyMailboxSearchPatch(mailState, {
+      calendarDate: "2026-10-23",
+      calendarView: "week",
+      workspace: "calendar",
+    });
+    const chatting = applyMailboxSearchPatch(calendar, {
+      chatId: "calendar-conversation",
+    });
+    const back = applyMailboxSearchPatch(chatting, { workspace: null });
+    expect(back).toMatchObject({
+      chatId: "calendar-conversation",
+      mailboxId: mailState.mailboxId,
+      messageId: mailState.messageId,
+      query: mailState.query,
+      threadId: mailState.threadId,
+    });
+    expect(back.workspace).toBeUndefined();
+    expect(back.calendarDate).toBe(calendar.calendarDate);
+  });
+
   test("preserves the active chat while navigating mail", () => {
     expect(
       applyMailboxSearchPatch(mailState, {

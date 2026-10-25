@@ -5,11 +5,16 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  approvalRequiredToolNames,
+  isCalendarWriteToolName,
+} from "@quieter/ai/chat-tools";
 import { getToolName } from "@quieter/app/features/chat/domain/chat-tools";
 import type {
   ChatToolApproval,
   ChatToolPart,
 } from "@quieter/app/features/chat/domain/chat-tools";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -20,16 +25,37 @@ import {
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 
 const labels: Record<string, { complete: string; pending: string }> = {
+  create_calendar_event: {
+    complete: "Created event",
+    pending: "Creating event…",
+  },
+  delete_calendar_event: {
+    complete: "Deleted event",
+    pending: "Deleting event…",
+  },
   edit_compose: { complete: "Updated draft", pending: "Updating draft…" },
+  get_calendar_event: { complete: "Read event", pending: "Reading event…" },
   get_workspace: {
     complete: "Checked workspace",
     pending: "Checking workspace…",
+  },
+  list_calendar_events: {
+    complete: "Checked calendar events",
+    pending: "Checking calendar events…",
+  },
+  list_calendars: {
+    complete: "Checked calendars",
+    pending: "Checking calendars…",
   },
   modify_mail: {
     complete: "Updated conversation",
     pending: "Updating conversation…",
   },
   navigate: { complete: "Opened view", pending: "Opening view…" },
+  navigate_calendar: {
+    complete: "Opened calendar",
+    pending: "Opening calendar…",
+  },
   open_compose: { complete: "Opened draft", pending: "Opening draft…" },
   read_gmail_message: { complete: "Read message", pending: "Reading message…" },
   read_gmail_messages: {
@@ -40,9 +66,69 @@ const labels: Record<string, { complete: string; pending: string }> = {
     complete: "Read conversation",
     pending: "Reading conversation…",
   },
+  respond_to_calendar_event: {
+    complete: "Responded to invitation",
+    pending: "Responding to invitation…",
+  },
   save_compose_draft: { complete: "Saved draft", pending: "Saving draft…" },
   search_gmail: { complete: "Searched mail", pending: "Searching mail…" },
   send_mail: { complete: "Sent email", pending: "Sending email…" },
+  update_calendar_event: {
+    complete: "Updated event",
+    pending: "Updating event…",
+  },
+};
+
+const CalendarApprovalDetails = ({
+  approval,
+}: {
+  approval: ChatToolApproval;
+}) => {
+  const review = approval.calendarReview;
+  if (review === undefined) {
+    return (
+      <p className="text-caption text-muted-fg">
+        The destination calendar and event need to be read before this action
+        can be approved.
+      </p>
+    );
+  }
+  const time =
+    review.time.kind === "all-day"
+      ? `${review.time.startDate} until ${review.time.endDate}, all day, end date excluded`
+      : `${new Intl.DateTimeFormat(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+          timeZone: review.time.timeZone,
+        }).formatRange(
+          new Date(review.time.start),
+          new Date(review.time.end)
+        )}, ${review.time.timeZone}`;
+  const details = [
+    ["Event", review.title],
+    ["When", time],
+    ["Account", review.account.email ?? review.account.name],
+    ["Calendar", review.calendar.name],
+    [
+      "Applies to",
+      {
+        event: "This event",
+        occurrence: "This occurrence only",
+        series: "The entire series",
+      }[review.scope],
+    ],
+    ["Guests", "Guests will be notified."],
+  ];
+  return (
+    <dl className="space-y-2 text-caption">
+      {details.map(([label, value]) => (
+        <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2" key={label}>
+          <dt className="text-muted-fg">{label}</dt>
+          <dd className="break-words whitespace-pre-wrap text-fg">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 };
 const ToolDetails = ({ input, draft }: { input: unknown; draft: boolean }) => {
   if (typeof input !== "object" || input === null) {
@@ -112,8 +198,17 @@ export const ToolActivity = ({
   part: ChatToolPart;
 }) => {
   const name = getToolName(part.type);
+  const approvalAction =
+    {
+      create_calendar_event: "Create event",
+      delete_calendar_event: "Delete",
+      respond_to_calendar_event: "Send response",
+      send_mail: "Send",
+      update_calendar_event: "Save changes",
+    }[name] ?? "Approve";
   const awaitingApproval =
-    name === "send_mail" && part.state === "approval-requested";
+    approvalRequiredToolNames.includes(name) &&
+    part.state === "approval-requested";
   const output = part.state === "output-available" ? part.output : undefined;
   const returnedError =
     typeof output === "object" &&
@@ -148,7 +243,14 @@ export const ToolActivity = ({
     label = "Skipped";
   }
   if (awaitingApproval) {
-    label = "Send this email?";
+    label =
+      {
+        create_calendar_event: "Create this event?",
+        delete_calendar_event: "Delete this event permanently?",
+        respond_to_calendar_event: "Send this invitation response?",
+        send_mail: "Send this email?",
+        update_calendar_event: "Save these event changes?",
+      }[name] ?? "Approve this action?";
   }
   let errorText = "The action could not be completed. Try again.";
   if (part.state === "output-error") {
@@ -184,31 +286,6 @@ export const ToolActivity = ({
         >
           {label}
         </span>
-        {awaitingApproval && approval ? (
-          <>
-            <Button
-              disabled={isStreaming}
-              onClick={() => {
-                approval.approve();
-              }}
-              size="compact"
-              type="button"
-            >
-              Send
-            </Button>
-            <Button
-              disabled={isStreaming}
-              onClick={() => {
-                approval.deny();
-              }}
-              size="compact"
-              type="button"
-              variant="secondary"
-            >
-              Cancel
-            </Button>
-          </>
-        ) : null}
         <IconButtonTooltip label="Action details">
           <CollapsibleTrigger
             aria-label="Action details"
@@ -225,7 +302,40 @@ export const ToolActivity = ({
       ) : null}
       <CollapsiblePanel>
         <div className="py-2">
+          {awaitingApproval && approval && isCalendarWriteToolName(name) ? (
+            <div className="mb-3">
+              <CalendarApprovalDetails approval={approval} />
+            </div>
+          ) : null}
           <ToolDetails draft={draft} input={part.input} />
+          {awaitingApproval && approval ? (
+            <ActionFooter className="mt-3">
+              <Button
+                disabled={isStreaming}
+                onClick={() => {
+                  approval.deny();
+                }}
+                size="compact"
+                type="button"
+                variant="secondary"
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={isStreaming}
+                onClick={() => {
+                  approval.approve();
+                }}
+                size="compact"
+                type="button"
+                variant={
+                  name === "delete_calendar_event" ? "destructive" : "default"
+                }
+              >
+                {approvalAction}
+              </Button>
+            </ActionFooter>
+          ) : null}
         </div>
       </CollapsiblePanel>
     </Collapsible>
