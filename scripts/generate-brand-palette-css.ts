@@ -15,7 +15,7 @@ const palettes = APP_THEMES.map(
   --theme-primary-fg: ${theme.palette.primaryInk};
   --theme-glow: ${theme.palette.glow ? "radial-gradient(ellipse at 6% 110%, color-mix(in srgb, var(--theme-accent) 28%, transparent), transparent 70%)" : "none"};
   --theme-panel-gradient: ${theme.palette.panelGradient === true ? "linear-gradient(180deg, var(--theme-surface), var(--theme-raised))" : "none"};
-  --theme-radius: ${theme.palette.radius ?? 6}px;
+  --theme-radius: ${theme.palette.radius ?? 10}px;
   --theme-gutter: ${theme.palette.gutter?.[0] ?? 6}px;
   --theme-gutter-wide: ${theme.palette.gutter?.[1] ?? 8}px;
   --theme-row-padding: ${theme.palette.rowPadding ?? 12}px;

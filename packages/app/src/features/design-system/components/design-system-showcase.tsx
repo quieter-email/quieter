@@ -156,7 +156,7 @@ const Section = ({
   title: string;
 }) => (
   <section className="border-t border-border pt-8">
-    <h2 className="text-title-sm font-semibold text-fg">{title}</h2>
+    <h2 className="truncate text-body-lg font-medium text-fg">{title}</h2>
     {description === undefined ? null : (
       <p className="mt-1 text-body-sm text-muted-fg">{description}</p>
     )}
@@ -200,7 +200,7 @@ export const DesignSystemShowcase = () => {
     <main className="@container min-h-dvh text-fg">
       <div className="mx-auto w-full max-w-4xl space-y-8 px-6 py-10">
         <header>
-          <h1 className="text-title-lg font-semibold text-fg">
+          <h1 className="truncate text-body-lg font-medium text-fg">
             Quieter design system
           </h1>
           <p className="mt-2 max-w-prose text-body-sm text-muted-fg">

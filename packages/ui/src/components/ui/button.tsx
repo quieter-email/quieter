@@ -64,7 +64,7 @@ export const buttonVariants = cva(
         secondary:
           "bg-secondary text-secondary-fg shadow-sm hover:bg-secondary-hover active:bg-secondary-active",
         toolbar:
-          "border-border bg-control text-muted-fg hover:bg-control-hover hover:text-fg active:bg-control-active active:text-fg [&_svg]:size-3.5",
+          "rounded-xl border-border bg-control text-muted-fg hover:bg-control-hover hover:text-fg active:bg-control-active active:text-fg [&_svg]:size-3.5",
       },
     },
   }

@@ -266,7 +266,7 @@ const MessageRowSelectionButton = ({
           <span
             className={cn(
               // oxlint-disable-next-line shadcn/no-arbitrary-values -- Bulk-select checkbox sizing with explicit transition properties.
-              "flex size-4.5 items-center justify-center rounded-xs border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
+              "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
               {
                 "border-border": !isSelected,
                 "border-primary bg-primary text-primary-fg": isSelected,
@@ -384,7 +384,7 @@ const MessageRowDetails = ({
 
       <div className="flex w-full min-w-0 items-center gap-1.5">
         <p
-          className={cn("min-w-0 flex-1 truncate text-left text-body", {
+          className={cn("min-w-0 flex-1 truncate text-left text-body-sm/4.5", {
             "font-medium text-fg": unread,
             "text-muted-fg": !unread,
           })}

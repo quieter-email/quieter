@@ -78,7 +78,7 @@ Use the custom type scale on semantic HTML or the shared text components. Direct
 | `text-caption`    | 12px | Metadata                               |
 | `text-micro`      | 11px | Small labels and pills                 |
 
-The type tokens include line heights and heading tracking. Prefer those defaults before adding leading or tracking. `font-sans` uses self-hosted Geist and `font-mono` uses self-hosted Geist Mono in web and desktop. Page and section headings use semibold, row labels and actions use medium, and supporting text uses regular weight. New scale steps must also be registered in `lib/cn.ts` so text colors do not evict font sizes during merging.
+The type tokens include line heights and heading tracking. Prefer those defaults before adding leading or tracking. `font-sans` uses self-hosted Geist and `font-mono` uses self-hosted Geist Mono in web and desktop. Compact workspace headings use 16px, dense UI uses 13px, and metadata uses 12px. Use medium weight for headings and row labels, regular weight for supporting text, and semantic colors to distinguish their roles. Truncate workspace and row titles to one line when space is limited. Help and instructions wrap normally, with 20px line height for settings descriptions. New scale steps must also be registered in `lib/cn.ts` so text colors do not evict font sizes during merging.
 
 ### Colors
 
@@ -107,9 +107,9 @@ App themes are defined in `APP_THEMES` in `lib/brand-themes.ts`, separately from
 
 Spacing uses the existing Tailwind scale with a 4px base, including half steps. There is no separate named spacing scale to invent. Repeated settings and workspace spacing belongs in those shared layouts. Unique viewport constraints and measured positions may use layout values without becoming global tokens.
 
-Workspace panels default to a 6px outer gutter below the desktop breakpoint and 8px on desktop. Themes can adjust these gutters and settings row padding through shared tokens. `WorkspaceSection` owns the gutter for both full-page panels and grid cells. A layout wrapper that positions adjacent panels, including docked chat, imports `workspaceGutterClassName` from the same module and uses `--workspace-gutter`. Do not add another gutter between a trailing sidebar and the preceding panel's existing margin. Settings, Labels, Snippets and their loading states use the shared tokens.
+Workspace panels are edge to edge below the desktop breakpoint, with no outer gutter, border, rounding, or shadow. Desktop panels keep an 8px gutter and their existing frame. Themes can adjust desktop gutters and settings row padding through shared tokens. `WorkspaceSection` owns the gutter for both full-page panels and grid cells. A layout wrapper that positions adjacent panels, including docked chat, imports `workspaceGutterClassName` from the same module and uses `--workspace-gutter`. Do not add another gutter between a trailing sidebar and the preceding panel's existing margin. Settings, Labels, Snippets and their loading states use the shared tokens. Internal cards and controls keep their own borders and rounding.
 
-The default radius ladder is `xs` 4px, `sm` 6px, `md` 8px, `lg` 10px, and `xl` 12px. The ladder follows the active theme's base radius. Larger existing steps remain available for intentionally larger shells. Controls own their radii; callers should not make the same checkbox rounder in one toolbar. `squircle` is an explicit treatment. Circular shapes use ordinary `rounded-full` geometry.
+The default radius ladder is `xs` 8px, `sm` 10px, `md` 12px, `lg` 14px, and `xl` 16px. The ladder follows the active theme's base radius. Larger existing steps remain available for intentionally larger shells. Controls own their radii. Supported browsers apply the existing superellipse corner shaping globally, and `squircle` can reassert it within a local override.
 
 Use `shadow-surface` for the existing workspace treatment and `shadow-elevation` where that elevated treatment is established. Ordinary component shadows are selected inside their implementation.
 

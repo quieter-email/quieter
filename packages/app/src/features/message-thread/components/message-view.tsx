@@ -242,7 +242,10 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               </IconButtonTooltip>
             </div>
           ) : null}
-          <h1 className="line-clamp-2 min-w-0 flex-1 text-title-sm font-semibold break-words text-fg @sm:line-clamp-1">
+          <h1
+            className="min-w-0 flex-1 truncate text-body-sm font-medium text-fg"
+            title={subject}
+          >
             {subject}
           </h1>
           {!isSingleMessageThread && (

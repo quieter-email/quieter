@@ -31,8 +31,8 @@ export const settingsSurfaceVariants = cva("", {
       page: "@container space-y-8",
       rowShell:
         "squircle relative flex w-full items-center gap-4 px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
-      title: "text-body font-medium text-fg",
-      value: "text-body-sm text-muted-fg",
+      title: "truncate text-body-sm font-medium text-fg",
+      value: "text-body-sm/5 text-muted-fg",
     },
   },
 });
@@ -49,11 +49,11 @@ export const SettingsPageHeader = ({
   <div className="@container">
     <header className="flex flex-col gap-3 @md:flex-row @md:items-end @md:justify-between">
       <div className="min-w-0">
-        <h1 className="font-sans text-title-sm font-semibold text-fg">
+        <h1 className="truncate font-sans text-body-lg font-medium text-fg">
           {title}
         </h1>
         {children !== undefined && children !== null ? (
-          <div className="mt-2 max-w-2xl text-body/6 text-muted-fg">
+          <div className="mt-2 max-w-2xl text-body-sm/5 text-muted-fg">
             {children}
           </div>
         ) : null}
@@ -81,10 +81,10 @@ export const SettingsSectionLayout = ({
       (description !== undefined && description !== null)) && (
       <div>
         {(title ?? "") === "" ? null : (
-          <h2 className="text-body font-semibold text-fg">{title}</h2>
+          <h2 className="truncate text-body-sm font-medium text-fg">{title}</h2>
         )}
         {description !== undefined && description !== null ? (
-          <div className="mt-1 max-w-3xl text-body/6 text-muted-fg">
+          <div className="mt-1 max-w-3xl text-body-sm/5 text-muted-fg">
             {description}
           </div>
         ) : null}

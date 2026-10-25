@@ -137,7 +137,7 @@ export const MessageListSearchView = ({
           onBlur={handleSearchFieldBlur}
           ref={fieldRef}
         >
-          <div className="flex min-h-8 min-w-0 items-center gap-1 rounded-md border border-border bg-control p-0.5 shadow-xs transition-colors duration-150 ease-out squircle has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:ring-2 has-[input[data-slot=search-input]:focus-visible]:ring-ring has-[input[data-slot=search-input]:focus-visible]:ring-offset-2 has-[input[data-slot=search-input]:focus-visible]:ring-offset-bg-raised has-[input[data-slot=search-input]:focus-visible]:outline-none">
+          <div className="flex min-h-8 min-w-0 items-center gap-1 rounded-xl border border-border bg-control p-0.5 shadow-xs transition-colors duration-150 ease-out squircle has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:ring-2 has-[input[data-slot=search-input]:focus-visible]:ring-ring has-[input[data-slot=search-input]:focus-visible]:ring-offset-2 has-[input[data-slot=search-input]:focus-visible]:ring-offset-bg-raised has-[input[data-slot=search-input]:focus-visible]:outline-none">
             <div
               className="flex min-w-0 flex-1 scroll-px-1 scrollbar-none items-center gap-1 overflow-x-auto overscroll-x-contain [&::-webkit-scrollbar]:hidden"
               onMouseDown={(event) => {

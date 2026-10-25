@@ -582,7 +582,7 @@ export const LabelsWorkspacePanel = ({
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
         <div className="mb-6 flex items-center justify-between gap-4">
-          <h1 className="font-sans text-title-sm font-semibold text-fg">
+          <h1 className="min-w-0 truncate font-sans text-body-lg font-medium text-fg">
             Labels
           </h1>
           <Button

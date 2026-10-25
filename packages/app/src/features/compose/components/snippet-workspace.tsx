@@ -149,7 +149,7 @@ export const SnippetWorkspace = ({
   } else if (filteredSnippets.length === 0) {
     snippetQueryState = (
       <div className="px-6 py-12 text-center">
-        <p className="text-body font-medium text-fg">
+        <p className="text-body-sm font-medium text-fg">
           {snippets.length === 0 ? "No snippets yet" : "No matches"}
         </p>
         <p className="mt-1 text-caption/5 text-muted-fg">
@@ -178,7 +178,7 @@ export const SnippetWorkspace = ({
                 <Icon icon={SidebarLeftIcon} />
               </Button>
             </IconButtonTooltip>
-            <h1 className="min-w-0 flex-1 text-title-sm font-semibold text-fg">
+            <h1 className="min-w-0 flex-1 truncate text-body-lg font-medium text-fg">
               Snippets
             </h1>
             <Button

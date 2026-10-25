@@ -7,7 +7,6 @@ export const overlayBackdropClassName =
 export const overlayPopupClassName =
   "fixed top-1/2 left-1/2 z-50 w-[min(92vw,30rem)] -translate-1/2 overflow-hidden rounded-xl border shadow-lg transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0";
 
-export const overlayTitleClassName =
-  "text-body-lg font-semibold tracking-tight";
+export const overlayTitleClassName = "truncate text-body-lg font-medium";
 
-export const overlayDescriptionClassName = "mt-2 text-body text-muted-fg";
+export const overlayDescriptionClassName = "mt-2 text-body-sm/5 text-muted-fg";

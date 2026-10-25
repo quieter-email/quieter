@@ -15,7 +15,7 @@ export const SettingsLoadingPage = ({
         <p className="text-caption text-muted-fg">Personal</p>
         {["Account", "Preferences", "Memories", "Connected apps"].map(
           (label) => (
-            <p className="text-body" key={label}>
+            <p className="text-body-sm" key={label}>
               {label}
             </p>
           )
@@ -34,7 +34,7 @@ export const SettingsLoadingPage = ({
           "Billing & usage",
           "API keys",
         ].map((label) => (
-          <p className="text-body" key={label}>
+          <p className="text-body-sm" key={label}>
             {label}
           </p>
         ))}
@@ -43,7 +43,7 @@ export const SettingsLoadingPage = ({
     <main className="relative min-w-0 flex-1">
       <WorkspaceSection>
         <div className="mx-auto w-full max-w-180 space-y-8 px-5 py-8 md:px-8 md:py-14">
-          <h1 className="text-title-sm font-semibold">
+          <h1 className="truncate text-body-lg font-medium">
             {SETTINGS_TITLES[tab]}
           </h1>
           <output
