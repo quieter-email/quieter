@@ -15,3 +15,5 @@ The shared-appearance review led to shared mail-row recipes and text variants, c
 The shader investigation found no removal or source change. Default headless Chrome had no graphics adapter. Headed Chrome with WebGPU rendered the existing shader under reduced motion. The capture recipe now waits for that rendered canvas, and the gallery explains the different baseline graphics capability.
 
 After current main was merged, the full check, 1,240 tests, import boundaries, and web and desktop builds passed. Three existing compiler warnings and 278 skipped tests remain. The merge preserves the new calendar and mailbox-action behavior. Calendar icons and headings use the shared presentation APIs.
+
+GPT-5.6 Sol completed a fresh final trail review after all follow-ups and the main merge. It checked the active transcript, superseding audit entries, raw merged validation output, four recorded resize runs, representative final screenshots, both manifests, and all 94 gallery references. It reported no remaining flags. The review confirmed the shader disclosure and the documented runtime and provider limits.

@@ -33,7 +33,8 @@ Throughput checkpoint. Capture the baseline first, then verify shared changes in
 - [x] Consolidate row presentation, headings, composer actions, search fields, setup frames, and copy controls in shared components.
 - [x] Keep the golden importance accent visible over selected row backgrounds.
 - [x] Keep unsubscribe confirmation present and make the importance icon reflect its saved state.
-- [ ] Verify both layouts, both inbox paths, narrow screens, and resizing; refresh review images and publish the PR update.
+- [x] Verify both layouts, both inbox paths, narrow screens, and resizing; refresh review images.
+- [ ] Publish the completed PR update.
 
 Throughput checkpoint. Ground persistence and both mailbox paths before implementation. Geometry and typography are complete; one writer now owns the mail-layout source changes so row and visibility decisions stay coherent. Read-only architecture candidates write separate scratch artifacts. The lead owns browser verification, screenshots, and publication. The existing list controllers, provider adapters, route state, and enrichment remain the source of mail behavior.
 
@@ -58,4 +59,5 @@ Done means Add mailbox uses shared Settings composition at desktop and mobile wi
 - [x] Keep selection, the golden accent, and keyboard focus visible.
 - [x] Verify desktop and mobile geometry, then show the live preview.
 - [x] Merge current main and repeat checks affected by its new calendar package.
-- [ ] Refresh the complete gallery, audit the final evidence, and publish the update.
+- [x] Refresh the complete gallery and audit the final evidence.
+- [ ] Publish the update.
