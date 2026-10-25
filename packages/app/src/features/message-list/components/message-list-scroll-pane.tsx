@@ -1,7 +1,6 @@
 "use client";
 
 import { Loading03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { getAggregateDeliveryStatusFromStatuses } from "@quieter/app/features/message-delivery/domain/delivery-status";
 import { getMessageListDeliveryOptions } from "@quieter/app/features/message-delivery/domain/message-delivery-query";
 import { supportsMessageDelivery } from "@quieter/app/features/message-delivery/domain/message-delivery-support";
@@ -16,9 +15,12 @@ import {
 import { verificationCodesQueryOptions } from "@quieter/app/lib/mail/verification-codes-query";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import type { RouterOutputs } from "@quieter/orpc";
+import { Icon } from "@quieter/ui/icon";
+import { mailListRowParts } from "@quieter/ui/mail-list-row";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useLayoutEffect, useMemo, useRef } from "react";
+import type { VirtualItem } from "@tanstack/react-virtual";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 
 const MESSAGE_ROW_HEIGHT_PX = 68;
 const MESSAGE_ROW_GAP_PX = 0;
@@ -281,15 +283,109 @@ export const MessageListScrollPane = ({
     return (seenTimestamps.get(compositeKey) ?? 0) > now - 2000;
   });
 
+  const rowHeightEstimateRef = useRef(MESSAGE_ROW_HEIGHT_PX);
+  const measuredWidthRef = useRef(0);
+  const pendingAnchorRef = useRef<
+    (Pick<VirtualItem, "index" | "key"> & { offsetWithinRow: number }) | null
+  >(null);
+  const previousActiveMessageIdRef = useRef(list.activeMessageId);
+  const pendingFocusRef = useRef<{
+    threadId: string;
+    focusVisible: boolean;
+    scrollIntoView: boolean;
+  } | null>(null);
   // react-doctor-disable-next-line react-hooks-js/incompatible-library
-  const messageVirtualizer = useVirtualizer({
+  const messageVirtualizer = useVirtualizer<HTMLDivElement, HTMLLIElement>({
     count: threadedMessages.length,
-    estimateSize: () => MESSAGE_ROW_HEIGHT_PX,
+    estimateSize: () => rowHeightEstimateRef.current,
     gap: MESSAGE_ROW_GAP_PX,
     getItemKey: (index) => threadedMessages[index].threadId ?? index,
     getScrollElement: () => selection.scrollRef.current,
+    measureElement: (element, _entry, instance) => {
+      const height = element.offsetHeight;
+      const key = instance.options.getItemKey(
+        instance.indexFromElement(element)
+      );
+      return height > 0
+        ? height
+        : (instance.itemSizeCache.get(key) ?? rowHeightEstimateRef.current);
+    },
     overscan: MESSAGE_LIST_OVERSCAN,
   });
+  const updateRowMeasurements = useCallback(() => {
+    const element = selection.scrollRef.current;
+    if (!element || element.clientWidth <= 0 || element.clientHeight <= 0) {
+      return false;
+    }
+    const width = element.clientWidth;
+    const rows = element.querySelectorAll<HTMLLIElement>("li[data-index]");
+    const firstRow = element.querySelector<HTMLLIElement>("li[data-index]");
+    const height = firstRow?.offsetHeight ?? 0;
+    if (
+      !firstRow &&
+      measuredWidthRef.current !== width &&
+      !pendingAnchorRef.current
+    ) {
+      const anchor = messageVirtualizer.getVirtualItemForOffset(
+        element.scrollTop
+      );
+      if (anchor) {
+        pendingAnchorRef.current = {
+          index: anchor.index,
+          key: anchor.key,
+          offsetWithinRow:
+            element.scrollTop -
+            anchor.start -
+            Number(getComputedStyle(element).paddingTop.replace("px", "")),
+        };
+      }
+    }
+    if (
+      height <= 0 ||
+      (measuredWidthRef.current === width &&
+        rowHeightEstimateRef.current === height)
+    ) {
+      return false;
+    }
+
+    const viewportTop = element.getBoundingClientRect().top;
+    let anchorRow = firstRow;
+    for (const row of rows) {
+      if (row.getBoundingClientRect().top > viewportTop) {
+        break;
+      }
+      anchorRow = row;
+    }
+    if (anchorRow?.dataset.threadId && !pendingAnchorRef.current) {
+      pendingAnchorRef.current = {
+        index: Number(anchorRow.dataset.index),
+        key: anchorRow.dataset.threadId,
+        offsetWithinRow: viewportTop - anchorRow.getBoundingClientRect().top,
+      };
+    }
+    measuredWidthRef.current = width;
+    rowHeightEstimateRef.current = height;
+    messageVirtualizer.measure();
+    for (const row of rows) {
+      messageVirtualizer.measureElement(row);
+    }
+    return true;
+  }, [messageVirtualizer, selection.scrollRef]);
+
+  useLayoutEffect((): (() => void) | undefined => {
+    const element = selection.scrollRef.current;
+    if (!element) {
+      return undefined;
+    }
+    const observer = new ResizeObserver(() => {
+      updateRowMeasurements();
+    });
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+    };
+  }, [selection.scrollRef, updateRowMeasurements]);
+
   const virtualItems = messageVirtualizer.getVirtualItems();
   const codeThreadIdBuckets = useMemo(() => {
     if (list.activeMailbox === "drafts") {
@@ -415,44 +511,99 @@ export const MessageListScrollPane = ({
     threadedMessages.length,
   ]);
 
-  useLayoutEffect((): (() => void) | undefined => {
+  useLayoutEffect(() => {
+    const previousActiveMessageId = previousActiveMessageIdRef.current;
+    previousActiveMessageIdRef.current = list.activeMessageId;
+    const isViewingMessage = (list.activeMessageId?.trim() ?? "") !== "";
     const threadId = selection.keyboardFocusedThreadId;
-    if (threadId === null || threadId === "") {
-      return undefined;
+    const focusVisible = selection.consumeFocusRingRequest();
+    const isReturningToList = (previousActiveMessageId?.trim() ?? "") !== "";
+    if (isViewingMessage) {
+      const returnThreadId = activeThreadId ?? threadId;
+      if (returnThreadId) {
+        pendingFocusRef.current = {
+          focusVisible:
+            focusVisible ||
+            (pendingFocusRef.current?.threadId === returnThreadId &&
+              pendingFocusRef.current.focusVisible),
+          scrollIntoView: false,
+          threadId: returnThreadId,
+        };
+      }
+    } else if (isReturningToList) {
+      const returnThreadId = pendingFocusRef.current?.threadId ?? threadId;
+      if (returnThreadId) {
+        pendingFocusRef.current = {
+          focusVisible:
+            focusVisible || pendingFocusRef.current?.focusVisible === true,
+          scrollIntoView: false,
+          threadId: returnThreadId,
+        };
+      }
+    } else if (focusVisible && threadId) {
+      pendingFocusRef.current = {
+        focusVisible,
+        scrollIntoView: true,
+        threadId,
+      };
     }
 
-    if (!selection.consumeFocusRingRequest()) {
-      return undefined;
+    if (updateRowMeasurements()) {
+      return;
     }
 
+    const element = selection.scrollRef.current;
+    if (
+      !element ||
+      element.clientWidth <= 0 ||
+      element.clientHeight <= 0 ||
+      virtualItems.length === 0
+    ) {
+      return;
+    }
+    const anchor = pendingAnchorRef.current;
+    pendingAnchorRef.current = null;
+    if (anchor && threadedMessages[anchor.index]?.threadId === anchor.key) {
+      const offset = messageVirtualizer.getOffsetForIndex(
+        anchor.index,
+        "start"
+      );
+      if (offset) {
+        messageVirtualizer.scrollToOffset(
+          offset[0] +
+            Number(getComputedStyle(element).paddingTop.replace("px", "")) +
+            Math.min(anchor.offsetWithinRow, rowHeightEstimateRef.current - 1)
+        );
+      }
+    }
+
+    if (isViewingMessage) {
+      return;
+    }
+    const focus = pendingFocusRef.current;
+    if (!focus) {
+      return;
+    }
     const focusedIndex = threadedMessages.findIndex(
-      (thread) => thread.threadId === threadId
+      (thread) => thread.threadId === focus.threadId
     );
     if (focusedIndex === -1) {
-      return undefined;
+      pendingFocusRef.current = null;
+      return;
     }
 
-    messageVirtualizer.scrollToIndex(focusedIndex, { align: "auto" });
-
-    const frameId = requestAnimationFrame(() => {
-      const trigger =
-        selection.scrollRef.current?.querySelector<HTMLButtonElement>(
-          `li[data-thread-id="${CSS.escape(threadId)}"] [data-message-row-trigger]`
-        );
-      trigger?.focus({ focusVisible: true, preventScroll: true });
-    });
-
-    return () => {
-      cancelAnimationFrame(frameId);
-    };
-  }, [
-    messageVirtualizer,
-    selection.consumeFocusRingRequest,
-    selection.keyboardFocusedThreadId,
-    selection.scrollRef,
-    selection,
-    threadedMessages,
-  ]);
+    const trigger = element.querySelector<HTMLButtonElement>(
+      `li[data-thread-id="${CSS.escape(focus.threadId)}"] [data-message-row-trigger]`
+    );
+    if (focus.scrollIntoView || !trigger) {
+      focus.scrollIntoView = false;
+      messageVirtualizer.scrollToIndex(focusedIndex, { align: "auto" });
+    }
+    if (trigger) {
+      pendingFocusRef.current = null;
+      trigger.focus({ focusVisible: focus.focusVisible, preventScroll: true });
+    }
+  });
 
   const handleThreadFocus = selection.focusThread;
   const handleOpenDraft = list.onOpenDraft;
@@ -464,8 +615,7 @@ export const MessageListScrollPane = ({
 
   return (
     <div
-      // oxlint-disable-next-line shadcn/no-arbitrary-values -- Floor the bottom inset at 1rem; max() cannot be a token.
-      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))] contain-strict @sm:px-4"
+      className={mailListRowParts.viewport}
       onScroll={() => {
         if (selection.isProgrammaticScrollToTopRef.current) {
           return;
@@ -528,6 +678,8 @@ export const MessageListScrollPane = ({
                 badge={context?.badge}
                 className="absolute top-0 left-0 w-full"
                 dataIndex={virtualItem.index}
+                rowRef={messageVirtualizer.measureElement}
+                wideCompactRows={list.wideCompactRows}
                 deliveryStatus={
                   thread.anchorMessage.id === undefined
                     ? undefined
@@ -580,8 +732,10 @@ export const MessageListScrollPane = ({
       {!list.isError && threadedMessages.length > 0 && (
         <p className="px-2 py-5 text-center text-caption text-muted-fg">
           {list.isFetchingNextPage || list.hasNextPage ? (
-            <HugeiconsIcon
-              className="mx-auto animate-spin text-muted-fg"
+            <Icon
+              animation="spin"
+              tone="muted"
+              className="mx-auto"
               icon={Loading03Icon}
             />
           ) : (

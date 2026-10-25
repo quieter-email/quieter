@@ -7,7 +7,6 @@ import {
   Loading03Icon,
   UserGroupIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   getOrganizationDivisionsQueryKey,
   organizationDivisionsQueryOptions,
@@ -53,6 +52,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
 import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
@@ -128,7 +128,7 @@ const CreateDivisionDialog = ({
         }}
         size="sm"
       >
-        <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+        <Icon aria-hidden icon={Add01Icon} />
         Add
       </Button>
 
@@ -217,17 +217,9 @@ const CreateDivisionDialog = ({
                 type="submit"
               >
                 {createMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                 ) : (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Add01Icon}
-                  />
+                  <Icon aria-hidden icon={Add01Icon} />
                 )}
                 Add
               </Button>
@@ -299,7 +291,7 @@ const EditDivisionFieldDialog = ({
         size="sm"
         variant="outline"
       >
-        <HugeiconsIcon aria-hidden className="size-4" icon={Edit01Icon} />
+        <Icon aria-hidden icon={Edit01Icon} />
         Edit
       </Button>
 
@@ -371,11 +363,7 @@ const EditDivisionFieldDialog = ({
                 type="submit"
               >
                 {updateMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                 ) : null}
                 Save
               </Button>
@@ -425,7 +413,7 @@ const DeleteDivisionDialog = ({
         size="sm"
         variant="destructive"
       >
-        <HugeiconsIcon aria-hidden className="size-4" icon={Delete02Icon} />
+        <Icon aria-hidden icon={Delete02Icon} />
         Delete
       </Button>
 
@@ -457,17 +445,9 @@ const DeleteDivisionDialog = ({
             variant="destructive"
           >
             {deleteMutation.isPending ? (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 animate-spin"
-                icon={Loading03Icon}
-              />
+              <Icon aria-hidden animation="spin" icon={Loading03Icon} />
             ) : (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4"
-                icon={Delete02Icon}
-              />
+              <Icon aria-hidden icon={Delete02Icon} />
             )}
             Delete
           </Button>
@@ -699,7 +679,7 @@ export const DivisionsView = ({
         {divisions.map((division) => (
           <SettingsNavigationRow
             description={`${formatCount(division.members.length, "Member")}, ${formatCount(division.mailboxCount, "Mailbox", "Mailboxes")}`}
-            icon={<HugeiconsIcon aria-hidden icon={UserGroupIcon} />}
+            icon={<Icon aria-hidden icon={UserGroupIcon} />}
             key={division.id}
             onClick={() => {
               setSelectedDivisionId(division.id);

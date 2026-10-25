@@ -14,7 +14,6 @@ import {
   TextStrikethroughIcon,
   TextUnderlineIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { buildComposeCommands } from "@quieter/app/features/compose/domain/compose-commands";
 import { normalizeComposeBodyHtml } from "@quieter/app/features/compose/domain/draft";
 import { SlashCommands } from "@quieter/app/features/compose/domain/slash-commands";
@@ -31,6 +30,7 @@ import {
   DialogCloseButton,
 } from "@quieter/ui/dialog";
 import { Field, FieldLabel } from "@quieter/ui/field";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { toast } from "@quieter/ui/toast";
@@ -526,7 +526,7 @@ export const ComposeEditorBody = ({
       className={cn(
         "relative min-h-20 w-full overflow-hidden rounded-md border border-border bg-control text-body text-fg shadow-sm transition-colors duration-150 ease-out squircle",
         {
-          "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-1 has-[.ProseMirror:focus-visible]:ring-ring/45 has-[.ProseMirror:focus-visible]:outline-none aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive/45":
+          "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-2 has-[.ProseMirror:focus-visible]:ring-ring has-[.ProseMirror:focus-visible]:ring-offset-2 has-[.ProseMirror:focus-visible]:ring-offset-bg-raised has-[.ProseMirror:focus-visible]:outline-none aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive":
             chrome === "default",
           "rounded-none border-0 bg-transparent shadow-none":
             chrome === "seamless",
@@ -673,7 +673,7 @@ export const ComposeEditorToolbar = ({
               type="button"
               variant={action.active ? "selected" : undefined}
             >
-              <HugeiconsIcon className="size-4" icon={action.icon} />
+              <Icon icon={action.icon} />
             </ToolbarButton>
           </IconButtonTooltip>
         ))}
@@ -695,7 +695,7 @@ export const ComposeEditorToolbar = ({
           size="icon"
           type="button"
         >
-          <HugeiconsIcon className="size-4" icon={ArrowTurnBackwardIcon} />
+          <Icon icon={ArrowTurnBackwardIcon} />
         </ToolbarButton>
       </IconButtonTooltip>
       <IconButtonTooltip label="Redo">
@@ -711,7 +711,7 @@ export const ComposeEditorToolbar = ({
           size="icon"
           type="button"
         >
-          <HugeiconsIcon className="size-4" icon={ArrowTurnForwardIcon} />
+          <Icon icon={ArrowTurnForwardIcon} />
         </ToolbarButton>
       </IconButtonTooltip>
     </ToolbarGroup>
@@ -759,7 +759,7 @@ export const ComposeEditorToolbar = ({
               }}
               type="button"
             >
-              <HugeiconsIcon icon={NoteIcon} />
+              <Icon icon={NoteIcon} />
               {chrome === "selection" ? null : "Save snippet"}
             </ToolbarButton>
           </IconButtonTooltip>
@@ -797,7 +797,7 @@ export const ComposeEditorDictationButton = () => {
         }}
         type="button"
       >
-        <HugeiconsIcon className="size-4" icon={StopIcon} />
+        <Icon icon={StopIcon} />
         Stop
       </ToolbarButton>
     </IconButtonTooltip>
@@ -815,7 +815,7 @@ export const ComposeEditorDictationButton = () => {
         size="icon"
         type="button"
       >
-        <HugeiconsIcon className="size-4" icon={AiMicIcon} />
+        <Icon icon={AiMicIcon} />
       </ToolbarButton>
     </IconButtonTooltip>
   );

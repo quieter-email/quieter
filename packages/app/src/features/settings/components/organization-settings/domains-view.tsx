@@ -1,7 +1,6 @@
 "use client";
 
 import { Globe02Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { BillingAccessNotice } from "@quieter/app/features/settings/components/organization-settings/billing-access-notice";
 import { formatCount } from "@quieter/app/features/settings/components/organization-settings/domain";
 import type { FullOrganization } from "@quieter/app/features/settings/components/organization-settings/domain";
@@ -22,6 +21,7 @@ import {
 } from "@quieter/app/features/settings/components/settings-layout";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -166,13 +166,7 @@ export const DomainsView = ({
             />
           ) : (
             <MutedActionButton
-              icon={
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-4"
-                  icon={Globe02Icon}
-                />
-              }
+              icon={<Icon aria-hidden icon={Globe02Icon} />}
               label="Register"
               reason={manageDomainsReason}
             />

@@ -1,7 +1,6 @@
 "use client";
 
 import { Loading03Icon, Mail01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { MailboxAccessPill } from "@quieter/app/features/mailbox/components/mailbox-access-pill";
 import type { MailboxGrantRole } from "@quieter/app/features/mailbox/components/mailbox-access-pill";
 import { runDetached } from "@quieter/app/features/settings/components/mailboxes-settings-shared";
@@ -12,7 +11,7 @@ import {
 } from "@quieter/app/features/settings/components/settings-layout";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import {
   Select,
   SelectContent,
@@ -148,11 +147,9 @@ export const MailboxDetailGeneralSection = ({
                 size="sm"
                 type="button"
               >
-                <HugeiconsIcon
+                <Icon
                   aria-hidden
-                  className={cn("size-4", {
-                    "animate-spin": isStartingGmail,
-                  })}
+                  animation={isStartingGmail ? "spin" : undefined}
                   icon={isStartingGmail ? Loading03Icon : Mail01Icon}
                 />
                 Reconnect

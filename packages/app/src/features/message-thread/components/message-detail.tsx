@@ -1,7 +1,6 @@
 "use client";
 
 import { Loading03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import type {
   MailboxActions,
@@ -15,6 +14,7 @@ import {
   appMotionDuration,
 } from "@quieter/app/features/motion/app-motion";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import { Icon } from "@quieter/ui/icon";
 import { m, useReducedMotion } from "motion/react";
 import { Suspense, useLayoutEffect, useRef } from "react";
 import type { ReactNode } from "react";
@@ -22,6 +22,7 @@ import type { ReactNode } from "react";
 type MessageDetailProps = {
   activeMailbox: MailboxCategory;
   detailOnly?: boolean;
+  showDesktopBack?: boolean;
   composeDemoMode?: boolean;
   composeManagedDemoMode?: boolean;
   composePersistDrafts?: boolean;
@@ -43,6 +44,7 @@ type MessageDetailProps = {
 export const MessageDetail = ({
   activeMailbox,
   detailOnly,
+  showDesktopBack,
   composeDemoMode,
   composeManagedDemoMode,
   composePersistDrafts,
@@ -87,16 +89,14 @@ export const MessageDetail = ({
       <Suspense
         fallback={
           <div className="grid h-full place-items-center text-body text-muted-fg">
-            <HugeiconsIcon
-              className="animate-spin text-muted-fg"
-              icon={Loading03Icon}
-            />
+            <Icon animation="spin" tone="muted" icon={Loading03Icon} />
           </div>
         }
       >
         <MessageView
           activeMailbox={activeMailbox}
           detailOnly={detailOnly}
+          showDesktopBack={showDesktopBack}
           composeDemoMode={composeDemoMode}
           composeManagedDemoMode={composeManagedDemoMode}
           composePersistDrafts={composePersistDrafts}

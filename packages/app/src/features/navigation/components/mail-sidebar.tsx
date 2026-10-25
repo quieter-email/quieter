@@ -10,7 +10,6 @@ import {
   NoteEditIcon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { AssistantSidebarContext } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import {
   loadComposeWorkspace,
@@ -35,6 +34,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { Link } from "@tanstack/react-router";
@@ -131,12 +131,7 @@ const SidebarHelpMenu = ({
             aria-label="Help and legal"
             className="relative z-10"
           >
-            <HugeiconsIcon
-              aria-hidden
-              className="size-4"
-              icon={HelpCircleIcon}
-              strokeWidth={1.5}
-            />
+            <Icon aria-hidden icon={HelpCircleIcon} />
           </DropdownMenuTrigger>
         </IconButtonTooltip>
       </div>
@@ -262,11 +257,7 @@ const SidebarInboxSection = ({
           onPointerDown={() => void loadComposeWorkspace()}
           type="button"
         >
-          <HugeiconsIcon
-            className="size-4 shrink-0"
-            icon={Edit01Icon}
-            strokeWidth={1.5}
-          />
+          <Icon icon={Edit01Icon} />
           Compose
         </Button>
       </SidebarEntrance>
@@ -280,11 +271,7 @@ const SidebarInboxSection = ({
             }}
             type="button"
           >
-            <HugeiconsIcon
-              aria-hidden
-              icon={Calendar03Icon}
-              strokeWidth={1.5}
-            />
+            <Icon aria-hidden icon={Calendar03Icon} />
             Calendar
           </SidebarNavItem>
         ) : null}
@@ -317,11 +304,7 @@ const SidebarInboxSection = ({
               type="button"
               variant="ghost"
             >
-              <HugeiconsIcon
-                className="shrink-0 text-fg"
-                icon={NoteEditIcon}
-                strokeWidth={1.5}
-              />
+              <Icon tone="default" icon={NoteEditIcon} />
               Snippets
             </SidebarNavItem>
           </SidebarEntrance>
@@ -392,11 +375,7 @@ const SidebarFooter = ({
           variant="ghost"
           to="/settings"
         >
-          <HugeiconsIcon
-            className="size-4 shrink-0"
-            icon={Settings01Icon}
-            strokeWidth={1.5}
-          />
+          <Icon icon={Settings01Icon} />
           Settings
         </LinkButton>
       </div>
@@ -430,7 +409,7 @@ const SidebarAssistantAction = ({
         }}
         type="button"
       >
-        <HugeiconsIcon aria-hidden icon={LayoutRightIcon} />
+        <Icon aria-hidden icon={LayoutRightIcon} />
         Open assistant
       </SidebarNavItem>
     </div>
@@ -507,7 +486,7 @@ const SidebarContent = ({
               type="button"
               variant="ghost"
             >
-              <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
+              <Icon aria-hidden icon={Cancel01Icon} />
             </Button>
           </IconButtonTooltip>
         )}

@@ -1,7 +1,6 @@
 "use client";
 
 import { Delete02Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   SettingsCard,
   SettingsRow,
@@ -18,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
 import { useState } from "react";
 
 export const MailboxRemovalSettings = ({
@@ -49,11 +49,7 @@ export const MailboxRemovalSettings = ({
                 type="button"
                 variant="destructive"
               >
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-4"
-                  icon={Delete02Icon}
-                />
+                <Icon aria-hidden icon={Delete02Icon} />
                 {isManaged ? "Delete mailbox" : "Remove"}
               </Button>
             }

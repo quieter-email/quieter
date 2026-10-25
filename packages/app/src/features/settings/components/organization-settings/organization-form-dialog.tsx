@@ -5,7 +5,6 @@ import {
   Loading03Icon,
   UserGroupIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   getFullOrganizationQueryKey,
   slugifyOrganizationName,
@@ -22,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
 import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
@@ -140,11 +140,7 @@ export const OrganizationFormDialog = ({
           size="sm"
           variant={isEditing ? "outline" : "default"}
         >
-          <HugeiconsIcon
-            aria-hidden
-            className="size-4"
-            icon={isEditing ? Edit01Icon : UserGroupIcon}
-          />
+          <Icon aria-hidden icon={isEditing ? Edit01Icon : UserGroupIcon} />
           {isEditing ? "Edit" : "Create"}
         </Button>
       )}
@@ -234,17 +230,9 @@ export const OrganizationFormDialog = ({
                 type="submit"
               >
                 {organizationMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                 ) : (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Edit01Icon}
-                  />
+                  <Icon aria-hidden icon={Edit01Icon} />
                 )}
                 {submitLabel}
               </Button>

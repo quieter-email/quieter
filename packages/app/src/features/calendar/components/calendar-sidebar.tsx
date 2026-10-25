@@ -9,7 +9,6 @@ import {
   MoreHorizontalIcon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { AssistantSidebarContext } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import type { CalendarAccount, CalendarSummary } from "@quieter/calendar";
 import { Button, LinkButton } from "@quieter/ui/button";
@@ -21,8 +20,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Pill } from "@quieter/ui/pill";
+import { Text } from "@quieter/ui/text";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { use } from "react";
 
@@ -79,7 +80,7 @@ const CalendarSidebarContent = ({
           }}
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+          <Icon aria-hidden icon={ArrowLeft01Icon} />
           Back to Mail
         </Button>
         {close ? (
@@ -90,18 +91,16 @@ const CalendarSidebarContent = ({
               size="icon-sm"
               variant="ghost"
             >
-              <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
+              <Icon aria-hidden icon={Cancel01Icon} />
             </Button>
           </IconButtonTooltip>
         ) : null}
       </div>
       <div className="flex items-center gap-2 px-2">
-        <HugeiconsIcon
-          aria-hidden
-          className="size-5 text-muted-fg"
-          icon={Calendar03Icon}
-        />
-        <h1 className="text-title-sm font-medium">Calendar</h1>
+        <Icon aria-hidden size={20} tone="muted" icon={Calendar03Icon} />
+        <Text as="h1" size="lg" truncate weight="medium">
+          Calendar
+        </Text>
       </div>
       <Button
         disabled={!canCreate}
@@ -111,7 +110,7 @@ const CalendarSidebarContent = ({
           close?.();
         }}
       >
-        <HugeiconsIcon aria-hidden icon={Add01Icon} />
+        <Icon aria-hidden icon={Add01Icon} />
         New event
       </Button>
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
@@ -151,11 +150,7 @@ const CalendarSidebarContent = ({
                         appearance="icon-transparent"
                         aria-label={`Manage ${account.name}`}
                       >
-                        <HugeiconsIcon
-                          aria-hidden
-                          className="size-4"
-                          icon={MoreHorizontalIcon}
-                        />
+                        <Icon aria-hidden icon={MoreHorizontalIcon} />
                       </DropdownMenuTrigger>
                     </IconButtonTooltip>
                     <DropdownMenuContent align="start" size="compact">
@@ -233,7 +228,7 @@ const CalendarSidebarContent = ({
               pending={connecting}
               variant="ghost"
             >
-              <HugeiconsIcon aria-hidden icon={Add01Icon} />
+              <Icon aria-hidden icon={Add01Icon} />
               Connect a calendar account
             </Button>
           )}
@@ -252,7 +247,7 @@ const CalendarSidebarContent = ({
             }}
             variant="ghost"
           >
-            <HugeiconsIcon aria-hidden icon={LayoutRightIcon} />
+            <Icon aria-hidden icon={LayoutRightIcon} />
             Open assistant
           </Button>
         ) : null}
@@ -263,7 +258,7 @@ const CalendarSidebarContent = ({
           to="/settings"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={Settings01Icon} />
+          <Icon aria-hidden icon={Settings01Icon} />
           Settings
         </LinkButton>
       </div>

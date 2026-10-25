@@ -1,7 +1,6 @@
 "use client";
 
 import { Loading03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { runDetached } from "@quieter/app/features/settings/components/mailboxes-settings-shared";
 import {
   SettingsErrorState,
@@ -21,6 +20,7 @@ import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -154,11 +154,7 @@ export const ConnectorsSettingsPanel = () => {
               variant="outline"
             >
               {isDisconnecting ? (
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-4 animate-spin"
-                  icon={Loading03Icon}
-                />
+                <Icon aria-hidden animation="spin" icon={Loading03Icon} />
               ) : null}
               Disconnect
             </Button>
@@ -175,11 +171,7 @@ export const ConnectorsSettingsPanel = () => {
               variant="outline"
             >
               {isStarting ? (
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-4 animate-spin"
-                  icon={Loading03Icon}
-                />
+                <Icon aria-hidden animation="spin" icon={Loading03Icon} />
               ) : null}
               {needsReconnect ? "Reconnect" : "Connect"}
             </Button>

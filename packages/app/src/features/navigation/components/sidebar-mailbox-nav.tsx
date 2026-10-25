@@ -10,11 +10,11 @@ import {
   MailSend02Icon,
   Flag01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type { IconSvgElement } from "@hugeicons/react";
 import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
+import { Icon } from "@quieter/ui/icon";
 
 const SIDEBAR_MAILBOX_ITEMS: readonly {
   id: MailboxCategory;
@@ -75,11 +75,7 @@ export const SidebarMailboxNav = ({
               type="button"
               variant="ghost"
             >
-              <HugeiconsIcon
-                strokeWidth={1.5}
-                className="shrink-0 text-fg"
-                icon={item.icon}
-              />
+              <Icon tone="default" icon={item.icon} />
               {item.label}
             </SidebarNavItem>
           </SidebarEntrance>

@@ -10,8 +10,8 @@ import {
   TextStrikethroughIcon,
   TextUnderlineIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type { SlashCommand } from "@quieter/app/features/compose/domain/slash-commands";
+import { Icon } from "@quieter/ui/icon";
 import type { Editor, Range } from "@tiptap/core";
 
 type ComposeCommandOptions = {
@@ -131,7 +131,7 @@ export const buildComposeCommands = ({
     .filter((action) => action.apply(editor.can().chain()).run())
     .map((action) => ({
       group: "Formatting",
-      icon: <HugeiconsIcon icon={action.icon} />,
+      icon: <Icon icon={action.icon} />,
       id: action.id,
       keywords: action.keywords,
       label: action.label,
@@ -142,7 +142,7 @@ export const buildComposeCommands = ({
   commands.push(
     {
       group: "Insert",
-      icon: <HugeiconsIcon icon={NoteIcon} />,
+      icon: <Icon icon={NoteIcon} />,
       id: "link",
       label: "Link",
       run: (targetEditor, range) => {
@@ -152,7 +152,7 @@ export const buildComposeCommands = ({
     },
     {
       group: "Insert",
-      icon: <HugeiconsIcon icon={Image01Icon} />,
+      icon: <Icon icon={Image01Icon} />,
       id: "image",
       label: "Image",
       run: (targetEditor, range) => {
@@ -163,7 +163,7 @@ export const buildComposeCommands = ({
     ...snippets.map((snippet) => ({
       description: snippet.bodyText,
       group: "Snippets",
-      icon: <HugeiconsIcon icon={NoteIcon} />,
+      icon: <Icon icon={NoteIcon} />,
       id: `snippet-${snippet.id}`,
       label: snippet.name,
       run: (targetEditor: Editor, range: Range) => {
@@ -187,7 +187,7 @@ export const buildComposeCommands = ({
   if (onCreateSnippet) {
     commands.push({
       group: "Snippets",
-      icon: <HugeiconsIcon icon={NoteIcon} />,
+      icon: <Icon icon={NoteIcon} />,
       id: "new-snippet",
       keywords: "create save",
       label: "New snippet",
@@ -200,7 +200,7 @@ export const buildComposeCommands = ({
   if (onManageSnippets) {
     commands.push({
       group: "Snippets",
-      icon: <HugeiconsIcon icon={NoteIcon} />,
+      icon: <Icon icon={NoteIcon} />,
       id: "manage-snippets",
       label: "Manage snippets",
       run: (targetEditor, range) => {

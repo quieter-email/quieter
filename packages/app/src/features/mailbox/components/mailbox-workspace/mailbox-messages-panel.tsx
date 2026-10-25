@@ -11,6 +11,7 @@ import {
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import { MessageList } from "@quieter/app/features/message-list/components/message-list";
 import { MessageDetail } from "@quieter/app/features/message-thread/components/message-detail";
+import type { MailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
 import { cn } from "@quieter/ui/cn";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
@@ -18,6 +19,7 @@ import { useLayoutEffect, useState } from "react";
 
 type MailboxMessagesPanelProps = {
   detailOnly?: boolean;
+  mailLayout: MailLayout;
   activeMailbox: MailboxCategory;
   currentUserEmail: string | null;
   focusOnOpen?: boolean;
@@ -38,6 +40,7 @@ type MailboxMessagesPanelProps = {
 
 export const MailboxMessagesPanel = ({
   detailOnly = false,
+  mailLayout,
   activeMailbox,
   currentUserEmail,
   focusOnOpen,
@@ -55,6 +58,7 @@ export const MailboxMessagesPanel = ({
   senderMailbox,
   signature,
 }: MailboxMessagesPanelProps) => {
+  const onePanelDesktop = mailLayout === "one-panel";
   const messageId = useMailboxMessageId() ?? null;
   const threadId = useMailboxThreadId() ?? null;
   const setMailboxSearch = useMailboxSearchActions();
@@ -131,13 +135,13 @@ export const MailboxMessagesPanel = ({
       return;
     }
 
-    const shouldPushMobileHistory =
+    const shouldPushHistory =
       (messageId?.trim() ?? "") === "" &&
-      window.matchMedia("(max-width: 1023.98px)").matches;
+      (onePanelDesktop || window.matchMedia("(max-width: 1023.98px)").matches);
     activateListMessage(nextMessageId);
     void setMailboxSearch(
       { messageId: nextMessageId, threadId: nextThreadId ?? null },
-      { replace: !shouldPushMobileHistory }
+      { replace: !shouldPushHistory }
     );
   };
 
@@ -157,7 +161,10 @@ export const MailboxMessagesPanel = ({
   const backToList = () => {
     setShouldFocusMessageView(false);
     onFocusRequestComplete?.();
-    void setMailboxSearch({ messageId: null, threadId: null });
+    void setMailboxSearch(
+      { messageId: null, threadId: null },
+      { replace: true }
+    );
   };
 
   const handleRefresh = () => {
@@ -171,10 +178,12 @@ export const MailboxMessagesPanel = ({
           className={cn({
             flex: !isMessageRouteOpen,
             hidden: isMessageRouteOpen,
+            "lg:hidden": onePanelDesktop && isMessageRouteOpen,
           })}
           layout="cell"
         >
           <MessageList
+            wideCompactRows={onePanelDesktop}
             activeMailbox={activeMailbox}
             activeMessageId={messageId}
             mailboxId={mailboxId}
@@ -207,11 +216,13 @@ export const MailboxMessagesPanel = ({
         className={cn({
           flex: isMessageRouteOpen,
           hidden: !isMessageRouteOpen,
+          "lg:hidden": onePanelDesktop && !isMessageRouteOpen,
         })}
         layout="cell"
       >
         {isMessageRouteOpen ? (
           <MessageDetail
+            showDesktopBack={onePanelDesktop}
             activeMailbox={activeMailbox}
             detailOnly={detailOnly}
             composeDemoMode={isDemoMode}

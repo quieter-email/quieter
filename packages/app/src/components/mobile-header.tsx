@@ -1,9 +1,9 @@
 "use client";
 
 import { ArrowLeft01Icon, SidebarLeftIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { ReactNode } from "react";
 
@@ -47,7 +47,7 @@ export const MobileHeader = ({
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={icon} />
+          <Icon aria-hidden icon={icon} />
         </Button>
       </IconButtonTooltip>
       {title === undefined || title === "" ? null : (

@@ -1,7 +1,6 @@
 "use client";
 
 import { Loading03Icon, Refresh01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { BillingAccessNotice } from "@quieter/app/features/settings/components/organization-settings/billing-access-notice";
 import type { FullOrganization } from "@quieter/app/features/settings/components/organization-settings/domain";
 import { DomainDangerSection } from "@quieter/app/features/settings/components/organization-settings/domain-danger-section";
@@ -40,6 +39,7 @@ import { openExternalUrl } from "@quieter/app/runtime";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -132,22 +132,16 @@ const DomainHeader = ({
             size="sm"
             variant="outline"
           >
-            <HugeiconsIcon
+            <Icon
               aria-hidden
-              className={cn("size-4", { "animate-spin": verifyPending })}
+              animation={verifyPending ? "spin" : undefined}
               icon={verifyPending ? Loading03Icon : Refresh01Icon}
             />
             Verify now
           </Button>
         ) : (
           <MutedActionButton
-            icon={
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4"
-                icon={Refresh01Icon}
-              />
-            }
+            icon={<Icon aria-hidden icon={Refresh01Icon} />}
             label="Verify"
             reason={manageReason}
           />

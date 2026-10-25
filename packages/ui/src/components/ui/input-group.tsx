@@ -11,7 +11,7 @@ export const InputGroup = ({
 }: ComponentPropsWithoutRef<"div"> & { surface?: "input" | "page" }) => (
   <div
     className={cn(
-      "flex h-8 min-w-0 items-center rounded-md border border-border bg-input shadow-sm transition-colors squircle focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45 has-aria-invalid:border-destructive has-aria-invalid:focus-within:border-destructive has-aria-invalid:focus-within:ring-destructive/45",
+      "flex h-8 min-w-0 items-center rounded-md border border-border bg-input shadow-sm transition-colors squircle focus-within:border-ring focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-bg-raised has-aria-invalid:border-destructive has-aria-invalid:focus-within:border-destructive has-aria-invalid:focus-within:ring-destructive",
       { "bg-bg": surface === "page" },
       className
     )}

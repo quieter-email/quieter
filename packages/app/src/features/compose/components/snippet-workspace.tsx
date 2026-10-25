@@ -7,7 +7,6 @@ import {
   Search01Icon,
   SidebarLeftIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { SnippetFields } from "@quieter/app/features/compose/components/snippet-fields";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
@@ -31,8 +30,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
@@ -136,7 +137,7 @@ export const SnippetWorkspace = ({
   if (isSnippetsPending) {
     snippetQueryState = (
       <div className="flex items-center justify-center gap-2 px-3 py-10 text-caption text-muted-fg">
-        <HugeiconsIcon className="size-3.5 animate-spin" icon={Loading03Icon} />
+        <Icon size={14} animation="spin" icon={Loading03Icon} />
         Loading snippets
       </div>
     );
@@ -149,7 +150,7 @@ export const SnippetWorkspace = ({
   } else if (filteredSnippets.length === 0) {
     snippetQueryState = (
       <div className="px-6 py-12 text-center">
-        <p className="text-body font-medium text-fg">
+        <p className="text-body-sm font-medium text-fg">
           {snippets.length === 0 ? "No snippets yet" : "No matches"}
         </p>
         <p className="mt-1 text-caption/5 text-muted-fg">
@@ -175,12 +176,18 @@ export const SnippetWorkspace = ({
                 type="button"
                 variant="ghost"
               >
-                <HugeiconsIcon icon={SidebarLeftIcon} />
+                <Icon icon={SidebarLeftIcon} />
               </Button>
             </IconButtonTooltip>
-            <h1 className="min-w-0 flex-1 text-body font-semibold tracking-tight text-fg">
+            <Text
+              as="h1"
+              className="min-w-0 flex-1"
+              size="lg"
+              truncate
+              weight="medium"
+            >
               Snippets
-            </h1>
+            </Text>
             <Button
               onClick={() => {
                 setEditingId(null);
@@ -191,7 +198,7 @@ export const SnippetWorkspace = ({
               size="sm"
               type="button"
             >
-              <HugeiconsIcon icon={Add01Icon} />
+              <Icon icon={Add01Icon} />
               New
             </Button>
           </div>
@@ -202,21 +209,24 @@ export const SnippetWorkspace = ({
             <span className="sr-only" id="snippet-workspace-search-label">
               Search snippets
             </span>
-            <HugeiconsIcon
-              className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-fg"
-              icon={Search01Icon}
-            />
-            <Input
-              aria-labelledby="snippet-workspace-search-label"
-              // oxlint-disable-next-line shadcn/no-restyle -- Search input leaves room for its leading icon.
-              className="pl-9"
-              id="snippet-workspace-search"
-              onChange={(event) => {
-                setSearch(event.currentTarget.value);
-              }}
-              placeholder="Search snippets"
-              value={search}
-            />
+            <InputGroup>
+              <InputAddon
+                aria-hidden
+                className="ml-3 flex shrink-0 items-center"
+              >
+                <Icon icon={Search01Icon} size={14} tone="muted" />
+              </InputAddon>
+              <Input
+                aria-labelledby="snippet-workspace-search-label"
+                chrome="attached"
+                id="snippet-workspace-search"
+                onChange={(event) => {
+                  setSearch(event.currentTarget.value);
+                }}
+                placeholder="Search snippets"
+                value={search}
+              />
+            </InputGroup>
           </label>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
@@ -298,7 +308,7 @@ export const SnippetWorkspace = ({
                   type="button"
                   variant="destructive"
                 >
-                  <HugeiconsIcon icon={Delete02Icon} />
+                  <Icon icon={Delete02Icon} />
                   Delete
                 </Button>
               ) : null}
@@ -307,10 +317,7 @@ export const SnippetWorkspace = ({
                 type="submit"
               >
                 {isSaving ? (
-                  <HugeiconsIcon
-                    className="animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <Icon animation="spin" icon={Loading03Icon} />
                 ) : null}
                 Save
               </Button>

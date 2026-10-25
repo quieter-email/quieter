@@ -1,12 +1,12 @@
 "use client";
 
 import { InformationCircleIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type { MailDeliveryMetricsRange } from "@quieter/app/features/settings/components/organization-settings/mail-delivery";
 import { SettingsCard } from "@quieter/app/features/settings/components/settings-layout";
 import type { rpc } from "@quieter/app/lib/orpc";
 import { BarChart } from "@quieter/ui/bar-chart";
 import { Button } from "@quieter/ui/button";
+import { Icon } from "@quieter/ui/icon";
 import { Separator } from "@quieter/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
 
@@ -95,7 +95,7 @@ export const MailDeliveryMetrics = ({
                       />
                     }
                   >
-                    <HugeiconsIcon icon={InformationCircleIcon} />
+                    <Icon icon={InformationCircleIcon} />
                   </TooltipTrigger>
                   <TooltipContent>{stat.hint}</TooltipContent>
                 </Tooltip>
@@ -151,7 +151,7 @@ export const MailDeliveryMetrics = ({
                       />
                     }
                   >
-                    <HugeiconsIcon icon={InformationCircleIcon} />
+                    <Icon icon={InformationCircleIcon} />
                   </TooltipTrigger>
                   <TooltipContent>{stat.hint}</TooltipContent>
                 </Tooltip>

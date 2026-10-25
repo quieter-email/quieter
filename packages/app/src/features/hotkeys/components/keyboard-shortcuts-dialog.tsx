@@ -1,7 +1,6 @@
 "use client";
 
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { KEYBOARD_SHORTCUTS } from "@quieter/app/features/hotkeys/domain/keyboard-shortcuts";
 import type { KeyboardShortcut } from "@quieter/app/features/hotkeys/domain/keyboard-shortcuts";
 import { cn } from "@quieter/ui/cn";
@@ -13,6 +12,7 @@ import {
   FullPageDialogHeader,
   FullPageDialogTitle,
 } from "@quieter/ui/full-page-dialog";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { formatForDisplay } from "@tanstack/react-hotkeys";
 import type { Hotkey, RegisterableHotkey } from "@tanstack/react-hotkeys";
@@ -186,7 +186,7 @@ export const KeyboardShortcutsDialog = ({
       <FullPageDialogHeader>
         <IconButtonTooltip label="Close keyboard shortcuts">
           <FullPageDialogClose aria-label="Close keyboard shortcuts">
-            <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
+            <Icon aria-hidden icon={Cancel01Icon} />
           </FullPageDialogClose>
         </IconButtonTooltip>
         <div className="min-w-0">

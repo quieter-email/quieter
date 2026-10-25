@@ -1,0 +1,18 @@
+{
+  "baseline": "c1d6a2513e1b23ce009fd6b4eec604d9808812fe",
+  "before": {
+    "accessHover": "oklch(0.3 0.007 264)",
+    "blue": "oklch(0.79 0.12 250)",
+    "controlHover": "oklch(0.3 0.007 264)",
+    "cyan": "oklch(0.79 0.1 210)",
+    "yellow": "oklch(0.82 0.12 90)"
+  },
+  "after": {
+    "accessHover": "oklch(0.24 0.003 264)",
+    "blue": "oklch(0.72 0.145 250)",
+    "controlHover": "oklch(0.24 0.003 264)",
+    "cyan": "oklch(0.73 0.125 210)",
+    "yellow": "oklch(0.78 0.14 90)"
+  },
+  "scope": "Only .home-page.dark and .home-footer.dark in the web stylesheet; feature home sources remain unchanged."
+}

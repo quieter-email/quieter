@@ -1,10 +1,10 @@
 "use client";
 
 import { ArrowUp01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@quieter/ui/button";
 import type { ButtonProps } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import {
   LazyMotion,
   PresenceContext,
@@ -130,13 +130,13 @@ export const ArrowInteractionButton = ({
       }}
     >
       <span aria-hidden="true" className="pointer-events-none opacity-0">
-        <HugeiconsIcon icon={ArrowUp01Icon} />
+        <Icon icon={ArrowUp01Icon} />
       </span>
       <LazyMotion features={domAnimation}>
         <PresenceContext.Provider value={null}>
           <span className="pointer-events-none absolute inset-0 inline-grid place-items-center overflow-hidden">
             <span aria-hidden="true" className="pointer-events-none opacity-0">
-              <HugeiconsIcon icon={ArrowUp01Icon} />
+              <Icon icon={ArrowUp01Icon} />
             </span>
             <m.span
               key={`primary-${animation.kind}-${animation.nonce}`}
@@ -145,7 +145,7 @@ export const ArrowInteractionButton = ({
               initial={arrowPrimaryInitial[animation.kind]}
               variants={arrowPrimaryVariants}
             >
-              <HugeiconsIcon icon={ArrowUp01Icon} />
+              <Icon icon={ArrowUp01Icon} />
             </m.span>
             {animation.kind === "success" && (
               <m.span
@@ -155,7 +155,7 @@ export const ArrowInteractionButton = ({
                 initial="from"
                 variants={arrowSecondaryVariants}
               >
-                <HugeiconsIcon icon={ArrowUp01Icon} />
+                <Icon icon={ArrowUp01Icon} />
               </m.span>
             )}
           </span>

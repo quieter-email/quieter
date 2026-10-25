@@ -37,7 +37,7 @@ import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { useQueries } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 const buildDraftListEntry = (
   message: MessageListItem,
@@ -568,44 +568,6 @@ const useMessageListInteractions = ({
     }
     selection.openFocusedThread();
   };
-
-  const previousActiveMessageIdRef = useRef(props.activeMessageId);
-
-  useLayoutEffect(() => {
-    const previousActiveMessageId = previousActiveMessageIdRef.current;
-    previousActiveMessageIdRef.current = props.activeMessageId;
-
-    const { keyboardFocusedThreadId } = selection;
-
-    if (
-      (previousActiveMessageId?.trim() ?? "") === "" ||
-      (props.activeMessageId?.trim() ?? "") !== "" ||
-      keyboardFocusedThreadId === null ||
-      keyboardFocusedThreadId.trim() === ""
-    ) {
-      return () => {
-        // Focus restore is not needed for this navigation path.
-      };
-    }
-
-    const focusedThreadId = keyboardFocusedThreadId;
-    const showFocusRing = selection.consumeFocusRingRequest();
-
-    const frameId = requestAnimationFrame(() => {
-      const focusedRowTrigger =
-        selection.scrollRef.current?.querySelector<HTMLButtonElement>(
-          `li[data-thread-id="${CSS.escape(focusedThreadId)}"] [data-message-row-trigger]`
-        );
-      focusedRowTrigger?.focus({
-        focusVisible: showFocusRing,
-        preventScroll: true,
-      });
-    });
-
-    return () => {
-      cancelAnimationFrame(frameId);
-    };
-  }, [props.activeMessageId, selection]);
 
   const actionHotkeysEnabled =
     actionMailboxProvider !== "api" &&

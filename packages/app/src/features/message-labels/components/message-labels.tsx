@@ -41,12 +41,16 @@ export const MessageLabels = ({
   return (
     <div
       aria-label="Conversation labels"
-      className={cn("flex min-w-0 flex-wrap items-center gap-1", className)}
+      className={cn(
+        "flex min-w-0 items-center gap-1",
+        { "flex-wrap": !compact },
+        className
+      )}
     >
       {visibleLabels.map((label) => (
         <Pill
           className={cn("min-w-0", {
-            "max-w-24": compact,
+            "max-w-24 shrink": compact,
             "max-w-44": !compact,
           })}
           key={label.id}

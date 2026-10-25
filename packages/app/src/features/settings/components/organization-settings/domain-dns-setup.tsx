@@ -6,7 +6,6 @@ import {
   Globe02Icon,
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { RecordState } from "@quieter/app/features/settings/components/organization-settings/domain-status";
 import type {
   getDomainVerificationStatus,
@@ -25,6 +24,7 @@ import {
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { toast } from "@quieter/ui/toast";
 
 const dnsTableColumns =
@@ -48,29 +48,19 @@ const copyDnsValue = async (value: string) => {
 };
 
 const DnsCopyCell = ({ value }: { value: string }) => (
-  <button
+  <Button
     aria-label={`Copy ${value}`}
-    className={cn(
-      "max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-caption text-fg squircle",
-      // oxlint-disable-next-line shadcn/no-arbitrary-values -- Explicit transition properties for the copy affordance.
-      "transition-[transform,background-color] duration-100 ease-out",
-      "hover:bg-muted/70",
-      "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
-    )}
+    className="max-w-full min-w-0"
     onClick={() => {
-      void (async () => {
-        try {
-          await copyDnsValue(value);
-        } catch {
-          /* clipboard errors are surfaced in copyDnsValue */
-        }
-      })();
+      void copyDnsValue(value);
     }}
+    size="auto"
     title={`Copy ${value}`}
     type="button"
+    variant="ghost"
   >
-    <span className="block truncate">{value}</span>
-  </button>
+    <code className="block truncate font-mono text-caption">{value}</code>
+  </Button>
 );
 
 const getStatusSectionClass = (tone: DomainStatusTone) => {
@@ -83,14 +73,14 @@ const getStatusSectionClass = (tone: DomainStatusTone) => {
   return "border-border bg-bg-raised/58";
 };
 
-const getStatusIconClass = (tone: DomainStatusTone) => {
+const getStatusIconTone = (tone: DomainStatusTone) => {
   if (tone === "success") {
-    return "text-success";
+    return "success";
   }
   if (tone === "error") {
-    return "text-destructive";
+    return "destructive";
   }
-  return "text-muted-fg";
+  return "muted";
 };
 
 const getDnsRecordStatusMessage = (
@@ -157,9 +147,9 @@ export const DomainStatusSummary = ({
       <SettingsRowText
         title={
           <span className="flex items-center gap-2">
-            <HugeiconsIcon
+            <Icon
               aria-hidden
-              className={cn("size-4", getStatusIconClass(status.tone))}
+              tone={getStatusIconTone(status.tone)}
               icon={getStatusIcon(status.tone)}
             />
             {status.label}
@@ -215,22 +205,16 @@ const DomainConnectCard = ({
           availability?.available === true &&
           (manageReason === null ? (
             <Button disabled={startPending} onClick={onStart} size="sm">
-              <HugeiconsIcon
+              <Icon
                 aria-hidden
-                className={cn("size-4", { "animate-spin": startPending })}
+                animation={startPending ? "spin" : undefined}
                 icon={startPending ? Loading03Icon : Globe02Icon}
               />
               Connect DNS
             </Button>
           ) : (
             <MutedActionButton
-              icon={
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-4"
-                  icon={Globe02Icon}
-                />
-              }
+              icon={<Icon aria-hidden icon={Globe02Icon} />}
               label="Connect DNS"
               reason={manageReason}
             />

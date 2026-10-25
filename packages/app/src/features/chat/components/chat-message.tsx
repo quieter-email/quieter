@@ -1,7 +1,6 @@
 "use client";
 
 import { Copy01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { MarkdownContent } from "@quieter/app/features/chat/components/markdown-content";
 import { ToolActivity } from "@quieter/app/features/chat/components/tool-activity";
 import {
@@ -13,6 +12,7 @@ import { isChatToolPart } from "@quieter/app/features/chat/domain/chat-tools";
 import type { ChatToolApproval } from "@quieter/app/features/chat/domain/chat-tools";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { Button } from "@quieter/ui/button";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { toast } from "@quieter/ui/toast";
 import type { UIMessage } from "ai";
@@ -120,11 +120,7 @@ export const ChatMessage = ({
               type="button"
               variant="ghost"
             >
-              <HugeiconsIcon
-                aria-hidden
-                className="size-3.5"
-                icon={Copy01Icon}
-              />
+              <Icon aria-hidden size={14} icon={Copy01Icon} />
             </Button>
           </IconButtonTooltip>
         </div>

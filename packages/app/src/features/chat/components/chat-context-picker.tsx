@@ -1,5 +1,4 @@
 import { Attachment01Icon, Mail01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { MAX_CHAT_CONTEXT_MESSAGES } from "@quieter/ai/chat-context";
 import type { ChatContextItem } from "@quieter/app/features/chat/components/chat-composer";
 import { parseSender } from "@quieter/app/lib/gmail/message-utils";
@@ -7,6 +6,7 @@ import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { messagesQueryOptions } from "@quieter/app/lib/mail/inbox-query/index";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
+import { Icon } from "@quieter/ui/icon";
 import { Input } from "@quieter/ui/input";
 import {
   Popover,
@@ -77,7 +77,7 @@ export const ChatContextPicker = ({
         disabled={disabled}
         render={<Button size="compact" variant="ghost" />}
       >
-        <HugeiconsIcon aria-hidden icon={Attachment01Icon} />
+        <Icon aria-hidden icon={Attachment01Icon} />
         Attach mail
       </PopoverTrigger>
       <PopoverContent align="start" side="top" size="sm">
@@ -149,7 +149,7 @@ export const ChatContextPicker = ({
                   size="auto"
                   variant="ghost"
                 >
-                  <HugeiconsIcon aria-hidden icon={Mail01Icon} />
+                  <Icon aria-hidden icon={Mail01Icon} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">
                       {message.subject?.trim() || "Untitled mail"}

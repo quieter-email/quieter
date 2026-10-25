@@ -1,7 +1,6 @@
 "use client";
 
 import { Add01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   getMailboxDisplayTitle,
   getProviderLabel,
@@ -23,6 +22,7 @@ import { useSettingsTeam } from "@quieter/app/features/settings/components/use-s
 import { mailboxesQueryOptions } from "@quieter/app/lib/mailboxes-query";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
+import { Icon } from "@quieter/ui/icon";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -197,7 +197,7 @@ export const MailboxesListSettingsView = ({
             size="sm"
             type="button"
           >
-            <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+            <Icon aria-hidden icon={Add01Icon} />
             Add mailbox
           </Button>
         }

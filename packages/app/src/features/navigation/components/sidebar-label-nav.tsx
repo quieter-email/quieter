@@ -1,7 +1,6 @@
 "use client";
 
 import { MoreVerticalIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   SIDEBAR_LABEL_VISIBILITY_EVENT,
   computeEffectiveHiddenLabelIds,
@@ -23,6 +22,7 @@ import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { ColorSwatch } from "@quieter/ui/color-swatch";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -276,11 +276,7 @@ export const SidebarLabelNav = ({
               type="button"
               variant="ghost"
             >
-              <HugeiconsIcon
-                aria-hidden
-                className="size-3.5"
-                icon={MoreVerticalIcon}
-              />
+              <Icon aria-hidden size={14} icon={MoreVerticalIcon} />
             </Button>
           </IconButtonTooltip>
         )}

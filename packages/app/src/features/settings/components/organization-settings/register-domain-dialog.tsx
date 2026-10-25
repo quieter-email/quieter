@@ -5,7 +5,6 @@ import {
   Globe02Icon,
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { getOrganizationMailDomainsQueryKey } from "@quieter/app/features/settings/components/organization-settings/mail-domains";
 import type { OrganizationMailDomain } from "@quieter/app/features/settings/components/organization-settings/mail-domains";
 import { orpc } from "@quieter/app/lib/orpc";
@@ -21,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
 import { Radio, RadioGroup, RadioIndicator } from "@quieter/ui/radio-group";
 import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
@@ -117,7 +117,7 @@ export const RegisterDomainDialog = ({
       >
         {children ?? (
           <>
-            <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+            <Icon aria-hidden icon={Add01Icon} />
             Register
           </>
         )}
@@ -253,17 +253,9 @@ export const RegisterDomainDialog = ({
                   type="submit"
                 >
                   {createSetupMutation.isPending ? (
-                    <HugeiconsIcon
-                      aria-hidden
-                      className="size-4 animate-spin"
-                      icon={Loading03Icon}
-                    />
+                    <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                   ) : (
-                    <HugeiconsIcon
-                      aria-hidden
-                      className="size-4"
-                      icon={Globe02Icon}
-                    />
+                    <Icon aria-hidden icon={Globe02Icon} />
                   )}
                   Register domain
                 </Button>

@@ -1,7 +1,6 @@
 "use client";
 
 import { Delete02Icon, Loading03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type { DomainDetail } from "@quieter/app/features/settings/components/organization-settings/domain-status";
 import { MutedActionButton } from "@quieter/app/features/settings/components/organization-settings/settings-row";
 import {
@@ -11,7 +10,6 @@ import {
 } from "@quieter/app/features/settings/components/settings-layout";
 import type { RouterInputs, RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import {
   Dialog,
   DialogBody,
@@ -22,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
 import { Text } from "@quieter/ui/text";
 import type { UseMutationResult } from "@tanstack/react-query";
 
@@ -64,13 +63,7 @@ export const DomainDangerSection = ({
               data.managedMailboxCount
             ) ? (
               <MutedActionButton
-                icon={
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Delete02Icon}
-                  />
-                }
+                icon={<Icon aria-hidden icon={Delete02Icon} />}
                 label="Remove"
                 reason={
                   manageReason ??
@@ -86,11 +79,7 @@ export const DomainDangerSection = ({
                 size="sm"
                 variant="destructive"
               >
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-4"
-                  icon={Delete02Icon}
-                />
+                <Icon aria-hidden icon={Delete02Icon} />
                 Remove
               </Button>
             )
@@ -132,11 +121,9 @@ export const DomainDangerSection = ({
             size="sm"
             variant="destructive"
           >
-            <HugeiconsIcon
+            <Icon
               aria-hidden
-              className={cn("size-4", {
-                "animate-spin": removeMutation.isPending,
-              })}
+              animation={removeMutation.isPending ? "spin" : undefined}
               icon={removeMutation.isPending ? Loading03Icon : Delete02Icon}
             />
             Remove domain

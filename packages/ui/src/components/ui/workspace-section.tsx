@@ -5,10 +5,10 @@ import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
 
 export const workspaceGutterClassName =
-  "[--workspace-gutter:var(--workspace-gap)] lg:[--workspace-gutter:var(--workspace-gap-wide)]";
+  "[--workspace-gutter:0px] lg:[--workspace-gutter:var(--workspace-gap-wide)]";
 
 export const workspaceSectionVariants = cva(
-  `${workspaceGutterClassName} overflow-hidden rounded-xl border border-border bg-bg-raised shadow-surface [background-image:var(--panel-gradient)]`,
+  `${workspaceGutterClassName} overflow-hidden rounded-none border-0 bg-bg-raised shadow-none [background-image:var(--panel-gradient)] lg:rounded-xl lg:border lg:border-border lg:shadow-surface`,
   {
     defaultVariants: {
       centered: false,

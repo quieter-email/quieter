@@ -5,7 +5,6 @@ import {
   Mail01Icon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
 import { AgentWorkspaceProvider } from "@quieter/app/features/chat/components/agent-workspace";
 import { AssistantSidebar } from "@quieter/app/features/chat/components/assistant-sidebar";
@@ -34,9 +33,11 @@ import type { MailboxWorkspaceView } from "@quieter/app/features/mailbox/domain/
 import { LabelsWorkspacePanel } from "@quieter/app/features/message-labels/components/labels-workspace-panel";
 import { MailSidebar } from "@quieter/app/features/navigation/components/mail-sidebar";
 import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/components/mailbox-switcher";
+import { useMailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { Text } from "@quieter/ui/text";
 import {
   WorkspaceSection,
@@ -162,11 +163,7 @@ const ComposeWorkspaceLoading = ({
       aria-live="polite"
       className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-3 p-6 text-body text-muted-fg sm:p-8"
     >
-      <HugeiconsIcon
-        aria-hidden
-        className="size-5 animate-spin"
-        icon={Loading03Icon}
-      />
+      <Icon aria-hidden size={20} animation="spin" icon={Loading03Icon} />
       Loading composer…
     </output>
   </div>
@@ -192,24 +189,28 @@ const NoMailboxWorkspace = ({
         animate={{ filter: "blur(0px)", opacity: 1, scale: 1 }}
         exit={{ filter: "blur(14px)", opacity: 0, scale: 0.96 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
-        className="absolute inset-0 flex items-center justify-center overflow-y-auto px-6 py-8"
+        className={cn(
+          "absolute inset-0 flex items-center justify-center overflow-y-auto lg:px-6 lg:py-8",
+          { "px-6 py-8": setupMode !== "managed" }
+        )}
       >
         <LinkButton
           aria-label="Settings"
-          className="group absolute bottom-5 left-5 justify-start"
+          className={cn("group absolute bottom-5 left-5 justify-start", {
+            "max-lg:hidden": setupMode === "managed",
+          })}
           search={{ from: "/" }}
           to="/settings"
           variant="ghost"
         >
-          <HugeiconsIcon
-            className="size-4 shrink-0"
-            icon={Settings01Icon}
-            strokeWidth={1.5}
-          />
+          <Icon icon={Settings01Icon} />
           Settings
         </LinkButton>
         {setupMode === "managed" ? (
-          <m.div className="w-full" {...workspaceContentMotion}>
+          <m.div
+            className="h-full w-full lg:h-auto"
+            {...workspaceContentMotion}
+          >
             <FirstRunManagedMailSetup
               onBack={() => {
                 setSetupMode("choice");
@@ -230,14 +231,16 @@ const NoMailboxWorkspace = ({
             className="w-full max-w-2xl text-center"
             {...workspaceContentMotion}
           >
-            <HugeiconsIcon
+            <Icon
               aria-hidden
-              className="mx-auto size-5 text-muted-fg"
+              size={20}
+              tone="muted"
+              className="mx-auto"
               icon={Mail01Icon}
             />
-            <h1 className="mt-5 text-body-lg font-semibold tracking-tight text-fg">
+            <Text as="h1" className="mt-5" size="lg" weight="medium">
               Connect a mailbox
-            </h1>
+            </Text>
             <p className="mx-auto mt-2 max-w-md text-body text-muted-fg">
               Connect Gmail, or set up managed mail to send and receive from
               your own domain with managed mailboxes and API keys.
@@ -250,11 +253,9 @@ const NoMailboxWorkspace = ({
                 variant="card"
               >
                 <span className="flex items-center gap-2 text-body font-medium text-fg">
-                  <HugeiconsIcon
+                  <Icon
                     aria-hidden
-                    className={cn("size-4", {
-                      "animate-spin": isConnectingGmail,
-                    })}
+                    animation={isConnectingGmail ? "spin" : undefined}
                     icon={isConnectingGmail ? Loading03Icon : Mail01Icon}
                   />
                   {isConnectingGmail ? "Opening Google" : "Connect Gmail"}
@@ -271,11 +272,7 @@ const NoMailboxWorkspace = ({
                 variant="card"
               >
                 <span className="flex items-center gap-2 text-body font-medium text-fg">
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Mail01Icon}
-                  />
+                  <Icon aria-hidden icon={Mail01Icon} />
                   Set up managed mail
                 </span>
                 <span className="mt-2 block text-body text-muted-fg">
@@ -345,6 +342,8 @@ const MailboxWorkspaceContentInner = ({
   selectedView,
   signature,
 }: MailboxWorkspaceContentProps) => {
+  const mailLayout = useMailLayout();
+  const onePanelDesktop = mailLayout === "one-panel";
   const messageId = useMailboxMessageId() ?? null;
   const setMailboxSearch = useMailboxSearchActions();
   const { workspace } = useMailboxRouteSearch();
@@ -499,9 +498,10 @@ const MailboxWorkspaceContentInner = ({
                 aria-live="polite"
                 className="flex items-center gap-3 text-body text-muted-fg"
               >
-                <HugeiconsIcon
+                <Icon
                   aria-hidden
-                  className="size-5 animate-spin"
+                  size={20}
+                  animation="spin"
                   icon={Loading03Icon}
                 />
                 Loading snippets…
@@ -519,12 +519,21 @@ const MailboxWorkspaceContentInner = ({
     );
   } else if (allInboxesActive) {
     mailboxContent = (
-      <div className={messagePanelsClassName}>
+      <div
+        className={cn(messagePanelsClassName, {
+          "lg:grid-cols-1": onePanelDesktop,
+        })}
+      >
         <WorkspaceSection
-          className={cn({ flex: !messageId, hidden: !!messageId })}
+          className={cn({
+            flex: !messageId,
+            hidden: !!messageId,
+            "lg:hidden": onePanelDesktop && !!messageId,
+          })}
           layout="cell"
         >
           <UnifiedInboxPanel
+            wideCompactRows={onePanelDesktop}
             activeMailbox={activeMailbox}
             activeMailboxId={selectedMailboxId}
             activeMessageId={messageId}
@@ -568,7 +577,8 @@ const MailboxWorkspaceContentInner = ({
                 {
                   replace:
                     !!messageId ||
-                    !window.matchMedia("(max-width: 1023.98px)").matches,
+                    (!onePanelDesktop &&
+                      !window.matchMedia("(max-width: 1023.98px)").matches),
                 }
               );
             }}
@@ -578,6 +588,7 @@ const MailboxWorkspaceContentInner = ({
         </WorkspaceSection>
         {messageId ? (
           <MailboxMessagesPanel
+            mailLayout={mailLayout}
             detailOnly
             activeMailbox={activeMailbox}
             senderMailbox={composeMailbox}
@@ -603,10 +614,16 @@ const MailboxWorkspaceContentInner = ({
             signature={signature}
           />
         ) : (
-          <WorkspaceSection centered className="hidden" layout="cell">
-            <HugeiconsIcon
+          <WorkspaceSection
+            centered
+            className={cn("hidden", { "lg:hidden": onePanelDesktop })}
+            layout="cell"
+          >
+            <Icon
               aria-hidden
-              className="mb-3 size-5 text-muted-fg"
+              size={20}
+              tone="muted"
+              className="mb-3"
               icon={Mail01Icon}
             />
             <p className="text-body text-muted-fg">Select a conversation</p>
@@ -651,11 +668,9 @@ const MailboxWorkspaceContentInner = ({
                 }}
                 type="button"
               >
-                <HugeiconsIcon
+                <Icon
                   aria-hidden
-                  className={cn("size-4", {
-                    "animate-spin": isReconnecting,
-                  })}
+                  animation={isReconnecting ? "spin" : undefined}
                   icon={isReconnecting ? Loading03Icon : Mail01Icon}
                 />
                 Reconnect
@@ -701,8 +716,13 @@ const MailboxWorkspaceContentInner = ({
     );
   } else {
     mailboxContent = (
-      <div className={messagePanelsClassName}>
+      <div
+        className={cn(messagePanelsClassName, {
+          "lg:grid-cols-1": onePanelDesktop,
+        })}
+      >
         <MailboxMessagesPanel
+          mailLayout={mailLayout}
           activeMailbox={activeMailbox}
           senderMailbox={composeMailbox}
           currentUserEmail={currentUserEmail}

@@ -1,9 +1,9 @@
 import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { AuthLayout } from "@quieter/app/components/auth-layout";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { Button } from "@quieter/ui/button";
 import { Field, FieldLabel } from "@quieter/ui/field";
+import { Icon } from "@quieter/ui/icon";
 import { Input } from "@quieter/ui/input";
 import { useEffect, useState } from "react";
 
@@ -59,7 +59,7 @@ export const DesktopAuthScreen = () => {
         fullWidth
       >
         {waiting ? "Open browser again" : "Continue in browser"}
-        <HugeiconsIcon icon={ArrowUpRight01Icon} size={16} />
+        <Icon icon={ArrowUpRight01Icon} />
       </Button>
       {waiting ? (
         <div className="mt-4 space-y-3">

@@ -1,7 +1,6 @@
 "use client";
 
 import { MoreHorizontalIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { PersonalizationMemories } from "@quieter/app/features/settings/components/personalization-memories";
 import {
   SettingsErrorState,
@@ -30,6 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -103,7 +103,7 @@ export const AiSettingsPanel = () => {
                 aria-label="Memory settings"
                 appearance="icon"
               >
-                <HugeiconsIcon aria-hidden icon={MoreHorizontalIcon} />
+                <Icon aria-hidden icon={MoreHorizontalIcon} />
               </DropdownMenuTrigger>
             </IconButtonTooltip>
             <DropdownMenuContent align="end" size="compact">

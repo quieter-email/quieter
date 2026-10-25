@@ -1,7 +1,6 @@
 "use client";
 
 import { Loading03Icon, MoreVerticalIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   formatRoleLabel,
   getFullOrganizationQueryKey,
@@ -23,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -148,17 +148,9 @@ export const MemberActions = ({
               }}
             >
               {isPending ? (
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-4 animate-spin"
-                  icon={Loading03Icon}
-                />
+                <Icon aria-hidden animation="spin" icon={Loading03Icon} />
               ) : (
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-4"
-                  icon={MoreVerticalIcon}
-                />
+                <Icon aria-hidden icon={MoreVerticalIcon} />
               )}
             </DropdownMenuTrigger>
           </IconButtonTooltip>

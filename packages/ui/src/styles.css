@@ -25,52 +25,48 @@
   --auth-particle-tint: var(--primary);
   --font-geist: "Geist Variable", sans-serif;
   --font-geist-mono: "Geist Mono Variable", monospace;
-  --bg: oklch(0.91 0.002 264);
-  --bg-raised: oklch(0.945 0.002 264);
-  --bg-surface: oklch(0.975 0.002 264);
-  --fg: oklch(0.15 0.002 264);
-  /* Light tells surfaces apart with borders and shadows, so a control shares
-     the canvas colour instead of being tinted off it, and interaction steps
-     *darker* to stay legible against every surface. Dark has no borders to
-     speak of, so it inverts both halves: shades apart, interaction lighter. */
-  --control: var(--bg-raised);
-  --control-hover: oklch(0.85 0.002 264);
-  --control-active: oklch(0.8 0.002 264);
-  --switch-track: oklch(0.89 0.002 264);
+  --bg: oklch(0.96 0.002 264);
+  --bg-raised: oklch(0.995 0.001 264);
+  --bg-surface: oklch(1 0 0);
+  --fg: oklch(0.24 0.005 264);
+  --control: oklch(0.975 0.002 264);
+  --control-hover: oklch(0.945 0.003 264);
+  --control-active: oklch(0.91 0.004 264);
+  --switch-track: oklch(0.82 0.003 264);
   --switch-thumb: oklch(0.42 0.003 264);
   --card: var(--bg-surface);
   --card-fg: var(--fg);
-  --popover: var(--control);
+  --popover: var(--bg-surface);
   --popover-fg: var(--fg);
   --primary: oklch(0.55 0.22 270);
   --primary-fg: oklch(0.985 0.002 264);
-  --secondary: oklch(0.85 0.002 264);
-  --secondary-hover: oklch(0.8 0.002 264);
-  --secondary-active: oklch(0.76 0.002 264);
+  --secondary: oklch(0.935 0.003 264);
+  --secondary-hover: oklch(0.9 0.004 264);
+  --secondary-active: oklch(0.87 0.004 264);
   --secondary-fg: oklch(0.205 0.002 264);
   --muted: var(--control-hover);
-  --muted-fg: oklch(0.45 0.003 264);
+  --muted-fg: oklch(0.49 0.008 264);
   --accent: var(--control-hover);
   --accent-fg: oklch(0.205 0.002 264);
-  --destructive: oklch(0.48 0.19 27.33);
+  --destructive: oklch(0.45 0.18 27.33);
   --destructive-fg: oklch(0.985 0.002 264);
-  --success: oklch(0.58 0.12 149.57);
-  --success-fg: oklch(0.12 0.002 264);
-  --warning: oklch(0.68 0.12 70.08);
-  --warning-fg: oklch(0.205 0.002 264);
-  --q-gray: oklch(0.58 0.014 264);
-  --q-blue: oklch(0.62 0.145 250);
-  --q-cyan: oklch(0.63 0.125 210);
-  --q-green: oklch(0.58 0.14 150);
-  --q-yellow: oklch(0.7 0.14 90);
-  --q-orange: oklch(0.64 0.15 55);
-  --q-red: oklch(0.6 0.18 25);
-  --q-pink: oklch(0.63 0.16 345);
-  --q-purple: oklch(0.6 0.16 300);
-  --border: oklch(0.8 0.002 264 / 0.7);
-  --border-strong: oklch(0.72 0.002 264 / 0.9);
+  --success: oklch(0.42 0.1 149.57);
+  --success-fg: oklch(0.985 0.002 264);
+  --warning: oklch(0.48 0.1 70.08);
+  --warning-fg: oklch(0.985 0.002 264);
+  --q-gray: oklch(0.43 0.014 264);
+  --q-blue: oklch(0.43 0.13 250);
+  --q-cyan: oklch(0.42 0.08 210);
+  --q-green: oklch(0.42 0.1 150);
+  --q-yellow: oklch(0.44 0.08 90);
+  --q-orange: oklch(0.44 0.12 55);
+  --q-red: oklch(0.43 0.16 25);
+  --q-pink: oklch(0.43 0.14 345);
+  --q-purple: oklch(0.43 0.14 300);
+  --border: oklch(0.86 0.004 264 / 0.8);
+  --border-strong: oklch(0.65 0.008 264);
   --input: var(--control);
-  --ring: oklch(0.708 0.003 264);
+  --ring: var(--primary);
   /* Needs more contrast than the control ladder gives; kept independent. */
   --scrollbar-thumb: oklch(0.84 0.002 264);
   --chart-1: oklch(0.32 0.002 264);
@@ -98,19 +94,9 @@
     0 20px 25px -5px oklch(0 0 0 / 0.07), 0 8px 10px -6px oklch(0 0 0 / 0.05);
   --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.15);
   --shadow-elevation: 0 8px 24px -8px oklch(0 0 0 / 0.08);
-  --shadow-surface:
-    0 16px 32px -20px oklch(0 0 0 / 0.18), 0 4px 10px -6px oklch(0 0 0 / 0.08);
-  --canvas-glow: radial-gradient(
-    170% 70% at 6% 110%,
-    oklch(1 0 0 / 0.4) 0%,
-    oklch(1 0 0 / 0.18) 48%,
-    transparent 88%
-  );
-  --panel-gradient: linear-gradient(
-    180deg,
-    oklch(0.975 0.002 264),
-    oklch(0.945 0.002 264)
-  );
+  --shadow-surface: 0 1px 3px oklch(0 0 0 / 0.04);
+  --canvas-glow: none;
+  --panel-gradient: none;
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 }
@@ -125,53 +111,48 @@
   --brand-bg: rgb(14 15 16);
   --auth-visual-bg: rgb(10 10 10);
   --auth-particle-tint: var(--primary);
-  --bg: oklch(0.155 0.003 264);
-  --bg-raised: oklch(0.24 0.003 264);
-  --bg-surface: oklch(0.235 0.003 264);
-  --fg: oklch(1 0.002 264);
-  --control: oklch(0.19 0.003 264);
-  --control-hover: oklch(0.24 0.003 264);
-  --control-active: oklch(0.29 0.003 264);
-  --switch-track: oklch(0.29 0.003 264);
+  --bg: oklch(0.18 0.005 264);
+  --bg-raised: oklch(0.225 0.005 264);
+  --bg-surface: oklch(0.255 0.006 264);
+  --fg: oklch(0.94 0.005 264);
+  --control: oklch(0.255 0.006 264);
+  --control-hover: oklch(0.3 0.007 264);
+  --control-active: oklch(0.34 0.008 264);
+  --switch-track: oklch(0.39 0.008 264);
   --switch-thumb: oklch(0.92 0.003 264);
-  /* Raised, like light mode. `--bg-raised` sits above the canvas in dark. */
   --card: var(--bg-surface);
   --card-fg: var(--fg);
-  --popover: var(--control);
+  --popover: var(--bg-surface);
   --popover-fg: var(--fg);
   --primary: oklch(0.95 0.008 285);
   --primary-fg: oklch(0.141 0.003 264);
-  --secondary: oklch(0.34 0.003 264);
-  --secondary-hover: oklch(0.38 0.003 264);
-  --secondary-active: oklch(0.42 0.003 264);
-  --secondary-fg: oklch(1 0.002 264);
+  --secondary: oklch(0.31 0.007 264);
+  --secondary-hover: oklch(0.35 0.008 264);
+  --secondary-active: oklch(0.39 0.008 264);
+  --secondary-fg: var(--fg);
   --muted: var(--control-hover);
   --muted-fg: oklch(0.74 0.004 264);
   --accent: var(--control-hover);
   --accent-fg: oklch(0.985 0.002 264);
-  --destructive: oklch(0.58 0.13 27.33);
-  --destructive-fg: oklch(0.985 0.002 264);
-  --success: oklch(0.62 0.08 149.57);
-  --success-fg: oklch(0.985 0.002 264);
+  --destructive: oklch(0.8 0.13 27.33);
+  --destructive-fg: oklch(0.14 0.003 264);
+  --success: oklch(0.8 0.1 149.57);
+  --success-fg: oklch(0.14 0.003 264);
   --warning: oklch(0.7 0.09 70.08);
   --warning-fg: oklch(0.12 0.003 264);
-  --q-gray: oklch(0.65 0.014 264);
-  --q-blue: oklch(0.72 0.145 250);
-  --q-cyan: oklch(0.73 0.125 210);
-  --q-green: oklch(0.7 0.14 150);
-  --q-yellow: oklch(0.78 0.14 90);
-  --q-orange: oklch(0.74 0.15 55);
-  --q-red: oklch(0.72 0.18 25);
-  --q-pink: oklch(0.75 0.16 345);
-  --q-purple: oklch(0.72 0.16 300);
-  /* Controls share their surface's fill in both themes, so the border is what
-     delineates them and has to be worth the same in each. At 0.25/0.6 this
-     read 0.035 against the workspace panel where light's reads 0.092, and a
-     shadow cannot make up the difference on a near-black ground. */
-  --border: oklch(0.28 0.004 264 / 0.7);
-  --border-strong: oklch(0.4 0.004 264 / 0.9);
+  --q-gray: oklch(0.8 0.014 264);
+  --q-blue: oklch(0.79 0.12 250);
+  --q-cyan: oklch(0.79 0.1 210);
+  --q-green: oklch(0.8 0.12 150);
+  --q-yellow: oklch(0.82 0.12 90);
+  --q-orange: oklch(0.8 0.13 55);
+  --q-red: oklch(0.81 0.13 25);
+  --q-pink: oklch(0.8 0.14 345);
+  --q-purple: oklch(0.8 0.14 300);
+  --border: oklch(0.34 0.008 264);
+  --border-strong: oklch(0.53 0.01 264);
   --input: var(--control);
-  --ring: oklch(0.42 0.004 264);
+  --ring: var(--primary);
   /* Needs more contrast than the control ladder gives; kept independent. */
   --scrollbar-thumb: oklch(0.36 0.004 264);
   --chart-1: oklch(0.42 0.003 264);
@@ -192,35 +173,33 @@
     0 20px 25px -5px oklch(0 0 0 / 0.25), 0 8px 10px -6px oklch(0 0 0 / 0.15);
   --shadow-2xl: 0 25px 50px -12px oklch(0 0 0 / 0.4);
   --shadow-elevation: 0 8px 24px -8px oklch(0 0 0 / 0.25);
-  --shadow-surface:
-    0 24px 48px -24px oklch(0 0 0 / 0.75), 0 6px 16px -8px oklch(0 0 0 / 0.45);
-  --canvas-glow: radial-gradient(
-    170% 60% at 6% 110%,
-    rgb(255 255 255 / 0.02) 0%,
-    rgb(255 255 255 / 0.014) 48%,
-    rgb(255 255 255 / 0.006) 72%,
-    transparent 92%
-  );
-  --panel-gradient: linear-gradient(
-    180deg,
-    oklch(0.188 0.003 264),
-    oklch(0.161 0.003 264)
-  );
+  --shadow-surface: 0 1px 3px oklch(0 0 0 / 0.12);
+  --canvas-glow: none;
+  --panel-gradient: none;
 }
 
 .theme-swatch[data-color-theme="dark"] {
-  --theme-base: oklch(0.155 0.003 264);
+  --theme-base: oklch(0.18 0.005 264);
   --theme-primary: oklch(0.95 0.008 285);
 }
 
 .theme-swatch[data-color-theme="light"] {
-  --theme-base: oklch(0.91 0.002 264);
+  --theme-base: oklch(0.96 0.002 264);
   --theme-primary: oklch(0.55 0.22 270);
 }
 
 .theme-swatch {
   background: var(--theme-base);
   box-shadow: inset -0.3rem 0 0 var(--theme-primary);
+}
+
+:root,
+.theme-light,
+.dark {
+  --primary-hover: color-mix(in oklch, var(--primary), var(--fg) 8%);
+  --primary-active: color-mix(in oklch, var(--primary), var(--fg) 16%);
+  --destructive-hover: color-mix(in oklch, var(--destructive), var(--fg) 8%);
+  --destructive-active: color-mix(in oklch, var(--destructive), var(--fg) 16%);
 }
 
 :root[data-color-theme] {
@@ -287,6 +266,8 @@
   --color-popover: var(--popover);
   --color-popover-fg: var(--popover-fg);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
   --color-primary-fg: var(--primary-fg);
   --color-secondary: var(--secondary);
   --color-secondary-hover: var(--secondary-hover);
@@ -297,6 +278,8 @@
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
   --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-active: var(--destructive-active);
   --color-destructive-fg: var(--destructive-fg);
   --color-success: var(--success);
   --color-success-fg: var(--success-fg);
