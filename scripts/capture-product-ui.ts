@@ -261,6 +261,7 @@ try {
       browser("open", new URL("/settings?tab=overview", origin).href);
       browser("wait", '[aria-label="Mail layout"]');
       browser("click", '[aria-label="Mail layout"]');
+      browser("wait", '[role="option"]');
       browser(
         "find",
         "role",
@@ -298,6 +299,7 @@ try {
       browser("open", new URL("/settings?tab=overview", origin).href);
       browser("wait", '[aria-label="Mail layout"]');
       browser("click", '[aria-label="Mail layout"]');
+      browser("wait", '[role="option"]');
       browser(
         "find",
         "role",
@@ -332,7 +334,10 @@ try {
           name: "mail-layout-options",
           path: "/settings?tab=overview",
           ready: '[aria-label="Mail layout"]',
-          steps: [["click", '[aria-label="Mail layout"]']],
+          steps: [
+            ["click", '[aria-label="Mail layout"]'],
+            ["wait", '[role="option"]'],
+          ],
         },
         {
           name: "add-mailbox-gmail",

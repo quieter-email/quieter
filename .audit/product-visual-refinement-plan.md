@@ -36,3 +36,26 @@ Throughput checkpoint. Capture the baseline first, then verify shared changes in
 - [ ] Verify both layouts, both inbox paths, narrow screens, and resizing; refresh review images and publish the PR update.
 
 Throughput checkpoint. Ground persistence and both mailbox paths before implementation. Geometry and typography are complete; one writer now owns the mail-layout source changes so row and visibility decisions stay coherent. Read-only architecture candidates write separate scratch artifacts. The lead owns browser verification, screenshots, and publication. The existing list controllers, provider adapters, route state, and enrichment remain the source of mail behavior.
+
+## Add mailbox, logos, columns, and shader feedback
+
+- [x] Reproduce it yourself on the matching surface via the control skill (Non-negotiables), even when a debug or instrumentation protocol says to ask the user to reproduce.
+- [x] Binary-search the cause.
+- [x] Plan the fix.
+- [x] Verify on the same surface.
+- [x] Stage the commits so the failing repro lands before the fix in git history. Skip a visual-value regression test because it would freeze presentation, and retain the existing broken screenshot as the before artifact.
+- [ ] Run Opening a PR. Update the existing PR.
+- [x] Frame. Separate Settings shell repair, shared logo and column presentation, and shader investigation into distinct writable paths.
+- [x] Fan out.
+- [x] Aggregate.
+- [ ] Report.
+
+Done means Add mailbox uses shared Settings composition at desktop and mobile widths, its existing Gmail and managed-mail contracts still work, both mail layouts use smaller shared logos, wide rows align their columns, and the onboarding shader is present or its actual failure is repaired. The lead owns live Chrome reproduction and final captures. The Settings writer owns only the Add mailbox view and its local store. The row writer owns the shared sender avatar and row presentation. The shader investigator initially reads only. No provider mutations, billing, deployment, or production access is required.
+
+## Full-width row preview
+
+- [x] Render square rows against both list edges with semantic separators.
+- [x] Keep selection, the golden accent, and keyboard focus visible.
+- [x] Verify desktop and mobile geometry, then show the live preview.
+- [x] Merge current main and repeat checks affected by its new calendar package.
+- [ ] Refresh the complete gallery, audit the final evidence, and publish the update.

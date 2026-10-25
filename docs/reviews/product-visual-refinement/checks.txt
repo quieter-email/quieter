@@ -1,36 +1,98 @@
+Final follow-up verification, October 25, 2026
+Source includes current main through c1d6a251, merged in 55f517fd.
+The two upstream changes add the calendar workspace and mailbox actions.
+Their behavior is preserved. New calendar controls use shared Icon and Text.
+
 $ vp check --fix
-  ! react(refs): Cannot access refs during render
-  ! react(incompatible-library): Use of incompatible library
-Found 0 errors and 3 warnings in 951 files (24.3s, 8 threads)
-pass: Formatting completed for checked files (26.8s)
+Found 0 errors and 3 existing React compiler warnings in 1000 files.
+Warnings remain in sidebar-surfaces.tsx, compose-workspace.tsx, and
+message-list-scroll-pane.tsx for refs, set-state-in-effect, and TanStack Virtual.
+Formatting completed.
 
 $ vp test
- Test Files  159 passed | 26 skipped (185)
-      Tests  1114 passed | 276 skipped (1390)
+ Test Files  176 passed | 26 skipped (202)
+      Tests  1240 passed | 278 skipped (1518)
 
 $ vp run check:boundaries
-$ node scripts/check-import-boundaries.ts ⊘ cache disabled
-Import boundaries passed for 761 source files and manifests.
+Import boundaries passed for 799 source files and manifests.
 
 $ vp run @quieter/web#build
-✓ built in 14.21s
-✓ built in 3.32s
-Worker JavaScript: 17.17 MB, 3.84 MB gzip
-vp run: 0/2 cache hit (0%). (Run `vp run --last-details` for full details)
+Web client, server, and worker deployment-boundary checks passed.
+Worker JavaScript: 17.68 MB, 3.95 MB gzip.
 
 $ vp run @quieter/desktop#build
-✓ built in 673ms
-✓ built in 13ms
-✓ built in 1.06s
-vp run: 0/3 cache hit (0%). (Run `vp run --last-details` for full details)
+Electron main, preload, and shared-product renderer builds passed.
+
+After the small message-control and accent follow-ups, targeted checks passed
+for message-cards.tsx, message-row.tsx, mail-list-row.tsx, and the showcase.
+All four existing unsubscribe cache tests passed. Both production builds were
+rerun successfully with those controls included. The source commit hook also
+passed formatting, lint, and type checks for all 31 staged supported files.
 
 Chrome manual checks
-Search and invalid-input keyboard focus are visible with an opaque 2px ring and 2px offset.
-Tab stays in the sample dialog. Escape closes it and restores focus to Open dialog.
-Narrow conversation subjects wrap to two lines. Dialog actions fill the footer width.
-Landing page content and access form render; marketing sources were not edited.
+Mail layout defaults to Two panels with missing or invalid storage.
+One panel is selected in Preferences and survives reload.
+Both ordinary mailbox and All inboxes routes show a full list, then full detail.
+First open pushes browser history; browser Back returns to the originating list.
+Direct-detail Back clears message and thread while retaining mailbox and search.
+Hidden-list resize and keyboard return passed in both directions, on both paths.
+The scrolled test used 440 synthetic messages through the existing demo store.
+Focus returned to the originating row, all rendered rows used the current
+density, virtual estimates were uniform, and adjacent rows had no gaps.
+See mail-layout-runtime.json for the four recorded runs.
+J focuses a row with a visible, opaque 2px inset ring and square corners.
+The inset ring remains inside the new full-width viewport.
+Mobile inbox and managed-setup panels measured left 0, width 390, border 0,
+radius 0, no outer gutter, and no horizontal overflow.
+Conversation headings truncate to one line. Help and message content wrap.
+Reply actions use shared composer chrome and open the existing inline editor.
+Selected important rows retain the shared yellow accent above selection.
+Unsubscribe stays visible, changes to a disabled check, and survives reload.
+Importance toggles the saved aria-pressed state and normal/crossed flag icon.
 
-Independent visual review
-GPT-6 Astra reviewed source and representative screenshot pairs.
-The remaining old focus styles in rich editing and structured search were fixed.
-Browser captures do not verify native Electron runtime or provider-dependent operations.
+Latest feedback checks
+Add mailbox previously nested the viewport-sized GuidedFlow in a 656px Settings
+column. Its three grid tracks left a 304px center with 98px choice cards.
+The repaired page uses shared Settings rows, cards, fields, and full-width footers.
+Chrome traversed Gmail team, managed team, managed address, private access and
+owner, and Back to the initial choice. No connection or mailbox was submitted.
+The 390px viewport has no horizontal overflow. Both footer actions fit together.
+Both mail densities use the shared 32px SenderAvatar variant.
+All six wide-row column starts align across messages with differing metadata,
+including All inboxes and the assistant-open layout.
+A real copy-code control plus long labels fits the wide row after using shared
+Button size xs and truncating compact labels. Normal labels still wrap.
+One-panel list bounds were left 281px, width 1150px, matching its row bounds.
+Rows have radius 0 and a 1px semantic border separator. Mobile rows measured
+left 0, width 390px, radius 0, no horizontal overflow.
+The shader and shader sources remain unchanged against d4605384. Default
+headless Chrome had no graphics adapter. Chrome with --webgpu --headed had an
+adapter and rendered the onboarding canvas at opacity 1, 1440 by 960 pixels,
+even with reduced motion. The gallery uses that rendering-capable browser.
+The capture recipe waits for popup options before choosing the layout.
+
+Initial pass checks retained
+Search and invalid-input keyboard focus use an opaque 2px ring and 2px offset.
+Tab stays in the sample dialog. Escape closes it and restores trigger focus.
+Dialog actions fill the footer width.
+Landing page content and access form render; marketing sources were not edited.
+The initial full suite passed 1114 tests before the four preference tests landed.
+
+Limits
+Browser captures do not verify native Electron runtime or provider operations.
+Real sending, OAuth, billing checkout, domain registration, API-key creation,
+provider generation, and destructive account actions were not performed.
+The shared development database lacks the existing memory-bootstrap table,
+so the Memories flow remains unverified. No schema or provider changes were made.
+
+Final visual artifacts
+The completed pinned-browser capture produced 55 after images.
+The preserved baseline has 39 before images, for 94 total screenshots.
+Both manifests exactly match their PNG directories, with no duplicates.
+All PNG signatures and dimensions were checked. Full-page component captures
+use the 1425px content area of the 1440px desktop viewport. Other desktop
+captures are 1440px wide; narrow captures are 390px wide.
+All 94 gallery image references resolve to files in the review directory.
+The final contrast artifact contains ten themes and zero sampled failures.
+The final shader, narrow managed address, persistent message controls,
+full-width dark inbox, and repaired Add mailbox screens were visually inspected.
