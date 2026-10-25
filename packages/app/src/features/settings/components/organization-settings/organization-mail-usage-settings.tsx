@@ -155,6 +155,11 @@ const usageBreakdownConfig = [
     label: "Auto-label",
   },
   {
+    className: "bg-q-red",
+    kind: "mailAction",
+    label: "Inbox actions",
+  },
+  {
     className: "bg-q-green",
     kind: "inboundMail",
     label: "Inbound mail",

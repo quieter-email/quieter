@@ -15,6 +15,12 @@ export const appRouter = {
         default: billingRouter,
       }))
   ),
+  calendar: lazy(
+    async () =>
+      await import("./calendar").then(({ calendarRouter }) => ({
+        default: calendarRouter,
+      }))
+  ),
   chat: lazy(
     async () =>
       await import("./chat").then(({ chatRouter }) => ({ default: chatRouter }))
@@ -28,6 +34,12 @@ export const appRouter = {
   mail: lazy(
     async () =>
       await import("./mail").then(({ mailRouter }) => ({ default: mailRouter }))
+  ),
+  mailAgent: lazy(
+    async () =>
+      await import("./mail-agent").then(({ mailAgentRouter }) => ({
+        default: mailAgentRouter,
+      }))
   ),
   mailDomains: lazy(
     async () =>

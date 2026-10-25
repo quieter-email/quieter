@@ -8,6 +8,7 @@ export type MailRequestContext = Pick<
   OrpcContext,
   "signal" | "resHeaders" | "scheduleBackgroundTask"
 > & {
+  retryUnauthorized?: boolean;
   userId: string;
 };
 
@@ -18,7 +19,11 @@ export const callGmail = async <T>(
 ): Promise<T> => {
   try {
     return await runAuthorizedGmailMailbox(
-      { mailboxId, userId: context.userId },
+      {
+        mailboxId,
+        retryUnauthorized: context.retryUnauthorized,
+        userId: context.userId,
+      },
       async (token) => await operation(token, context.signal)
     );
   } catch (error) {

@@ -75,6 +75,10 @@ const CONTEXT_POLICIES: Record<string, AiMemoryContextSelection> = {
     ],
     characterBudget: 24_000,
   },
+  mail_action: {
+    categories: AI_MEMORY_CATEGORIES,
+    characterBudget: 24_000,
+  },
   mail_importance: {
     categories: [
       "preferences",

@@ -1,0 +1,810 @@
+"use client";
+
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { CSSProperties, DragEvent, KeyboardEvent } from "react";
+
+import { cn } from "../../lib/cn";
+import { Button } from "./button";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./dialog";
+import { IconButtonTooltip } from "./icon-button-tooltip";
+
+export type ScheduleItem = {
+  allDay: boolean;
+  date: string;
+  detail?: string;
+  endMinute: number;
+  id: string;
+  startMinute: number;
+  title: string;
+  tone?:
+    | "primary"
+    | "success"
+    | "warning"
+    | "destructive"
+    | "muted"
+    | "blue"
+    | "green"
+    | "purple"
+    | "orange"
+    | "cyan";
+};
+
+export type ScheduleProps = {
+  currentMinute?: number;
+  dates: string[];
+  items: ScheduleItem[];
+  onEventClick: (id: string) => void;
+  onEventMove?: (input: {
+    allDay: boolean;
+    date: string;
+    id: string;
+    minute: number;
+    source: { date: string; minute: number };
+  }) => void;
+  onEventResize?: (input: {
+    date: string;
+    endMinute: number;
+    id: string;
+  }) => void;
+  onSlotClick: (input: {
+    allDay: boolean;
+    date: string;
+    minute: number;
+  }) => void;
+  selectedId?: string;
+  today: string;
+  view: "day" | "week" | "month" | "agenda";
+};
+
+const hourHeight = 56;
+type ScheduleStyle = CSSProperties & {
+  "--schedule-columns"?: string;
+  "--schedule-height"?: string;
+  "--schedule-left"?: string;
+  "--schedule-min-width"?: string;
+  "--schedule-top"?: string;
+  "--schedule-width"?: string;
+};
+const hours = Array.from({ length: 24 }, (_, hour) => hour);
+const minuteLabels = Array.from({ length: 48 }, (_, index) => index * 30);
+const dateFormatter = new Intl.DateTimeFormat("en", {
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+  weekday: "long",
+});
+const weekdayFormatter = new Intl.DateTimeFormat("en", {
+  timeZone: "UTC",
+  weekday: "short",
+});
+const toneClasses = {
+  blue: "border-q-blue/40 before:bg-q-blue/15 text-fg",
+  cyan: "border-q-cyan/40 before:bg-q-cyan/15 text-fg",
+  destructive:
+    "border-destructive/35 before:bg-destructive/15 text-destructive",
+  green: "border-q-green/40 before:bg-q-green/15 text-fg",
+  muted: "border-border-strong bg-control text-fg",
+  orange: "border-q-orange/40 before:bg-q-orange/15 text-fg",
+  primary: "border-primary/35 before:bg-primary/15 text-fg",
+  purple: "border-q-purple/40 before:bg-q-purple/15 text-fg",
+  success: "border-success/35 before:bg-success/15 text-fg",
+  warning: "border-warning/35 before:bg-warning/15 text-fg",
+} satisfies Record<NonNullable<ScheduleItem["tone"]>, string>;
+
+const formatMinute = (minute: number) => {
+  const hour = Math.floor(minute / 60);
+  const remainder = Math.floor(minute % 60);
+  return `${String(hour).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+};
+
+type PositionedItem = {
+  column: number;
+  columns: number;
+  item: ScheduleItem;
+};
+
+const positionTimedItems = (items: ScheduleItem[]): PositionedItem[] => {
+  const sorted = items
+    .filter((item) => !item.allDay)
+    .toSorted(
+      (left, right) =>
+        left.startMinute - right.startMinute || right.endMinute - left.endMinute
+    );
+  const result: PositionedItem[] = [];
+  let cluster: PositionedItem[] = [];
+  let columnEnds: number[] = [];
+  let clusterEnd = 0;
+
+  for (const item of sorted) {
+    if (cluster.length > 0 && item.startMinute >= clusterEnd) {
+      for (const entry of cluster) {
+        entry.columns = columnEnds.length;
+      }
+      result.push(...cluster);
+      cluster = [];
+      columnEnds = [];
+    }
+
+    const occupiedEndMinute = Math.max(
+      item.endMinute,
+      item.startMinute + (24 * 60) / hourHeight
+    );
+    const freeColumn = columnEnds.findIndex((end) => end <= item.startMinute);
+    const column = freeColumn === -1 ? columnEnds.length : freeColumn;
+    columnEnds[column] = occupiedEndMinute;
+    cluster.push({ column, columns: 1, item });
+    clusterEnd = Math.max(clusterEnd, occupiedEndMinute);
+  }
+
+  for (const entry of cluster) {
+    entry.columns = columnEnds.length;
+  }
+  result.push(...cluster);
+  return result;
+};
+
+export const Schedule = ({
+  currentMinute,
+  dates,
+  items,
+  onEventClick,
+  onEventMove,
+  onEventResize,
+  onSlotClick,
+  selectedId,
+  today,
+  view,
+}: ScheduleProps) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{
+    allDay: boolean;
+    date: string;
+    id: string;
+    minute: number;
+    offsetMinute: number;
+  } | null>(null);
+  const slotHelpId = useId();
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [resize, setResize] = useState<{
+    date: string;
+    endMinute: number;
+    id: string;
+    originMinute: number;
+    originY: number;
+    startMinute: number;
+  } | null>(null);
+
+  const days = useMemo(() => {
+    const grouped = new Map<string, ScheduleItem[]>(
+      dates.map((date) => [date, []])
+    );
+    for (const item of items) {
+      grouped.get(item.date)?.push(item);
+    }
+    for (const dayItems of grouped.values()) {
+      dayItems.sort(
+        (left, right) =>
+          Number(right.allDay) - Number(left.allDay) ||
+          left.startMinute - right.startMinute
+      );
+    }
+    return grouped;
+  }, [dates, items]);
+
+  useEffect(() => {
+    if ((view === "day" || view === "week") && scrollRef.current) {
+      scrollRef.current.scrollTop = 8 * hourHeight;
+    }
+  }, [view]);
+
+  const beginDrag = (
+    event: DragEvent<HTMLButtonElement>,
+    item: ScheduleItem,
+    timed: boolean
+  ) => {
+    if (!onEventMove) {
+      return;
+    }
+    const bounds = event.currentTarget.getBoundingClientRect();
+    dragRef.current = {
+      allDay: item.allDay,
+      date: item.date,
+      id: item.id,
+      minute: item.startMinute,
+      offsetMinute: timed
+        ? Math.max(0, ((event.clientY - bounds.top) * 60) / hourHeight)
+        : 0,
+    };
+    event.dataTransfer.setData("application/x-quieter-schedule-event", item.id);
+    event.dataTransfer.effectAllowed = "move";
+    setDraggingId(item.id);
+  };
+
+  const dropEvent = (
+    event: DragEvent<HTMLElement>,
+    date: string,
+    allDay: boolean,
+    timed = false
+  ) => {
+    const dragged = dragRef.current;
+    if (!dragged || !onEventMove) {
+      return;
+    }
+    event.preventDefault();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const minute = timed
+      ? Math.max(
+          0,
+          Math.min(
+            1425,
+            Math.round(
+              (((event.clientY - bounds.top) * 60) / hourHeight -
+                dragged.offsetMinute) /
+                15
+            ) * 15
+          )
+        )
+      : dragged.minute;
+    onEventMove({
+      allDay,
+      date,
+      id: dragged.id,
+      minute: allDay ? 0 : minute,
+      source: { date: dragged.date, minute: dragged.minute },
+    });
+    dragRef.current = null;
+    setDraggingId(null);
+  };
+
+  const moveSlotFocus = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    date: string,
+    minute: number
+  ) => {
+    let targetMinute = minute;
+    let targetDate = date;
+    switch (event.key) {
+      case "ArrowUp": {
+        targetMinute -= 30;
+        break;
+      }
+      case "ArrowDown": {
+        targetMinute += 30;
+        break;
+      }
+      case "ArrowLeft": {
+        targetDate = dates[dates.indexOf(date) - 1] ?? date;
+        break;
+      }
+      case "ArrowRight": {
+        targetDate = dates[dates.indexOf(date) + 1] ?? date;
+        break;
+      }
+      case "Home": {
+        targetMinute = 0;
+        break;
+      }
+      case "End": {
+        targetMinute = 1410;
+        break;
+      }
+      case "PageUp": {
+        targetMinute -= 120;
+        break;
+      }
+      case "PageDown": {
+        targetMinute += 120;
+        break;
+      }
+      default: {
+        return;
+      }
+    }
+    event.preventDefault();
+    scrollRef.current
+      ?.querySelector<HTMLButtonElement>(
+        `[data-slot-date="${targetDate}"][data-slot-minute="${Math.max(0, Math.min(1410, targetMinute))}"]`
+      )
+      ?.focus();
+  };
+
+  const renderEvent = (item: ScheduleItem, compact = false) => {
+    const duration = item.endMinute - item.startMinute;
+    return (
+      // Schedule targets need data-sized geometry, drag anchors and dense event typography.
+      // Shared Button sizes cannot express this timed positioning or month-row interaction.
+      <button
+        aria-label={`${item.title}, ${item.allDay ? "all day" : `${formatMinute(item.startMinute)} to ${formatMinute(item.endMinute)}`}. Open event to edit.`}
+        aria-pressed={selectedId === item.id}
+        className={cn(
+          "group/event @container/event-card relative isolate z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm border border-l-2 bg-card px-2 py-1 text-left text-caption transition-colors outline-none before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-sm hover:brightness-95 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg aria-pressed:ring-2 aria-pressed:ring-primary motion-reduce:transition-none",
+          toneClasses[item.tone ?? "primary"],
+          {
+            "h-full": !compact,
+            "opacity-40": draggingId === item.id,
+            "py-0.5 text-micro": compact,
+          }
+        )}
+        draggable={Boolean(onEventMove)}
+        key={`${item.id}:${item.date}`}
+        onClick={() => {
+          setExpandedDate(null);
+          onEventClick(item.id);
+        }}
+        onDragEnd={() => {
+          dragRef.current = null;
+          setDraggingId(null);
+        }}
+        onDragStart={(event) => {
+          beginDrag(event, item, !compact && !item.allDay);
+        }}
+        title={`${item.title}${item.allDay ? "" : `, ${formatMinute(item.startMinute)} – ${formatMinute(item.endMinute)}`}${item.detail ? `, ${item.detail}` : ""}`}
+        type="button"
+      >
+        <span
+          className={cn("w-full shrink-0 font-medium", {
+            "line-clamp-2": !compact && duration >= 75,
+            truncate: compact || duration < 75,
+          })}
+        >
+          {compact && !item.allDay ? (
+            <span className="mr-1 font-normal opacity-70">
+              {formatMinute(item.startMinute)}
+            </span>
+          ) : null}
+          {item.title}
+        </span>
+        {!compact && !item.allDay && duration >= 45 ? (
+          <span className="w-full shrink-0 truncate text-micro opacity-75">
+            {formatMinute(item.startMinute)} – {formatMinute(item.endMinute)}
+          </span>
+        ) : null}
+        {!compact && duration >= 90 && item.detail ? (
+          <span className="hidden w-full shrink-0 truncate text-micro opacity-75 @min-[8rem]/event-card:block">
+            {item.detail}
+          </span>
+        ) : null}
+      </button>
+    );
+  };
+
+  const renderAgendaDay = (date: string, dayItems: ScheduleItem[]) => (
+    <section className="border-b border-border py-4" key={date}>
+      <h3
+        className={cn("mb-3 text-body-sm font-medium", {
+          "text-primary": date === today,
+        })}
+      >
+        {dateFormatter.format(new Date(`${date}T12:00:00Z`))}
+        {date === today ? (
+          <span className="ml-2 text-caption font-normal">Today</span>
+        ) : null}
+      </h3>
+      <div className="space-y-2">
+        {dayItems.map((item) => (
+          <div
+            className="grid grid-cols-[5rem_minmax(0,1fr)] items-start gap-3"
+            key={`${item.id}:${date}`}
+          >
+            <p className="pt-1 text-caption text-muted-fg">
+              {item.allDay ? "All day" : formatMinute(item.startMinute)}
+            </p>
+            {renderEvent(item, true)}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+
+  if (view === "agenda") {
+    const occupied = [...days].filter(([, dayItems]) => dayItems.length > 0);
+    return (
+      <div
+        aria-label="Calendar agenda"
+        className="min-h-0 flex-1 overflow-y-auto px-5"
+      >
+        {occupied.length === 0 ? (
+          <div className="flex min-h-64 flex-col items-center justify-center gap-3 text-center">
+            <p className="text-body-sm text-muted-fg">
+              No events in this date range.
+            </p>
+            {dates[0] ? (
+              <Button
+                onClick={() => {
+                  onSlotClick({
+                    allDay: false,
+                    date: dates[0] ?? today,
+                    minute: 540,
+                  });
+                }}
+              >
+                Create event
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          occupied.map(([date, dayItems]) => renderAgendaDay(date, dayItems))
+        )}
+      </div>
+    );
+  }
+
+  if (view === "month") {
+    const month = dates[20]?.slice(0, 7);
+    return (
+      <>
+        <div
+          aria-label="Month calendar"
+          className="flex min-h-0 flex-1 flex-col overflow-auto"
+        >
+          <div className="grid min-w-xl grid-cols-7 border-b border-border">
+            {dates.slice(0, 7).map((date) => (
+              <div className="px-3 py-3 text-caption text-muted-fg" key={date}>
+                {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
+              </div>
+            ))}
+          </div>
+          <div className="grid min-h-0 min-w-xl flex-1 auto-rows-fr grid-cols-7">
+            {dates.map((date) => {
+              const dayItems = days.get(date) ?? [];
+              return (
+                <div
+                  className="min-h-28 min-w-0 border-r border-b border-border p-1.5 last:border-r-0"
+                  key={date}
+                  onDragOver={(event) => {
+                    if (dragRef.current) {
+                      event.preventDefault();
+                    }
+                  }}
+                  onDrop={(event) => {
+                    dropEvent(event, date, dragRef.current?.allDay ?? false);
+                  }}
+                >
+                  <div className="mb-1 flex items-center justify-between">
+                    <Button
+                      aria-label={`Create event on ${dateFormatter.format(new Date(`${date}T12:00:00Z`))}`}
+                      onClick={() => {
+                        onSlotClick({ allDay: true, date, minute: 0 });
+                      }}
+                      size="compact"
+                      variant={date === today ? "default" : "ghost"}
+                    >
+                      <span
+                        className={cn({
+                          "opacity-40": date.slice(0, 7) !== month,
+                        })}
+                      >
+                        {Number(date.slice(8))}
+                      </span>
+                    </Button>
+                  </div>
+                  <div className="space-y-1">
+                    {dayItems
+                      .slice(0, 3)
+                      .map((item) => renderEvent(item, true))}
+                    {dayItems.length > 3 ? (
+                      <Button
+                        onClick={() => {
+                          setExpandedDate(date);
+                        }}
+                        size="compact"
+                        variant="ghost"
+                      >
+                        +{dayItems.length - 3} more
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <Dialog
+          onOpenChange={(open) => {
+            if (!open) {
+              setExpandedDate(null);
+            }
+          }}
+          open={expandedDate !== null}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {expandedDate
+                  ? dateFormatter.format(new Date(`${expandedDate}T12:00:00Z`))
+                  : "Day events"}
+              </DialogTitle>
+              <DialogDescription>
+                Choose an event to see details or edit its schedule.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogBody className="max-h-96 overflow-y-auto">
+              {expandedDate
+                ? renderAgendaDay(expandedDate, days.get(expandedDate) ?? [])
+                : null}
+            </DialogBody>
+            <DialogFooter>
+              <DialogCloseButton variant="default">Done</DialogCloseButton>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
+
+  const columnStyle: ScheduleStyle = {
+    "--schedule-columns": `3rem repeat(${dates.length}, minmax(6.5rem, 1fr))`,
+    "--schedule-min-width": `${48 + dates.length * 104}px`,
+  };
+  const currentTimeStyle: ScheduleStyle = {
+    "--schedule-top": `${((currentMinute ?? 0) * hourHeight) / 60}px`,
+  };
+  return (
+    <div
+      aria-label={`${view === "day" ? "Day" : "Week"} calendar`}
+      className="relative min-h-0 flex-1 overflow-auto overscroll-contain"
+      ref={scrollRef}
+    >
+      <p className="sr-only" id={slotHelpId}>
+        Use arrow keys to choose a time and Enter to create an event. Open any
+        event to edit its date and time.
+      </p>
+      <div
+        className="sticky top-0 z-30 grid w-full min-w-[var(--schedule-min-width)] grid-cols-[var(--schedule-columns)] border-b border-border bg-card"
+        style={columnStyle}
+      >
+        <div />
+        {dates.map((date) => (
+          <div
+            className={cn(
+              "flex min-h-8 items-center justify-center gap-1.5 border-b-2 border-transparent px-2 py-1",
+              {
+                "border-q-blue bg-q-blue/15": date === today,
+              }
+            )}
+            key={date}
+          >
+            <span
+              className={cn("text-caption", {
+                "font-medium": date === today,
+                "text-muted-fg": date !== today,
+              })}
+            >
+              {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
+            </span>
+            <span className="text-caption font-medium">
+              {Number(date.slice(8))}
+            </span>
+          </div>
+        ))}
+        <div className="border-t border-r border-border px-1 py-2 text-right text-micro text-muted-fg">
+          All day
+        </div>
+        {dates.map((date) => (
+          <div
+            className="relative min-h-8 space-y-1 border-t border-r border-border py-1 last:border-r-0"
+            key={date}
+            onDragOver={(event) => {
+              if (dragRef.current) {
+                event.preventDefault();
+              }
+            }}
+            onDrop={(event) => {
+              dropEvent(event, date, true);
+            }}
+          >
+            {/* Native hit areas fill each all-day cell without adding a separate control row. */}
+            <button
+              aria-label={`Create all-day event on ${date}`}
+              className="absolute inset-0 outline-none hover:bg-control-hover/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              onClick={() => {
+                onSlotClick({ allDay: true, date, minute: 0 });
+              }}
+              type="button"
+            />
+            {(days.get(date) ?? [])
+              .filter((item) => item.allDay)
+              .map((item) => renderEvent(item, true))}
+          </div>
+        ))}
+      </div>
+      <div
+        className="grid h-336 w-full min-w-[var(--schedule-min-width)] grid-cols-[var(--schedule-columns)]"
+        style={columnStyle}
+      >
+        <div aria-hidden className="relative border-r border-border">
+          {hours.map((hour) => {
+            const hourStyle: ScheduleStyle = {
+              "--schedule-top": `${hour * hourHeight}px`,
+            };
+            return (
+              <span
+                className="absolute top-[var(--schedule-top)] right-2 -translate-y-1/2 text-micro text-muted-fg"
+                key={hour}
+                style={hourStyle}
+              >
+                {hour === 0 ? "" : formatMinute(hour * 60)}
+              </span>
+            );
+          })}
+        </div>
+        {dates.map((date) => (
+          <div
+            className="relative border-r border-border last:border-r-0"
+            key={date}
+            onDragOver={(event) => {
+              if (dragRef.current) {
+                event.preventDefault();
+              }
+            }}
+            onDrop={(event) => {
+              dropEvent(event, date, false, true);
+            }}
+          >
+            {minuteLabels.map((minute) => {
+              const slotStyle: ScheduleStyle = {
+                "--schedule-top": `${(minute * hourHeight) / 60}px`,
+              };
+              return (
+                // Native grid cells preserve half-hour hit areas and roving keyboard focus.
+                <button
+                  aria-describedby={slotHelpId}
+                  aria-label={`Create event on ${dateFormatter.format(new Date(`${date}T12:00:00Z`))} at ${formatMinute(minute)}`}
+                  className={cn(
+                    "absolute inset-x-0 top-[var(--schedule-top)] h-7 border-b border-border/40 text-left outline-none hover:bg-control-hover/50 focus-visible:z-10 focus-visible:bg-control-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                    { "border-b-border": minute % 60 === 30 }
+                  )}
+                  data-slot-date={date}
+                  data-slot-minute={minute}
+                  key={minute}
+                  onClick={() => {
+                    onSlotClick({ allDay: false, date, minute });
+                  }}
+                  onKeyDown={(event) => {
+                    moveSlotFocus(event, date, minute);
+                  }}
+                  style={slotStyle}
+                  tabIndex={date === dates[0] && minute === 540 ? 0 : -1}
+                  type="button"
+                />
+              );
+            })}
+            {positionTimedItems(days.get(date) ?? []).map(
+              ({ column, columns: count, item }) => {
+                const endMinute =
+                  resize?.id === item.id && resize.date === date
+                    ? resize.endMinute
+                    : item.endMinute;
+                const eventStyle: ScheduleStyle = {
+                  "--schedule-height": `${Math.max(24, ((endMinute - item.startMinute) * hourHeight) / 60)}px`,
+                  "--schedule-left": `${(column * 100) / count}%`,
+                  "--schedule-top": `${(item.startMinute * hourHeight) / 60}px`,
+                  "--schedule-width": `${100 / count}%`,
+                };
+                return (
+                  <div
+                    className="group/event-slot absolute top-[var(--schedule-top)] left-[var(--schedule-left)] z-10 h-[var(--schedule-height)] w-[var(--schedule-width)] min-w-0"
+                    key={`${item.id}:${date}`}
+                    style={eventStyle}
+                  >
+                    {renderEvent({ ...item, endMinute })}
+                    {onEventResize ? (
+                      <IconButtonTooltip label="Resize event, or use arrow keys">
+                        <button
+                          aria-label={`Resize ${item.title}. Use up or down arrows to adjust by 15 minutes.`}
+                          className="absolute inset-x-1 bottom-0 z-20 h-2 cursor-ns-resize touch-none rounded-b-sm opacity-0 outline-none group-hover/event-slot:opacity-100 after:mx-auto after:mt-1 after:block after:h-0.5 after:w-6 after:rounded-full after:bg-fg/30 focus-visible:bg-primary/20 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                          }}
+                          onKeyDown={(event) => {
+                            if (
+                              event.key !== "ArrowUp" &&
+                              event.key !== "ArrowDown"
+                            ) {
+                              return;
+                            }
+                            event.preventDefault();
+                            onEventResize({
+                              date,
+                              endMinute: Math.max(
+                                item.startMinute + 15,
+                                Math.min(
+                                  1440,
+                                  item.endMinute +
+                                    (event.key === "ArrowDown" ? 15 : -15)
+                                )
+                              ),
+                              id: item.id,
+                            });
+                          }}
+                          onPointerCancel={() => {
+                            setResize(null);
+                          }}
+                          onPointerDown={(event) => {
+                            if (event.button !== 0) {
+                              return;
+                            }
+                            event.preventDefault();
+                            event.currentTarget.setPointerCapture(
+                              event.pointerId
+                            );
+                            setResize({
+                              date,
+                              endMinute: item.endMinute,
+                              id: item.id,
+                              originMinute: item.endMinute,
+                              originY: event.clientY,
+                              startMinute: item.startMinute,
+                            });
+                          }}
+                          onPointerMove={(event) => {
+                            if (
+                              !resize ||
+                              resize.id !== item.id ||
+                              resize.date !== date
+                            ) {
+                              return;
+                            }
+                            const target =
+                              Math.round(
+                                (resize.originMinute +
+                                  ((event.clientY - resize.originY) * 60) /
+                                    hourHeight) /
+                                  15
+                              ) * 15;
+                            setResize({
+                              ...resize,
+                              endMinute: Math.max(
+                                resize.startMinute + 15,
+                                Math.min(1440, target)
+                              ),
+                            });
+                          }}
+                          onPointerUp={() => {
+                            if (
+                              !resize ||
+                              resize.id !== item.id ||
+                              resize.date !== date
+                            ) {
+                              return;
+                            }
+                            if (resize.endMinute !== resize.originMinute) {
+                              onEventResize({
+                                date,
+                                endMinute: resize.endMinute,
+                                id: item.id,
+                              });
+                            }
+                            setResize(null);
+                          }}
+                          type="button"
+                        />
+                      </IconButtonTooltip>
+                    ) : null}
+                  </div>
+                );
+              }
+            )}
+            {date === today && currentMinute !== undefined ? (
+              <div
+                aria-label={`Current time ${formatMinute(currentMinute)}`}
+                className="pointer-events-none absolute inset-x-0 top-[var(--schedule-top)] z-20 border-t border-primary before:absolute before:-top-1 before:-left-1 before:size-2 before:rounded-full before:bg-primary"
+                style={currentTimeStyle}
+              />
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};

@@ -4,19 +4,26 @@ import { useChat } from "@ai-sdk/react";
 import type { ChatMailContext } from "@quieter/ai/chat-context";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import {
+  approvalRequiredToolNames,
   foregroundSnapshotSchema,
   isForegroundClientToolName,
+  isCalendarWriteToolName,
+  calendarWriteInputSchemas,
+  resolveCalendarWriteReview,
   saveComposeDraftInputSchema,
   saveComposeDraftOutputSchema,
   sendMailOutputSchema,
 } from "@quieter/ai/chat-tools";
 import type { ForegroundSnapshot } from "@quieter/ai/chat-tools";
 import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
+import { useMailboxRouteSearch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import {
   hasOrganizationAiAccess,
   USER_BILLING_QUERY_KEY,
   userBillingQueryOptions,
 } from "@quieter/app/features/settings/domain/billing";
+import { authClient } from "@quieter/app/lib/auth";
+import { applyCalendarMutationReceipt } from "@quieter/app/lib/calendar-cache-lifecycle";
 import {
   chatQueryOptions,
   getChatsQueryKey,
@@ -26,6 +33,7 @@ import { getMessagesQueryKey } from "@quieter/app/lib/mail/inbox-query/index";
 import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { rpc } from "@quieter/app/lib/orpc";
 import { appFetch, getApiUrl } from "@quieter/app/runtime";
+import { calendarMutationResultSchema } from "@quieter/calendar";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -57,11 +65,13 @@ const ChatSession = ({
     throw new Error("The assistant needs a mail workspace.");
   }
   const queryClient = useQueryClient();
+  const userId = authClient.useSession().data?.user.id;
+  const { workspace: activeWorkspace } = useMailboxRouteSearch();
   const [input, setInput] = useState("");
   const [model, setModel] = useState<ChatModel | "auto">("auto");
   const mailContext = useChatMailContext(
     workspace.mailboxId,
-    props.mailContext
+    activeWorkspace === "calendar" ? undefined : props.mailContext
   );
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const dictation = useChatDictation({
@@ -165,6 +175,43 @@ const ChatSession = ({
             part.state !== "output-available" ||
             appliedReceipts.current.has(part.toolCallId)
           ) {
+            continue;
+          }
+          const toolName = part.type.replace("tool-", "");
+          if (isCalendarWriteToolName(toolName)) {
+            const receipt = calendarMutationResultSchema.safeParse(part.output);
+            const command = calendarWriteInputSchemas[toolName].safeParse(
+              part.input
+            );
+            const expectedAction = {
+              create_calendar_event: "created",
+              delete_calendar_event: "deleted",
+              respond_to_calendar_event: "responded",
+              update_calendar_event: "updated",
+            }[toolName];
+            if (
+              userId !== undefined &&
+              receipt.success &&
+              command.success &&
+              receipt.data.action === expectedAction &&
+              receipt.data.connectionId === command.data.connectionId &&
+              receipt.data.calendarId === command.data.calendarId &&
+              (!("eventId" in command.data) ||
+                receipt.data.eventId === command.data.eventId)
+            ) {
+              appliedReceipts.current.add(part.toolCallId);
+              void (async () => {
+                try {
+                  await applyCalendarMutationReceipt(
+                    queryClient,
+                    userId,
+                    receipt.data
+                  );
+                } catch (error) {
+                  toastError(error, { boundary: "assistant-calendar-refresh" });
+                }
+              })();
+            }
             continue;
           }
           if (
@@ -335,11 +382,12 @@ const ChatSession = ({
     message.parts.flatMap((part) => {
       if (
         !isToolUIPart(part) ||
-        part.type !== "tool-send_mail" ||
+        !approvalRequiredToolNames.includes(part.type.replace("tool-", "")) ||
         part.state !== "approval-requested"
       ) {
         return [];
       }
+      const toolName = part.type.replace("tool-", "");
       return [
         {
           approve: () => {
@@ -347,6 +395,28 @@ const ChatSession = ({
               foregroundRef.current &&
               workspace.control.isCurrent(foregroundRef.current.generation)
             ) {
+              if (isCalendarWriteToolName(toolName)) {
+                if (
+                  resolveCalendarWriteReview({
+                    input: part.input,
+                    toolName,
+                    transcript: [message],
+                  }) === undefined
+                ) {
+                  void chat.addToolApprovalResponse({
+                    approved: false,
+                    id: part.approval.id,
+                    reason:
+                      "Read the destination calendar and current event before requesting approval again.",
+                  });
+                  return;
+                }
+                void chat.addToolApprovalResponse({
+                  approved: true,
+                  id: part.approval.id,
+                });
+                return;
+              }
               const proposed = saveComposeDraftInputSchema.safeParse(
                 part.input
               );
@@ -373,6 +443,13 @@ const ChatSession = ({
               });
             }
           },
+          calendarReview: isCalendarWriteToolName(toolName)
+            ? resolveCalendarWriteReview({
+                input: part.input,
+                toolName,
+                transcript: [message],
+              })
+            : undefined,
           deny: () => {
             if (
               foregroundRef.current &&
@@ -445,14 +522,19 @@ const ChatSession = ({
         ...(model === "auto" ? {} : { model }),
       };
       foregroundRef.current = foregroundSnapshotSchema.parse({
-        capabilities: [
-          "navigate",
-          "compose",
-          "edit_compose",
-          "save_draft",
-          "send_mail",
-          "modify_mail",
-        ],
+        calendar: snapshot.calendar,
+        capabilities:
+          snapshot.workspace === "calendar"
+            ? ["navigate", "modify_calendar"]
+            : [
+                "navigate",
+                "compose",
+                "edit_compose",
+                "save_draft",
+                "send_mail",
+                "modify_mail",
+                "modify_calendar",
+              ],
         draftId: snapshot.draftId,
         draftRevision: snapshot.draftRevision,
         exchangeId: crypto.randomUUID(),
@@ -467,6 +549,7 @@ const ChatSession = ({
         selectedThreadId: mailContext.context.threadId,
         tabId,
         view: snapshot.view,
+        workspace: snapshot.workspace,
       });
       if (resubmit === undefined) {
         setInput("");
@@ -521,6 +604,11 @@ const ChatSession = ({
         </p>
       )}
       <ChatComposer
+        placeholder={
+          activeWorkspace === "calendar"
+            ? "Ask about your calendar…"
+            : undefined
+        }
         input={input}
         inputRef={inputRef}
         model={model}

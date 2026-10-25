@@ -861,6 +861,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     setMailboxSearch,
     threadId,
     view: requestedView,
+    workspace,
   } = useMailboxRouteSearch();
   const { isMobileSidebarOpen, setIsMobileSidebarOpen } = useWorkspaceUiState();
   const isDemoMode = useDemoModeEnabled();
@@ -967,7 +968,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     isComposeMailbox,
     isSandboxMode,
     isSnippetMailbox,
-    isWorkspaceReady,
+    isWorkspaceReady: isWorkspaceReady && workspace !== "calendar",
     launchedMailtoRef: composeWorkspace.launchedMailtoRef,
     mailboxId,
     mailboxes,
@@ -982,7 +983,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   });
 
   useMailboxWorkspaceHotkeys({
-    isWorkspaceReady,
+    isWorkspaceReady: isWorkspaceReady && workspace !== "calendar",
     openComposeWorkspace: composeWorkspace.openComposeWorkspace,
     selectMailboxFromHotkey: workspaceActions.selectMailboxFromHotkey,
     selectedMailboxId,

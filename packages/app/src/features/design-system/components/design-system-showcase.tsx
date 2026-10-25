@@ -62,6 +62,8 @@ import {
 } from "@quieter/ui/mail-list-row";
 import { Pill } from "@quieter/ui/pill";
 import type { PillTone } from "@quieter/ui/pill";
+import { Schedule } from "@quieter/ui/schedule";
+import type { ScheduleItem, ScheduleProps } from "@quieter/ui/schedule";
 import {
   Select,
   SelectContent,
@@ -154,6 +156,192 @@ const pillTones: PillTone[] = [
 ];
 
 const statusTones: PillTone[] = ["neutral", "success", "destructive"];
+
+const scheduleDates = {
+  agenda: Array.from({ length: 30 }, (_, offset) =>
+    new Date(Date.UTC(2026, 9, 19 + offset)).toISOString().slice(0, 10)
+  ),
+  day: ["2026-10-23"],
+  month: Array.from({ length: 42 }, (_, offset) =>
+    new Date(Date.UTC(2026, 8, 28 + offset)).toISOString().slice(0, 10)
+  ),
+  week: Array.from({ length: 7 }, (_, offset) =>
+    new Date(Date.UTC(2026, 9, 19 + offset)).toISOString().slice(0, 10)
+  ),
+};
+
+const sampleScheduleItems: ScheduleItem[] = [
+  {
+    allDay: true,
+    date: "2026-10-21",
+    endMinute: 1440,
+    id: "sample-release",
+    startMinute: 0,
+    title: "Release day",
+    tone: "success",
+  },
+  {
+    allDay: false,
+    date: "2026-10-20",
+    detail: "Studio",
+    endMinute: 660,
+    id: "sample-design",
+    startMinute: 570,
+    title: "Design review",
+    tone: "primary",
+  },
+  {
+    allDay: false,
+    date: "2026-10-20",
+    endMinute: 690,
+    id: "sample-overlap",
+    startMinute: 630,
+    title: "Customer conversation",
+    tone: "warning",
+  },
+  {
+    allDay: false,
+    date: "2026-10-22",
+    detail: "Time to think",
+    endMinute: 900,
+    id: "sample-focus",
+    startMinute: 780,
+    title: "Focus time",
+    tone: "muted",
+  },
+  {
+    allDay: false,
+    date: "2026-10-23",
+    endMinute: 630,
+    id: "sample-planning",
+    startMinute: 570,
+    title: "Weekly planning",
+    tone: "primary",
+  },
+  {
+    allDay: false,
+    date: "2026-10-23",
+    endMinute: 720,
+    id: "sample-walk",
+    startMinute: 690,
+    title: "A walk outside",
+    tone: "success",
+  },
+  {
+    allDay: false,
+    date: "2026-10-23",
+    endMinute: 810,
+    id: "sample-lunch",
+    startMinute: 750,
+    title: "Lunch with the team",
+    tone: "warning",
+  },
+  {
+    allDay: false,
+    date: "2026-10-23",
+    endMinute: 960,
+    id: "sample-wrap",
+    startMinute: 900,
+    title: "Wrap up the week",
+    tone: "muted",
+  },
+];
+
+const ScheduleShowcase = () => {
+  const [view, setView] = useState<ScheduleProps["view"]>("week");
+  const [items, setItems] = useState(sampleScheduleItems);
+  const [selectedId, setSelectedId] = useState<string>();
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {(
+          ["day", "week", "month", "agenda"] satisfies ScheduleProps["view"][]
+        ).map((option) => (
+          <Button
+            aria-pressed={view === option}
+            key={option}
+            onClick={() => {
+              setView(option);
+            }}
+            size="sm"
+            variant="option"
+          >
+            {option.charAt(0).toUpperCase() + option.slice(1)}
+          </Button>
+        ))}
+        <Button
+          onClick={() => {
+            setItems(sampleScheduleItems);
+            setSelectedId(undefined);
+          }}
+          size="sm"
+          variant="secondary"
+        >
+          Reset example
+        </Button>
+      </div>
+      <div className="flex h-112 flex-col overflow-hidden rounded-md border border-border bg-card">
+        <Schedule
+          currentMinute={640}
+          dates={scheduleDates[view]}
+          items={items}
+          onEventClick={setSelectedId}
+          onEventMove={({ allDay, date, id, minute }) => {
+            setItems((previous) =>
+              previous.map((item) =>
+                item.id === id
+                  ? {
+                      ...item,
+                      allDay,
+                      date,
+                      endMinute: allDay
+                        ? 1440
+                        : minute +
+                          Math.max(
+                            30,
+                            item.allDay ? 60 : item.endMinute - item.startMinute
+                          ),
+                      startMinute: allDay ? 0 : minute,
+                    }
+                  : item
+              )
+            );
+          }}
+          onEventResize={({ endMinute, id }) => {
+            setItems((previous) =>
+              previous.map((item) =>
+                item.id === id ? { ...item, endMinute } : item
+              )
+            );
+          }}
+          onSlotClick={({ allDay, date, minute }) => {
+            setItems((previous) => [
+              ...previous,
+              {
+                allDay,
+                date,
+                endMinute: allDay ? 1440 : minute + 30,
+                id: crypto.randomUUID(),
+                startMinute: minute,
+                title: "New event",
+                tone: "primary",
+              },
+            ]);
+          }}
+          selectedId={selectedId}
+          today="2026-10-23"
+          view={view}
+        />
+      </div>
+      <p className="text-caption text-muted-fg">
+        {selectedId
+          ? `Selected ${items.find((item) => item.id === selectedId)?.title ?? "event"}.`
+          : "Choose a slot to add an event. Drag events to move them, or use the bottom handle and arrow keys to resize."}
+      </p>
+    </div>
+  );
+};
 
 const Section = ({
   children,
@@ -698,10 +886,9 @@ export const DesignSystemShowcase = () => {
             <div className="w-80 rounded-md border border-border bg-input px-3 py-2 shadow-sm squircle focus-within:border-ring focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-bg-raised">
               <TokenField
                 aria-label="Token field"
-                // oxlint-disable-next-line shadcn/no-restyle -- Showcase demonstrates the scrollable field.
-                className="max-h-32 min-h-16 overflow-y-auto text-body"
                 onChange={setTokenFieldValue}
                 placeholder="Type @ to mention an app…"
+                size="prompt"
                 tokens={showcaseTokens}
                 value={tokenFieldValue}
               />
@@ -835,6 +1022,13 @@ export const DesignSystemShowcase = () => {
               </Button>
             </div>
           </Row>
+        </Section>
+
+        <Section
+          description="A shared schedule with overlapping events, all-day rows, keyboard navigation, drag and resize. This example uses sample events."
+          title="Schedule"
+        >
+          <ScheduleShowcase />
         </Section>
 
         <Section title="Mobile header">

@@ -18,7 +18,7 @@ Agent connector readiness is tracked separately in [Agent tooling](agent-tooling
 | Polar | Non-expiring sandbox token, existing Managed/Pro products, official CLI 1.3.9 in WSL; six real customer/member events returned HTTP 200 | Checkout/portal/renewal/cancellation/credits with bypass off |
 | Telemetry | Explicit opt-in implemented; off by default; consent still required for PostHog | Development-project ingestion and browser privacy assertions |
 | Managed mail | Private fixture mailbox opens in the browser with its body and attachment; archive and restore-to-inbox actions pass; native R2 read/delete tests; fixture reseed preserves one message; domain changes and external sending blocked locally | SES/MX delivery requires a deployment and is excluded from this local setup |
-| Calendar/Linear | Independent server-side write controls; Calendar verifies the actual primary calendar account; OAuth configuration present | Real connector authorization and dedicated resources for writes |
+| Calendar/Linear | Independent server-side write controls; Calendar checks the connected account and target-calendar permissions; OAuth configuration present | Real connector authorization and dedicated resources for writes |
 | logo.dev/c15t | Real publishable logo configuration; consent uses offline mode | Focused UI/network acceptance |
 | Domain Connect | Inactive | Deferred until activated |
 
@@ -102,7 +102,9 @@ Gmail's official integration path uses real test mailboxes. I found no official 
 
 Google Pub/Sub does have an official local emulator. It supports local message testing and HTTP push, but does not implement IAM or turn Gmail into a local service. It cannot prove Google's real OIDC push authentication. Use it only where its API behavior adds coverage; use signed fixtures for the ingress verifier and a real development subscription for end-to-end delivery. See [Pub/Sub emulator](https://docs.cloud.google.com/pubsub/docs/emulator?hl=en).
 
-Calendar's official local quickstart connects local code to real Google Calendar. I found no complete official local Calendar emulator. Quieter currently targets the primary calendar, so use a dedicated test account rather than assuming a spare secondary calendar is enough isolation. Cover timezones, DST, all-day events, permissions, and cancellation. See [Calendar quickstart](https://developers.google.com/workspace/calendar/api/quickstart/nodejs).
+Calendar's official local quickstart connects local code to real Google Calendar. I found no complete official local Calendar emulator. Quieter supports multiple accounts and subscribed calendars. Local writes require write mode, an allowed connected account, and owner or writer access. Every non-primary calendar also requires its calendar ID in the allowlist, including calendars where the account has manager access. Use dedicated test resources for provider writes. See [Calendar setup, cache, and limits](calendar.md) and the [Calendar quickstart](https://developers.google.com/workspace/calendar/api/quickstart/nodejs).
+
+The Calendar workspace has sample events in preview persona mode. Preview edits do not write to Google or call AI models. Real Calendar OAuth consent and provider writes remain unverified for the October 23, 2026 workspace change.
 
 ### Linear
 
@@ -130,7 +132,7 @@ logo.dev remains an external image API. The local publishable key exists. Use st
 
 Domain Connect supplies a protocol, example service, templates, and signing examples rather than a complete local DNS-provider emulator. Test signing and callbacks locally; use a dedicated domain for actual registrar/DNS changes and SES verification. The required private signing key is consumed by code but omitted from the current SST secret registry and deployment bindings. See [Domain Connect getting started](https://www.domainconnect.org/getting-started/).
 
-GitHub Actions provides the existing CI execution environment. GitHub CLI authentication works. There is no need to run GitHub itself locally. Vercel is present in older sandbox webhook destinations, but the current app infrastructure targets Cloudflare. D1, KV, Vectorize, Cloudflare Workflows, Redis, and Neon are not prerequisites inferred from the current runtime inventory. Gmail synchronization processes Pub/Sub deliveries directly; managed rule backfills run in mail maintenance. Custom action workflows are removed.
+GitHub Actions provides the existing CI execution environment. GitHub CLI authentication works. There is no need to run GitHub itself locally. Vercel is present in older sandbox webhook destinations, but the current app infrastructure targets Cloudflare. D1, KV, Vectorize, Cloudflare Workflows, Redis, and Neon are not prerequisites inferred from the current runtime inventory. Gmail synchronization processes Pub/Sub deliveries directly; managed rule backfills and reviewed mailbox Actions run in mail maintenance. The custom graph runtime remains removed.
 
 ## Feature acceptance matrix
 
@@ -153,7 +155,7 @@ These are required acceptance cases, not a claim that every row was executed dur
 | Voice input | Permission/error UI, format and size validation, transcription fixtures | Actual microphone and OpenRouter transcription |
 | AI memory | Personal/mailbox ownership, lexical/semantic retrieval, deletion | pgvector index and real embedding dimensions |
 | Automatic AI features | Label/detail extraction with fixed outputs | Selected real-model quality regression examples |
-| Calendar connector | OAuth state, credential encryption, events, UTC/DST/all-day cases | Dedicated primary calendar read/write/revoke |
+| Calendar connector | OAuth state, credential encryption, owner isolation, event conflicts, cache lifecycle, UTC/DST/all-day cases, preview UI | Dedicated-account consent, refresh/revoke, calendar permissions, guest notifications, recurrence, meeting creation, and imports |
 | Linear connector | MCP/tool schemas, auth expiry, retries, permission errors | Dedicated workspace read/write/revoke |
 | Billing | Webhook signatures, ordering/idempotency, entitlements, credits, usage | Polar sandbox checkout, plan changes, cancellation and renewal |
 | Managed domains | DNS record generation, verification states, catch-all routing | Test-domain MX/SPF/DKIM, SES identities and Domain Connect |
@@ -164,9 +166,9 @@ These are required acceptance cases, not a claim that every row was executed dur
 | UI resilience | Mobile layouts, keyboard use, focus, stale cache, disconnect/reconnect | Multiple browsers, real device and constrained network |
 | Recovery and deployment | Clean seed/reset, migration replay, old/new schema compatibility | Deployment rollback, IAM restrictions, cloud logs and DLQ |
 
-## Custom action removal
+## Mailbox actions and retained graphs
 
-The current change removes custom action settings, dispatch, queue consumption, graph execution, and action-specific credit reservations. Connectors remain available to chat, and managed inbox rules remain. `MailMaintenance` replaces the retired dispatcher for send recovery, storage cleanup, expired rate-limit cleanup, and managed rule backfills every minute. Local execution uses `vp run dev:trigger mail-recovery`.
+Mailbox Actions use one reviewed prompt per mailbox and run through the existing `MailMaintenance` Worker. Its bounded runtime supports incoming mail and manual execution, actor-private summaries, and reply drafts for ordinary compose review. Exact connected accounts and known tool effects are reauthorized at each call. The old graph editor, dispatcher, graph execution, and credit reservations remain removed. Local execution uses `vp run dev:trigger actions` for action work alone. See [Action specifications](action-specifications.md) for authority, privacy, and retry rules.
 
 Seven unpublished migrations were consolidated into `20260907233131_melodic_blacklash`. Read-only inspection confirmed that none of the seven appeared in the development ledger; main history is unchanged. This inspection did not apply the consolidated migration. Keep Drizzle's SQL and full snapshots together, and consolidate only unapplied feature migrations as described in [the migration workflow](architecture.md#migration-workflow).
 

@@ -18,7 +18,7 @@ import {
 import type { ConnectorProvider } from "@quieter/app/lib/connectors-query";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
-import { Button } from "@quieter/ui/button";
+import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { toast } from "@quieter/ui/toast";
@@ -141,43 +141,57 @@ export const ConnectorsSettingsPanel = () => {
             disconnectConnectorMutation.variables?.provider ===
               connector.provider;
 
+          const connectionAction = isConnected ? (
+            <Button
+              disabled={isDisconnecting}
+              onClick={() => {
+                disconnectConnectorMutation.mutate({
+                  provider: connector.provider,
+                });
+              }}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {isDisconnecting ? (
+                <Icon aria-hidden animation="spin" icon={Loading03Icon} />
+              ) : null}
+              Disconnect
+            </Button>
+          ) : (
+            <Button
+              disabled={!connector.isConfigured || isStarting}
+              onClick={() => {
+                runDetached(async () => {
+                  await startConnection(connector.provider);
+                });
+              }}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {isStarting ? (
+                <Icon aria-hidden animation="spin" icon={Loading03Icon} />
+              ) : null}
+              {needsReconnect ? "Reconnect" : "Connect"}
+            </Button>
+          );
+
           return (
             <SettingsRow
               action={
-                isConnected ? (
-                  <Button
-                    disabled={isDisconnecting}
-                    onClick={() => {
-                      disconnectConnectorMutation.mutate({
-                        provider: connector.provider,
-                      });
-                    }}
+                connector.provider === "google_calendar" &&
+                connector.accounts.length > 0 ? (
+                  <LinkButton
+                    search={{ workspace: "calendar" }}
                     size="sm"
-                    type="button"
-                    variant="outline"
+                    to="/"
+                    variant="secondary"
                   >
-                    {isDisconnecting ? (
-                      <Icon aria-hidden animation="spin" icon={Loading03Icon} />
-                    ) : null}
-                    Disconnect
-                  </Button>
+                    Manage calendars
+                  </LinkButton>
                 ) : (
-                  <Button
-                    disabled={!connector.isConfigured || isStarting}
-                    onClick={() => {
-                      runDetached(async () => {
-                        await startConnection(connector.provider);
-                      });
-                    }}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    {isStarting ? (
-                      <Icon aria-hidden animation="spin" icon={Loading03Icon} />
-                    ) : null}
-                    {needsReconnect ? "Reconnect" : "Connect"}
-                  </Button>
+                  connectionAction
                 )
               }
               icon={<ConnectorIcon provider={connector.provider} />}

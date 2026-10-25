@@ -1,0 +1,26 @@
+{
+  "review": "Existing connector owner queries in the development logical database, retrieved read-only through PlanetScale Insights. These observations do not measure the new Calendar queries.",
+  "queries": [
+    {
+      "sql": "select \"accountEmail\", \"displayName\", id, provider, \"providerAccountId\", \"providerWorkspaceName\", status from \"connectorCredential\" where \"connectorCredential\".\"userId\" = $1",
+      "namespace": "quieter_dev.public",
+      "indexes": [
+        "public.connectorCredential.connector_credential_user_provider_idx"
+      ]
+    },
+    {
+      "sql": "select \"accountEmail\", \"createdAt\", \"displayName\", id, provider, \"providerAccountId\", \"providerWorkspaceId\", \"providerWorkspaceName\", status from \"connectorCredential\" where \"connectorCredential\".\"userId\" = $1",
+      "namespace": "quieter_dev.public",
+      "indexes": [
+        "public.connectorCredential.connector_credential_user_provider_idx"
+      ]
+    },
+    {
+      "sql": "select \"accountEmail\", \"displayName\", id, provider, \"providerAccountId\", \"providerWorkspaceName\", scopes, status from \"connectorCredential\" where ( (\"connectorCredential\".\"userId\" = $1) and (\"connectorCredential\".id in (...)))",
+      "namespace": "quieter_dev.public",
+      "indexes": [
+        "public.connectorCredential.connector_credential_user_provider_idx"
+      ]
+    }
+  ]
+}

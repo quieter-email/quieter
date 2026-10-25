@@ -1,3 +1,4 @@
+import type { navigateCalendarInputSchema } from "@quieter/ai/chat-tools";
 import { createForegroundControl } from "@quieter/app/features/chat/domain/foreground-control";
 import { AgentWorkspaceContext } from "@quieter/app/features/chat/domain/workspace-context";
 import type { ComposeFormValues } from "@quieter/app/features/compose/domain/compose-form";
@@ -7,8 +8,17 @@ import {
 } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { useMailboxRouteSearch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
+import type { CalendarWorkspace } from "@quieter/calendar";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
+import type { z } from "zod";
+
+export type CalendarBridge = {
+  read: () => CalendarWorkspace;
+  navigate: (
+    input: z.infer<typeof navigateCalendarInputSchema>
+  ) => Promise<void>;
+};
 
 type ComposeBridge = {
   applyReceipt: (receipt: {
@@ -54,7 +64,9 @@ const createWorkspaceBridge = (mailboxId: string) => {
     },
   };
   let compose: ComposeBridge | null = null;
+  let calendar: CalendarBridge | null = null;
   let onComposeReady: (() => void) | undefined;
+  let onCalendarReady: (() => void) | undefined;
   return {
     activate() {
       disposed = false;
@@ -64,10 +76,22 @@ const createWorkspaceBridge = (mailboxId: string) => {
       disposed = true;
       foregroundControl.cancel();
       compose = null;
+      calendar = null;
       onComposeReady?.();
+      onCalendarReady?.();
     },
+    getCalendar: () => (disposed ? null : calendar),
     getCompose: () => (disposed ? null : compose),
     mailboxId,
+    registerCalendar(registered: CalendarBridge) {
+      calendar = registered;
+      onCalendarReady?.();
+      return () => {
+        if (calendar === registered) {
+          calendar = null;
+        }
+      };
+    },
     registerCompose(bridge: ComposeBridge) {
       compose = bridge;
       onComposeReady?.();
@@ -76,6 +100,33 @@ const createWorkspaceBridge = (mailboxId: string) => {
           compose = null;
         }
       };
+    },
+    async waitForCalendar(generation: number) {
+      const pending = Promise.withResolvers<CalendarWorkspace>();
+      const check = () => {
+        if (!control.isCurrent(generation)) {
+          pending.reject(new Error("The request was stopped."));
+        } else if (calendar !== null) {
+          pending.resolve(calendar.read());
+        }
+      };
+      onCalendarReady = check;
+      const subscription = control.state.subscribe(check);
+      const timeout = window.setTimeout(() => {
+        pending.reject(
+          new Error("The calendar could not be opened. Try again.")
+        );
+      }, 20_000);
+      check();
+      try {
+        return await pending.promise;
+      } finally {
+        if (onCalendarReady === check) {
+          onCalendarReady = undefined;
+        }
+        subscription.unsubscribe();
+        window.clearTimeout(timeout);
+      }
     },
     async waitForCompose(draftId: string, generation: number) {
       const pending =
@@ -114,12 +165,14 @@ export type WorkspaceBridge = Omit<
   "activate" | "dispose"
 > & {
   read: () => {
+    calendar?: CalendarWorkspace;
     generation: number;
     mailboxId: string;
     selectedMessageId?: string;
     selectedThreadId?: string;
     query: string;
     view: string;
+    workspace: "mail" | "calendar";
     draftId?: string;
     draftRevision?: number;
     draft?: {
@@ -152,6 +205,10 @@ export type WorkspaceBridge = Omit<
     },
     generation: number
   ) => Promise<void>;
+  navigateCalendar: (
+    input: z.infer<typeof navigateCalendarInputSchema>,
+    generation: number
+  ) => Promise<void>;
   openCompose: (
     input: {
       to?: string;
@@ -179,11 +236,29 @@ export const AgentWorkspaceProvider = ({
   const route = useMailboxRouteSearch();
   const current = useRef({ onComposeDraftRequested, route });
   const activeMailboxId = useRef(mailboxId);
+  const activeWorkspace = useRef(route.workspace);
+  const assistantNavigation = useRef<{
+    generation: number;
+    workspace: "mail" | "calendar";
+  } | null>(null);
   useLayoutEffect(() => {
     activeMailboxId.current = mailboxId;
     current.current = { onComposeDraftRequested, route };
   });
   const bridge = useMemo(() => createWorkspaceBridge(mailboxId), [mailboxId]);
+  useLayoutEffect(() => {
+    if (activeWorkspace.current !== route.workspace) {
+      const expected = assistantNavigation.current;
+      if (
+        expected?.workspace !== (route.workspace ?? "mail") ||
+        !bridge.control.isCurrent(expected.generation)
+      ) {
+        bridge.control.cancel();
+      }
+      assistantNavigation.current = null;
+      activeWorkspace.current = route.workspace;
+    }
+  }, [bridge, route.workspace]);
   useLayoutEffect(() => {
     bridge.activate();
     return () => {
@@ -217,6 +292,9 @@ export const AgentWorkspaceProvider = ({
         ) {
           throw new Error("This view is not available.");
         }
+        if (current.current.route.workspace === "calendar") {
+          assistantNavigation.current = { generation, workspace: "mail" };
+        }
         await current.current.route.setMailboxSearch({
           ...(view === undefined
             ? {}
@@ -234,7 +312,42 @@ export const AgentWorkspaceProvider = ({
           messageId: input.messageId ?? (view === undefined ? undefined : null),
           query: input.query ?? (view === undefined ? undefined : null),
           threadId: input.threadId ?? (view === undefined ? undefined : null),
+          workspace: null,
         });
+      },
+      async navigateCalendar(input, generation) {
+        if (
+          activeMailboxId.current !== mailboxId ||
+          !bridge.control.isCurrent(generation)
+        ) {
+          throw new Error("The request was stopped.");
+        }
+        const mounted = bridge.getCalendar();
+        if (
+          current.current.route.workspace === "calendar" &&
+          mounted !== null
+        ) {
+          await mounted.navigate(input);
+          return;
+        }
+        if (current.current.route.workspace !== "calendar") {
+          assistantNavigation.current = { generation, workspace: "calendar" };
+        }
+        await current.current.route.setMailboxSearch({
+          calendarConnectionId: input.connectionId,
+          calendarDate: input.date,
+          calendarEventId: input.eventId,
+          calendarId: input.calendarId,
+          calendarTimeZone: input.timeZone,
+          calendarView: input.view,
+          workspace: "calendar",
+        });
+        await bridge.waitForCalendar(generation);
+        const calendar = bridge.getCalendar();
+        if (calendar === null || !bridge.control.isCurrent(generation)) {
+          throw new Error("The request was stopped.");
+        }
+        await calendar.navigate(input);
       },
       async openCompose(input, generation) {
         if (
@@ -242,6 +355,9 @@ export const AgentWorkspaceProvider = ({
           !bridge.control.isCurrent(generation)
         ) {
           throw new Error("The request was stopped.");
+        }
+        if (current.current.route.workspace === "calendar") {
+          throw new Error("Open Mail before composing an email.");
         }
         if (bridge.getCompose() || current.current.route.isComposeMailbox) {
           throw new Error(
@@ -275,6 +391,22 @@ export const AgentWorkspaceProvider = ({
           throw new Error("The request was stopped.");
         }
         const selected = current.current.route;
+        if (selected.workspace === "calendar") {
+          const calendar = bridge.getCalendar()?.read();
+          if (calendar === undefined) {
+            throw new Error(
+              "The calendar is still opening. Try again shortly."
+            );
+          }
+          return {
+            calendar,
+            generation: bridge.control.state.get().generation,
+            mailboxId,
+            query: "",
+            view: "calendar",
+            workspace: "calendar",
+          };
+        }
         const draft = bridge.getCompose()?.read();
         let view: string = selected.activeMailbox;
         if (selected.isComposeMailbox) {
@@ -291,6 +423,7 @@ export const AgentWorkspaceProvider = ({
           selectedMessageId: selected.messageId,
           selectedThreadId: selected.threadId,
           view,
+          workspace: "mail",
           ...(draft
             ? {
                 draft: {

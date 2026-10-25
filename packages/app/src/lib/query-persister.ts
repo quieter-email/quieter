@@ -48,7 +48,7 @@ const deserializePersistedQuery = (value: string): PersistedQuery => {
 };
 
 let persistenceUser: string | undefined;
-let persistenceEpoch = 0;
+let persistenceGeneration = 0;
 let persistenceInitialized = false;
 let persistenceClient: QueryClient | undefined;
 
@@ -66,28 +66,43 @@ const threadCacheSchema = z.looseObject({
   ),
 });
 
-const createPersister = (epoch: number) => {
+const createPersister = (generation: number) => {
   const ownerClient = persistenceClient;
+  const pendingWrites = new Set<Promise<void>>();
   const storage = {
     entries: async () =>
-      epoch === persistenceEpoch ? await mailCache.entries() : [],
+      generation === persistenceGeneration ? await mailCache.entries() : [],
     getItem: async (key: string) =>
-      epoch === persistenceEpoch ? await mailCache.getItem(key) : null,
+      generation === persistenceGeneration
+        ? await mailCache.getItem(key)
+        : null,
     removeItem: async (key: string) => {
-      if (epoch === persistenceEpoch) {
+      if (generation === persistenceGeneration) {
         await mailCache.removeItem(key);
       }
     },
     setItem: async (key: string, value: string) => {
-      if (epoch === persistenceEpoch && value !== "") {
-        await mailCache.setItem(key, value);
+      if (generation === persistenceGeneration && value !== "") {
+        const write = mailCache.setItem(key, value);
+        pendingWrites.add(write);
+        try {
+          await write;
+        } finally {
+          pendingWrites.delete(write);
+        }
       }
     },
   };
-  return experimental_createQueryPersister({
+  const persister = experimental_createQueryPersister({
     buster: "v8",
     deserialize: async (value) => {
       const parsed = deserializePersistedQuery(value);
+      if (
+        parsed.queryKey[0] === "calendar" &&
+        parsed.queryKey[1] !== persistenceUser
+      ) {
+        throw new Error("Calendar cache belongs to a different account.");
+      }
       if (parsed.queryKey[0] === "message-thread") {
         const detail = threadCacheSchema.parse(parsed.state.data);
         let missingBody = false;
@@ -123,7 +138,9 @@ const createPersister = (epoch: number) => {
           ? query.queryKey[2]
           : query.queryKey[1];
       if (
-        epoch !== persistenceEpoch ||
+        generation !== persistenceGeneration ||
+        (query.queryKey[0] === "calendar" &&
+          query.queryKey[1] !== persistenceUser) ||
         (ownerClient &&
           typeof mailboxId === "string" &&
           pendingMailMutations.get(ownerClient)?.has(mailboxId) === true)
@@ -161,9 +178,18 @@ const createPersister = (epoch: number) => {
     },
     storage,
   });
+  return {
+    ...persister,
+    persistQueryByKey: async (
+      ...args: Parameters<typeof persister.persistQueryByKey>
+    ) => {
+      await persister.persistQueryByKey(...args);
+      await Promise.all(pendingWrites);
+    },
+  };
 };
 
-let currentPersister = createPersister(persistenceEpoch);
+let currentPersister = createPersister(persistenceGeneration);
 
 export const queryPersister: ReturnType<
   typeof experimental_createQueryPersister
@@ -209,9 +235,9 @@ export const setQueryPersistenceUser = (
   }
   persistenceUser = userId ?? undefined;
   persistenceClient = client;
-  persistenceEpoch += 1;
+  persistenceGeneration += 1;
   mailCache.setUser(persistenceUser);
-  currentPersister = createPersister(persistenceEpoch);
+  currentPersister = createPersister(persistenceGeneration);
   try {
     for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
       const key = window.localStorage.key(index);
@@ -225,6 +251,27 @@ export const setQueryPersistenceUser = (
 };
 
 export const shouldPersistQueryKey = (queryKey: readonly unknown[]) => {
+  if (queryKey[0] === "calendar") {
+    return (
+      typeof queryKey[1] === "string" &&
+      queryKey[1].length > 0 &&
+      ((queryKey.length === 3 && queryKey[2] === "accounts") ||
+        (queryKey[2] === "connection" &&
+          typeof queryKey[3] === "string" &&
+          queryKey[3].length > 0 &&
+          ((queryKey.length === 5 && queryKey[4] === "calendars") ||
+            (queryKey.length === 8 &&
+              queryKey[4] === "calendar" &&
+              typeof queryKey[5] === "string" &&
+              queryKey[5].length > 0 &&
+              ((queryKey[6] === "event" &&
+                typeof queryKey[7] === "string" &&
+                queryKey[7].length > 0) ||
+                (queryKey[6] === "events" &&
+                  typeof queryKey[7] === "object" &&
+                  queryKey[7] !== null))))))
+    );
+  }
   if (queryKey[0] === "message-thread" && queryKey.length === 4) {
     return (
       typeof queryKey[2] === "string" &&
@@ -250,6 +297,71 @@ export const shouldPersistQueryKey = (queryKey: readonly unknown[]) => {
     queryKey[2] !== "drafts" &&
     queryKey[3] === ""
   );
+};
+
+export const removeCalendarScopePersistence = async (
+  userId: string,
+  connectionId: string,
+  calendarId?: string
+) => {
+  if (persistenceUser !== userId) {
+    return;
+  }
+  persistenceGeneration += 1;
+  currentPersister = createPersister(persistenceGeneration);
+  await mailCache.removeCalendarScope(connectionId, calendarId);
+  if (calendarId === undefined) {
+    await queryPersister.removeQueries({
+      queryKey: ["calendar", userId, "accounts"],
+    });
+  }
+};
+
+export const restoreMissingCalendarScopeQueries = async (
+  client: QueryClient,
+  userId: string,
+  connectionId: string,
+  calendarId: string
+) => {
+  if (persistenceUser !== userId || persistenceClient !== client) {
+    return;
+  }
+  for (const [storageKey, value] of await mailCache.entries()) {
+    if (!storageKey.startsWith("quieter-cache-")) {
+      continue;
+    }
+    let stored: PersistedQuery;
+    try {
+      stored = deserializePersistedQuery(value);
+    } catch {
+      continue;
+    }
+    const key = stored.queryKey;
+    if (
+      key[0] !== "calendar" ||
+      key[1] !== userId ||
+      key[2] !== "connection" ||
+      key[3] !== connectionId ||
+      !(
+        (key.length === 5 && key[4] === "calendars") ||
+        (key.length === 8 &&
+          key[4] === "calendar" &&
+          key[5] === calendarId &&
+          (key[6] === "event" || key[6] === "events"))
+      ) ||
+      storageKey !== `quieter-cache-${stored.queryHash}` ||
+      client.getQueryData(key) !== undefined
+    ) {
+      continue;
+    }
+    const data = await queryPersister.retrieveQuery<unknown>(stored.queryHash);
+    if (persistenceUser !== userId || persistenceClient !== client) {
+      return;
+    }
+    if (data !== undefined && client.getQueryData(key) === undefined) {
+      client.setQueryData(key, data, { updatedAt: stored.state.dataUpdatedAt });
+    }
+  }
 };
 
 export const persistQueryByKey = async (
@@ -280,7 +392,7 @@ export const persistQueryByKey = async (
   try {
     await queryPersister.persistQueryByKey(queryKey, queryClient);
   } catch {
-    // Optional cache persistence must not change a server mutation outcome.
+    /* Persistence is optional. */
   }
 };
 

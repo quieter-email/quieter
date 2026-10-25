@@ -356,7 +356,7 @@ const isGmailAuthError = (error: unknown) =>
       error.googleStatus.toUpperCase() === "UNAUTHENTICATED"));
 
 export const runAuthorizedGmailMailbox = async <TValue>(
-  input: { mailboxId: string; userId: string },
+  input: { mailboxId: string; retryUnauthorized?: boolean; userId: string },
   runner: (accessToken: string) => Promise<TValue>
 ): Promise<TValue> => {
   const { accessToken, mailbox: authorizedMailbox } =
@@ -365,7 +365,7 @@ export const runAuthorizedGmailMailbox = async <TValue>(
   try {
     return await runner(accessToken);
   } catch (error) {
-    if (!isGmailAuthError(error)) {
+    if (input.retryUnauthorized === false || !isGmailAuthError(error)) {
       throw error;
     }
   }

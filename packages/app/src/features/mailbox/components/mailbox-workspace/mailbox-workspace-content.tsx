@@ -21,6 +21,7 @@ import { MailboxMessagesPanel } from "@quieter/app/features/mailbox/components/m
 import {
   useMailboxMessageId,
   useMailboxSearchActions,
+  useMailboxRouteSearch,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import {
   loadChatView,
@@ -45,6 +46,7 @@ import {
 } from "@quieter/ui/workspace-section";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import {
+  Activity,
   lazy,
   Suspense,
   useEffect,
@@ -57,6 +59,12 @@ import {
 import type { ComponentProps, ReactNode } from "react";
 
 const ChatView = lazy(loadChatView);
+
+const CalendarWorkspace = lazy(async () => {
+  const { CalendarWorkspace: Workspace } =
+    await import("@quieter/app/features/calendar/components/calendar-workspace");
+  return { default: Workspace };
+});
 
 const ComposeWorkspace = lazy(loadComposeWorkspace);
 
@@ -338,6 +346,8 @@ const MailboxWorkspaceContentInner = ({
   const onePanelDesktop = mailLayout === "one-panel";
   const messageId = useMailboxMessageId() ?? null;
   const setMailboxSearch = useMailboxSearchActions();
+  const { workspace } = useMailboxRouteSearch();
+  const calendarActive = workspace === "calendar";
   const allInboxesActive = selectedView === "all-inboxes";
   const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);
   const senderMailboxes = mailboxes
@@ -756,6 +766,7 @@ const MailboxWorkspaceContentInner = ({
                 open: assistantOpen,
                 panelId: assistantPanelId,
                 showNavigationTrigger:
+                  calendarActive ||
                   isComposeMailbox ||
                   isSnippetMailbox ||
                   selectedView === "labels" ||
@@ -766,46 +777,55 @@ const MailboxWorkspaceContentInner = ({
       >
         <main className="pt-safe pr-safe pb-safe pl-safe relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-fg lg:p-0">
           <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
-            {selectedMailboxId ? (
-              <MailSidebar
-                userId={userId}
-                allInboxesActive={allInboxesActive}
-                groups={mailboxGroups}
-                onComposeNewMail={onComposeNewMail}
-                onMobileOpenChange={onMobileOpenChange}
-                onReorderMailboxSwitcher={onReorderMailboxSwitcher}
-                onReconnectMailbox={onReconnectMailbox}
-                onSearch={onSearch}
-                onManageLabels={(sourceMailboxId) => {
-                  if (sourceMailboxId) {
-                    void setMailboxSearch({
-                      chatId:
-                        sourceMailboxId === selectedMailboxId
-                          ? undefined
-                          : null,
-                      mailboxId: sourceMailboxId,
-                      messageId: null,
-                      query: null,
-                      threadId: null,
-                      view: "labels",
-                    });
-                  } else {
-                    onSelectView("labels");
-                  }
-                }}
-                onManageSnippets={onManageSnippets}
-                onSelectMailbox={onSelectMailbox}
-                onSelectMailboxId={onSelectMailboxId}
-                onSelectView={onSelectView}
-                reconnectingMailboxId={reconnectingMailboxId}
-                searchQuery={searchQuery}
-                selectedMailbox={activeMailbox}
-                isSnippetMailbox={isSnippetMailbox}
-                selectedMailboxId={selectedMailboxId}
-                selectedMailboxProvider={selectedMailboxProvider}
-                isMobileOpen={layoutState.isMobileSidebarOpen}
-              />
-            ) : null}
+            <Activity mode={calendarActive ? "hidden" : "visible"}>
+              {selectedMailboxId ? (
+                <MailSidebar
+                  userId={userId}
+                  allInboxesActive={allInboxesActive}
+                  groups={mailboxGroups}
+                  onComposeNewMail={onComposeNewMail}
+                  onOpenCalendar={() => {
+                    onMobileOpenChange(false);
+                    void setMailboxSearch(
+                      { workspace: "calendar" },
+                      { replace: false }
+                    );
+                  }}
+                  onMobileOpenChange={onMobileOpenChange}
+                  onReorderMailboxSwitcher={onReorderMailboxSwitcher}
+                  onReconnectMailbox={onReconnectMailbox}
+                  onSearch={onSearch}
+                  onManageLabels={(sourceMailboxId) => {
+                    if (sourceMailboxId) {
+                      void setMailboxSearch({
+                        chatId:
+                          sourceMailboxId === selectedMailboxId
+                            ? undefined
+                            : null,
+                        mailboxId: sourceMailboxId,
+                        messageId: null,
+                        query: null,
+                        threadId: null,
+                        view: "labels",
+                      });
+                    } else {
+                      onSelectView("labels");
+                    }
+                  }}
+                  onManageSnippets={onManageSnippets}
+                  onSelectMailbox={onSelectMailbox}
+                  onSelectMailboxId={onSelectMailboxId}
+                  onSelectView={onSelectView}
+                  reconnectingMailboxId={reconnectingMailboxId}
+                  searchQuery={searchQuery}
+                  selectedMailbox={activeMailbox}
+                  isSnippetMailbox={isSnippetMailbox}
+                  selectedMailboxId={selectedMailboxId}
+                  selectedMailboxProvider={selectedMailboxProvider}
+                  isMobileOpen={layoutState.isMobileSidebarOpen}
+                />
+              ) : null}
+            </Activity>
 
             <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
               <div
@@ -821,17 +841,43 @@ const MailboxWorkspaceContentInner = ({
                 }
                 className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent"
               >
-                <div className="relative min-h-0 flex-1">{mailboxContent}</div>
-                {!allInboxesActive &&
-                !isComposeMailbox &&
-                !isDemoMode &&
-                !isManagedDemoMode &&
-                selectedMailboxId !== null ? (
-                  <DraftRecoveryNotice
-                    mailboxId={selectedMailboxId}
-                    onResume={onComposeDraftRequested}
-                  />
-                ) : null}
+                <Activity mode={calendarActive ? "visible" : "hidden"}>
+                  <Suspense
+                    fallback={
+                      <p className="p-6 text-body-sm text-muted-fg">
+                        Loading calendar…
+                      </p>
+                    }
+                  >
+                    <CalendarWorkspace
+                      isMobileSidebarOpen={layoutState.isMobileSidebarOpen}
+                      onMobileSidebarOpenChange={onMobileOpenChange}
+                      onBackToMail={() => {
+                        onMobileOpenChange(false);
+                        void setMailboxSearch(
+                          { workspace: null },
+                          { replace: false }
+                        );
+                      }}
+                      userId={userId}
+                    />
+                  </Suspense>
+                </Activity>
+                <Activity mode={calendarActive ? "hidden" : "visible"}>
+                  <div className="relative min-h-0 flex-1">
+                    {mailboxContent}
+                  </div>
+                  {!allInboxesActive &&
+                  !isComposeMailbox &&
+                  !isDemoMode &&
+                  !isManagedDemoMode &&
+                  selectedMailboxId !== null ? (
+                    <DraftRecoveryNotice
+                      mailboxId={selectedMailboxId}
+                      onResume={onComposeDraftRequested}
+                    />
+                  ) : null}
+                </Activity>
               </div>
               {selectedMailboxId && selectedMailboxProvider !== "api" ? (
                 <AssistantSidebar

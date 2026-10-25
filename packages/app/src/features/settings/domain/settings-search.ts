@@ -223,6 +223,16 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     tab: "mailboxes",
     title: "Mailbox intelligence",
   },
+  {
+    description: "Mailboxes / Actions",
+    id: "mailbox-actions",
+    keywords:
+      "agent automation instructions tools connected accounts review activate pause",
+    scope: "mailbox",
+    section: "actions",
+    tab: "mailboxes",
+    title: "Actions",
+  },
 ];
 
 const editDistance = (left: string, right: string) => {

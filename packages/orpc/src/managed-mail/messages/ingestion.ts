@@ -27,6 +27,7 @@ import {
 } from "drizzle-orm";
 
 import { captureManagedMessageMemory } from "../../ai-memory-capture";
+import { enqueueMailAgentMessage } from "../../mail-agent/inbox";
 import {
   ensureMailImportanceWork,
   processPendingMailImportance,
@@ -230,8 +231,15 @@ const finishIngestion = async (input: {
   mailboxId: string;
   messageId: string;
   providerMessageId: string;
+  receivedAt: Date;
   threadId: string;
 }) => {
+  await enqueueMailAgentMessage({
+    mailboxId: input.mailboxId,
+    messageId: input.messageId,
+    receivedAt: input.receivedAt,
+    threadId: input.threadId,
+  });
   const results = await Promise.allSettled([
     captureManagedMessageMemory({
       mailboxId: input.mailboxId,
@@ -284,7 +292,7 @@ const ingestManagedMessageForMailbox = async (input: {
         bodyText: input.parsed.bodyText ?? null,
         cc: input.parsed.cc ?? null,
         ccNormalized: normalizeManagedSearchValue(input.parsed.cc),
-        createdAt: new Date(),
+        createdAt: input.receivedAt,
         direction: "inbound",
         from: input.parsed.from,
         fromNormalized: normalizeManagedSearchValue(input.parsed.from),
@@ -411,6 +419,7 @@ const ingestManagedMessageForMailbox = async (input: {
       mailboxId: inserted.mailboxId,
       messageId: inserted.id,
       providerMessageId: input.providerMessageId,
+      receivedAt: input.receivedAt,
       threadId: inserted.threadId,
     });
     return inserted.mailboxId;
@@ -418,6 +427,7 @@ const ingestManagedMessageForMailbox = async (input: {
 
   const [existing] = await db
     .select({
+      createdAt: managedMailMessage.createdAt,
       id: managedMailMessage.id,
       threadId: managedMailMessage.threadId,
     })
@@ -434,6 +444,7 @@ const ingestManagedMessageForMailbox = async (input: {
       mailboxId: input.targetMailboxId,
       messageId: existing.id,
       providerMessageId: input.providerMessageId,
+      receivedAt: existing.createdAt,
       threadId: existing.threadId,
     });
     return input.targetMailboxId;

@@ -3,6 +3,7 @@
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { GmailMailboxDetailSections } from "@quieter/app/features/settings/components/gmail-mailbox-detail-sections";
 import { GmailMailboxNameSettings } from "@quieter/app/features/settings/components/gmail-mailbox-name-settings";
+import { MailboxActionsSettings } from "@quieter/app/features/settings/components/mailbox-actions-settings";
 import { MailboxDetailGeneralSection } from "@quieter/app/features/settings/components/mailbox-detail-general-section";
 import type {
   ManagedMailboxAccessModeInput,
@@ -148,6 +149,13 @@ export const MailboxDetailSettingsContent = ({
         <MailboxSignatureSettings
           key={`signature-${mailbox.id}`}
           mailbox={mailbox}
+        />
+      )}
+
+      {(isGmail || mailbox.provider === "managed") && (
+        <MailboxActionsSettings
+          key={`actions-${mailbox.id}`}
+          mailboxId={mailbox.id}
         />
       )}
 

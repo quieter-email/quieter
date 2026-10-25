@@ -56,6 +56,7 @@ import {
 } from "../ai-memory-capture";
 import { syncGmailLabels } from "../gmail-labels";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
+import { enqueueMailAgentMessage } from "../mail-agent/inbox";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
 import { loadMailAutoLabelHistory } from "../mail-automation/history";
@@ -504,6 +505,7 @@ const processMessageIds = async ({
   mailboxId,
   messageIds,
   organizationId,
+  triggerActions = false,
   userId,
 }: {
   accessToken: string;
@@ -513,6 +515,7 @@ const processMessageIds = async ({
   mailboxId: string;
   messageIds: string[];
   organizationId: string | null;
+  triggerActions?: boolean;
   userId: string;
 }) => {
   if (messageIds.length === 0) {
@@ -553,6 +556,28 @@ const processMessageIds = async ({
             throw error;
           }
         };
+
+        if (triggerActions) {
+          const message = await loadMessage();
+          if (
+            message !== null &&
+            !message.draftId &&
+            message.labelIds?.some((label) =>
+              AUTO_LABEL_EXCLUDED_LABELS.has(label)
+            ) !== true
+          ) {
+            const receivedAt = Number(message.internalDate);
+            if (!Number.isFinite(receivedAt) || receivedAt <= 0) {
+              throw new Error("Gmail message is missing its arrival time.");
+            }
+            await enqueueMailAgentMessage({
+              mailboxId,
+              messageId: message.id,
+              receivedAt: new Date(receivedAt),
+              threadId: message.threadId,
+            });
+          }
+        }
 
         await Promise.all([
           loadMessage().then(async (message) => {
@@ -907,6 +932,7 @@ const processMailboxHistory = async ({
             mailboxId,
             messageIds: page.messageIds,
             organizationId,
+            triggerActions: true,
             userId,
           });
           const now = new Date();

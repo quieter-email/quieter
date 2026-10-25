@@ -136,6 +136,7 @@
     "./features/message-thread/components/message-unsubscribe": "./src/features/message-thread/components/message-unsubscribe.ts",
     "./features/message-thread/components/message-view": "./src/features/message-thread/components/message-view.tsx",
     "./features/message-thread/components/message-view-types": "./src/features/message-thread/components/message-view-types.ts",
+    "./features/message-thread/components/thread-action-results": "./src/features/message-thread/components/thread-action-results.tsx",
     "./features/message-thread/components/use-message-view": "./src/features/message-thread/components/use-message-view.tsx",
     "./features/message-thread/domain/mail-html": "./src/features/message-thread/domain/mail-html.ts",
     "./features/motion/app-motion": "./src/features/motion/app-motion.ts",
@@ -166,6 +167,8 @@
     "./features/settings/components/gmail-connection-result": "./src/features/settings/components/gmail-connection-result.tsx",
     "./features/settings/components/gmail-mailbox-detail-sections": "./src/features/settings/components/gmail-mailbox-detail-sections.tsx",
     "./features/settings/components/gmail-mailbox-name-settings": "./src/features/settings/components/gmail-mailbox-name-settings.tsx",
+    "./features/settings/components/mailbox-actions-review": "./src/features/settings/components/mailbox-actions-review.tsx",
+    "./features/settings/components/mailbox-actions-settings": "./src/features/settings/components/mailbox-actions-settings.tsx",
     "./features/settings/components/mailbox-detail-general-section": "./src/features/settings/components/mailbox-detail-general-section.tsx",
     "./features/settings/components/mailbox-detail-mutation-types": "./src/features/settings/components/mailbox-detail-mutation-types.ts",
     "./features/settings/components/mailbox-detail-settings-content": "./src/features/settings/components/mailbox-detail-settings-content.tsx",
@@ -293,7 +296,10 @@
     "./route-search": "./src/route-search.ts",
     "./runtime": "./src/runtime.ts",
     "./session-user": "./src/session-user.ts",
-    "./styles.css": "./src/styles.css"
+    "./styles.css": "./src/styles.css",
+    "./features/calendar/components/calendar-workspace": "./src/features/calendar/components/calendar-workspace.tsx",
+    "./lib/calendar-query": "./src/lib/calendar-query.ts",
+    "./lib/calendar-cache-lifecycle": "./src/lib/calendar-cache-lifecycle.ts"
   },
   "dependencies": {
     "@ai-sdk/provider-utils": "5.0.59",
@@ -314,6 +320,7 @@
     "@quieter/ai": "workspace:*",
     "@quieter/auth": "workspace:*",
     "@quieter/billing": "workspace:*",
+    "@quieter/calendar": "workspace:*",
     "@quieter/env": "workspace:*",
     "@quieter/mail": "workspace:*",
     "@quieter/orpc": "workspace:*",

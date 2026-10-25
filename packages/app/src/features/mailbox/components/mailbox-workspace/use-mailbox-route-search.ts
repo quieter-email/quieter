@@ -3,6 +3,7 @@
 import type { MailboxWorkspaceView } from "@quieter/app/features/mailbox/domain/mailbox-workspace-view";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
+import type { CalendarView } from "@quieter/calendar";
 import { useNavigate } from "@tanstack/react-router";
 
 const MAILBOX_ROUTE_CATEGORIES = [
@@ -21,6 +22,12 @@ const MAILBOX_ROUTE_CATEGORIES = [
 type MailboxRouteCategory = (typeof MAILBOX_ROUTE_CATEGORIES)[number];
 
 export type MailboxSearchPatch = {
+  calendarConnectionId?: string | null;
+  calendarDate?: string | null;
+  calendarEventId?: string | null;
+  calendarId?: string | null;
+  calendarTimeZone?: string | null;
+  calendarView?: CalendarView | null;
   chatId?: string | null;
   compose?: "mailto" | null;
   mailto?: string | null;
@@ -30,6 +37,7 @@ export type MailboxSearchPatch = {
   threadId?: string | null;
   query?: string | null;
   view?: MailboxWorkspaceView;
+  workspace?: "calendar" | null;
 };
 
 type MailboxSearchOptions = {
@@ -37,6 +45,12 @@ type MailboxSearchOptions = {
 };
 
 export type MailboxRouteState = {
+  calendarConnectionId?: string;
+  calendarDate?: string;
+  calendarEventId?: string;
+  calendarId?: string;
+  calendarTimeZone?: string;
+  calendarView?: CalendarView;
   chatId?: string;
   compose?: "mailto";
   mailbox: MailboxRouteCategory;
@@ -46,6 +60,7 @@ export type MailboxRouteState = {
   query: string;
   threadId?: string;
   view?: MailboxWorkspaceView;
+  workspace?: "calendar";
 };
 
 const normalizeSearchValue = (value: string | null | undefined) => {
@@ -65,7 +80,7 @@ export const applyMailboxSearchPatch = (
     threadId = currentThreadId;
   }
 
-  return {
+  const next: MailboxRouteState = {
     chatId:
       patch.chatId === undefined
         ? state.chatId
@@ -92,6 +107,32 @@ export const applyMailboxSearchPatch = (
     threadId,
     view: patch.view ?? state.view,
   };
+  for (const field of [
+    "calendarConnectionId",
+    "calendarDate",
+    "calendarEventId",
+    "calendarId",
+    "calendarTimeZone",
+  ] as const) {
+    const value =
+      patch[field] === undefined
+        ? state[field]
+        : normalizeSearchValue(patch[field]);
+    if (value !== undefined) {
+      next[field] = value;
+    }
+  }
+  const calendarView =
+    patch.calendarView === undefined ? state.calendarView : patch.calendarView;
+  if (calendarView) {
+    next.calendarView = calendarView;
+  }
+  const workspace =
+    patch.workspace === undefined ? state.workspace : patch.workspace;
+  if (workspace) {
+    next.workspace = workspace;
+  }
+  return next;
 };
 
 export const useMailboxSearchActions = () => {
@@ -122,6 +163,17 @@ export const useMailboxThreadId = () =>
   });
 
 export const useMailboxRouteSearch = () => {
+  const calendarSearch = inboxRouteApi.useSearch({
+    select: (search) => ({
+      calendarConnectionId: search.calendarConnectionId,
+      calendarDate: search.calendarDate,
+      calendarEventId: search.calendarEventId,
+      calendarId: search.calendarId,
+      calendarTimeZone: search.calendarTimeZone,
+      calendarView: search.calendarView,
+      workspace: search.workspace,
+    }),
+  });
   const routeMailbox = inboxRouteApi.useSearch({
     select: (search) => search.mailbox,
   });
@@ -161,6 +213,7 @@ export const useMailboxRouteSearch = () => {
   const setMailboxSearch = useMailboxSearchActions();
 
   return {
+    ...calendarSearch,
     activeMailbox,
     chatId,
     compose,

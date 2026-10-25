@@ -27,6 +27,7 @@ import {
   ThreadMessageList,
 } from "@quieter/app/features/message-thread/components/message-cards";
 import type { MessageViewProps } from "@quieter/app/features/message-thread/components/message-view-types";
+import { ThreadActionResults } from "@quieter/app/features/message-thread/components/thread-action-results";
 import {
   useMessageViewData,
   useMessageViewFocus,
@@ -313,6 +314,25 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           mailboxId={mailboxId}
         />
       </header>
+
+      {mailboxProvider !== "api" &&
+      composeDemoMode !== true &&
+      composeManagedDemoMode !== true ? (
+        <ThreadActionResults
+          mailboxId={mailboxId}
+          onOpenDraft={
+            canComposeFromMailbox
+              ? (draftMessage) => {
+                  openInlineCompose(
+                    buildComposeDraftFromSavedDraftMessage(draftMessage)
+                  );
+                }
+              : undefined
+          }
+          threadId={message.threadId}
+          threadMessages={threadMessages}
+        />
+      ) : null}
 
       {isSingleMessageThread ? (
         visibleMessages.map((threadMessage) => (

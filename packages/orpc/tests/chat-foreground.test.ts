@@ -75,6 +75,46 @@ const approvedSendTranscript = [
 ];
 
 describe("foreground chat requests", () => {
+  test("does not save a retained draft after the visible workspace moved to Calendar", () => {
+    const transcript = transcriptWithDraft(richDraft);
+    const [message] = transcript;
+    expect(() => {
+      resolveForegroundComposeDraftForPersistence({
+        draft: richDraft,
+        foreground,
+        mailboxId: "mailbox-1",
+        transcript: [
+          {
+            ...message,
+            id: foreground.exchangeId,
+            parts: [
+              ...(message?.parts ?? []),
+              {
+                input: { date: "2026-10-23" },
+                output: {
+                  calendar: {
+                    date: "2026-10-23",
+                    timeZone: "Europe/Berlin",
+                    view: "week",
+                    visibleCalendars: [],
+                  },
+                  generation: foreground.generation,
+                  mailboxId: "mailbox-1",
+                  view: "calendar",
+                  workspace: "calendar",
+                },
+                state: "output-available",
+                toolCallId: "calendar-nav",
+                type: "tool-navigate_calendar",
+              },
+            ],
+            role: "assistant",
+          },
+        ],
+      });
+    }).toThrow(/open mail/iu);
+  });
+
   test("requires approval for the exact send call, exchange, and draft", () => {
     const approved = {
       draft: richDraft,

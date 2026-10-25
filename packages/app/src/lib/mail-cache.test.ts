@@ -72,6 +72,29 @@ describe("bounded mail cache", () => {
     await expect(cache.getItem("message")).resolves.toBeNull();
   });
 
+  test("concurrent account and calendar removals purge each scope and retain other calendars", async () => {
+    const cache = createMailCache({ name: crypto.randomUUID() });
+    cache.setUser("one");
+    const first = `quieter-cache-${JSON.stringify(["calendar", "one", "connection", "first", "calendars"])}`;
+    const second = `quieter-cache-${JSON.stringify(["calendar", "one", "connection", "second", "calendars"])}`;
+    const work = `quieter-cache-${JSON.stringify(["calendar", "one", "connection", "retained", "calendar", "work", "event", "meeting"])}`;
+    const personal = `quieter-cache-${JSON.stringify(["calendar", "one", "connection", "retained", "calendar", "personal", "event", "appointment"])}`;
+    const holiday = `quieter-cache-${JSON.stringify(["calendar", "one", "connection", "retained", "calendar", "holidays", "event", "holiday"])}`;
+    for (const key of [first, second, work, personal, holiday]) {
+      await cache.setItem(key, "Private schedule");
+    }
+    await Promise.all([
+      cache.removeCalendarScope("first"),
+      cache.removeCalendarScope("second"),
+      cache.removeCalendarScope("retained", "work"),
+      cache.removeCalendarScope("retained", "personal"),
+    ]);
+    for (const key of [first, second, work, personal]) {
+      await expect(cache.getItem(key)).resolves.toBeNull();
+    }
+    await expect(cache.getItem(holiday)).resolves.toBe("Private schedule");
+  });
+
   test("evicts and retries a browser quota failure", async () => {
     const cache = createMailCache({ budget: 3000, name: crypto.randomUUID() });
     cache.setUser("one");

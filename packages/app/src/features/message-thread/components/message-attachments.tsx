@@ -12,20 +12,22 @@ import {
   Video01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
+import { authClient } from "@quieter/app/lib/auth";
 import {
   connectorsQueryOptions,
   openConnectorLink,
 } from "@quieter/app/lib/connectors-query";
+import { toastError } from "@quieter/app/lib/error-toast";
 import { downloadAttachmentFromServer } from "@quieter/app/lib/gmail/attachments";
 import type { MessageAttachment } from "@quieter/app/lib/mail";
-import { rpc } from "@quieter/app/lib/orpc";
 import { getErrorMessage } from "@quieter/app/lib/orpc-errors";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
-import { toast } from "@quieter/ui/toast";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
+
+import { CalendarInvitationDialog } from "./calendar-invitation-dialog";
 
 type ThreadAttachment = MessageAttachment & {
   messageId: string;
@@ -196,6 +198,9 @@ export const MessageAttachments = ({
   className,
   mailboxId,
 }: MessageAttachmentsProps) => {
+  const userId = authClient.useSession().data?.user.id;
+  const [calendarAttachment, setCalendarAttachment] =
+    useState<ThreadAttachment | null>(null);
   const [activeCalendarAttachmentKey, setActiveCalendarAttachmentKey] =
     useState<string | null>(null);
   const [activeDownloadAttachmentKey, setActiveDownloadAttachmentKey] =
@@ -232,6 +237,7 @@ export const MessageAttachments = ({
       ),
     ]);
     if (downloadResult.status === "rejected") {
+      toastError(downloadResult.reason, { boundary: "attachment-download" });
       setErrorMessage(
         getErrorMessage(
           downloadResult.reason,
@@ -258,15 +264,11 @@ export const MessageAttachments = ({
         return;
       }
 
-      const result = await rpc.connectors.addGoogleCalendarIcsAttachment({
-        attachmentId: attachment.attachmentId,
-        mailboxId,
-        messageId: attachment.messageId,
-      });
-      toast.success(`Added ${result.summary} to Google Calendar.`);
+      setCalendarAttachment(attachment);
     };
     const [calendarResult] = await Promise.allSettled([performAction()]);
     if (calendarResult.status === "rejected") {
+      toastError(calendarResult.reason, { boundary: "calendar-invitation" });
       setErrorMessage(
         getErrorMessage(
           calendarResult.reason,
@@ -284,6 +286,16 @@ export const MessageAttachments = ({
       aria-label="Attachments"
       className={cn("w-full min-w-0", className)}
     >
+      {calendarAttachment && userId ? (
+        <CalendarInvitationDialog
+          attachment={calendarAttachment}
+          mailboxId={mailboxId}
+          onClose={() => {
+            setCalendarAttachment(null);
+          }}
+          userId={userId}
+        />
+      ) : null}
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         {attachments.map((attachment) => {
           const attachmentKey = `${attachment.messageId}:${attachment.attachmentId}`;
