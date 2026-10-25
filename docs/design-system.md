@@ -28,6 +28,7 @@ Before changing a UI, read the relevant component and its closest existing calle
 | Product icon | `Icon` from `@quieter/ui/icon`, with `size`, `tone`, and `animation` props |
 | Product heading or text treatment | `Text`, with semantic `as`, `size`, `tone`, `weight`, and `truncate` props |
 | Mail-list presentation | `MailListRowDetails` and `mailListRowFrameVariants`, with `stacked` or `adaptive` layout |
+| Sender logo or fallback | `SenderAvatar`, with `sm` for mail rows and message headers |
 | Field | `Field`, `FieldLabel`, `Input`, `Textarea`, validation components |
 | Compound mailbox address | `InputGroup`, `Input chrome="attached"`, `InputAddon`, attached `SelectTrigger` |
 | Choice or boolean | `Select`, `Checkbox`, `Switch`, `RadioGroup`, `Toggle` |
@@ -42,7 +43,7 @@ Before changing a UI, read the relevant component and its closest existing calle
 
 Settings feature code imports its local `settings-layout` adapter when it needs anchored rows or sections. The adapter re-exports shared components and adds search-anchor behavior; it does not define another visual system.
 
-Mail layout is a device preference owned by `features/settings/domain/mail-layout-setting.ts`. Two panels is the default. One panel reuses the existing mailbox and All inboxes list/detail paths, with selection kept in the route. Narrow screens always show one panel. Shared `MailListRowDetails` owns the row's responsive arrangement, type, and truncation. App code supplies formatted content and metadata slots. The virtualizer measures rendered row height and restores scroll and focus after a hidden list reappears at another width.
+Mail layout is a device preference owned by `features/settings/domain/mail-layout-setting.ts`. Two panels is the default. One panel reuses the existing mailbox and All inboxes list/detail paths, with selection kept in the route. Narrow screens always show one panel. Shared `MailListRowDetails` owns the row's responsive arrangement, type, and truncation. Wide rows align sender, address, subject, labels, metadata, and date in six columns, including when optional content is absent. Rows fill the list width with square corners and subtle separators. `mailListRowParts` owns the interactive row recipes. App code supplies formatted content and metadata slots. The virtualizer measures rendered row height and restores scroll and focus after a hidden list reappears at another width.
 
 ## Appearance and layout
 

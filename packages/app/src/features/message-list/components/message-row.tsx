@@ -4,7 +4,6 @@ import {
   FileAttachmentIcon,
   MessageMultiple01Icon,
 } from "@hugeicons/core-free-icons";
-import { SenderAvatar } from "@quieter/app/components/sender-avatar";
 import {
   DELIVERY_PILL_TONES,
   getDeliveryStatusLabel,
@@ -34,9 +33,12 @@ import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import {
   MailListRowDetails,
+  MailListRowSelectionMark,
   mailListRowFrameVariants,
+  mailListRowParts,
 } from "@quieter/ui/mail-list-row";
 import { Pill } from "@quieter/ui/pill";
+import { SenderAvatar } from "@quieter/ui/sender-avatar";
 import { Text } from "@quieter/ui/text";
 import { m, useReducedMotion } from "motion/react";
 import type { FocusEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
@@ -219,11 +221,11 @@ const MessageRowSelectionButton = ({
   };
 
   return (
-    <div className="relative z-10 ml-2 flex h-full shrink-0 items-center justify-center @sm:ml-3">
+    <div className={mailListRowParts.selectionCell}>
       <button
         aria-label={selectionAriaLabel}
         aria-pressed={isSelected}
-        className="relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none disabled:pointer-events-none"
+        className={mailListRowParts.selectionButton}
         disabled={isActionPending}
         onKeyDown={handleSelectionKeyDown}
         onMouseDown={handleSelectionPress}
@@ -241,7 +243,7 @@ const MessageRowSelectionButton = ({
             opacity: showCheckbox ? 0 : 1,
             scale: reducedMotion !== false || !showCheckbox ? 1 : 0.92,
           }}
-          className="block"
+          className="flex items-center justify-center"
           initial={false}
           transition={{
             duration: appMotionDuration.feedback,
@@ -251,7 +253,7 @@ const MessageRowSelectionButton = ({
           <SenderAvatar
             avatarUrlDark={thread.anchorMessage.senderAvatarUrls?.dark}
             avatarUrlLight={thread.anchorMessage.senderAvatarUrls?.light}
-            className="size-9.5 rounded-lg"
+            size="sm"
             fallbackLabel={senderInitial}
           />
         </m.span>
@@ -269,28 +271,7 @@ const MessageRowSelectionButton = ({
             ease: appEaseOut,
           }}
         >
-          <span
-            className={cn(
-              // oxlint-disable-next-line shadcn/no-arbitrary-values -- Bulk-select checkbox sizing with explicit transition properties.
-              "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
-              {
-                "border-border": !isSelected,
-                "border-primary bg-primary text-primary-fg": isSelected,
-              }
-            )}
-          >
-            <svg
-              className="size-3.5"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              viewBox="0 0 14 14"
-            >
-              <path d="M3 7.5 5.75 10 11 4.75" />
-            </svg>
-          </span>
+          <MailListRowSelectionMark selected={isSelected} />
         </m.span>
       </button>
     </div>
@@ -388,9 +369,11 @@ const MessageRowDetails = ({
     }
     subjectTrailing={
       <>
-        {verificationCode && <CopyVerificationCode code={verificationCode} />}
+        {verificationCode && (
+          <CopyVerificationCode code={verificationCode} size="xs" />
+        )}
         <MessageLabels
-          className="hidden shrink-0 @sm:flex"
+          className="hidden @sm:flex"
           compact
           labelIds={thread.threadLabelIds}
           labels={gmailLabels}
@@ -650,16 +633,13 @@ const MessageRowSurface = ({
       <m.span
         animate={{ opacity: surfaceOpacity }}
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 rounded-lg bg-muted"
+        className={mailListRowParts.overlay}
         initial={false}
         transition={{ duration: appMotionDuration.feedback, ease: appEaseOut }}
       />
 
       {unread && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute top-1/2 left-0 z-20 h-8 w-0.75 -translate-y-1/2 rounded-r-full bg-primary"
-        />
+        <span aria-hidden className={mailListRowParts.unreadIndicator} />
       )}
       <MessageRowSelectionButton
         isActionPending={isActionPending}
@@ -697,7 +677,7 @@ const MessageRowSurface = ({
               badge !== undefined && badge !== null ? openAriaLabel : undefined
             }
             aria-current={isActive ? "true" : undefined}
-            className="absolute inset-0 z-10 rounded-lg border border-transparent text-left focus-visible:z-20 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none"
+            className={mailListRowParts.trigger}
             data-message-row-trigger
             onClick={handleRowClick}
             onKeyDown={handleRowKeyDown}

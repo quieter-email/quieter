@@ -70,6 +70,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { SenderAvatar } from "@quieter/ui/sender-avatar";
 import {
   SettingsCard,
   SettingsFieldRow,
@@ -324,6 +325,16 @@ export const DesignSystemShowcase = () => {
           </Row>
         </Section>
 
+        <Section title="Sender avatars">
+          <Row label="Sizes">
+            <Button size="xs" type="button">
+              Extra small
+            </Button>
+            <SenderAvatar fallbackLabel="N" size="sm" />
+            <SenderAvatar fallbackLabel="A" />
+          </Row>
+        </Section>
+
         <Section
           description="Stacked rows keep two lines. Adaptive rows place the sender, subject, and metadata on one line when their list container is wide enough."
           title="Mail list rows"
@@ -364,6 +375,13 @@ export const DesignSystemShowcase = () => {
             >
               <MailListRowDetails
                 active
+                metadata={
+                  <Pill size="xs" tone="neutral">
+                    <span className="inline-flex items-center gap-1 tabular-nums">
+                      <Icon aria-hidden icon={FileAttachmentIcon} size={12} />2
+                    </span>
+                  </Pill>
+                }
                 badge={
                   <Pill size="xs" tone="purple">
                     Team
@@ -375,6 +393,20 @@ export const DesignSystemShowcase = () => {
                 senderPrefix="To "
                 subject="A longer subject stays on one line and truncates when the list gets narrower"
                 timestamp="Yesterday"
+              />
+            </div>
+            <div className={mailListRowFrameVariants({ layout: "adaptive" })}>
+              <MailListRowDetails
+                layout="adaptive"
+                sender="Nora Patel"
+                senderEmail="nora@example.test"
+                subject="Optional labels and counts keep the same column positions"
+                subjectTrailing={
+                  <Pill size="xs" tone="blue">
+                    Work
+                  </Pill>
+                }
+                timestamp="10:42"
               />
             </div>
           </div>

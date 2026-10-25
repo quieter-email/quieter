@@ -9,7 +9,6 @@ import {
   Tick01Icon,
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons";
-import { SenderAvatar } from "@quieter/app/components/sender-avatar";
 import {
   buildComposeDraftFromSavedDraftMessage,
   findLinkedDraftForMessage,
@@ -39,6 +38,7 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { SenderAvatar } from "@quieter/ui/sender-avatar";
 import { TooltipGroup } from "@quieter/ui/tooltip";
 import { domAnimation, LazyMotion } from "motion/react";
 import { useState } from "react";
@@ -209,7 +209,7 @@ const MessageHeaderContent = ({
         <SenderAvatar
           avatarUrlDark={message.senderAvatarUrls?.dark}
           avatarUrlLight={message.senderAvatarUrls?.light}
-          className="size-10"
+          size="sm"
           fallbackLabel={senderInitial}
         />
       </div>

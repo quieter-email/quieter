@@ -22,7 +22,6 @@
     "./components/mailto-protocol-handler": "./src/components/mailto-protocol-handler.tsx",
     "./components/mobile-header": "./src/components/mobile-header.tsx",
     "./components/providers": "./src/components/providers.tsx",
-    "./components/sender-avatar": "./src/components/sender-avatar.tsx",
     "./components/spin-while-active": "./src/components/spin-while-active.tsx",
     "./components/telemetry-provider": "./src/components/telemetry-provider.tsx",
     "./components/vertical-slot": "./src/components/vertical-slot.tsx",

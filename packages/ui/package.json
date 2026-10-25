@@ -46,6 +46,7 @@
     "./radio-group": "./src/components/ui/radio-group.tsx",
     "./scroll-area": "./src/components/ui/scroll-area.tsx",
     "./select": "./src/components/ui/select.tsx",
+    "./sender-avatar": "./src/components/ui/sender-avatar.tsx",
     "./separator": "./src/components/ui/separator.tsx",
     "./settings-layout": "./src/components/ui/settings-layout.tsx",
     "./slider": "./src/components/ui/slider.tsx",

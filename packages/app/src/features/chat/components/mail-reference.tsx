@@ -1,4 +1,3 @@
-import { SenderAvatar } from "@quieter/app/components/sender-avatar";
 import type { parseMailReference } from "@quieter/app/features/chat/domain/mail-reference";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
 import { useMailboxSearchActions } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
@@ -7,6 +6,7 @@ import { parseSender } from "@quieter/app/lib/gmail/message-utils";
 import { getCachedMessagesQueries } from "@quieter/app/lib/mail/inbox-query/query-cache";
 import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
 import { Button } from "@quieter/ui/button";
+import { SenderAvatar } from "@quieter/ui/sender-avatar";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 

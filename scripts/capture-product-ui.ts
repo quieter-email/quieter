@@ -36,7 +36,16 @@ const browser = (...args: readonly string[]) => {
   try {
     return execFileSync(
       "vp",
-      ["dlx", "--", "agent-browser@0.39.2", "--session", session, ...args],
+      [
+        "dlx",
+        "--",
+        "agent-browser@0.39.2",
+        "--session",
+        session,
+        "--webgpu",
+        "--headed",
+        ...args,
+      ],
       { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
     );
   } catch (error) {
@@ -231,6 +240,11 @@ try {
       "--fn",
       "!document.querySelector('[aria-label=\"Cookie consent\"]')"
     );
+    browser(
+      "wait",
+      "--fn",
+      "document.fonts.status === 'loaded' && document.querySelector('main canvas')?.classList.contains('opacity-100') && getComputedStyle(document.querySelector('main canvas')).opacity === '1'"
+    );
     browser("screenshot", path.resolve(output, "auth-dark.png"));
     captures.push("auth-dark.png");
     browser(
@@ -321,6 +335,54 @@ try {
           steps: [["click", '[aria-label="Mail layout"]']],
         },
         {
+          name: "add-mailbox-gmail",
+          path: "/settings?tab=mailboxes&mailboxView=add",
+          ready: "h1",
+          steps: [
+            [
+              "find",
+              "role",
+              "button",
+              "click",
+              "--name",
+              "Gmail Connect your Gmail inbox to Quieter.",
+              "--exact",
+            ],
+            ["wait", '[aria-label="Gmail mailbox team"]'],
+          ],
+        },
+        {
+          name: "add-mailbox-address",
+          path: "/settings?tab=mailboxes&mailboxView=add",
+          ready: "h1",
+          steps: [
+            [
+              "find",
+              "role",
+              "button",
+              "click",
+              "--name",
+              "Quieter managed mailbox Create a custom mailbox with your own domain.",
+              "--exact",
+            ],
+            [
+              "wait",
+              "--fn",
+              "Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Continue' && !button.disabled)",
+            ],
+            [
+              "find",
+              "role",
+              "button",
+              "click",
+              "--name",
+              "Continue",
+              "--exact",
+            ],
+            ["wait", "#local-part"],
+          ],
+        },
+        {
           name: "one-panel-selected-important",
           path: "/?mailbox=inbox&mailboxId=demo%3Amailbox",
           ready: '[aria-label^="Open conversation:"]',
@@ -363,7 +425,17 @@ try {
         },
       ] satisfies readonly CaptureScenario[]) {
         capture({ scenario, theme: "light" });
+        if (scenario.name === "add-mailbox-address") {
+          capture({ narrow: true, scenario, theme: "light" });
+        }
       }
+      const addMailbox = scenarios.find(
+        (scenario) => scenario.name === "add-mailbox"
+      );
+      if (!addMailbox) {
+        throw new Error("Missing Add mailbox capture scenario.");
+      }
+      capture({ narrow: true, scenario: addMailbox, theme: "light" });
     }
     browser("cookies", "clear");
     browser("eval", "localStorage.clear()");
@@ -380,15 +452,35 @@ try {
       "--exact"
     );
     browser("wait", "--text", "What brings you here");
+    browser(
+      "wait",
+      "--fn",
+      "document.fonts.status === 'loaded' && document.querySelector('main canvas')?.classList.contains('opacity-100') && getComputedStyle(document.querySelector('main canvas')).opacity === '1'"
+    );
     browser("screenshot", path.resolve(output, "onboarding-dark.png"));
     captures.push("onboarding-dark.png");
     if (phase === "after") {
+      browser(
+        "find",
+        "role",
+        "button",
+        "click",
+        "--name",
+        "Reject All",
+        "--exact"
+      );
+      browser(
+        "wait",
+        "--fn",
+        "!document.querySelector('[aria-label=\"Cookie consent\"]')"
+      );
       browser("find", "label", "Name", "fill", "Sam Rivera", "--exact");
       browser("find", "role", "button", "click", "--name", "Finish", "--exact");
       browser("wait", "--text", "Connect a mailbox");
       browser("set", "media", "dark", "reduced-motion");
       browser("eval", 'localStorage.setItem("quieter-color-mode", "dark")');
       browser("open", origin.href);
+      browser("wait", "--text", "Connect a mailbox");
       browser(
         "find",
         "role",

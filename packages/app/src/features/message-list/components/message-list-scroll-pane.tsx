@@ -16,6 +16,7 @@ import { verificationCodesQueryOptions } from "@quieter/app/lib/mail/verificatio
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Icon } from "@quieter/ui/icon";
+import { mailListRowParts } from "@quieter/ui/mail-list-row";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { VirtualItem } from "@tanstack/react-virtual";
@@ -614,8 +615,7 @@ export const MessageListScrollPane = ({
 
   return (
     <div
-      // oxlint-disable-next-line shadcn/no-arbitrary-values -- Floor the bottom inset at 1rem; max() cannot be a token.
-      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))] contain-strict @sm:px-4"
+      className={mailListRowParts.viewport}
       onScroll={() => {
         if (selection.isProgrammaticScrollToTopRef.current) {
           return;
