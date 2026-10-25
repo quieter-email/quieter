@@ -1,0 +1,3 @@
+ts	phase	decision	why	evidence	result
+2026-10-25T12:25:37Z	frame	Use one worktree and the established shared product UI	Web and desktop consume the same components; one visual system should reach both	.audit/product-visual-refinement-plan.md	Worktree ready; read-only design and preview exploration running
+2026-10-25T12:36:41Z	baseline	Capture 39 existing screens before product edits	Compare the same real components and synthetic mail in light, dark, and narrow layouts	docs/reviews/product-visual-refinement/before/captures.json	Baseline captured; preference readiness gate corrected after a loading-screen capture
