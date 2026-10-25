@@ -1,13 +1,8 @@
 import { ORPCError } from "@orpc/server";
-import { googleCalendarListEventsInputSchema } from "@quieter/ai/chat-agent";
-import type {
-  GoogleCalendarListEventsInput,
-  GoogleCalendarListEventsResult,
-} from "@quieter/ai/chat-agent";
 import { db } from "@quieter/database/client";
 import { connectorCredential } from "@quieter/database/schema";
 import type { ConnectorProvider } from "@quieter/database/schema";
-import { requireServerEnv, serverEnv } from "@quieter/env/server";
+import { requireServerEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -26,34 +21,28 @@ export {
 } from "./contracts";
 const CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60 * 1000;
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
-const GOOGLE_CALENDAR_API_URL = "https://www.googleapis.com/calendar/v3";
 export const LINEAR_AUTHORIZATION_URL = "https://linear.app/oauth/authorize";
 export const LINEAR_MCP_URL = "https://mcp.linear.app/mcp";
 export const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
 const permanentGoogleTokenErrors = new Set(["invalid_grant", "invalid_token"]);
 const permanentLinearTokenErrors = new Set(["invalid_grant", "invalid_token"]);
-
-export type GoogleCalendarEventInput = {
-  description?: string;
-  end: {
-    date?: string;
-    dateTime?: string;
-    timeZone?: string;
-  };
-  location?: string;
-  start: {
-    date?: string;
-    dateTime?: string;
-    timeZone?: string;
-  };
-  summary: string;
-};
+type ConnectorAuthorizationInput = {
+  signal?: AbortSignal;
+  userId: string;
+} & (
+  | {
+      connectionId: string;
+      provider: typeof GOOGLE_CALENDAR_CONNECTOR_PROVIDER;
+    }
+  | { connectionId?: string; provider: typeof LINEAR_CONNECTOR_PROVIDER }
+);
 
 export const GOOGLE_CALENDAR_SCOPES = [
   "openid",
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/userinfo.profile",
   "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 ] as const;
 // The agent reaches Linear through the workspace's own tools, so the grant has to
 // cover the changes those tools make. Connections made under the older, narrower
@@ -90,71 +79,6 @@ const linearRefreshResponseSchema = z.object({
   refresh_token: z.string().min(1),
   scope: z.union([z.string(), z.array(z.string())]).optional(),
   token_type: z.string().min(1),
-});
-
-const googleApiErrorSchema = z.object({
-  error: z.object({
-    code: z.number().optional(),
-    message: z.string().optional(),
-    status: z.string().optional(),
-  }),
-});
-
-const googleCalendarEventResponseSchema = z.object({
-  htmlLink: z.url().optional(),
-  id: z.string().min(1),
-  summary: z.string().optional(),
-});
-
-const googleCalendarEventListResponseSchema = z.object({
-  items: z
-    .array(
-      googleCalendarEventResponseSchema.extend({
-        recurringEventId: z.string().optional(),
-        status: z.string().optional(),
-      })
-    )
-    .optional(),
-  nextPageToken: z.string().optional(),
-});
-
-const calendarReadDateSchema = z.union([
-  z.object({ date: z.iso.date() }),
-  z.object({
-    dateTime: z.iso.datetime({ offset: true }),
-    timeZone: z.string().optional(),
-  }),
-]);
-
-const calendarReadResponseSchema = z.object({
-  items: z
-    .array(
-      z.object({
-        attendees: z
-          .array(
-            z.object({
-              responseStatus: z
-                .enum(["accepted", "declined", "needsAction", "tentative"])
-                .optional(),
-              self: z.boolean().optional(),
-            })
-          )
-          .optional(),
-        description: z.string().optional(),
-        end: calendarReadDateSchema.optional(),
-        id: z.string().min(1),
-        location: z.string().optional(),
-        start: calendarReadDateSchema.optional(),
-        status: z
-          .enum(["cancelled", "confirmed", "tentative"])
-          .default("confirmed"),
-        summary: z.string().optional(),
-        transparency: z.enum(["opaque", "transparent"]).default("opaque"),
-      })
-    )
-    .default([]),
-  nextPageToken: z.string().optional(),
-  timeZone: z.string().min(1),
 });
 
 const getGoogleCalendarOAuthClient = () => ({
@@ -196,39 +120,15 @@ const decryptConnectorSecret = (value: string) =>
 export const normalizeOAuthScope = (scope: string | string[]) =>
   Array.isArray(scope) ? scope.join(" ") : scope;
 
-class ConnectorHttpError extends Error {
-  readonly reason: "invalid_sequence" | undefined;
+export class ConnectorHttpError extends Error {
   readonly status: number;
 
-  constructor(message: string, status: number, reason?: "invalid_sequence") {
+  constructor(message: string, status: number) {
     super(message);
     this.name = "ConnectorHttpError";
-    this.reason = reason;
     this.status = status;
   }
 }
-
-const createGoogleApiError = async (response: Response) => {
-  const body = await response.text().catch(() => "");
-  const parsedBody = (() => {
-    if (!body.trim()) {
-      return null;
-    }
-
-    try {
-      return googleApiErrorSchema.parse(JSON.parse(body));
-    } catch {
-      return null;
-    }
-  })();
-  return new ConnectorHttpError(
-    `Google Calendar request failed with status ${response.status}.`,
-    response.status,
-    parsedBody?.error.message?.startsWith("Invalid sequence value.") === true
-      ? "invalid_sequence"
-      : undefined
-  );
-};
 
 const hasCachedConnectorAccessToken = (record: {
   accessTokenExpiresAt: Date | null;
@@ -262,9 +162,12 @@ export const hasConnectedConnector = async (input: {
 };
 
 const getConnectorRepairRequiredError = (provider: ConnectorProvider) =>
-  new ORPCError("BAD_REQUEST", {
-    message: `Reconnect ${connectorDefinitions[provider].displayName} before using this action.`,
-  });
+  new ORPCError(
+    provider === "google_calendar" ? "UNAUTHORIZED" : "BAD_REQUEST",
+    {
+      message: `Reconnect ${connectorDefinitions[provider].displayName} before using this action.`,
+    }
+  );
 
 /**
  * A refresh returns a token carrying the scopes the user originally granted. When the
@@ -277,7 +180,7 @@ const getRefreshedScopes = (
 ) => (scope === undefined ? (record.scopes ?? "") : normalizeOAuthScope(scope));
 
 /** A grant missing a scope the connector now needs cannot serve its tools. */
-const hasRequiredConnectorScopes = (
+export const hasRequiredConnectorScopes = (
   provider: ConnectorProvider,
   scopes: string
 ) => {
@@ -390,11 +293,9 @@ const refreshConnectorAccessToken = async (
   return refreshed.access_token;
 };
 
-const getAuthorizedConnectorAccessToken = async (input: {
-  provider: ConnectorProvider;
-  userId: string;
-  signal?: AbortSignal;
-}) => {
+const getAuthorizedConnectorAccessToken = async (
+  input: ConnectorAuthorizationInput
+) => {
   const [record] = await db
     .select({
       accessTokenExpiresAt: connectorCredential.accessTokenExpiresAt,
@@ -409,7 +310,10 @@ const getAuthorizedConnectorAccessToken = async (input: {
     .where(
       and(
         eq(connectorCredential.userId, input.userId),
-        eq(connectorCredential.provider, input.provider)
+        eq(connectorCredential.provider, input.provider),
+        input.connectionId === undefined
+          ? undefined
+          : eq(connectorCredential.id, input.connectionId)
       )
     )
     .limit(1);
@@ -435,11 +339,9 @@ const getAuthorizedConnectorAccessToken = async (input: {
   return await refreshConnectorAccessToken(record, input.signal);
 };
 
-const refreshAuthorizedConnectorAccessToken = async (input: {
-  provider: ConnectorProvider;
-  userId: string;
-  signal?: AbortSignal;
-}) => {
+const refreshAuthorizedConnectorAccessToken = async (
+  input: ConnectorAuthorizationInput
+) => {
   const [record] = await db
     .select({
       encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
@@ -451,7 +353,10 @@ const refreshAuthorizedConnectorAccessToken = async (input: {
     .where(
       and(
         eq(connectorCredential.userId, input.userId),
-        eq(connectorCredential.provider, input.provider)
+        eq(connectorCredential.provider, input.provider),
+        input.connectionId === undefined
+          ? undefined
+          : eq(connectorCredential.id, input.connectionId)
       )
     )
     .limit(1);
@@ -466,7 +371,7 @@ const refreshAuthorizedConnectorAccessToken = async (input: {
 };
 
 export const runAuthorizedConnector = async <TValue>(
-  input: { provider: ConnectorProvider; signal?: AbortSignal; userId: string },
+  input: ConnectorAuthorizationInput,
   runner: (
     accessToken: string,
     signal?: AbortSignal
@@ -486,182 +391,6 @@ export const runAuthorizedConnector = async <TValue>(
     await refreshAuthorizedConnectorAccessToken(input);
   return await runner(refreshedAccessToken, input.signal);
 };
-
-const findGoogleCalendarEventByUid = async (input: {
-  accessToken: string;
-  iCalUID: string;
-  signal?: AbortSignal;
-}) => {
-  let pageToken: string | undefined;
-  do {
-    const parameters = new URLSearchParams({
-      iCalUID: input.iCalUID,
-      showDeleted: "false",
-      singleEvents: "false",
-    });
-    if (pageToken) {
-      parameters.set("pageToken", pageToken);
-    }
-    const response = await fetch(
-      `${GOOGLE_CALENDAR_API_URL}/calendars/primary/events?${parameters}`,
-      {
-        headers: { authorization: `Bearer ${input.accessToken}` },
-        signal: input.signal,
-      }
-    );
-    if (!response.ok) {
-      throw await createGoogleApiError(response);
-    }
-    const events = googleCalendarEventListResponseSchema.parse(
-      await response.json()
-    );
-    const existing = events.items?.find(
-      (event) => !event.recurringEventId && event.status !== "cancelled"
-    );
-    if (existing) {
-      return existing;
-    }
-    pageToken = events.nextPageToken;
-  } while (pageToken);
-  return null;
-};
-
-export const postGoogleCalendarEvent = async (input: {
-  accessToken: string;
-  event: GoogleCalendarEventDraft;
-  importEvent?: boolean;
-  signal?: AbortSignal;
-}) => {
-  if (
-    serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
-    serverEnv.QUIETER_LOCAL_PROVIDER_MODE !== "write"
-  ) {
-    throw new ORPCError("FORBIDDEN", {
-      message:
-        "This development environment can read connected accounts, but cannot change them.",
-    });
-  }
-  if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local") {
-    const allowedAccounts =
-      serverEnv.QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS?.split(",").map(
-        (account) => account.trim().toLowerCase()
-      ) ?? [];
-    if (allowedAccounts.length === 0) {
-      throw new ORPCError("FORBIDDEN", {
-        message: "Calendar write tests require an explicitly allowed account.",
-      });
-    }
-    const calendarResponse = await fetch(
-      `${GOOGLE_CALENDAR_API_URL}/calendars/primary`,
-      {
-        headers: { authorization: `Bearer ${input.accessToken}` },
-        signal: input.signal,
-      }
-    );
-    if (!calendarResponse.ok) {
-      throw await createGoogleApiError(calendarResponse);
-    }
-    const calendar = z
-      .object({ id: z.string() })
-      .parse(await calendarResponse.json());
-    if (!allowedAccounts.includes(calendar.id.toLowerCase())) {
-      throw new ORPCError("FORBIDDEN", {
-        message:
-          "This calendar account is not allowed for development write tests.",
-      });
-    }
-  }
-  const importUid =
-    input.importEvent === true ? input.event.iCalUID : undefined;
-  if (importUid) {
-    const existing = await findGoogleCalendarEventByUid({
-      accessToken: input.accessToken,
-      iCalUID: importUid,
-      signal: input.signal,
-    });
-    // Adding an invitation must preserve edits and newer revisions already on the calendar.
-    if (existing) {
-      return existing;
-    }
-  }
-  const response = await fetch(
-    `${GOOGLE_CALENDAR_API_URL}/calendars/primary/events${input.importEvent === true ? "/import" : ""}`,
-    {
-      body: JSON.stringify(input.event),
-      headers: {
-        authorization: `Bearer ${input.accessToken}`,
-        "content-type": "application/json",
-      },
-      method: "POST",
-      signal: input.signal,
-    }
-  );
-
-  if (!response.ok) {
-    const error = await createGoogleApiError(response);
-    if (
-      importUid &&
-      (error.status === 409 ||
-        (error.status === 400 && error.reason === "invalid_sequence"))
-    ) {
-      // An invitation can arrive through another client between the lookup and import.
-      const existing = await findGoogleCalendarEventByUid({
-        accessToken: input.accessToken,
-        iCalUID: importUid,
-        signal: input.signal,
-      });
-      if (existing) {
-        return existing;
-      }
-    }
-    throw error;
-  }
-
-  return googleCalendarEventResponseSchema.parse(await response.json());
-};
-
-type GoogleCalendarEventDraft = {
-  iCalUID?: string;
-  description?: string;
-  end:
-    | { date: string; dateTime?: never; timeZone?: never }
-    | { date?: never; dateTime: string; timeZone?: string };
-  location?: string;
-  start:
-    | { date: string; dateTime?: never; timeZone?: never }
-    | { date?: never; dateTime: string; timeZone?: string };
-  summary: string;
-};
-
-const normalizeGoogleCalendarEventDate = (
-  value: GoogleCalendarEventInput["start"]
-): GoogleCalendarEventDraft["start"] => {
-  if (value.date && !value.dateTime) {
-    return { date: value.date };
-  }
-
-  if (value.dateTime && !value.date) {
-    if (value.timeZone) {
-      return { dateTime: value.dateTime, timeZone: value.timeZone };
-    }
-    return { dateTime: value.dateTime };
-  }
-
-  throw new ORPCError("BAD_REQUEST", {
-    message:
-      "Calendar events require exactly one date or date-time for both start and end.",
-  });
-};
-
-const normalizeGoogleCalendarEvent = (
-  event: GoogleCalendarEventInput
-): GoogleCalendarEventDraft => ({
-  ...(event.description ? { description: event.description } : {}),
-  end: normalizeGoogleCalendarEventDate(event.end),
-  ...(event.location ? { location: event.location } : {}),
-  start: normalizeGoogleCalendarEventDate(event.start),
-  summary: event.summary,
-});
 
 const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
 /** The one Linear read that is not a tool call: naming the connection being made. */
@@ -765,130 +494,3 @@ export const getLinearAccessTokenForUser = async (input: {
     signal: input.signal,
     userId: input.userId,
   });
-
-export const createGoogleCalendarEventForUser = async (input: {
-  event: GoogleCalendarEventInput;
-  signal?: AbortSignal;
-  userId: string;
-}) =>
-  await runAuthorizedConnector(
-    {
-      provider: GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken, signal) => {
-      const eventDraft = normalizeGoogleCalendarEvent(input.event);
-      const event = await postGoogleCalendarEvent({
-        accessToken,
-        event: eventDraft,
-        signal,
-      });
-      return {
-        htmlLink: event.htmlLink,
-        id: event.id,
-        status: "success" as const,
-        summary: event.summary ?? eventDraft.summary,
-      };
-    }
-  );
-
-export const listGoogleCalendarEventsForUser = async (
-  input: GoogleCalendarListEventsInput & {
-    signal?: AbortSignal;
-    userId: string;
-  }
-): Promise<GoogleCalendarListEventsResult> => {
-  const range = googleCalendarListEventsInputSchema.parse(input);
-  input.signal?.throwIfAborted();
-  return await runAuthorizedConnector(
-    {
-      provider: GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
-      signal:
-        input.signal === undefined
-          ? AbortSignal.timeout(20_000)
-          : AbortSignal.any([input.signal, AbortSignal.timeout(20_000)]),
-      userId: input.userId,
-    },
-    async (accessToken, signal) => {
-      const parameters = new URLSearchParams({
-        fields:
-          "timeZone,nextPageToken,items(id,summary,description,location,start,end,status,transparency,attendees(self,responseStatus))",
-        maxAttendees: "1",
-        maxResults: String(range.maxResults),
-        orderBy: "startTime",
-        showDeleted: "false",
-        singleEvents: "true",
-        timeMax: range.timeMax,
-        timeMin: range.timeMin,
-      });
-      if (range.pageToken !== undefined) {
-        parameters.set("pageToken", range.pageToken);
-      }
-      if (range.query !== undefined) {
-        parameters.set("q", range.query);
-      }
-      const response = await fetch(
-        `${GOOGLE_CALENDAR_API_URL}/calendars/primary/events?${parameters}`,
-        { headers: { authorization: `Bearer ${accessToken}` }, signal }
-      );
-      if (!response.ok) {
-        throw await createGoogleApiError(response);
-      }
-      const calendar = calendarReadResponseSchema.parse(await response.json());
-      const fetchedAt = new Date();
-      const events = calendar.items
-        .filter((event) => event.status !== "cancelled")
-        .slice(0, range.maxResults)
-        .flatMap((event) => {
-          if (
-            event.start === undefined ||
-            event.end === undefined ||
-            event.status === "cancelled"
-          ) {
-            return [];
-          }
-          return [
-            {
-              description: event.description?.slice(0, 1000),
-              detailsTruncated:
-                (event.description?.length ?? 0) > 1000 ||
-                (event.location?.length ?? 0) > 300 ||
-                (event.summary?.length ?? 0) > 300,
-              end: event.end,
-              id: event.id,
-              location: event.location?.slice(0, 300),
-              responseStatus: event.attendees?.find(
-                (attendee) => attendee.self === true
-              )?.responseStatus,
-              start: event.start,
-              status: event.status,
-              summary: event.summary?.slice(0, 300),
-              transparency: event.transparency,
-            },
-          ];
-        });
-      return {
-        calendarId: "primary",
-        currentDate: new Intl.DateTimeFormat("en-CA", {
-          day: "2-digit",
-          month: "2-digit",
-          timeZone: calendar.timeZone,
-          year: "numeric",
-        }).format(fetchedAt),
-        events,
-        fetchedAt: fetchedAt.toISOString(),
-        nextPageToken: calendar.nextPageToken,
-        partial:
-          calendar.nextPageToken !== undefined ||
-          calendar.items.filter((event) => event.status !== "cancelled")
-            .length > events.length,
-        query: range.query,
-        status: "success",
-        timeMax: range.timeMax,
-        timeMin: range.timeMin,
-        timeZone: calendar.timeZone,
-      };
-    }
-  );
-};

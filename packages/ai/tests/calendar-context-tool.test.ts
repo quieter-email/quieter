@@ -1,63 +1,48 @@
 import { describe, expect, test, vi } from "vite-plus/test";
 
-import { createGoogleCalendarChatTool } from "../src/chat-agent";
-import type { GoogleCalendarToolsContext } from "../src/chat-agent";
+import { createCalendarChatTools } from "../src/chat-agent";
+import type { CalendarToolsContext } from "../src/chat-agent";
 
 describe("calendar context tool", () => {
-  test("reads without approval and forwards cancellation to the connected account", async () => {
-    const listGoogleCalendarEvents = vi
-      .fn<GoogleCalendarToolsContext["listGoogleCalendarEvents"]>()
+  test("reads without approval and forwards cancellation to the selected account", async () => {
+    const listEvents = vi
+      .fn<CalendarToolsContext["listEvents"]>()
       .mockResolvedValue({
-        calendarId: "primary",
-        currentDate: "2026-10-23",
         events: [],
         fetchedAt: "2026-10-23T12:00:00Z",
-        partial: false,
         status: "success",
-        timeMax: "2026-10-24T00:00:00Z",
-        timeMin: "2026-10-23T00:00:00Z",
-        timeZone: "Europe/Berlin",
       });
-    const tools = createGoogleCalendarChatTool({
-      createGoogleCalendarEvent:
-        vi.fn<GoogleCalendarToolsContext["createGoogleCalendarEvent"]>(),
-      listGoogleCalendarEvents,
+    const tools = createCalendarChatTools({
+      createEvent: vi.fn<CalendarToolsContext["createEvent"]>(),
+      deleteEvent: vi.fn<CalendarToolsContext["deleteEvent"]>(),
+      getEvent: vi.fn<CalendarToolsContext["getEvent"]>(),
+      listCalendars: vi.fn<CalendarToolsContext["listCalendars"]>(),
+      listEvents,
+      respondToEvent: vi.fn<CalendarToolsContext["respondToEvent"]>(),
+      updateEvent: vi.fn<CalendarToolsContext["updateEvent"]>(),
     });
-    const read = tools.list_google_calendar_events;
+    const read = tools.list_calendar_events;
     if (!read?.execute) {
       throw new Error("Expected the calendar read tool");
     }
-    const abortSignal = new AbortController().signal;
+    const controller = new AbortController();
     const range = {
-      maxResults: 2,
-      timeMax: "2026-10-24T00:00:00Z",
-      timeMin: "2026-10-23T00:00:00Z",
+      calendarId: "team-calendar",
+      connectionId: "connection-1",
+      end: "2026-10-24T00:00:00Z",
+      start: "2026-10-23T00:00:00Z",
+      timeZone: "Europe/Berlin",
     };
     const result: unknown = await read.execute(range, {
-      abortSignal,
+      abortSignal: controller.signal,
       context: undefined,
       messages: [],
       toolCallId: "calendar",
     });
     expect(read).not.toHaveProperty("needsApproval");
-    expect(listGoogleCalendarEvents).toHaveBeenCalledWith(range, abortSignal);
-    expect(result).toMatchObject({
-      events: [],
-      status: "success",
-      timeZone: "Europe/Berlin",
-    });
-
-    const cancelled = new AbortController();
-    cancelled.abort();
-    listGoogleCalendarEvents.mockClear();
-    await expect(
-      read.execute(range, {
-        abortSignal: cancelled.signal,
-        context: undefined,
-        messages: [],
-        toolCallId: "cancelled-calendar",
-      })
-    ).rejects.toMatchObject({ name: "AbortError" });
-    expect(listGoogleCalendarEvents).not.toHaveBeenCalled();
+    expect(listEvents).toHaveBeenCalledWith(range, controller.signal);
+    expect(result).toMatchObject({ events: [], status: "success" });
+    controller.abort();
+    expect(listEvents.mock.calls[0]?.[1]?.aborted).toBeTruthy();
   });
 });

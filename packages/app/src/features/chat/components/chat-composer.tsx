@@ -40,6 +40,7 @@ type ChatComposerProps = {
   onStop: () => void;
   onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
   onToggleDictation: () => void;
+  placeholder?: string;
   recording: boolean;
   recordingSupported: boolean;
   startingRecording: boolean;
@@ -62,6 +63,7 @@ export const ChatComposer = ({
   onStop,
   onSubmit,
   onToggleDictation,
+  placeholder = "Ask about your mail…",
   recording,
   recordingSupported,
   startingRecording,
@@ -116,7 +118,7 @@ export const ChatComposer = ({
             onInputChange(event.target.value);
           }}
           onKeyDown={onInputKeyDown}
-          placeholder="Ask about your mail…"
+          placeholder={placeholder}
           ref={inputRef}
           value={input}
           variant="prompt"

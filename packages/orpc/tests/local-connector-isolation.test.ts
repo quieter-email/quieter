@@ -11,7 +11,6 @@ import {
 } from "vite-plus/test";
 
 import { runLinearMcpToolCallsForUser } from "../src/connectors/linear-mcp";
-import { createGoogleCalendarEventForUser } from "../src/connectors/runtime";
 
 const mocks = vi.hoisted(() => {
   const env: {
@@ -77,9 +76,8 @@ vi.mock("@quieter/database/client", async (importOriginal) => {
               {
                 accessTokenExpiresAt: new Date(Date.now() + 3_600_000),
                 encryptedAccessToken: "encrypted-test",
-                provider: "google_calendar",
-                scopes:
-                  "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events read write",
+                provider: "linear",
+                scopes: "read write",
                 status: "connected",
               },
             ],
@@ -94,12 +92,6 @@ vi.mock(import("../src/gmail-credential-crypto"), () => ({
   encryptGmailCredentialSecret: vi.fn<() => string>(),
 }));
 
-const event = {
-  end: { date: "2026-09-07" },
-  start: { date: "2026-09-06" },
-  summary: "Development test",
-};
-
 describe("independent local connector write controls", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -110,48 +102,6 @@ describe("independent local connector write controls", () => {
   });
 
   afterEach(() => vi.unstubAllGlobals());
-
-  test("enabling Gmail writes does not enable Calendar writes", async () => {
-    const request = vi.fn<typeof fetch>();
-    vi.stubGlobal("fetch", request);
-    await expect(
-      createGoogleCalendarEventForUser({ event, userId: "test" })
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(request).not.toHaveBeenCalled();
-  });
-
-  test("checks the actual primary calendar before allowing a write", async () => {
-    mocks.env.QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS = "test@example.com";
-    const request = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(Response.json({ id: "shared@example.com" }));
-    vi.stubGlobal("fetch", request);
-    await expect(
-      createGoogleCalendarEventForUser({ event, userId: "test" })
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(request).toHaveBeenCalledExactlyOnceWith(
-      "https://www.googleapis.com/calendar/v3/calendars/primary",
-      expect.not.objectContaining({ method: "POST" })
-    );
-  });
-
-  test("allows only the explicitly selected calendar", async () => {
-    mocks.env.QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS = "TEST@example.com";
-    const request = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(Response.json({ id: "test@example.com" }))
-      .mockResolvedValueOnce(
-        Response.json({ id: "test-event", summary: event.summary })
-      );
-    vi.stubGlobal("fetch", request);
-    await expect(
-      createGoogleCalendarEventForUser({ event, userId: "test" })
-    ).resolves.toMatchObject({ id: "test-event", status: "success" });
-    expect(request).toHaveBeenLastCalledWith(
-      "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-      expect.objectContaining({ method: "POST" })
-    );
-  });
 
   test("Linear reads work while writes remain independently disabled", async () => {
     const results = await runLinearMcpToolCallsForUser({

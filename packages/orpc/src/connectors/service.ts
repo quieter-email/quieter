@@ -9,9 +9,13 @@ import {
 import type { ConnectorProvider } from "@quieter/database/schema";
 import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { getMessageAttachment } from "@quieter/gmail";
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq, gt, lt } from "drizzle-orm";
 import { z } from "zod";
 
+import {
+  importCalendarInvitationForUser,
+  resolveCalendarImportTargetForUser,
+} from "../calendar/service";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { getManagedMessageAttachment } from "../managed-mail/messages/attachments";
@@ -25,8 +29,7 @@ import {
   getConnectorOAuthClient,
   GOOGLE_CALENDAR_SCOPES,
   normalizeOAuthScope,
-  postGoogleCalendarEvent,
-  runAuthorizedConnector,
+  hasRequiredConnectorScopes,
   getLinearIdentityFromAccessToken,
   LINEAR_AUTHORIZATION_URL,
   LINEAR_CONNECTOR_PROVIDER,
@@ -37,8 +40,6 @@ import {
 export {
   GOOGLE_CALENDAR_SCOPES,
   hasConnectedConnector,
-  createGoogleCalendarEventForUser,
-  listGoogleCalendarEventsForUser,
   LINEAR_CONNECTOR_PROVIDER,
   LINEAR_SCOPES,
 } from "./runtime";
@@ -297,6 +298,7 @@ export const listConnectors = async (
       providerAccountId: connectorCredential.providerAccountId,
       providerWorkspaceId: connectorCredential.providerWorkspaceId,
       providerWorkspaceName: connectorCredential.providerWorkspaceName,
+      scopes: connectorCredential.scopes,
       status: connectorCredential.status,
     })
     .from(connectorCredential)
@@ -315,6 +317,14 @@ export const listConnectors = async (
       } else if (provider === LINEAR_CONNECTOR_PROVIDER) {
         isConfigured = isLinearOAuthConfigured();
       }
+      let status: ConnectorConnectionStatus = "not_connected";
+      if (credential !== undefined) {
+        status =
+          credential.status === "connected" &&
+          hasRequiredConnectorScopes(provider, credential.scopes ?? "")
+            ? "connected"
+            : "needs_reconnect";
+      }
 
       return {
         accountEmail: credential?.accountEmail,
@@ -325,14 +335,18 @@ export const listConnectors = async (
           providerAccountId: row.providerAccountId,
           providerWorkspaceId: row.providerWorkspaceId,
           providerWorkspaceName: row.providerWorkspaceName,
-          status: row.status,
+          status:
+            row.status === "connected" &&
+            hasRequiredConnectorScopes(row.provider, row.scopes ?? "")
+              ? "connected"
+              : "needs_reconnect",
         })),
         connectedAt: credential?.createdAt,
         description: definition.description,
         displayName: definition.displayName,
         isConfigured,
         provider,
-        status: credential?.status ?? "not_connected",
+        status,
         supportsChatTools: definition.supportsChatTools,
       };
     }),
@@ -411,7 +425,13 @@ export const completeConnectorOAuth = async (input: {
 
   const [oauthState] = await db
     .delete(connectorOAuthState)
-    .where(eq(connectorOAuthState.id, input.state))
+    .where(
+      and(
+        eq(connectorOAuthState.id, input.state),
+        eq(connectorOAuthState.userId, session.user.id),
+        gt(connectorOAuthState.expiresAt, new Date())
+      )
+    )
     .returning();
 
   if (
@@ -454,19 +474,11 @@ export const completeConnectorOAuth = async (input: {
       .where(
         and(
           eq(connectorCredential.userId, session.user.id),
-          eq(connectorCredential.provider, oauthState.provider)
+          eq(connectorCredential.provider, oauthState.provider),
+          eq(connectorCredential.providerAccountId, tokenInfo.sub)
         )
       )
       .limit(1);
-    if (
-      existingCredential !== undefined &&
-      existingCredential.providerAccountId !== tokenInfo.sub
-    ) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: `Reconnect ${connectorDefinitions[oauthState.provider].displayName} with the same Google account, or disconnect it first.`,
-      });
-    }
-
     const encryptedRefreshToken = tokenResponse.refresh_token
       ? encryptConnectorSecret(tokenResponse.refresh_token)
       : existingCredential?.encryptedRefreshToken;
@@ -599,6 +611,7 @@ export const completeConnectorOAuth = async (input: {
 };
 
 export const disconnectConnector = async (input: {
+  connectionId?: string;
   provider: ConnectorProvider;
   userId: string;
 }) => {
@@ -607,7 +620,10 @@ export const disconnectConnector = async (input: {
     .where(
       and(
         eq(connectorCredential.userId, input.userId),
-        eq(connectorCredential.provider, input.provider)
+        eq(connectorCredential.provider, input.provider),
+        input.connectionId === undefined
+          ? undefined
+          : eq(connectorCredential.id, input.connectionId)
       )
     )
     .returning({ id: connectorCredential.id });
@@ -617,11 +633,14 @@ export const disconnectConnector = async (input: {
 
 export const addIcsAttachmentToGoogleCalendar = async (input: {
   attachmentId: string;
+  calendarId?: string;
+  connectionId?: string;
   mailboxId: string;
   messageId: string;
   signal?: AbortSignal;
   userId: string;
 }) => {
+  const target = await resolveCalendarImportTargetForUser(input);
   const mailbox = await assertAccessibleMailbox(input);
   let invitation: string;
   if (mailbox.provider === "managed") {
@@ -657,31 +676,20 @@ export const addIcsAttachmentToGoogleCalendar = async (input: {
       });
     }
   })();
-  const importedEvent = await runAuthorizedConnector(
-    {
-      provider: GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
-      signal: input.signal,
-      userId: input.userId,
-    },
-    async (accessToken, signal) => {
-      const event = await postGoogleCalendarEvent({
-        accessToken,
-        event: {
-          ...parsedEvent,
-          iCalUID: parsedEvent.iCalUID ?? `${randomUUID()}@quieter.email`,
-        },
-        importEvent: true,
-        signal,
-      });
-
-      return {
-        htmlLink: event.htmlLink,
-        id: event.id,
-        status: "success" as const,
-        summary: event.summary ?? parsedEvent.summary,
-      };
-    }
-  );
-
-  return importedEvent;
+  return await importCalendarInvitationForUser({
+    ...target,
+    event: parsedEvent,
+    fallbackUid: `${createHash("sha256")
+      .update(
+        JSON.stringify([
+          input.userId,
+          input.mailboxId,
+          input.messageId,
+          input.attachmentId,
+        ])
+      )
+      .digest("hex")}@quieter.email`,
+    signal: input.signal,
+    userId: input.userId,
+  });
 };

@@ -8,9 +8,11 @@ type ComposeBridge = NonNullable<ReturnType<WorkspaceBridge["getCompose"]>>;
 const createWorkspace = ({
   compose = null,
   mailboxId = "mailbox-a",
+  calendarVisible = false,
 }: {
   compose?: ComposeBridge | null;
   mailboxId?: string;
+  calendarVisible?: boolean;
 } = {}) => {
   const control = createForegroundControl();
   const read = vi.fn<WorkspaceBridge["read"]>(() => ({
@@ -18,20 +20,30 @@ const createWorkspace = ({
     mailboxId,
     query: "",
     view: "inbox",
+    workspace: calendarVisible ? "calendar" : "mail",
   }));
   const navigate = vi.fn<WorkspaceBridge["navigate"]>().mockResolvedValue();
+  const navigateCalendar = vi
+    .fn<WorkspaceBridge["navigateCalendar"]>()
+    .mockResolvedValue();
   const openCompose = vi
     .fn<WorkspaceBridge["openCompose"]>()
     .mockResolvedValue({ draftId: "draft-a", draftRevision: 1 });
 
   return {
     control,
+    getCalendar: () => null,
     getCompose: () => compose,
     mailboxId,
     navigate,
+    navigateCalendar,
     openCompose,
     read,
+    registerCalendar: () => () => {},
     registerCompose: () => () => {},
+    waitForCalendar: () => {
+      throw new Error("The calendar was not registered.");
+    },
     waitForCompose: () => {
       throw new Error("The draft was not registered.");
     },
@@ -193,5 +205,46 @@ describe("workspace tools", () => {
       generation,
     });
     expect(edit).toHaveBeenLastCalledWith({ bodyText: "Updated draft" }, 4);
+  });
+
+  test("does not edit a retained hidden mail draft from Calendar", async () => {
+    const { compose, edit, values } = createCompose();
+    const workspace = createWorkspace({ calendarVisible: true, compose });
+    const generation = workspace.control.begin();
+    await expect(
+      executeWorkspaceTool(
+        workspace,
+        "edit_compose",
+        {
+          bodyText: "Hidden edit",
+          draftId: "draft-a",
+          expectedDraftRevision: 4,
+        },
+        generation
+      )
+    ).rejects.toThrow(/open mail/iu);
+    expect(edit).not.toHaveBeenCalled();
+    expect(values.bodyText).toBe("Initial");
+  });
+
+  test("stops a calendar navigation result when the user takes over", async () => {
+    const workspace = createWorkspace();
+    const generation = workspace.control.begin();
+    workspace.navigateCalendar.mockImplementation(async () => {
+      workspace.control.cancel();
+      await Promise.resolve();
+    });
+    await expect(
+      executeWorkspaceTool(
+        workspace,
+        "navigate_calendar",
+        {
+          date: "2026-10-23",
+          view: "week",
+        },
+        generation
+      )
+    ).rejects.toThrow(/stopped/iu);
+    expect(workspace.read).not.toHaveBeenCalled();
   });
 });

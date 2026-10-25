@@ -3,6 +3,7 @@
 import { useHeadlessConsentUI } from "@c15t/react/headless";
 import {
   Cancel01Icon,
+  Calendar03Icon,
   Edit01Icon,
   HelpCircleIcon,
   LayoutRightIcon,
@@ -74,6 +75,7 @@ type MailSidebarProps = {
   onSelectMailboxId: (mailboxId: string) => void;
   onSearch: (query: string) => void;
   onComposeNewMail: () => void;
+  onOpenCalendar?: () => void;
   onManageLabels: (mailboxId?: string) => void;
   onManageSnippets: () => void;
   onSelectView: (view: MailboxWorkspaceView) => void;
@@ -188,6 +190,7 @@ const SidebarInboxSection = ({
   onComposeNewMail,
   onManageLabels,
   onManageSnippets,
+  onOpenCalendar,
   onRequestClose,
   onSearch,
   onSelectMailbox,
@@ -206,6 +209,7 @@ const SidebarInboxSection = ({
   | "onComposeNewMail"
   | "onManageLabels"
   | "onManageSnippets"
+  | "onOpenCalendar"
   | "onRequestClose"
   | "onSearch"
   | "onSelectMailbox"
@@ -268,6 +272,22 @@ const SidebarInboxSection = ({
       </SidebarEntrance>
 
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto p-1">
+        {embedded !== true && onOpenCalendar ? (
+          <SidebarNavItem
+            onClick={() => {
+              onOpenCalendar();
+              onRequestClose?.();
+            }}
+            type="button"
+          >
+            <HugeiconsIcon
+              aria-hidden
+              icon={Calendar03Icon}
+              strokeWidth={1.5}
+            />
+            Calendar
+          </SidebarNavItem>
+        ) : null}
         <SidebarMailboxNav
           animateEntrance={animateEntrance}
           mailboxProvider={selectedMailboxProvider}
@@ -426,6 +446,7 @@ const SidebarContent = ({
   onComposeNewMail,
   onManageLabels,
   onManageSnippets,
+  onOpenCalendar,
   onReorderMailboxSwitcher,
   onReconnectMailbox,
   onRequestClose,
@@ -500,6 +521,7 @@ const SidebarContent = ({
         groups={groups}
         onComposeNewMail={onComposeNewMail}
         onManageSnippets={onManageSnippets}
+        onOpenCalendar={onOpenCalendar}
         onManageLabels={(sourceMailboxId) => {
           onManageLabels(sourceMailboxId);
           onRequestClose?.();
