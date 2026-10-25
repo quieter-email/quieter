@@ -1659,6 +1659,139 @@ export const mailboxAutomationSettings = pgTable("mailboxAutomationSettings", {
     .default(false),
 });
 
+export const mailboxAgentSetting = pgTable("mailboxAgentSetting", {
+  activatedAt: timestamp("activatedAt"),
+  activatedByUserId: text("activatedByUserId").references(() => user.id, {
+    onDelete: "set null",
+  }),
+  activationVersion: integer("activationVersion").notNull().default(0),
+  activeRevisionId: text("activeRevisionId"),
+  createdAt: timestamp("createdAt").notNull(),
+  draftRevisionId: text("draftRevisionId"),
+  enabled: boolean("enabled").notNull().default(false),
+  mailboxId: text("mailboxId")
+    .primaryKey()
+    .references(() => mailbox.id, { onDelete: "cascade" }),
+  updatedAt: timestamp("updatedAt").notNull(),
+  version: integer("version").notNull().default(0),
+});
+
+export const mailboxAgentRevision = pgTable(
+  "mailboxAgentRevision",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    createdByUserId: text("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    manifest: jsonb("manifest").$type<unknown>().notNull(),
+    manifestDigest: text("manifestDigest").notNull(),
+    specification: jsonb("specification").$type<unknown>().notNull(),
+    usage: jsonb("usage").$type<MailboxAgentUsage | null>(),
+    usageReportedAt: timestamp("usageReportedAt"),
+  },
+  (table) => [index("mailbox_agent_revision_mailbox_idx").on(table.mailboxId)]
+);
+
+export type MailboxAgentRunStatus =
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "skipped"
+  | "needs_attention";
+export type MailboxAgentUsage = {
+  cacheWriteTokens: number;
+  cachedTokens: number;
+  completionTokens: number;
+  costUsd?: number;
+  promptTokens: number;
+  model: string;
+};
+export const mailboxAgentRun = pgTable(
+  "mailboxAgentRun",
+  {
+    actorUserId: text("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    attempts: integer("attempts").notNull().default(0),
+    createdAt: timestamp("createdAt").notNull(),
+    draftId: text("draftId"),
+    errorMessage: text("errorMessage"),
+    finishedAt: timestamp("finishedAt"),
+    id: text("id").primaryKey(),
+    invocationKey: text("invocationKey").notNull(),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    leaseToken: text("leaseToken"),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    messageId: text("messageId"),
+    privateResult: boolean("privateResult").notNull().default(true),
+    revisionId: text("revisionId")
+      .notNull()
+      .references(() => mailboxAgentRevision.id, { onDelete: "cascade" }),
+    settingVersion: integer("settingVersion").notNull(),
+    status: text("status")
+      .$type<MailboxAgentRunStatus>()
+      .notNull()
+      .default("queued"),
+    summary: text("summary"),
+    threadId: text("threadId").notNull(),
+    triggerKind: text("triggerKind")
+      .$type<"mail_received" | "manual">()
+      .notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+    usage: jsonb("usage").$type<MailboxAgentUsage[]>(),
+    usageReportedAt: timestamp("usageReportedAt"),
+  },
+  (table) => [
+    unique("mailbox_agent_run_invocation_unique").on(
+      table.mailboxId,
+      table.invocationKey
+    ),
+    index("mailbox_agent_run_pending_idx").on(
+      table.status,
+      table.leaseExpiresAt
+    ),
+    index("mailbox_agent_run_thread_idx").on(table.mailboxId, table.threadId),
+    check(
+      "mailbox_agent_run_status_check",
+      sql`${table.status} in ('queued', 'running', 'succeeded', 'skipped', 'needs_attention')`
+    ),
+  ]
+);
+
+export const mailboxAgentEffect = pgTable(
+  "mailboxAgentEffect",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    inputDigest: text("inputDigest").notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    result: jsonb("result").$type<unknown>(),
+    runId: text("runId")
+      .notNull()
+      .references(() => mailboxAgentRun.id, { onDelete: "cascade" }),
+    status: text("status")
+      .$type<"pending" | "completed" | "uncertain">()
+      .notNull(),
+    toolCallId: text("toolCallId").notNull(),
+    toolId: text("toolId").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    unique("mailbox_agent_effect_call_unique").on(
+      table.runId,
+      table.toolCallId
+    ),
+  ]
+);
+
 // Retained until the release removing custom actions has replaced all old workers.
 export const mailboxAction = pgTable(
   "mailboxAction",
@@ -3298,6 +3431,10 @@ export const tables = {
   mailboxActionRun,
   mailboxActionRunFrame,
   mailboxActionStepRun,
+  mailboxAgentEffect,
+  mailboxAgentRevision,
+  mailboxAgentRun,
+  mailboxAgentSetting,
   mailboxAutomationSettings,
   mailboxDivisionGrant,
   mailboxGrant,

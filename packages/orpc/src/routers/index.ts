@@ -35,6 +35,12 @@ export const appRouter = {
     async () =>
       await import("./mail").then(({ mailRouter }) => ({ default: mailRouter }))
   ),
+  mailAgent: lazy(
+    async () =>
+      await import("./mail-agent").then(({ mailAgentRouter }) => ({
+        default: mailAgentRouter,
+      }))
+  ),
   mailDomains: lazy(
     async () =>
       await import("./mail-domains").then(({ mailDomainsRouter }) => ({

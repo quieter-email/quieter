@@ -487,6 +487,7 @@ export const reportAiUsage = async (input: {
     | "importance"
     | "aiChat"
     | "aiMemory"
+    | "mailAction"
     | "autoLabel"
     | "usefulDetails"
     | "verificationCode"

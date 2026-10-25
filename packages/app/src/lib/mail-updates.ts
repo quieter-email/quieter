@@ -1,8 +1,9 @@
 import type { ListMessagesPageResult } from "@quieter/app/lib/mail";
-import { rpc } from "@quieter/app/lib/orpc";
+import { orpc, rpc } from "@quieter/app/lib/orpc";
 import { mailUpdateSchema } from "@quieter/mail/updates";
 import type { MailUpdate } from "@quieter/mail/updates";
 import type { QueryClient } from "@tanstack/react-query";
+import { partialMatchKey } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 export const connectMailUpdates = (queryClient: QueryClient) => {
@@ -21,7 +22,11 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   let refreshing = false;
   const pending = new Map<
     string,
-    { types: Set<MailUpdate["type"]>; revision?: string }
+    {
+      types: Set<MailUpdate["type"]>;
+      revision?: string;
+      threadIds: Set<string> | null;
+    }
   >();
   const seen = new Set<string>();
 
@@ -83,6 +88,43 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
       await queryClient.invalidateQueries(
         {
           predicate: ({ queryKey }) => {
+            if (partialMatchKey(queryKey, orpc.mailAgent.threadResults.key())) {
+              for (const [mailboxId, change] of changes) {
+                if (
+                  !change.types.has("mailbox.changed") &&
+                  !change.types.has("details.changed")
+                ) {
+                  continue;
+                }
+                if (mailboxId === "*") {
+                  return true;
+                }
+                if (
+                  !partialMatchKey(
+                    queryKey,
+                    orpc.mailAgent.threadResults.key({ input: { mailboxId } })
+                  )
+                ) {
+                  continue;
+                }
+                if (change.threadIds === null) {
+                  return true;
+                }
+                for (const threadId of change.threadIds) {
+                  if (
+                    partialMatchKey(
+                      queryKey,
+                      orpc.mailAgent.threadResults.key({
+                        input: { mailboxId, threadId },
+                      })
+                    )
+                  ) {
+                    return true;
+                  }
+                }
+              }
+              return false;
+            }
             const [root] = queryKey;
             if (root === "mailboxes") {
               return [...changes.values()].some((change) =>
@@ -159,12 +201,26 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   const requestRefresh = (
     mailboxId = "*",
     type: MailUpdate["type"] = "mailbox.changed",
-    revision?: string
+    revision?: string,
+    threadIds?: string[]
   ) => {
     const change = pending.get(mailboxId);
     if (change === undefined) {
-      pending.set(mailboxId, { revision, types: new Set([type]) });
+      pending.set(mailboxId, {
+        revision,
+        threadIds: threadIds === undefined ? null : new Set(threadIds),
+        types: new Set([type]),
+      });
     } else {
+      if (change.threadIds !== null) {
+        if (threadIds === undefined) {
+          change.threadIds = null;
+        } else {
+          for (const threadId of threadIds) {
+            change.threadIds.add(threadId);
+          }
+        }
+      }
       if (type === "mailbox.changed") {
         change.revision =
           revision !== undefined &&
@@ -279,7 +335,8 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
           requestRefresh(
             event.data.mailboxId,
             event.data.type,
-            event.data.revision
+            event.data.revision,
+            event.data.threadIds
           );
         } catch {
           /* Ignore malformed frames. */

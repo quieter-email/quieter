@@ -140,6 +140,18 @@ export default {
         return requestErrorResponse(error, "local-mail-importance");
       }
     }
+    if (url.pathname === "/__dev/actions") {
+      try {
+        const { drainMailAgentRuns } = await import("@quieter/orpc/mail-agent");
+        return Response.json(
+          await withRequestDatabaseClient(
+            async () => await drainMailAgentRuns({ limit: 1 })
+          )
+        );
+      } catch (error) {
+        return requestErrorResponse(error, "local-mail-agent");
+      }
+    }
     if (url.pathname === "/__dev/memory") {
       try {
         const input = z
@@ -188,6 +200,7 @@ export default {
         await import("@quieter/orpc/managed-mail/ingestion");
       const { cleanupMailboxVerificationCodes } =
         await import("@quieter/orpc/verification-codes");
+      const { drainMailAgentRuns } = await import("@quieter/orpc/mail-agent");
       await withRequestDatabaseClient(async () => {
         const results = await Promise.allSettled([
           recoverMailSends(),
@@ -198,6 +211,7 @@ export default {
           processManagedRuleBackfills(),
           retryPendingManagedVerificationCodes(),
           cleanupMailboxVerificationCodes(),
+          drainMailAgentRuns({ limit: 1 }),
         ]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed !== undefined) {

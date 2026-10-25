@@ -41,7 +41,11 @@ import {
 } from "./google";
 import type { GoogleCalendar } from "./google";
 
-type UserRequest = { signal?: AbortSignal; userId: string };
+type UserRequest = {
+  retryUnauthorized?: boolean;
+  signal?: AbortSignal;
+  userId: string;
+};
 type CalendarRequest = CalendarRef & UserRequest;
 type CalendarContext = {
   accessToken: string;

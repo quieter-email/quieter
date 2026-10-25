@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./compile-action-specification": "./src/compile-action-specification.ts",
     "./action-specification": "./src/action-specification.ts",
     "./ai-memory": "./src/ai-memory.ts",
     "./chat-agent": "./src/chat-agent.ts",

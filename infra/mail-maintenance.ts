@@ -41,6 +41,11 @@ export const createMailMaintenanceResources = (
         ...(
           [
             "GMAIL_LIVE_SYNC_TOKEN_SECRET",
+            "CONNECTOR_TOKEN_ENCRYPTION_KEY",
+            "GOOGLE_CALENDAR_CLIENT_ID",
+            "GOOGLE_CALENDAR_CLIENT_SECRET",
+            "LINEAR_CLIENT_ID",
+            "LINEAR_CLIENT_SECRET",
             "POLAR_ACCESS_TOKEN",
             "OPENROUTER_API_KEY",
             "QUIETER_BACKGROUND_MODEL",

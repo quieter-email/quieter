@@ -38,50 +38,53 @@ const fact = (overrides: Partial<Memory> = {}): Memory => ({
 });
 
 describe("task-specific text memory", () => {
-  test("reserves general voice and matching recipient tone despite unrelated high volume", () => {
-    const context = serializeAiAgentContext(
-      selectAiMemoryContext({
-        agent: "reply_suggestion",
-        candidates: [
-          ...Array.from({ length: 300 }, (_, index) =>
+  test.each(["reply_suggestion", "mail_action"])(
+    "reserves general voice and matching recipient tone despite unrelated high volume (%s)",
+    (agent) => {
+      const context = serializeAiAgentContext(
+        selectAiMemoryContext({
+          agent,
+          candidates: [
+            ...Array.from({ length: 300 }, (_, index) =>
+              fact({
+                content: `Working on project ${index}. ${"Current work detail. ".repeat(60)}`,
+                id: `activity-${index}`,
+                importance: 5,
+                key: `activity-${index}`,
+                metadata: { agents: ["all"], category: "activity" },
+              })
+            ),
+            fact(),
             fact({
-              content: `Working on project ${index}. ${"Current work detail. ".repeat(60)}`,
-              id: `activity-${index}`,
-              importance: 5,
-              key: `activity-${index}`,
-              metadata: { agents: ["all"], category: "activity" },
-            })
-          ),
-          fact(),
-          fact({
-            content:
-              "With Alex, use playful language and sign off with See you.",
-            id: "alex",
-            key: "alex-voice",
-            metadata: {
-              agents: ["all"],
-              category: "writing_style",
-              correspondents: ["alex@example.test"],
-            },
-          }),
-          fact({
-            content: "With Blair, use formal greetings and full titles.",
-            id: "blair",
-            key: "blair-voice",
-            metadata: {
-              agents: ["all"],
-              category: "writing_style",
-              correspondents: ["blair@example.test"],
-            },
-          }),
-        ],
-        query: "Reply to Alex <alex@example.test> about lunch",
-      })
-    );
-    expect(context).toContain("warm replies");
-    expect(context).toContain("playful language");
-    expect(context).not.toContain("full titles");
-  });
+              content:
+                "With Alex, use playful language and sign off with See you.",
+              id: "alex",
+              key: "alex-voice",
+              metadata: {
+                agents: ["all"],
+                category: "writing_style",
+                correspondents: ["alex@example.test"],
+              },
+            }),
+            fact({
+              content: "With Blair, use formal greetings and full titles.",
+              id: "blair",
+              key: "blair-voice",
+              metadata: {
+                agents: ["all"],
+                category: "writing_style",
+                correspondents: ["blair@example.test"],
+              },
+            }),
+          ],
+          query: "Reply to Alex <alex@example.test> about lunch",
+        })
+      );
+      expect(context).toContain("warm replies");
+      expect(context).toContain("playful language");
+      expect(context).not.toContain("full titles");
+    }
+  );
 
   test("resolves relationship references before knowing a person's address", () => {
     const context = serializeAiAgentContext(

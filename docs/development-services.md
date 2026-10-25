@@ -132,7 +132,7 @@ logo.dev remains an external image API. The local publishable key exists. Use st
 
 Domain Connect supplies a protocol, example service, templates, and signing examples rather than a complete local DNS-provider emulator. Test signing and callbacks locally; use a dedicated domain for actual registrar/DNS changes and SES verification. The required private signing key is consumed by code but omitted from the current SST secret registry and deployment bindings. See [Domain Connect getting started](https://www.domainconnect.org/getting-started/).
 
-GitHub Actions provides the existing CI execution environment. GitHub CLI authentication works. There is no need to run GitHub itself locally. Vercel is present in older sandbox webhook destinations, but the current app infrastructure targets Cloudflare. D1, KV, Vectorize, Cloudflare Workflows, Redis, and Neon are not prerequisites inferred from the current runtime inventory. Gmail synchronization processes Pub/Sub deliveries directly; managed rule backfills run in mail maintenance. Custom action workflows are removed.
+GitHub Actions provides the existing CI execution environment. GitHub CLI authentication works. There is no need to run GitHub itself locally. Vercel is present in older sandbox webhook destinations, but the current app infrastructure targets Cloudflare. D1, KV, Vectorize, Cloudflare Workflows, Redis, and Neon are not prerequisites inferred from the current runtime inventory. Gmail synchronization processes Pub/Sub deliveries directly; managed rule backfills and reviewed mailbox Actions run in mail maintenance. The custom graph runtime remains removed.
 
 ## Feature acceptance matrix
 
@@ -166,9 +166,9 @@ These are required acceptance cases, not a claim that every row was executed dur
 | UI resilience | Mobile layouts, keyboard use, focus, stale cache, disconnect/reconnect | Multiple browsers, real device and constrained network |
 | Recovery and deployment | Clean seed/reset, migration replay, old/new schema compatibility | Deployment rollback, IAM restrictions, cloud logs and DLQ |
 
-## Custom action removal
+## Mailbox actions and retained graphs
 
-The current change removes custom action settings, dispatch, queue consumption, graph execution, and action-specific credit reservations. Connectors remain available to chat, and managed inbox rules remain. `MailMaintenance` replaces the retired dispatcher for send recovery, storage cleanup, expired rate-limit cleanup, and managed rule backfills every minute. Local execution uses `vp run dev:trigger mail-recovery`.
+Mailbox Actions use one reviewed prompt per mailbox and run through the existing `MailMaintenance` Worker. Its bounded runtime supports incoming mail and manual execution, actor-private summaries, and reply drafts for ordinary compose review. Exact connected accounts and known tool effects are reauthorized at each call. The old graph editor, dispatcher, graph execution, and credit reservations remain removed. Local execution uses `vp run dev:trigger actions` for action work alone. See [Action specifications](action-specifications.md) for authority, privacy, and retry rules.
 
 Seven unpublished migrations were consolidated into `20260907233131_melodic_blacklash`. Read-only inspection confirmed that none of the seven appeared in the development ledger; main history is unchanged. This inspection did not apply the consolidated migration. Keep Drizzle's SQL and full snapshots together, and consolidate only unapplied feature migrations as described in [the migration workflow](architecture.md#migration-workflow).
 

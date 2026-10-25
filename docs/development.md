@@ -112,11 +112,14 @@ vp run dev:trigger health
 vp run dev:trigger maintenance
 vp run dev:trigger mail-recovery
 vp run dev:trigger importance
+vp run dev:trigger actions
 ```
 
 The local Worker handles Gmail notifications, realtime updates, managed-mail fixtures, and maintenance in one process. Production deploys separate Workers. Local maintenance uses manual triggers, not an automatically running cron. The Pub/Sub bridge uses `gcloud auth print-access-token`, pulls one message at a time from its own subscription, extends the acknowledgment deadline during processing, and acknowledges only after the local Worker finishes.
 
 Important classification has a manual maintenance trigger. Use `vp run dev:trigger importance` to process pending incoming mail with development model credentials and billing controls. See [Mail importance](mail-importance.md) for classification, manual overrides, and privacy rules. The trigger preserves Gmail watch ownership and provider data.
+
+Mailbox Actions use `vp run dev:trigger actions` to drain one queued incoming-mail or manual run. Review and activate a mailbox prompt first, then ingest fresh fixture mail. The command uses the same authorization, usage controls, and effect journal as scheduled maintenance. See [Action specifications](action-specifications.md#development-walkthrough) for exact account mentions, private results, draft review, and uncertain-effect recovery.
 
 Shared Gmail accounts default to `QUIETER_LOCAL_PROVIDER_MODE=observe` and `QUIETER_LOCAL_GMAIL_WATCH_OWNER=production`. Mail reads and AI results stored in `quieter_dev` work in this mode. Gmail, Calendar and Linear writes are rejected server-side. Auto-label classification is saved without applying labels. Write tests require a dedicated mailbox or a verified ownership handoff, plus the explicit Gmail account allowlist. Never start a competing consumer on the production subscription.
 
