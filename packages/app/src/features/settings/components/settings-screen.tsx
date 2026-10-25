@@ -1,7 +1,6 @@
 "use client";
 
 import { Menu01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { BillingCheckoutResult } from "@quieter/app/features/settings/components/billing-checkout-result";
 import { ConnectorConnectionResult } from "@quieter/app/features/settings/components/connector-connection-result";
 import { GmailConnectionResult } from "@quieter/app/features/settings/components/gmail-connection-result";
@@ -17,6 +16,7 @@ import { isDemoModeAvailable } from "@quieter/app/features/settings/domain/demo-
 import { SETTINGS_TITLES } from "@quieter/app/features/settings/domain/settings-navigation";
 import { settingsRouteApi } from "@quieter/app/lib/route-apis";
 import { Button } from "@quieter/ui/button";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
@@ -149,11 +149,7 @@ export const SettingsScreen = ({
                       setIsMobileOpen(true);
                     }}
                   >
-                    <HugeiconsIcon
-                      icon={Menu01Icon}
-                      className="size-4"
-                      strokeWidth={1.5}
-                    />
+                    <Icon icon={Menu01Icon} />
                   </Button>
                 </IconButtonTooltip>
               </div>

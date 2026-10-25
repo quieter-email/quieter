@@ -7,7 +7,6 @@ import {
   Loading03Icon,
   Refresh01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { runDetached } from "@quieter/app/features/settings/components/mailboxes-settings-shared";
 import {
   getOrganizationApiKeysQueryKey,
@@ -52,6 +51,7 @@ import {
   DialogTitle,
 } from "@quieter/ui/dialog";
 import { FieldLabel } from "@quieter/ui/field";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
   Select,
@@ -318,7 +318,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
         }}
         size="sm"
       >
-        <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+        <Icon aria-hidden icon={Add01Icon} />
         Create
       </Button>
 
@@ -441,17 +441,9 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                   type="submit"
                 >
                   {createMutation.isPending ? (
-                    <HugeiconsIcon
-                      aria-hidden
-                      className="size-4 animate-spin"
-                      icon={Loading03Icon}
-                    />
+                    <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                   ) : (
-                    <HugeiconsIcon
-                      aria-hidden
-                      className="size-4"
-                      icon={Key02Icon}
-                    />
+                    <Icon aria-hidden icon={Key02Icon} />
                   )}
                   Create
                 </Button>
@@ -581,11 +573,9 @@ const ResetApiKeyDialog = ({
           type="button"
           variant="destructive"
         >
-          <HugeiconsIcon
+          <Icon
             aria-hidden
-            className={cn("size-4", {
-              "animate-spin": resetMutation.isPending,
-            })}
+            animation={resetMutation.isPending ? "spin" : undefined}
             icon={resetMutation.isPending ? Loading03Icon : Refresh01Icon}
           />
         </Button>
@@ -621,17 +611,9 @@ const ResetApiKeyDialog = ({
                 variant="destructive"
               >
                 {resetMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                 ) : (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Refresh01Icon}
-                  />
+                  <Icon aria-hidden icon={Refresh01Icon} />
                 )}
                 Reset
               </Button>
@@ -735,11 +717,9 @@ const DeleteApiKeyDialog = ({
           type="button"
           variant="destructive"
         >
-          <HugeiconsIcon
+          <Icon
             aria-hidden
-            className={cn("size-4", {
-              "animate-spin": deleteMutation.isPending,
-            })}
+            animation={deleteMutation.isPending ? "spin" : undefined}
             icon={deleteMutation.isPending ? Loading03Icon : Delete02Icon}
           />
         </Button>
@@ -772,17 +752,9 @@ const DeleteApiKeyDialog = ({
             variant="destructive"
           >
             {deleteMutation.isPending ? (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4 animate-spin"
-                icon={Loading03Icon}
-              />
+              <Icon aria-hidden animation="spin" icon={Loading03Icon} />
             ) : (
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4"
-                icon={Delete02Icon}
-              />
+              <Icon aria-hidden icon={Delete02Icon} />
             )}
             Remove
           </Button>
@@ -856,7 +828,7 @@ const ApiKeysListSection = ({
               </div>
             ) : undefined
           }
-          icon={<HugeiconsIcon aria-hidden icon={Key02Icon} />}
+          icon={<Icon aria-hidden icon={Key02Icon} />}
           key={apiKey.id}
           title={apiKey.name ?? "API key"}
         >
@@ -909,13 +881,7 @@ export const ApiKeysView = ({
             <CreateApiKeyDialog organizationId={organization.id} />
           ) : (
             <MutedActionButton
-              icon={
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-4"
-                  icon={Key02Icon}
-                />
-              }
+              icon={<Icon aria-hidden icon={Key02Icon} />}
               label="Create"
               reason={manageApiKeysReason}
             />

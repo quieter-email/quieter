@@ -1,9 +1,9 @@
 "use client";
 
 import { SidebarLeftIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { getAppPresenceMotion } from "@quieter/app/features/motion/app-motion";
 import { Button } from "@quieter/ui/button";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
   AnimatePresence,
@@ -48,7 +48,7 @@ export const MessageListHeader = ({
                 size="icon"
                 variant="outline"
               >
-                <HugeiconsIcon icon={SidebarLeftIcon} />
+                <Icon icon={SidebarLeftIcon} />
               </Button>
             </IconButtonTooltip>
           </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import { Add01Icon, MoreHorizontalIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   SettingsCard,
   SettingsErrorState,
@@ -27,6 +26,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { toast } from "@quieter/ui/toast";
@@ -120,7 +120,7 @@ export const PersonalizationMemories = ({
             }}
             size="icon"
           >
-            <HugeiconsIcon aria-hidden icon={Add01Icon} />
+            <Icon aria-hidden icon={Add01Icon} />
           </Button>
         </IconButtonTooltip>
         {actions}
@@ -162,7 +162,7 @@ export const PersonalizationMemories = ({
                           />
                         }
                       >
-                        <HugeiconsIcon aria-hidden icon={MoreHorizontalIcon} />
+                        <Icon aria-hidden icon={MoreHorizontalIcon} />
                       </DropdownMenuTrigger>
                     </IconButtonTooltip>
                     <DropdownMenuContent align="end" size="compact">

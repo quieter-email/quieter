@@ -10,7 +10,6 @@ import {
   Mail01Icon,
   Wallet02Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { BillingProductCard } from "@quieter/app/features/settings/components/billing-product-card";
 import {
   getOrganizationApiKeysQueryKey,
@@ -37,6 +36,7 @@ import { getApiUrl, openExternalUrl } from "@quieter/app/runtime";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
 import { Button, buttonVariants } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { Pill } from "@quieter/ui/pill";
 import {
@@ -88,7 +88,7 @@ const FirstRunSetupHeader = ({
   <div className="flex flex-col gap-4 border-b border-border p-5 @3xl:flex-row @3xl:items-start @3xl:justify-between">
     <div>
       <Button className="mb-3 -ml-2" onClick={onBack} size="sm" variant="ghost">
-        <HugeiconsIcon aria-hidden className="size-4" icon={ArrowLeft01Icon} />
+        <Icon aria-hidden icon={ArrowLeft01Icon} />
         Back
       </Button>
       <h1 className="text-body-lg font-semibold tracking-tight text-fg">
@@ -141,9 +141,9 @@ const FirstRunSetupNavigation = ({
           )}
           key={step.id}
         >
-          <HugeiconsIcon
+          <Icon
             aria-hidden
-            className="size-4 shrink-0"
+
             icon={stepStatus[step.id] ? CheckmarkCircle01Icon : step.icon}
           />
           <span>{step.label}</span>
@@ -174,11 +174,7 @@ const FirstRunBillingStep = ({
 }) => {
   const accessContent = hasManagedAccess ? (
     <p className="inline-flex items-center gap-2 text-body text-success">
-      <HugeiconsIcon
-        aria-hidden
-        className="size-4"
-        icon={CheckmarkCircle01Icon}
-      />
+      <Icon aria-hidden icon={CheckmarkCircle01Icon} />
       Managed mail is active for this organization.
     </p>
   ) : (
@@ -200,11 +196,7 @@ const FirstRunBillingStep = ({
   );
   const content = isBillingPending ? (
     <p className="inline-flex items-center gap-2 text-body text-muted-fg">
-      <HugeiconsIcon
-        aria-hidden
-        className="size-4 animate-spin"
-        icon={Loading03Icon}
-      />
+      <Icon aria-hidden animation="spin" icon={Loading03Icon} />
       Loading billing…
     </p>
   ) : (
@@ -250,7 +242,7 @@ const FirstRunDomainStep = ({
           onCreated={onCreated}
           organizationId={organizationId}
         >
-          <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
+          <Icon aria-hidden icon={Add01Icon} />
           Add another
         </RegisterDomainDialog>
       </div>
@@ -259,7 +251,7 @@ const FirstRunDomainStep = ({
         onCreated={onCreated}
         organizationId={organizationId}
       >
-        <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
+        <Icon aria-hidden icon={Globe02Icon} />
         Register domain
       </RegisterDomainDialog>
     );
@@ -278,7 +270,7 @@ const FirstRunDomainStep = ({
       ) : (
         <div className="flex flex-wrap items-center gap-3">
           <Button disabled size="sm" type="button">
-            <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
+            <Icon aria-hidden icon={Globe02Icon} />
             Register domain
           </Button>
           <p className="text-body text-muted-fg">
@@ -326,11 +318,7 @@ const FirstRunMailboxStep = ({
     </div>
     {hasManagedMailbox ? (
       <p className="inline-flex items-center gap-2 text-body text-success">
-        <HugeiconsIcon
-          aria-hidden
-          className="size-4"
-          icon={CheckmarkCircle01Icon}
-        />
+        <Icon aria-hidden icon={CheckmarkCircle01Icon} />
         This organization already has a managed mailbox.
       </p>
     ) : (
@@ -395,11 +383,7 @@ const FirstRunMailboxStep = ({
           type="button"
         >
           {createPending && (
-            <HugeiconsIcon
-              aria-hidden
-              className="size-4 animate-spin"
-              icon={Loading03Icon}
-            />
+            <Icon aria-hidden animation="spin" icon={Loading03Icon} />
           )}
           Create mailbox
         </Button>
@@ -427,11 +411,7 @@ const FirstRunApiKeyStep = ({
       return (
         <div className="space-y-3">
           <p className="inline-flex items-center gap-2 text-body text-success">
-            <HugeiconsIcon
-              aria-hidden
-              className="size-4"
-              icon={CheckmarkCircle01Icon}
-            />
+            <Icon aria-hidden icon={CheckmarkCircle01Icon} />
             API key created. Store it before leaving this screen.
           </p>
           <Button
@@ -467,11 +447,7 @@ const FirstRunApiKeyStep = ({
       return (
         <div className="space-y-2">
           <p className="inline-flex items-center gap-2 text-body text-success">
-            <HugeiconsIcon
-              aria-hidden
-              className="size-4"
-              icon={CheckmarkCircle01Icon}
-            />
+            <Icon aria-hidden icon={CheckmarkCircle01Icon} />
             This organization already has an API key.
           </p>
           <a
@@ -496,13 +472,9 @@ const FirstRunApiKeyStep = ({
           type="button"
         >
           {isPending ? (
-            <HugeiconsIcon
-              aria-hidden
-              className="size-4 animate-spin"
-              icon={Loading03Icon}
-            />
+            <Icon aria-hidden animation="spin" icon={Loading03Icon} />
           ) : (
-            <HugeiconsIcon aria-hidden className="size-4" icon={Key02Icon} />
+            <Icon aria-hidden icon={Key02Icon} />
           )}
           Create API key
         </Button>

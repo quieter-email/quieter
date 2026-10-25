@@ -17,7 +17,6 @@ import {
   CodeIcon,
   MailSend02Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import {
   fullOrganizationQueryOptions,
@@ -44,6 +43,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -119,20 +119,14 @@ export const SettingsSidebar = ({
       active={selected}
       key={title}
       aria-current={selected ? "page" : undefined}
-      // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with compact settings-row spacing.
-      className="h-6 justify-start px-2 text-left text-caption font-normal"
-      // oxlint-enable shadcn/no-restyle
+      className="justify-start text-left"
       onClick={() => {
         open(destination);
       }}
       variant="ghost"
       size="sm"
     >
-      <HugeiconsIcon
-        icon={SETTINGS_ICONS[title] ?? Settings01Icon}
-        strokeWidth={1.5}
-        className="shrink-0 text-fg"
-      />
+      <Icon icon={SETTINGS_ICONS[title] ?? Settings01Icon} tone="default" />
       {title}
     </SidebarNavItem>
   );
@@ -140,19 +134,14 @@ export const SettingsSidebar = ({
     <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6">
       <div className="mb-3 flex items-center justify-between px-1">
         <Button
-          // oxlint-disable-next-line shadcn/no-restyle -- Back link keeps its caption metrics.
-          className="justify-start gap-2 px-2 text-caption"
+          className="justify-start"
           onClick={() => {
             void navigate({ to: from });
           }}
           variant="ghost"
           size="sm"
         >
-          <HugeiconsIcon
-            icon={ArrowLeft01Icon}
-            strokeWidth={1.5}
-            className="size-4"
-          />
+          <Icon icon={ArrowLeft01Icon} />
           Back to mail
         </Button>
         {onRequestClose && (
@@ -163,11 +152,7 @@ export const SettingsSidebar = ({
               variant="ghost"
               onClick={onRequestClose}
             >
-              <HugeiconsIcon
-                icon={Cancel01Icon}
-                strokeWidth={1.5}
-                className="size-4"
-              />
+              <Icon icon={Cancel01Icon} />
             </Button>
           </IconButtonTooltip>
         )}
@@ -205,30 +190,17 @@ export const SettingsSidebar = ({
               <DropdownMenuTrigger
                 aria-label="Team settings"
                 render={
-                  <Button
-                    // oxlint-disable-next-line shadcn/no-restyle -- Preserve the existing team switcher spacing and caption metrics.
-                    className="mb-2 w-full gap-2 text-caption font-normal"
-                    size="sm"
-                    variant="outline"
-                  />
+                  <Button className="mb-2 w-full" size="sm" variant="outline" />
                 }
               >
-                <HugeiconsIcon
-                  icon={UserGroupIcon}
-                  strokeWidth={1.5}
-                  className="size-3.5 shrink-0"
-                />
+                <Icon icon={UserGroupIcon} size={14} />
                 <span className="min-w-0 flex-1 truncate text-left">
                   {team?.name ??
                     (organizationsState.isPending
                       ? "Loading teams"
                       : "Choose a team")}
                 </span>
-                <HugeiconsIcon
-                  icon={ArrowDown01Icon}
-                  strokeWidth={1.5}
-                  className="size-3.5 shrink-0 text-muted-fg"
-                />
+                <Icon icon={ArrowDown01Icon} size={14} tone="muted" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" size="compact">
                 {organizations.map((item) => (
@@ -264,11 +236,7 @@ export const SettingsSidebar = ({
                     open({ organizationId: "", tab: "organization" });
                   }}
                 >
-                  <HugeiconsIcon
-                    icon={UserGroupIcon}
-                    strokeWidth={1.5}
-                    className="size-3.5"
-                  />
+                  <Icon icon={UserGroupIcon} size={14} />
                   Teams & invitations
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -276,11 +244,7 @@ export const SettingsSidebar = ({
                     setIsCreateTeamOpen(true);
                   }}
                 >
-                  <HugeiconsIcon
-                    icon={Add01Icon}
-                    strokeWidth={1.5}
-                    className="size-3.5"
-                  />
+                  <Icon icon={Add01Icon} size={14} />
                   Create team
                 </DropdownMenuItem>
               </DropdownMenuContent>

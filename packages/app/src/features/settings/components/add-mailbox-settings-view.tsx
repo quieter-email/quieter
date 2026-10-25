@@ -5,7 +5,6 @@ import {
   ArrowRight01Icon,
   Mail01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { GuidedFlow } from "@quieter/app/features/guided-flow/components/guided-flow";
 import { useAddMailboxSettingsStore } from "@quieter/app/features/settings/components/add-mailbox-settings-store";
 import {
@@ -31,6 +30,7 @@ import { orpc } from "@quieter/app/lib/orpc";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
+import { Icon } from "@quieter/ui/icon";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { FlowProgress } from "@quieter/ui/progress";
 import {
@@ -207,7 +207,7 @@ export const AddMailboxSettingsView = ({
       previous={
         mailboxType === undefined ? null : (
           <Button onClick={goBack} size="sm" variant="ghost">
-            <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+            <Icon aria-hidden icon={ArrowLeft01Icon} />
             {previousLabel}
           </Button>
         )
@@ -236,9 +236,10 @@ export const AddMailboxSettingsView = ({
               </span>
               <span className="mt-auto flex items-center gap-1.5 pt-6 text-caption font-medium text-fg">
                 Continue
-                <HugeiconsIcon
+                <Icon
                   aria-hidden
-                  className="size-3.5 transition-transform group-hover:translate-x-0.5"
+                  size={14}
+                  className="group-hover:translate-x-0.5"
                   icon={ArrowRight01Icon}
                 />
               </span>
@@ -263,9 +264,10 @@ export const AddMailboxSettingsView = ({
               </span>
               <span className="mt-auto flex items-center gap-1.5 pt-6 text-caption font-medium text-fg">
                 Continue
-                <HugeiconsIcon
+                <Icon
                   aria-hidden
-                  className="size-3.5 transition-transform group-hover:translate-x-0.5"
+                  size={14}
+                  className="group-hover:translate-x-0.5"
                   icon={ArrowRight01Icon}
                 />
               </span>
@@ -312,7 +314,7 @@ export const AddMailboxSettingsView = ({
               pending={isStartingGmail}
               pendingLabel="Opening Google"
             >
-              <HugeiconsIcon aria-hidden icon={Mail01Icon} />
+              <Icon aria-hidden icon={Mail01Icon} />
               Continue with Google
             </Button>
           </div>
@@ -368,7 +370,7 @@ export const AddMailboxSettingsView = ({
               }}
             >
               Continue
-              <HugeiconsIcon aria-hidden icon={ArrowRight01Icon} />
+              <Icon aria-hidden icon={ArrowRight01Icon} />
             </Button>
           </div>
         </div>

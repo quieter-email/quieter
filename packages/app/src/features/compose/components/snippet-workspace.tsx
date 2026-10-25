@@ -7,7 +7,6 @@ import {
   Search01Icon,
   SidebarLeftIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { SnippetFields } from "@quieter/app/features/compose/components/snippet-fields";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
@@ -31,6 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Text } from "@quieter/ui/text";
@@ -136,7 +136,7 @@ export const SnippetWorkspace = ({
   if (isSnippetsPending) {
     snippetQueryState = (
       <div className="flex items-center justify-center gap-2 px-3 py-10 text-caption text-muted-fg">
-        <HugeiconsIcon className="size-3.5 animate-spin" icon={Loading03Icon} />
+        <Icon size={14} animation="spin" icon={Loading03Icon} />
         Loading snippets
       </div>
     );
@@ -175,10 +175,10 @@ export const SnippetWorkspace = ({
                 type="button"
                 variant="ghost"
               >
-                <HugeiconsIcon icon={SidebarLeftIcon} />
+                <Icon icon={SidebarLeftIcon} />
               </Button>
             </IconButtonTooltip>
-            <h1 className="min-w-0 flex-1 text-body font-semibold tracking-tight text-fg">
+            <h1 className="min-w-0 flex-1 text-title-sm font-semibold text-fg">
               Snippets
             </h1>
             <Button
@@ -191,7 +191,7 @@ export const SnippetWorkspace = ({
               size="sm"
               type="button"
             >
-              <HugeiconsIcon icon={Add01Icon} />
+              <Icon icon={Add01Icon} />
               New
             </Button>
           </div>
@@ -202,8 +202,10 @@ export const SnippetWorkspace = ({
             <span className="sr-only" id="snippet-workspace-search-label">
               Search snippets
             </span>
-            <HugeiconsIcon
-              className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-fg"
+            <Icon
+              size={14}
+              tone="muted"
+              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
               icon={Search01Icon}
             />
             <Input
@@ -298,7 +300,7 @@ export const SnippetWorkspace = ({
                   type="button"
                   variant="destructive"
                 >
-                  <HugeiconsIcon icon={Delete02Icon} />
+                  <Icon icon={Delete02Icon} />
                   Delete
                 </Button>
               ) : null}
@@ -307,10 +309,7 @@ export const SnippetWorkspace = ({
                 type="submit"
               >
                 {isSaving ? (
-                  <HugeiconsIcon
-                    className="animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <Icon animation="spin" icon={Loading03Icon} />
                 ) : null}
                 Save
               </Button>

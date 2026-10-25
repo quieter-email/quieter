@@ -7,7 +7,6 @@ import {
   MoreVerticalIcon,
   SparklesIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { AutoLabelEditor } from "@quieter/app/features/message-labels/components/auto-label-editor";
 import { AutoLabelSwitch } from "@quieter/app/features/message-labels/components/auto-label-switch";
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
@@ -68,6 +67,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
@@ -500,7 +500,7 @@ export const LabelsWorkspacePanel = ({
                 type="button"
                 variant="ghost"
               >
-                <HugeiconsIcon aria-hidden icon={SparklesIcon} />
+                <Icon aria-hidden icon={SparklesIcon} />
                 Prompt
               </Button>
               <IconButtonTooltip label={`Auto-label ${label.name}`}>
@@ -533,11 +533,7 @@ export const LabelsWorkspacePanel = ({
                     appearance="icon"
                     aria-label={`Options for ${label.name}`}
                   >
-                    <HugeiconsIcon
-                      aria-hidden
-                      className="size-4"
-                      icon={MoreVerticalIcon}
-                    />
+                    <Icon aria-hidden icon={MoreVerticalIcon} />
                   </DropdownMenuTrigger>
                 </IconButtonTooltip>
                 <DropdownMenuContent align="end">
@@ -547,11 +543,7 @@ export const LabelsWorkspacePanel = ({
                       startEditing(label);
                     }}
                   >
-                    <HugeiconsIcon
-                      aria-hidden
-                      className="size-4"
-                      icon={Edit01Icon}
-                    />
+                    <Icon aria-hidden icon={Edit01Icon} />
                     Edit label
                   </DropdownMenuItem>
                   <DropdownMenuItem
@@ -574,11 +566,7 @@ export const LabelsWorkspacePanel = ({
                     }}
                     tone="destructive"
                   >
-                    <HugeiconsIcon
-                      aria-hidden
-                      className="size-4"
-                      icon={Delete01Icon}
-                    />
+                    <Icon aria-hidden icon={Delete01Icon} />
                     Delete
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -594,7 +582,7 @@ export const LabelsWorkspacePanel = ({
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
         <div className="mb-6 flex items-center justify-between gap-4">
-          <h1 className="font-sans text-title-sm font-normal text-fg">
+          <h1 className="font-sans text-title-sm font-semibold text-fg">
             Labels
           </h1>
           <Button
@@ -608,7 +596,7 @@ export const LabelsWorkspacePanel = ({
             size="sm"
             type="button"
           >
-            <HugeiconsIcon aria-hidden icon={Add01Icon} />
+            <Icon aria-hidden icon={Add01Icon} />
             New label
           </Button>
         </div>

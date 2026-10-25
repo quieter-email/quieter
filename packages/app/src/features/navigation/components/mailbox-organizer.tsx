@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowLeft02Icon, Edit01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { useMailboxOrganizerController } from "@quieter/app/features/navigation/components/mailbox-organizer-state";
 import type {
   MailboxOrganizerContentProps,
@@ -17,6 +16,7 @@ import {
   FullPageDialogHeader,
   FullPageDialogTitle,
 } from "@quieter/ui/full-page-dialog";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 
 const MailboxOrganizerSidebar = (props: MailboxOrganizerContentProps) => {
@@ -36,7 +36,7 @@ const MailboxOrganizerSidebar = (props: MailboxOrganizerContentProps) => {
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden className="size-3.5" icon={Edit01Icon} />
+          <Icon aria-hidden size={14} icon={Edit01Icon} />
         </Button>
       </IconButtonTooltip>
     </div>
@@ -54,7 +54,7 @@ const MailboxOrganizerFullPageDialog = (
         <FullPageDialogHeader>
           <IconButtonTooltip label="Close organizer">
             <FullPageDialogClose aria-label="Close organizer">
-              <HugeiconsIcon aria-hidden icon={ArrowLeft02Icon} />
+              <Icon aria-hidden icon={ArrowLeft02Icon} />
             </FullPageDialogClose>
           </IconButtonTooltip>
           <FullPageDialogTitle>Organize mailbox</FullPageDialogTitle>

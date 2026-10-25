@@ -1,7 +1,6 @@
 "use client";
 
 import { Delete02Icon, Logout03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   formatRoleLabel,
   hasOrganizationRole,
@@ -23,6 +22,7 @@ import {
   SettingsSection,
 } from "@quieter/app/features/settings/components/settings-layout";
 import { authClient } from "@quieter/app/lib/auth";
+import { Icon } from "@quieter/ui/icon";
 
 export const OrganizationDangerView = ({
   activeRole,
@@ -64,13 +64,7 @@ export const OrganizationDangerView = ({
           action={
             leaveOrganizationReason ? (
               <MutedActionButton
-                icon={
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Logout03Icon}
-                  />
-                }
+                icon={<Icon aria-hidden icon={Logout03Icon} />}
                 label="Leave"
                 reason={leaveOrganizationReason}
                 variant="destructive"
@@ -90,13 +84,7 @@ export const OrganizationDangerView = ({
           action={
             deleteOrganizationReason ? (
               <MutedActionButton
-                icon={
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Delete02Icon}
-                  />
-                }
+                icon={<Icon aria-hidden icon={Delete02Icon} />}
                 label="Delete"
                 reason={deleteOrganizationReason}
                 variant="destructive"

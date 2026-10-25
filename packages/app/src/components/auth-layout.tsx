@@ -26,7 +26,7 @@ export const AuthLayout = ({
           className="mx-auto mb-8 h-6 w-24 text-fg"
           variant="combination"
         />
-        <h1 className="text-center text-title-md font-medium tracking-tight text-fg">
+        <h1 className="text-center text-title-md font-semibold text-fg">
           {title}
         </h1>
         {children}

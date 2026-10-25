@@ -34,6 +34,7 @@
     "./fieldset": "./src/components/ui/fieldset.tsx",
     "./full-page-dialog": "./src/components/ui/full-page-dialog.tsx",
     "./icon-button-tooltip": "./src/components/ui/icon-button-tooltip.tsx",
+    "./icon": "./src/components/ui/icon.tsx",
     "./icons": "./src/components/ui/icons.tsx",
     "./input": "./src/components/ui/input.tsx",
     "./input-group": "./src/components/ui/input-group.tsx",

@@ -9,7 +9,6 @@ import {
   Loading03Icon,
   Mail01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { AuthLayout } from "@quieter/app/components/auth-layout";
 import { GoogleLogo } from "@quieter/app/components/google-logo";
 import { getAppFlyInMotion } from "@quieter/app/features/motion/app-motion";
@@ -40,6 +39,7 @@ import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
 import { Field, FieldLabel } from "@quieter/ui/field";
+import { Icon } from "@quieter/ui/icon";
 import { Input } from "@quieter/ui/input";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { Pill } from "@quieter/ui/pill";
@@ -73,9 +73,11 @@ const ConnectedAddressList = ({
         className="flex min-w-0 items-center gap-2 text-body-sm text-fg"
         key={mailbox.id}
       >
-        <HugeiconsIcon
+        <Icon
           aria-hidden
-          className="size-3.5 shrink-0 text-success"
+          size={14}
+          tone="success"
+
           icon={CheckmarkCircle02Icon}
         />
         <span className="min-w-0 break-all">{mailbox.emailAddress}</span>
@@ -92,7 +94,7 @@ const PlaybookCard = ({
   title,
 }: {
   children: React.ReactNode;
-  icon: React.ComponentProps<typeof HugeiconsIcon>["icon"];
+  icon: React.ComponentProps<typeof Icon>["icon"];
   requirement?: string;
   state: "done" | "todo";
   title: string;
@@ -104,12 +106,9 @@ const PlaybookCard = ({
     })}
   >
     <div className="flex items-center gap-2">
-      <HugeiconsIcon
+      <Icon
         aria-hidden
-        className={cn("size-4 shrink-0", {
-          "text-muted-fg": state !== "done",
-          "text-success": state === "done",
-        })}
+        tone={state === "done" ? "success" : "muted"}
         icon={state === "done" ? CheckmarkCircle02Icon : icon}
       />
       <h3 className="text-body font-medium tracking-tight text-fg">{title}</h3>
@@ -195,7 +194,7 @@ const PlaybookBillingAction = ({
 
   return (
     <RegisterDomainDialog fixedMode={fixedMode} organizationId={organizationId}>
-      <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
+      <Icon aria-hidden icon={Globe02Icon} />
       Add a domain
     </RegisterDomainDialog>
   );
@@ -203,9 +202,11 @@ const PlaybookBillingAction = ({
 
 const DomainStatusNote = ({ count }: { count: number }) => (
   <p className="flex items-center gap-2 text-body-sm text-muted-fg">
-    <HugeiconsIcon
+    <Icon
       aria-hidden
-      className="size-3.5 animate-spin text-muted-fg"
+      size={14}
+      animation="spin"
+      tone="muted"
       icon={Loading03Icon}
     />
     DNS setup in progress for {count} {count === 1 ? "domain" : "domains"}.
@@ -923,7 +924,7 @@ export const OnboardingScreen = () => {
                       }}
                     >
                       Continue
-                      <HugeiconsIcon aria-hidden icon={ArrowRight01Icon} />
+                      <Icon aria-hidden icon={ArrowRight01Icon} />
                     </Button>
                   )}
                 </div>
@@ -981,7 +982,7 @@ export const OnboardingScreen = () => {
                     size="sm"
                     variant="ghost"
                   >
-                    <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+                    <Icon aria-hidden icon={ArrowLeft01Icon} />
                     {steps[0]}
                   </Button>
                 </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { GmailMailboxDetailSections } from "@quieter/app/features/settings/components/gmail-mailbox-detail-sections";
 import { GmailMailboxNameSettings } from "@quieter/app/features/settings/components/gmail-mailbox-name-settings";
 import { MailboxDetailGeneralSection } from "@quieter/app/features/settings/components/mailbox-detail-general-section";
@@ -30,6 +29,7 @@ import {
 import { toastError } from "@quieter/app/lib/error-toast";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
+import { Icon } from "@quieter/ui/icon";
 import { useNavigate } from "@tanstack/react-router";
 
 type Mailbox =
@@ -276,11 +276,7 @@ export const MailboxDetailSettingsContent = ({
               variant="outline"
             >
               Open team settings
-              <HugeiconsIcon
-                aria-hidden
-                className="size-4"
-                icon={ArrowRight01Icon}
-              />
+              <Icon aria-hidden icon={ArrowRight01Icon} />
             </Button>
           </SettingsCard>
         </SettingsSection>

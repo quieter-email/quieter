@@ -11,9 +11,9 @@ The product uses `@quieter/ui` for reusable appearance and app components for do
 | Tailwind class merging | `packages/ui/src/lib/cn.ts` |
 | Component implementations | `packages/ui/src/components/ui/` |
 | Public component imports | `packages/ui/package.json` exports |
-| Working compositions | `apps/web/src/features/design-system/components/design-system-showcase.tsx` |
-| Settings anchors and domain wrappers | `apps/web/src/features/settings/components/settings-layout.tsx` |
-| Motion orchestration | `apps/web/src/features/motion/` |
+| Working compositions | `packages/app/src/features/design-system/components/design-system-showcase.tsx` |
+| Settings anchors and domain wrappers | `packages/app/src/features/settings/components/settings-layout.tsx` |
+| Motion orchestration | `packages/app/src/features/motion/` |
 
 Before changing a UI, read the relevant component and its closest existing caller. A component's actual props are the contract. Do not assume APIs from upstream shadcn examples match this codebase.
 
@@ -25,6 +25,7 @@ Before changing a UI, read the relevant component and its closest existing calle
 | Selectable setup card | `Button variant="card"` |
 | Compact toggle chip or segmented option | `Button variant="chip"` or `variant="option"` with `aria-pressed` |
 | Icon action | Icon-sized `Button`, concise `aria-label`, `IconButtonTooltip` |
+| Product icon | `Icon` from `@quieter/ui/icon`, with `size`, `tone`, and `animation` props |
 | Field | `Field`, `FieldLabel`, `Input`, `Textarea`, validation components |
 | Compound mailbox address | `InputGroup`, `Input chrome="attached"`, `InputAddon`, attached `SelectTrigger` |
 | Choice or boolean | `Select`, `Checkbox`, `Switch`, `RadioGroup`, `Toggle` |
@@ -77,7 +78,7 @@ Use the custom type scale on semantic HTML or the shared text components. Direct
 | `text-caption`    | 12px | Metadata                               |
 | `text-micro`      | 11px | Small labels and pills                 |
 
-The type tokens include line heights and heading tracking. Prefer those defaults before adding leading or tracking. `font-sans` uses Geist and `font-mono` uses Geist Mono. New scale steps must also be registered in `lib/cn.ts` so text colors do not evict font sizes during merging.
+The type tokens include line heights and heading tracking. Prefer those defaults before adding leading or tracking. `font-sans` uses self-hosted Geist and `font-mono` uses self-hosted Geist Mono in web and desktop. Page and section headings use semibold, row labels and actions use medium, and supporting text uses regular weight. New scale steps must also be registered in `lib/cn.ts` so text colors do not evict font sizes during merging.
 
 ### Colors
 
@@ -87,10 +88,10 @@ The type tokens include line heights and heading tracking. Prefer those defaults
 | Raised workspace and panels | `bg-raised`, `bg-surface` |
 | Cards and popovers | `card`, `card-fg`, `popover`, `popover-fg` |
 | Fields and interaction ladder | `input`, `control`, `control-hover`, `control-active` |
-| Main action | `primary`, `primary-fg` |
+| Main action | `primary`, `primary-hover`, `primary-active`, `primary-fg` |
 | Secondary action | `secondary`, `secondary-hover`, `secondary-active`, `secondary-fg` |
 | Muted content and menu highlights | `muted`, `muted-fg`, `accent`, `accent-fg` |
-| State | `success`, `warning`, `destructive`, with their foreground pairs |
+| State | `success`, `warning`, `destructive`, with their foreground pairs; destructive actions also use `destructive-hover` and `destructive-active` |
 | Edges and focus | `border`, `border-strong`, `ring` |
 | Categorical colors | `q-gray`, `q-blue`, `q-cyan`, `q-green`, `q-yellow`, `q-orange`, `q-red`, `q-pink`, `q-purple` |
 
@@ -108,7 +109,7 @@ Spacing uses the existing Tailwind scale with a 4px base, including half steps. 
 
 Workspace panels default to a 6px outer gutter below the desktop breakpoint and 8px on desktop. Themes can adjust these gutters and settings row padding through shared tokens. `WorkspaceSection` owns the gutter for both full-page panels and grid cells. A layout wrapper that positions adjacent panels, including docked chat, imports `workspaceGutterClassName` from the same module and uses `--workspace-gutter`. Do not add another gutter between a trailing sidebar and the preceding panel's existing margin. Settings, Labels, Snippets and their loading states use the shared tokens.
 
-The default radius ladder is `xs` 8px, `sm` 10px, `md` 12px, `lg` 14px, and `xl` 16px. The ladder follows the active theme's base radius. Larger existing steps remain available for intentionally larger shells. Controls own their radii; callers should not make the same checkbox rounder in one toolbar. Circular shapes can use `rounded-full`.
+The default radius ladder is `xs` 4px, `sm` 6px, `md` 8px, `lg` 10px, and `xl` 12px. The ladder follows the active theme's base radius. Larger existing steps remain available for intentionally larger shells. Controls own their radii; callers should not make the same checkbox rounder in one toolbar. `squircle` is an explicit treatment. Circular shapes use ordinary `rounded-full` geometry.
 
 Use `shadow-surface` for the existing workspace treatment and `shadow-elevation` where that elevated treatment is established. Ordinary component shadows are selected inside their implementation.
 

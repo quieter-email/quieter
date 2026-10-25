@@ -5,7 +5,6 @@ import {
   Cancel01Icon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type { IconSvgElement } from "@hugeicons/react";
 import { mailboxLabelSearchPillSurfaceClassNameByColor } from "@quieter/app/features/message-labels/domain/mailbox-label-presentation";
 import type { searchFilterOptions } from "@quieter/app/features/message-search/components/message-list-search-filter-options";
@@ -18,6 +17,7 @@ import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { LazyMotion, domAnimation, AnimatePresence, m } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
@@ -97,7 +97,7 @@ const SearchDropdownRow = ({
   return (
     <button
       className={cn(
-        "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
+        "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none",
         className,
         {
           "bg-accent": active && !className && !customColor,
@@ -113,9 +113,11 @@ const SearchDropdownRow = ({
       style={rowStyle}
       type="button"
     >
-      <HugeiconsIcon
+      <Icon
         aria-hidden
-        className="size-3.5 shrink-0 text-muted-fg"
+        size={14}
+        tone="muted"
+
         icon={icon}
       />
       <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -457,7 +459,7 @@ export const MessageListSearchDropdown = ({
                       aria-expanded={showLabelsSubmenu}
                       aria-haspopup="true"
                       className={cn(
-                        "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none",
+                        "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none",
                         {
                           "bg-accent": selectedUserLabelStates.size > 0,
                           "bg-muted": isLabelHighlighted,
@@ -469,20 +471,21 @@ export const MessageListSearchDropdown = ({
                       ref={labelsTriggerRef}
                       type="button"
                     >
-                      <HugeiconsIcon
+                      <Icon
                         aria-hidden
-                        className="size-3.5 shrink-0 text-muted-fg"
+                        size={14}
+                        tone="muted"
+
                         icon={Tag01Icon}
                       />
                       <span className="min-w-0 flex-1 truncate">Labels</span>
-                      <HugeiconsIcon
+                      <Icon
                         aria-hidden
-                        className={cn(
-                          "size-3.5 shrink-0 text-muted-fg transition-transform",
-                          {
-                            "rotate-90 lg:rotate-0": showLabelsSubmenu,
-                          }
-                        )}
+                        className={cn("", {
+                          "rotate-90 lg:rotate-0": showLabelsSubmenu,
+                        })}
+                        size={14}
+                        tone="muted"
                         icon={ArrowRight01Icon}
                       />
                     </button>
@@ -516,11 +519,7 @@ export const MessageListSearchDropdown = ({
 
             <ActionFooter className="mt-1 shrink-0 lg:hidden">
               <Button onClick={onDismiss} size="sm" type="button">
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-3.5"
-                  icon={Cancel01Icon}
-                />
+                <Icon aria-hidden size={14} icon={Cancel01Icon} />
                 Close search
               </Button>
             </ActionFooter>

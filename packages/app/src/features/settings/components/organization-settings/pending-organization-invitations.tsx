@@ -1,7 +1,6 @@
 "use client";
 
 import { Delete02Icon, Loading03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   formatRoleLabel,
   getFullOrganizationQueryKey,
@@ -16,6 +15,7 @@ import {
 import { authClient } from "@quieter/app/lib/auth";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -98,17 +98,9 @@ export const PendingOrganizationInvitations = ({
                     variant="outline"
                   >
                     {isPending ? (
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-4 animate-spin"
-                        icon={Loading03Icon}
-                      />
+                      <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                     ) : (
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-4"
-                        icon={Delete02Icon}
-                      />
+                      <Icon aria-hidden icon={Delete02Icon} />
                     )}
                     Cancel
                   </Button>

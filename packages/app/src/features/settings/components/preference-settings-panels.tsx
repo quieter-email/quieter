@@ -1,7 +1,6 @@
 "use client";
 
 import { CodeIcon, KeyboardIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { ConsentPreferencesLink } from "@quieter/app/components/consent-preferences-link";
 import { useKeyboardShortcuts } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
 import {
@@ -21,6 +20,7 @@ import { appRuntime } from "@quieter/app/runtime";
 import { Button } from "@quieter/ui/button";
 import { useColorMode } from "@quieter/ui/color-mode";
 import type { ConfigColorMode } from "@quieter/ui/color-mode";
+import { Icon } from "@quieter/ui/icon";
 import {
   Select,
   SelectContent,
@@ -105,9 +105,9 @@ export const PreferencesSettingsPanel = () => {
                 type="button"
                 variant="outline"
               >
-                <HugeiconsIcon
+                <Icon
                   aria-hidden
-                  className="size-4 shrink-0"
+
                   icon={KeyboardIcon}
                 />
                 View
@@ -208,11 +208,7 @@ export const DevelopmentSettingsUnavailable = () => (
   <SettingsSection title="Development">
     <SettingsCard className={settingsSurfaceVariants({ variant: "body" })}>
       <div className="flex items-start gap-3">
-        <HugeiconsIcon
-          aria-hidden
-          className="mt-0.5 size-4 shrink-0 text-muted-fg"
-          icon={CodeIcon}
-        />
+        <Icon aria-hidden tone="muted" className="mt-0.5" icon={CodeIcon} />
         <p className="text-body text-muted-fg">
           Local demo mailbox options are only available in development builds.
         </p>

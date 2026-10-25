@@ -1,7 +1,6 @@
 "use client";
 
 import { Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { AuthLayout } from "@quieter/app/components/auth-layout";
 import { GoogleLogo } from "@quieter/app/components/google-logo";
 import { setDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
@@ -19,6 +18,7 @@ import { desktopAuthQuerySchema } from "@quieter/auth/desktop";
 import type { DesktopAuthQuery } from "@quieter/auth/desktop";
 import { Button } from "@quieter/ui/button";
 import { FieldLabel } from "@quieter/ui/field";
+import { Icon } from "@quieter/ui/icon";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -298,7 +298,7 @@ export const AuthCredentials = ({
           {({ canSubmit, email, isSubmitted, isSubmitting }) => {
             let submitContent: ReactNode = (
               <>
-                <HugeiconsIcon className="size-4 shrink-0" icon={Mail01Icon} />
+                <Icon icon={Mail01Icon} />
                 Continue with magic link
               </>
             );
@@ -307,10 +307,7 @@ export const AuthCredentials = ({
             } else if (isSubmitted) {
               submitContent = (
                 <>
-                  <HugeiconsIcon
-                    className="size-4 shrink-0"
-                    icon={Mail01Icon}
-                  />
+                  <Icon icon={Mail01Icon} />
                   Magic link sent to {email.trim().toLowerCase()}
                 </>
               );
@@ -375,7 +372,7 @@ export const AuthCredentials = ({
         variant="outline"
       >
         {authClient.isLastUsedLoginMethod("passkey") && <AuthLastUsedHint />}
-        <HugeiconsIcon className="size-4 shrink-0" icon={Key02Icon} />
+        <Icon icon={Key02Icon} />
         Continue with passkey
       </Button>
 

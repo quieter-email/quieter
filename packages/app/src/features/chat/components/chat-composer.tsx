@@ -6,7 +6,6 @@ import {
   Search01Icon,
   StopIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import { ChatModelPicker } from "@quieter/app/features/chat/components/chat-model-picker";
 import { Button } from "@quieter/ui/button";
@@ -14,6 +13,7 @@ import {
   ComposerContextChip,
   PromptComposerFrame,
 } from "@quieter/ui/composer-chrome";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Textarea } from "@quieter/ui/textarea";
 import type { KeyboardEvent, ReactNode, Ref, SubmitEvent } from "react";
@@ -94,9 +94,10 @@ export const ChatComposer = ({
             <ComposerContextChip
               disabled={disabled}
               icon={
-                <HugeiconsIcon
+                <Icon
                   aria-hidden
-                  className="size-3 shrink-0"
+                  size={12}
+
                   icon={item.query === undefined ? Mail01Icon : Search01Icon}
                 />
               }
@@ -149,9 +150,9 @@ export const ChatComposer = ({
                 size="icon-sm"
                 variant={recording ? "secondary" : "ghost"}
               >
-                <HugeiconsIcon
+                <Icon
                   aria-hidden
-                  className={audioBusy ? "animate-spin" : undefined}
+                  animation={audioBusy ? "spin" : undefined}
                   icon={dictationIcon}
                 />
               </Button>
@@ -164,7 +165,7 @@ export const ChatComposer = ({
                   size="icon-sm"
                   variant="secondary"
                 >
-                  <HugeiconsIcon aria-hidden icon={StopIcon} />
+                  <Icon aria-hidden icon={StopIcon} />
                 </Button>
               </IconButtonTooltip>
             ) : (
@@ -181,9 +182,9 @@ export const ChatComposer = ({
                   size="icon-sm"
                   type="submit"
                 >
-                  <HugeiconsIcon
+                  <Icon
                     aria-hidden
-                    className={submitting ? "animate-spin" : undefined}
+                    animation={submitting ? "spin" : undefined}
                     icon={submitting ? Loading03Icon : ArrowUp02Icon}
                   />
                 </Button>

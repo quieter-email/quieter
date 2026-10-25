@@ -13,7 +13,6 @@ import {
   MoreVerticalIcon,
   NotificationOff01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type { IconSvgElement } from "@hugeicons/react";
 import { MessageLabelsSubmenu } from "@quieter/app/features/message-labels/components/message-labels-menu";
 import type {
@@ -29,7 +28,6 @@ import {
 import { toastError } from "@quieter/app/lib/error-toast";
 import { isMessageUnread } from "@quieter/app/lib/mail";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
-import { cn } from "@quieter/ui/cn";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -44,6 +42,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { CSSProperties, PropsWithChildren } from "react";
 
@@ -122,7 +121,7 @@ const renderDropdownEntry = (entry: MenuEntry) => {
       onSelect={entry.onAction}
       tone={entry.destructive === true ? "destructive" : undefined}
     >
-      <HugeiconsIcon aria-hidden className="size-4" icon={entry.icon} />
+      <Icon aria-hidden icon={entry.icon} />
       <span>{entry.label}</span>
     </DropdownMenuItem>
   );
@@ -144,7 +143,7 @@ const renderContextEntry = (entry: MenuEntry) => {
       onSelect={entry.onAction}
       tone={entry.destructive === true ? "destructive" : undefined}
     >
-      <HugeiconsIcon aria-hidden className="size-4" icon={entry.icon} />
+      <Icon aria-hidden icon={entry.icon} />
       <span>{entry.label}</span>
     </ContextMenuItem>
   );
@@ -427,9 +426,10 @@ export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
           disabled={isBusy}
           type="button"
         >
-          <HugeiconsIcon
+          <Icon
             aria-hidden
-            className={cn("size-3.5", { "animate-spin": isBusy })}
+            size={14}
+            animation={isBusy ? "spin" : undefined}
             icon={isBusy ? Loading03Icon : MoreVerticalIcon}
           />
         </DropdownMenuTrigger>

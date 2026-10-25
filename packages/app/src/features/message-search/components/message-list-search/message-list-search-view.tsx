@@ -6,7 +6,6 @@ import {
   Search01Icon,
   SparklesIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowInteractionButton } from "@quieter/app/components/arrow-interaction-button";
 import { SpinWhileActive } from "@quieter/app/components/spin-while-active";
 import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
@@ -24,6 +23,7 @@ import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
 import { Calendar } from "@quieter/ui/calendar";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
@@ -137,7 +137,7 @@ export const MessageListSearchView = ({
           onBlur={handleSearchFieldBlur}
           ref={fieldRef}
         >
-          <div className="flex min-h-8 min-w-0 items-center gap-1 rounded-xl border border-border bg-control p-0.5 shadow-xs transition-colors duration-150 ease-out squircle has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:ring-1 has-[input[data-slot=search-input]:focus-visible]:ring-ring/45 has-[input[data-slot=search-input]:focus-visible]:outline-none">
+          <div className="flex min-h-8 min-w-0 items-center gap-1 rounded-md border border-border bg-control p-0.5 shadow-xs transition-colors duration-150 ease-out squircle has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:ring-2 has-[input[data-slot=search-input]:focus-visible]:ring-ring has-[input[data-slot=search-input]:focus-visible]:ring-offset-2 has-[input[data-slot=search-input]:focus-visible]:ring-offset-bg-raised has-[input[data-slot=search-input]:focus-visible]:outline-none">
             <div
               className="flex min-w-0 flex-1 scroll-px-1 scrollbar-none items-center gap-1 overflow-x-auto overscroll-x-contain [&::-webkit-scrollbar]:hidden"
               onMouseDown={(event) => {
@@ -300,7 +300,7 @@ export const MessageListSearchView = ({
                             )} filter`
                           : `Exclude ${getFilterLabel(filter.type)} filter`
                       }
-                      className="inline-flex shrink-0 items-center gap-1 rounded-sm text-muted-fg hover:text-fg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-sm text-muted-fg hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none"
                       onClick={(event) => {
                         event.stopPropagation();
                         cycleFilterFromPointer(index);
@@ -360,7 +360,7 @@ export const MessageListSearchView = ({
                       aria-label={`Remove ${getFilterLabel(
                         filter.type
                       )} filter`}
-                      className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-fg hover:text-fg focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
+                      className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-fg hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none"
                       onClick={(event) => {
                         event.stopPropagation();
                         removeFilterFromPointer(index);
@@ -377,11 +377,7 @@ export const MessageListSearchView = ({
                       }}
                       type="button"
                     >
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-3"
-                        icon={Cancel01Icon}
-                      />
+                      <Icon aria-hidden size={12} icon={Cancel01Icon} />
                     </button>
                   </div>
                 );
@@ -443,7 +439,7 @@ export const MessageListSearchView = ({
                         />
                       }
                     >
-                      <HugeiconsIcon className="size-4" icon={SparklesIcon} />
+                      <Icon icon={SparklesIcon} />
                     </Button>
                   </IconButtonTooltip>
                 )}
@@ -473,7 +469,7 @@ export const MessageListSearchView = ({
                         />
                       }
                     >
-                      <HugeiconsIcon icon={Cancel01Icon} />
+                      <Icon icon={Cancel01Icon} />
                     </Button>
                   </IconButtonTooltip>
                 )}
@@ -493,7 +489,7 @@ export const MessageListSearchView = ({
                 type="button"
                 variant="ghost"
               >
-                <HugeiconsIcon icon={Search01Icon} />
+                <Icon icon={Search01Icon} />
               </Button>
             </IconButtonTooltip>
           </div>
@@ -592,7 +588,7 @@ export const MessageListSearchView = ({
               variant="toolbar"
             >
               <SpinWhileActive active={isRefreshing}>
-                <HugeiconsIcon icon={Refresh01Icon} />
+                <Icon icon={Refresh01Icon} />
               </SpinWhileActive>
             </Button>
           </IconButtonTooltip>

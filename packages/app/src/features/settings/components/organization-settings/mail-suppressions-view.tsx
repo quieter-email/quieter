@@ -5,7 +5,6 @@ import {
   Delete02Icon,
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type { FullOrganization } from "@quieter/app/features/settings/components/organization-settings/domain";
 import {
   getOrganizationMailSuppressionAuditQueryKey,
@@ -26,6 +25,7 @@ import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { Pill } from "@quieter/ui/pill";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
@@ -205,17 +205,9 @@ export const MailSuppressionsView = ({
                 type="submit"
               >
                 {blockMutation.isPending ? (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4 animate-spin"
-                    icon={Loading03Icon}
-                  />
+                  <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                 ) : (
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={BanIcon}
-                  />
+                  <Icon aria-hidden icon={BanIcon} />
                 )}
                 Block
               </Button>
@@ -244,11 +236,7 @@ export const MailSuppressionsView = ({
                       size="sm"
                       variant="ghost"
                     >
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-4"
-                        icon={Delete02Icon}
-                      />
+                      <Icon aria-hidden icon={Delete02Icon} />
                       Unblock
                     </Button>
                   </div>

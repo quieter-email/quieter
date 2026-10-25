@@ -4,7 +4,6 @@ import {
   FileAttachmentIcon,
   MessageMultiple01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { SenderAvatar } from "@quieter/app/components/sender-avatar";
 import {
   DELIVERY_PILL_TONES,
@@ -32,6 +31,7 @@ import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import type { RouterOutputs } from "@quieter/orpc";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { Pill } from "@quieter/ui/pill";
 import { m, useReducedMotion } from "motion/react";
 import type { FocusEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
@@ -217,7 +217,7 @@ const MessageRowSelectionButton = ({
       <button
         aria-label={selectionAriaLabel}
         aria-pressed={isSelected}
-        className="relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:pointer-events-none"
+        className="relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none disabled:pointer-events-none"
         disabled={isActionPending}
         onKeyDown={handleSelectionKeyDown}
         onMouseDown={handleSelectionPress}
@@ -266,7 +266,7 @@ const MessageRowSelectionButton = ({
           <span
             className={cn(
               // oxlint-disable-next-line shadcn/no-arbitrary-values -- Bulk-select checkbox sizing with explicit transition properties.
-              "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
+              "flex size-4.5 items-center justify-center rounded-xs border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
               {
                 "border-border": !isSelected,
                 "border-primary bg-primary text-primary-fg": isSelected,
@@ -364,21 +364,13 @@ const MessageRowDetails = ({
             >
               {thread.attachmentCount > 0 && (
                 <span className="inline-flex items-center gap-1">
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-3"
-                    icon={FileAttachmentIcon}
-                  />
+                  <Icon aria-hidden size={12} icon={FileAttachmentIcon} />
                   <span>{thread.attachmentCount}</span>
                 </span>
               )}
               {threaded && (
                 <span className="inline-flex items-center gap-1">
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-3"
-                    icon={MessageMultiple01Icon}
-                  />
+                  <Icon aria-hidden size={12} icon={MessageMultiple01Icon} />
                   <span>{thread.messageCount}</span>
                 </span>
               )}
@@ -392,7 +384,7 @@ const MessageRowDetails = ({
 
       <div className="flex w-full min-w-0 items-center gap-1.5">
         <p
-          className={cn("min-w-0 flex-1 truncate text-left text-body-sm/4.5", {
+          className={cn("min-w-0 flex-1 truncate text-left text-body", {
             "font-medium text-fg": unread,
             "text-muted-fg": !unread,
           })}
@@ -717,7 +709,7 @@ const MessageRowSurface = ({
               badge !== undefined && badge !== null ? openAriaLabel : undefined
             }
             aria-current={isActive ? "true" : undefined}
-            className="absolute inset-0 z-10 rounded-lg border border-transparent text-left focus-visible:z-20 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none"
+            className="absolute inset-0 z-10 rounded-lg border border-transparent text-left focus-visible:z-20 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none"
             data-message-row-trigger
             onClick={handleRowClick}
             onKeyDown={handleRowKeyDown}

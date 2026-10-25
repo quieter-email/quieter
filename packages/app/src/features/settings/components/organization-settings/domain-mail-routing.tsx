@@ -1,7 +1,6 @@
 "use client";
 
 import { Globe02Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { RecordState } from "@quieter/app/features/settings/components/organization-settings/domain-status";
 import type {
   DomainDetail,
@@ -30,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
 import { useQuery } from "@tanstack/react-query";
 import type { UseMutationResult } from "@tanstack/react-query";
 import { useState } from "react";
@@ -120,9 +120,7 @@ const MailModeOptionAction = ({
   if (showMutedMailModeSwitch(manageReason, blockedReason)) {
     return (
       <MutedActionButton
-        icon={
-          <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
-        }
+        icon={<Icon aria-hidden icon={Globe02Icon} />}
         label="Switch"
         reason={getMailModeSwitchReason(manageReason, blockedReason) ?? ""}
       />
@@ -262,9 +260,7 @@ const DomainCatchAllAction = ({
     if (manageReason !== null) {
       return (
         <MutedActionButton
-          icon={
-            <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
-          }
+          icon={<Icon aria-hidden icon={Globe02Icon} />}
           label="Remove"
           reason={manageReason}
           variant="destructive"
@@ -295,9 +291,7 @@ const DomainCatchAllAction = ({
     );
   }
 
-  const globeIcon = (
-    <HugeiconsIcon aria-hidden className="size-4" icon={Globe02Icon} />
-  );
+  const globeIcon = <Icon aria-hidden icon={Globe02Icon} />;
   if (actionReason !== null) {
     return (
       <MutedActionButton

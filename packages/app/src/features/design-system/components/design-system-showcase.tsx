@@ -6,7 +6,6 @@ import {
   Refresh01Icon,
   Tick01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
 import { toastError } from "@quieter/app/lib/error-toast";
@@ -50,6 +49,7 @@ import {
   DrawerTrigger,
 } from "@quieter/ui/drawer";
 import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
@@ -156,7 +156,7 @@ const Section = ({
   title: string;
 }) => (
   <section className="border-t border-border pt-8">
-    <h2 className="text-title-sm tracking-tight text-fg">{title}</h2>
+    <h2 className="text-title-sm font-semibold text-fg">{title}</h2>
     {description === undefined ? null : (
       <p className="mt-1 text-body-sm text-muted-fg">{description}</p>
     )}
@@ -200,7 +200,7 @@ export const DesignSystemShowcase = () => {
     <main className="@container min-h-dvh text-fg">
       <div className="mx-auto w-full max-w-4xl space-y-8 px-6 py-10">
         <header>
-          <h1 className="text-title-lg tracking-tight text-fg">
+          <h1 className="text-title-lg font-semibold text-fg">
             Quieter design system
           </h1>
           <p className="mt-2 max-w-prose text-body-sm text-muted-fg">
@@ -254,6 +254,22 @@ export const DesignSystemShowcase = () => {
         </Section>
 
         <Section
+          description="Product icons share one stroke weight. Small controls use 14px icons, standard controls use 16px, and prominent actions use 20px."
+          title="Icons"
+        >
+          <div className="flex flex-wrap items-center gap-8">
+            {[14, 16, 20].map((size) => (
+              <div className="flex items-center gap-3" key={size}>
+                <Icon icon={Mail01Icon} size={size} />
+                <Icon icon={Refresh01Icon} size={size} />
+                <Icon icon={Tick01Icon} size={size} />
+                <span className="text-caption text-muted-fg">{size}px</span>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        <Section
           description="Every size in the product comes from this scale. No arbitrary sizes: if a design lands between two steps, take the smaller one."
           title="Typography"
         >
@@ -286,7 +302,7 @@ export const DesignSystemShowcase = () => {
                 setSuccessPulse(false);
               }}
             >
-              <HugeiconsIcon aria-hidden icon={Tick01Icon} />
+              <Icon aria-hidden icon={Tick01Icon} />
             </SuccessPulse>
             Try success pulse
           </Button>
@@ -319,19 +335,19 @@ export const DesignSystemShowcase = () => {
           <Row label="Icon, with tooltip">
             <IconButtonTooltip label="Delete">
               <Button aria-label="Delete" size="icon-sm" variant="destructive">
-                <HugeiconsIcon aria-hidden icon={Delete02Icon} />
+                <Icon aria-hidden icon={Delete02Icon} />
               </Button>
             </IconButtonTooltip>
             <IconButtonTooltip label="Mail">
               <Button aria-label="Mail" size="icon" variant="ghost">
-                <HugeiconsIcon aria-hidden icon={Mail01Icon} />
+                <Icon aria-hidden icon={Mail01Icon} />
               </Button>
             </IconButtonTooltip>
           </Row>
           <Row label="Toolbar control">
             <IconButtonTooltip label="Refresh">
               <Button aria-label="Refresh" size="icon" variant="toolbar">
-                <HugeiconsIcon aria-hidden icon={Refresh01Icon} />
+                <Icon aria-hidden icon={Refresh01Icon} />
               </Button>
             </IconButtonTooltip>
           </Row>
@@ -498,13 +514,7 @@ export const DesignSystemShowcase = () => {
               {showPromptContext ? (
                 <div className="flex min-w-0">
                   <ComposerContextChip
-                    icon={
-                      <HugeiconsIcon
-                        aria-hidden
-                        className="size-3"
-                        icon={Mail01Icon}
-                      />
-                    }
+                    icon={<Icon aria-hidden size={12} icon={Mail01Icon} />}
                     label="Planning the autumn release"
                     onRemove={() => {
                       setShowPromptContext(false);
@@ -532,7 +542,7 @@ export const DesignSystemShowcase = () => {
             </PromptComposerFrame>
           </Row>
           <Row label="Token field">
-            <div className="w-80 rounded-md border border-border bg-input px-3 py-2 shadow-sm squircle focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/45">
+            <div className="w-80 rounded-md border border-border bg-input px-3 py-2 shadow-sm squircle focus-within:border-ring focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-bg-raised">
               <TokenField
                 aria-label="Token field"
                 // oxlint-disable-next-line shadcn/no-restyle -- Showcase demonstrates the scrollable field.

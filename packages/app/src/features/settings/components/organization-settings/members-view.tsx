@@ -1,7 +1,6 @@
 "use client";
 
 import { Search01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import {
   formatCount,
   formatRoleLabel,
@@ -19,6 +18,7 @@ import {
   settingsSurfaceVariants,
 } from "@quieter/app/features/settings/components/settings-layout";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { useState } from "react";
 
@@ -87,9 +87,10 @@ export const MembersView = ({
               "relative"
             )}
           >
-            <HugeiconsIcon
+            <Icon
               aria-hidden
-              className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-fg @md:left-6"
+              tone="muted"
+              className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 @md:left-6"
               icon={Search01Icon}
             />
             <TextFieldInput

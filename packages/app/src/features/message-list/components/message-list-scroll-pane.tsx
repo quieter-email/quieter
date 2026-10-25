@@ -1,7 +1,6 @@
 "use client";
 
 import { Loading03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { getAggregateDeliveryStatusFromStatuses } from "@quieter/app/features/message-delivery/domain/delivery-status";
 import { getMessageListDeliveryOptions } from "@quieter/app/features/message-delivery/domain/message-delivery-query";
 import { supportsMessageDelivery } from "@quieter/app/features/message-delivery/domain/message-delivery-support";
@@ -16,6 +15,7 @@ import {
 import { verificationCodesQueryOptions } from "@quieter/app/lib/mail/verification-codes-query";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import type { RouterOutputs } from "@quieter/orpc";
+import { Icon } from "@quieter/ui/icon";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLayoutEffect, useMemo, useRef } from "react";
@@ -580,8 +580,10 @@ export const MessageListScrollPane = ({
       {!list.isError && threadedMessages.length > 0 && (
         <p className="px-2 py-5 text-center text-caption text-muted-fg">
           {list.isFetchingNextPage || list.hasNextPage ? (
-            <HugeiconsIcon
-              className="mx-auto animate-spin text-muted-fg"
+            <Icon
+              animation="spin"
+              tone="muted"
+              className="mx-auto"
               icon={Loading03Icon}
             />
           ) : (

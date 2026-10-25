@@ -9,7 +9,6 @@ import {
   MailReplyAll02Icon,
   SparklesIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import {
   buildComposeDraftFromMessageAction,
@@ -40,6 +39,7 @@ import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query"
 import { orpc } from "@quieter/app/lib/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -237,15 +237,12 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                   type="button"
                   variant="ghost"
                 >
-                  <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+                  <Icon aria-hidden icon={ArrowLeft01Icon} />
                 </Button>
               </IconButtonTooltip>
             </div>
           ) : null}
-          <h1
-            // oxlint-disable-next-line shadcn/no-arbitrary-values -- Optical tracking for the thread subject.
-            className="min-w-0 flex-1 truncate font-sans text-body-lg leading-5.5 font-normal tracking-[-0.01em] text-fg"
-          >
+          <h1 className="line-clamp-2 min-w-0 flex-1 text-title-sm font-semibold break-words text-fg @sm:line-clamp-1">
             {subject}
           </h1>
           {!isSingleMessageThread && (
@@ -385,9 +382,10 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                         aria-live="polite"
                         className="grid min-h-64 place-items-center rounded-xl border border-border bg-control text-body text-muted-fg"
                       >
-                        <HugeiconsIcon
+                        <Icon
                           aria-hidden
-                          className="size-5 animate-spin"
+                          size={20}
+                          animation="spin"
                           icon={Loading03Icon}
                         />
                       </output>
@@ -443,7 +441,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                     type="button"
                     variant="ghost"
                   >
-                    <HugeiconsIcon
+                    <Icon
                       aria-hidden
                       icon={
                         hotkeyLinkedDraftMessage ? Edit01Icon : MailReply02Icon
@@ -472,7 +470,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                         type="button"
                         variant="ghost"
                       >
-                        <HugeiconsIcon aria-hidden icon={MailReplyAll02Icon} />
+                        <Icon aria-hidden icon={MailReplyAll02Icon} />
                         <span className="hidden @sm:inline">Reply all</span>
                       </Button>
                     </IconButtonTooltip>
@@ -491,11 +489,9 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                       type="button"
                       variant="ghost"
                     >
-                      <HugeiconsIcon
+                      <Icon
                         aria-hidden
-                        className={cn({
-                          "animate-spin": suggestReply.isPending,
-                        })}
+                        animation={suggestReply.isPending ? "spin" : undefined}
                         icon={
                           suggestReply.isPending ? Loading03Icon : SparklesIcon
                         }
@@ -525,7 +521,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                       type="button"
                       variant="ghost"
                     >
-                      <HugeiconsIcon aria-hidden icon={ArrowRightDoubleIcon} />
+                      <Icon aria-hidden icon={ArrowRightDoubleIcon} />
                       <span className="hidden @sm:inline">Forward</span>
                     </Button>
                   </IconButtonTooltip>

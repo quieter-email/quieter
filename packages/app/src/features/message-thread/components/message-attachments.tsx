@@ -11,7 +11,6 @@ import {
   Pdf01Icon,
   Video01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type { IconSvgElement } from "@hugeicons/react";
 import {
   connectorsQueryOptions,
@@ -23,6 +22,7 @@ import { rpc } from "@quieter/app/lib/orpc";
 import { getErrorMessage } from "@quieter/app/lib/orpc-errors";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { toast } from "@quieter/ui/toast";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
@@ -322,12 +322,19 @@ export const MessageAttachments = ({
                   variant="secondary"
                 >
                   <span className="flex size-5 shrink-0 items-center justify-center text-muted-fg">
-                    <HugeiconsIcon
+                    <Icon
                       aria-hidden="true"
-                      className={cn("size-3.5", {
-                        "animate-pulse text-fg":
-                          isCalendarPending || areConnectorsLoading,
-                      })}
+                      animation={
+                        isCalendarPending || areConnectorsLoading
+                          ? "pulse"
+                          : undefined
+                      }
+                      size={14}
+                      tone={
+                        isCalendarPending || areConnectorsLoading
+                          ? "default"
+                          : undefined
+                      }
                       icon={CalendarAdd01Icon}
                     />
                   </span>
@@ -354,11 +361,11 @@ export const MessageAttachments = ({
                 variant="secondary"
               >
                 <span className="flex size-5 shrink-0 items-center justify-center text-muted-fg">
-                  <HugeiconsIcon
+                  <Icon
                     aria-hidden="true"
-                    className={cn("size-3.5", {
-                      "animate-pulse text-fg": isDownloadPending,
-                    })}
+                    animation={isDownloadPending ? "pulse" : undefined}
+                    size={14}
+                    tone={isDownloadPending ? "default" : undefined}
                     icon={isDownloadPending ? Download01Icon : typeIcon}
                   />
                 </span>

@@ -6,7 +6,6 @@ import {
   MoreHorizontalIcon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { MessageLabelsMenu } from "@quieter/app/features/message-labels/components/message-labels-menu";
 import type {
   MessageListBulkAction,
@@ -20,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { useLayoutEffect, useRef, useState } from "react";
 
@@ -95,7 +95,7 @@ const MessageListBulkActionButton = ({
       type="button"
       variant={action.destructive === true ? "destructive" : "outline"}
     >
-      <HugeiconsIcon aria-hidden icon={action.icon} />
+      <Icon aria-hidden icon={action.icon} />
     </Button>
   </IconButtonTooltip>
 );
@@ -117,7 +117,7 @@ const MessageListBulkLabelsMenu = ({
           disabled={disabled}
           type="button"
         >
-          <HugeiconsIcon aria-hidden icon={Tag01Icon} />
+          <Icon aria-hidden icon={Tag01Icon} />
         </DropdownMenuTrigger>
       </IconButtonTooltip>
     }
@@ -139,7 +139,7 @@ const MessageListBulkOverflowMenu = ({
         disabled={disabled}
         type="button"
       >
-        <HugeiconsIcon aria-hidden icon={MoreHorizontalIcon} />
+        <Icon aria-hidden icon={MoreHorizontalIcon} />
       </DropdownMenuTrigger>
     </IconButtonTooltip>
 
@@ -152,7 +152,7 @@ const MessageListBulkOverflowMenu = ({
           }}
           tone={action.destructive === true ? "destructive" : undefined}
         >
-          <HugeiconsIcon aria-hidden className="size-4" icon={action.icon} />
+          <Icon aria-hidden icon={action.icon} />
           <span>{action.label}</span>
         </DropdownMenuItem>
       ))}
@@ -229,9 +229,12 @@ export const MessageListSelectionToolbar = ({
         </p>
 
         {pending && (
-          <HugeiconsIcon
+          <Icon
             aria-hidden
-            className="size-3.5 shrink-0 animate-spin text-muted-fg"
+            size={14}
+            animation="spin"
+            tone="muted"
+
             icon={Loading03Icon}
           />
         )}
@@ -271,7 +274,7 @@ export const MessageListSelectionToolbar = ({
             type="button"
             variant="outline"
           >
-            <HugeiconsIcon aria-hidden icon={Cancel01Icon} />
+            <Icon aria-hidden icon={Cancel01Icon} />
           </Button>
         </IconButtonTooltip>
       </div>

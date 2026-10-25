@@ -8,7 +8,6 @@ import {
   Tick01Icon,
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { SenderAvatar } from "@quieter/app/components/sender-avatar";
 import {
   buildComposeDraftFromSavedDraftMessage,
@@ -37,6 +36,7 @@ import type { MessageListItem } from "@quieter/app/lib/mail";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { SuccessPulse } from "@quieter/ui/success-pulse";
 import { TooltipGroup } from "@quieter/ui/tooltip";
@@ -321,7 +321,7 @@ const MessageHeaderActions = ({
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={Edit01Icon} />
+          <Icon aria-hidden icon={Edit01Icon} />
           <span>Draft</span>
         </Button>
       )}
@@ -353,7 +353,7 @@ const MessageHeaderActions = ({
               type="button"
               variant="ghost"
             >
-              <HugeiconsIcon aria-hidden icon={Flag01Icon} />
+              <Icon aria-hidden icon={Flag01Icon} />
             </Button>
           </IconButtonTooltip>
         )}
@@ -378,7 +378,7 @@ const MessageHeaderActions = ({
                 setUnsubscribePhase("idle");
               }}
             >
-              <HugeiconsIcon
+              <Icon
                 aria-hidden
                 icon={
                   unsubscribePhase === "success"
@@ -398,7 +398,7 @@ const MessageHeaderActions = ({
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={ZoomInAreaIcon} />
+          <Icon aria-hidden icon={ZoomInAreaIcon} />
         </Button>
       </IconButtonTooltip>
     </div>
@@ -464,14 +464,11 @@ const MessageExpandButton = ({
       size="icon-sm"
       variant="ghost"
     >
-      <HugeiconsIcon
+      <Icon
         aria-hidden
-        className={cn(
-          "transition-transform duration-(--app-motion-duration-layout) ease-(--app-motion-ease-in-out) motion-reduce:transition-none",
-          {
-            "rotate-180": expanded,
-          }
-        )}
+        className={cn({
+          "rotate-180": expanded,
+        })}
         icon={ArrowDown01Icon}
       />
     </Button>

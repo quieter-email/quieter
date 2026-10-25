@@ -3,7 +3,6 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import type { ButtonProps as BaseUIButtonProps } from "@base-ui/react/button";
 import { Loading03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { createLink } from "@tanstack/react-router";
 import type { LinkComponent } from "@tanstack/react-router";
 import { cva } from "class-variance-authority";
@@ -11,9 +10,10 @@ import type { VariantProps } from "class-variance-authority";
 import type { ComponentRef, ReactNode, Ref } from "react";
 
 import { cn } from "../../lib/cn";
+import { Icon } from "./icon";
 
 export const buttonVariants = cva(
-  "inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-body whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-body font-medium whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     defaultVariants: {
       size: "default",
@@ -42,9 +42,9 @@ export const buttonVariants = cva(
         // follows aria-pressed so callers only pass the state.
         chip: "h-7 px-1.5 text-caption text-muted-fg active:scale-100 aria-pressed:bg-control-active aria-pressed:text-fg",
         default:
-          "bg-primary text-primary-fg shadow-sm hover:bg-primary/90 active:bg-primary/85",
+          "bg-primary text-primary-fg shadow-sm hover:bg-primary-hover active:bg-primary-active",
         destructive:
-          "bg-destructive text-destructive-fg shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
+          "bg-destructive text-destructive-fg shadow-sm hover:bg-destructive-hover active:bg-destructive-active",
         ghost:
           "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-control-active active:text-fg aria-[current=page]:bg-muted aria-[current=page]:text-fg aria-[current=true]:bg-muted aria-[current=true]:text-fg",
         // Segmented option, e.g. the rule-builder choices. The selected look
@@ -64,7 +64,7 @@ export const buttonVariants = cva(
         secondary:
           "bg-secondary text-secondary-fg shadow-sm hover:bg-secondary-hover active:bg-secondary-active",
         toolbar:
-          "rounded-xl border-border bg-control text-muted-fg shadow-xs hover:bg-control-hover hover:text-fg active:bg-control-active active:text-fg [&_svg]:size-3.5",
+          "border-border bg-control text-muted-fg hover:bg-control-hover hover:text-fg active:bg-control-active active:text-fg [&_svg]:size-3.5",
       },
     },
   }
@@ -100,11 +100,7 @@ export const Button = ({
         {props.children}
       </span>
       <span className="col-start-1 row-start-1 inline-flex items-center gap-2">
-        <HugeiconsIcon
-          aria-hidden
-          className="size-4 animate-spin"
-          icon={Loading03Icon}
-        />
+        <Icon aria-hidden animation="spin" icon={Loading03Icon} />
         {pendingLabel}
       </span>
       {pendingLabel === undefined ? (

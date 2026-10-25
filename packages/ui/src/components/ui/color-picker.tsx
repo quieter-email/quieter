@@ -1,12 +1,12 @@
 "use client";
 
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { useId, useRef, useState } from "react";
 import { HexColorInput, HexColorPicker } from "react-colorful";
 
 import { Button } from "./button";
 import { ColorSwatch } from "./color-swatch";
+import { Icon } from "./icon";
 import { inputVariants } from "./input";
 import {
   Popover,
@@ -72,7 +72,7 @@ export const ColorPicker = ({
         render={<Button size="sm" type="button" variant="outline" />}
       >
         <ColorSwatch color={value} ref={swatchRef} shape="square" />
-        <HugeiconsIcon aria-hidden icon={ArrowDown01Icon} />
+        <Icon aria-hidden icon={ArrowDown01Icon} />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-60">
         <PopoverTitle className="sr-only">{label}</PopoverTitle>

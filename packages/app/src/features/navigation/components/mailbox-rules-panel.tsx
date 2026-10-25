@@ -8,7 +8,6 @@ import {
   Edit01Icon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type {
   RuleActionKind,
   MailboxOrganizerContentProps,
@@ -30,6 +29,7 @@ import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { FullPageDialogDescription } from "@quieter/ui/full-page-dialog";
+import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
@@ -275,11 +275,7 @@ const ManagedRuleLabelsEditor = (props: MailboxOrganizerContentProps) => {
                 >
                   <CheckboxIndicator />
                 </Checkbox>
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-3.5 text-muted-fg"
-                  icon={Tag01Icon}
-                />
+                <Icon aria-hidden size={14} tone="muted" icon={Tag01Icon} />
                 {label.name}
               </label>,
             ]
@@ -458,11 +454,7 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
 
   return (
     <div className="flex items-center gap-3 py-2" key={rule.id}>
-      <HugeiconsIcon
-        aria-hidden
-        className="size-4 text-muted-fg"
-        icon={Tag01Icon}
-      />
+      <Icon aria-hidden tone="muted" icon={Tag01Icon} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-body">{rule.name}</p>
         <p className="text-caption text-muted-fg">
@@ -575,7 +567,7 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={Edit01Icon} />
+          <Icon aria-hidden icon={Edit01Icon} />
         </Button>
       </IconButtonTooltip>
       <IconButtonTooltip label={`Move ${rule.name} up`}>
@@ -603,7 +595,7 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={ArrowUp01Icon} />
+          <Icon aria-hidden icon={ArrowUp01Icon} />
         </Button>
       </IconButtonTooltip>
       <IconButtonTooltip label={`Move ${rule.name} down`}>
@@ -631,7 +623,7 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={ArrowDown01Icon} />
+          <Icon aria-hidden icon={ArrowDown01Icon} />
         </Button>
       </IconButtonTooltip>
       <IconButtonTooltip label={`Apply ${rule.name} to existing mail`}>
@@ -660,7 +652,7 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
           type="button"
           variant="ghost"
         >
-          <HugeiconsIcon aria-hidden icon={ArrowRight01Icon} />
+          <Icon aria-hidden icon={ArrowRight01Icon} />
         </Button>
       </IconButtonTooltip>
       <IconButtonTooltip label={`Delete ${rule.name}`}>
@@ -684,7 +676,7 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
           type="button"
           variant="destructive"
         >
-          <HugeiconsIcon aria-hidden icon={Delete01Icon} />
+          <Icon aria-hidden icon={Delete01Icon} />
         </Button>
       </IconButtonTooltip>
     </div>

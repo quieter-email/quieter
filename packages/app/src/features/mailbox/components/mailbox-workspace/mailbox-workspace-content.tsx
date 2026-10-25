@@ -5,7 +5,6 @@ import {
   Mail01Icon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
 import { AgentWorkspaceProvider } from "@quieter/app/features/chat/components/agent-workspace";
 import { AssistantSidebar } from "@quieter/app/features/chat/components/assistant-sidebar";
@@ -36,6 +35,7 @@ import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/comp
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
 import { Text } from "@quieter/ui/text";
 import {
   WorkspaceSection,
@@ -154,11 +154,7 @@ const ComposeWorkspaceLoading = ({
       aria-live="polite"
       className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-3 p-6 text-body text-muted-fg sm:p-8"
     >
-      <HugeiconsIcon
-        aria-hidden
-        className="size-5 animate-spin"
-        icon={Loading03Icon}
-      />
+      <Icon aria-hidden size={20} animation="spin" icon={Loading03Icon} />
       Loading composer…
     </output>
   </div>
@@ -193,11 +189,7 @@ const NoMailboxWorkspace = ({
           to="/settings"
           variant="ghost"
         >
-          <HugeiconsIcon
-            className="size-4 shrink-0"
-            icon={Settings01Icon}
-            strokeWidth={1.5}
-          />
+          <Icon icon={Settings01Icon} />
           Settings
         </LinkButton>
         {setupMode === "managed" ? (
@@ -222,9 +214,11 @@ const NoMailboxWorkspace = ({
             className="w-full max-w-2xl text-center"
             {...workspaceContentMotion}
           >
-            <HugeiconsIcon
+            <Icon
               aria-hidden
-              className="mx-auto size-5 text-muted-fg"
+              size={20}
+              tone="muted"
+              className="mx-auto"
               icon={Mail01Icon}
             />
             <h1 className="mt-5 text-body-lg font-semibold tracking-tight text-fg">
@@ -242,11 +236,9 @@ const NoMailboxWorkspace = ({
                 variant="card"
               >
                 <span className="flex items-center gap-2 text-body font-medium text-fg">
-                  <HugeiconsIcon
+                  <Icon
                     aria-hidden
-                    className={cn("size-4", {
-                      "animate-spin": isConnectingGmail,
-                    })}
+                    animation={isConnectingGmail ? "spin" : undefined}
                     icon={isConnectingGmail ? Loading03Icon : Mail01Icon}
                   />
                   {isConnectingGmail ? "Opening Google" : "Connect Gmail"}
@@ -263,11 +255,7 @@ const NoMailboxWorkspace = ({
                 variant="card"
               >
                 <span className="flex items-center gap-2 text-body font-medium text-fg">
-                  <HugeiconsIcon
-                    aria-hidden
-                    className="size-4"
-                    icon={Mail01Icon}
-                  />
+                  <Icon aria-hidden icon={Mail01Icon} />
                   Set up managed mail
                 </span>
                 <span className="mt-2 block text-body text-muted-fg">
@@ -489,9 +477,10 @@ const MailboxWorkspaceContentInner = ({
                 aria-live="polite"
                 className="flex items-center gap-3 text-body text-muted-fg"
               >
-                <HugeiconsIcon
+                <Icon
                   aria-hidden
-                  className="size-5 animate-spin"
+                  size={20}
+                  animation="spin"
                   icon={Loading03Icon}
                 />
                 Loading snippets…
@@ -594,9 +583,11 @@ const MailboxWorkspaceContentInner = ({
           />
         ) : (
           <WorkspaceSection centered className="hidden" layout="cell">
-            <HugeiconsIcon
+            <Icon
               aria-hidden
-              className="mb-3 size-5 text-muted-fg"
+              size={20}
+              tone="muted"
+              className="mb-3"
               icon={Mail01Icon}
             />
             <p className="text-body text-muted-fg">Select a conversation</p>
@@ -641,11 +632,9 @@ const MailboxWorkspaceContentInner = ({
                 }}
                 type="button"
               >
-                <HugeiconsIcon
+                <Icon
                   aria-hidden
-                  className={cn("size-4", {
-                    "animate-spin": isReconnecting,
-                  })}
+                  animation={isReconnecting ? "spin" : undefined}
                   icon={isReconnecting ? Loading03Icon : Mail01Icon}
                 />
                 Reconnect

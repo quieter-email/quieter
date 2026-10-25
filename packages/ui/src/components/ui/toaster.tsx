@@ -8,22 +8,18 @@ import {
   InformationCircleIcon,
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
+import { Icon } from "./icon";
 import { DEFAULT_TOAST_TIMEOUT, toastManager } from "./toast";
 
 const ToastIcon = ({ type }: { type: string | undefined }) => {
   if (type === "success") {
     return (
       <span className="flex size-4 shrink-0 items-center justify-center text-success">
-        <HugeiconsIcon
-          aria-hidden
-          className="size-4"
-          icon={CheckmarkCircle02Icon}
-        />
+        <Icon aria-hidden icon={CheckmarkCircle02Icon} />
       </span>
     );
   }
@@ -31,7 +27,7 @@ const ToastIcon = ({ type }: { type: string | undefined }) => {
   if (type === "error") {
     return (
       <span className="flex size-4 shrink-0 items-center justify-center text-destructive">
-        <HugeiconsIcon aria-hidden className="size-4" icon={Alert02Icon} />
+        <Icon aria-hidden icon={Alert02Icon} />
       </span>
     );
   }
@@ -39,7 +35,7 @@ const ToastIcon = ({ type }: { type: string | undefined }) => {
   if (type === "warning") {
     return (
       <span className="flex size-4 shrink-0 items-center justify-center text-warning">
-        <HugeiconsIcon aria-hidden className="size-4" icon={Alert02Icon} />
+        <Icon aria-hidden icon={Alert02Icon} />
       </span>
     );
   }
@@ -47,11 +43,7 @@ const ToastIcon = ({ type }: { type: string | undefined }) => {
   if (type === "info") {
     return (
       <span className="flex size-4 shrink-0 items-center justify-center text-primary">
-        <HugeiconsIcon
-          aria-hidden
-          className="size-4"
-          icon={InformationCircleIcon}
-        />
+        <Icon aria-hidden icon={InformationCircleIcon} />
       </span>
     );
   }
@@ -59,11 +51,7 @@ const ToastIcon = ({ type }: { type: string | undefined }) => {
   if (type === "loading") {
     return (
       <span className="flex size-4 shrink-0 items-center justify-center text-muted-fg">
-        <HugeiconsIcon
-          aria-hidden
-          className="size-4 animate-spin"
-          icon={Loading03Icon}
-        />
+        <Icon aria-hidden animation="spin" icon={Loading03Icon} />
       </span>
     );
   }
@@ -117,9 +105,9 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
         </div>
         <Toast.Close
           aria-label="Dismiss"
-          className="absolute top-3 right-3 flex size-7 items-center justify-center rounded-md text-muted-fg transition-transform duration-100 ease-out squircle hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
+          className="absolute top-3 right-3 flex size-7 items-center justify-center rounded-md text-muted-fg transition-transform duration-100 ease-out squircle hover:text-fg focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
         >
-          <HugeiconsIcon aria-hidden className="size-3.5" icon={Cancel01Icon} />
+          <Icon aria-hidden size={14} icon={Cancel01Icon} />
         </Toast.Close>
       </Toast.Content>
     </Toast.Root>
