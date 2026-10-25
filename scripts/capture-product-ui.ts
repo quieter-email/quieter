@@ -243,6 +243,20 @@ try {
       "--exact"
     );
     browser("wait", '[aria-label^="Open conversation:"]');
+    if (phase === "after") {
+      browser("open", new URL("/settings?tab=overview", origin).href);
+      browser("wait", '[aria-label="Mail layout"]');
+      browser("click", '[aria-label="Mail layout"]');
+      browser(
+        "find",
+        "role",
+        "option",
+        "click",
+        "--name",
+        "Two panels",
+        "--exact"
+      );
+    }
     for (const theme of ["light", "dark"] as const) {
       for (const scenario of scenarios) {
         capture({ scenario, theme });
@@ -265,6 +279,92 @@ try {
         theme: name === "compose" || name === "preferences" ? "dark" : "light",
       });
     }
+    if (phase === "after") {
+      browser("set", "viewport", "1440", "960");
+      browser("open", new URL("/settings?tab=overview", origin).href);
+      browser("wait", '[aria-label="Mail layout"]');
+      browser("click", '[aria-label="Mail layout"]');
+      browser(
+        "find",
+        "role",
+        "option",
+        "click",
+        "--name",
+        "One panel",
+        "--exact"
+      );
+      for (const theme of ["light", "dark"] as const) {
+        for (const scenario of scenarios.filter((item) =>
+          ["inbox", "conversation"].includes(item.name)
+        )) {
+          capture({
+            scenario: { ...scenario, name: `one-panel-${scenario.name}` },
+            theme,
+          });
+        }
+      }
+      for (const scenario of [
+        {
+          name: "one-panel-unified-inbox",
+          path: "/?view=all-inboxes&mailbox=inbox&mailboxId=demo%3Amailbox",
+          ready: '[aria-label^="Open conversation:"]',
+        },
+        {
+          name: "one-panel-unified-conversation",
+          path: "/?view=all-inboxes&mailboxId=demo%3Amailbox&messageId=demo-stripe-1&threadId=demo-stripe-1",
+          ready: "article h1",
+        },
+        {
+          name: "mail-layout-options",
+          path: "/settings?tab=overview",
+          ready: '[aria-label="Mail layout"]',
+          steps: [["click", '[aria-label="Mail layout"]']],
+        },
+        {
+          name: "one-panel-selected-important",
+          path: "/?mailbox=inbox&mailboxId=demo%3Amailbox",
+          ready: '[aria-label^="Open conversation:"]',
+          steps: [
+            ["click", 'li[data-index="0"] [aria-label="Select conversation"]'],
+          ],
+        },
+        {
+          name: "message-controls",
+          path: "/?mailboxId=demo%3Amailbox&messageId=demo-slack-1&threadId=demo-slack-1",
+          ready: '[aria-label="Unsubscribe"]',
+        },
+        {
+          name: "message-controls-requested",
+          path: "/?mailboxId=demo%3Amailbox&messageId=demo-slack-1&threadId=demo-slack-1",
+          ready: '[aria-label="Unsubscribe"]',
+          steps: [
+            ["click", '[aria-label="Unsubscribe"]'],
+            ["wait", '[aria-label="Unsubscribe requested"]'],
+            ["click", '[aria-label="Mark message as important"]'],
+            ["wait", '[aria-label="Mark message as not important"]'],
+          ],
+        },
+        {
+          name: "one-panel-inbox-assistant",
+          path: "/?mailbox=inbox&mailboxId=demo%3Amailbox",
+          ready: '[aria-label^="Open conversation:"]',
+          steps: [
+            [
+              "find",
+              "role",
+              "button",
+              "click",
+              "--name",
+              "Expand assistant sidebar",
+              "--exact",
+            ],
+            ["wait", '[aria-label="Collapse assistant sidebar"]'],
+          ],
+        },
+      ] satisfies readonly CaptureScenario[]) {
+        capture({ scenario, theme: "light" });
+      }
+    }
     browser("cookies", "clear");
     browser("eval", "localStorage.clear()");
     browser("set", "viewport", "1440", "960");
@@ -282,6 +382,30 @@ try {
     browser("wait", "--text", "What brings you here");
     browser("screenshot", path.resolve(output, "onboarding-dark.png"));
     captures.push("onboarding-dark.png");
+    if (phase === "after") {
+      browser("find", "label", "Name", "fill", "Sam Rivera", "--exact");
+      browser("find", "role", "button", "click", "--name", "Finish", "--exact");
+      browser("wait", "--text", "Connect a mailbox");
+      browser("set", "media", "dark", "reduced-motion");
+      browser("eval", 'localStorage.setItem("quieter-color-mode", "dark")');
+      browser("open", origin.href);
+      browser(
+        "find",
+        "role",
+        "button",
+        "click",
+        "--name",
+        "Set up managed mail Use your own domain with managed mailboxes and API keys.",
+        "--exact"
+      );
+      browser("wait", "--text", "Choose managed access");
+      browser("set", "viewport", "390", "844");
+      browser(
+        "screenshot",
+        path.resolve(output, "managed-setup-dark-narrow.png")
+      );
+      captures.push("managed-setup-dark-narrow.png");
+    }
   }
   browser("open", new URL("/design-system", origin).href);
   browser("wait", "h1");

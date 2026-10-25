@@ -22,6 +22,7 @@ import type { ReactNode } from "react";
 type MessageDetailProps = {
   activeMailbox: MailboxCategory;
   detailOnly?: boolean;
+  showDesktopBack?: boolean;
   composeDemoMode?: boolean;
   composeManagedDemoMode?: boolean;
   composePersistDrafts?: boolean;
@@ -43,6 +44,7 @@ type MessageDetailProps = {
 export const MessageDetail = ({
   activeMailbox,
   detailOnly,
+  showDesktopBack,
   composeDemoMode,
   composeManagedDemoMode,
   composePersistDrafts,
@@ -94,6 +96,7 @@ export const MessageDetail = ({
         <MessageView
           activeMailbox={activeMailbox}
           detailOnly={detailOnly}
+          showDesktopBack={showDesktopBack}
           composeDemoMode={composeDemoMode}
           composeManagedDemoMode={composeManagedDemoMode}
           composePersistDrafts={composePersistDrafts}

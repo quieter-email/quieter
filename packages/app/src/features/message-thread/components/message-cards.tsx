@@ -5,6 +5,7 @@ import {
   Edit01Icon,
   NotificationOff01Icon,
   Flag01Icon,
+  FlagOffIcon,
   Tick01Icon,
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons";
@@ -38,7 +39,6 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { SuccessPulse } from "@quieter/ui/success-pulse";
 import { TooltipGroup } from "@quieter/ui/tooltip";
 import { domAnimation, LazyMotion } from "motion/react";
 import { useState } from "react";
@@ -285,13 +285,15 @@ const MessageHeaderActions = ({
   const [unsubscribePhase, setUnsubscribePhase] = useState<
     "idle" | "pending" | "success"
   >("idle");
+  const unsubscribeRequested =
+    message.unsubscribeStatus === "requested" || unsubscribePhase === "success";
   let unsubscribeLabel: string =
     messageUnsubscribeLabels[onUnsubscribe?.kind ?? "mailto"];
-  if (unsubscribePhase === "success") {
+  if (unsubscribeRequested) {
     unsubscribeLabel = "Unsubscribe requested";
   }
   const handleUnsubscribe = async () => {
-    if (!onUnsubscribe || unsubscribePhase !== "idle") {
+    if (!onUnsubscribe || unsubscribePhase !== "idle" || unsubscribeRequested) {
       return;
     }
     setUnsubscribePhase("pending");
@@ -306,11 +308,7 @@ const MessageHeaderActions = ({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center justify-start gap-1 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover/message:opacity-100 focus-within:opacity-100 @md:justify-end pointer-coarse:opacity-100",
-        {
-          "opacity-0": unsubscribePhase === "idle",
-          "opacity-100": unsubscribePhase !== "idle",
-        },
+        "flex flex-wrap items-center justify-start gap-1 @md:justify-end",
         className
       )}
     >
@@ -353,40 +351,37 @@ const MessageHeaderActions = ({
               type="button"
               variant="ghost"
             >
-              <Icon aria-hidden icon={Flag01Icon} />
+              <Icon
+                aria-hidden
+                icon={message.isImportant === true ? Flag01Icon : FlagOffIcon}
+                tone={message.isImportant === true ? "default" : "muted"}
+              />
             </Button>
           </IconButtonTooltip>
         )}
-      {(onUnsubscribe !== undefined || unsubscribePhase !== "idle") && (
+      {(onUnsubscribe !== undefined ||
+        unsubscribePhase !== "idle" ||
+        unsubscribeRequested) && (
         <IconButtonTooltip label={unsubscribeLabel}>
           <Button
             aria-label={unsubscribeLabel}
             disabled={
-              unsubscribePhase !== "idle" ||
+              unsubscribeRequested ||
               (isPending === true && onUnsubscribe?.kind !== "url")
             }
             onClick={() => {
               void handleUnsubscribe();
             }}
             size="icon-sm"
+            pending={unsubscribePhase === "pending"}
             type="button"
             variant="ghost"
           >
-            <SuccessPulse
-              active={unsubscribePhase === "success"}
-              onComplete={() => {
-                setUnsubscribePhase("idle");
-              }}
-            >
-              <Icon
-                aria-hidden
-                icon={
-                  unsubscribePhase === "success"
-                    ? Tick01Icon
-                    : NotificationOff01Icon
-                }
-              />
-            </SuccessPulse>
+            <Icon
+              aria-hidden
+              icon={unsubscribeRequested ? Tick01Icon : NotificationOff01Icon}
+              tone={unsubscribeRequested ? "success" : undefined}
+            />
           </Button>
         </IconButtonTooltip>
       )}
@@ -534,6 +529,7 @@ const ThreadMessageCard = ({
           }
           headerActions={
             <MessageHeaderActions
+              key={`${mailboxId}:${message.id}`}
               message={message}
               onSetImportance={onSetImportance}
               onContinueDraft={linkedDraftMessage ? openLinkedDraft : undefined}
@@ -639,6 +635,7 @@ export const SingleMessageCard = ({
         }
         headerActions={
           <MessageHeaderActions
+            key={`${mailboxId}:${message.id}`}
             message={message}
             onSetImportance={onSetImportance}
             onContinueDraft={linkedDraftMessage ? openLinkedDraft : undefined}

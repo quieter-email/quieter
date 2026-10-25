@@ -6,6 +6,7 @@ import type { ReactNode, Ref } from "react";
 
 import { cn } from "../../lib/cn";
 import { Icon } from "./icon";
+import { Text } from "./text";
 
 export const settingsSurfaceVariants = cva("", {
   variants: {
@@ -49,9 +50,9 @@ export const SettingsPageHeader = ({
   <div className="@container">
     <header className="flex flex-col gap-3 @md:flex-row @md:items-end @md:justify-between">
       <div className="min-w-0">
-        <h1 className="truncate font-sans text-body-lg font-medium text-fg">
+        <Text as="h1" size="lg" truncate weight="medium">
           {title}
-        </h1>
+        </Text>
         {children !== undefined && children !== null ? (
           <div className="mt-2 max-w-2xl text-body-sm/5 text-muted-fg">
             {children}
@@ -81,7 +82,9 @@ export const SettingsSectionLayout = ({
       (description !== undefined && description !== null)) && (
       <div>
         {(title ?? "") === "" ? null : (
-          <h2 className="truncate text-body-sm font-medium text-fg">{title}</h2>
+          <Text as="h2" size="sm" truncate weight="medium">
+            {title}
+          </Text>
         )}
         {description !== undefined && description !== null ? (
           <div className="mt-1 max-w-3xl text-body-sm/5 text-muted-fg">

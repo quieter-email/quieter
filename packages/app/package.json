@@ -234,6 +234,7 @@
     "./features/settings/domain/billing": "./src/features/settings/domain/billing.ts",
     "./features/settings/domain/demo-mode-setting": "./src/features/settings/domain/demo-mode-setting.ts",
     "./features/settings/domain/external-images-setting": "./src/features/settings/domain/external-images-setting.ts",
+    "./features/settings/domain/mail-layout-setting": "./src/features/settings/domain/mail-layout-setting.ts",
     "./features/settings/domain/managed-demo-mode-setting": "./src/features/settings/domain/managed-demo-mode-setting.ts",
     "./features/settings/domain/organization-settings-view": "./src/features/settings/domain/organization-settings-view.ts",
     "./features/settings/domain/settings-destination": "./src/features/settings/domain/settings-destination.ts",

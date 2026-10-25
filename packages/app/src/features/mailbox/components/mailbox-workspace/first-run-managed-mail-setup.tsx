@@ -46,8 +46,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Text } from "@quieter/ui/text";
 import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
+import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
@@ -91,13 +93,13 @@ const FirstRunSetupHeader = ({
         <Icon aria-hidden icon={ArrowLeft01Icon} />
         Back
       </Button>
-      <h1 className="text-body-lg font-semibold tracking-tight text-fg">
+      <Text as="h1" size="lg" weight="medium">
         Set up managed mail
-      </h1>
-      <p className="mt-1 max-w-2xl text-body text-muted-fg">
+      </Text>
+      <Text className="mt-1 max-w-2xl" size="sm" tone="muted">
         Send and receive from your own domain with managed mailboxes and API
         keys.
-      </p>
+      </Text>
     </div>
     <Select
       items={organizations.map((organization) => ({
@@ -647,7 +649,10 @@ export const FirstRunManagedMailSetup = ({
   } satisfies Record<(typeof setupSteps)[number]["id"], boolean>;
 
   return (
-    <div className="@container mx-auto flex max-h-[calc(100dvh-4rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-border bg-bg-raised/88 text-left shadow-2xl backdrop-blur-xl">
+    <WorkspaceSection
+      className="@container mx-auto h-full w-full max-w-5xl lg:max-h-[calc(100dvh-4rem)]"
+      layout="surface"
+    >
       <FirstRunSetupHeader
         onBack={onBack}
         onOrganizationChange={(nextOrganizationId) => {
@@ -729,6 +734,6 @@ export const FirstRunManagedMailSetup = ({
           />
         </div>
       </div>
-    </div>
+    </WorkspaceSection>
   );
 };

@@ -13,6 +13,11 @@ import {
   useExternalImagesEnabled,
 } from "@quieter/app/features/settings/domain/external-images-setting";
 import {
+  MAIL_LAYOUT_OPTIONS,
+  setMailLayout,
+  useMailLayout,
+} from "@quieter/app/features/settings/domain/mail-layout-setting";
+import {
   setManagedDemoModeEnabled,
   useManagedDemoModeEnabled,
 } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
@@ -48,6 +53,7 @@ const COLOR_MODE_OPTIONS: { label: string; value: ConfigColorMode }[] = [
 
 export const PreferencesSettingsPanel = () => {
   const { configColorMode, isMounted, setColorMode } = useColorMode();
+  const mailLayout = useMailLayout();
   const externalImagesEnabled = useExternalImagesEnabled();
   const { openKeyboardShortcuts } = useKeyboardShortcuts();
   return (
@@ -96,6 +102,40 @@ export const PreferencesSettingsPanel = () => {
           <SettingsRow action={<ThemePicker />} title="Theme">
             Choose a look for your workspace. Your light and dark choices are
             remembered on this device.
+          </SettingsRow>
+          <SettingsRow
+            title="Mail layout"
+            action={
+              <Select
+                items={MAIL_LAYOUT_OPTIONS}
+                value={mailLayout}
+                onValueChange={(value) => {
+                  const option = MAIL_LAYOUT_OPTIONS.find(
+                    (item) => item.value === value
+                  );
+                  if (option) {
+                    setMailLayout(option.value);
+                  }
+                }}
+              >
+                <SelectTrigger
+                  aria-label="Mail layout"
+                  className="w-36"
+                  size="sm"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  {MAIL_LAYOUT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            }
+          >
+            Choose a layout for this device. Small screens use one panel.
           </SettingsRow>
           <SettingsRow
             action={

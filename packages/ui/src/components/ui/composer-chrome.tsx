@@ -22,6 +22,19 @@ export const PromptComposerFrame = ({
   />
 );
 
+export const ComposerActionBar = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<"div">) => (
+  <div
+    className={cn(
+      "flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-border bg-control p-1.5 squircle",
+      className
+    )}
+    {...props}
+  />
+);
+
 export const ComposerContextChip = ({
   disabled,
   icon,

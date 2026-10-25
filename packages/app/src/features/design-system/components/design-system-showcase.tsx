@@ -2,8 +2,10 @@
 
 import {
   Delete02Icon,
+  FileAttachmentIcon,
   Mail01Icon,
   Refresh01Icon,
+  Search01Icon,
   Tick01Icon,
 } from "@hugeicons/core-free-icons";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
@@ -25,6 +27,7 @@ import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
 import { useColorMode } from "@quieter/ui/color-mode";
 import {
+  ComposerActionBar,
   ComposerContextChip,
   PromptComposerFrame,
 } from "@quieter/ui/composer-chrome";
@@ -53,6 +56,10 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
+import {
+  MailListRowDetails,
+  mailListRowFrameVariants,
+} from "@quieter/ui/mail-list-row";
 import { Pill } from "@quieter/ui/pill";
 import type { PillTone } from "@quieter/ui/pill";
 import {
@@ -72,6 +79,7 @@ import {
 } from "@quieter/ui/settings-layout";
 import { SuccessPulse } from "@quieter/ui/success-pulse";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
+import { Text } from "@quieter/ui/text";
 import { Textarea } from "@quieter/ui/textarea";
 import { ThemePicker } from "@quieter/ui/theme-picker";
 import { toast } from "@quieter/ui/toast";
@@ -156,7 +164,9 @@ const Section = ({
   title: string;
 }) => (
   <section className="border-t border-border pt-8">
-    <h2 className="truncate text-body-lg font-medium text-fg">{title}</h2>
+    <Text as="h2" size="lg" truncate weight="medium">
+      {title}
+    </Text>
     {description === undefined ? null : (
       <p className="mt-1 text-body-sm text-muted-fg">{description}</p>
     )}
@@ -200,9 +210,9 @@ export const DesignSystemShowcase = () => {
     <main className="@container min-h-dvh text-fg">
       <div className="mx-auto w-full max-w-4xl space-y-8 px-6 py-10">
         <header>
-          <h1 className="truncate text-body-lg font-medium text-fg">
+          <Text as="h1" size="lg" truncate weight="medium">
             Quieter design system
-          </h1>
+          </Text>
           <p className="mt-2 max-w-prose text-body-sm text-muted-fg">
             Every control the product composes from. If a surface needs
             something that is not here, extend a primitive rather than inventing
@@ -284,6 +294,89 @@ export const DesignSystemShowcase = () => {
                 </span>
               </div>
             ))}
+          </div>
+          <Row label="Product headings">
+            <Text as="h3" size="lg" weight="medium">
+              Workspace heading
+            </Text>
+            <Text as="h3" size="title" weight="medium">
+              Welcome back
+            </Text>
+          </Row>
+          <Row label="Dense text">
+            <Text size="sm" weight="medium">
+              Section heading
+            </Text>
+            <Text size="sm" tone="muted">
+              Supporting text
+            </Text>
+          </Row>
+          <Row label="Truncated heading">
+            <Text
+              as="h3"
+              className="max-w-48"
+              size="sm"
+              truncate
+              weight="medium"
+            >
+              A long heading keeps its place without wrapping onto another line
+            </Text>
+          </Row>
+        </Section>
+
+        <Section
+          description="Stacked rows keep two lines. Adaptive rows place the sender, subject, and metadata on one line when their list container is wide enough."
+          title="Mail list rows"
+        >
+          <div className="@container space-y-3">
+            <div
+              className={mailListRowFrameVariants({
+                accent: "yellow",
+                layout: "stacked",
+              })}
+            >
+              <MailListRowDetails
+                layout="stacked"
+                metadata={
+                  <Pill size="xs" tone="neutral">
+                    <span className="inline-flex items-center gap-1 tabular-nums">
+                      <Icon aria-hidden icon={FileAttachmentIcon} size={12} />2
+                    </span>
+                  </Pill>
+                }
+                sender="Nora Patel"
+                senderEmail="nora@example.test"
+                subject="The updated project files are ready for your review"
+                subjectTrailing={
+                  <Pill size="xs" tone="blue">
+                    Work
+                  </Pill>
+                }
+                timestamp="10:42"
+                unread
+              />
+            </div>
+            <div
+              className={mailListRowFrameVariants({
+                accent: "yellow",
+                layout: "adaptive",
+              })}
+            >
+              <MailListRowDetails
+                active
+                badge={
+                  <Pill size="xs" tone="purple">
+                    Team
+                  </Pill>
+                }
+                layout="adaptive"
+                sender="Alex Morgan"
+                senderEmail="alex@example.test"
+                senderPrefix="To "
+                subject="A longer subject stays on one line and truncates when the list gets narrower"
+                timestamp="Yesterday"
+              />
+            </div>
           </div>
         </Section>
 
@@ -473,6 +566,21 @@ export const DesignSystemShowcase = () => {
               size="sm"
             />
           </Row>
+          <Row label="Search input">
+            <InputGroup className="w-64">
+              <InputAddon
+                aria-hidden
+                className="ml-3 flex shrink-0 items-center"
+              >
+                <Icon icon={Search01Icon} size={14} tone="muted" />
+              </InputAddon>
+              <Input
+                aria-label="Search samples"
+                chrome="attached"
+                placeholder="Search"
+              />
+            </InputGroup>
+          </Row>
           <Row label="Input, invalid">
             <Input
               aria-invalid
@@ -540,6 +648,19 @@ export const DesignSystemShowcase = () => {
                 <Button size="compact">Send</Button>
               </div>
             </PromptComposerFrame>
+          </Row>
+          <Row label="Composer actions">
+            <ComposerActionBar className="w-80 max-w-full">
+              <Button className="min-w-0 flex-1" size="auto" variant="ghost">
+                <Icon aria-hidden icon={Mail01Icon} />
+                <Text as="span" size="sm" tone="muted" truncate>
+                  Reply to Alex
+                </Text>
+              </Button>
+              <Button size="sm" variant="ghost">
+                Forward
+              </Button>
+            </ComposerActionBar>
           </Row>
           <Row label="Token field">
             <div className="w-80 rounded-md border border-border bg-input px-3 py-2 shadow-sm squircle focus-within:border-ring focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-bg-raised">

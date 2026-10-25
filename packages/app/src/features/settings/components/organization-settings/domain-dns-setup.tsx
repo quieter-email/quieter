@@ -48,29 +48,19 @@ const copyDnsValue = async (value: string) => {
 };
 
 const DnsCopyCell = ({ value }: { value: string }) => (
-  <button
+  <Button
     aria-label={`Copy ${value}`}
-    className={cn(
-      "max-w-full min-w-0 rounded-md px-1.5 py-0.5 text-left font-mono text-caption text-fg squircle",
-      // oxlint-disable-next-line shadcn/no-arbitrary-values -- Explicit transition properties for the copy affordance.
-      "transition-[transform,background-color] duration-100 ease-out",
-      "hover:bg-muted/70",
-      "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
-    )}
+    className="max-w-full min-w-0"
     onClick={() => {
-      void (async () => {
-        try {
-          await copyDnsValue(value);
-        } catch {
-          /* clipboard errors are surfaced in copyDnsValue */
-        }
-      })();
+      void copyDnsValue(value);
     }}
+    size="auto"
     title={`Copy ${value}`}
     type="button"
+    variant="ghost"
   >
-    <span className="block truncate">{value}</span>
-  </button>
+    <code className="block truncate font-mono text-caption">{value}</code>
+  </Button>
 );
 
 const getStatusSectionClass = (tone: DomainStatusTone) => {

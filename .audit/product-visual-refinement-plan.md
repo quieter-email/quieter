@@ -25,11 +25,14 @@ Throughput checkpoint. Capture the baseline first, then verify shared changes in
 - [x] Simplify typography with smaller, consistent type and single-line title truncation.
 - [x] Restore the original desktop/control radius values and corner shaping.
 - [x] Remove the single mobile workspace's outer frame and gutter through the shared recipe.
-- [ ] Ground the existing device preferences, mailbox routing, unified inbox, and row virtualization paths.
-- [ ] Sketch two mail-layout designs and choose the smaller complete contract.
-- [ ] Add a remembered Mail layout preference with two panels as the default.
-- [ ] Reuse the existing list/detail paths for a full-width one-panel mode, including Back, keyboard, and browser history.
-- [ ] Make rows shorter and horizontal when the list has enough width, retaining metadata and selection behavior.
+- [x] Ground the existing device preferences, mailbox routing, unified inbox, and row virtualization paths.
+- [x] Sketch two mail-layout designs and choose the smaller complete contract.
+- [x] Add a remembered Mail layout preference with two panels as the default.
+- [x] Reuse the existing list/detail paths for a full-width one-panel mode, including Back, keyboard, and browser history.
+- [x] Make rows shorter and horizontal when the list has enough width, retaining metadata and selection behavior.
+- [x] Consolidate row presentation, headings, composer actions, search fields, setup frames, and copy controls in shared components.
+- [x] Keep the golden importance accent visible over selected row backgrounds.
+- [x] Keep unsubscribe confirmation present and make the importance icon reflect its saved state.
 - [ ] Verify both layouts, both inbox paths, narrow screens, and resizing; refresh review images and publish the PR update.
 
 Throughput checkpoint. Ground persistence and both mailbox paths before implementation. Geometry and typography are complete; one writer now owns the mail-layout source changes so row and visibility decisions stay coherent. Read-only architecture candidates write separate scratch artifacts. The lead owns browser verification, screenshots, and publication. The existing list controllers, provider adapters, route state, and enrichment remain the source of mail behavior.

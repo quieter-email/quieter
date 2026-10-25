@@ -32,6 +32,7 @@ import type { MailboxWorkspaceView } from "@quieter/app/features/mailbox/domain/
 import { LabelsWorkspacePanel } from "@quieter/app/features/message-labels/components/labels-workspace-panel";
 import { MailSidebar } from "@quieter/app/features/navigation/components/mail-sidebar";
 import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/components/mailbox-switcher";
+import { useMailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -180,11 +181,16 @@ const NoMailboxWorkspace = ({
         animate={{ filter: "blur(0px)", opacity: 1, scale: 1 }}
         exit={{ filter: "blur(14px)", opacity: 0, scale: 0.96 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
-        className="absolute inset-0 flex items-center justify-center overflow-y-auto px-6 py-8"
+        className={cn(
+          "absolute inset-0 flex items-center justify-center overflow-y-auto lg:px-6 lg:py-8",
+          { "px-6 py-8": setupMode !== "managed" }
+        )}
       >
         <LinkButton
           aria-label="Settings"
-          className="group absolute bottom-5 left-5 justify-start"
+          className={cn("group absolute bottom-5 left-5 justify-start", {
+            "max-lg:hidden": setupMode === "managed",
+          })}
           search={{ from: "/" }}
           to="/settings"
           variant="ghost"
@@ -193,7 +199,10 @@ const NoMailboxWorkspace = ({
           Settings
         </LinkButton>
         {setupMode === "managed" ? (
-          <m.div className="w-full" {...workspaceContentMotion}>
+          <m.div
+            className="h-full w-full lg:h-auto"
+            {...workspaceContentMotion}
+          >
             <FirstRunManagedMailSetup
               onBack={() => {
                 setSetupMode("choice");
@@ -221,9 +230,9 @@ const NoMailboxWorkspace = ({
               className="mx-auto"
               icon={Mail01Icon}
             />
-            <h1 className="mt-5 text-body-lg font-semibold tracking-tight text-fg">
+            <Text as="h1" className="mt-5" size="lg" weight="medium">
               Connect a mailbox
-            </h1>
+            </Text>
             <p className="mx-auto mt-2 max-w-md text-body text-muted-fg">
               Connect Gmail, or set up managed mail to send and receive from
               your own domain with managed mailboxes and API keys.
@@ -325,6 +334,8 @@ const MailboxWorkspaceContentInner = ({
   selectedView,
   signature,
 }: MailboxWorkspaceContentProps) => {
+  const mailLayout = useMailLayout();
+  const onePanelDesktop = mailLayout === "one-panel";
   const messageId = useMailboxMessageId() ?? null;
   const setMailboxSearch = useMailboxSearchActions();
   const allInboxesActive = selectedView === "all-inboxes";
@@ -498,12 +509,21 @@ const MailboxWorkspaceContentInner = ({
     );
   } else if (allInboxesActive) {
     mailboxContent = (
-      <div className={messagePanelsClassName}>
+      <div
+        className={cn(messagePanelsClassName, {
+          "lg:grid-cols-1": onePanelDesktop,
+        })}
+      >
         <WorkspaceSection
-          className={cn({ flex: !messageId, hidden: !!messageId })}
+          className={cn({
+            flex: !messageId,
+            hidden: !!messageId,
+            "lg:hidden": onePanelDesktop && !!messageId,
+          })}
           layout="cell"
         >
           <UnifiedInboxPanel
+            wideCompactRows={onePanelDesktop}
             activeMailbox={activeMailbox}
             activeMailboxId={selectedMailboxId}
             activeMessageId={messageId}
@@ -547,7 +567,8 @@ const MailboxWorkspaceContentInner = ({
                 {
                   replace:
                     !!messageId ||
-                    !window.matchMedia("(max-width: 1023.98px)").matches,
+                    (!onePanelDesktop &&
+                      !window.matchMedia("(max-width: 1023.98px)").matches),
                 }
               );
             }}
@@ -557,6 +578,7 @@ const MailboxWorkspaceContentInner = ({
         </WorkspaceSection>
         {messageId ? (
           <MailboxMessagesPanel
+            mailLayout={mailLayout}
             detailOnly
             activeMailbox={activeMailbox}
             senderMailbox={composeMailbox}
@@ -582,7 +604,11 @@ const MailboxWorkspaceContentInner = ({
             signature={signature}
           />
         ) : (
-          <WorkspaceSection centered className="hidden" layout="cell">
+          <WorkspaceSection
+            centered
+            className={cn("hidden", { "lg:hidden": onePanelDesktop })}
+            layout="cell"
+          >
             <Icon
               aria-hidden
               size={20}
@@ -680,8 +706,13 @@ const MailboxWorkspaceContentInner = ({
     );
   } else {
     mailboxContent = (
-      <div className={messagePanelsClassName}>
+      <div
+        className={cn(messagePanelsClassName, {
+          "lg:grid-cols-1": onePanelDesktop,
+        })}
+      >
         <MailboxMessagesPanel
+          mailLayout={mailLayout}
           activeMailbox={activeMailbox}
           senderMailbox={composeMailbox}
           currentUserEmail={currentUserEmail}

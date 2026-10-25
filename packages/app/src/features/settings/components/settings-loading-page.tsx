@@ -1,6 +1,7 @@
 import { LoadingSpinner } from "@quieter/app/components/loading-spinner";
 import { SETTINGS_TITLES } from "@quieter/app/features/settings/domain/settings-navigation";
 import type { SettingsTab } from "@quieter/app/features/settings/domain/settings-tab";
+import { Text } from "@quieter/ui/text";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 
 export const SettingsLoadingPage = ({
@@ -43,9 +44,9 @@ export const SettingsLoadingPage = ({
     <main className="relative min-w-0 flex-1">
       <WorkspaceSection>
         <div className="mx-auto w-full max-w-180 space-y-8 px-5 py-8 md:px-8 md:py-14">
-          <h1 className="truncate text-body-lg font-medium">
+          <Text as="h1" size="lg" truncate weight="medium">
             {SETTINGS_TITLES[tab]}
-          </h1>
+          </Text>
           <output
             aria-label="Loading settings"
             className="flex min-h-64 items-center justify-center"

@@ -72,6 +72,7 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
+import { Text } from "@quieter/ui/text";
 import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -582,9 +583,9 @@ export const LabelsWorkspacePanel = ({
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
         <div className="mb-6 flex items-center justify-between gap-4">
-          <h1 className="min-w-0 truncate font-sans text-body-lg font-medium text-fg">
+          <Text as="h1" className="min-w-0" size="lg" truncate weight="medium">
             Labels
-          </h1>
+          </Text>
           <Button
             aria-haspopup="dialog"
             disabled={!canManage || !isNonemptyMailboxId(mailboxId)}

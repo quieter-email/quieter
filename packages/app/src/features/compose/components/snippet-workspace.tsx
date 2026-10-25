@@ -33,6 +33,7 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
@@ -178,9 +179,15 @@ export const SnippetWorkspace = ({
                 <Icon icon={SidebarLeftIcon} />
               </Button>
             </IconButtonTooltip>
-            <h1 className="min-w-0 flex-1 truncate text-body-lg font-medium text-fg">
+            <Text
+              as="h1"
+              className="min-w-0 flex-1"
+              size="lg"
+              truncate
+              weight="medium"
+            >
               Snippets
-            </h1>
+            </Text>
             <Button
               onClick={() => {
                 setEditingId(null);
@@ -202,23 +209,24 @@ export const SnippetWorkspace = ({
             <span className="sr-only" id="snippet-workspace-search-label">
               Search snippets
             </span>
-            <Icon
-              size={14}
-              tone="muted"
-              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
-              icon={Search01Icon}
-            />
-            <Input
-              aria-labelledby="snippet-workspace-search-label"
-              // oxlint-disable-next-line shadcn/no-restyle -- Search input leaves room for its leading icon.
-              className="pl-9"
-              id="snippet-workspace-search"
-              onChange={(event) => {
-                setSearch(event.currentTarget.value);
-              }}
-              placeholder="Search snippets"
-              value={search}
-            />
+            <InputGroup>
+              <InputAddon
+                aria-hidden
+                className="ml-3 flex shrink-0 items-center"
+              >
+                <Icon icon={Search01Icon} size={14} tone="muted" />
+              </InputAddon>
+              <Input
+                aria-labelledby="snippet-workspace-search-label"
+                chrome="attached"
+                id="snippet-workspace-search"
+                onChange={(event) => {
+                  setSearch(event.currentTarget.value);
+                }}
+                placeholder="Search snippets"
+                value={search}
+              />
+            </InputGroup>
           </label>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto p-2">

@@ -38,6 +38,7 @@
     "./icons": "./src/components/ui/icons.tsx",
     "./input": "./src/components/ui/input.tsx",
     "./input-group": "./src/components/ui/input-group.tsx",
+    "./mail-list-row": "./src/components/ui/mail-list-row.tsx",
     "./number-field": "./src/components/ui/number-field.tsx",
     "./popover": "./src/components/ui/popover.tsx",
     "./pill": "./src/components/ui/pill.tsx",

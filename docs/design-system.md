@@ -26,6 +26,8 @@ Before changing a UI, read the relevant component and its closest existing calle
 | Compact toggle chip or segmented option | `Button variant="chip"` or `variant="option"` with `aria-pressed` |
 | Icon action | Icon-sized `Button`, concise `aria-label`, `IconButtonTooltip` |
 | Product icon | `Icon` from `@quieter/ui/icon`, with `size`, `tone`, and `animation` props |
+| Product heading or text treatment | `Text`, with semantic `as`, `size`, `tone`, `weight`, and `truncate` props |
+| Mail-list presentation | `MailListRowDetails` and `mailListRowFrameVariants`, with `stacked` or `adaptive` layout |
 | Field | `Field`, `FieldLabel`, `Input`, `Textarea`, validation components |
 | Compound mailbox address | `InputGroup`, `Input chrome="attached"`, `InputAddon`, attached `SelectTrigger` |
 | Choice or boolean | `Select`, `Checkbox`, `Switch`, `RadioGroup`, `Toggle` |
@@ -34,11 +36,13 @@ Before changing a UI, read the relevant component and its closest existing calle
 | Overlay finishing actions | Shared overlay footer or `ActionFooter` |
 | Workspace panel | `WorkspaceSection`, `WorkspaceSidebar` |
 | Settings | Shared `settings-layout` components; app wrappers add anchors |
-| Composer | `composer-chrome` components |
+| Composer | `composer-chrome` components, including `ComposerActionBar` for reply actions |
 | Tokenized editor | `TokenField` |
 | Menu, tooltip, popover | Shared menu, tooltip, popover components |
 
 Settings feature code imports its local `settings-layout` adapter when it needs anchored rows or sections. The adapter re-exports shared components and adds search-anchor behavior; it does not define another visual system.
+
+Mail layout is a device preference owned by `features/settings/domain/mail-layout-setting.ts`. Two panels is the default. One panel reuses the existing mailbox and All inboxes list/detail paths, with selection kept in the route. Narrow screens always show one panel. Shared `MailListRowDetails` owns the row's responsive arrangement, type, and truncation. App code supplies formatted content and metadata slots. The virtualizer measures rendered row height and restores scroll and focus after a hidden list reappears at another width.
 
 ## Appearance and layout
 
@@ -63,7 +67,7 @@ Do not create a variant just to encode a feature name, another hex value, or one
 
 ### Type
 
-Use the custom type scale on semantic HTML or the shared text components. Direct semantic headings with type utilities are supported; wrapping every text node in `Text` is unnecessary.
+Use shared `Text` props for repeated product headings and text treatments. Specialized semantic HTML can use the same custom type scale directly. Wrapping every text node in `Text` is unnecessary.
 
 | Utility           | Size | Use                                    |
 | ----------------- | ---- | -------------------------------------- |
