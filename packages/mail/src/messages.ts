@@ -35,6 +35,7 @@ export type MessageListItem = {
   threadLabelIds?: string[];
   threadMessageCount?: number;
   threadAttachmentCount?: number;
+  threadAttachmentNames?: string[];
   draftId?: string;
   baseRevision?: string;
   draftAnchor?: ComposeDraftAnchor;

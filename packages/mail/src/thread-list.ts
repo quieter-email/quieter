@@ -137,6 +137,7 @@ export type ThreadListEntry = {
   preview: string;
   messageCount: number;
   attachmentCount: number;
+  attachmentNames: string[];
   unreadCount: number;
 };
 
@@ -176,6 +177,10 @@ const createThreadEntry = (message: MessageListItem): ThreadListEntry => {
     anchorMessage: message,
     attachmentCount:
       message.threadAttachmentCount ?? message.attachments?.length ?? 0,
+    attachmentNames:
+      message.threadAttachmentNames ??
+      message.attachments?.map((attachment) => attachment.fileName) ??
+      [],
     isImportant: message.threadIsImportant ?? message.isImportant ?? false,
     messageCount: Math.max(1, message.threadMessageCount ?? 0),
     messages: [message],
@@ -201,9 +206,26 @@ const updateThreadEntry = (
     existingThread.messages.length,
     message.threadMessageCount ?? 0
   );
+  const countSummary = existingThread.messages.find(
+    (threadMessage) => threadMessage.threadAttachmentCount !== undefined
+  );
   existingThread.attachmentCount =
-    message.threadAttachmentCount ??
-    existingThread.attachmentCount + (message.attachments?.length ?? 0);
+    countSummary?.threadAttachmentCount ??
+    existingThread.messages.reduce(
+      (count, threadMessage) =>
+        count + (threadMessage.attachments?.length ?? 0),
+      0
+    );
+  const attachmentSummary = existingThread.messages.find(
+    (threadMessage) => threadMessage.threadAttachmentNames !== undefined
+  );
+  existingThread.attachmentNames =
+    attachmentSummary?.threadAttachmentNames ??
+    existingThread.messages.flatMap(
+      (threadMessage) =>
+        threadMessage.attachments?.map((attachment) => attachment.fileName) ??
+        []
+    );
 
   const snippet = message.snippet?.trim();
   if (

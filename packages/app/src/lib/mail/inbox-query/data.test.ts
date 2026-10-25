@@ -30,6 +30,30 @@ const page = (
 });
 
 describe(mergeRefreshedMailboxPagesIntoQueryData, () => {
+  test("keeps attachment names through partial refreshes and accepts a complete replacement", () => {
+    const previous: MessagesQueryData = {
+      pageParams: [undefined],
+      pages: [page([message("a", { threadAttachmentNames: ["invoice.pdf"] })])],
+    };
+    const partialRefresh = mergeRefreshedMailboxPagesIntoQueryData(
+      previous,
+      [page([message("a")])],
+      [undefined]
+    );
+    expect(partialRefresh.pages[0].messages[0].threadAttachmentNames).toContain(
+      "invoice.pdf"
+    );
+
+    const completeRefresh = mergeRefreshedMailboxPagesIntoQueryData(
+      partialRefresh,
+      [page([message("a", { threadAttachmentNames: [] })])],
+      [undefined]
+    );
+    expect(
+      completeRefresh.pages[0].messages[0].threadAttachmentNames
+    ).toHaveLength(0);
+  });
+
   test("preserves unrefreshed persisted pages behind a refreshed prefix", () => {
     const previous: MessagesQueryData = {
       pageParams: [undefined, "old-page-2", "old-page-3"],

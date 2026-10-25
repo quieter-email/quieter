@@ -39,3 +39,68 @@ describe("thread label aggregation", () => {
     ).toStrictEqual(["latest-only", "previous-only"]);
   });
 });
+
+describe("thread attachment names", () => {
+  const invoice = {
+    attachmentId: "invoice",
+    fileName: "invoice.pdf",
+    mimeType: "application/pdf",
+    size: 1200,
+  };
+  const notes = {
+    attachmentId: "notes",
+    fileName: "notes.txt",
+    mimeType: "text/plain",
+    size: 600,
+  };
+
+  test("collects attachment names from all loaded messages without a summary", () => {
+    const [entry] = buildThreadListEntries([
+      { ...message("latest", ["INBOX"]), attachments: [invoice] },
+      { ...message("previous", ["INBOX"]), attachments: [notes] },
+    ]);
+
+    expect(entry?.attachmentNames).toContain("invoice.pdf");
+    expect(entry?.attachmentNames).toContain("notes.txt");
+    expect(entry?.attachmentCount).toBe(2);
+  });
+
+  test.each([0, 1])(
+    "uses a complete thread summary on grouped message %i without double counting names",
+    (summaryIndex) => {
+      const loadedMessages = [
+        { ...message("latest", ["INBOX"]), attachments: [invoice] },
+        { ...message("previous", ["INBOX"]), attachments: [notes] },
+      ].map((item, index) => ({
+        ...item,
+        threadAttachmentCount: index === summaryIndex ? 3 : undefined,
+        threadAttachmentNames:
+          index === summaryIndex
+            ? ["invoice.pdf", "notes.txt", "earlier.pdf"]
+            : undefined,
+      }));
+      const [entry] = buildThreadListEntries(loadedMessages);
+
+      expect(entry?.attachmentNames).toContain("earlier.pdf");
+      expect(entry?.attachmentNames).toHaveLength(3);
+      expect(entry?.attachmentCount).toBe(3);
+      expect(
+        entry?.attachmentNames.filter((name) => name === "invoice.pdf")
+      ).toHaveLength(1);
+    }
+  );
+
+  test("trusts an empty complete summary over message attachment metadata", () => {
+    const [entry] = buildThreadListEntries([
+      { ...message("latest", ["INBOX"]), attachments: [invoice] },
+      {
+        ...message("previous", ["INBOX"]),
+        threadAttachmentCount: 0,
+        threadAttachmentNames: [],
+      },
+    ]);
+
+    expect(entry?.attachmentNames).toHaveLength(0);
+    expect(entry?.attachmentCount).toBe(0);
+  });
+});

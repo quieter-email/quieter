@@ -18,7 +18,19 @@ import type {
 } from "@quieter/mail/messages";
 import type { SendHeader } from "@quieter/mail/send";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
-import { and, asc, count, desc, eq, ilike, inArray, lt, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import {
   assertUserCanManageOrganizationSettings,
@@ -207,6 +219,7 @@ const toMessageListItem = async (
   record: typeof organizationApiMailMessage.$inferSelect,
   options: {
     attachmentCount?: number;
+    attachmentNames?: string[];
     includeApiSource?: boolean;
     mailboxState?: ApiMessageMailboxState | null;
     userId: string;
@@ -251,6 +264,7 @@ const toMessageListItem = async (
     snippet: record.snippet ?? undefined,
     subject: record.subject ?? undefined,
     threadAttachmentCount: options.attachmentCount,
+    threadAttachmentNames: options.attachmentNames,
     threadId: record.id,
     threadMessageCount: 1,
     to: record.to ?? undefined,
@@ -447,13 +461,16 @@ export const listOrganizationApiMailMessages = async (input: {
   ]);
   const hasNextPage = records.length > limit;
   const pageRecords = records.slice(0, limit);
-  const attachmentCounts =
+  const attachmentSummaries =
     pageRecords.length === 0
       ? []
       : await db
           .select({
             count: count(),
             messageId: organizationApiMailAttachment.messageId,
+            names: sql<
+              string[]
+            >`jsonb_agg(${organizationApiMailAttachment.fileName} order by ${organizationApiMailAttachment.createdAt}, ${organizationApiMailAttachment.id})`,
           })
           .from(organizationApiMailAttachment)
           .where(
@@ -462,12 +479,17 @@ export const listOrganizationApiMailMessages = async (input: {
               inArray(
                 organizationApiMailAttachment.messageId,
                 pageRecords.map((record) => record.id)
+              ),
+              or(
+                eq(organizationApiMailAttachment.inline, false),
+                isNull(organizationApiMailAttachment.contentId),
+                eq(organizationApiMailAttachment.contentId, "")
               )
             )
           )
           .groupBy(organizationApiMailAttachment.messageId);
-  const attachmentCountByMessageId = new Map(
-    attachmentCounts.map((record) => [record.messageId, record.count])
+  const attachmentSummaryByMessageId = new Map(
+    attachmentSummaries.map((record) => [record.messageId, record])
   );
   const mailboxRows =
     pageRecords.length === 0
@@ -504,7 +526,10 @@ export const listOrganizationApiMailMessages = async (input: {
       pageRecords.map(
         async (record) =>
           await toMessageListItem(record, {
-            attachmentCount: attachmentCountByMessageId.get(record.id) ?? 0,
+            attachmentCount:
+              attachmentSummaryByMessageId.get(record.id)?.count ?? 0,
+            attachmentNames:
+              attachmentSummaryByMessageId.get(record.id)?.names ?? [],
             includeApiSource: true,
             mailboxState: toApiMessageMailboxState(
               mailboxBySenderAddress.get(record.senderAddress) ?? null,

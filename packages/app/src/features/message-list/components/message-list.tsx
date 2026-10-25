@@ -46,6 +46,10 @@ const buildDraftListEntry = (
   anchorMessage: message,
   attachmentCount:
     message.threadAttachmentCount ?? message.attachments?.length ?? 0,
+  attachmentNames:
+    message.threadAttachmentNames ??
+    message.attachments?.map((attachment) => attachment.fileName) ??
+    [],
   isImportant: false,
   messageCount: Math.max(1, message.threadMessageCount ?? 0),
   messages: [message],

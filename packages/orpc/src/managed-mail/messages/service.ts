@@ -38,6 +38,7 @@ import {
   eq,
   inArray,
   isNotNull,
+  isNull,
   lt,
   ne,
   or,
@@ -131,6 +132,7 @@ const toMessageListItem = async (
     attachments?: MessageListItem["attachments"];
     inlineImages?: MessageListItem["inlineImages"];
     attachmentCount?: number;
+    attachmentNames?: string[];
     labelIds?: string[];
     threadLabelIds?: string[];
     threadMessageCount?: number;
@@ -168,6 +170,7 @@ const toMessageListItem = async (
   snippet: record.snippet ?? undefined,
   subject: record.subject ?? undefined,
   threadAttachmentCount: options.attachmentCount,
+  threadAttachmentNames: options.attachmentNames,
   threadId: record.threadId,
   threadLabelIds: options.threadLabelIds,
   threadMessageCount: options.threadMessageCount,
@@ -336,9 +339,15 @@ export const listManagedMessages = async (input: {
           db
             .select({
               attachmentCount: countDistinct(managedMailAttachment.id),
+              attachments: sql<
+                Pick<
+                  typeof managedMailAttachment.$inferSelect,
+                  "id" | "fileName"
+                >[]
+              >`coalesce(jsonb_agg(distinct jsonb_build_object('id', ${managedMailAttachment.id}, 'fileName', ${managedMailAttachment.fileName})) filter (where ${isNotNull(managedMailAttachment.id)}), '[]'::jsonb)`,
               labelIds: sql<
                 string[]
-              >`coalesce(array_agg(distinct ${managedMailMessageLabel.labelId}) filter (where ${isNotNull(managedMailMessageLabel.labelId)}), '{}')`,
+              >`coalesce(jsonb_agg(distinct ${managedMailMessageLabel.labelId}) filter (where ${isNotNull(managedMailMessageLabel.labelId)}), '[]'::jsonb)`,
               messageCount: countDistinct(managedMailMessage.id),
               threadId: managedMailMessage.threadId,
             })
@@ -349,7 +358,14 @@ export const listManagedMessages = async (input: {
             )
             .leftJoin(
               managedMailAttachment,
-              eq(managedMailMessage.id, managedMailAttachment.messageId)
+              and(
+                eq(managedMailMessage.id, managedMailAttachment.messageId),
+                or(
+                  eq(managedMailAttachment.inline, false),
+                  isNull(managedMailAttachment.contentId),
+                  eq(managedMailAttachment.contentId, "")
+                )
+              )
             )
             .where(
               and(
@@ -393,8 +409,8 @@ export const listManagedMessages = async (input: {
   const messageCountByThreadId = new Map(
     aggregates.map((record) => [record.threadId, record.messageCount])
   );
-  const attachmentCountByThreadId = new Map(
-    aggregates.map((record) => [record.threadId, record.attachmentCount])
+  const attachmentSummaryByThreadId = new Map(
+    aggregates.map((record) => [record.threadId, record])
   );
 
   return {
@@ -406,7 +422,12 @@ export const listManagedMessages = async (input: {
           async (record) =>
             await toMessageListItem(record, {
               attachmentCount:
-                attachmentCountByThreadId.get(record.threadId) ?? 0,
+                attachmentSummaryByThreadId.get(record.threadId)
+                  ?.attachmentCount ?? 0,
+              attachmentNames:
+                attachmentSummaryByThreadId
+                  .get(record.threadId)
+                  ?.attachments.map((attachment) => attachment.fileName) ?? [],
               labelIds: labelIdsByThreadId.get(record.threadId) ?? [],
               threadLabelIds: [
                 ...(threadLabelIdsByThreadId.get(record.threadId) ?? []),

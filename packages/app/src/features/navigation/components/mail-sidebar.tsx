@@ -264,16 +264,26 @@ const SidebarInboxSection = ({
 
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto p-1">
         {embedded !== true && onOpenCalendar ? (
-          <SidebarNavItem
-            onClick={() => {
-              onOpenCalendar();
-              onRequestClose?.();
-            }}
-            type="button"
+          <SidebarEntrance
+            animateEntrance={animateEntrance}
+            className="mb-2 w-full"
+            index={2}
           >
-            <Icon aria-hidden icon={Calendar03Icon} />
-            Calendar
-          </SidebarNavItem>
+            <SidebarNavItem
+              // oxlint-disable-next-line shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom row spacing.
+              className="justify-start gap-3 px-3 text-left"
+              onClick={() => {
+                onOpenCalendar();
+                onRequestClose?.();
+              }}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <Icon aria-hidden tone="default" icon={Calendar03Icon} />
+              Calendar
+            </SidebarNavItem>
+          </SidebarEntrance>
         ) : null}
         <SidebarMailboxNav
           animateEntrance={animateEntrance}

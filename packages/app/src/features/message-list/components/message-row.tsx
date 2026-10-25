@@ -1,10 +1,6 @@
 "use client";
 
 import {
-  FileAttachmentIcon,
-  MessageMultiple01Icon,
-} from "@hugeicons/core-free-icons";
-import {
   DELIVERY_PILL_TONES,
   getDeliveryStatusLabel,
   getDeliveryStatusTone,
@@ -30,9 +26,9 @@ import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import type { RouterOutputs } from "@quieter/orpc";
 import { cn } from "@quieter/ui/cn";
-import { Icon } from "@quieter/ui/icon";
 import {
   MailListRowDetails,
+  MailListRowMetadata,
   MailListRowSelectionMark,
   mailListRowFrameVariants,
   mailListRowParts,
@@ -130,13 +126,6 @@ const getMessageRowCountsTitle = (thread: ThreadListEntry) => {
   }
   return `This thread has ${parts.join(" and ")}.`;
 };
-
-const rowPressTransition = {
-  damping: 28,
-  mass: 0.7,
-  stiffness: 700,
-  type: "spring",
-} as const;
 
 type MessageRowProps = {
   wideCompactRows?: boolean;
@@ -253,7 +242,7 @@ const MessageRowSelectionButton = ({
           <SenderAvatar
             avatarUrlDark={thread.anchorMessage.senderAvatarUrls?.dark}
             avatarUrlLight={thread.anchorMessage.senderAvatarUrls?.light}
-            size="sm"
+            size="xs"
             fallbackLabel={senderInitial}
           />
         </m.span>
@@ -290,7 +279,6 @@ const MessageRowDetails = ({
   senderLabel,
   subject,
   thread,
-  threaded,
   unread,
   verificationCode,
 }: {
@@ -304,7 +292,6 @@ const MessageRowDetails = ({
   senderLabel: string;
   subject: string;
   thread: ThreadListEntry;
-  threaded: boolean;
   unread: boolean;
   verificationCode?: string;
   wideCompactRows?: boolean;
@@ -322,28 +309,13 @@ const MessageRowDetails = ({
             {getDeliveryStatusLabel(deliveryStatus)}
           </Pill>
         )}
-        {(thread.attachmentCount > 0 || threaded) && (
-          <Pill
-            size="xs"
-            tone="neutral"
-            title={getMessageRowCountsTitle(thread)}
-          >
-            <span className="inline-flex items-center gap-1 tabular-nums">
-              {thread.attachmentCount > 0 && (
-                <span className="inline-flex items-center gap-1">
-                  <Icon aria-hidden size={12} icon={FileAttachmentIcon} />
-                  <span>{thread.attachmentCount}</span>
-                </span>
-              )}
-              {threaded && (
-                <span className="inline-flex items-center gap-1">
-                  <Icon aria-hidden size={12} icon={MessageMultiple01Icon} />
-                  <span>{thread.messageCount}</span>
-                </span>
-              )}
-            </span>
-          </Pill>
-        )}
+        <MailListRowMetadata
+          attachmentCount={thread.attachmentCount}
+          attachmentNames={thread.attachmentNames}
+          layout={wideCompactRows === true ? "adaptive" : "stacked"}
+          messageCount={thread.messageCount}
+          title={getMessageRowCountsTitle(thread)}
+        />
       </>
     }
     sender={senderLabel}
@@ -377,7 +349,7 @@ const MessageRowDetails = ({
           compact
           labelIds={thread.threadLabelIds}
           labels={gmailLabels}
-          limit={2}
+          limit={wideCompactRows === true ? undefined : 2}
         />
       </>
     }
@@ -525,7 +497,6 @@ type MessageRowSurfaceProps = {
   showSelectionControl: boolean;
   subject: string;
   thread: ThreadListEntry;
-  threaded: boolean;
   unread: boolean;
   verificationCode?: MessageRowProps["verificationCode"];
 };
@@ -566,7 +537,6 @@ const MessageRowSurface = ({
   showSelectionControl,
   subject,
   thread,
-  threaded,
   unread,
   verificationCode,
 }: MessageRowSurfaceProps) => {
@@ -592,17 +562,14 @@ const MessageRowSurface = ({
   });
 
   return (
-    <m.div
-      animate={{
-        scale: reducedMotion !== false || !isPressed ? 1 : 0.97,
-      }}
+    <div
       className={mailListRowFrameVariants({
         accent: thread.isImportant ? "yellow" : undefined,
         layout: wideCompactRows === true ? "adaptive" : "stacked",
       })}
-      initial={false}
       onBlurCapture={handleRowBlurCapture}
       onFocusCapture={handleRowFocusCapture}
+      // oxlint-disable-next-line jsx-a11y/mouse-events-have-key-events -- Keyboard focus is handled by onFocusCapture.
       onMouseOver={(event) => {
         const isCopyButton =
           event.target instanceof Element &&
@@ -628,10 +595,9 @@ const MessageRowSurface = ({
           active.blur();
         }
       }}
-      transition={rowPressTransition}
     >
       <m.span
-        animate={{ opacity: surfaceOpacity }}
+        animate={{ opacity: isPressed ? 1 : surfaceOpacity }}
         aria-hidden
         className={mailListRowParts.overlay}
         initial={false}
@@ -708,13 +674,12 @@ const MessageRowSurface = ({
             senderLabel={senderLabel}
             subject={subject}
             thread={thread}
-            threaded={threaded}
             unread={unread}
             verificationCode={verificationCode?.code}
           />
         </MessageActionsContextMenu>
       </div>
-    </m.div>
+    </div>
   );
 };
 
@@ -757,7 +722,6 @@ const MessageRowContent = ({
   );
   const date = formatMessageListDate(anchorMessage);
   const unread = !isDraftMailbox && thread.unreadCount > 0;
-  const threaded = thread.messageCount > 1;
   const isActionPending =
     pendingActions.isMessageActionPending(anchorMessage.id) ||
     pendingActions.isThreadActionPending(thread.threadId);
@@ -814,7 +778,6 @@ const MessageRowContent = ({
       showSelectionControl={showSelectionControl}
       subject={subject}
       thread={thread}
-      threaded={threaded}
       unread={unread}
       verificationCode={verificationCode}
     />

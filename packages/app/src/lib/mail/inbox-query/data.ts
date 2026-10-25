@@ -85,6 +85,8 @@ export const mergeMessagePreservingLoadedDetails = (
     syncedMessage.senderAvatarUrls ?? currentMessage.senderAvatarUrls,
   threadAttachmentCount:
     syncedMessage.threadAttachmentCount ?? currentMessage.threadAttachmentCount,
+  threadAttachmentNames:
+    syncedMessage.threadAttachmentNames ?? currentMessage.threadAttachmentNames,
   threadIsImportant:
     syncedMessage.threadIsImportant ?? currentMessage.threadIsImportant,
   threadMessageCount:
