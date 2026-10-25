@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
 import {
+  AI_MEMORY_CATEGORIES,
+  AI_MEMORY_CONTENT_MAX_LENGTH,
   AI_MEMORY_REQUEST_MAX_LENGTH,
   AI_MEMORY_UPDATE_OPERATION_LIMIT,
   AI_MEMORY_USER_MESSAGE_MAX_LENGTH,
@@ -27,16 +29,15 @@ import { retryIdempotentDatabaseQuery } from "@quieter/database/retry";
 import {
   aiMemory,
   aiMemoryChangeSet,
+  aiMemoryMailboxState,
   aiMemoryScopeConfig,
-  gmailUsefulDetailFeedback,
-  mailAutomationMemoryProfile,
   mailAutoLabelFeedback,
   mailbox,
-  managedMailMessage,
   user as memoryUser,
   userAiContextEvent,
 } from "@quieter/database/schema";
 import type {
+  AiMemoryCategory,
   AiMemoryChange,
   AiMemoryMetadata,
   AiMemorySnapshot,
@@ -52,29 +53,22 @@ import {
   desc,
   eq,
   gt,
+  getTableColumns,
   inArray,
-  isNotNull,
   isNull,
   like,
   lt,
-  lte,
   ne,
+  notInArray,
+  ilike,
   or,
   sql,
 } from "drizzle-orm";
+import { z } from "zod";
 
 import { assertCanUseAi } from "./ai-access";
-import {
-  embedAiMemories,
-  embedPendingAiMemories,
-  searchAiMemoryBySimilarity,
-} from "./ai-memory-embedding";
 import { assertAccessibleMailbox } from "./mailbox/service";
 
-const MEMORY_CANDIDATE_LIMIT = 200;
-const MEMORY_CONTEXT_LIMIT = 8;
-const MEMORY_CONTEXT_CHARACTER_BUDGET = 4000;
-const MEMORY_OVERVIEW_PAGE_SIZE = 100;
 const MEMORY_EVENT_METADATA_STRING_LIMIT = 600;
 export const AI_MEMORY_LEARNING_PROMPT_MAX_LENGTH = 6000;
 export const DEFAULT_AI_MEMORY_LEARNING_PROMPT = `Build a concise, useful understanding of the user from their own chat, writing, and mail activity. Learn their language, tone, vocabulary, greetings and sign-offs, relationships they describe, work and routines, reading interests, priorities, organization habits, and how preferences vary by recipient or context. Connect repeated labeling, reading, archiving, reply requests, and brief feedback into durable patterns. Distinguish dismissing from disliking, and deferring from ignoring. Keep uncertain evidence provisional, update contradictions, expire temporary context, and never retain raw correspondence or secrets.`;
@@ -83,161 +77,43 @@ export type AiMemoryEventMetadata = Record<
   string,
   string | number | boolean | null
 >;
-export type AiAgentMemoryContext = {
-  instructions: string | null;
-  memory: string | null;
-};
+export {
+  buildMailMemoryQuery,
+  calculateAiMemorySalience,
+  getAiMemoryRetirementReason,
+  loadAiAgentContext,
+  loadAiAgentMemoryCandidates,
+  rankAiAgentMemoryCandidates,
+  rankAiMemoryCandidates,
+  serializeAiAgentContext,
+} from "./ai-memory-context";
+export type {
+  AiAgentMemoryCandidates,
+  AiAgentMemoryContext,
+  AiMemoryContextSelection,
+  AiMemoryOverviewCursor,
+  AiMemoryOverviewPage,
+} from "./ai-memory-context";
 
-export type AiMemoryOverviewCursor = {
-  afterId: string;
-  startedAt: string;
-};
+type MemoryRow = Omit<typeof aiMemory.$inferSelect, "embedding" | "embeddedAt">;
+const {
+  embedding: _embedding,
+  embeddedAt: _embeddedAt,
+  ...memoryColumns
+} = getTableColumns(aiMemory);
 
-export type AiMemoryOverviewPage = {
-  hasMore: boolean;
-  items: {
-    content: string;
-    id: string;
-    kind: "instruction" | "learned";
-    scope: "mailbox" | "user";
-    summary: string;
-  }[];
-  nextCursor: AiMemoryOverviewCursor | null;
-  total: number;
-};
-
-export const buildMailMemoryQuery = (message: {
-  from?: string | null;
-  snippet?: string | null;
-  subject?: string | null;
-  to?: string | null;
-}) =>
-  [message.from, message.to, message.subject, message.snippet]
-    .filter((value): value is string => !!value)
-    .join(" ")
-    .slice(0, 2000);
-
-export const serializeAiAgentContext = ({
-  instructions,
-  memory,
-}: AiAgentMemoryContext) =>
-  [
-    ...(instructions ? [`User-authored instructions:\n${instructions}`] : []),
-    ...(memory ? [`Relevant learned memory:\n${memory}`] : []),
-  ].join("\n\n") || null;
-
-type MemoryRow = typeof aiMemory.$inferSelect;
-type RankedAiMemoryCandidate = {
-  memory: MemoryRow;
-  score: number;
-};
-
-const MEMORY_SOURCE_HALF_LIFE_DAYS = {
-  explicit: 720,
-  feedback: 360,
-  inferred: 180,
-  migration: 360,
-} as const;
-const DAY_MS = 86_400_000;
-
-const clampUnit = (value: number) => Math.min(1, Math.max(0, value));
-
-export const calculateAiMemorySalience = (
-  memory: Pick<
-    MemoryRow,
-    | "confidence"
-    | "kind"
-    | "lastConfirmedAt"
-    | "lastUsedAt"
-    | "reinforcementCount"
-    | "source"
-  >,
-  now = new Date()
-) => {
-  if (memory.kind === "instruction") {
-    return 1;
-  }
-  const ageDays = Math.max(
-    0,
-    (now.getTime() - memory.lastConfirmedAt.getTime()) / DAY_MS
-  );
-  const evidenceDecay = Math.exp(
-    (-Math.LN2 * ageDays) / MEMORY_SOURCE_HALF_LIFE_DAYS[memory.source]
-  );
-  const usageAgeDays = memory.lastUsedAt
-    ? Math.max(0, (now.getTime() - memory.lastUsedAt.getTime()) / DAY_MS)
-    : Number.POSITIVE_INFINITY;
-  const usageSignal = Number.isFinite(usageAgeDays)
-    ? Math.exp((-Math.LN2 * usageAgeDays) / 180)
-    : 0;
-  const reinforcementSignal = Math.min(
-    1,
-    Math.log2(memory.reinforcementCount + 1) / 4
-  );
-  return clampUnit(
-    memory.confidence * (0.3 + evidenceDecay * 0.5) +
-      usageSignal * 0.1 +
-      reinforcementSignal * 0.1
-  );
-};
-
-export const getAiMemoryRetirementReason = (
-  memory: Pick<
-    MemoryRow,
-    | "confidence"
-    | "expiresAt"
-    | "kind"
-    | "lastConfirmedAt"
-    | "lastUsedAt"
-    | "reinforcementCount"
-    | "source"
-    | "status"
-  >,
-  now = new Date()
-) => {
-  if (memory.status !== "active" || memory.kind === "instruction") {
-    return null;
-  }
-  if (memory.expiresAt !== null && memory.expiresAt <= now) {
-    return "expired" as const;
-  }
-  if (memory.source === "explicit") {
-    return null;
-  }
-  const ageDays = (now.getTime() - memory.lastConfirmedAt.getTime()) / DAY_MS;
-  const unusedDays = memory.lastUsedAt
-    ? (now.getTime() - memory.lastUsedAt.getTime()) / DAY_MS
-    : ageDays;
-  if (
-    ageDays >= 540 &&
-    unusedDays >= 365 &&
-    memory.reinforcementCount === 1 &&
-    memory.confidence < 0.6
-  ) {
-    return "stale_low_signal" as const;
-  }
-  return null;
-};
-
-type MemoryScopeTarget = {
-  mailboxId: string | null;
-  scope: "mailbox" | "user";
+type UserMemoryOwner = {
+  mailboxId: null;
+  scope: "user";
   scopeKey: string;
-  userId: string | null;
+  userId: string;
 };
 
-const userScope = (userId: string): MemoryScopeTarget => ({
+const userScope = (userId: string): UserMemoryOwner => ({
   mailboxId: null,
   scope: "user",
   scopeKey: `user:${userId}`,
   userId,
-});
-
-const mailboxScope = (mailboxId: string): MemoryScopeTarget => ({
-  mailboxId,
-  scope: "mailbox",
-  scopeKey: `mailbox:${mailboxId}`,
-  userId: null,
 });
 
 const toAiMemoryScopeConfig = (
@@ -251,7 +127,7 @@ const toAiMemoryScopeConfig = (
   updatedAt: record?.updatedAt ?? null,
 });
 
-const loadAiMemoryScopeConfig = async (scope: MemoryScopeTarget) => {
+const loadAiMemoryScopeConfig = async (scope: UserMemoryOwner) => {
   const [record] = await db
     .select()
     .from(aiMemoryScopeConfig)
@@ -260,34 +136,146 @@ const loadAiMemoryScopeConfig = async (scope: MemoryScopeTarget) => {
   return toAiMemoryScopeConfig(record);
 };
 
+const lockAiMemoryScope = async (
+  executor: DatabaseExecutor,
+  scope: UserMemoryOwner
+) => {
+  await executor
+    .select({ id: memoryUser.id })
+    .from(memoryUser)
+    .where(eq(memoryUser.id, scope.userId))
+    .for("update");
+  const [config] = await executor
+    .select()
+    .from(aiMemoryScopeConfig)
+    .where(eq(aiMemoryScopeConfig.scopeKey, scope.scopeKey))
+    .for("update");
+  return toAiMemoryScopeConfig(config);
+};
+
+const advanceAiMemoryScopeRevision = async (
+  executor: DatabaseExecutor,
+  scope: UserMemoryOwner
+) => {
+  const now = new Date();
+  await executor
+    .insert(aiMemoryScopeConfig)
+    .values({ ...scope, createdAt: now, id: randomUUID(), updatedAt: now })
+    .onConflictDoUpdate({
+      set: {
+        revision: sql`${aiMemoryScopeConfig.revision} + 1`,
+        updatedAt: now,
+      },
+      target: aiMemoryScopeConfig.scopeKey,
+    });
+};
+
+const discardPendingAiMemoryEvents = async (
+  executor: DatabaseExecutor,
+  scope: UserMemoryOwner
+) => {
+  const now = new Date();
+  await executor
+    .update(userAiContextEvent)
+    .set({
+      lastError: null,
+      metadata: {},
+      processingAt: null,
+      skippedAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(userAiContextEvent.userId, scope.userId),
+        isNull(userAiContextEvent.mergedAt),
+        isNull(userAiContextEvent.skippedAt)
+      )
+    );
+};
+
+const completeAiMemoryBootstrap = async (
+  executor: DatabaseExecutor,
+  scope: UserMemoryOwner
+) => {
+  // Reset holds the user lock, while mailbox deletion locks the mailbox first.
+  const targets = await executor
+    .select({ id: mailbox.id })
+    .from(mailbox)
+    .where(
+      or(
+        and(
+          eq(mailbox.provider, "gmail"),
+          eq(mailbox.ownerUserId, scope.userId)
+        ),
+        and(
+          eq(mailbox.provider, "managed"),
+          eq(mailbox.accessMode, "private"),
+          eq(mailbox.managedOwnerUserId, scope.userId)
+        )
+      )
+    )
+    .orderBy(asc(mailbox.id))
+    .for("update", { noWait: true })
+    .catch((error: unknown) => {
+      if (
+        error instanceof Error &&
+        error.cause instanceof Error &&
+        "code" in error.cause &&
+        error.cause.code === "55P03"
+      ) {
+        throw new ORPCError("CONFLICT", {
+          cause: error,
+          message: "Your inbox changed while updating memory. Try again.",
+        });
+      }
+      throw error;
+    });
+  if (targets.length === 0) {
+    return;
+  }
+  const now = new Date();
+  await executor
+    .insert(aiMemoryMailboxState)
+    .values(
+      targets.map(({ id }) => ({
+        createdAt: now,
+        mailboxId: id,
+        receivedComplete: true,
+        sentComplete: true,
+        status: "completed" as const,
+        updatedAt: now,
+        userId: scope.userId,
+      }))
+    )
+    .onConflictDoUpdate({
+      set: {
+        lastError: null,
+        processingAt: null,
+        receivedComplete: true,
+        sentComplete: true,
+        status: "completed",
+        updatedAt: now,
+        userId: scope.userId,
+      },
+      target: aiMemoryMailboxState.mailboxId,
+    });
+};
+
 export const getPersonalAiMemoryScopeConfig = async (userId: string) =>
   await loadAiMemoryScopeConfig(userScope(userId));
-
-export const getMailboxAiMemoryScopeConfig = async (mailboxId: string) =>
-  await loadAiMemoryScopeConfig(mailboxScope(mailboxId));
 
 export const updateAiMemoryScopeConfig = async ({
   activeLearningEnabled,
   learningPrompt,
-  mailboxId,
   revision,
-  scope: requestedScope,
   userId,
 }: {
   activeLearningEnabled: boolean;
   learningPrompt: string;
-  mailboxId?: string | null;
   revision: number;
-  scope: "mailbox" | "user";
   userId: string;
 }) => {
-  const scope =
-    requestedScope === "user"
-      ? userScope(userId)
-      : mailboxScope(mailboxId ?? "");
-  if (requestedScope === "mailbox" && !mailboxId) {
-    throw new ORPCError("BAD_REQUEST", { message: "A mailbox is required." });
-  }
+  const scope = userScope(userId);
   const normalizedPrompt = learningPrompt
     .replaceAll(/\r\n?/gu, "\n")
     .replaceAll(/\n{4,}/gu, "\n\n\n")
@@ -296,19 +284,7 @@ export const updateAiMemoryScopeConfig = async ({
     .trimEnd();
   const now = new Date();
   const record = await db.transaction(async (tx) => {
-    if (scope.scope === "user") {
-      await tx
-        .select({ id: memoryUser.id })
-        .from(memoryUser)
-        .where(eq(memoryUser.id, userId))
-        .for("update");
-    } else {
-      await tx
-        .select({ id: mailbox.id })
-        .from(mailbox)
-        .where(eq(mailbox.id, scope.mailboxId ?? ""))
-        .for("update");
-    }
+    await lockAiMemoryScope(tx, scope);
     const [updated] =
       revision === 0
         ? await tx
@@ -344,6 +320,9 @@ export const updateAiMemoryScopeConfig = async ({
           "Learning guidance changed elsewhere. Review the latest version.",
       });
     }
+    if (!activeLearningEnabled) {
+      await discardPendingAiMemoryEvents(tx, scope);
+    }
     return updated;
   });
   return toAiMemoryScopeConfig(record);
@@ -364,8 +343,10 @@ const toSnapshot = (record: MemoryRow): AiMemorySnapshot => ({
 
 const toEditorMemory = (record: MemoryRow): AiMemoryEditorMemory => ({
   agents: record.metadata.agents ?? ["all"],
+  category: record.metadata.category ?? "preferences",
   confidence: record.confidence,
   content: record.content,
+  correspondents: record.metadata.correspondents ?? [],
   expiresAt: record.expiresAt?.toISOString() ?? null,
   id: record.id,
   importance: record.importance,
@@ -387,15 +368,14 @@ const sanitizeMetadata = (
       if (containsProhibitedMemorySecret(trimmed)) {
         continue;
       }
+      const limits: Record<string, number> = {
+        bodyText: 20_000,
+        userMessage: AI_MEMORY_USER_MESSAGE_MAX_LENGTH,
+      };
       sanitized[key] =
         trimmed === ""
           ? null
-          : trimmed.slice(
-              0,
-              key === "userMessage"
-                ? AI_MEMORY_USER_MESSAGE_MAX_LENGTH
-                : MEMORY_EVENT_METADATA_STRING_LIMIT
-            );
+          : trimmed.slice(0, limits[key] ?? MEMORY_EVENT_METADATA_STRING_LIMIT);
     } else if (typeof value === "number") {
       if (Number.isFinite(value)) {
         sanitized[key] = value;
@@ -408,287 +388,316 @@ const sanitizeMetadata = (
   return sanitized;
 };
 
-const normalizeSearchTokens = (value: string) =>
-  new Set(
-    value
-      .toLowerCase()
-      .match(/[a-z0-9][a-z0-9._@:-]{1,}/gu)
-      ?.filter((token) => token.length > 2)
-      .slice(0, 120)
-  );
-
-export const rankAiMemoryCandidates = ({
-  agent,
-  candidates,
-  now = new Date(),
-  query,
-  semanticScores = new Map<string, number>(),
-}: {
-  agent: string;
-  candidates: MemoryRow[];
-  now?: Date;
-  query: string;
-  semanticScores?: ReadonlyMap<string, number>;
-}): RankedAiMemoryCandidate[] => {
-  const queryTokens = normalizeSearchTokens(
-    `${agent.replaceAll("_", " ")} ${query}`
-  );
-
-  return candidates
-    .flatMap((memory) => {
-      const agents = memory.metadata.agents ?? ["all"];
-      if (!agents.includes("all") && !agents.includes(agent)) {
-        return [];
-      }
-      if (
-        memory.status !== "active" ||
-        (memory.expiresAt !== null && memory.expiresAt <= now)
-      ) {
-        return [];
-      }
-
-      const contentTokens = normalizeSearchTokens(
-        `${memory.content} ${memory.summary} ${(memory.metadata.topics ?? []).join(" ")}`
-      );
-      const overlap = [...queryTokens].filter((token) =>
-        contentTokens.has(token)
-      ).length;
-      const sourceDomainMatch = (memory.metadata.sourceDomains ?? []).some(
-        (domain) => query.toLowerCase().includes(domain.toLowerCase())
-      );
-      const semanticScore = clampUnit(semanticScores.get(memory.id) ?? 0);
-      const alwaysRelevant = memory.importance === 5 && agents.includes("all");
-      if (
-        overlap === 0 &&
-        !sourceDomainMatch &&
-        !alwaysRelevant &&
-        semanticScore < 0.35
-      ) {
-        return [];
-      }
-
-      const salience = calculateAiMemorySalience(memory, now);
-      const lexical = Math.min(0.7, overlap * 0.16);
-      const score =
-        lexical +
-        semanticScore * 0.82 +
-        (sourceDomainMatch ? 0.65 : 0) +
-        memory.importance * 0.035 +
-        salience * 0.16 +
-        Math.min(0.05, Math.log2(memory.reinforcementCount + 1) * 0.012);
-
-      return [{ memory, score }];
-    })
-    .toSorted(
-      (left, right) =>
-        right.score - left.score ||
-        right.memory.updatedAt.getTime() - left.memory.updatedAt.getTime()
-    );
-};
-
-const memoryAuthority = (memory: MemoryRow) => {
-  if (memory.kind === "instruction") {
-    return memory.scope === "mailbox" ? 4 : 3;
-  }
-  return memory.scope === "mailbox" ? 2 : 1;
-};
-
-const jaccardSimilarity = (left: Set<string>, right: Set<string>) => {
-  const union = new Set([...left, ...right]).size;
-  if (union === 0) {
-    return 0;
-  }
-  return [...left].filter((token) => right.has(token)).length / union;
-};
-
-/**
- * Packs the highest-authority, most relevant, least redundant memories into
- * the context budget. Authority dominates the ordering; relevance and
- * novelty break ties within an authority tier.
- */
-const formatMemoryContext = (
-  ranked: ReturnType<typeof rankAiMemoryCandidates>
-) => {
-  const remaining = ranked.map((candidate) => ({
-    ...candidate,
-    tokens: normalizeSearchTokens(
-      `${candidate.memory.summary} ${candidate.memory.content}`
-    ),
-  }));
-  const selectedTokens: Set<string>[] = [];
-  const selected: MemoryRow[] = [];
-  let usedCharacters = 0;
-
-  while (selected.length < MEMORY_CONTEXT_LIMIT && remaining.length > 0) {
-    let bestIndex = 0;
-    let bestScore = Number.NEGATIVE_INFINITY;
-    for (const [index, candidate] of remaining.entries()) {
-      let redundancy = 0;
-      for (const tokens of selectedTokens) {
-        redundancy = Math.max(
-          redundancy,
-          jaccardSimilarity(candidate.tokens, tokens)
-        );
-      }
-      const marginalScore =
-        memoryAuthority(candidate.memory) * 10 +
-        candidate.score -
-        redundancy * 0.3;
-      if (marginalScore > bestScore) {
-        bestIndex = index;
-        bestScore = marginalScore;
-      }
-    }
-    const [next] = remaining.splice(bestIndex, 1);
-    if (next === undefined) {
-      break;
-    }
-    const nextLength = next.memory.content.length + 4;
-    if (usedCharacters + nextLength > MEMORY_CONTEXT_CHARACTER_BUDGET) {
-      continue;
-    }
-    selected.push(next.memory);
-    selectedTokens.push(next.tokens);
-    usedCharacters += nextLength;
-  }
-
-  return selected;
-};
-
 export const loadAiConfiguration = () => ({
   autoLabelModel: AUTO_LABEL_MODEL,
 });
 
-export type AiAgentMemoryCandidates = MemoryRow[];
-
-/**
- * Archives records that have expired or decayed below usefulness. Archiving
- * removes them from retrieval on its own, because every read filters on
- * `status = 'active'`.
- */
-const retireAiMemories = async (stale: MemoryRow[]) => {
-  if (stale.length === 0) {
-    return;
-  }
-  const now = new Date();
-  await Promise.all(
-    stale.map(
-      async (memory) =>
-        await db
-          .update(aiMemory)
-          .set({
-            archivedAt: now,
-            status: "archived",
-            updatedAt: now,
-            version: sql`${aiMemory.version} + 1`,
-          })
-          .where(
-            and(
-              eq(aiMemory.id, memory.id),
-              eq(aiMemory.status, "active"),
-              eq(aiMemory.version, memory.version)
-            )
-          )
-    )
-  );
-};
-
-/**
- * Background upkeep for the scopes a request just touched: retire decayed
- * records and embed anything still missing a vector.
- */
-const maintainAiMemoryScopes = async ({
-  scopeKeys,
-  stale,
-}: {
-  scopeKeys: string[];
-  stale: MemoryRow[];
-}) => {
-  try {
-    await retireAiMemories(stale);
-    await embedPendingAiMemories(scopeKeys);
-  } catch (error: unknown) {
-    reportError(error, { operation: "ai-memory:maintain-scopes" });
-  }
-};
-
-const listScopeMemories = async (scopeKey: string) =>
+const listScopeMemories = async (userId: string) =>
   await db
-    .select()
+    .select(memoryColumns)
     .from(aiMemory)
-    .where(eq(aiMemory.scopeKey, scopeKey))
-    .orderBy(asc(aiMemory.status), desc(aiMemory.updatedAt))
-    .limit(MEMORY_CANDIDATE_LIMIT);
+    .where(
+      and(eq(aiMemory.scopeKey, `user:${userId}`), eq(aiMemory.userId, userId))
+    )
+    .orderBy(asc(aiMemory.id));
+
+const listConsolidationMemories = async ({
+  mailboxId,
+  events,
+  scope,
+}: {
+  events: Pick<typeof userAiContextEvent.$inferSelect, "kind" | "metadata">[];
+  mailboxId?: string;
+  scope: UserMemoryOwner;
+}) => {
+  const text = events
+    .flatMap(({ metadata }) => Object.values(metadata))
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+  const tokens = [
+    ...new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)),
+  ].slice(0, 80);
+  const contacts = [
+    ...new Set(
+      text
+        .toLowerCase()
+        .match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/gu)
+    ),
+  ].slice(0, 30);
+  let categories: AiMemoryCategory[] = [
+    "identity",
+    "relationships",
+    "preferences",
+    "work",
+    "interests",
+    "activity",
+  ];
+  if (
+    events.some(
+      ({ kind, metadata }) =>
+        kind === "sent_message" ||
+        metadata.observationKind === "sent_message" ||
+        metadata.observationKind === "draft_message"
+    )
+  ) {
+    categories = [
+      "identity",
+      "writing_style",
+      "relationships",
+      "preferences",
+      "work",
+    ];
+  } else if (events.some(({ kind }) => kind === "auto_label_feedback")) {
+    categories = ["labeling", "preferences", "activity"];
+  }
+  const document = sql`to_tsvector('simple', ${aiMemory.content} || ' ' || ${aiMemory.summary})`;
+  const textQuery = sql`to_tsquery('simple', ${tokens.join(" | ") || "quieter_empty_observation"})`;
+  const contactMatch =
+    contacts.length === 0
+      ? sql`false`
+      : or(
+          ...contacts.map(
+            (contact) =>
+              sql`${aiMemory.metadata} @> ${JSON.stringify({ correspondents: [contact] })}::jsonb`
+          )
+        );
+  const usable = and(
+    eq(aiMemory.scopeKey, scope.scopeKey),
+    eq(aiMemory.userId, scope.userId),
+    or(
+      sql`${aiMemory.metadata}->>'sourceMailboxId' is null`,
+      mailboxId === undefined
+        ? undefined
+        : eq(sql`${aiMemory.metadata}->>'sourceMailboxId'`, mailboxId)
+    ),
+    eq(aiMemory.status, "active"),
+    or(isNull(aiMemory.expiresAt), gt(aiMemory.expiresAt, new Date()))
+  );
+  categories = [
+    ...new Set([
+      ...categories,
+      "identity",
+      "writing_style",
+      "preferences",
+    ] satisfies AiMemoryCategory[]),
+  ];
+  const categoryIds = sql`(select id from (
+    select ${aiMemory.id} as id,
+      row_number() over (
+        partition by coalesce(${aiMemory.metadata}->>'category', 'preferences')
+        order by ${aiMemory.importance} desc, ${aiMemory.lastConfirmedAt} desc, ${aiMemory.id}
+      ) as position
+    from ${aiMemory}
+    where ${usable}
+      and jsonb_array_length(coalesce(${aiMemory.metadata}->'correspondents', '[]'::jsonb)) = 0
+      and coalesce(${aiMemory.metadata}->>'category', 'preferences') in (${sql.join(
+        categories.map((category) => sql`${category}`),
+        sql`, `
+      )})
+  ) balanced where position <= 8)`;
+  const [general, matchingText, matchingContacts] = await Promise.all([
+    db
+      .select(memoryColumns)
+      .from(aiMemory)
+      .where(and(usable, inArray(aiMemory.id, categoryIds)))
+      .orderBy(asc(aiMemory.id)),
+    db
+      .select(memoryColumns)
+      .from(aiMemory)
+      .where(and(usable, sql`${document} @@ ${textQuery}`))
+      .orderBy(
+        desc(sql`ts_rank_cd(${document}, ${textQuery})`),
+        asc(aiMemory.id)
+      )
+      .limit(32),
+    db
+      .select(memoryColumns)
+      .from(aiMemory)
+      .where(and(usable, contactMatch))
+      .orderBy(desc(aiMemory.lastConfirmedAt), asc(aiMemory.id))
+      .limit(32),
+  ]);
+  return [
+    ...new Map(
+      [...matchingContacts, ...matchingText, ...general].map((memory) => [
+        memory.id,
+        memory,
+      ])
+    ).values(),
+  ];
+};
 
 const buildMemoryValues = ({
   operation,
   source,
+  sourceMailboxId,
 }: {
   operation: AiMemoryUpdatePlan["operations"][number];
   source: AiMemorySource;
+  sourceMailboxId?: string;
 }) => ({
   confidence: operation.confidence,
   content: operation.content ?? operation.summary,
-  // Content changed, so any stored embedding no longer describes this record.
-  // A null embedding is the re-embedding queue.
-  embeddedAt: null,
-  embedding: null,
   expiresAt: operation.expiresAt ? new Date(operation.expiresAt) : null,
   importance: operation.importance,
   key: operation.key,
   kind: operation.kind,
   metadata: {
     agents: operation.agents.length > 0 ? operation.agents : ["all"],
+    category: operation.category ?? "preferences",
+    correspondents: operation.correspondents ?? [],
     topics: operation.topics,
+    ...(sourceMailboxId === undefined ? {} : { sourceMailboxId }),
   } satisfies AiMemoryMetadata,
   source,
   summary: operation.summary,
 });
 
+const eraseAiMemoryRecords = async ({
+  executor,
+  memories,
+  scope,
+}: {
+  executor: DatabaseExecutor;
+  memories: MemoryRow[];
+  scope: UserMemoryOwner;
+}) => {
+  if (memories.length === 0) {
+    return;
+  }
+  const ids = memories.map(({ id }) => id);
+  const historyCondition = and(
+    eq(aiMemoryChangeSet.userId, scope.userId),
+    sql`exists (
+      select 1 from jsonb_array_elements(${aiMemoryChangeSet.changes}) as change
+      where change->>'memoryId' in (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `
+      )})
+    )`
+  );
+  for (const memory of memories) {
+    const { labelId, sourceMailboxId, feedbackSource } = memory.metadata;
+    if (
+      "feedbackSource" in memory.metadata &&
+      typeof labelId === "string" &&
+      typeof sourceMailboxId === "string"
+    ) {
+      await executor
+        .delete(mailAutoLabelFeedback)
+        .where(
+          and(
+            eq(mailAutoLabelFeedback.createdByUserId, scope.userId),
+            eq(mailAutoLabelFeedback.mailboxId, sourceMailboxId),
+            eq(mailAutoLabelFeedback.labelId, labelId),
+            typeof feedbackSource === "string"
+              ? eq(mailAutoLabelFeedback.source, feedbackSource)
+              : isNull(mailAutoLabelFeedback.source)
+          )
+        );
+    }
+  }
+  const history = await executor
+    .select({ sourceEventId: aiMemoryChangeSet.sourceEventId })
+    .from(aiMemoryChangeSet)
+    .where(historyCondition);
+  const sourceIds = [
+    ...new Set(
+      [
+        ...memories.map(({ sourceReference }) => sourceReference),
+        ...history.map(({ sourceEventId }) => sourceEventId),
+      ].filter((id): id is string => id !== null)
+    ),
+  ];
+  await executor.delete(aiMemoryChangeSet).where(historyCondition);
+  if (sourceIds.length > 0) {
+    await executor
+      .update(userAiContextEvent)
+      .set({
+        lastError: null,
+        metadata: {},
+        processingAt: null,
+        skippedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          inArray(userAiContextEvent.id, sourceIds),
+          eq(userAiContextEvent.userId, scope.userId)
+        )
+      );
+  }
+  await discardPendingAiMemoryEvents(executor, scope);
+  await completeAiMemoryBootstrap(executor, scope);
+  await executor
+    .delete(aiMemory)
+    .where(
+      and(
+        eq(aiMemory.scopeKey, scope.scopeKey),
+        eq(aiMemory.userId, scope.userId),
+        inArray(aiMemory.id, ids)
+      )
+    );
+};
+
 const applyAiMemoryPlan = async ({
   actorUserId,
+  allowDirectUserFactUpdates = false,
   changeSetSource,
   executor,
   existingEditsOnly = false,
+  expectedRevision,
   expectedVersions,
   plan,
-  request,
   scope,
   source,
+  sourceClaimedAt,
   sourceEventId,
   sourceEventIds,
+  sourceEventMailboxId,
 }: {
   actorUserId: string;
+  allowDirectUserFactUpdates?: boolean;
   changeSetSource: "chat" | "feedback" | "settings" | "system";
   executor?: DatabaseExecutor;
   existingEditsOnly?: boolean;
+  expectedRevision: number;
   expectedVersions?: ReadonlyMap<string, number>;
   plan: AiMemoryUpdatePlan;
-  request: string | null;
-  scope: MemoryScopeTarget;
+  scope: UserMemoryOwner;
   source: AiMemorySource;
+  sourceClaimedAt?: Date;
   sourceEventId?: string | null;
   sourceEventIds?: string[];
+  sourceEventMailboxId?: string;
 }) => {
-  const appliedChangeSet = await (executor ?? db).transaction(async (tx) => {
-    if (scope.scope === "user") {
-      await tx
-        .select({ id: memoryUser.id })
-        .from(memoryUser)
-        .where(eq(memoryUser.id, actorUserId))
-        .for("update");
-    } else {
-      await tx
-        .select({ id: mailbox.id })
-        .from(mailbox)
-        .where(eq(mailbox.id, scope.mailboxId ?? ""))
-        .for("update");
+  const mailboxKeyPrefix =
+    sourceEventMailboxId === undefined
+      ? null
+      : `labeling:${createHash("sha256").update(sourceEventMailboxId).digest("hex")}:`;
+  const operations = plan.operations.map((operation) => {
+    if (
+      mailboxKeyPrefix === null ||
+      operation.category !== "labeling" ||
+      operation.action !== "add" ||
+      operation.targetId !== null ||
+      operation.key.startsWith(mailboxKeyPrefix)
+    ) {
+      return operation;
     }
-    await tx
-      .select({ id: aiMemory.id })
-      .from(aiMemory)
-      .where(eq(aiMemory.scopeKey, scope.scopeKey))
-      .for("update");
+    return {
+      ...operation,
+      key: `${mailboxKeyPrefix}${createHash("sha256").update(operation.key).digest("hex")}`,
+    };
+  });
+  const appliedChangeSet = await (executor ?? db).transaction(async (tx) => {
+    const config = await lockAiMemoryScope(tx, scope);
+    if (config.revision !== expectedRevision) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "Memory changed while this update was being prepared. Try again.",
+      });
+    }
     if (sourceEventIds !== undefined && sourceEventIds.length > 0) {
       const claimedEvents = await tx
         .select({ id: userAiContextEvent.id })
@@ -696,6 +705,11 @@ const applyAiMemoryPlan = async ({
         .where(
           and(
             inArray(userAiContextEvent.id, sourceEventIds),
+            eq(userAiContextEvent.userId, actorUserId),
+            eq(userAiContextEvent.mailboxId, sourceEventMailboxId ?? ""),
+            sourceClaimedAt
+              ? eq(userAiContextEvent.processingAt, sourceClaimedAt)
+              : undefined,
             isNull(userAiContextEvent.mergedAt),
             isNull(userAiContextEvent.skippedAt)
           )
@@ -706,28 +720,34 @@ const applyAiMemoryPlan = async ({
           message: "These observations were already processed or forgotten.",
         });
       }
-      const [latestConfig] = await tx
-        .select({
-          activeLearningEnabled: aiMemoryScopeConfig.activeLearningEnabled,
-        })
-        .from(aiMemoryScopeConfig)
-        .where(eq(aiMemoryScopeConfig.scopeKey, scope.scopeKey))
-        .for("share");
-      if (latestConfig !== undefined && !latestConfig.activeLearningEnabled) {
+      if (!config.activeLearningEnabled) {
         throw new ORPCError("CONFLICT", { message: "Learning is paused." });
       }
     }
-    const current = await tx
-      .select()
-      .from(aiMemory)
-      .where(eq(aiMemory.scopeKey, scope.scopeKey));
+    const targetIds = operations.flatMap(({ targetId }) =>
+      targetId ? [targetId] : []
+    );
+    const keys = operations.map(({ key }) => key);
+    const current =
+      keys.length === 0
+        ? []
+        : await tx
+            .select(memoryColumns)
+            .from(aiMemory)
+            .where(
+              and(
+                eq(aiMemory.scopeKey, scope.scopeKey),
+                eq(aiMemory.userId, scope.userId),
+                or(inArray(aiMemory.id, targetIds), inArray(aiMemory.key, keys))
+              )
+            );
     const recordsById = new Map(current.map((memory) => [memory.id, memory]));
     const recordsByKey = new Map(current.map((memory) => [memory.key, memory]));
     const changes: AiMemoryChange[] = [];
     const now = new Date();
     if (
       existingEditsOnly &&
-      plan.operations.some((operation) => {
+      operations.some((operation) => {
         const target = operation.targetId
           ? recordsById.get(operation.targetId)
           : undefined;
@@ -746,17 +766,19 @@ const applyAiMemoryPlan = async ({
       });
     }
     if (
-      plan.operations.some(
+      operations.some(
         ({ targetId }) => targetId !== null && !recordsById.has(targetId)
       ) ||
       (expectedVersions !== undefined &&
         current.some(
           (record) =>
             record.version !== expectedVersions.get(record.id) &&
-            plan.operations.some((operation) =>
+            operations.some((operation) =>
               operation.targetId
                 ? operation.targetId === record.id
-                : operation.key === record.key
+                : operation.key === record.key &&
+                  (operation.action !== "add" ||
+                    expectedVersions.has(record.id))
             )
         ))
     ) {
@@ -766,10 +788,65 @@ const applyAiMemoryPlan = async ({
       });
     }
 
-    for (const operation of plan.operations) {
-      const target = operation.targetId
+    const forgotten: MemoryRow[] = [];
+    const seenTargets = new Set<string>();
+    for (const proposedOperation of operations) {
+      let operation = proposedOperation;
+      let target = operation.targetId
         ? recordsById.get(operation.targetId)
         : recordsByKey.get(operation.key);
+      const targetKey = target?.id ?? `new:${operation.key}`;
+      if (seenTargets.has(targetKey)) {
+        throw new ORPCError("CONFLICT", {
+          message: "The memory update included conflicting changes. Try again.",
+        });
+      }
+      seenTargets.add(targetKey);
+      if (
+        operation.action === "add" &&
+        operation.targetId === null &&
+        target !== undefined &&
+        expectedVersions !== undefined &&
+        !expectedVersions.has(target.id)
+      ) {
+        const fact = JSON.stringify([
+          operation.content,
+          operation.kind,
+          operation.category ?? "preferences",
+          operation.correspondents ?? [],
+        ]);
+        if (
+          fact ===
+          JSON.stringify([
+            target.content,
+            target.kind,
+            target.metadata.category ?? "preferences",
+            target.metadata.correspondents ?? [],
+          ])
+        ) {
+          continue;
+        }
+        const suffix = `:add:${createHash("sha256").update(operation.key).update(fact).digest("hex")}`;
+        operation = {
+          ...operation,
+          key: `${operation.key.slice(0, 200 - suffix.length)}${suffix}`,
+        };
+        const [existing] = await tx
+          .select({ id: aiMemory.id })
+          .from(aiMemory)
+          .where(
+            and(
+              eq(aiMemory.scopeKey, scope.scopeKey),
+              eq(aiMemory.userId, scope.userId),
+              eq(aiMemory.key, operation.key)
+            )
+          )
+          .limit(1);
+        if (existing !== undefined) {
+          continue;
+        }
+        target = undefined;
+      }
       if (
         existingEditsOnly &&
         (target === undefined || target.status !== "active")
@@ -783,6 +860,33 @@ const applyAiMemoryPlan = async ({
         continue;
       }
 
+      if (
+        target !== undefined &&
+        source !== "explicit" &&
+        JSON.stringify(target.metadata.correspondents ?? []) !==
+          JSON.stringify(operation.correspondents ?? [])
+      ) {
+        continue;
+      }
+      if (
+        target?.source === "explicit" &&
+        source !== "explicit" &&
+        !(
+          allowDirectUserFactUpdates &&
+          target.kind === "learned" &&
+          operation.action === "update"
+        )
+      ) {
+        continue;
+      }
+      if (operation.action === "archive" && source === "explicit") {
+        if (target !== undefined) {
+          forgotten.push(target);
+          recordsById.delete(target.id);
+          recordsByKey.delete(target.key);
+        }
+        continue;
+      }
       if (operation.action === "archive") {
         if (target === undefined || target.status === "archived") {
           continue;
@@ -818,7 +922,12 @@ const applyAiMemoryPlan = async ({
         continue;
       }
 
-      const values = buildMemoryValues({ operation, source });
+      const values = buildMemoryValues({
+        operation,
+        source: target?.source === "explicit" ? "explicit" : source,
+        sourceMailboxId:
+          operation.category === "labeling" ? sourceEventMailboxId : undefined,
+      });
       if (target) {
         const [updated] = await tx
           .update(aiMemory)
@@ -826,6 +935,7 @@ const applyAiMemoryPlan = async ({
             ...values,
             archivedAt: null,
             lastConfirmedAt: now,
+            metadata: { ...target.metadata, ...values.metadata },
             reinforcementCount: sql`${aiMemory.reinforcementCount} + 1`,
             sourceReference: sourceEventId ?? target.sourceReference,
             status: "active",
@@ -879,6 +989,12 @@ const applyAiMemoryPlan = async ({
       }
     }
 
+    if (forgotten.length > 0) {
+      await eraseAiMemoryRecords({ executor: tx, memories: forgotten, scope });
+    }
+    if (source === "explicit" && (changes.length > 0 || forgotten.length > 0)) {
+      await advanceAiMemoryScopeRevision(tx, scope);
+    }
     const [insertedChangeSet] = await tx
       .insert(aiMemoryChangeSet)
       .values({
@@ -886,11 +1002,13 @@ const applyAiMemoryPlan = async ({
         createdAt: now,
         id: randomUUID(),
         mailboxId: scope.mailboxId,
-        request,
+        request: null,
         source: changeSetSource,
         sourceEventId: sourceEventId ?? null,
-        status: changes.length > 0 ? "applied" : "no_change",
-        summary: plan.summary,
+        status:
+          changes.length > 0 || forgotten.length > 0 ? "applied" : "no_change",
+        summary:
+          forgotten.length > 0 ? "Forgot the requested memory." : plan.summary,
         updatedAt: now,
         userId: actorUserId,
       })
@@ -906,22 +1024,24 @@ const applyAiMemoryPlan = async ({
         .set({
           lastError: null,
           mergedAt: now,
-          metadata: sql`${userAiContextEvent.metadata} - 'userMessage'`,
+          metadata: {},
           processingAt: null,
           updatedAt: now,
         })
-        .where(inArray(userAiContextEvent.id, sourceEventIds));
+        .where(
+          and(
+            inArray(userAiContextEvent.id, sourceEventIds),
+            sourceClaimedAt
+              ? eq(userAiContextEvent.processingAt, sourceClaimedAt)
+              : undefined,
+            isNull(userAiContextEvent.mergedAt),
+            isNull(userAiContextEvent.skippedAt)
+          )
+        );
     }
 
     return { changeSet: insertedChangeSet, changes };
   });
-  if (executor === undefined) {
-    void embedAiMemories(
-      appliedChangeSet.changes.flatMap((change) =>
-        change.after?.status === "active" ? [change.memoryId] : []
-      )
-    );
-  }
   return appliedChangeSet.changeSet;
 };
 
@@ -973,20 +1093,116 @@ const reportMemoryUsage = async ({
   }
 };
 
+const planRequestedAiMemoryUpdate = async ({
+  allowMutations,
+  billingOrganizationId,
+  mailboxId,
+  mode,
+  request,
+  scope,
+  userId,
+  userMessage,
+}: {
+  allowMutations: boolean;
+  billingOrganizationId: string;
+  mailboxId: string;
+  mode: "request" | "remember";
+  request: string;
+  scope: UserMemoryOwner;
+  userId: string;
+  userMessage?: string | null;
+}) => {
+  await assertCanUseAi({
+    organizationId: billingOrganizationId,
+    userId,
+  });
+  const config = await loadAiMemoryScopeConfig(scope);
+  const current =
+    mode === "remember"
+      ? await listConsolidationMemories({
+          events: [
+            {
+              kind: "explicit_preference",
+              metadata: { userMessage: userMessage ?? request },
+            },
+          ],
+          mailboxId,
+          scope,
+        })
+      : await listScopeMemories(scope.userId);
+  const plans: AiMemoryUpdatePlan[] = [];
+  const requestId = randomUUID();
+  const pageSize =
+    mode === "remember"
+      ? Math.max(1, current.length)
+      : AI_MEMORY_UPDATE_OPERATION_LIMIT;
+  for (
+    let offset = 0;
+    offset < Math.max(1, current.length);
+    offset += pageSize
+  ) {
+    if (offset > 0) {
+      await assertCanUseAi({
+        organizationId: billingOrganizationId,
+        userId,
+      });
+    }
+    const usage = createUsageCollector();
+    try {
+      plans.push(
+        await planAiMemoryUpdate({
+          currentMemories: current
+            .slice(offset, offset + pageSize)
+            .map(toEditorMemory),
+          existingEditsOnly: offset > 0,
+          learningGuidance: allowMutations
+            ? config.learningPrompt
+            : `${config.learningPrompt}\n\nThis interaction is read-only. Answer the question and return zero operations.`,
+
+          onUsage: usage.collect,
+          request,
+          source: "explicit",
+          userMessage: userMessage ?? request,
+        })
+      );
+    } finally {
+      await reportMemoryUsage({
+        externalId: `ai-memory-request:${requestId}:${offset}`,
+        mailboxId,
+        usage: usage.usage(),
+        userId,
+      });
+    }
+  }
+  const plan: AiMemoryUpdatePlan = {
+    answer: plans.map(({ answer }) => answer).join("\n\n"),
+    operations: allowMutations
+      ? plans.flatMap(({ operations }) => operations)
+      : [],
+    summary: plans[0]?.summary ?? "Reviewed personal knowledge.",
+  };
+  return {
+    expectedRevision: config.revision,
+    expectedVersions: new Map(current.map(({ id, version }) => [id, version])),
+    plan,
+    scope,
+  };
+};
+
 export const requestAiMemoryUpdate = async ({
   allowMutations = true,
   changeSetSource = "settings",
   mailboxId,
+  mode = "request",
   request,
-  scope: requestedScope,
   userId,
   userMessage,
 }: {
   allowMutations?: boolean;
   changeSetSource?: "chat" | "settings";
   mailboxId: string;
+  mode?: "request" | "remember";
   request: string;
-  scope: "mailbox" | "user";
   userId: string;
   /** The acting user's verbatim message, when the caller has one. */
   userMessage?: string | null;
@@ -1000,73 +1216,23 @@ export const requestAiMemoryUpdate = async ({
     });
   }
   const billingMailbox = await assertAccessibleMailbox({ mailboxId, userId });
-  await assertCanUseAi({
-    organizationId: billingMailbox.organizationId,
+  const prepared = await planRequestedAiMemoryUpdate({
+    allowMutations,
+    billingOrganizationId: billingMailbox.organizationId,
+    mailboxId,
+    mode,
+    request: normalizedRequest,
+    scope: userScope(userId),
     userId,
+    userMessage,
   });
-  const scope =
-    requestedScope === "user" ? userScope(userId) : mailboxScope(mailboxId);
-  const [current, config] = await Promise.all([
-    listScopeMemories(scope.scopeKey),
-    loadAiMemoryScopeConfig(scope),
-  ]);
-  const usage = createUsageCollector();
-
-  try {
-    const plan = await planAiMemoryUpdate({
-      currentMemories: current.map(toEditorMemory),
-      learningGuidance: allowMutations
-        ? config.learningPrompt
-        : `${config.learningPrompt}\n\nThis interaction is read-only. Answer the question and return zero operations.`,
-      memoryScope: scope.scope,
-      onUsage: usage.collect,
-      request: normalizedRequest,
-      source: "explicit",
-      userMessage,
-    });
-    const appliedPlan = allowMutations
-      ? plan
-      : {
-          ...plan,
-          operations: [],
-          summary: "Answered from mailbox knowledge without changing it.",
-        };
-    const changeSet = await applyAiMemoryPlan({
-      actorUserId: userId,
-      changeSetSource,
-      plan: appliedPlan,
-      request: normalizedRequest,
-      scope,
-      source: "explicit",
-    });
-    await reportMemoryUsage({
-      externalId: `ai-memory-request:${changeSet.id}`,
-      mailboxId,
-      usage: usage.usage(),
-      userId,
-    });
-    return { ...changeSet, answer: plan.answer };
-  } catch (error) {
-    const now = new Date();
-    await db.insert(aiMemoryChangeSet).values({
-      changes: [],
-      createdAt: now,
-      error:
-        error instanceof Error
-          ? error.message.slice(0, 2000)
-          : "Unknown error.",
-      id: randomUUID(),
-      mailboxId: scope.mailboxId,
-      request: normalizedRequest,
-      source: changeSetSource,
-      status: "failed",
-      summary:
-        "Nothing changed because Quieter could not safely apply that memory update.",
-      updatedAt: now,
-      userId,
-    });
-    throw error;
-  }
+  const changeSet = await applyAiMemoryPlan({
+    ...prepared,
+    actorUserId: userId,
+    changeSetSource,
+    source: "explicit",
+  });
+  return { ...changeSet, answer: prepared.plan.answer };
 };
 
 export const recordAiMemoryEvent = async (input: {
@@ -1075,25 +1241,18 @@ export const recordAiMemoryEvent = async (input: {
   mailboxId: string;
   metadata: AiMemoryEventMetadata;
   userId: string;
-}) =>
-  await db.transaction(async (tx) => {
-    const scope =
-      input.metadata.memoryScope === "user"
-        ? userScope(input.userId)
-        : mailboxScope(input.mailboxId);
-    if (scope.scope === "user") {
-      await tx
-        .select({ id: memoryUser.id })
-        .from(memoryUser)
-        .where(eq(memoryUser.id, input.userId))
-        .for("update");
-    } else {
-      await tx
-        .select({ id: mailbox.id })
-        .from(mailbox)
-        .where(eq(mailbox.id, input.mailboxId))
-        .for("update");
-    }
+}) => {
+  await assertAccessibleMailbox({
+    mailboxId: input.mailboxId,
+    userId: input.userId,
+  });
+  return await db.transaction(async (tx) => {
+    const scope = userScope(input.userId);
+    await tx
+      .select({ id: memoryUser.id })
+      .from(memoryUser)
+      .where(eq(memoryUser.id, input.userId))
+      .for("update");
     const [config] = await tx
       .select({
         activeLearningEnabled: aiMemoryScopeConfig.activeLearningEnabled,
@@ -1103,6 +1262,25 @@ export const recordAiMemoryEvent = async (input: {
       .for("share");
     if (config !== undefined && !config.activeLearningEnabled) {
       return null;
+    }
+    if (input.metadata.source === "bootstrap") {
+      const [bootstrap] = await tx
+        .select({
+          processingAt: aiMemoryMailboxState.processingAt,
+          status: aiMemoryMailboxState.status,
+          userId: aiMemoryMailboxState.userId,
+        })
+        .from(aiMemoryMailboxState)
+        .where(eq(aiMemoryMailboxState.mailboxId, input.mailboxId))
+        .for("share");
+      if (
+        bootstrap === undefined ||
+        bootstrap.userId !== input.userId ||
+        bootstrap.status !== "processing" ||
+        bootstrap.processingAt?.toISOString() !== input.metadata.bootstrapLease
+      ) {
+        return null;
+      }
     }
     const [selectedMailbox] = await tx
       .select({ organizationId: mailbox.organizationId })
@@ -1124,7 +1302,6 @@ export const recordAiMemoryEvent = async (input: {
                   input.userId,
                   input.mailboxId,
                   input.kind,
-                  input.metadata.memoryScope,
                   input.eventKey,
                 ])
               )
@@ -1132,7 +1309,7 @@ export const recordAiMemoryEvent = async (input: {
           : randomUUID(),
         kind: input.kind,
         mailboxId: input.mailboxId,
-        metadata: sanitizeMetadata(input.metadata),
+        metadata: { ...sanitizeMetadata(input.metadata), memoryScope: "user" },
         organizationId: selectedMailbox.organizationId,
         updatedAt: now,
         userId: input.userId,
@@ -1141,6 +1318,7 @@ export const recordAiMemoryEvent = async (input: {
       .returning({ id: userAiContextEvent.id });
     return event ?? null;
   });
+};
 
 export const learnAiMemoryFromFeedback = async (input: {
   eventKey?: string;
@@ -1180,192 +1358,80 @@ const canRunMemoryModel = async (input: {
 const forgetSensitiveAiMemory = async (input: {
   mailboxId: string;
   messageId: string;
-  scopes: MemoryScopeTarget[];
   text: string;
   userId: string;
 }) => {
-  const { scopes } = input;
-  const scopePlans: {
-    ownedMemoryCondition: ReturnType<typeof and>;
-    scope: MemoryScopeTarget;
-    targets: MemoryRow[];
-  }[] = [];
-  const billingMailbox = await assertAccessibleMailbox({
-    mailboxId: input.mailboxId,
-    userId: input.userId,
-  });
-  for (const scope of scopes) {
-    const ownedMemoryCondition = and(
-      eq(aiMemory.scopeKey, scope.scopeKey),
-      eq(aiMemory.scope, scope.scope),
-      scope.scope === "user"
-        ? and(eq(aiMemory.userId, input.userId), isNull(aiMemory.mailboxId))
-        : and(eq(aiMemory.mailboxId, input.mailboxId), isNull(aiMemory.userId))
-    );
-    const current = await db
-      .select()
-      .from(aiMemory)
-      .where(ownedMemoryCondition)
-      .orderBy(desc(aiMemory.updatedAt));
-    const targetIds: string[] = [];
-    for (let offset = 0; offset < current.length; offset += 100) {
-      if (
-        !(await canRunMemoryModel({
-          organizationId: billingMailbox.organizationId,
-          userId: input.userId,
-        }))
-      ) {
-        throw new ORPCError("FORBIDDEN", {
-          message:
-            "Nothing was forgotten because the full memory scan requires available usage balance.",
-        });
-      }
-      const usage = createUsageCollector();
-      try {
-        targetIds.push(
-          ...(await planAiMemoryDeletion({
-            currentMemories: current
-              .slice(offset, offset + 100)
-              .map(toEditorMemory),
-            memoryScope: scope.scope,
-            onUsage: usage.collect,
-            userMessage: input.text,
-          }))
-        );
-      } finally {
-        await reportMemoryUsage({
-          externalId: `ai-memory-chat-forget:${scope.scope}:${input.messageId}:${offset}`,
-          mailboxId: input.mailboxId,
-          usage: usage.usage(),
-          userId: input.userId,
-        });
-      }
-    }
-    const selectedIds = new Set(targetIds);
-    const targets = current.filter(({ id }) => selectedIds.has(id));
-    if (targets.length > 0) {
-      scopePlans.push({ ownedMemoryCondition, scope, targets });
-    }
-  }
-  if (scopePlans.length === 0) {
-    return { status: "skipped" as const };
-  }
-  if (scopes.some((scope) => scope.scope === "mailbox")) {
-    const access = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: input.userId,
-    });
-    if (!access.capabilities.canManageKnowledge) {
+  const scope = userScope(input.userId);
+  const billingMailbox = await assertAccessibleMailbox(input);
+  const current = await listScopeMemories(input.userId);
+  const targetIds: string[] = [];
+  for (let offset = 0; offset < current.length; offset += 100) {
+    if (
+      !(await canRunMemoryModel({
+        organizationId: billingMailbox.organizationId,
+        userId: input.userId,
+      }))
+    ) {
       throw new ORPCError("FORBIDDEN", {
-        message: "Nothing was forgotten because your mailbox access changed.",
+        message:
+          "Nothing was forgotten because the full memory scan requires available usage balance.",
+      });
+    }
+    const usage = createUsageCollector();
+    try {
+      targetIds.push(
+        ...(await planAiMemoryDeletion({
+          currentMemories: current
+            .slice(offset, offset + 100)
+            .map(toEditorMemory),
+          onUsage: usage.collect,
+          userMessage: input.text,
+        }))
+      );
+    } finally {
+      await reportMemoryUsage({
+        externalId: `ai-memory-chat-forget:${input.messageId}:${offset}`,
+        mailboxId: input.mailboxId,
+        usage: usage.usage(),
+        userId: input.userId,
       });
     }
   }
+  const selectedIds = new Set(targetIds);
+  const targets = current.filter(({ id }) => selectedIds.has(id));
+  if (targets.length === 0) {
+    return { status: "skipped" as const };
+  }
   await db.transaction(async (tx) => {
-    for (const { ownedMemoryCondition, scope, targets } of scopePlans) {
-      const selectedIds = new Set(targets.map(({ id }) => id));
-      if (scope.scope === "user") {
-        await tx
-          .select({ id: memoryUser.id })
-          .from(memoryUser)
-          .where(eq(memoryUser.id, input.userId))
-          .for("update");
-      } else {
-        await tx
-          .select({ id: mailbox.id })
-          .from(mailbox)
-          .where(eq(mailbox.id, input.mailboxId))
-          .for("update");
-      }
-      const targetCondition = and(
-        ownedMemoryCondition,
-        inArray(
-          aiMemory.id,
-          targets.map(({ id }) => id)
-        )
-      );
-      const locked = await tx
-        .select()
-        .from(aiMemory)
-        .where(targetCondition)
-        .for("update");
-      if (
-        locked.length !== targets.length ||
-        locked.some(
-          (memory) =>
-            memory.version !==
-            targets.find(({ id }) => id === memory.id)?.version
-        )
-      ) {
-        throw new ORPCError("CONFLICT", {
-          message: "The memory to forget was changed or already forgotten.",
-        });
-      }
-      const scopeChangesCondition =
-        scope.scope === "user"
-          ? and(
-              eq(aiMemoryChangeSet.userId, input.userId),
-              isNull(aiMemoryChangeSet.mailboxId)
-            )
-          : eq(aiMemoryChangeSet.mailboxId, input.mailboxId);
-      const history = await tx
-        .select()
-        .from(aiMemoryChangeSet)
-        .where(scopeChangesCondition);
-      const affectedHistory = history.filter(({ changes }) =>
-        changes.some(({ memoryId }) => selectedIds.has(memoryId))
-      );
-      const sourceEventIds = [
-        ...new Set(
-          [
-            ...locked.map(({ sourceReference }) => sourceReference),
-            ...affectedHistory.map(({ sourceEventId }) => sourceEventId),
-          ].filter((id): id is string => id !== null)
-        ),
-      ];
-      // Erasure must also remove undo snapshots and source observations. Archiving
-      // would retain the secret and let a later undo or refresh recreate it.
-      if (affectedHistory.length > 0) {
-        await tx.delete(aiMemoryChangeSet).where(
-          and(
-            scopeChangesCondition,
-            inArray(
-              aiMemoryChangeSet.id,
-              affectedHistory.map(({ id }) => id)
-            )
+    await lockAiMemoryScope(tx, scope);
+    const locked = await tx
+      .select(memoryColumns)
+      .from(aiMemory)
+      .where(
+        and(
+          eq(aiMemory.userId, input.userId),
+          eq(aiMemory.scopeKey, scope.scopeKey),
+          eq(aiMemory.userId, scope.userId),
+          inArray(
+            aiMemory.id,
+            targets.map(({ id }) => id)
           )
-        );
-      }
-      if (sourceEventIds.length > 0) {
-        await tx
-          .delete(userAiContextEvent)
-          .where(
-            and(
-              inArray(userAiContextEvent.id, sourceEventIds),
-              scope.scope === "user"
-                ? and(
-                    eq(userAiContextEvent.userId, input.userId),
-                    or(
-                      eq(userAiContextEvent.kind, "chat_discovery"),
-                      eq(userAiContextEvent.kind, "explicit_preference"),
-                      eq(
-                        sql<string>`${userAiContextEvent.metadata}->>'memoryScope'`,
-                        "user"
-                      )
-                    )
-                  )
-                : and(
-                    eq(userAiContextEvent.mailboxId, input.mailboxId),
-                    eq(
-                      sql<string>`coalesce(${userAiContextEvent.metadata}->>'memoryScope', 'mailbox')`,
-                      "mailbox"
-                    )
-                  )
-            )
-          );
-      }
-      await tx.delete(aiMemory).where(targetCondition);
+        )
+      )
+      .for("update");
+    if (
+      locked.length !== targets.length ||
+      locked.some(
+        (memory) =>
+          memory.version !== targets.find(({ id }) => id === memory.id)?.version
+      )
+    ) {
+      throw new ORPCError("CONFLICT", {
+        message: "The memory to forget was changed or already forgotten.",
+      });
     }
+    await eraseAiMemoryRecords({ executor: tx, memories: locked, scope });
+    await advanceAiMemoryScopeRevision(tx, scope);
   });
   return { status: "refreshed" as const };
 };
@@ -1373,17 +1439,19 @@ const forgetSensitiveAiMemory = async (input: {
 const planExistingAiMemoryFromChatMessage = async (input: {
   mailboxId: string;
   messageId: string;
-  scope: MemoryScopeTarget;
+  scope: UserMemoryOwner;
   text: string;
   userId: string;
 }) => {
   const { scope } = input;
+  const config = await loadAiMemoryScopeConfig(scope);
   const current = await db
-    .select()
+    .select(memoryColumns)
     .from(aiMemory)
     .where(
       and(
         eq(aiMemory.scopeKey, scope.scopeKey),
+        eq(aiMemory.userId, scope.userId),
         eq(aiMemory.status, "active"),
         or(isNull(aiMemory.expiresAt), gt(aiMemory.expiresAt, new Date()))
       )
@@ -1422,17 +1490,17 @@ const planExistingAiMemoryFromChatMessage = async (input: {
       const plan = await planAiMemoryUpdate({
         currentMemories: batch.map(toEditorMemory),
         existingEditsOnly: true,
-        memoryScope: scope.scope,
+
         onUsage: usage.collect,
         request:
-          "Apply only an explicit correction or forgetting request for existing knowledge in this scope.",
+          "Apply only an explicit correction or forgetting request for the user's existing memories.",
         source: "explicit",
         userMessage: input.text.slice(0, AI_MEMORY_USER_MESSAGE_MAX_LENGTH),
       });
       operations.push(...plan.operations);
     } finally {
       await reportMemoryUsage({
-        externalId: `ai-memory-chat-edit:${scope.scope}:${input.messageId}:${offset}`,
+        externalId: `ai-memory-chat-edit:${input.messageId}:${offset}`,
         mailboxId: input.mailboxId,
         usage: usage.usage(),
         userId: input.userId,
@@ -1443,6 +1511,7 @@ const planExistingAiMemoryFromChatMessage = async (input: {
     return null;
   }
   return {
+    expectedRevision: config.revision,
     expectedVersions: new Map(current.map(({ id, version }) => [id, version])),
     plan: {
       answer: "Updated the requested knowledge.",
@@ -1504,7 +1573,7 @@ export const learnAiMemoryFromChatMessage = async (
 ) => {
   const text = input.bodyText.trim();
   if (!text) {
-    return { status: "skipped" as const };
+    return { explicit: false, status: "skipped" as const };
   }
   const accessibleMailbox = await assertAccessibleMailbox({
     mailboxId: input.mailboxId,
@@ -1534,85 +1603,64 @@ export const learnAiMemoryFromChatMessage = async (
     }
   }
   if (editIntent === "forget_sensitive") {
-    const scope = userScope(input.userId);
-    return await forgetSensitiveAiMemory({
+    const result = await forgetSensitiveAiMemory({
       mailboxId: input.mailboxId,
       messageId: input.messageId,
-      scopes: accessibleMailbox.capabilities.canManageKnowledge
-        ? [scope, mailboxScope(input.mailboxId)]
-        : [scope],
       text,
       userId: input.userId,
     });
+    return { ...result, explicit: true };
   }
   if (editIntent === "none") {
-    return await learnPersonalAiMemoryFromChatMessage(input);
+    return {
+      ...(await learnPersonalAiMemoryFromChatMessage(input)),
+      explicit: false,
+    };
   }
-  const scopes = accessibleMailbox.capabilities.canManageKnowledge
-    ? [userScope(input.userId), mailboxScope(input.mailboxId)]
-    : [userScope(input.userId)];
-  const scopePlans: NonNullable<
-    Awaited<ReturnType<typeof planExistingAiMemoryFromChatMessage>>
-  >[] = [];
-  for (const scope of scopes) {
-    const plan = await planExistingAiMemoryFromChatMessage({
-      mailboxId: input.mailboxId,
-      messageId: input.messageId,
-      scope,
-      text,
-      userId: input.userId,
-    });
-    if (plan !== null) {
-      scopePlans.push(plan);
-    }
-  }
-  if (scopePlans.length === 0) {
-    return { status: "skipped" as const };
-  }
-  if (scopes.some((scope) => scope.scope === "mailbox")) {
-    const access = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: input.userId,
-    });
-    if (!access.capabilities.canManageKnowledge) {
-      throw new ORPCError("FORBIDDEN", {
-        message: "Nothing changed because your mailbox access changed.",
-      });
-    }
-  }
-  const changeSets = await db.transaction(async (tx) => {
-    const applied: Awaited<ReturnType<typeof applyAiMemoryPlan>>[] = [];
-    for (const { expectedVersions, plan, scope } of scopePlans) {
-      applied.push(
-        await applyAiMemoryPlan({
-          actorUserId: input.userId,
-          changeSetSource: "chat",
-          executor: tx,
-          existingEditsOnly: true,
-          expectedVersions,
-          plan,
-          request: null,
+  const scope = userScope(input.userId);
+  const prepared =
+    editIntent === "add"
+      ? await planRequestedAiMemoryUpdate({
+          allowMutations: true,
+          billingOrganizationId: accessibleMailbox.organizationId,
+          mailboxId: input.mailboxId,
+          mode: "remember",
+          request:
+            "Remember the information the user explicitly asks to save about themselves and their preferences.",
           scope,
-          source: "explicit",
+          userId: input.userId,
+          userMessage: text,
         })
-      );
-    }
-    return applied;
+      : await planExistingAiMemoryFromChatMessage({
+          mailboxId: input.mailboxId,
+          messageId: input.messageId,
+          scope,
+          text,
+          userId: input.userId,
+        });
+  if (prepared === null || prepared.plan.operations.length === 0) {
+    return { explicit: true, status: "skipped" as const };
+  }
+  const change = await applyAiMemoryPlan({
+    ...prepared,
+    actorUserId: input.userId,
+    changeSetSource: "chat",
+    existingEditsOnly: editIntent !== "add",
+    source: "explicit",
   });
-  void embedAiMemories(
-    changeSets.flatMap(({ changes }) =>
-      changes.flatMap((change) =>
-        change.after?.status === "active" ? [change.memoryId] : []
-      )
-    )
-  );
-  return { status: "refreshed" as const };
+  return {
+    explicit: true,
+    status:
+      change.status === "applied"
+        ? ("refreshed" as const)
+        : ("skipped" as const),
+  };
 };
 
 const resolveMemorySource = (
   kind: UserAiContextEventKind
 ): "explicit" | "feedback" | "inferred" => {
-  if (kind === "chat_discovery" || kind === "explicit_preference") {
+  if (kind === "explicit_preference") {
     return "explicit";
   }
   if (kind === "auto_label_feedback" || kind === "useful_detail_feedback") {
@@ -1646,6 +1694,7 @@ export const refreshAiMemoryFromEvent = async ({
     .limit(1);
   if (
     candidate === undefined ||
+    candidate.metadata.memoryScope !== "user" ||
     candidate.mergedAt !== null ||
     candidate.skippedAt !== null
   ) {
@@ -1685,11 +1734,18 @@ export const refreshAiMemoryFromEvent = async ({
       .set({
         lastError: null,
         mergedAt: new Date(),
-        metadata: sql`${userAiContextEvent.metadata} - 'userMessage'`,
+        metadata: {},
         processingAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(userAiContextEvent.id, event.id));
+      .where(
+        and(
+          eq(userAiContextEvent.id, event.id),
+          eq(userAiContextEvent.processingAt, claimedAt),
+          isNull(userAiContextEvent.mergedAt),
+          isNull(userAiContextEvent.skippedAt)
+        )
+      );
     return { status: "refreshed" as const };
   }
 
@@ -1706,20 +1762,21 @@ export const refreshAiMemoryFromEvent = async ({
         processingAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(userAiContextEvent.id, event.id));
+      .where(
+        and(
+          eq(userAiContextEvent.id, event.id),
+          eq(userAiContextEvent.processingAt, claimedAt),
+          isNull(userAiContextEvent.mergedAt),
+          isNull(userAiContextEvent.skippedAt)
+        )
+      );
     return { status: "ineligible" as const };
   }
 
   const memorySource = resolveMemorySource(event.kind);
   const isExplicit = memorySource === "explicit";
-  const scope =
-    event.metadata.memoryScope === "user"
-      ? userScope(event.userId)
-      : mailboxScope(event.mailboxId);
-  const [current, config] = await Promise.all([
-    listScopeMemories(scope.scopeKey),
-    loadAiMemoryScopeConfig(scope),
-  ]);
+  const scope = userScope(event.userId);
+  const config = await loadAiMemoryScopeConfig(scope);
   if (
     (!isExplicit || event.metadata.ambient === true) &&
     !config.activeLearningEnabled
@@ -1728,17 +1785,23 @@ export const refreshAiMemoryFromEvent = async ({
       .update(userAiContextEvent)
       .set({
         lastError: null,
-        metadata: sql`${userAiContextEvent.metadata} - 'userMessage'`,
+        metadata: {},
         processingAt: null,
         skippedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(userAiContextEvent.id, event.id));
+      .where(
+        and(
+          eq(userAiContextEvent.id, event.id),
+          eq(userAiContextEvent.processingAt, claimedAt),
+          isNull(userAiContextEvent.mergedAt),
+          isNull(userAiContextEvent.skippedAt)
+        )
+      );
     return { status: "skipped" as const };
   }
-  let accessibleMailbox;
   try {
-    accessibleMailbox = await assertAccessibleMailbox({
+    await assertAccessibleMailbox({
       mailboxId: event.mailboxId,
       userId: event.userId,
     });
@@ -1752,30 +1815,22 @@ export const refreshAiMemoryFromEvent = async ({
     await db
       .update(userAiContextEvent)
       .set({
-        metadata: sql`${userAiContextEvent.metadata} - 'userMessage'`,
+        metadata: {},
         processingAt: null,
         skippedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(userAiContextEvent.id, event.id));
+      .where(
+        and(
+          eq(userAiContextEvent.id, event.id),
+          eq(userAiContextEvent.processingAt, claimedAt),
+          isNull(userAiContextEvent.mergedAt),
+          isNull(userAiContextEvent.skippedAt)
+        )
+      );
     return { status: "skipped" as const };
   }
-  if (
-    scope.scope === "mailbox" &&
-    !accessibleMailbox.capabilities.canManageKnowledge
-  ) {
-    await db
-      .update(userAiContextEvent)
-      .set({
-        metadata: sql`${userAiContextEvent.metadata} - 'userMessage'`,
-        processingAt: null,
-        skippedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(userAiContextEvent.id, event.id));
-    return { status: "skipped" as const };
-  }
-  const siblingLimit = isExplicit ? 0 : 19;
+  const siblingLimit = isExplicit ? 0 : 3;
   const pending = await db
     .select({ id: userAiContextEvent.id })
     .from(userAiContextEvent)
@@ -1785,10 +1840,7 @@ export const refreshAiMemoryFromEvent = async ({
         eq(userAiContextEvent.userId, event.userId),
         eq(userAiContextEvent.mailboxId, event.mailboxId),
         eq(userAiContextEvent.kind, event.kind),
-        eq(
-          sql<string>`coalesce(${userAiContextEvent.metadata}->>'memoryScope', 'mailbox')`,
-          scope.scope
-        ),
+        eq(sql<string>`${userAiContextEvent.metadata}->>'memoryScope'`, "user"),
         isNull(userAiContextEvent.mergedAt),
         isNull(userAiContextEvent.skippedAt),
         or(
@@ -1801,7 +1853,7 @@ export const refreshAiMemoryFromEvent = async ({
       )
     )
     .orderBy(asc(userAiContextEvent.createdAt))
-    .limit(event.metadata.ambient === true ? 3 : siblingLimit);
+    .limit(siblingLimit);
   const siblings =
     pending.length === 0
       ? []
@@ -1826,48 +1878,106 @@ export const refreshAiMemoryFromEvent = async ({
             )
           )
           .returning();
-  const events = [event, ...siblings].toSorted(
+  const claimedEvents = [event, ...siblings].toSorted(
     (left, right) => left.createdAt.getTime() - right.createdAt.getTime()
   );
-  const sourceEventIds = events.map(({ id }) => id);
-  const earlierEvents = await db
-    .select({
-      createdAt: userAiContextEvent.createdAt,
-      kind: userAiContextEvent.kind,
-      metadata: userAiContextEvent.metadata,
-    })
-    .from(userAiContextEvent)
-    .where(
-      and(
-        eq(userAiContextEvent.userId, event.userId),
-        eq(userAiContextEvent.mailboxId, event.mailboxId),
-        eq(
-          sql<string>`coalesce(${userAiContextEvent.metadata}->>'memoryScope', 'mailbox')`,
-          scope.scope
-        ),
-        isNotNull(userAiContextEvent.mergedAt),
-        ne(userAiContextEvent.kind, "chat_discovery"),
-        gt(
-          userAiContextEvent.createdAt,
-          new Date(claimedAt.getTime() - 30 * DAY_MS)
+  const events: typeof claimedEvents = [];
+  try {
+    for (const claimed of claimedEvents) {
+      if (
+        claimed.metadata.hydrateMessage !== true ||
+        typeof claimed.metadata.messageId !== "string"
+      ) {
+        events.push(claimed);
+        continue;
+      }
+      const { hydrateMailMemoryEvent } = await import("./ai-memory-capture");
+      const hydrated = await hydrateMailMemoryEvent({
+        mailboxId: claimed.mailboxId,
+        messageId: claimed.metadata.messageId,
+        userId: claimed.userId,
+      });
+      if (hydrated === null) {
+        if (
+          claimed.metadata.messageContextOnly === true &&
+          typeof claimed.metadata.action === "string"
+        ) {
+          events.push({
+            ...claimed,
+            metadata: {
+              ...claimed.metadata,
+              hydrateMessage: false,
+              messageUnavailable: true,
+            },
+          });
+          continue;
+        }
+        await db
+          .update(userAiContextEvent)
+          .set({
+            lastError: null,
+            metadata: {},
+            processingAt: null,
+            skippedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(userAiContextEvent.id, claimed.id),
+              eq(userAiContextEvent.processingAt, claimedAt),
+              isNull(userAiContextEvent.mergedAt),
+              isNull(userAiContextEvent.skippedAt)
+            )
+          );
+        continue;
+      }
+      events.push({
+        ...claimed,
+        metadata: {
+          ...claimed.metadata,
+          ...sanitizeMetadata(hydrated),
+          hydrateMessage: false,
+          memoryScope: "user",
+          observationKind:
+            claimed.metadata.observationKind ?? hydrated.observationKind,
+          source: claimed.metadata.source ?? null,
+        },
+      });
+    }
+  } catch {
+    await db
+      .update(userAiContextEvent)
+      .set({
+        lastError: "Message details could not be loaded for learning.",
+        processingAt: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          inArray(
+            userAiContextEvent.id,
+            claimedEvents.map(({ id }) => id)
+          ),
+          eq(userAiContextEvent.processingAt, claimedAt),
+          isNull(userAiContextEvent.mergedAt),
+          isNull(userAiContextEvent.skippedAt)
         )
-      )
-    )
-    .orderBy(desc(userAiContextEvent.createdAt))
-    .limit(20 - events.length);
-  const observations: AiMemoryObservation[] = [
-    ...earlierEvents.toReversed().map(({ createdAt, kind, metadata }) => ({
-      kind,
-      metadata: {
-        ...Object.fromEntries(
-          Object.entries(metadata).filter(([key]) => key !== "userMessage")
-        ),
-        observedAt: createdAt.toISOString(),
-        previouslyProcessed: true,
-      },
-    })),
-    ...events.map(({ createdAt, kind, metadata }) => ({
-      kind,
+      );
+    reportError(new Error("Message memory hydration failed."), {
+      operation: "ai-memory:hydrate-observations",
+    });
+    return { status: "failed" as const };
+  }
+  if (events.length === 0) {
+    return { status: "skipped" as const };
+  }
+  const sourceEventIds = events.map(({ id }) => id);
+  const observations: AiMemoryObservation[] = events.map(
+    ({ createdAt, kind, metadata }) => ({
+      kind:
+        typeof metadata.observationKind === "string"
+          ? metadata.observationKind
+          : kind,
       metadata: {
         ...Object.fromEntries(
           Object.entries(metadata).filter(([key]) => key !== "userMessage")
@@ -1875,8 +1985,8 @@ export const refreshAiMemoryFromEvent = async ({
         observedAt: createdAt.toISOString(),
         previouslyProcessed: false,
       },
-    })),
-  ];
+    })
+  );
   const userMessages = events
     .map(({ metadata }) => metadata.userMessage)
     .filter(
@@ -1888,10 +1998,15 @@ export const refreshAiMemoryFromEvent = async ({
   const usage = createUsageCollector();
 
   try {
+    const current = await listConsolidationMemories({
+      events,
+      mailboxId: event.mailboxId,
+      scope,
+    });
     const plan = await planAiMemoryUpdate({
       currentMemories: current.map(toEditorMemory),
       learningGuidance: config.learningPrompt,
-      memoryScope: scope.scope,
+
       observations,
       onUsage: usage.collect,
       request,
@@ -1900,16 +2015,25 @@ export const refreshAiMemoryFromEvent = async ({
     });
     const changeSet = await applyAiMemoryPlan({
       actorUserId: event.userId,
+      allowDirectUserFactUpdates: events.every(
+        (observation) =>
+          observation.kind === "chat_discovery" &&
+          observation.metadata.memoryScope === "user" &&
+          typeof observation.metadata.userMessage === "string" &&
+          observation.metadata.userMessage.trim() !== ""
+      ),
       changeSetSource: resolveChangeSetSource(event.kind),
+      expectedRevision: config.revision,
       expectedVersions: new Map(
         current.map(({ id, version }) => [id, version])
       ),
       plan,
-      request: null,
       scope,
       source: memorySource,
-      sourceEventId: event.id,
+      sourceClaimedAt: claimedAt,
+      sourceEventId: events[0]?.id ?? event.id,
       sourceEventIds,
+      sourceEventMailboxId: event.mailboxId,
     });
     await reportMemoryUsage({
       externalId: `ai-memory-event:${event.id}:${changeSet.id}`,
@@ -1920,7 +2044,9 @@ export const refreshAiMemoryFromEvent = async ({
     return { status: "refreshed" as const };
   } catch (error) {
     if (!(error instanceof ORPCError) || error.code !== "CONFLICT") {
-      reportError(error, { operation: "ai-memory:consolidate-observations" });
+      reportError(new Error("Memory observation consolidation failed."), {
+        operation: "ai-memory:consolidate-observations",
+      });
     }
     await reportMemoryUsage({
       externalId: `ai-memory-event:${event.id}:failed:${claimedAt.getTime()}`,
@@ -1931,413 +2057,20 @@ export const refreshAiMemoryFromEvent = async ({
     await db
       .update(userAiContextEvent)
       .set({
-        lastError:
-          error instanceof Error
-            ? error.message.slice(0, 2000)
-            : "Unknown error.",
+        lastError: "The memory update could not be applied.",
         processingAt: null,
         updatedAt: new Date(),
       })
-      .where(inArray(userAiContextEvent.id, sourceEventIds));
+      .where(
+        and(
+          inArray(userAiContextEvent.id, sourceEventIds),
+          eq(userAiContextEvent.processingAt, claimedAt),
+          isNull(userAiContextEvent.mergedAt),
+          isNull(userAiContextEvent.skippedAt)
+        )
+      );
     return { status: "failed" as const };
   }
-};
-
-export const loadAiAgentMemoryCandidates = async ({
-  includeUserScope = true,
-  mailboxId,
-  userId,
-}: {
-  includeUserScope?: boolean;
-  mailboxId: string;
-  userId: string;
-}): Promise<AiAgentMemoryCandidates> => {
-  try {
-    const scopeKeys = [
-      `mailbox:${mailboxId}`,
-      ...(includeUserScope ? [`user:${userId}`] : []),
-    ];
-    const candidatesByScope = await Promise.all(
-      scopeKeys.map(
-        async (scopeKey) =>
-          await db
-            .select()
-            .from(aiMemory)
-            .where(
-              and(
-                eq(aiMemory.scopeKey, scopeKey),
-                eq(aiMemory.status, "active")
-              )
-            )
-            .orderBy(desc(aiMemory.importance), desc(aiMemory.lastConfirmedAt))
-            .limit(MEMORY_CANDIDATE_LIMIT)
-      )
-    );
-    const stale: MemoryRow[] = [];
-    const usable: MemoryRow[] = [];
-    for (const memory of candidatesByScope.flat()) {
-      if (getAiMemoryRetirementReason(memory) === null) {
-        usable.push(memory);
-      } else {
-        stale.push(memory);
-      }
-    }
-    // Retiring and embedding are housekeeping, so they never block the caller.
-    void maintainAiMemoryScopes({ scopeKeys, stale });
-    return usable;
-  } catch (error) {
-    reportError(error, { operation: "ai-memory:load-candidates" });
-    return [];
-  }
-};
-
-export const rankAiAgentMemoryCandidates = async ({
-  agent,
-  candidates,
-  query,
-  semantic = true,
-}: {
-  agent: string;
-  candidates: AiAgentMemoryCandidates;
-  query: string;
-  /**
-   * Semantic recall costs one embedding request per call. Agents that run
-   * once per user request keep it on; per-message agents whose queries are
-   * inherently lexical (sender, subject, label names) turn it off.
-   */
-  semantic?: boolean;
-}): Promise<AiAgentMemoryContext> => {
-  try {
-    const scopeKeys = [...new Set(candidates.map((memory) => memory.scopeKey))];
-    const { rows: semanticRows, similarity } = semantic
-      ? await searchAiMemoryBySimilarity({
-          query: `${agent.replaceAll("_", " ")} ${query}`,
-          scopeKeys,
-        })
-      : { rows: [], similarity: new Map<string, number>() };
-    const loadedIds = new Set(candidates.map((memory) => memory.id));
-    const extraCandidates = semanticRows.filter(
-      (memory) =>
-        !loadedIds.has(memory.id) &&
-        getAiMemoryRetirementReason(memory) === null
-    );
-    const ranked = rankAiMemoryCandidates({
-      agent,
-      candidates: [...candidates, ...extraCandidates],
-      query,
-      semanticScores: similarity,
-    });
-    const selected = formatMemoryContext([
-      ...ranked.filter(
-        ({ memory }) =>
-          memory.scope === "mailbox" && memory.kind === "instruction"
-      ),
-      ...ranked.filter(
-        ({ memory }) => memory.scope === "user" && memory.kind === "instruction"
-      ),
-      ...ranked.filter(
-        ({ memory }) => memory.scope === "mailbox" && memory.kind === "learned"
-      ),
-      ...ranked.filter(
-        ({ memory }) => memory.scope === "user" && memory.kind === "learned"
-      ),
-    ]);
-    const mailboxInstructions = selected.filter(
-      (memory) => memory.scope === "mailbox" && memory.kind === "instruction"
-    );
-    const userInstructions = selected.filter(
-      (memory) => memory.scope === "user" && memory.kind === "instruction"
-    );
-    const mailboxMemories = selected.filter(
-      (memory) => memory.scope === "mailbox" && memory.kind === "learned"
-    );
-    const userMemories = selected.filter(
-      (memory) => memory.scope === "user" && memory.kind === "learned"
-    );
-    const instructionSections = [
-      mailboxInstructions.length > 0
-        ? `Current mailbox instructions (more specific):\n${mailboxInstructions.map((memory) => `- ${memory.content}`).join("\n")}`
-        : null,
-      userInstructions.length > 0
-        ? `Personal instructions (apply across mailboxes):\n${userInstructions.map((memory) => `- ${memory.content}`).join("\n")}`
-        : null,
-    ].filter((section): section is string => !!section);
-    const memorySections = [
-      mailboxMemories.length > 0
-        ? `Current mailbox memory (more specific):\n${mailboxMemories.map((memory) => `- ${memory.content}`).join("\n")}`
-        : null,
-      userMemories.length > 0
-        ? `Personal memory (applies across mailboxes):\n${userMemories.map((memory) => `- ${memory.content}`).join("\n")}`
-        : null,
-    ].filter((section): section is string => !!section);
-
-    if (selected.length > 0) {
-      const recordMemoryRetrieval = async () => {
-        try {
-          await db
-            .update(aiMemory)
-            .set({
-              lastUsedAt: new Date(),
-              updatedAt: aiMemory.updatedAt,
-            })
-            .where(
-              inArray(
-                aiMemory.id,
-                selected.map((memory) => memory.id)
-              )
-            );
-        } catch (error: unknown) {
-          reportError(error, { operation: "ai-memory:record-retrieval" });
-        }
-      };
-      void recordMemoryRetrieval();
-    }
-
-    return {
-      instructions: instructionSections.join("\n\n") || null,
-      memory: memorySections.join("\n\n") || null,
-    };
-  } catch (error) {
-    reportError(error, { operation: "ai-memory:rank-memory" });
-    return { instructions: null, memory: null };
-  }
-};
-
-type AiAgentContextInput = {
-  agent: string;
-  candidates?: AiAgentMemoryCandidates;
-  includeUserScope?: boolean;
-  mailboxId: string;
-  query: string;
-  semantic?: boolean;
-  userId: string;
-};
-
-type AiMemoryOverviewInput = {
-  mailboxId: string;
-  overview: { cursor?: AiMemoryOverviewCursor };
-  userId: string;
-};
-
-export function loadAiAgentContext(
-  input: AiMemoryOverviewInput
-): Promise<AiMemoryOverviewPage>;
-export function loadAiAgentContext(
-  input: AiAgentContextInput
-): Promise<AiAgentMemoryContext>;
-export async function loadAiAgentContext(
-  input: AiAgentContextInput | AiMemoryOverviewInput
-): Promise<AiAgentMemoryContext | AiMemoryOverviewPage> {
-  if ("overview" in input) {
-    const { mailboxId, overview, userId } = input;
-    await assertAccessibleMailbox({ mailboxId, userId });
-    const now = new Date();
-    const startedAt = overview.cursor
-      ? new Date(overview.cursor.startedAt)
-      : now;
-    if (Number.isNaN(startedAt.getTime()) || startedAt > now) {
-      throw new ORPCError("BAD_REQUEST", {
-        message:
-          "That personal context page is no longer available. Start again.",
-      });
-    }
-    const where = and(
-      or(
-        and(
-          eq(aiMemory.scope, "user"),
-          eq(aiMemory.scopeKey, `user:${userId}`),
-          eq(aiMemory.userId, userId)
-        ),
-        and(
-          eq(aiMemory.scope, "mailbox"),
-          eq(aiMemory.scopeKey, `mailbox:${mailboxId}`),
-          eq(aiMemory.mailboxId, mailboxId)
-        )
-      ),
-      eq(aiMemory.status, "active"),
-      or(isNull(aiMemory.expiresAt), gt(aiMemory.expiresAt, now)),
-      lte(aiMemory.createdAt, startedAt)
-    );
-    const [rows, totals] = await Promise.all([
-      db
-        .select({
-          content: aiMemory.content,
-          id: aiMemory.id,
-          kind: aiMemory.kind,
-          scope: aiMemory.scope,
-          summary: aiMemory.summary,
-        })
-        .from(aiMemory)
-        .where(
-          and(
-            where,
-            overview.cursor
-              ? gt(aiMemory.id, overview.cursor.afterId)
-              : undefined
-          )
-        )
-        .orderBy(asc(aiMemory.id))
-        .limit(MEMORY_OVERVIEW_PAGE_SIZE + 1),
-      db.select({ total: count() }).from(aiMemory).where(where),
-    ]);
-    const items = rows.slice(0, MEMORY_OVERVIEW_PAGE_SIZE).map((row) =>
-      containsProhibitedMemorySecret(`${row.summary} ${row.content}`)
-        ? {
-            ...row,
-            content: "A sensitive detail was omitted from this overview.",
-            summary: "Sensitive detail omitted",
-          }
-        : row
-    );
-    const hasMore = rows.length > items.length;
-    const lastItem = items.at(-1);
-    return {
-      hasMore,
-      items,
-      nextCursor:
-        hasMore && lastItem
-          ? { afterId: lastItem.id, startedAt: startedAt.toISOString() }
-          : null,
-      total: totals[0]?.total ?? 0,
-    };
-  }
-  const {
-    agent,
-    candidates,
-    includeUserScope = true,
-    mailboxId,
-    query,
-    semantic = true,
-    userId,
-  } = input;
-  return await rankAiAgentMemoryCandidates({
-    agent,
-    candidates:
-      candidates?.filter(
-        (memory) =>
-          memory.scopeKey === `mailbox:${mailboxId}` ||
-          (includeUserScope && memory.scopeKey === `user:${userId}`)
-      ) ??
-      (await loadAiAgentMemoryCandidates({
-        includeUserScope,
-        mailboxId,
-        userId,
-      })),
-    query,
-    semantic,
-  });
-}
-
-const listAddressDomains = (value: string) =>
-  [
-    ...new Set(
-      [...value.matchAll(/@(?<domain>[a-z0-9.-]+\.[a-z]{2,})/giu)].map(
-        (match) => (match.groups?.domain ?? "").toLowerCase()
-      )
-    ),
-  ]
-    .filter((domain) => domain !== "")
-    .slice(0, 12)
-    .join(", ");
-
-const classifyGreeting = (text: string) => {
-  const firstLine = text
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line !== "");
-  if (!firstLine) {
-    return "none";
-  }
-  const greeting =
-    /^(?<greeting>hi|hello|hey|dear|good (?:morning|afternoon|evening))\b/iu.exec(
-      firstLine
-    )?.groups?.greeting;
-  return greeting?.toLowerCase() ?? "none";
-};
-
-const classifySignOff = (text: string) => {
-  const lines = text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line !== "")
-    .slice(-4);
-  for (const line of lines) {
-    const signOff =
-      /^(?<signOff>best|best regards|kind regards|regards|thanks|thank you|cheers|sincerely|warmly)\b/iu.exec(
-        line
-      )?.groups?.signOff;
-    if (signOff) {
-      return signOff.toLowerCase();
-    }
-  }
-  return "none";
-};
-
-export const learnAiMemoryFromSentMessage = async ({
-  bodyText,
-  isReply,
-  mailboxId,
-  recipients,
-  userId,
-}: {
-  bodyText: string;
-  isReply: boolean;
-  mailboxId: string;
-  recipients: string;
-  userId: string;
-}) => {
-  const normalized =
-    bodyText
-      .replaceAll(/\r\n?/gu, "\n")
-      .split(
-        /\n(?:On .+wrote:|Am .+schrieb .+:|[-_]{3,}\s*(?:Forwarded|Original) message)/iu
-      )[0]
-      ?.split("\n")
-      .filter((line) => !line.trimStart().startsWith(">"))
-      .join("\n")
-      .trim()
-      .slice(0, 20_000) ?? "";
-  if (!normalized) {
-    return { status: "skipped" as const };
-  }
-  const words = normalized.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? [];
-  const sentences = normalized
-    .split(/[.!?]+(?:\s|$)/u)
-    .filter((sentence) => sentence.trim() !== "");
-  const sentAt = new Date();
-
-  const metadata: AiMemoryEventMetadata = {
-    averageSentenceWords: Math.round(
-      words.length / Math.max(1, sentences.length)
-    ),
-    bulletCount: (normalized.match(/^\s*(?:[-*]|\d+[.)])\s/gmu) ?? []).length,
-    contractionCount: (normalized.match(/\b\p{L}+[’']\p{L}+\b/gu) ?? []).length,
-    emojiCount: (normalized.match(/\p{Extended_Pictographic}/gu) ?? []).length,
-    exclamationCount: (normalized.match(/!/gu) ?? []).length,
-    greeting: classifyGreeting(normalized),
-    isReply,
-    paragraphCount: normalized
-      .split(/\n\s*\n/u)
-      .filter((paragraph) => paragraph.trim() !== "").length,
-    questionCount: (normalized.match(/\?/gu) ?? []).length,
-    recipientCount: recipients
-      .split(",")
-      .filter((recipient) => recipient.trim() !== "").length,
-    recipientDomains: listAddressDomains(recipients),
-    sentHourUtc: sentAt.getUTCHours(),
-    sentWeekdayUtc: sentAt.toLocaleDateString("en", {
-      timeZone: "UTC",
-      weekday: "long",
-    }),
-    signOff: classifySignOff(normalized),
-    wordCount: words.length,
-  };
-  return await learnAiMemoryFromFeedback({
-    kind: "sent_message",
-    mailboxId,
-    metadata,
-    userId,
-  });
 };
 
 export const processPendingAiMemoryEvents = async ({
@@ -2348,50 +2081,95 @@ export const processPendingAiMemoryEvents = async ({
     return { failed: 0, processed: 0 };
   }
   const cutoff = new Date(Date.now() - 120_000);
+  const eligible = and(
+    isNull(userAiContextEvent.mergedAt),
+    isNull(userAiContextEvent.skippedAt),
+    eq(sql`${userAiContextEvent.metadata}->>'memoryScope'`, "user"),
+    userId === undefined ? undefined : eq(userAiContextEvent.userId, userId),
+    or(
+      isNull(userAiContextEvent.processingAt),
+      lt(userAiContextEvent.processingAt, cutoff)
+    ),
+    allowLocal ? undefined : lt(userAiContextEvent.updatedAt, cutoff)
+  );
+  const deadline = Date.now() + 60_000;
   const pending = await retryIdempotentDatabaseQuery(
     async () =>
       await db
-        .select({ id: userAiContextEvent.id })
+        .select({ userId: userAiContextEvent.userId })
         .from(userAiContextEvent)
-        .where(
-          and(
-            isNull(userAiContextEvent.mergedAt),
-            isNull(userAiContextEvent.skippedAt),
-            userId === undefined
-              ? undefined
-              : eq(userAiContextEvent.userId, userId),
-            or(
-              isNull(userAiContextEvent.processingAt),
-              lt(userAiContextEvent.processingAt, cutoff)
-            ),
-            allowLocal ? undefined : lt(userAiContextEvent.updatedAt, cutoff)
-          )
+        .where(eligible)
+        .groupBy(userAiContextEvent.userId)
+        .orderBy(
+          sql`min(${userAiContextEvent.updatedAt})`,
+          userAiContextEvent.userId
         )
-        .orderBy(userAiContextEvent.updatedAt)
-        .limit(4)
+  );
+  const turns: { attemptedIds: string[]; userId: string }[] = pending.map(
+    (actor) => ({
+      attemptedIds: [],
+      userId: actor.userId,
+    })
   );
   let processed = 0;
   let failed = 0;
-  for (const event of pending) {
-    try {
-      const result = await refreshAiMemoryFromEvent({ eventId: event.id });
-      if (result.status === "refreshed") {
-        processed += 1;
-      } else if (result.status === "failed") {
-        failed += 1;
+  await Promise.all(
+    Array.from({ length: Math.min(4, turns.length) }, async () => {
+      while (Date.now() < deadline) {
+        const turn = turns.shift();
+        if (turn === undefined) {
+          return;
+        }
+        try {
+          const [event] = await retryIdempotentDatabaseQuery(
+            async () =>
+              await db
+                .select({ id: userAiContextEvent.id })
+                .from(userAiContextEvent)
+                .where(
+                  and(
+                    eligible,
+                    eq(userAiContextEvent.userId, turn.userId),
+                    turn.attemptedIds.length > 0
+                      ? notInArray(userAiContextEvent.id, turn.attemptedIds)
+                      : undefined
+                  )
+                )
+                .orderBy(userAiContextEvent.updatedAt, userAiContextEvent.id)
+                .limit(1)
+          );
+          if (event === undefined || Date.now() >= deadline) {
+            continue;
+          }
+          turn.attemptedIds.push(event.id);
+          const result = await refreshAiMemoryFromEvent({ eventId: event.id });
+          if (result.status === "refreshed") {
+            processed += 1;
+          } else if (result.status === "failed") {
+            failed += 1;
+            continue;
+          } else if (result.status === "ineligible") {
+            continue;
+          }
+          if (turn.attemptedIds.length < 4) {
+            turns.push(turn);
+          }
+        } catch {
+          failed += 1;
+          reportError(
+            new Error("Pending memory observation could not be processed."),
+            { operation: "ai-memory:process-pending-event" }
+          );
+        }
       }
-    } catch (error) {
-      failed += 1;
-      reportError(error, {
-        operation: "ai-memory:process-pending-event",
-      });
-    }
-  }
+    })
+  );
   return { failed, processed };
 };
 
 export const learnAiMemoryFromMailAction = async ({
   action,
+  eventKey,
   mailboxId,
   messageIds,
   metadata = {},
@@ -2399,6 +2177,7 @@ export const learnAiMemoryFromMailAction = async ({
   userId,
 }: {
   action: string;
+  eventKey?: string;
   mailboxId: string;
   messageIds?: string[];
   metadata?: AiMemoryEventMetadata;
@@ -2408,109 +2187,49 @@ export const learnAiMemoryFromMailAction = async ({
   if (targetCount < 1) {
     return { status: "skipped" as const };
   }
+  await assertAccessibleMailbox({ mailboxId, userId });
   const config = await getPersonalAiMemoryScopeConfig(userId);
   if (!config.activeLearningEnabled) {
     return { status: "skipped" as const };
   }
-  const messages =
+  const actionKey = eventKey ?? randomUUID();
+  let event: { id: string } | null = null;
+  const targets =
     messageIds !== undefined && messageIds.length > 0
-      ? await db
-          .select({
-            from: managedMailMessage.from,
-            subject: managedMailMessage.subject,
-          })
-          .from(managedMailMessage)
-          .where(
-            and(
-              eq(managedMailMessage.mailboxId, mailboxId),
-              inArray(
-                managedMailMessage.id,
-                [...new Set(messageIds)].slice(0, 12)
-              )
-            )
-          )
-          .limit(12)
-      : [];
-  const event = await recordAiMemoryEvent({
-    kind: "mail_action",
-    mailboxId,
-    metadata: {
-      ...metadata,
-      action,
-      memoryScope: "user",
-      senderDomains:
-        listAddressDomains(
-          messages
-            .map((message) => message.from)
-            .filter(Boolean)
-            .join(", ")
-        ) ||
-        (typeof metadata.senderDomains === "string"
-          ? metadata.senderDomains
-          : null) ||
-        (typeof metadata.senderDomain === "string"
-          ? metadata.senderDomain
-          : null) ||
-        null,
-      subjects:
-        messages
-          .map((message) => message.subject)
-          .filter(Boolean)
-          .join("; ") ||
-        (typeof metadata.subjects === "string" ? metadata.subjects : null) ||
-        (typeof metadata.subject === "string" ? metadata.subject : null) ||
-        null,
-      targetCount,
-    },
-    userId,
-  });
+      ? [...new Set(messageIds)]
+      : [null];
+  for (const messageId of targets) {
+    const recorded = await recordAiMemoryEvent({
+      eventKey: `action:${actionKey}:${action}:${messageId ?? "all"}`,
+      kind: "mail_action",
+      mailboxId,
+      metadata: {
+        ...metadata,
+        action,
+        hydrateMessage: messageId !== null,
+        messageContextOnly: true,
+        messageId,
+        observationKind: "mail_action",
+        targetCount,
+      },
+      userId,
+    });
+    event ??= recorded;
+  }
   return event === null
     ? { status: "skipped" as const }
     : { eventId: event.id, status: "recorded" as const };
 };
 
-export const enrichAiMemoryMailAction = async ({
-  eventId,
-  mailboxId,
-  metadata,
-  userId,
-}: {
-  eventId: string;
-  mailboxId: string;
-  metadata: AiMemoryEventMetadata;
-  userId: string;
-}) => {
-  const context = sanitizeMetadata({
-    senderDomains: metadata.senderDomains ?? null,
-    subjects: metadata.subjects ?? null,
-  });
-  await db
-    .update(userAiContextEvent)
-    .set({
-      metadata: sql`${userAiContextEvent.metadata} || ${JSON.stringify(context)}::jsonb`,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(userAiContextEvent.id, eventId),
-        eq(userAiContextEvent.mailboxId, mailboxId),
-        eq(userAiContextEvent.userId, userId),
-        eq(userAiContextEvent.kind, "mail_action"),
-        eq(sql<string>`${userAiContextEvent.metadata}->>'memoryScope'`, "user"),
-        isNull(userAiContextEvent.mergedAt),
-        isNull(userAiContextEvent.skippedAt),
-        isNull(userAiContextEvent.processingAt)
-      )
-    );
-};
-
-export const replaceMailboxFeedbackMemories = async ({
+export const replaceAiMemoryFeedback = async ({
   agent,
+  expectedRevision,
   memories,
   mailboxId,
   userId,
 }: {
   agent: "auto_label";
+  expectedRevision: number;
   memories: {
     confidence: number;
     content: string;
@@ -2525,53 +2244,48 @@ export const replaceMailboxFeedbackMemories = async ({
   mailboxId: string;
   userId: string;
 }) => {
-  const prefix = `feedback:${agent}:`;
-  const scope = mailboxScope(mailboxId);
-  const [accessibleMailbox, config] = await Promise.all([
+  const prefix = `feedback:${agent}:${createHash("sha256").update(mailboxId).digest("hex")}:`;
+  const feedbackMemories = memories.map((memory) => ({
+    ...memory,
+    key: `${prefix}${createHash("sha256").update(memory.key).digest("hex")}`,
+  }));
+  const scope = userScope(userId);
+  const [, config] = await Promise.all([
     assertAccessibleMailbox({ mailboxId, userId }),
-    getMailboxAiMemoryScopeConfig(mailboxId),
+    getPersonalAiMemoryScopeConfig(userId),
   ]);
-  if (
-    !accessibleMailbox.capabilities.canManageKnowledge ||
-    !config.activeLearningEnabled
-  ) {
+  if (!config.activeLearningEnabled) {
     return { changed: 0 };
   }
   const now = new Date();
   const changes = await db.transaction(async (tx) => {
-    await tx
-      .select({ id: mailbox.id })
-      .from(mailbox)
-      .where(eq(mailbox.id, mailboxId))
-      .for("update");
-    await tx
-      .select({ id: aiMemory.id })
-      .from(aiMemory)
-      .where(eq(aiMemory.scopeKey, scope.scopeKey))
-      .for("update");
+    const latestConfig = await lockAiMemoryScope(tx, scope);
+    if (
+      !latestConfig.activeLearningEnabled ||
+      latestConfig.revision !== expectedRevision
+    ) {
+      return [];
+    }
     const current = await tx
-      .select()
+      .select(memoryColumns)
       .from(aiMemory)
       .where(
         and(
           eq(aiMemory.scopeKey, scope.scopeKey),
+          eq(aiMemory.userId, scope.userId),
           like(aiMemory.key, `${prefix}%`)
         )
       );
     const byKey = new Map(current.map((memory) => [memory.key, memory]));
-    const nextKeys = new Set(
-      memories.map((memory) => `${prefix}${memory.key}`)
-    );
+    const nextKeys = new Set(feedbackMemories.map((memory) => memory.key));
     const applied: AiMemoryChange[] = [];
 
-    for (const memory of memories) {
-      const key = `${prefix}${memory.key}`;
+    for (const memory of feedbackMemories) {
+      const { key } = memory;
       const existing = byKey.get(key);
       const values = {
         confidence: memory.confidence,
         content: memory.content.slice(0, 2000),
-        embeddedAt: null,
-        embedding: null,
         importance: memory.importance,
         key,
         kind: "learned" as const,
@@ -2579,7 +2293,9 @@ export const replaceMailboxFeedbackMemories = async ({
         metadata: {
           ...memory.metadata,
           agents: [agent],
+          category: "labeling",
           sourceDomains: memory.sourceDomains ?? [],
+          sourceMailboxId: mailboxId,
           topics: memory.topics,
         } satisfies AiMemoryMetadata,
         reinforcementCount: Math.max(1, memory.reinforcementCount),
@@ -2589,6 +2305,9 @@ export const replaceMailboxFeedbackMemories = async ({
         summary: memory.summary.slice(0, 300),
         updatedAt: now,
       };
+      if (existing?.source === "explicit") {
+        continue;
+      }
       if (existing) {
         const unchanged =
           existing.content === values.content &&
@@ -2617,9 +2336,7 @@ export const replaceMailboxFeedbackMemories = async ({
           )
           .returning();
         if (updated === undefined) {
-          throw new Error(
-            "Mailbox memory changed while feedback was being applied."
-          );
+          throw new Error("Memory changed while feedback was being applied.");
         }
         applied.push({
           after: toSnapshot(updated),
@@ -2633,7 +2350,7 @@ export const replaceMailboxFeedbackMemories = async ({
           .values({ ...scope, ...values, createdAt: now, id: randomUUID() })
           .returning();
         if (inserted === undefined) {
-          throw new Error("Could not create mailbox feedback memory.");
+          throw new Error("Could not create feedback memory.");
         }
         applied.push({
           after: toSnapshot(inserted),
@@ -2645,7 +2362,11 @@ export const replaceMailboxFeedbackMemories = async ({
     }
 
     for (const existing of current) {
-      if (nextKeys.has(existing.key) || existing.status === "archived") {
+      if (
+        nextKeys.has(existing.key) ||
+        existing.status === "archived" ||
+        existing.source === "explicit"
+      ) {
         continue;
       }
       const [archived] = await tx
@@ -2664,9 +2385,7 @@ export const replaceMailboxFeedbackMemories = async ({
         )
         .returning();
       if (archived === undefined) {
-        throw new Error(
-          "Mailbox memory changed while feedback was being applied."
-        );
+        throw new Error("Memory changed while feedback was being applied.");
       }
       applied.push({
         after: toSnapshot(archived),
@@ -2692,11 +2411,6 @@ export const replaceMailboxFeedbackMemories = async ({
     });
     return applied;
   });
-  void embedAiMemories(
-    changes.flatMap((change) =>
-      change.after?.status === "active" ? [change.memoryId] : []
-    )
-  );
   return { changed: changes.length };
 };
 
@@ -2707,12 +2421,6 @@ const buildAiMemoryScope = ({
   changes: (typeof aiMemoryChangeSet.$inferSelect)[];
   memories: MemoryRow[];
 }) => {
-  const versions = new Map(
-    memories.map((memory) => [memory.id, memory.version])
-  );
-  const undoneIds = new Set(
-    changes.flatMap((change) => (change.undoOfId ? [change.undoOfId] : []))
-  );
   const now = new Date();
   const activeMemories = memories.filter(
     (memory) =>
@@ -2734,15 +2442,6 @@ const buildAiMemoryScope = ({
     recentChanges: changes
       .filter((change) => change.status === "applied")
       .map((change) => ({
-        canUndo:
-          change.status === "applied" &&
-          change.changes.length > 0 &&
-          !undoneIds.has(change.id) &&
-          change.changes.every(
-            (item) =>
-              item.after !== null &&
-              versions.get(item.memoryId) === item.after.version
-          ),
         createdAt: change.createdAt,
         id: change.id,
         source: change.source,
@@ -2752,325 +2451,281 @@ const buildAiMemoryScope = ({
   };
 };
 
-const listAiMemoryScope = async ({
-  mailboxId,
-  scope,
-  userId,
-}: {
-  mailboxId?: string | null;
-  scope: "mailbox" | "user";
-  userId: string;
-}) => {
-  const target =
-    scope === "user" ? userScope(userId) : mailboxScope(mailboxId ?? "");
-  if (scope === "mailbox" && !mailboxId) {
-    throw new ORPCError("BAD_REQUEST", { message: "A mailbox is required." });
-  }
+export const listPersonalAiMemory = async (userId: string) => {
   const [memories, changes] = await Promise.all([
-    listScopeMemories(target.scopeKey),
+    listScopeMemories(userId),
     db
       .select()
       .from(aiMemoryChangeSet)
-      .where(
-        scope === "user"
-          ? and(
-              eq(aiMemoryChangeSet.userId, userId),
-              isNull(aiMemoryChangeSet.mailboxId)
-            )
-          : eq(aiMemoryChangeSet.mailboxId, mailboxId ?? "")
-      )
+      .where(eq(aiMemoryChangeSet.userId, userId))
       .orderBy(desc(aiMemoryChangeSet.createdAt))
       .limit(12),
   ]);
   return buildAiMemoryScope({ changes, memories });
 };
 
-export const listPersonalAiMemory = async (userId: string) =>
-  await listAiMemoryScope({ scope: "user", userId });
+const toSearchMemory = (memory: MemoryRow) => ({
+  category: memory.metadata.category ?? "preferences",
+  content: memory.content,
+  correspondents: memory.metadata.correspondents ?? [],
+  id: memory.id,
+  kind: memory.kind,
+  source: memory.source,
+  summary: memory.summary,
+  updatedAt: memory.updatedAt.toISOString(),
+  version: memory.version,
+});
 
-export const listMailboxAiMemory = async (mailboxId: string, userId: string) =>
-  await listAiMemoryScope({ mailboxId, scope: "mailbox", userId });
-
-export const forgetAiMemory = async ({
-  mailboxId,
-  memoryId,
-  scope: requestedScope,
+export const searchAiMemory = async ({
+  category,
+  cursor,
+  limit = 50,
+  query,
   userId,
 }: {
-  mailboxId?: string | null;
-  memoryId: string;
-  scope: "mailbox" | "user";
+  category?: AiMemoryCategory;
+  cursor?: string | null;
+  limit?: number;
+  query?: string;
   userId: string;
 }) => {
-  const scope =
-    requestedScope === "user"
-      ? userScope(userId)
-      : mailboxScope(mailboxId ?? "");
-  if (requestedScope === "mailbox" && !mailboxId) {
-    throw new ORPCError("BAD_REQUEST", { message: "A mailbox is required." });
-  }
-  const [memory] = await db
-    .select()
-    .from(aiMemory)
-    .where(
-      and(eq(aiMemory.id, memoryId), eq(aiMemory.scopeKey, scope.scopeKey))
-    )
-    .limit(1);
-  if (memory === undefined || memory.status === "archived") {
-    return null;
-  }
-  const plan: AiMemoryUpdatePlan = {
-    answer: `Forgot: ${memory.summary}`,
-    operations: [
-      {
-        action: "archive",
-        agents: memory.metadata.agents ?? ["all"],
-        confidence: memory.confidence,
-        content: null,
-        expiresAt: memory.expiresAt?.toISOString() ?? null,
-        importance: memory.importance,
-        key: memory.key,
-        kind: memory.kind,
-        summary: memory.summary,
-        targetId: memory.id,
-        topics: memory.metadata.topics ?? [],
-      },
-    ],
-    summary: `Forgot: ${memory.summary}`,
+  const target = userScope(userId);
+  const pageSize = Math.max(1, Math.min(100, Math.floor(limit)));
+  const search = query?.trim().slice(0, 2000);
+  const memoryCategory = sql<AiMemoryCategory>`coalesce(${aiMemory.metadata}->>'category', 'preferences')`;
+  const matching = and(
+    eq(aiMemory.scopeKey, target.scopeKey),
+    eq(aiMemory.userId, userId),
+    eq(aiMemory.scope, target.scope),
+    eq(aiMemory.status, "active"),
+    or(isNull(aiMemory.expiresAt), gt(aiMemory.expiresAt, new Date())),
+    search
+      ? or(
+          ilike(aiMemory.content, `%${search.replaceAll(/[\\%_]/gu, "\\$&")}%`),
+          ilike(aiMemory.summary, `%${search.replaceAll(/[\\%_]/gu, "\\$&")}%`),
+          ilike(
+            sql<string>`${aiMemory.metadata}->>'correspondents'`,
+            `%${search.replaceAll(/[\\%_]/gu, "\\$&")}%`
+          )
+        )
+      : undefined
+  );
+  const where = and(
+    matching,
+    category ? eq(memoryCategory, category) : undefined
+  );
+  const [rows, totals, categoryTotals] = await Promise.all([
+    db
+      .select(memoryColumns)
+      .from(aiMemory)
+      .where(and(where, cursor ? gt(aiMemory.id, cursor) : undefined))
+      .orderBy(asc(aiMemory.id))
+      .limit(pageSize + 1),
+    db.select({ total: count() }).from(aiMemory).where(where),
+    db
+      .select({ category: memoryCategory, count: count() })
+      .from(aiMemory)
+      .where(matching)
+      .groupBy(memoryCategory),
+  ]);
+  const items = rows.slice(0, pageSize).map(toSearchMemory);
+  return {
+    categoryCounts: AI_MEMORY_CATEGORIES.map((value) => ({
+      category: value,
+      count: categoryTotals.find((row) => row.category === value)?.count ?? 0,
+    })),
+    items,
+    nextCursor: rows.length > pageSize ? (items.at(-1)?.id ?? null) : null,
+    total: totals[0]?.total ?? 0,
   };
-  return await applyAiMemoryPlan({
-    actorUserId: userId,
-    changeSetSource: "settings",
-    plan,
-    request: null,
-    scope,
-    source: memory.source,
+};
+
+export const saveAiMemory = async ({
+  category,
+  content,
+  correspondents = [],
+  memoryId,
+  userId,
+  version,
+}: {
+  category: AiMemoryCategory;
+  content: string;
+  correspondents?: string[];
+  memoryId?: string;
+  userId: string;
+  version?: number;
+}) => {
+  const target = userScope(userId);
+  const normalizedContent = content.replaceAll(/\r\n?/gu, "\n").trim();
+  if (
+    !normalizedContent ||
+    normalizedContent.length > AI_MEMORY_CONTENT_MAX_LENGTH
+  ) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Memory must contain text within the allowed length.",
+    });
+  }
+  if (containsProhibitedMemorySecret(normalizedContent)) {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "Passwords, payment details, and access codes cannot be saved as memory.",
+    });
+  }
+  const contacts = z
+    .array(z.email().max(320))
+    .max(20)
+    .safeParse([
+      ...new Set(correspondents.map((address) => address.trim().toLowerCase())),
+    ]);
+  if (!contacts.success) {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "Use valid email addresses for the people this memory applies to.",
+    });
+  }
+  return await db.transaction(async (tx) => {
+    await lockAiMemoryScope(tx, target);
+    const [existing] = memoryId
+      ? await tx
+          .select(memoryColumns)
+          .from(aiMemory)
+          .where(
+            and(
+              eq(aiMemory.id, memoryId),
+              eq(aiMemory.scopeKey, target.scopeKey),
+              eq(aiMemory.userId, userId)
+            )
+          )
+          .for("update")
+      : [];
+    if (
+      memoryId &&
+      (existing === undefined ||
+        version === undefined ||
+        existing.version !== version)
+    ) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "That memory changed or was forgotten. Review the latest version.",
+      });
+    }
+    const now = new Date();
+    const values = {
+      archivedAt: null,
+      confidence: 1,
+      content: normalizedContent,
+      expiresAt: null,
+      importance: 5,
+      kind: existing?.kind ?? "learned",
+      lastConfirmedAt: now,
+      metadata: {
+        ...existing?.metadata,
+        agents: existing?.metadata.agents ?? ["all"],
+        category,
+        correspondents: contacts.data.toSorted(),
+        topics: existing?.metadata.topics ?? [],
+      },
+      source: "explicit" as const,
+      status: "active" as const,
+      summary: normalizedContent.replaceAll(/\s+/gu, " ").slice(0, 300),
+      updatedAt: now,
+    };
+    const [saved] =
+      existing === undefined
+        ? await tx
+            .insert(aiMemory)
+            .values({
+              ...target,
+              ...values,
+              createdAt: now,
+              id: randomUUID(),
+              key: `manual:${randomUUID()}`,
+            })
+            .returning()
+        : await tx
+            .update(aiMemory)
+            .set({ ...values, version: sql`${aiMemory.version} + 1` })
+            .where(
+              and(
+                eq(aiMemory.id, existing.id),
+                eq(aiMemory.version, version ?? 0)
+              )
+            )
+            .returning();
+    if (saved === undefined) {
+      throw new ORPCError("CONFLICT", {
+        message: "That memory changed while it was being saved. Try again.",
+      });
+    }
+    await advanceAiMemoryScopeRevision(tx, target);
+    return toSearchMemory(saved);
   });
 };
 
-export const undoAiMemoryChange = async ({
-  changeSetId,
-  mailboxId,
-  scope: requestedScope,
+export const forgetAiMemory = async ({
+  memoryId,
   userId,
 }: {
-  changeSetId: string;
-  mailboxId?: string | null;
-  scope: "mailbox" | "user";
+  memoryId: string;
   userId: string;
 }) => {
-  const scope =
-    requestedScope === "user"
-      ? userScope(userId)
-      : mailboxScope(mailboxId ?? "");
-  if (requestedScope === "mailbox" && !mailboxId) {
-    throw new ORPCError("BAD_REQUEST", { message: "A mailbox is required." });
-  }
-  const undoChangeSet = await db.transaction(async (tx) => {
-    const scopeCondition =
-      requestedScope === "user"
-        ? and(
-            eq(aiMemoryChangeSet.userId, userId),
-            isNull(aiMemoryChangeSet.mailboxId)
-          )
-        : eq(aiMemoryChangeSet.mailboxId, mailboxId ?? "");
-    const [changeSet] = await tx
-      .select()
-      .from(aiMemoryChangeSet)
-      .where(and(eq(aiMemoryChangeSet.id, changeSetId), scopeCondition))
-      .limit(1);
-    if (
-      changeSet === undefined ||
-      changeSet.status !== "applied" ||
-      changeSet.changes.length === 0
-    ) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: "That memory change cannot be undone.",
-      });
-    }
-    const [existingUndo] = await tx
-      .select({ id: aiMemoryChangeSet.id })
-      .from(aiMemoryChangeSet)
-      .where(eq(aiMemoryChangeSet.undoOfId, changeSet.id))
-      .limit(1);
-    if (existingUndo !== undefined) {
-      throw new ORPCError("CONFLICT", {
-        message: "That memory change was already undone.",
-      });
-    }
-
-    const now = new Date();
-    const inverse: AiMemoryChange[] = [];
-    for (const change of changeSet.changes.toReversed()) {
-      const [current] = await tx
-        .select()
-        .from(aiMemory)
-        .where(
-          and(
-            eq(aiMemory.id, change.memoryId),
-            eq(aiMemory.scopeKey, scope.scopeKey)
-          )
+  const target = userScope(userId);
+  return await db.transaction(async (tx) => {
+    await lockAiMemoryScope(tx, target);
+    const memories = await tx
+      .select(memoryColumns)
+      .from(aiMemory)
+      .where(
+        and(
+          eq(aiMemory.id, memoryId),
+          eq(aiMemory.scopeKey, target.scopeKey),
+          eq(aiMemory.userId, userId)
         )
-        .limit(1);
-      if (
-        current === undefined ||
-        change.after === null ||
-        current.version !== change.after.version
-      ) {
-        throw new ORPCError("CONFLICT", {
-          message:
-            "Memory changed again after this update and can no longer be safely undone.",
-        });
-      }
-
-      const previous = change.before;
-      const [updated] = await tx
-        .update(aiMemory)
-        .set(
-          previous
-            ? {
-                archivedAt: previous.status === "archived" ? now : null,
-                confidence: previous.confidence,
-                content: previous.content,
-                embeddedAt: null,
-                embedding: null,
-                expiresAt: previous.expiresAt
-                  ? new Date(previous.expiresAt)
-                  : null,
-                importance: previous.importance,
-                key: previous.key,
-                kind: previous.kind,
-                metadata: previous.metadata,
-                status: previous.status,
-                summary: previous.summary,
-                updatedAt: now,
-                version: sql`${aiMemory.version} + 1`,
-              }
-            : {
-                archivedAt: now,
-                status: "archived",
-                updatedAt: now,
-                version: sql`${aiMemory.version} + 1`,
-              }
-        )
-        .where(
-          and(
-            eq(aiMemory.id, current.id),
-            eq(aiMemory.version, current.version)
-          )
-        )
-        .returning();
-      if (updated === undefined) {
-        throw new ORPCError("CONFLICT", {
-          message: "Memory changed while the undo was being applied.",
-        });
-      }
-      inverse.push({
-        after: toSnapshot(updated),
-        before: toSnapshot(current),
-        memoryId: updated.id,
-        operation: (() => {
-          if (updated.status === "archived") {
-            return "archive" as const;
-          }
-          if (current.status === "archived") {
-            return "restore" as const;
-          }
-          return "update" as const;
-        })(),
-      });
-    }
-
-    const [insertedUndo] = await tx
-      .insert(aiMemoryChangeSet)
-      .values({
-        changes: inverse,
-        createdAt: now,
-        id: randomUUID(),
-        mailboxId: scope.mailboxId,
-        source: "settings",
-        status: "applied",
-        summary: `Undid: ${changeSet.summary}`,
-        undoOfId: changeSet.id,
-        updatedAt: now,
-        userId,
-      })
-      .returning();
-    return { changeSet: insertedUndo, changes: inverse };
+      )
+      .for("update");
+    await eraseAiMemoryRecords({ executor: tx, memories, scope: target });
+    await advanceAiMemoryScopeRevision(tx, target);
+    return { deleted: true };
   });
-  void embedAiMemories(
-    undoChangeSet.changes.flatMap((change) =>
-      change.after?.status === "active" ? [change.memoryId] : []
-    )
-  );
-  return undoChangeSet.changeSet;
 };
 
 export const purgePersonalAiMemory = async (userId: string) =>
   await db.transaction(async (tx) => {
-    await tx
-      .select({ id: memoryUser.id })
-      .from(memoryUser)
-      .where(eq(memoryUser.id, userId))
-      .for("update");
-    await tx.delete(aiMemory).where(eq(aiMemory.scopeKey, `user:${userId}`));
-    await tx
-      .delete(aiMemoryChangeSet)
-      .where(
-        and(
-          eq(aiMemoryChangeSet.userId, userId),
-          isNull(aiMemoryChangeSet.mailboxId)
-        )
-      );
-    await tx
-      .delete(userAiContextEvent)
-      .where(
-        and(
-          eq(userAiContextEvent.userId, userId),
-          or(
-            eq(userAiContextEvent.kind, "chat_discovery"),
-            eq(userAiContextEvent.kind, "explicit_preference"),
-            eq(
-              sql<string>`${userAiContextEvent.metadata}->>'memoryScope'`,
-              "user"
-            )
-          )
-        )
-      );
-    return { deleted: true };
-  });
-
-export const purgeMailboxAiMemory = async (mailboxId: string) =>
-  await db.transaction(async (tx) => {
-    await tx
-      .select({ id: mailbox.id })
-      .from(mailbox)
-      .where(eq(mailbox.id, mailboxId))
-      .for("update");
+    const scope = userScope(userId);
+    await lockAiMemoryScope(tx, scope);
+    await advanceAiMemoryScopeRevision(tx, scope);
     await tx
       .delete(aiMemory)
-      .where(eq(aiMemory.scopeKey, `mailbox:${mailboxId}`));
+      .where(
+        and(
+          eq(aiMemory.scopeKey, scope.scopeKey),
+          eq(aiMemory.userId, scope.userId)
+        )
+      );
     await tx
       .delete(aiMemoryChangeSet)
-      .where(eq(aiMemoryChangeSet.mailboxId, mailboxId));
-    await tx
-      .delete(userAiContextEvent)
-      .where(eq(userAiContextEvent.mailboxId, mailboxId));
+      .where(eq(aiMemoryChangeSet.userId, userId));
     await tx
       .delete(mailAutoLabelFeedback)
-      .where(eq(mailAutoLabelFeedback.mailboxId, mailboxId));
+      .where(eq(mailAutoLabelFeedback.createdByUserId, userId));
+    const now = new Date();
     await tx
-      .delete(gmailUsefulDetailFeedback)
-      .where(eq(gmailUsefulDetailFeedback.mailboxId, mailboxId));
-    await tx
-      .delete(mailAutomationMemoryProfile)
-      .where(eq(mailAutomationMemoryProfile.mailboxId, mailboxId));
+      .update(userAiContextEvent)
+      .set({
+        lastError: null,
+        metadata: {},
+        processingAt: null,
+        skippedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(userAiContextEvent.userId, userId));
+    await completeAiMemoryBootstrap(tx, scope);
     return { deleted: true };
   });
 
 export const exportPersonalAiMemory = async (userId: string) => {
   const [memories, learning] = await Promise.all([
-    listScopeMemories(`user:${userId}`),
+    listScopeMemories(userId),
     getPersonalAiMemoryScopeConfig(userId),
   ]);
 
@@ -3079,30 +2734,9 @@ export const exportPersonalAiMemory = async (userId: string) => {
     learning,
     memories: memories.map((memory) => ({
       agents: memory.metadata.agents ?? ["all"],
+      category: memory.metadata.category ?? "preferences",
       content: memory.content,
-      expiresAt: memory.expiresAt?.toISOString() ?? null,
-      kind: memory.kind,
-      status: memory.status,
-      summary: memory.summary,
-      topics: memory.metadata.topics ?? [],
-      updatedAt: memory.updatedAt.toISOString(),
-    })),
-    version: 1,
-  };
-};
-
-export const exportMailboxAiMemory = async (mailboxId: string) => {
-  const [memories, learning] = await Promise.all([
-    listScopeMemories(`mailbox:${mailboxId}`),
-    getMailboxAiMemoryScopeConfig(mailboxId),
-  ]);
-  return {
-    exportedAt: new Date().toISOString(),
-    learning,
-    mailboxId,
-    memories: memories.map((memory) => ({
-      agents: memory.metadata.agents ?? ["all"],
-      content: memory.content,
+      correspondents: memory.metadata.correspondents ?? [],
       expiresAt: memory.expiresAt?.toISOString() ?? null,
       kind: memory.kind,
       status: memory.status,

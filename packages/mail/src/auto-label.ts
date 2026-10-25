@@ -32,3 +32,30 @@ export const autoLabelSettingsSchema = z.object({
 });
 
 export type AutoLabelSettings = z.infer<typeof autoLabelSettingsSchema>;
+
+export type MailAutoLabelHistoryExample = {
+  messageId: string;
+  sender: string;
+  subject?: string;
+  date?: string;
+  currentLabels: {
+    id: string;
+    name: string;
+    source?: "manual" | "rule" | "inherited" | "backfill" | "ai_auto_label";
+  }[];
+  priorAutomaticApplication: {
+    appliedAt: string;
+    labels: { id: string; name: string }[];
+  } | null;
+  manualCorrections: {
+    labelId: string;
+    labelName: string;
+    signal: "added" | "removed";
+    recordedAt: string;
+  }[];
+};
+
+export type MailAutoLabelHistory = {
+  sameSender: MailAutoLabelHistoryExample[];
+  sameDomain: MailAutoLabelHistoryExample[];
+};

@@ -26,6 +26,7 @@ import {
 } from "@quieter/database/schema";
 import { getGmailMessageCount, getGmailProfile } from "@quieter/gmail";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
+import { reportError } from "@quieter/observability";
 import { and, asc, count, eq, gt, inArray, isNull, lt } from "drizzle-orm";
 import { z } from "zod";
 
@@ -1233,6 +1234,20 @@ export const completeGmailOAuth = async (input: {
     tokenInfo,
     tokenResponse,
   });
+  try {
+    const { queueMailboxMemoryBootstrap } =
+      await import("../ai-memory-capture");
+    await queueMailboxMemoryBootstrap({ mailboxId, userId: session.user.id });
+  } catch (error) {
+    if (
+      !(error instanceof ORPCError) ||
+      (error.code !== "NOT_FOUND" && error.code !== "FORBIDDEN")
+    ) {
+      reportError(new Error("Recent mail learning could not be queued."), {
+        operation: "mailbox:queue-mail-memory",
+      });
+    }
+  }
 
   return {
     mailboxId,

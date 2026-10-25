@@ -50,10 +50,15 @@ import {
   serializeAiAgentContext,
 } from "../ai-memory";
 import type { AiAgentMemoryCandidates } from "../ai-memory";
+import {
+  captureMailboxMessageMemory,
+  getMailboxMemoryActor,
+} from "../ai-memory-capture";
 import { syncGmailLabels } from "../gmail-labels";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
+import { loadMailAutoLabelHistory } from "../mail-automation/history";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
 import { processGmailMailCapture } from "../mail-capture";
 import {
@@ -78,8 +83,9 @@ const AUTO_LABEL_EXCLUDED_LABELS = new Set<string>([
 
 type AutoLabelContext = {
   availableLabelIds: Set<string>;
+  historyLabels: Pick<MailAutoLabelCandidate, "id" | "name">[];
   labels: MailAutoLabelCandidate[];
-  memoryCandidates: AiAgentMemoryCandidates;
+  memoryCandidates: AiAgentMemoryCandidates | null;
   model: string;
 };
 type MailAutomationBudgetStatus = Awaited<
@@ -87,7 +93,7 @@ type MailAutomationBudgetStatus = Awaited<
 >;
 type MailAutomationContext = {
   configuration: Awaited<ReturnType<typeof loadAiConfiguration>>;
-  memoryCandidates: AiAgentMemoryCandidates;
+  memoryCandidates: AiAgentMemoryCandidates | null;
 };
 type MailAutomationRuntime = {
   getAutoLabelContext: () => Promise<AutoLabelContext>;
@@ -362,22 +368,37 @@ const processAutoLabelMessage = async ({
         }
       }
 
+      const [memoryContext, labelHistory] = await Promise.all([
+        aiLabels.length === 0 || autoLabelContext.memoryCandidates === null
+          ? null
+          : loadAiAgentContext({
+              agent: "auto_label",
+              candidates: autoLabelContext.memoryCandidates,
+              mailboxId,
+              query: buildMailMemoryQuery(message),
+              userId: autoLabelContext.memoryCandidates.userId,
+            }),
+        aiLabels.length === 0
+          ? null
+          : loadMailAutoLabelHistory({
+              accessToken,
+              labels: autoLabelContext.historyLabels,
+              mailboxId,
+              message,
+              provider: "gmail",
+              userId,
+            }),
+      ]);
       const aiLabelIds =
         aiLabels.length === 0
           ? []
           : await classifyMailMessage({
+              labelHistory,
               labels: aiLabels,
-              memoryContext: serializeAiAgentContext(
-                await loadAiAgentContext({
-                  agent: "auto_label",
-                  candidates: autoLabelContext.memoryCandidates,
-                  includeUserScope: false,
-                  mailboxId,
-                  query: buildMailMemoryQuery(message),
-                  semantic: false,
-                  userId,
-                })
-              ),
+              memoryContext:
+                memoryContext === null
+                  ? null
+                  : serializeAiAgentContext(memoryContext),
               message,
               model: autoLabelContext.model,
               onUsage: (reportedUsage) => {
@@ -494,7 +515,7 @@ const processMessageIds = async ({
   organizationId: string | null;
   userId: string;
 }) => {
-  if ((!autoLabelEnabled && !extractCodes) || messageIds.length === 0) {
+  if (messageIds.length === 0) {
     return;
   }
 
@@ -534,6 +555,16 @@ const processMessageIds = async ({
         };
 
         await Promise.all([
+          loadMessage().then(async (message) => {
+            if (message) {
+              await captureMailboxMessageMemory({
+                actorUserId: userId,
+                mailboxId,
+                message,
+                source: "sync",
+              });
+            }
+          }),
           autoLabelEnabled
             ? processAutoLabelMessage({
                 accessToken,
@@ -709,7 +740,6 @@ const processHistoryRecoveryPage = async ({
   }
 
   const page = await listGmailMessageIds(accessToken, {
-    mailbox: "inbox",
     maxResults: 25,
     pageToken: state.recoveryPageToken ?? undefined,
     query: `after:${Math.floor(state.recoveryAfter.getTime() / 1000)} before:${Math.floor(
@@ -780,16 +810,17 @@ const processMailboxHistory = async ({
         let mailAutomationContextPromise: Promise<MailAutomationContext> | null =
           null;
         const getMailAutomationContext = async () => {
-          mailAutomationContextPromise ??= Promise.all([
-            Promise.resolve(loadAiConfiguration()),
-            loadAiAgentMemoryCandidates({
-              includeUserScope: false,
-              mailboxId,
-              userId,
-            }),
-          ]).then(([configuration, memoryCandidates]) => ({
-            configuration,
-            memoryCandidates,
+          mailAutomationContextPromise ??= getMailboxMemoryActor({
+            mailboxId,
+          }).then(async (memoryActor) => ({
+            configuration: loadAiConfiguration(),
+            memoryCandidates:
+              memoryActor === null
+                ? null
+                : await loadAiAgentMemoryCandidates({
+                    mailboxId,
+                    userId: memoryActor.userId,
+                  }),
           }));
           return await mailAutomationContextPromise;
         };
@@ -815,6 +846,9 @@ const processMailboxHistory = async ({
               }));
             return {
               availableLabelIds: new Set(labels.map((label) => label.id)),
+              historyLabels: gmailLabels
+                .filter((label) => label.type === "user")
+                .map(({ id, name }) => ({ id, name })),
               labels,
               memoryCandidates: automationContext.memoryCandidates,
               model: automationContext.configuration.autoLabelModel,

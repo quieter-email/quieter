@@ -14,6 +14,10 @@ import { reportError } from "@quieter/observability";
 import { and, eq, sql } from "drizzle-orm";
 
 import {
+  captureMailboxDraftMemory,
+  captureMailboxMessageMemory,
+} from "../ai-memory-capture";
+import {
   deleteGmailComposeDraft,
   getGmailComposeSendStatus,
   saveGmailDraft,
@@ -28,10 +32,7 @@ import {
   deleteManagedDraft,
 } from "../managed-mail/messages/drafts";
 import { sendManagedMailboxMessage } from "../managed-mail/messages/send";
-import {
-  learnAiMemoryFromMailAction,
-  learnAiMemoryFromSentMessage,
-} from "./feedback";
+import { learnAiMemoryFromMailAction } from "./feedback";
 import type { MailInputs } from "./inputs";
 
 const parseListUnsubscribeMailto = (value: string) => {
@@ -186,23 +187,34 @@ export const composeMailOperations = {
       userId: context.userId,
     });
     if (selectedMailbox.provider === "managed") {
-      return await saveManagedDraft({
+      const saved = await saveManagedDraft({
         ...input,
         userId: context.userId,
       });
+      await captureMailboxDraftMemory({
+        draft: input.draft,
+        draftId: saved.draftId,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      return saved;
     }
 
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken) =>
-        await saveGmailDraft(
-          accessToken,
-          input.mailboxId,
-          input.draft,
-          context.signal
-        )
-    );
+    return await callGmail(context, input.mailboxId, async (accessToken) => {
+      const saved = await saveGmailDraft(
+        accessToken,
+        input.mailboxId,
+        input.draft,
+        context.signal
+      );
+      await captureMailboxDraftMemory({
+        draft: input.draft,
+        draftId: saved.draftId,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      return saved;
+    });
   },
   sendDraft: async ({
     context,
@@ -227,29 +239,10 @@ export const composeMailOperations = {
       userId: context.userId,
     });
     if (selectedMailbox.provider === "managed") {
-      const sent = await sendManagedMailboxMessage({
+      return await sendManagedMailboxMessage({
         ...input,
         userId: context.userId,
       });
-      if (sent.idempotent === true) {
-        return sent;
-      }
-      await learnAiMemoryFromSentMessage({
-        bodyText: input.message.bodyText,
-        isReply: !!input.message.replyContext,
-        mailboxId: input.mailboxId,
-        recipients: [
-          input.message.recipients.to,
-          input.message.recipients.cc,
-          input.message.recipients.bcc,
-        ].join(","),
-        userId: context.userId,
-      }).catch((error: unknown) => {
-        reportError(error, {
-          operation: "Could not record sent-message learning.",
-        });
-      });
-      return sent;
     }
 
     return await callGmail(context, input.mailboxId, async (accessToken) => {
@@ -259,19 +252,22 @@ export const composeMailOperations = {
         input.message,
         context.signal
       );
-      if (sent.idempotent) {
-        return sent;
-      }
-      await learnAiMemoryFromSentMessage({
-        bodyText: input.message.bodyText,
-        isReply: !!input.message.replyContext,
+      await captureMailboxMessageMemory({
+        actorUserId: context.userId,
         mailboxId: input.mailboxId,
-        recipients: [
-          input.message.recipients.to,
-          input.message.recipients.cc,
-          input.message.recipients.bcc,
-        ].join(","),
-        userId: context.userId,
+        message: {
+          bcc: input.message.recipients.bcc,
+          bodyHtml: input.message.bodyHtml,
+          bodyText: input.message.bodyText,
+          cc: input.message.recipients.cc,
+          date: new Date().toISOString(),
+          id: sent.id,
+          inReplyTo: input.message.replyContext?.messageHeaderId,
+          subject: input.message.subject,
+          threadId: sent.threadId ?? sent.id,
+          to: input.message.recipients.to,
+        },
+        source: "sent",
       }).catch((error: unknown) => {
         reportError(error, {
           operation: "Could not record sent-message learning.",

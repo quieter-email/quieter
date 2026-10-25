@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
-import { AI_MEMORY_REQUEST_MAX_LENGTH } from "@quieter/ai/ai-memory";
+import {
+  AI_MEMORY_CATEGORIES,
+  AI_MEMORY_CONTENT_MAX_LENGTH,
+  AI_MEMORY_REQUEST_MAX_LENGTH,
+} from "@quieter/ai/ai-memory";
 import { AUTO_LABEL_MODEL } from "@quieter/ai/classify-gmail-message";
 import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import {
@@ -11,56 +15,40 @@ import {
 import type { ParsedMailSearch } from "@quieter/ai/parse-mail-search";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
-import { user } from "@quieter/database/schema";
+import { user, userAiContextEvent } from "@quieter/database/schema";
 import {
   isMailSearchFilterSupported,
   normalizeStructuredMailSearch,
 } from "@quieter/mail/search";
 import { reportError } from "@quieter/observability";
-import { eq } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { assertCanUseAi } from "../ai-access";
 import {
   AI_MEMORY_LEARNING_PROMPT_MAX_LENGTH,
-  exportMailboxAiMemory,
   exportPersonalAiMemory,
   forgetAiMemory,
   getPersonalAiMemoryScopeConfig,
-  listMailboxAiMemory,
   listPersonalAiMemory,
-  purgeMailboxAiMemory,
+  loadAiAgentContext,
   purgePersonalAiMemory,
   requestAiMemoryUpdate,
-  undoAiMemoryChange,
+  saveAiMemory,
+  searchAiMemory,
+  serializeAiAgentContext,
   updateAiMemoryScopeConfig,
 } from "../ai-memory";
+import {
+  listMailboxMemoryBootstraps,
+  retryMailboxMemoryBootstrap,
+} from "../ai-memory-capture";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
   replySuggestionInputSchema,
   requestReplySuggestion,
 } from "../reply-suggestion";
 import { mailboxIdSchema, protectedProcedure } from "./base";
-
-const memoryTargetSchema = z
-  .object({
-    mailboxId: z.string().trim().min(1).optional(),
-    scope: z.enum(["mailbox", "user"]),
-  })
-  .superRefine((target, context) => {
-    if (
-      target.scope === "mailbox" &&
-      (target.mailboxId === undefined || target.mailboxId.length === 0)
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "Choose a mailbox.",
-        path: ["mailboxId"],
-      });
-    }
-  });
-
-type MemoryTarget = z.infer<typeof memoryTargetSchema>;
 
 const serializeModels = () => {
   const backgroundModel = resolveBackgroundModel();
@@ -71,10 +59,52 @@ const serializeModels = () => {
 };
 
 const loadSettings = async (userId: string) => {
-  const memoryConfig = await getPersonalAiMemoryScopeConfig(userId);
+  const [memoryConfig, learning] = await Promise.all([
+    getPersonalAiMemoryScopeConfig(userId),
+    listMailboxMemoryBootstraps(userId),
+  ]);
+  const pending =
+    learning.length === 0
+      ? []
+      : await db
+          .select({
+            failedCount:
+              sql<number>`count(*) filter (where ${userAiContextEvent.lastError} is not null)`.mapWith(
+                Number
+              ),
+            mailboxId: userAiContextEvent.mailboxId,
+            needsBalance: sql<boolean>`bool_or(${userAiContextEvent.lastError} like '%usage balance%')`,
+            pendingCount: count(),
+          })
+          .from(userAiContextEvent)
+          .where(
+            and(
+              eq(userAiContextEvent.userId, userId),
+              inArray(
+                userAiContextEvent.mailboxId,
+                learning.map((item) => item.mailboxId)
+              ),
+              eq(sql`${userAiContextEvent.metadata}->>'memoryScope'`, "user"),
+              isNull(userAiContextEvent.mergedAt),
+              isNull(userAiContextEvent.skippedAt)
+            )
+          )
+          .groupBy(userAiContextEvent.mailboxId);
+  const pendingByMailbox = new Map(
+    pending.map((item) => [item.mailboxId, item])
+  );
   return {
     memory: {
       enabled: memoryConfig.activeLearningEnabled,
+      learning: learning.map((item) => {
+        const queued = pendingByMailbox.get(item.mailboxId);
+        return {
+          ...item,
+          failedCount: queued?.failedCount ?? 0,
+          needsBalance: queued?.needsBalance ?? false,
+          pendingCount: queued?.pendingCount ?? 0,
+        };
+      }),
       revision: memoryConfig.revision,
     },
     models: serializeModels(),
@@ -90,31 +120,6 @@ const getBillingMailboxId = async (userId: string) => {
   return record?.defaultMailboxId ?? null;
 };
 
-const assertMemoryTarget = async (
-  target: MemoryTarget,
-  userId: string,
-  write: boolean
-) => {
-  if (target.scope === "user") {
-    return null;
-  }
-  const selectedMailbox = await assertAccessibleMailbox({
-    mailboxId: target.mailboxId ?? "",
-    userId,
-  });
-  if (write && !selectedMailbox.capabilities.canManageKnowledge) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "Only mailbox managers can change this knowledge.",
-    });
-  }
-  return selectedMailbox;
-};
-
-const loadTargetMemory = async (target: MemoryTarget, userId: string) =>
-  target.scope === "user"
-    ? await listPersonalAiMemory(userId)
-    : await listMailboxAiMemory(target.mailboxId ?? "", userId);
-
 const toUserMemoryError = (error: unknown) => {
   if (error instanceof ORPCError) {
     return error;
@@ -126,78 +131,50 @@ const toUserMemoryError = (error: unknown) => {
 };
 
 export const aiRouter = {
-  deleteMemory: protectedProcedure
-    .input(memoryTargetSchema)
-    .handler(async ({ context, input }) => {
-      await assertMemoryTarget(input, context.userId, true);
-      if (input.scope === "user") {
-        await purgePersonalAiMemory(context.userId);
-      } else {
-        await purgeMailboxAiMemory(input.mailboxId ?? "");
-      }
-      return { memory: await loadTargetMemory(input, context.userId) };
-    }),
+  deleteMemory: protectedProcedure.handler(async ({ context }) => {
+    await purgePersonalAiMemory(context.userId);
+    return { memory: await listPersonalAiMemory(context.userId) };
+  }),
 
-  exportMemory: protectedProcedure
-    .input(memoryTargetSchema)
-    .handler(async ({ context, input }) => {
-      await assertMemoryTarget(input, context.userId, false);
-      return input.scope === "user"
-        ? await exportPersonalAiMemory(context.userId)
-        : await exportMailboxAiMemory(input.mailboxId ?? "");
-    }),
+  exportMemory: protectedProcedure.handler(
+    async ({ context }) => await exportPersonalAiMemory(context.userId)
+  ),
 
   forgetMemory: protectedProcedure
-    .input(memoryTargetSchema.extend({ memoryId: z.string().trim().min(1) }))
+    .input(z.object({ memoryId: z.string().trim().min(1) }))
     .handler(async ({ context, input }) => {
-      await assertMemoryTarget(input, context.userId, true);
-      const change = await forgetAiMemory({
-        mailboxId: input.mailboxId,
-        memoryId: input.memoryId,
-        scope: input.scope,
-        userId: context.userId,
-      });
-      if (!change) {
-        throw new ORPCError("NOT_FOUND", { message: "Memory not found." });
+      try {
+        return await forgetAiMemory({
+          memoryId: input.memoryId,
+          userId: context.userId,
+        });
+      } catch (error) {
+        throw toUserMemoryError(error);
       }
-      return {
-        memory: await loadTargetMemory(input, context.userId),
-        summary: change.summary,
-      };
     }),
 
   interactMemory: protectedProcedure
     .input(
-      memoryTargetSchema.extend({
+      z.object({
         request: z.string().trim().min(1).max(AI_MEMORY_REQUEST_MAX_LENGTH),
       })
     )
     .handler(async ({ context, input }) => {
       try {
-        const selectedMailbox = await assertMemoryTarget(
-          input,
-          context.userId,
-          false
-        );
-        const allowMutations =
-          selectedMailbox?.capabilities.canManageKnowledge ?? true;
-        const billingMailboxId =
-          input.mailboxId ?? (await getBillingMailboxId(context.userId));
-        if (billingMailboxId === null || billingMailboxId.length === 0) {
+        const mailboxId = await getBillingMailboxId(context.userId);
+        if (!mailboxId) {
           throw new ORPCError("BAD_REQUEST", {
             message: "Connect a mailbox before updating AI memory.",
           });
         }
         const change = await requestAiMemoryUpdate({
-          allowMutations,
-          mailboxId: billingMailboxId,
+          mailboxId,
           request: input.request,
-          scope: input.scope,
           userId: context.userId,
         });
         return {
           answer: change.answer,
-          memory: await loadTargetMemory(input, context.userId),
+          memory: await listPersonalAiMemory(context.userId),
           summary: change.summary,
         };
       } catch (error) {
@@ -237,6 +214,14 @@ export const aiRouter = {
               ? undefined
               : ["archived", "read", "unread"],
           availableLabels: input.availableLabels ?? [],
+          memoryContext: serializeAiAgentContext(
+            await loadAiAgentContext({
+              agent: "search",
+              mailboxId: mailbox.id,
+              query: input.query,
+              userId: context.userId,
+            })
+          ),
           model: searchModel,
           onUsage: (usage) => {
             void reportAiUsage({
@@ -276,10 +261,75 @@ export const aiRouter = {
       });
     }),
 
+  learnFromMail: protectedProcedure
+    .input(z.object({ mailboxId: mailboxIdSchema }))
+    .handler(async ({ context, input }) => {
+      try {
+        return await retryMailboxMemoryBootstrap({
+          mailboxId: input.mailboxId,
+          userId: context.userId,
+        });
+      } catch (error) {
+        throw toUserMemoryError(error);
+      }
+    }),
+
+  memories: protectedProcedure
+    .route({ method: "GET" })
+    .input(
+      z.object({
+        category: z.enum(AI_MEMORY_CATEGORIES).optional(),
+        cursor: z.string().trim().min(1).max(1000).optional(),
+        limit: z.number().int().min(1).max(50).default(20),
+        query: z.string().trim().max(500).optional(),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      try {
+        return await searchAiMemory({ ...input, userId: context.userId });
+      } catch (error) {
+        throw toUserMemoryError(error);
+      }
+    }),
+
   resetPersonalization: protectedProcedure.handler(async ({ context }) => {
     await purgePersonalAiMemory(context.userId);
     return { deleted: true };
   }),
+
+  saveMemory: protectedProcedure
+    .input(
+      z
+        .object({
+          category: z.enum(AI_MEMORY_CATEGORIES),
+          content: z.string().trim().min(1).max(AI_MEMORY_CONTENT_MAX_LENGTH),
+          correspondents: z
+            .array(z.email().trim().max(320))
+            .max(20)
+            .default([]),
+          memoryId: z.string().trim().min(1).max(200).optional(),
+          version: z.number().int().positive().optional(),
+        })
+        .superRefine((memory, context) => {
+          if (
+            (memory.memoryId === undefined) !==
+            (memory.version === undefined)
+          ) {
+            context.addIssue({
+              code: "custom",
+              message: "Reload this memory before saving your changes.",
+              path: ["version"],
+            });
+          }
+        })
+    )
+    .handler(async ({ context, input }) => {
+      try {
+        return await saveAiMemory({ ...input, userId: context.userId });
+      } catch (error) {
+        throw toUserMemoryError(error);
+      }
+    }),
 
   settings: protectedProcedure
     .route({ method: "GET" })
@@ -289,29 +339,9 @@ export const aiRouter = {
     .input(replySuggestionInputSchema)
     .handler(requestReplySuggestion),
 
-  undoMemoryChange: protectedProcedure
-    .input(memoryTargetSchema.extend({ changeSetId: z.string().trim().min(1) }))
-    .handler(async ({ context, input }) => {
-      try {
-        await assertMemoryTarget(input, context.userId, true);
-        const change = await undoAiMemoryChange({
-          changeSetId: input.changeSetId,
-          mailboxId: input.mailboxId,
-          scope: input.scope,
-          userId: context.userId,
-        });
-        return {
-          memory: await loadTargetMemory(input, context.userId),
-          summary: change.summary,
-        };
-      } catch (error) {
-        throw toUserMemoryError(error);
-      }
-    }),
-
   updateLearningGuidance: protectedProcedure
     .input(
-      memoryTargetSchema.extend({
+      z.object({
         activeLearningEnabled: z.boolean(),
         learningPrompt: z.string().max(AI_MEMORY_LEARNING_PROMPT_MAX_LENGTH),
         revision: z.number().int().nonnegative(),
@@ -319,13 +349,10 @@ export const aiRouter = {
     )
     .handler(async ({ context, input }) => {
       try {
-        await assertMemoryTarget(input, context.userId, true);
         return await updateAiMemoryScopeConfig({
           activeLearningEnabled: input.activeLearningEnabled,
           learningPrompt: input.learningPrompt,
-          mailboxId: input.mailboxId,
           revision: input.revision,
-          scope: input.scope,
           userId: context.userId,
         });
       } catch (error) {
@@ -346,7 +373,6 @@ export const aiRouter = {
         activeLearningEnabled: input.enabled,
         learningPrompt: current.learningPrompt,
         revision: input.revision,
-        scope: "user",
         userId: context.userId,
       });
       return {

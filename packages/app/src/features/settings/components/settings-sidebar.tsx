@@ -51,7 +51,6 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 const SETTINGS_ICONS: Record<string, typeof Settings01Icon> = {
-  "AI & personalization": AiChat01Icon,
   "API keys": Key01Icon,
   Account: UserIcon,
   "Billing & usage": CreditCardIcon,
@@ -64,13 +63,14 @@ const SETTINGS_ICONS: Record<string, typeof Settings01Icon> = {
   General: Settings01Icon,
   Mailboxes: Mail01Icon,
   "Members & invitations": UserGroupIcon,
+  Memories: AiChat01Icon,
   Preferences: Settings01Icon,
 };
 
 const PERSONAL_ITEMS = [
   { tab: "account", title: "Account" },
   { tab: "appearance", title: "Preferences" },
-  { tab: "ai", title: "AI & personalization" },
+  { tab: "ai", title: "Memories" },
   { tab: "connectors", title: "Connected apps" },
 ] as const;
 

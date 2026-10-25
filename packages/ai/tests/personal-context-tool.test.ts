@@ -15,7 +15,6 @@ describe("personal context read tool", () => {
             content: "Detail ".repeat(1000),
             id: "memory-50",
             kind: "learned" as const,
-            scope: "user" as const,
             summary: "A remembered detail",
           },
         ],

@@ -19,7 +19,7 @@ export const classifyMailImportance = async (input: {
     model: resolveBackgroundModel(),
     onUsage: input.onUsage,
     prompt: JSON.stringify({
-      context: input.context?.slice(0, 6000) ?? null,
+      context: input.context ?? null,
       email: {
         attachments: input.message.attachments
           ?.slice(0, 32)

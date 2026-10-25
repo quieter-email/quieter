@@ -1,9 +1,11 @@
 "use client";
 
+import { MoreHorizontalIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { PersonalizationMemories } from "@quieter/app/features/settings/components/personalization-memories";
 import {
-  SettingsRow,
-  SettingsRows,
+  SettingsErrorState,
+  SettingsLoadingState,
   SettingsSection,
 } from "@quieter/app/features/settings/components/settings-layout";
 import { toastError } from "@quieter/app/lib/error-toast";
@@ -12,7 +14,6 @@ import { persistQueryByKey } from "@quieter/app/lib/query-persister";
 import type { RouterOutputs } from "@quieter/orpc";
 import {
   AlertDialog,
-  AlertDialogBody,
   AlertDialogCloseButton,
   AlertDialogContent,
   AlertDialogDescription,
@@ -21,173 +22,149 @@ import {
   AlertDialogTitle,
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
-import { Switch, SwitchThumb } from "@quieter/ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@quieter/ui/dropdown-menu";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-type AiSettings = RouterOutputs["ai"]["settings"];
-type UpdateSettings = (updater: (current: AiSettings) => AiSettings) => void;
-
-const useAiSettingsData = () => {
+export const AiSettingsPanel = () => {
   const queryClient = useQueryClient();
-  const settingsQuery = orpc.ai.settings.queryOptions();
-  const { data: settings, isPending } = useQuery(settingsQuery);
-  const updateSettings: UpdateSettings = (updater) => {
-    queryClient.setQueryData<AiSettings>(settingsQuery.queryKey, (current) =>
-      current ? updater(current) : current
-    );
-    void persistQueryByKey(settingsQuery.queryKey, queryClient);
-  };
-  return { isPending, settings, updateSettings };
-};
-
-const AiPersonalizationSection = ({
-  settings,
-  updateSettings,
-}: ReturnType<typeof useAiSettingsData>) => {
   const [resetOpen, setResetOpen] = useState(false);
-  const updateMutation = useMutation(
-    orpc.ai.updatePersonalization.mutationOptions()
-  );
-  const resetMutation = useMutation(
-    orpc.ai.resetPersonalization.mutationOptions()
-  );
-  const enabled = settings?.memory.enabled ?? true;
-
-  const updateEnabled = (nextEnabled: boolean) => {
-    if (!settings) {
-      return;
-    }
-    updateSettings((current) => ({
-      ...current,
-      memory: { ...current.memory, enabled: nextEnabled },
-    }));
-    updateMutation.mutate(
-      { enabled: nextEnabled, revision: settings.memory.revision },
-      {
-        onError(error) {
-          updateSettings((current) => ({
-            ...current,
-            memory: { ...current.memory, enabled },
-          }));
-          toastError(error, {
-            boundary: "ai-settings",
-            fallback: "Could not update personalization.",
-          });
-        },
-        onSuccess(memory) {
-          updateSettings((current) => ({ ...current, memory }));
-        },
-      }
-    );
-  };
-
-  const reset = () => {
-    resetMutation.mutate(undefined, {
+  const settingsQuery = orpc.ai.settings.queryOptions();
+  const settings = useQuery(settingsQuery);
+  const update = useMutation(
+    orpc.ai.updatePersonalization.mutationOptions({
       onError(error) {
-        toastError(error, {
-          boundary: "ai-settings",
-          fallback: "Could not reset personalization.",
-        });
+        toastError(error, { boundary: "ai-settings" });
       },
-      onSuccess() {
-        toast.success("Personalization has been reset.");
+      onSuccess(memory) {
+        queryClient.setQueryData<RouterOutputs["ai"]["settings"]>(
+          settingsQuery.queryKey,
+          (current) =>
+            current
+              ? { ...current, memory: { ...current.memory, ...memory } }
+              : current
+        );
+        void persistQueryByKey(settingsQuery.queryKey, queryClient);
       },
-    });
-    setResetOpen(false);
+    })
+  );
+  const reset = useMutation(
+    orpc.ai.resetPersonalization.mutationOptions({
+      onError(error) {
+        toastError(error, { boundary: "ai-settings" });
+      },
+      async onSuccess() {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: orpc.ai.memories.key() }),
+          queryClient.invalidateQueries({ queryKey: orpc.ai.settings.key() }),
+        ]);
+        setResetOpen(false);
+        toast.success("Memories deleted.");
+      },
+    })
+  );
+  const retrySettings = async () => {
+    const result = await settings.refetch();
+    if (result.error) {
+      toastError(result.error, { boundary: "ai-settings" });
+    }
   };
+
+  if (settings.isPending) {
+    return <SettingsLoadingState label="Loading memories" />;
+  }
+  if (settings.isError) {
+    return (
+      <SettingsErrorState
+        message="Could not load memories."
+        onRetry={() => {
+          void retrySettings();
+        }}
+      />
+    );
+  }
 
   return (
-    <>
-      <SettingsSection
-        description="Quieter can quietly adapt to how you communicate and work. It recalls only the context that fits the task and lets weak, outdated patterns fade."
-        title="Personalization"
-      >
-        <SettingsRows>
-          <SettingsRow
-            action={
-              <Switch
-                aria-label="Adaptive personalization"
-                checked={enabled}
-                disabled={!settings || updateMutation.isPending}
-                onCheckedChange={updateEnabled}
+    <SettingsSection>
+      <PersonalizationMemories
+        actions={
+          <DropdownMenu>
+            <IconButtonTooltip label="Memory settings">
+              <DropdownMenuTrigger
+                aria-label="Memory settings"
+                appearance="icon"
               >
-                <SwitchThumb />
-              </Switch>
-            }
-            title="Adapt over time"
-          >
-            Learn useful patterns from conversations and the way you handle
-            mail. Ask Quieter in chat what it knows, or tell it to forget or
-            correct something.
-          </SettingsRow>
-          <SettingsRow
-            action={<PersonalizationMemories />}
-            title="What Quieter remembers"
-          >
-            Read what Quieter has learned about you.
-          </SettingsRow>
-          <SettingsRow
-            action={
-              <Button
-                disabled={resetMutation.isPending}
-                onClick={() => {
+                <HugeiconsIcon aria-hidden icon={MoreHorizontalIcon} />
+              </DropdownMenuTrigger>
+            </IconButtonTooltip>
+            <DropdownMenuContent align="end" size="compact">
+              <DropdownMenuCheckboxItem
+                checked={settings.data.memory.enabled}
+                disabled={update.isPending}
+                onCheckedChange={(enabled) => {
+                  update.mutate({
+                    enabled,
+                    revision: settings.data.memory.revision,
+                  });
+                }}
+              >
+                Learn automatically
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
                   setResetOpen(true);
                 }}
-                size="sm"
-                type="button"
-                variant="destructive"
+                tone="destructive"
               >
-                Start fresh
-              </Button>
-            }
-            title="Reset personalization"
-          >
-            Clear the context Quieter has learned about you. New patterns can
-            form again while adaptation is on.
-          </SettingsRow>
-        </SettingsRows>
-      </SettingsSection>
-
-      <AlertDialog onOpenChange={setResetOpen} open={resetOpen}>
+                Delete all memories
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
+      />
+      <AlertDialog
+        onOpenChange={(open) => {
+          if (!reset.isPending) {
+            setResetOpen(open);
+          }
+        }}
+        open={resetOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Start personalization fresh?</AlertDialogTitle>
+            <AlertDialogTitle>Delete all memories?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently clears the context Quieter has learned about you.
+              This permanently deletes what Quieter remembers about you.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogBody>
-            <p className="text-body text-muted-fg">
-              Shared mailbox behavior is not affected. You can also ask Quieter
-              to forget or correct individual things in chat.
-            </p>
-          </AlertDialogBody>
           <AlertDialogFooter>
-            <AlertDialogCloseButton disabled={resetMutation.isPending}>
+            <AlertDialogCloseButton disabled={reset.isPending}>
               Cancel
             </AlertDialogCloseButton>
             <Button
-              disabled={resetMutation.isPending}
-              onClick={reset}
-              type="button"
+              disabled={reset.isPending}
+              onClick={() => {
+                reset.mutate();
+              }}
+              pending={reset.isPending}
+              pendingLabel="Deleting"
               variant="destructive"
             >
-              Start fresh
+              Delete all
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
-  );
-};
-
-export const AiSettingsPanel = () => {
-  const settingsData = useAiSettingsData();
-  return (
-    <div className="flex flex-col gap-8">
-      <AiPersonalizationSection {...settingsData} />
-    </div>
+    </SettingsSection>
   );
 };

@@ -168,6 +168,7 @@ export const sendManagedMailboxMessage = async (input: {
       raw,
       requestHash,
       snapshot: {
+        actorUserId: input.userId,
         attachments: parsed.attachments.map((attachment, partIndex) => ({
           ...attachment,
           partIndex,

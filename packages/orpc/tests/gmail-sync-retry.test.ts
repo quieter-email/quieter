@@ -6,12 +6,14 @@ import type * as drizzleOrm from "drizzle-orm";
 import { getTableName } from "drizzle-orm";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
+import * as aiMemory from "../src/ai-memory";
 import {
   listGmailPubSubMaintenanceJobs,
   retryPendingAutomationMessages,
 } from "../src/gmail-sync/service";
 import type { getMailAutomationAiBudgetStatus } from "../src/mail-automation/ai-budget";
 import { MAIL_AUTOMATION_AI_PAUSED_MESSAGE } from "../src/mail-automation/ai-budget";
+import type { loadMailAutoLabelHistory } from "../src/mail-automation/history";
 import type { processMailVerificationCode } from "../src/verification-codes";
 
 type Row = Record<string, unknown>;
@@ -22,6 +24,7 @@ const fixtures = vi.hoisted(() => ({
   budget: vi.fn<() => Promise<BudgetStatus>>(),
   classify: vi.fn<typeof classifyMailMessage>(),
   getMessage: vi.fn<typeof getMessageWithDetails>(),
+  history: vi.fn<typeof loadMailAutoLabelHistory>(),
   mailboxes: [] as Row[],
   mutate: vi.fn<typeof mutateGmailMessage>(),
   pendingCodeMessageIds: [] as string[],
@@ -187,6 +190,9 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => {
     },
   };
 });
+vi.mock(import("../src/mail-automation/history"), () => ({
+  loadMailAutoLabelHistory: fixtures.history,
+}));
 
 vi.mock(import("../src/verification-codes"), () => ({
   listPendingMailboxVerificationCodeMessageIds: async () =>
@@ -201,8 +207,12 @@ const input = {
   automationRuntime: {
     getAutoLabelContext: async () => ({
       availableLabelIds: new Set<string>(),
+      historyLabels: [],
       labels: [],
-      memoryCandidates: [],
+      memoryCandidates: {
+        mailboxId: "mailbox-1",
+        userId: "user-1",
+      },
       model: "fixture-model",
     }),
     getBudgetStatus: fixtures.budget,
@@ -215,6 +225,10 @@ const input = {
 describe("Gmail automation retry recovery", () => {
   beforeEach(() => {
     fixtures.classify.mockReset();
+    fixtures.history.mockReset().mockResolvedValue(null);
+    vi.spyOn(aiMemory, "loadAiAgentContext")
+      .mockReset()
+      .mockResolvedValue({ instructions: null, memory: null });
     fixtures.mutate.mockReset().mockResolvedValue({
       id: "deferred-message",
       isUnread: false,
@@ -317,6 +331,74 @@ describe("Gmail automation retry recovery", () => {
     expect(fixtures.rows[0]?.appliedAt).toBeInstanceOf(Date);
   });
 
+  test("classifies with current sender history and the user's preferences", async () => {
+    fixtures.classify.mockResolvedValue(["work"]);
+    vi.mocked(aiMemory.loadAiAgentContext).mockResolvedValue({
+      instructions: null,
+      memory: "Keep launch announcements under Work.",
+    });
+    fixtures.history.mockResolvedValue({
+      sameDomain: [],
+      sameSender: [
+        {
+          currentLabels: [{ id: "work", name: "Work" }],
+          manualCorrections: [
+            {
+              labelId: "work",
+              labelName: "Work",
+              recordedAt: new Date().toISOString(),
+              signal: "added",
+            },
+          ],
+          messageId: "earlier-message",
+          priorAutomaticApplication: null,
+          sender: "mail@example.com",
+        },
+      ],
+    });
+    await retryPendingAutomationMessages({
+      ...input,
+      automationRuntime: {
+        ...input.automationRuntime,
+        getAutoLabelContext: async () => ({
+          ...(await input.automationRuntime.getAutoLabelContext()),
+          availableLabelIds: new Set(["work"]),
+          historyLabels: [
+            { id: "work", name: "Work" },
+            { id: "manual-only", name: "Manual only" },
+          ],
+          labels: [
+            {
+              description: null,
+              id: "work",
+              inclusionCriteria: null,
+              name: "Work",
+            },
+          ],
+        }),
+      },
+    });
+
+    const [classification] = fixtures.classify.mock.calls[0] ?? [];
+    expect(classification?.memoryContext).toContain("launch announcements");
+    expect(
+      classification?.labelHistory?.sameSender.map((entry) => entry.messageId)
+    ).toContain("earlier-message");
+    expect(
+      classification?.labelHistory?.sameSender.flatMap((entry) =>
+        entry.currentLabels.map((label) => label.id)
+      )
+    ).toContain("work");
+    const [historyRequest] = fixtures.history.mock.calls[0] ?? [];
+    expect(historyRequest?.mailboxId).toBe(input.mailboxId);
+    expect(historyRequest?.message.id).toBe("deferred-message");
+    expect(historyRequest?.userId).toBe(input.userId);
+    expect(historyRequest?.labels.map((label) => label.id)).toContain(
+      "manual-only"
+    );
+    expect(fixtures.rows[0]?.appliedAt).toBeInstanceOf(Date);
+  });
+
   test("processes due retries without checking budget solely for future failures", async () => {
     const [due] = fixtures.rows;
     if (due === undefined) {
@@ -373,6 +455,7 @@ describe("Gmail automation retry recovery", () => {
           ...input.automationRuntime,
           getAutoLabelContext: async () => ({
             availableLabelIds: new Set(["deterministic", "ai"]),
+            historyLabels: [],
             labels: [
               candidate,
               ...(mixed
@@ -385,7 +468,10 @@ describe("Gmail automation retry recovery", () => {
                   ]
                 : []),
             ],
-            memoryCandidates: [],
+            memoryCandidates: {
+              mailboxId: "mailbox-1",
+              userId: "user-1",
+            },
             model: "fixture-model",
           }),
         },
