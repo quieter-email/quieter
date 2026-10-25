@@ -18,8 +18,8 @@ import {
   openConnectorLink,
 } from "@quieter/app/lib/connectors-query";
 import { toastError } from "@quieter/app/lib/error-toast";
-import { downloadAttachmentFromServer } from "@quieter/app/lib/gmail/attachments";
 import type { MessageAttachment } from "@quieter/app/lib/mail";
+import { downloadAttachmentFromServer } from "@quieter/app/lib/mail/attachments";
 import { getErrorMessage } from "@quieter/app/lib/orpc-errors";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";

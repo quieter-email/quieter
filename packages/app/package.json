@@ -258,7 +258,7 @@
     "./lib/deployment-errors": "./src/lib/deployment-errors.ts",
     "./lib/draft-recovery-journal": "./src/lib/draft-recovery-journal.ts",
     "./lib/error-toast": "./src/lib/error-toast.ts",
-    "./lib/gmail/attachments": "./src/lib/gmail/attachments.ts",
+    "./lib/mail/attachments": "./src/lib/mail/attachments.ts",
     "./lib/gmail/demo-mail": "./src/lib/gmail/demo-mail.ts",
     "./lib/gmail/message-utils": "./src/lib/gmail/message-utils.ts",
     "./lib/gmail/thread-list": "./src/lib/gmail/thread-list.ts",
@@ -304,7 +304,6 @@
   "dependencies": {
     "@ai-sdk/provider-utils": "5.0.59",
     "@ai-sdk/react": "catalog:",
-    "@barkleapp/css-sanitizer": "1.0.0",
     "@better-auth/api-key": "catalog:",
     "@better-auth/electron": "1.7.7",
     "@better-auth/passkey": "catalog:",
@@ -352,7 +351,7 @@
     "ai": "catalog:",
     "better-auth": "catalog:",
     "class-variance-authority": "^0.7.1",
-    "color": "^5.0.3",
+    "css-tree": "^3.2.1",
     "dompurify": "^3.4.17",
     "idb": "^8.0.4",
     "lenis": "^1.3.26",
@@ -366,6 +365,7 @@
   },
   "devDependencies": {
     "@quieter/config": "workspace:*",
+    "@types/css-tree": "^3.2.0",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "fake-indexeddb": "^6.2.5",
