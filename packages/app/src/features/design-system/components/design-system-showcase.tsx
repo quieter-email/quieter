@@ -10,7 +10,9 @@ import {
 } from "@hugeicons/core-free-icons";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
+import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
 import { toastError } from "@quieter/app/lib/error-toast";
+import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import {
   AlertDialog,
@@ -89,7 +91,7 @@ import { ThemePicker } from "@quieter/ui/theme-picker";
 import { toast } from "@quieter/ui/toast";
 import { TokenField } from "@quieter/ui/token-field";
 import type { TokenFieldToken } from "@quieter/ui/token-field";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { ReactNode } from "react";
 
 // Sample data only. Real mentions come from the user's connected apps.
@@ -393,6 +395,13 @@ export const DesignSystemShowcase = () => {
     "When it's a bug, use @Tracker to file it."
   );
   const [boxChecked, setBoxChecked] = useState(true);
+  const [inlineName, setInlineName] = useState("Project updates");
+  const [inlineNameDraft, setInlineNameDraft] = useState<string | null>(null);
+  const focusNameInput = useCallback((input: HTMLInputElement | null) => {
+    input?.focus();
+    input?.select();
+  }, []);
+  const [labelColor, setLabelColor] = useState<MailboxLabelColor>("blue");
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [showPromptContext, setShowPromptContext] = useState(true);
 
@@ -799,6 +808,59 @@ export const DesignSystemShowcase = () => {
               size="sm"
             />
           </Row>
+          <Row label="Inline name">
+            <div className="w-64">
+              {inlineNameDraft === null ? (
+                <Button
+                  aria-label="Edit example name"
+                  className="w-full"
+                  onClick={() => {
+                    setInlineNameDraft(inlineName);
+                  }}
+                  variant="inline-edit"
+                >
+                  <span className="truncate">{inlineName}</span>
+                </Button>
+              ) : (
+                <Input
+                  aria-label="Example name"
+                  chrome="inline"
+                  onBlur={() => {
+                    setInlineName(inlineNameDraft.trim() || inlineName);
+                    setInlineNameDraft(null);
+                  }}
+                  onChange={(event) => {
+                    setInlineNameDraft(event.currentTarget.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.nativeEvent.isComposing) {
+                      return;
+                    }
+                    if (event.key === "Escape") {
+                      setInlineNameDraft(null);
+                    } else if (event.key === "Enter") {
+                      event.currentTarget.blur();
+                    }
+                  }}
+                  ref={focusNameInput}
+                  value={inlineNameDraft}
+                />
+              )}
+            </div>
+          </Row>
+          <Row label="Color picker">
+            <MailboxColorPicker
+              label="Example color"
+              onChange={setLabelColor}
+              value={labelColor}
+            />
+            <MailboxColorPicker
+              label="Edit example color"
+              onChange={setLabelColor}
+              trigger="swatch"
+              value={labelColor}
+            />
+          </Row>
           <Row label="Search input">
             <InputGroup className="w-64">
               <InputAddon
@@ -848,6 +910,14 @@ export const DesignSystemShowcase = () => {
               aria-label="Message"
               className="w-64"
               placeholder="Placeholder"
+            />
+          </Row>
+          <Row label="Growing textarea">
+            <Textarea
+              aria-label="Example growing prompt"
+              autoSize
+              className="w-80 max-w-full"
+              placeholder="Describe which emails belong here…"
             />
           </Row>
           <Row label="Prompt composer">

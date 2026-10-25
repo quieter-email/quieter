@@ -34,8 +34,7 @@ export const AutoLabelEditor = ({
   const [prompt, setPrompt] = useState(initialPrompt);
   const [showErrors, setShowErrors] = useState(false);
   const parsed = autoLabelSettingsSchema.shape.prompt.safeParse(prompt);
-  const preservedSettings =
-    !parsed.success && prompt === initialPrompt ? label.autoLabel : null;
+  const preservedSettings = prompt === initialPrompt ? label.autoLabel : null;
   const hasValidationError = !parsed.success && preservedSettings === null;
   const disabled = !canManage || isPending;
 
@@ -89,6 +88,7 @@ export const AutoLabelEditor = ({
               </div>
             </div>
             <Textarea
+              autoSize
               aria-label="AI prompt"
               aria-describedby={
                 showErrors && hasValidationError ? `${id}-error` : undefined
@@ -101,7 +101,6 @@ export const AutoLabelEditor = ({
                 setPrompt(event.target.value);
               }}
               placeholder="Describe which emails belong here…"
-              rows={5}
               value={prompt}
             />
             {showErrors && hasValidationError && !parsed.success ? (
