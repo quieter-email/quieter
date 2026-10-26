@@ -1,7 +1,7 @@
-/* oxlint-disable eslint/require-await -- Fetch test doubles keep the async contract without network I/O. */
+/* oxlint-disable eslint/require-await -- Fetch and SQL test doubles preserve asynchronous transport contracts. */
 import { calendarEventDraftSchema } from "@quieter/calendar";
-import type { connectorCredential } from "@quieter/database/schema";
-import type * as drizzleOrm from "drizzle-orm";
+import type * as DatabaseClientModule from "@quieter/database/client";
+import type { gmailCredential, mailbox } from "@quieter/database/schema";
 import {
   afterEach,
   beforeEach,
@@ -16,60 +16,35 @@ import {
   listCalendarEventsForUser,
 } from "../src/calendar/service";
 import { getLinearAccessTokenForUser } from "../src/connectors/runtime";
+import { CALENDAR_SCOPES } from "../src/gmail-mailbox-access";
 
 type Credential = Pick<
-  typeof connectorCredential.$inferSelect,
+  typeof gmailCredential.$inferSelect,
   | "accessTokenExpiresAt"
   | "encryptedAccessToken"
   | "encryptedRefreshToken"
-  | "id"
-  | "provider"
+  | "googleSubject"
   | "scopes"
-  | "status"
-  | "userId"
->;
-type Predicate = (row: Credential) => boolean;
+> &
+  Pick<
+    typeof mailbox.$inferSelect,
+    "emailAddress" | "id" | "ownerUserId" | "status"
+  >;
 
-const fixtures = vi.hoisted(() => {
-  const credentials: Credential[] = [];
-  return { credentials };
+const fixtures = vi.hoisted(() => ({
+  credentials: [] as Credential[],
+  query:
+    vi.fn<
+      (query: string, parameters: unknown[]) => Promise<{ rows: unknown[][] }>
+    >(),
+}));
+
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- The proxy exercises the actual ownership and account predicates.
+vi.mock("@quieter/database/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof DatabaseClientModule>();
+  const { drizzle } = await import("drizzle-orm/pg-proxy");
+  return { ...actual, db: drizzle(fixtures.query) };
 });
-
-// oxlint-disable-next-line vitest/prefer-import-in-mock -- The fake evaluates credential predicates against isolated account records.
-vi.mock("drizzle-orm", async (importOriginal) => ({
-  ...(await importOriginal<typeof drizzleOrm>()),
-  and:
-    (...predicates: (Predicate | undefined)[]) =>
-    (row: Credential) =>
-      predicates.every((predicate) => predicate?.(row) ?? true),
-  eq: (column: { name: string }, value: unknown) => (row: Credential) =>
-    Object.entries(row).some(
-      ([name, current]) => name === column.name && current === value
-    ),
-}));
-
-// oxlint-disable-next-line vitest/prefer-import-in-mock -- The fake implements only credential query methods.
-vi.mock("@quieter/database/client", () => ({
-  db: {
-    select: () => ({
-      from: () => ({
-        where: (predicate: Predicate) => ({
-          limit: (limit: number) =>
-            fixtures.credentials.filter(predicate).slice(0, limit),
-        }),
-      }),
-    }),
-    update: () => ({
-      set: (values: Partial<Credential>) => ({
-        where: (predicate: Predicate) => {
-          for (const record of fixtures.credentials.filter(predicate)) {
-            Object.assign(record, values);
-          }
-        },
-      }),
-    }),
-  },
-}));
 
 vi.mock(import("@quieter/env/server"), async (importOriginal) => {
   const actual = await importOriginal();
@@ -118,30 +93,80 @@ const range = {
 
 describe("connector account authority", () => {
   beforeEach(() => {
-    fixtures.credentials.length = 0;
-    fixtures.credentials.push(
-      ...["first", "selected"].map((id): Credential => ({
-        accessTokenExpiresAt: new Date(Date.now() + 3_600_000),
-        encryptedAccessToken: `${id}-access`,
-        encryptedRefreshToken: `${id}-refresh`,
-        id,
-        provider: "google_calendar",
-        scopes:
-          "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly",
-        status: "connected",
-        userId: "owner",
-      })),
-      {
-        accessTokenExpiresAt: new Date(Date.now() + 3_600_000),
-        encryptedAccessToken: "linear-access",
-        encryptedRefreshToken: "linear-refresh",
-        id: "linear",
-        provider: "linear",
-        scopes: "read write",
-        status: "connected",
-        userId: "owner",
+    fixtures.credentials = ["first", "selected"].map((id): Credential => ({
+      accessTokenExpiresAt: new Date(Date.now() + 3_600_000),
+      emailAddress: `${id}@example.test`,
+      encryptedAccessToken: `${id}-access`,
+      encryptedRefreshToken: `${id}-refresh`,
+      googleSubject: `${id}-subject`,
+      id: `mailbox-${id}`,
+      ownerUserId: "owner",
+      scopes: CALENDAR_SCOPES.join(" "),
+      status: "connected",
+    }));
+    fixtures.query.mockReset().mockImplementation(async (query, params) => {
+      if (query.startsWith("update")) {
+        return { rows: [["mailbox-selected"]] };
       }
-    );
+      if (query.includes('from "connectorCredential"')) {
+        if (!params.includes("owner")) {
+          return { rows: [] };
+        }
+        if (query.includes('"accessTokenExpiresAt"')) {
+          return {
+            rows: params.includes("selected")
+              ? []
+              : [
+                  [
+                    new Date("2099-01-01T00:00:00Z"),
+                    "linear-access",
+                    "linear-refresh",
+                    "linear",
+                    "linear",
+                    "read write",
+                    "connected",
+                  ],
+                ],
+          };
+        }
+        return {
+          rows: fixtures.credentials.map((record) => [
+            record.emailAddress,
+            null,
+            record.id.replace("mailbox-", ""),
+            record.googleSubject,
+          ]),
+        };
+      }
+      const owned = fixtures.credentials.filter((record) =>
+        params.includes(record.ownerUserId)
+      );
+      if (query.includes('"accessTokenExpiresAt"')) {
+        return {
+          rows: owned
+            .filter((record) => params.includes(record.id))
+            .map((record) => [
+              record.accessTokenExpiresAt,
+              record.emailAddress,
+              record.encryptedAccessToken,
+              record.encryptedRefreshToken,
+              record.id,
+              record.scopes,
+              record.status,
+            ]),
+        };
+      }
+      return {
+        rows: owned.map((record) => [
+          null,
+          record.emailAddress,
+          record.googleSubject,
+          record.id,
+          record.scopes,
+          record.status,
+        ]),
+      };
+    });
   });
 
   afterEach(() => vi.unstubAllGlobals());
@@ -237,14 +262,14 @@ describe("connector account authority", () => {
     ]);
     expect(refreshTokens).toStrictEqual(["selected-refresh"]);
     expect(
-      fixtures.credentials.find((record) => record.id === "first")
+      fixtures.credentials.find((record) => record.id === "mailbox-first")
         ?.encryptedAccessToken
     ).toBe("first-access");
   });
 
   test("refreshes expired authorization upfront but never replays a background mutation", async () => {
     const selected = fixtures.credentials.find(
-      (record) => record.id === "selected"
+      (record) => record.id === "mailbox-selected"
     );
     if (selected === undefined) {
       throw new Error("Missing selected credential.");

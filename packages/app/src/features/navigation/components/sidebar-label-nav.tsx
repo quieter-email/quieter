@@ -1,6 +1,7 @@
 "use client";
 
 import { MoreVerticalIcon } from "@hugeicons/core-free-icons";
+import { applyMailboxSearchPatch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import {
   SIDEBAR_LABEL_VISIBILITY_EVENT,
   computeEffectiveHiddenLabelIds,
@@ -14,10 +15,11 @@ import {
   normalizeLabelSelectionKey,
   parseStructuredSearchQuery,
 } from "@quieter/app/features/message-search/state/message-list-search-state";
-import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
+import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import { managedLabelCountsQueryOptions } from "@quieter/app/lib/managed-mailbox-organization-query";
+import { mailboxSearchSchema } from "@quieter/app/route-search";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -25,15 +27,18 @@ import { ColorSwatch } from "@quieter/ui/color-swatch";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useEffect, useReducer } from "react";
 
 type SidebarLabelNavProps = {
   animateEntrance: boolean;
   canManage: boolean;
+  embedded: boolean;
   mailboxId: string | null;
   mailboxProvider: "gmail" | "managed";
   onManageLabels: () => void;
+  onRequestClose?: () => void;
   onSearch: (query: string) => void;
   searchQuery: string;
 };
@@ -99,9 +104,11 @@ const isNonemptyMailboxId = (
 export const SidebarLabelNav = ({
   animateEntrance,
   canManage,
+  embedded,
   mailboxId,
   mailboxProvider,
   onManageLabels,
+  onRequestClose,
   onSearch,
   searchQuery,
 }: SidebarLabelNavProps) => {
@@ -210,6 +217,13 @@ export const SidebarLabelNav = ({
       const isActive =
         selectedLabelKeys.has(normalizeLabelSelectionKey(label.id)) ||
         selectedLabelKeys.has(normalizeLabelSelectionKey(label.name));
+      const nextQuery = updateLabelFilter(
+        searchQuery,
+        selectedLabelKeys.has(normalizeLabelSelectionKey(label.id))
+          ? label.id
+          : label.name,
+        !isActive
+      );
 
       return (
         <SidebarLabelEntrance
@@ -217,9 +231,9 @@ export const SidebarLabelNav = ({
           animateEntrance={shouldAnimateEntrance}
           index={index + 9}
         >
-          <SidebarNavItem
+          <SidebarMailboxNavItem
             active={isActive}
-            aria-pressed={isActive}
+            aria-current={isActive ? "page" : undefined}
             // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom label-row spacing.
             className={cn(
               "min-w-0 justify-start text-left text-caption font-normal squircle",
@@ -229,16 +243,21 @@ export const SidebarLabelNav = ({
               }
             )}
             // oxlint-enable shadcn/no-restyle
+            mailboxSearch={
+              embedded
+                ? undefined
+                : {
+                    mailboxId,
+                    messageId: null,
+                    query: nextQuery,
+                    workspace: null,
+                  }
+            }
             onClick={() => {
-              onSearch(
-                updateLabelFilter(
-                  searchQuery,
-                  selectedLabelKeys.has(normalizeLabelSelectionKey(label.id))
-                    ? label.id
-                    : label.name,
-                  !isActive
-                )
-              );
+              if (embedded) {
+                onSearch(nextQuery);
+              }
+              onRequestClose?.();
             }}
             size="sm"
             type="button"
@@ -251,7 +270,7 @@ export const SidebarLabelNav = ({
                 {managedLabelCountById.get(label.id) ?? 0}
               </span>
             ) : null}
-          </SidebarNavItem>
+          </SidebarMailboxNavItem>
         </SidebarLabelEntrance>
       );
     });
@@ -269,9 +288,35 @@ export const SidebarLabelNav = ({
           <IconButtonTooltip label={`Manage ${labelNounPlural}`}>
             <Button
               aria-label={`Manage ${labelNounPlural}`}
+              nativeButton={embedded}
               onClick={() => {
-                onManageLabels();
+                if (embedded) {
+                  onManageLabels();
+                }
+                onRequestClose?.();
               }}
+              render={
+                embedded ? undefined : (
+                  <Link
+                    replace
+                    resetScroll={false}
+                    search={(previous) =>
+                      applyMailboxSearchPatch(
+                        mailboxSearchSchema.parse(previous),
+                        {
+                          mailboxId,
+                          messageId: null,
+                          query: null,
+                          view: "labels",
+                          workspace: null,
+                        }
+                      )
+                    }
+                    to="/"
+                  />
+                )
+              }
+              role={embedded ? "button" : "link"}
               size="icon-xs"
               type="button"
               variant="ghost"

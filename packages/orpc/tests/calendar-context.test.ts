@@ -13,7 +13,7 @@ import {
 
 import { listCalendarEventsForUser } from "../src/calendar/service";
 import { createCalendarToolsContext } from "../src/chat/calendar-tools";
-import { GOOGLE_CALENDAR_SCOPES } from "../src/connectors/runtime";
+import { CALENDAR_SCOPES } from "../src/gmail-mailbox-access";
 
 const mocks = vi.hoisted(() => ({
   query:
@@ -69,24 +69,37 @@ const foreground = foregroundSnapshotSchema.parse({
 
 describe("live calendar context", () => {
   beforeEach(() => {
-    mocks.query.mockReset().mockImplementation(
-      async (query) =>
-        await Promise.resolve({
-          rows: query.includes('"accessTokenExpiresAt"')
-            ? [
-                [
-                  new Date("2099-01-01T00:00:00Z"),
-                  "owner-credential",
-                  null,
-                  range.connectionId,
-                  "google_calendar",
-                  GOOGLE_CALENDAR_SCOPES.join(" "),
-                  "connected",
-                ],
-              ]
-            : [["owner@example.test", range.connectionId]],
-        })
-    );
+    mocks.query.mockReset().mockImplementation(async (query) => {
+      if (query.includes('"accessTokenExpiresAt"')) {
+        return await Promise.resolve({
+          rows: [
+            [
+              new Date("2099-01-01T00:00:00Z"),
+              "owner@example.test",
+              "owner-credential",
+              null,
+              range.connectionId,
+              CALENDAR_SCOPES.join(" "),
+              "connected",
+            ],
+          ],
+        });
+      }
+      return await Promise.resolve({
+        rows: query.includes('from "connectorCredential"')
+          ? []
+          : [
+              [
+                null,
+                "owner@example.test",
+                "owned-subject",
+                range.connectionId,
+                CALENDAR_SCOPES.join(" "),
+                "connected",
+              ],
+            ],
+      });
+    });
   });
   afterEach(() => vi.unstubAllGlobals());
 
@@ -131,18 +144,19 @@ describe("live calendar context", () => {
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(request).not.toHaveBeenCalled();
 
+    const priorQueries = mocks.query.mock.calls.length;
     const result = await listCalendarEventsForUser({
       ...range,
       query: "planning",
       userId: "owner",
     });
-    for (const [query, values] of mocks.query.mock.calls.slice(1)) {
-      expect(query).toContain('"connectorCredential"."userId" =');
-      expect(query).toContain('"connectorCredential"."provider" =');
-      expect(query).toContain('"connectorCredential"."id" =');
-      expect(values).toStrictEqual(
-        expect.arrayContaining(["owner", "google_calendar", range.connectionId])
+    for (const [query, values] of mocks.query.mock.calls.slice(priorQueries)) {
+      expect(query).toContain(
+        query.includes('from "connectorCredential"')
+          ? '"connectorCredential"."userId" ='
+          : '"mailbox"."ownerUserId" ='
       );
+      expect(values).toContain("owner");
     }
     expect(request).toHaveBeenCalledWith(
       expect.stringContaining("/calendars/team-calendar/events?"),

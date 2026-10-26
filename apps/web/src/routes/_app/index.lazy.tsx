@@ -11,5 +11,10 @@ function InboxRouteComponent() {
     return null;
   }
 
-  return <InboxPageClient user={loaderData.user} />;
+  return (
+    <InboxPageClient
+      gmailError={loaderData.gmailError}
+      user={loaderData.user}
+    />
+  );
 }

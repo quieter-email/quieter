@@ -29,7 +29,6 @@ export const CalendarEventDetails = ({
   event,
   onClose,
   onDelete,
-  onEdit,
   onRespond,
   pending,
   timeZone,
@@ -38,7 +37,6 @@ export const CalendarEventDetails = ({
   event: CalendarEvent;
   onClose: () => void;
   onDelete: () => void;
-  onEdit: () => void;
   onRespond: (response: "accepted" | "tentative" | "declined") => void;
   pending: boolean;
   timeZone: string;
@@ -245,19 +243,9 @@ export const CalendarEventDetails = ({
                 </p>
               ))
             : null}
-          {event.webUrl ? (
-            <a
-              className="underline underline-offset-4 hover:text-fg"
-              href={event.webUrl}
-              rel="noreferrer"
-              target="_blank"
-            >
-              Open original event
-            </a>
-          ) : null}
         </div>
       </div>
-      {event.permissions.edit || event.permissions.delete ? (
+      {event.permissions.delete ? (
         <div className="border-t border-border p-4">
           <ActionFooter>
             {event.permissions.delete ? (
@@ -267,11 +255,6 @@ export const CalendarEventDetails = ({
                 variant="destructive"
               >
                 Delete
-              </Button>
-            ) : null}
-            {event.permissions.edit ? (
-              <Button disabled={pending} onClick={onEdit}>
-                Edit event
               </Button>
             ) : null}
           </ActionFooter>

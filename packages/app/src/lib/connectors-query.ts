@@ -2,7 +2,7 @@ import { rpc } from "@quieter/app/lib/orpc";
 import { openExternalUrl } from "@quieter/app/runtime";
 import { queryOptions } from "@tanstack/react-query";
 
-export type ConnectorProvider = "google_calendar" | "linear";
+export type ConnectorProvider = "linear";
 
 export const CONNECTORS_QUERY_KEY = ["connectors"] as const;
 

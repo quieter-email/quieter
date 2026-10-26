@@ -21,12 +21,15 @@ import { MailboxSwitcherDropdown } from "@quieter/app/features/navigation/compon
 import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/components/mailbox-switcher";
 import { SidebarLabelNav } from "@quieter/app/features/navigation/components/sidebar-label-nav";
 import { SidebarMailboxNav } from "@quieter/app/features/navigation/components/sidebar-mailbox-nav";
-import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
+import {
+  SidebarMailboxNavItem,
+  SidebarNavItem,
+} from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { appRuntime } from "@quieter/app/runtime";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
-import { Button, LinkButton } from "@quieter/ui/button";
+import { Button } from "@quieter/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,7 +40,7 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import { use, useEffect, useState } from "react";
 
 import { UnifiedSidebarLabelNav } from "./unified-sidebar-label-nav";
@@ -75,9 +78,7 @@ type MailSidebarProps = {
   onSelectMailboxId: (mailboxId: string) => void;
   onSearch: (query: string) => void;
   onComposeNewMail: () => void;
-  onOpenCalendar?: () => void;
   onManageLabels: (mailboxId?: string) => void;
-  onManageSnippets: () => void;
   onSelectView: (view: MailboxWorkspaceView) => void;
   reconnectingMailboxId: string | null;
   searchQuery: string;
@@ -184,8 +185,6 @@ const SidebarInboxSection = ({
   groups,
   onComposeNewMail,
   onManageLabels,
-  onManageSnippets,
-  onOpenCalendar,
   onRequestClose,
   onSearch,
   onSelectMailbox,
@@ -203,8 +202,6 @@ const SidebarInboxSection = ({
   | "groups"
   | "onComposeNewMail"
   | "onManageLabels"
-  | "onManageSnippets"
-  | "onOpenCalendar"
   | "onRequestClose"
   | "onSearch"
   | "onSelectMailbox"
@@ -219,10 +216,6 @@ const SidebarInboxSection = ({
     .find((mailbox) => mailbox.id === selectedMailboxId)?.grantRole;
   const handleComposeNewMail = () => {
     onComposeNewMail();
-    onRequestClose?.();
-  };
-  const handleSelectMailbox = (mailbox: MailboxCategory) => {
-    onSelectMailbox(mailbox);
     onRequestClose?.();
   };
   return (
@@ -254,7 +247,13 @@ const SidebarInboxSection = ({
           onClick={handleComposeNewMail}
           onFocus={() => void loadComposeWorkspace()}
           onMouseEnter={() => void loadComposeWorkspace()}
-          onPointerDown={() => void loadComposeWorkspace()}
+          onPointerDown={(event) => {
+            if (event.button !== 0) {
+              event.preventDefault();
+              return;
+            }
+            void loadComposeWorkspace();
+          }}
           type="button"
         >
           <Icon icon={Edit01Icon} />
@@ -263,32 +262,38 @@ const SidebarInboxSection = ({
       </SidebarEntrance>
 
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto p-1">
-        {embedded !== true && onOpenCalendar ? (
+        {embedded === true ? null : (
           <SidebarEntrance
             animateEntrance={animateEntrance}
             className="mb-2 w-full"
             index={2}
           >
-            <SidebarNavItem
+            <SidebarMailboxNavItem
               // oxlint-disable-next-line shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom row spacing.
               className="justify-start gap-3 px-3 text-left"
-              onClick={() => {
-                onOpenCalendar();
-                onRequestClose?.();
+              mailboxSearch={{
+                mailboxId: selectedMailboxId,
+                workspace: "calendar",
               }}
+              onClick={onRequestClose}
+              replace={false}
               size="sm"
               type="button"
               variant="ghost"
             >
               <Icon aria-hidden tone="default" icon={Calendar03Icon} />
               Calendar
-            </SidebarNavItem>
+            </SidebarMailboxNavItem>
           </SidebarEntrance>
-        ) : null}
+        )}
         <SidebarMailboxNav
+          allInboxesActive={allInboxesActive}
           animateEntrance={animateEntrance}
+          embedded={embedded === true}
+          mailboxId={selectedMailboxId}
           mailboxProvider={selectedMailboxProvider}
-          onSelectMailbox={handleSelectMailbox}
+          onRequestClose={onRequestClose}
+          onSelectMailbox={onSelectMailbox}
           selectedMailbox={selectedMailbox}
         />
         {embedded !== true && selectedMailboxId !== null ? (
@@ -297,16 +302,21 @@ const SidebarInboxSection = ({
             className="w-full"
             index={10}
           >
-            <SidebarNavItem
+            <SidebarMailboxNavItem
               active={isSnippetMailbox}
               aria-current={isSnippetMailbox ? "page" : undefined}
               // oxlint-disable shadcn/no-restyle -- The sidebar row uses its existing animated active styling.
               className="justify-start gap-3 px-3 text-left"
               // oxlint-enable shadcn/no-restyle
-              onClick={() => {
-                onManageSnippets();
-                onRequestClose?.();
+              mailboxSearch={{
+                mailbox: "snippets",
+                mailboxId: selectedMailboxId,
+                messageId: null,
+                threadId: null,
+                view: "inbox",
+                workspace: null,
               }}
+              onClick={onRequestClose}
               onFocus={() => void loadSnippetWorkspace()}
               onMouseEnter={() => void loadSnippetWorkspace()}
               onPointerDown={() => void loadSnippetWorkspace()}
@@ -316,7 +326,7 @@ const SidebarInboxSection = ({
             >
               <Icon tone="default" icon={NoteEditIcon} />
               Snippets
-            </SidebarNavItem>
+            </SidebarMailboxNavItem>
           </SidebarEntrance>
         ) : null}
         {!allInboxesActive &&
@@ -331,13 +341,10 @@ const SidebarInboxSection = ({
         {allInboxesActive && (
           <UnifiedSidebarLabelNav
             groups={groups}
+            mailboxId={selectedMailboxId}
+            onRequestClose={onRequestClose}
             userId={userId}
             searchQuery={searchQuery}
-            onManageLabels={onManageLabels}
-            onSearch={(nextQuery) => {
-              onSearch(nextQuery);
-              onRequestClose?.();
-            }}
           />
         )}
         {!allInboxesActive && selectedMailboxProvider !== "api" && (
@@ -350,6 +357,8 @@ const SidebarInboxSection = ({
             }
             mailboxId={selectedMailboxId}
             mailboxProvider={selectedMailboxProvider ?? "gmail"}
+            embedded={embedded === true}
+            onRequestClose={onRequestClose}
             onManageLabels={onManageLabels}
             onSearch={(query) => {
               onSearch(query);
@@ -366,33 +375,36 @@ const SidebarInboxSection = ({
 const SidebarFooter = ({
   animateEntrance,
   onRequestClose,
-}: Pick<SidebarContentProps, "animateEntrance" | "onRequestClose">) => (
-  <SidebarEntrance
-    animateEntrance={animateEntrance}
-    className="mt-auto p-2"
-    index={9}
-  >
-    <div className="flex items-center gap-1">
-      <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
-        <LinkButton
-          aria-label="Settings"
-          // oxlint-disable-next-line shadcn/no-restyle -- Sidebar settings link keeps its row treatment.
-          className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
-          onClick={onRequestClose}
-          search={{
-            from: "/",
-          }}
-          variant="ghost"
-          to="/settings"
-        >
-          <Icon icon={Settings01Icon} />
-          Settings
-        </LinkButton>
+}: Pick<SidebarContentProps, "animateEntrance" | "onRequestClose">) => {
+  const returnTo = useLocation({ select: (location) => location.href });
+  return (
+    <SidebarEntrance
+      animateEntrance={animateEntrance}
+      className="mt-auto p-2"
+      index={9}
+    >
+      <div className="flex items-center gap-1">
+        <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
+          <Button
+            aria-label="Settings"
+            // oxlint-disable-next-line shadcn/no-restyle -- Sidebar settings link keeps its row treatment.
+            className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
+            onClick={onRequestClose}
+            nativeButton={false}
+            render={<Link search={{ from: returnTo }} to="/settings" />}
+            // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native anchor through its render slot.
+            role="link"
+            variant="ghost"
+          >
+            <Icon icon={Settings01Icon} />
+            Settings
+          </Button>
+        </div>
+        <SidebarHelpMenu onRequestClose={onRequestClose} />
       </div>
-      <SidebarHelpMenu onRequestClose={onRequestClose} />
-    </div>
-  </SidebarEntrance>
-);
+    </SidebarEntrance>
+  );
+};
 
 const SidebarAssistantAction = ({
   onRequestClose,
@@ -434,8 +446,6 @@ const SidebarContent = ({
   groups,
   onComposeNewMail,
   onManageLabels,
-  onManageSnippets,
-  onOpenCalendar,
   onReorderMailboxSwitcher,
   onReconnectMailbox,
   onRequestClose,
@@ -509,8 +519,6 @@ const SidebarContent = ({
         embedded={embedded}
         groups={groups}
         onComposeNewMail={onComposeNewMail}
-        onManageSnippets={onManageSnippets}
-        onOpenCalendar={onOpenCalendar}
         onManageLabels={(sourceMailboxId) => {
           onManageLabels(sourceMailboxId);
           onRequestClose?.();

@@ -244,6 +244,15 @@ export const calendarListToolResultSchema = z.object({
   fetchedAt: z.iso.datetime(),
   status: z.literal("success"),
 });
+const calendarListReviewSchema = calendarListToolResultSchema.extend({
+  accounts: z.array(
+    calendarAccountSchema.options[0].pick({
+      email: true,
+      id: true,
+      name: true,
+    })
+  ),
+});
 export const calendarEventsToolResultSchema = z.object({
   events: z.array(calendarEventSchema),
   fetchedAt: z.iso.datetime(),
@@ -274,7 +283,7 @@ export const isCalendarWriteToolName = (
   Object.hasOwn(calendarWriteInputSchemas, name);
 
 export type CalendarWriteReview = {
-  account: CalendarAccount;
+  account: Pick<CalendarAccount, "email" | "id" | "name">;
   calendar: CalendarSummary;
   previousEvent?: CalendarEvent;
   scope: "event" | "occurrence" | "series";
@@ -296,7 +305,7 @@ export const resolveCalendarWriteReview = ({
     return undefined;
   }
   const parts = transcript.flatMap((message) => message.parts);
-  let account: CalendarAccount | undefined;
+  let account: CalendarWriteReview["account"] | undefined;
   let calendar: CalendarSummary | undefined;
   let previousEvent: CalendarEvent | undefined;
   for (const part of parts) {
@@ -308,7 +317,7 @@ export const resolveCalendarWriteReview = ({
       continue;
     }
     if (Reflect.get(part, "type") === "tool-list_calendars") {
-      const listed = calendarListToolResultSchema.safeParse(
+      const listed = calendarListReviewSchema.safeParse(
         Reflect.get(part, "output")
       );
       if (listed.success) {

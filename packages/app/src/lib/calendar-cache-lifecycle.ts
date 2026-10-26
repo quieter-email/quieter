@@ -1,6 +1,7 @@
 import { mailCache } from "@quieter/app/lib/mail-cache";
 import {
   persistQueryByKey,
+  queryPersister,
   removeCalendarScopePersistence,
   restoreMissingCalendarScopeQueries,
 } from "@quieter/app/lib/query-persister";
@@ -303,7 +304,40 @@ export const bindCalendarCache = (client: QueryClient, userId?: string) => {
             if (disposed || client.getQueryData(key) !== snapshot) {
               return;
             }
+            const account = parsed.data.accounts.find(
+              (candidate) => candidate.id === connectionId
+            );
+            const calendarListKey = [
+              "calendar",
+              userId,
+              "connection",
+              connectionId,
+              "calendars",
+            ];
+            const calendarList = calendarsSchema.safeParse(
+              account?.status === "needs-reconnect" &&
+                account.mailboxId !== null
+                ? (client.getQueryData(calendarListKey) ??
+                    (await queryPersister.retrieveQuery(
+                      JSON.stringify(calendarListKey)
+                    )))
+                : undefined
+            );
+            if (disposed || client.getQueryData(key) !== snapshot) {
+              return;
+            }
             await clearCalendarConnectionCache(client, userId, connectionId);
+            if (
+              !disposed &&
+              client.getQueryData(key) === snapshot &&
+              calendarList.success &&
+              calendarList.data.calendars.every(
+                (calendar) => calendar.connectionId === connectionId
+              )
+            ) {
+              client.setQueryData(calendarListKey, calendarList.data);
+              await persistQueryByKey(calendarListKey, client);
+            }
           }
           await persistQueryByKey(["calendar", userId, "accounts"], client);
         } catch {

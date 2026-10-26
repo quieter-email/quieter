@@ -9,12 +9,14 @@ import {
 import type { CalendarEventsRange } from "@quieter/app/lib/calendar-query";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { rpc } from "@quieter/app/lib/orpc";
+import { persistQueryByKey } from "@quieter/app/lib/query-persister";
 import type {
   CalendarEvent,
   CalendarEventDraft,
   CalendarEventPatch,
   CalendarMutationResult,
   CalendarRef,
+  CalendarSummary,
 } from "@quieter/calendar";
 import {
   useMutation,
@@ -22,6 +24,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 
 import {
   getCalendarEventKey,
@@ -82,8 +85,22 @@ export const useCalendarData = ({
           enabled: preview === null && account.status === "connected",
         })),
   });
+  const previewCalendarsKey = [
+    "calendar-preview",
+    userId,
+    preview ?? "disabled",
+    "calendars",
+  ] as const;
+  const previewCalendarsQuery = useQuery({
+    enabled: false,
+    gcTime: 7 * 24 * 60 * 60 * 1000,
+    initialData: preview ? calendarPreviewCalendars : undefined,
+    queryFn: () => calendarPreviewCalendars,
+    queryKey: previewCalendarsKey,
+    staleTime: Infinity,
+  });
   const calendars = preview
-    ? calendarPreviewCalendars
+    ? (previewCalendarsQuery.data ?? [])
     : calendarQueries.flatMap((query) => query.data?.calendars ?? []);
   const visibleCalendars = calendars.filter(
     (calendar) => !hiddenCalendarKeys.includes(getCalendarRefKey(calendar))
@@ -138,41 +155,64 @@ export const useCalendarData = ({
             .map((event) => [getCalendarEventKey(event), event])
         ).values(),
       ];
+  const scopedQueries = [
+    ...calendarQueries.map((query, index) => ({
+      connectionId: accounts[index]?.id,
+      query,
+    })),
+    ...eventQueries.map((query, index) => ({
+      connectionId: requests[index]?.calendar.connectionId,
+      query,
+    })),
+  ];
+  const authorizationFailures = JSON.stringify([
+    ...new Set(
+      scopedQueries.flatMap(({ connectionId, query }) =>
+        query.isError &&
+        "status" in query.error &&
+        (query.error.status === 401 || query.error.status === 403)
+          ? [connectionId]
+          : []
+      )
+    ),
+  ]);
+  const refreshedAuthorizationFailures = useRef(new Set<string>());
+  useEffect(() => {
+    if (
+      authorizationFailures !== "[]" &&
+      !refreshedAuthorizationFailures.current.has(authorizationFailures)
+    ) {
+      refreshedAuthorizationFailures.current.add(authorizationFailures);
+      void queryClient.invalidateQueries({
+        exact: true,
+        queryKey: [...getCalendarQueryKey(userId), "accounts"],
+      });
+    }
+  }, [authorizationFailures, queryClient, userId]);
   const failures = preview
     ? []
     : [
-        ...(accountsQuery.isError
-          ? [
-              {
-                key: "accounts",
-                label: "Calendar accounts",
-                retry: async () => await accountsQuery.refetch(),
-              },
-            ]
-          : []),
-        ...calendarQueries.flatMap((query, index) =>
-          query.isError
-            ? [
-                {
-                  key: `calendars-${accounts[index]?.id ?? index}`,
-                  label: accounts[index]?.name ?? "Calendar list",
-                  retry: async () => await query.refetch(),
-                },
-              ]
-            : []
-        ),
-        ...eventQueries.flatMap((query, index) =>
-          query.isError
-            ? [
-                {
-                  key: `events-${requests[index]?.calendar.connectionId}-${requests[index]?.calendar.calendarId}-${requests[index]?.month.start}`,
-                  label: `${requests[index]?.calendar.name ?? "Calendar events"}, ${requests[index]?.month.start.slice(0, 7) ?? ""}`,
-                  retry: async () => await query.refetch(),
-                },
-              ]
+        ...(accountsQuery.isError ? [accountsQuery] : []),
+        ...scopedQueries.flatMap(({ connectionId, query }) =>
+          query.isError &&
+          !("status" in query.error && query.error.status === 401) &&
+          accounts.some(
+            (account) =>
+              account.id === connectionId && account.status === "connected"
+          )
+            ? [query]
             : []
         ),
       ];
+  const onMutationError = async (error: Error) => {
+    toastError(error, { boundary: "calendar" });
+    if ("status" in error && error.status === 401) {
+      await queryClient.invalidateQueries({
+        exact: true,
+        queryKey: accountsOptions.queryKey,
+      });
+    }
+  };
   const mutation = useMutation({
     mutationFn: async (
       input: CalendarMutation
@@ -201,6 +241,10 @@ export const useCalendarData = ({
       }
       let nextEvent: CalendarEvent;
       if (input.kind === "create") {
+        const calendar = calendars.find(
+          (candidate) =>
+            getCalendarRefKey(candidate) === getCalendarRefKey(input.ref)
+        );
         nextEvent = {
           ...input.draft,
           ...input.ref,
@@ -210,6 +254,8 @@ export const useCalendarData = ({
             response: "needs-action",
             self: false,
           })),
+          color: input.draft.color ?? calendar?.color,
+          colorOverride: input.draft.color ?? undefined,
           eventId: `preview-${input.operationId}`,
           meetingPending: false,
           organizer: { email: "alex@example.com", name: "Alex", self: true },
@@ -218,6 +264,10 @@ export const useCalendarData = ({
           version: crypto.randomUUID(),
         };
       } else if (input.kind === "update") {
+        const calendar = calendars.find(
+          (candidate) =>
+            getCalendarRefKey(candidate) === getCalendarRefKey(input.event)
+        );
         nextEvent = {
           ...input.event,
           ...input.changes,
@@ -231,6 +281,14 @@ export const useCalendarData = ({
                 )?.response ?? "needs-action",
               self: guest.email === "alex@example.com",
             })) ?? input.event.attendees,
+          color:
+            input.changes.color === undefined
+              ? input.event.color
+              : (input.changes.color ?? calendar?.color),
+          colorOverride:
+            input.changes.color === undefined
+              ? input.event.colorOverride
+              : (input.changes.color ?? undefined),
           version: crypto.randomUUID(),
         };
       } else if (input.kind === "respond") {
@@ -271,9 +329,7 @@ export const useCalendarData = ({
         status: "success",
       };
     },
-    onError: (error) => {
-      toastError(error, { boundary: "calendar" });
-    },
+    onError: onMutationError,
     onMutate: async () => {
       if (!preview) {
         await queryClient.cancelQueries({
@@ -288,6 +344,64 @@ export const useCalendarData = ({
       await applyCalendarMutationReceipt(queryClient, userId, result);
     },
   });
+  const colorMutation = useMutation({
+    mutationFn: async ({
+      calendar,
+      color,
+    }: {
+      calendar: CalendarSummary;
+      color: string;
+    }): Promise<CalendarSummary> => {
+      if (preview) {
+        return { ...calendar, color };
+      }
+      return await rpc.calendar.updateColor({
+        calendarId: calendar.calendarId,
+        color,
+        connectionId: calendar.connectionId,
+      });
+    },
+    onError: onMutationError,
+    onSuccess: async (calendar) => {
+      if (preview) {
+        queryClient.setQueryData<CalendarSummary[]>(
+          previewCalendarsKey,
+          (current = []) =>
+            current.map((candidate) =>
+              getCalendarRefKey(candidate) === getCalendarRefKey(calendar)
+                ? calendar
+                : candidate
+            )
+        );
+        return;
+      }
+      const calendarsKey = calendarCalendarsQueryOptions(
+        userId,
+        calendar.connectionId
+      ).queryKey;
+      await queryClient.cancelQueries({ exact: true, queryKey: calendarsKey });
+      queryClient.setQueryData(calendarsKey, (current) =>
+        current
+          ? {
+              ...current,
+              calendars: current.calendars.map((candidate) =>
+                getCalendarRefKey(candidate) === getCalendarRefKey(calendar)
+                  ? calendar
+                  : candidate
+              ),
+            }
+          : current
+      );
+      await persistQueryByKey(calendarsKey, queryClient);
+      await queryClient.invalidateQueries({
+        queryKey: [
+          ...calendarsKey.slice(0, 4),
+          "calendar",
+          calendar.calendarId,
+        ],
+      });
+    },
+  });
   const refresh = async () => {
     if (!preview) {
       await queryClient.invalidateQueries({
@@ -298,14 +412,17 @@ export const useCalendarData = ({
   return {
     accounts,
     calendars,
+    colorMutation,
     events,
     failures,
     isConfigured: preview !== null || accountsQuery.data?.isConfigured === true,
     isLoading:
       !preview &&
-      (accountsQuery.isPending ||
-        calendarQueries.some((query) => query.isLoading) ||
-        eventQueries.some((query) => query.isLoading)),
+      (accountsQuery.isLoading ||
+        (calendars.length === 0 &&
+          calendarQueries.some((query) => query.isLoading)) ||
+        (eventQueries.every((query) => query.data === undefined) &&
+          eventQueries.some((query) => query.isLoading))),
     isRefreshing:
       !preview &&
       (accountsQuery.isFetching ||
@@ -313,6 +430,12 @@ export const useCalendarData = ({
         eventQueries.some((query) => query.isFetching)),
     mutation,
     refresh,
+    retryFailures: async () => {
+      await Promise.allSettled(
+        failures.map(async (query) => await query.refetch())
+      );
+    },
+    retryingFailures: failures.some((query) => query.isFetching),
     visibleCalendars,
   };
 };

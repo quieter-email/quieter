@@ -9,6 +9,7 @@ import type {
   CalendarSummary,
 } from "@quieter/calendar";
 import {
+  calendarColorSchema,
   calendarEventTimeSchema,
   calendarTimeZoneSchema,
 } from "@quieter/calendar";
@@ -53,6 +54,7 @@ const remindersSchema = z.object({
 const eventSchema = z.object({
   attendees: z.array(attendeeSchema).optional(),
   attendeesOmitted: z.boolean().optional(),
+  colorId: z.string().optional(),
   conferenceData: z
     .object({
       createRequest: z
@@ -103,7 +105,8 @@ const calendarSchema = z.object({
     "writer",
     "owner",
   ]),
-  backgroundColor: z.string().optional(),
+  backgroundColor: calendarColorSchema.optional(),
+  colorId: z.string().optional(),
   conferenceProperties: z
     .object({ allowedConferenceSolutionTypes: z.array(z.string()).optional() })
     .optional(),
@@ -117,6 +120,16 @@ const calendarSchema = z.object({
 });
 export type GoogleCalendar = z.infer<typeof calendarSchema>;
 export type GoogleEvent = z.infer<typeof eventSchema>;
+const colorDefinitionSchema = z.object({
+  background: calendarColorSchema,
+  foreground: calendarColorSchema,
+});
+const colorsSchema = z.object({
+  calendar: z.record(z.string(), colorDefinitionSchema),
+  event: z.record(z.string(), colorDefinitionSchema),
+});
+export type GoogleColors = z.infer<typeof colorsSchema>;
+let cachedColors: { expiresAt: number; value: GoogleColors } | undefined;
 type GoogleAuth = { accessToken: string; signal?: AbortSignal };
 type GoogleTarget = GoogleAuth & { calendarId: string };
 const accessRoles = {
@@ -232,13 +245,43 @@ export const getGoogleCalendar = async (
   return calendarSchema.parse(await response.json());
 };
 
+export const getGoogleColors = async (
+  input: GoogleAuth
+): Promise<GoogleColors> => {
+  input.signal?.throwIfAborted();
+  if (cachedColors && cachedColors.expiresAt > Date.now()) {
+    return cachedColors.value;
+  }
+  const response = await requestGoogle({ ...input, path: "/colors" });
+  const value = colorsSchema.parse(await response.json());
+  cachedColors = { expiresAt: Date.now() + 24 * 60 * 60 * 1000, value };
+  return value;
+};
+
+export const patchGoogleCalendarColor = async (
+  input: GoogleTarget & { color: string }
+): Promise<GoogleCalendar> => {
+  const response = await requestGoogle({
+    ...input,
+    body: { backgroundColor: input.color },
+    method: "PATCH",
+    path: `/users/me/calendarList/${encodeURIComponent(input.calendarId)}?colorRgbFormat=true`,
+  });
+  return calendarSchema.parse(await response.json());
+};
+
 export const toCalendarSummary = (input: {
   calendar: GoogleCalendar;
+  colors?: GoogleColors;
   connectionId: string;
 }): CalendarSummary => ({
   access: accessRoles[input.calendar.accessRole],
   calendarId: input.calendar.id,
-  color: input.calendar.backgroundColor,
+  color:
+    input.calendar.backgroundColor ??
+    (input.calendar.colorId
+      ? input.colors?.calendar[input.calendar.colorId]?.background
+      : undefined),
   connectionId: input.connectionId,
   name: input.calendar.summaryOverride ?? input.calendar.summary ?? "Calendar",
   primary: input.calendar.primary ?? false,
@@ -327,10 +370,14 @@ export const getGoogleEvent = async (
 
 export const toCalendarEvent = (input: {
   calendar: GoogleCalendar;
+  colors?: GoogleColors;
   connectionId: string;
   event: GoogleEvent;
 }): CalendarEvent => {
   const { calendar, event } = input;
+  const colorOverride = event.colorId
+    ? input.colors?.event[event.colorId]?.background
+    : undefined;
   let time: CalendarEventTime;
   if (event.start?.date && event.end?.date) {
     time = calendarEventTimeSchema.parse({
@@ -393,6 +440,13 @@ export const toCalendarEvent = (input: {
     ),
     availability: event.transparency === "transparent" ? "free" : "busy",
     calendarId: calendar.id,
+    color:
+      colorOverride ??
+      calendar.backgroundColor ??
+      (calendar.colorId
+        ? input.colors?.calendar[calendar.colorId]?.background
+        : undefined),
+    ...(colorOverride ? { colorOverride } : {}),
     connectionId: input.connectionId,
     description: event.description ?? "",
     eventId: event.id,
@@ -449,12 +503,28 @@ export const toCalendarEvent = (input: {
 
 export const googleEventChanges = (input: {
   changes: CalendarEventPatch;
+  colors?: GoogleColors;
   current?: GoogleEvent;
   meetingRequestId: string;
 }) => {
   const { changes, current } = input;
   const { time } = changes;
+  let colorId: string | null | undefined;
+  if (changes.color === null) {
+    colorId = null;
+  } else if (changes.color !== undefined) {
+    const requestedColor = changes.color.toLowerCase();
+    colorId = Object.entries(input.colors?.event ?? {}).find(
+      ([, color]) => color.background.toLowerCase() === requestedColor
+    )?.[0];
+    if (colorId === undefined) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Choose one of the available event colors.",
+      });
+    }
+  }
   return {
+    ...(colorId === undefined ? {} : { colorId }),
     ...(changes.addMeeting === true &&
     !current?.hangoutLink &&
     !current?.conferenceData
@@ -552,6 +622,7 @@ export const googleEventChanges = (input: {
 
 export const createGoogleEvent = async (
   input: GoogleTarget & {
+    colors?: GoogleColors;
     event: CalendarEventDraft;
     operationId: string;
     userId: string;
@@ -570,6 +641,7 @@ export const createGoogleEvent = async (
     .digest("hex");
   const draft = googleEventChanges({
     changes: input.event,
+    colors: input.colors,
     meetingRequestId: id,
   });
   const digest = createHash("sha256")

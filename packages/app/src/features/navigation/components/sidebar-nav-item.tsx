@@ -1,12 +1,16 @@
 "use client";
 
+import { applyMailboxSearchPatch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
+import type { MailboxSearchPatch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import {
   SidebarActiveSurface,
   sidebarNavButtonVariants,
 } from "@quieter/app/features/navigation/components/sidebar-surfaces";
+import { mailboxSearchSchema } from "@quieter/app/route-search";
 import { Button } from "@quieter/ui/button";
 import type { ButtonProps } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Link } from "@tanstack/react-router";
 import type { MouseEventHandler, ReactNode } from "react";
 
 type SidebarNavItemProps = Omit<
@@ -59,4 +63,36 @@ export const SidebarNavItem = ({
     </Button>
     {trailing}
   </div>
+);
+
+export const SidebarMailboxNavItem = ({
+  mailboxSearch,
+  replace = true,
+  ...props
+}: SidebarNavItemProps & {
+  mailboxSearch?: MailboxSearchPatch;
+  replace?: boolean;
+}) => (
+  <SidebarNavItem
+    {...props}
+    {...(mailboxSearch === undefined
+      ? {}
+      : {
+          nativeButton: false,
+          render: (
+            <Link
+              replace={replace}
+              resetScroll={false}
+              search={(previous) =>
+                applyMailboxSearchPatch(
+                  mailboxSearchSchema.parse(previous),
+                  mailboxSearch
+                )
+              }
+              to="/"
+            />
+          ),
+          role: "link",
+        })}
+  />
 );

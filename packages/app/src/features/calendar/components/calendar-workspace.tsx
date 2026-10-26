@@ -3,6 +3,8 @@
 import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
+  Cancel01Icon,
+  Loading03Icon,
   RefreshIcon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
@@ -10,19 +12,15 @@ import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
 import { useMailboxRouteSearch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
-import { clearCalendarConnectionCache } from "@quieter/app/lib/calendar-cache-lifecycle";
 import {
   calendarEventQueryOptions,
   calendarEventsQueryOptions,
   getCalendarCacheMonthRanges,
-  getCalendarQueryKey,
 } from "@quieter/app/lib/calendar-query";
-import { openConnectorLink } from "@quieter/app/lib/connectors-query";
 import { toastError } from "@quieter/app/lib/error-toast";
-import { rpc } from "@quieter/app/lib/orpc";
+import { openGoogleAccountLink } from "@quieter/app/lib/google-account-link";
 import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
 import type {
-  CalendarAccount,
   CalendarEvent,
   CalendarEventTime,
   CalendarMutationResult,
@@ -38,6 +36,7 @@ import {
   moveCalendarEventTime,
   splitCalendarEventTime,
 } from "@quieter/calendar/time";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -51,7 +50,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
@@ -70,7 +68,6 @@ import {
   SelectValue,
 } from "@quieter/ui/select";
 import { Text } from "@quieter/ui/text";
-import { toast } from "@quieter/ui/toast";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCreateStore, useSelector } from "@tanstack/react-store";
@@ -83,34 +80,35 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import type { ReactNode } from "react";
 import { z } from "zod";
 
+import { createCalendarEventEditorStore } from "../domain/calendar-event-editor";
 import {
   addCalendarDays,
   createCalendarEventChanges,
   getCalendarEventKey,
   getCalendarRefKey,
-  getCalendarTimeZoneOptions,
 } from "../domain/calendar-event-form";
 import type { CalendarEditor } from "../domain/calendar-event-form";
 import { CalendarEventDetails } from "./calendar-event-details";
 import { CalendarEventEditor } from "./calendar-event-editor";
 import { CalendarSidebar } from "./calendar-sidebar";
+import type { CalendarConnectionTarget } from "./calendar-sidebar";
+import { CalendarTimeZonePicker } from "./calendar-time-zone-picker";
 import { useCalendarData } from "./use-calendar-data";
 
 type CalendarConfirmation =
   | { kind: "delete"; event: CalendarEvent; scope: "occurrence" | "series" }
-  | { kind: "move"; event: CalendarEvent; time: CalendarEventTime }
-  | { kind: "disconnect"; account: CalendarAccount };
+  | { kind: "move"; event: CalendarEvent; time: CalendarEventTime };
 
 type CalendarUiState = {
   confirmation: CalendarConfirmation | null;
-  connecting: boolean;
-  disconnecting: boolean;
   editor: CalendarEditor | null;
   hiddenCalendarKeys: string[];
   loadingSeries: boolean;
-  recurringAction: { event: CalendarEvent; kind: "edit" | "delete" } | null;
+  pendingConnection: CalendarConnectionTarget | null;
+  recurringAction: CalendarEvent | null;
   search: string;
 };
 
@@ -118,7 +116,6 @@ type CalendarWorkspaceProps = {
   userId: string;
   isMobileSidebarOpen: boolean;
   onMobileSidebarOpenChange: (open: boolean) => void;
-  onBackToMail: () => void;
 };
 
 const calendarPreferencesSchema = z.object({
@@ -144,7 +141,6 @@ const getOnlineSnapshot = () => navigator.onLine;
 const getServerOnlineSnapshot = () => true;
 const CalendarWorkspaceContent = ({
   isMobileSidebarOpen,
-  onBackToMail,
   onMobileSidebarOpenChange,
   userId,
   preview,
@@ -165,7 +161,7 @@ const CalendarWorkspaceContent = ({
       return undefined;
     }
     const observer = new ResizeObserver(([entry]) => {
-      setWide((entry?.contentRect.width ?? 0) >= 1120);
+      setWide((entry?.contentRect.width ?? 0) >= 720);
     });
     observer.observe(element);
     return () => {
@@ -209,15 +205,18 @@ const CalendarWorkspaceContent = ({
   }, [preferencesKey]);
   const store = useCreateStore<CalendarUiState>({
     confirmation: null,
-    connecting: false,
-    disconnecting: false,
     editor: null,
     hiddenCalendarKeys: initialPreferences,
     loadingSeries: false,
+    pendingConnection: null,
     recurringAction: null,
     search: "",
   });
   const ui = useSelector(store, (current) => current);
+  const [editorSession, setEditorSession] = useState<{
+    key: string;
+    store: ReturnType<typeof createCalendarEventEditorStore>;
+  } | null>(null);
   const revealCalendar = useEffectEvent((ref: CalendarRef) => {
     const target = getCalendarRefKey(ref);
     store.setState((current) =>
@@ -256,20 +255,22 @@ const CalendarWorkspaceContent = ({
     range: { end: range.end, start: range.start, timeZone },
     userId,
   });
-  const selectedRef =
-    route.calendarConnectionId &&
-    route.calendarId &&
-    route.calendarEventId &&
-    data.visibleCalendars.some(
-      (calendar) =>
-        calendar.connectionId === route.calendarConnectionId &&
-        calendar.calendarId === route.calendarId
-    )
+  const requestedEventRef =
+    route.calendarConnectionId && route.calendarId && route.calendarEventId
       ? {
           calendarId: route.calendarId,
           connectionId: route.calendarConnectionId,
           eventId: route.calendarEventId,
         }
+      : undefined;
+  const selectedRef =
+    requestedEventRef &&
+    data.visibleCalendars.some(
+      (calendar) =>
+        calendar.connectionId === requestedEventRef.connectionId &&
+        calendar.calendarId === requestedEventRef.calendarId
+    )
+      ? requestedEventRef
       : undefined;
   const selectedOptions = calendarEventQueryOptions(
     userId,
@@ -281,7 +282,14 @@ const CalendarWorkspaceContent = ({
   );
   const selectedQuery = useQuery({
     ...selectedOptions,
-    enabled: preview === null && selectedRef !== undefined,
+    enabled:
+      preview === null &&
+      selectedRef !== undefined &&
+      data.accounts.some(
+        (account) =>
+          account.id === selectedRef.connectionId &&
+          account.status === "connected"
+      ),
     initialData: () =>
       selectedRef
         ? data.events.find(
@@ -293,6 +301,32 @@ const CalendarWorkspaceContent = ({
     queryKey: preview
       ? ["calendar-preview", userId, preview, "event", selectedRef]
       : selectedOptions.queryKey,
+  });
+  const editingEvent = ui.editor?.kind === "edit" ? ui.editor.event : null;
+  const editingOptions = calendarEventQueryOptions(
+    userId,
+    editingEvent ?? {
+      calendarId: "none",
+      connectionId: "none",
+      eventId: "none",
+    }
+  );
+  const editingQuery = useQuery({
+    ...editingOptions,
+    enabled:
+      preview === null &&
+      selectedRef !== undefined &&
+      editingEvent !== null &&
+      data.accounts.some(
+        (account) =>
+          account.id === editingEvent.connectionId &&
+          account.status === "connected"
+      ),
+    initialData: editingEvent ?? undefined,
+    persister: preview ? undefined : editingOptions.persister,
+    queryKey: preview
+      ? ["calendar-preview", userId, preview, "editing-event", editingEvent]
+      : editingOptions.queryKey,
   });
   let selectedEvent: CalendarEvent | undefined;
   if (selectedRef) {
@@ -404,9 +438,11 @@ const CalendarWorkspaceContent = ({
     };
   }, [prefetchFingerprint]);
   const closeEvent = () => {
+    store.setState((current) => ({ ...current, editor: null }));
     void route.setMailboxSearch({ calendarEventId: null });
   };
   const selectEvent = (event: CalendarEvent) => {
+    store.setState((current) => ({ ...current, editor: null }));
     void route.setMailboxSearch({
       calendarConnectionId: event.connectionId,
       calendarEventId: event.eventId,
@@ -424,10 +460,12 @@ const CalendarWorkspaceContent = ({
   const createEvent = ({
     allDay,
     date: eventDate,
+    endMinute,
     minute,
   }: {
     allDay: boolean;
     date: string;
+    endMinute?: number;
     minute: number;
   }) => {
     const calendar =
@@ -455,7 +493,20 @@ const CalendarWorkspaceContent = ({
           });
       const time: CalendarEventTime = start
         ? {
-            end: new Date(Date.parse(start) + 60 * 60 * 1000).toISOString(),
+            end:
+              endMinute === undefined
+                ? new Date(Date.parse(start) + 60 * 60 * 1000).toISOString()
+                : calendarWallTimeToInstant({
+                    date:
+                      endMinute === 1440
+                        ? addCalendarDays(eventDate, 1)
+                        : eventDate,
+                    time:
+                      endMinute === 1440
+                        ? "00:00"
+                        : `${String(Math.floor(endMinute / 60)).padStart(2, "0")}:${String(endMinute % 60).padStart(2, "0")}`,
+                    timeZone,
+                  }),
             kind: "timed",
             start,
             timeZone,
@@ -490,17 +541,29 @@ const CalendarWorkspaceContent = ({
       );
     }
   };
-  const connect = async () => {
-    store.setState((current) => ({ ...current, connecting: true }));
+  const connect = async (target: CalendarConnectionTarget) => {
+    if (store.get().pendingConnection) {
+      return;
+    }
+    const account =
+      target.kind === "account"
+        ? data.accounts.find((candidate) => candidate.id === target.accountId)
+        : undefined;
+    if (target.kind === "account" && !account) {
+      return;
+    }
+    store.setState((current) => ({ ...current, pendingConnection: target }));
     try {
-      await openConnectorLink({
-        provider: "google_calendar",
-        returnTo: `${window.location.pathname}${window.location.search}`,
+      await openGoogleAccountLink({
+        loginHint: account?.email ?? undefined,
+        mailboxId: account?.mailboxId ?? undefined,
+        queryClient,
+        returnTo: `${window.location.pathname}${window.location.search}${window.location.hash}`,
       });
     } catch (error) {
       toastError(error, { boundary: "calendar" });
     } finally {
-      store.setState((current) => ({ ...current, connecting: false }));
+      store.setState((current) => ({ ...current, pendingConnection: null }));
     }
   };
   const reloadEvent = async (event: CalendarEvent) => {
@@ -521,17 +584,9 @@ const CalendarWorkspaceContent = ({
       staleTime: 0,
     });
   };
-  const requestAction = (event: CalendarEvent, kind: "edit" | "delete") => {
+  const requestDelete = (event: CalendarEvent) => {
     if (event.recurringEventId || event.recurrence.length > 0) {
-      store.setState((current) => ({
-        ...current,
-        recurringAction: { event, kind },
-      }));
-    } else if (kind === "edit") {
-      store.setState((current) => ({
-        ...current,
-        editor: { event, kind: "edit", scope: "occurrence" },
-      }));
+      store.setState((current) => ({ ...current, recurringAction: event }));
     } else {
       store.setState((current) => ({
         ...current,
@@ -549,15 +604,13 @@ const CalendarWorkspaceContent = ({
       const event =
         scope === "series"
           ? await reloadEvent({
-              ...action.event,
-              eventId: action.event.recurringEventId ?? action.event.eventId,
+              ...action,
+              eventId: action.recurringEventId ?? action.eventId,
             })
-          : action.event;
+          : action;
       store.setState((current) => ({
         ...current,
-        confirmation:
-          action.kind === "delete" ? { event, kind: "delete", scope } : null,
-        editor: action.kind === "edit" ? { event, kind: "edit", scope } : null,
+        confirmation: { event, kind: "delete", scope },
         loadingSeries: false,
         recurringAction: null,
       }));
@@ -600,34 +653,6 @@ const CalendarWorkspaceContent = ({
     if (!confirmation) {
       return;
     }
-    if (confirmation.kind === "disconnect") {
-      store.setState((current) => ({ ...current, disconnecting: true }));
-      try {
-        await rpc.connectors.disconnect({
-          connectionId: confirmation.account.id,
-          provider: "google_calendar",
-        });
-        await clearCalendarConnectionCache(
-          queryClient,
-          userId,
-          confirmation.account.id
-        );
-        store.setState((current) => ({
-          ...current,
-          confirmation: null,
-          disconnecting: false,
-        }));
-        closeEvent();
-        await queryClient.invalidateQueries({
-          queryKey: getCalendarQueryKey(userId),
-        });
-        toast.success("Calendar account disconnected.");
-      } catch (error) {
-        store.setState((current) => ({ ...current, disconnecting: false }));
-        toastError(error, { boundary: "calendar" });
-      }
-      return;
-    }
     try {
       if (confirmation.kind === "delete") {
         await data.mutation.mutateAsync({
@@ -656,62 +681,290 @@ const CalendarWorkspaceContent = ({
       .includes(ui.search.toLocaleLowerCase())
   );
   const items: ScheduleItem[] = filteredEvents.flatMap((event) => {
-    const calendarIndex = data.calendars.findIndex(
-      (calendar) =>
-        calendar.connectionId === event.connectionId &&
-        calendar.calendarId === event.calendarId
+    const calendar = data.calendars.find(
+      (candidate) =>
+        candidate.connectionId === event.connectionId &&
+        candidate.calendarId === event.calendarId
     );
-    let tone: ScheduleItem["tone"] =
-      (["blue", "green", "purple", "orange", "cyan"] as const)[
-        Math.max(0, calendarIndex) % 5
-      ] ?? "blue";
-    if (event.status === "tentative") {
-      tone = "warning";
-    }
     return splitCalendarEventTime({
       dates: range.dates,
       time: event.time,
       timeZone,
     }).map((segment) => ({
       ...segment,
+      color: event.colorOverride ?? calendar?.color ?? event.color,
       detail: event.location,
       id: getCalendarEventKey(event),
       title: event.title || "Untitled event",
-      tone,
+      tone: event.status === "tentative" ? "warning" : "blue",
     }));
   });
-  const details = selectedEvent ? (
-    <CalendarEventDetails
-      calendarName={
-        data.calendars.find(
-          (calendar) =>
-            calendar.connectionId === selectedEvent.connectionId &&
-            calendar.calendarId === selectedEvent.calendarId
-        )?.name ?? "Calendar"
-      }
-      event={selectedEvent}
-      onClose={closeEvent}
-      onDelete={() => {
-        requestAction(selectedEvent, "delete");
-      }}
-      onEdit={() => {
-        requestAction(selectedEvent, "edit");
-      }}
-      onRespond={(response) => {
-        data.mutation.mutate({
+  const selectedAccount = data.accounts.find(
+    (account) => account.id === requestedEventRef?.connectionId
+  );
+  const selectedNeedsAccess =
+    selectedAccount !== undefined && selectedAccount.status !== "connected";
+  const selectedLoading =
+    online &&
+    !selectedNeedsAccess &&
+    (selectedRef ? selectedQuery.isPending : data.isLoading);
+  let selectedDescription =
+    "This event may have moved or you may no longer have access.";
+  if (selectedLoading) {
+    selectedDescription = "Getting the latest event details.";
+  } else if (selectedNeedsAccess) {
+    selectedDescription =
+      "Reconnect this mailbox in the sidebar to view this event.";
+  } else if (!online) {
+    selectedDescription =
+      "This event is not saved on this device. Connect to load its details.";
+  }
+  const selectedEditor =
+    ui.editor?.kind === "edit" &&
+    selectedEvent &&
+    ui.editor.event.connectionId === selectedEvent.connectionId &&
+    ui.editor.event.calendarId === selectedEvent.calendarId &&
+    (ui.editor.event.eventId === selectedEvent.eventId ||
+      ui.editor.event.eventId === selectedEvent.recurringEventId)
+      ? {
+          ...ui.editor,
+          event: preview
+            ? ui.editor.event
+            : (editingQuery.data ?? ui.editor.event),
+        }
+      : null;
+  const activeEditor: CalendarEditor | null =
+    (ui.editor?.kind === "create" ? ui.editor : selectedEditor) ??
+    (selectedEvent?.permissions.edit === true
+      ? {
           event: selectedEvent,
-          kind: "respond",
-          response,
-        });
-      }}
-      pending={data.mutation.isPending}
-      timeZone={timeZone}
-    />
-  ) : null;
+          kind: "edit",
+          scope:
+            selectedEvent.recurrence.length > 0 &&
+            !selectedEvent.recurringEventId
+              ? "series"
+              : "occurrence",
+        }
+      : null);
+  let editorKey: string | null = null;
+  if (activeEditor) {
+    editorKey =
+      activeEditor.kind === "edit"
+        ? `${getCalendarEventKey(activeEditor.event)}-${activeEditor.scope}`
+        : activeEditor.operationId;
+  }
+  if (editorKey !== (editorSession?.key ?? null)) {
+    setEditorSession(
+      activeEditor && editorKey
+        ? {
+            key: editorKey,
+            store: createCalendarEventEditorStore(activeEditor, timeZone),
+          }
+        : null
+    );
+  }
+  let details: ReactNode = null;
+  if (activeEditor && editorSession) {
+    details = (
+      <CalendarEventEditor
+        calendars={data.calendars}
+        editor={activeEditor}
+        key={
+          activeEditor.kind === "edit"
+            ? `${getCalendarEventKey(activeEditor.event)}-${activeEditor.scope}`
+            : activeEditor.operationId
+        }
+        onClose={closeEvent}
+        onDelete={
+          activeEditor.kind === "edit" && activeEditor.event.permissions.delete
+            ? () => {
+                requestDelete(activeEditor.event);
+              }
+            : undefined
+        }
+        onReload={reloadEvent}
+        onRespond={
+          activeEditor.kind === "edit"
+            ? async (event, response) => {
+                const result = await data.mutation
+                  .mutateAsync({ event, kind: "respond", response })
+                  .catch(() => null);
+                return result?.event;
+              }
+            : undefined
+        }
+        onSave={async ({ draft, editor, ref, original }) => {
+          let result: CalendarMutationResult;
+          if (editor.kind === "create") {
+            result = await data.mutation.mutateAsync({
+              draft,
+              kind: "create",
+              operationId: editor.operationId,
+              ref,
+            });
+          } else {
+            const changes = createCalendarEventChanges({
+              draft,
+              original: original ?? editor.event,
+            });
+            if (!changes) {
+              return editor.event;
+            }
+            result = await data.mutation.mutateAsync({
+              changes,
+              event: editor.event,
+              kind: "update",
+            });
+          }
+          if (result.event) {
+            selectEvent(result.event);
+          }
+          return result.event;
+        }}
+        onScopeChange={
+          selectedEvent?.recurringEventId
+            ? async (scope) => {
+                store.setState((current) => ({
+                  ...current,
+                  loadingSeries: true,
+                }));
+                try {
+                  const event =
+                    scope === "series"
+                      ? await reloadEvent({
+                          ...selectedEvent,
+                          eventId:
+                            selectedEvent.recurringEventId ??
+                            selectedEvent.eventId,
+                        })
+                      : selectedEvent;
+                  store.setState((current) => ({
+                    ...current,
+                    editor: { event, kind: "edit", scope },
+                    loadingSeries: false,
+                  }));
+                } catch (error) {
+                  store.setState((current) => ({
+                    ...current,
+                    loadingSeries: false,
+                  }));
+                  toastError(error, { boundary: "calendar" });
+                }
+              }
+            : undefined
+        }
+        pending={data.mutation.isPending || ui.loadingSeries}
+        preview={preview !== null}
+        store={editorSession.store}
+        timeZone={timeZone}
+        userId={userId}
+      />
+    );
+  } else if (selectedEvent) {
+    details = (
+      <CalendarEventDetails
+        calendarName={
+          data.calendars.find(
+            (calendar) =>
+              calendar.connectionId === selectedEvent.connectionId &&
+              calendar.calendarId === selectedEvent.calendarId
+          )?.name ?? "Calendar"
+        }
+        event={selectedEvent}
+        onClose={closeEvent}
+        onDelete={() => {
+          requestDelete(selectedEvent);
+        }}
+        onRespond={(response) => {
+          data.mutation.mutate({
+            event: selectedEvent,
+            kind: "respond",
+            response,
+          });
+        }}
+        pending={data.mutation.isPending}
+        timeZone={timeZone}
+      />
+    );
+  } else if (requestedEventRef) {
+    details = (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex items-center gap-2 border-b border-border px-5 py-4">
+          <Text as="h2" className="flex-1" size="sm" truncate weight="medium">
+            Event details
+          </Text>
+          <IconButtonTooltip label="Close event details">
+            <Button
+              aria-label="Close event details"
+              onClick={closeEvent}
+              size="icon-sm"
+              variant="ghost"
+            >
+              <Icon aria-hidden icon={Cancel01Icon} />
+            </Button>
+          </IconButtonTooltip>
+        </div>
+        <div aria-live="polite" className="flex-1 space-y-2 p-5">
+          {selectedLoading ? (
+            <Icon
+              aria-hidden
+              animation="spin"
+              icon={Loading03Icon}
+              tone="muted"
+            />
+          ) : null}
+          <Text as="h3" size="sm" weight="medium">
+            {selectedLoading ? "Loading event" : "Event unavailable"}
+          </Text>
+          <Text as="p" size="sm" tone="muted">
+            {selectedDescription}
+          </Text>
+        </div>
+        <div className="p-5">
+          <ActionFooter>
+            <Button
+              onClick={closeEvent}
+              variant={
+                selectedLoading || selectedNeedsAccess || !online
+                  ? "default"
+                  : "secondary"
+              }
+            >
+              Close
+            </Button>
+            {!selectedLoading && !selectedNeedsAccess && online ? (
+              <Button
+                onClick={() => {
+                  if (selectedRef) {
+                    void selectedQuery.refetch();
+                  } else {
+                    void data.refresh();
+                  }
+                }}
+                pending={
+                  selectedQuery.isFetching ||
+                  (!selectedRef && data.isRefreshing)
+                }
+              >
+                Retry
+              </Button>
+            ) : null}
+          </ActionFooter>
+        </div>
+      </div>
+    );
+  }
+  const showInitialLoading = data.isLoading && !requestedEventRef;
   let emptyDescription =
-    "Bring your schedule into Quieter and plan with your assistant.";
-  if (data.isLoading) {
+    "Your Gmail mailbox includes your calendars. Connect it to see your schedule.";
+  let emptyTitle = "Your day, in one place";
+  if (!online) {
+    emptyDescription =
+      "No calendars are saved on this device. Connect to load your schedule.";
+    emptyTitle = "You're offline";
+  } else if (data.isLoading) {
     emptyDescription = "Your calendar will appear here.";
+    emptyTitle = "Loading your calendars";
   } else if (data.failures.length > 0) {
     emptyDescription =
       "We could not load your calendars. Use Retry above to try again.";
@@ -732,11 +985,7 @@ const CalendarWorkspaceContent = ({
   let confirmationTitle = "Move this event?";
   let confirmationDescription = "";
   let confirmationAction = "Move event";
-  if (ui.confirmation?.kind === "disconnect") {
-    confirmationTitle = "Disconnect calendar account?";
-    confirmationDescription = `Calendars for ${ui.confirmation.account.email ?? ui.confirmation.account.name} will be removed from this device. Events remain in your calendar account.`;
-    confirmationAction = "Disconnect";
-  } else if (ui.confirmation?.kind === "delete") {
+  if (ui.confirmation?.kind === "delete") {
     confirmationTitle =
       ui.confirmation.scope === "series"
         ? "Delete the entire series?"
@@ -752,26 +1001,18 @@ const CalendarWorkspaceContent = ({
         accounts={data.accounts}
         calendars={data.calendars}
         canCreate={writableCalendars.length > 0}
-        connecting={ui.connecting}
         date={date}
         hiddenCalendarKeys={ui.hiddenCalendarKeys}
         isConfigured={data.isConfigured}
         isMobileOpen={isMobileSidebarOpen}
-        onBackToMail={onBackToMail}
-        onConnect={() => {
-          void connect();
+        onConnect={(target) => {
+          void connect(target);
         }}
         onCreate={() => {
           createEvent({ allDay: false, date, minute: 540 });
         }}
         onDateChange={(nextDate) => {
           void route.setMailboxSearch({ calendarDate: nextDate });
-        }}
-        onDisconnect={(account) => {
-          store.setState((current) => ({
-            ...current,
-            confirmation: { account, kind: "disconnect" },
-          }));
         }}
         onMobileOpenChange={onMobileSidebarOpenChange}
         onToggleCalendar={(calendar: CalendarSummary) => {
@@ -797,6 +1038,18 @@ const CalendarWorkspaceContent = ({
           }
         }}
         preview={preview !== null}
+        pendingConnection={ui.pendingConnection}
+        onUpdateCalendarColor={async (calendar, color) =>
+          await data.colorMutation.mutateAsync({ calendar, color }).then(
+            () => true,
+            () => false
+          )
+        }
+        pendingCalendarColorKey={
+          data.colorMutation.isPending
+            ? getCalendarRefKey(data.colorMutation.variables.calendar)
+            : null
+        }
       />
       <WorkspaceSection
         aria-label="Calendar workspace"
@@ -820,9 +1073,13 @@ const CalendarWorkspaceContent = ({
           >
             {new Intl.DateTimeFormat(undefined, {
               month: "long",
-              timeZone: "UTC",
+              timeZone,
               year: "numeric",
-            }).format(new Date(`${date}T12:00:00Z`))}
+            }).format(
+              new Date(
+                calendarWallTimeToInstant({ date, time: "12:00", timeZone })
+              )
+            )}
           </Text>
           <div className="flex items-center gap-1">
             <IconButtonTooltip label="Previous date range">
@@ -914,31 +1171,16 @@ const CalendarWorkspaceContent = ({
               ))}
             </SelectContent>
           </Select>
-          <Select
-            items={getCalendarTimeZoneOptions(timeZone)}
-            onValueChange={(value) => {
-              if (value) {
-                void route.setMailboxSearch({ calendarTimeZone: value });
-              }
+          <CalendarTimeZonePicker
+            aria-label="Display time zone"
+            className="max-w-40"
+            onValueChange={(zone) => {
+              void route.setMailboxSearch({ calendarTimeZone: zone });
             }}
+            size="sm"
             value={timeZone}
-          >
-            <SelectTrigger
-              aria-label="Display time zone"
-              className="max-w-32"
-              size="sm"
-              variant="ghost"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {getCalendarTimeZoneOptions(timeZone).map((zone) => (
-                <SelectItem key={zone.value} value={zone.value}>
-                  {zone.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            variant="ghost"
+          />
           <Popover>
             <IconButtonTooltip
               label={ui.search ? `Find events: ${ui.search}` : "Find events"}
@@ -993,47 +1235,50 @@ const CalendarWorkspaceContent = ({
             {syncStatus}
           </p>
         </header>
-        {data.failures.map((failure) => (
-          <div
-            className="flex items-center gap-3 border-b border-border px-5 py-2"
-            key={failure.key}
-          >
-            <p className="flex-1 text-caption text-destructive">
-              Could not refresh {failure.label}. Cached events may be out of
-              date.
+        {data.failures.length > 0 ? (
+          <output className="flex items-center gap-3 border-b border-border px-5 py-2">
+            <p className="flex-1 text-caption text-muted-fg">
+              Some calendars could not refresh. Saved events may be out of date.
             </p>
             <Button
               onClick={() => {
-                void failure.retry();
+                void data.retryFailures();
               }}
+              pending={data.retryingFailures}
               size="sm"
               variant="secondary"
             >
               Retry
             </Button>
-          </div>
-        ))}
+          </output>
+        ) : null}
         <div className="flex min-h-0 flex-1" ref={workspaceRef}>
-          {data.accounts.length === 0 ? (
+          {data.accounts.length === 0 && !requestedEventRef ? (
             <EmptyMessageState
               action={
                 !data.isLoading && data.isConfigured ? (
                   <Button
+                    disabled={ui.pendingConnection !== null}
                     onClick={() => {
-                      void connect();
+                      void connect({ kind: "add", source: "empty" });
                     }}
-                    pending={ui.connecting}
+                    pending={
+                      ui.pendingConnection?.kind === "add" &&
+                      ui.pendingConnection.source === "empty"
+                    }
                   >
-                    Connect Google Calendar
+                    Connect Gmail
                   </Button>
                 ) : undefined
               }
               description={emptyDescription}
-              title={
-                data.isLoading
-                  ? "Loading your calendars"
-                  : "Your day, in one place"
-              }
+              title={emptyTitle}
+            />
+          ) : null}
+          {data.accounts.length > 0 && showInitialLoading ? (
+            <EmptyMessageState
+              description="Your schedule will appear here."
+              title="Loading your calendars"
             />
           ) : null}
           {data.accounts.length > 0 &&
@@ -1050,12 +1295,21 @@ const CalendarWorkspaceContent = ({
                   Choose calendars
                 </Button>
               }
-              description="Choose a calendar in the sidebar to see its events."
-              title="No calendars visible"
+              description={
+                data.accounts.some((account) => account.status !== "connected")
+                  ? "Manage the mailbox connection in the sidebar to see its calendars."
+                  : "Choose a calendar in the sidebar to see its events."
+              }
+              title={
+                data.accounts.some((account) => account.status !== "connected")
+                  ? "Your mailbox needs attention"
+                  : "No calendars visible"
+              }
             />
           ) : null}
           {data.accounts.length > 0 &&
-          (data.visibleCalendars.length > 0 || data.isLoading) ? (
+          data.visibleCalendars.length > 0 &&
+          !showInitialLoading ? (
             <Schedule
               currentMinute={
                 Number(now.time.slice(0, 2)) * 60 + Number(now.time.slice(3, 5))
@@ -1161,6 +1415,7 @@ const CalendarWorkspaceContent = ({
                 }
               }}
               onSlotClick={createEvent}
+              selectedDate={date}
               selectedId={
                 selectedEvent ? getCalendarEventKey(selectedEvent) : undefined
               }
@@ -1171,18 +1426,14 @@ const CalendarWorkspaceContent = ({
           {wide && details ? (
             <aside
               aria-label="Event details"
-              className="flex w-80 shrink-0 flex-col border-l border-border"
+              className="ml-auto flex w-88 shrink-0 flex-col border-l border-border"
             >
               {details}
             </aside>
           ) : null}
         </div>
       </WorkspaceSection>
-      {!wide &&
-      selectedEvent &&
-      !ui.editor &&
-      !ui.recurringAction &&
-      !ui.confirmation ? (
+      {!wide && details && !ui.recurringAction && !ui.confirmation ? (
         <Dialog
           onOpenChange={(open) => {
             if (!open) {
@@ -1204,84 +1455,6 @@ const CalendarWorkspaceContent = ({
           </DialogContent>
         </Dialog>
       ) : null}
-      {selectedRef && selectedQuery.isError && !selectedEvent ? (
-        <Dialog
-          onOpenChange={(open) => {
-            if (!open) {
-              closeEvent();
-            }
-          }}
-          open
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Event unavailable</DialogTitle>
-              <DialogDescription>
-                This event may have moved or you may no longer have access.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button onClick={closeEvent} variant="secondary">
-                Close
-              </Button>
-              <Button
-                onClick={() => {
-                  void selectedQuery.refetch();
-                }}
-              >
-                Retry
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      ) : null}
-      {ui.editor ? (
-        <CalendarEventEditor
-          calendars={data.calendars}
-          editor={ui.editor}
-          key={
-            ui.editor.kind === "edit"
-              ? `${getCalendarEventKey(ui.editor.event)}-${ui.editor.scope}`
-              : ui.editor.operationId
-          }
-          onClose={() => {
-            store.setState((current) => ({ ...current, editor: null }));
-          }}
-          onReload={reloadEvent}
-          onSave={async ({ draft, editor, ref, original }) => {
-            let result: CalendarMutationResult;
-            if (editor.kind === "create") {
-              result = await data.mutation.mutateAsync({
-                draft,
-                kind: "create",
-                operationId: editor.operationId,
-                ref,
-              });
-            } else {
-              const changes = createCalendarEventChanges({
-                draft,
-                original: original ?? editor.event,
-              });
-              if (!changes) {
-                store.setState((current) => ({ ...current, editor: null }));
-                return;
-              }
-              result = await data.mutation.mutateAsync({
-                changes,
-                event: editor.event,
-                kind: "update",
-              });
-            }
-            store.setState((current) => ({ ...current, editor: null }));
-            if (result.event) {
-              selectEvent(result.event);
-            }
-          }}
-          pending={data.mutation.isPending}
-          preview={preview !== null}
-          timeZone={timeZone}
-        />
-      ) : null}
       <AlertDialog
         onOpenChange={(open) => {
           if (!open && !ui.loadingSeries) {
@@ -1297,8 +1470,8 @@ const CalendarWorkspaceContent = ({
           <AlertDialogHeader>
             <AlertDialogTitle>Repeating event</AlertDialogTitle>
             <AlertDialogDescription>
-              {ui.recurringAction?.event.recurringEventId
-                ? `Choose whether to ${ui.recurringAction.kind === "delete" ? "delete" : "edit"} this occurrence or the entire series.`
+              {ui.recurringAction?.recurringEventId
+                ? "Choose whether to delete this occurrence or the entire series."
                 : "You are viewing the recurring series. Changes apply to the entire series."}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1315,17 +1488,13 @@ const CalendarWorkspaceContent = ({
             >
               Cancel
             </Button>
-            {ui.recurringAction?.event.recurringEventId ? (
+            {ui.recurringAction?.recurringEventId ? (
               <Button
                 disabled={ui.loadingSeries}
                 onClick={() => {
                   void chooseRecurrenceScope("occurrence");
                 }}
-                variant={
-                  ui.recurringAction?.kind === "delete"
-                    ? "destructive"
-                    : "secondary"
-                }
+                variant="destructive"
               >
                 This event
               </Button>
@@ -1335,11 +1504,7 @@ const CalendarWorkspaceContent = ({
                 void chooseRecurrenceScope("series");
               }}
               pending={ui.loadingSeries}
-              variant={
-                ui.recurringAction?.kind === "delete"
-                  ? "destructive"
-                  : "default"
-              }
+              variant="destructive"
             >
               Entire series
             </Button>
@@ -1348,7 +1513,7 @@ const CalendarWorkspaceContent = ({
       </AlertDialog>
       <AlertDialog
         onOpenChange={(open) => {
-          if (!open && !data.mutation.isPending && !ui.disconnecting) {
+          if (!open && !data.mutation.isPending) {
             store.setState((current) => ({ ...current, confirmation: null }));
           }
         }}
@@ -1363,7 +1528,7 @@ const CalendarWorkspaceContent = ({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <Button
-              disabled={data.mutation.isPending || ui.disconnecting}
+              disabled={data.mutation.isPending}
               onClick={() => {
                 store.setState((current) => ({
                   ...current,
@@ -1378,7 +1543,7 @@ const CalendarWorkspaceContent = ({
               onClick={() => {
                 void confirm();
               }}
-              pending={data.mutation.isPending || ui.disconnecting}
+              pending={data.mutation.isPending}
               variant={
                 ui.confirmation?.kind === "move" ? "default" : "destructive"
               }

@@ -1,7 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import { connectorCredential } from "@quieter/database/schema";
-import type { ConnectorProvider } from "@quieter/database/schema";
 import { requireServerEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -10,51 +9,28 @@ import {
   decryptGmailCredentialSecret,
   encryptGmailCredentialSecret,
 } from "../gmail-credential-crypto";
-import {
-  GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
-  LINEAR_CONNECTOR_PROVIDER,
-} from "./contracts";
+import { LINEAR_CONNECTOR_PROVIDER } from "./contracts";
+import type { ConnectorProvider } from "./contracts";
 
-export {
-  GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
-  LINEAR_CONNECTOR_PROVIDER,
-} from "./contracts";
+export { LINEAR_CONNECTOR_PROVIDER } from "./contracts";
 const CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60 * 1000;
-const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const LINEAR_AUTHORIZATION_URL = "https://linear.app/oauth/authorize";
 export const LINEAR_MCP_URL = "https://mcp.linear.app/mcp";
 export const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
-const permanentGoogleTokenErrors = new Set(["invalid_grant", "invalid_token"]);
 const permanentLinearTokenErrors = new Set(["invalid_grant", "invalid_token"]);
 type ConnectorAuthorizationInput = {
-  retryUnauthorized?: boolean;
+  connectionId?: string;
+  provider: ConnectorProvider;
   signal?: AbortSignal;
   userId: string;
-} & (
-  | {
-      connectionId: string;
-      provider: typeof GOOGLE_CALENDAR_CONNECTOR_PROVIDER;
-    }
-  | { connectionId?: string; provider: typeof LINEAR_CONNECTOR_PROVIDER }
-);
+};
 
-export const GOOGLE_CALENDAR_SCOPES = [
-  "openid",
-  "https://www.googleapis.com/auth/userinfo.email",
-  "https://www.googleapis.com/auth/userinfo.profile",
-  "https://www.googleapis.com/auth/calendar.events",
-  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
-] as const;
 // The agent reaches Linear through the workspace's own tools, so the grant has to
 // cover the changes those tools make. Connections made under the older, narrower
 // grant keep working for reads and fail the rest until they are reconnected.
 export const LINEAR_SCOPES = ["read", "write"] as const;
 
 const connectorDefinitions = {
-  [GOOGLE_CALENDAR_CONNECTOR_PROVIDER]: {
-    displayName: "Google Calendar",
-    scopes: GOOGLE_CALENDAR_SCOPES,
-  },
   [LINEAR_CONNECTOR_PROVIDER]: {
     displayName: "Linear",
     scopes: LINEAR_SCOPES,
@@ -67,13 +43,6 @@ const connectorDefinitions = {
   }
 >;
 
-const googleRefreshResponseSchema = z.object({
-  access_token: z.string().min(1),
-  expires_in: z.number().int().positive(),
-  scope: z.string().min(1).optional(),
-  token_type: z.string().min(1),
-});
-
 const linearRefreshResponseSchema = z.object({
   access_token: z.string().min(1),
   expires_in: z.number().int().positive(),
@@ -82,28 +51,10 @@ const linearRefreshResponseSchema = z.object({
   token_type: z.string().min(1),
 });
 
-const getGoogleCalendarOAuthClient = () => ({
-  clientId: requireServerEnv("GOOGLE_CALENDAR_CLIENT_ID"),
-  clientSecret: requireServerEnv("GOOGLE_CALENDAR_CLIENT_SECRET"),
-});
-
-const getLinearOAuthClient = () => ({
+export const getLinearOAuthClient = () => ({
   clientId: requireServerEnv("LINEAR_CLIENT_ID"),
   clientSecret: requireServerEnv("LINEAR_CLIENT_SECRET"),
 });
-
-export const getConnectorOAuthClient = (provider: ConnectorProvider) => {
-  if (provider === GOOGLE_CALENDAR_CONNECTOR_PROVIDER) {
-    return getGoogleCalendarOAuthClient();
-  }
-  if (provider === LINEAR_CONNECTOR_PROVIDER) {
-    return getLinearOAuthClient();
-  }
-
-  throw new ORPCError("BAD_REQUEST", {
-    message: "Connector is not supported.",
-  });
-};
 
 const getConnectorCredentialEncryptionKey = () =>
   requireServerEnv("CONNECTOR_TOKEN_ENCRYPTION_KEY");
@@ -163,12 +114,9 @@ export const hasConnectedConnector = async (input: {
 };
 
 const getConnectorRepairRequiredError = (provider: ConnectorProvider) =>
-  new ORPCError(
-    provider === "google_calendar" ? "UNAUTHORIZED" : "BAD_REQUEST",
-    {
-      message: `Reconnect ${connectorDefinitions[provider].displayName} before using this action.`,
-    }
-  );
+  new ORPCError("BAD_REQUEST", {
+    message: `Reconnect ${connectorDefinitions[provider].displayName} before using this action.`,
+  });
 
 /**
  * A refresh returns a token carrying the scopes the user originally granted. When the
@@ -197,7 +145,6 @@ const refreshConnectorAccessToken = async (
   record: {
     encryptedRefreshToken: string | null;
     id: string;
-    provider: ConnectorProvider;
     scopes: string | null;
   },
   signal?: AbortSignal
@@ -208,29 +155,24 @@ const refreshConnectorAccessToken = async (
       .update(connectorCredential)
       .set({ status: "needs_reconnect", updatedAt: new Date() })
       .where(eq(connectorCredential.id, record.id));
-    throw getConnectorRepairRequiredError(record.provider);
+    throw getConnectorRepairRequiredError(LINEAR_CONNECTOR_PROVIDER);
   }
 
-  const config = getConnectorOAuthClient(record.provider);
-  const response = await fetch(
-    record.provider === LINEAR_CONNECTOR_PROVIDER
-      ? LINEAR_TOKEN_URL
-      : GOOGLE_TOKEN_URL,
-    {
-      body: new URLSearchParams({
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
-        grant_type: "refresh_token",
-        refresh_token: decryptConnectorSecret(record.encryptedRefreshToken),
-      }),
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      method: "POST",
-      signal:
-        signal === undefined
-          ? AbortSignal.timeout(15_000)
-          : AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
-    }
-  );
+  const config = getLinearOAuthClient();
+  const response = await fetch(LINEAR_TOKEN_URL, {
+    body: new URLSearchParams({
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      grant_type: "refresh_token",
+      refresh_token: decryptConnectorSecret(record.encryptedRefreshToken),
+    }),
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    method: "POST",
+    signal:
+      signal === undefined
+        ? AbortSignal.timeout(15_000)
+        : AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
+  });
 
   if (!response.ok) {
     const body = await response
@@ -240,34 +182,30 @@ const refreshConnectorAccessToken = async (
       )
       .catch(() => null);
     const errorCode = body?.success === true ? body.data.error : undefined;
-    const permanentErrors =
-      record.provider === LINEAR_CONNECTOR_PROVIDER
-        ? permanentLinearTokenErrors
-        : permanentGoogleTokenErrors;
     if (
       response.status === 400 ||
       response.status === 401 ||
-      (errorCode !== undefined && permanentErrors.has(errorCode))
+      (errorCode !== undefined && permanentLinearTokenErrors.has(errorCode))
     ) {
       await db
         .update(connectorCredential)
         .set({ status: "needs_reconnect", updatedAt: new Date() })
         .where(eq(connectorCredential.id, record.id));
-      throw getConnectorRepairRequiredError(record.provider);
+      throw getConnectorRepairRequiredError(LINEAR_CONNECTOR_PROVIDER);
     }
 
     throw new Error(
-      `${connectorDefinitions[record.provider].displayName} token refresh failed with status ${response.status}.`
+      `${connectorDefinitions[LINEAR_CONNECTOR_PROVIDER].displayName} token refresh failed with status ${response.status}.`
     );
   }
 
-  const refreshed =
-    record.provider === LINEAR_CONNECTOR_PROVIDER
-      ? linearRefreshResponseSchema.parse(await response.json())
-      : googleRefreshResponseSchema.parse(await response.json());
+  const refreshed = linearRefreshResponseSchema.parse(await response.json());
   const now = new Date();
   const scopes = getRefreshedScopes(record, refreshed.scope);
-  const hasRequiredScopes = hasRequiredConnectorScopes(record.provider, scopes);
+  const hasRequiredScopes = hasRequiredConnectorScopes(
+    LINEAR_CONNECTOR_PROVIDER,
+    scopes
+  );
   await db
     .update(connectorCredential)
     .set({
@@ -275,10 +213,7 @@ const refreshConnectorAccessToken = async (
         now.getTime() + refreshed.expires_in * 1000
       ),
       encryptedAccessToken: encryptConnectorSecret(refreshed.access_token),
-      encryptedRefreshToken:
-        "refresh_token" in refreshed && refreshed.refresh_token
-          ? encryptConnectorSecret(refreshed.refresh_token)
-          : record.encryptedRefreshToken,
+      encryptedRefreshToken: encryptConnectorSecret(refreshed.refresh_token),
       scopes,
       // An older, narrower grant still refreshes, but it cannot do what the connector
       // now asks of it, so it is surfaced as needing a reconnect rather than silently
@@ -289,7 +224,7 @@ const refreshConnectorAccessToken = async (
     .where(eq(connectorCredential.id, record.id));
 
   if (!hasRequiredScopes) {
-    throw getConnectorRepairRequiredError(record.provider);
+    throw getConnectorRepairRequiredError(LINEAR_CONNECTOR_PROVIDER);
   }
   return refreshed.access_token;
 };
@@ -319,7 +254,7 @@ const getAuthorizedConnectorAccessToken = async (
     )
     .limit(1);
 
-  if (record === undefined) {
+  if (record === undefined || record.provider !== LINEAR_CONNECTOR_PROVIDER) {
     throw new ORPCError("BAD_REQUEST", {
       message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
     });
@@ -338,63 +273,6 @@ const getAuthorizedConnectorAccessToken = async (
   }
 
   return await refreshConnectorAccessToken(record, input.signal);
-};
-
-const refreshAuthorizedConnectorAccessToken = async (
-  input: ConnectorAuthorizationInput
-) => {
-  const [record] = await db
-    .select({
-      encryptedRefreshToken: connectorCredential.encryptedRefreshToken,
-      id: connectorCredential.id,
-      provider: connectorCredential.provider,
-      scopes: connectorCredential.scopes,
-    })
-    .from(connectorCredential)
-    .where(
-      and(
-        eq(connectorCredential.userId, input.userId),
-        eq(connectorCredential.provider, input.provider),
-        input.connectionId === undefined
-          ? undefined
-          : eq(connectorCredential.id, input.connectionId)
-      )
-    )
-    .limit(1);
-
-  if (record === undefined) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
-    });
-  }
-
-  return await refreshConnectorAccessToken(record, input.signal);
-};
-
-export const runAuthorizedConnector = async <TValue>(
-  input: ConnectorAuthorizationInput,
-  runner: (
-    accessToken: string,
-    signal?: AbortSignal
-  ) => TValue | Promise<TValue>
-) => {
-  const accessToken = await getAuthorizedConnectorAccessToken(input);
-
-  try {
-    return await runner(accessToken, input.signal);
-  } catch (error) {
-    if (
-      input.retryUnauthorized === false ||
-      !(error instanceof ConnectorHttpError) ||
-      error.status !== 401
-    ) {
-      throw error;
-    }
-  }
-
-  const refreshedAccessToken =
-    await refreshAuthorizedConnectorAccessToken(input);
-  return await runner(refreshedAccessToken, input.signal);
 };
 
 const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";

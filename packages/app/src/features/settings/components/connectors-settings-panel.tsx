@@ -18,7 +18,7 @@ import {
 import type { ConnectorProvider } from "@quieter/app/lib/connectors-query";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
-import { Button, LinkButton } from "@quieter/ui/button";
+import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { toast } from "@quieter/ui/toast";
@@ -81,6 +81,9 @@ export const ConnectorsSettingsPanel = () => {
   const disconnectConnectorMutation = useMutation({
     ...orpc.connectors.disconnect.mutationOptions(),
     mutationKey: ["connectors", "disconnect"],
+    onError: (disconnectError) => {
+      toastError(disconnectError, { boundary: "connectors" });
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: CONNECTORS_QUERY_KEY });
       toast.success("Connector disconnected.");
@@ -95,11 +98,12 @@ export const ConnectorsSettingsPanel = () => {
         returnTo: getSettingsReturnTo(),
       });
     } catch (connectionError) {
-      setStartingProvider(null);
       toastError(connectionError, {
         boundary: "connectors",
         fallback: "Could not start connector setup.",
       });
+    } finally {
+      setStartingProvider(null);
     }
   };
 
@@ -151,7 +155,7 @@ export const ConnectorsSettingsPanel = () => {
               }}
               size="sm"
               type="button"
-              variant="outline"
+              variant="destructive"
             >
               {isDisconnecting ? (
                 <Icon aria-hidden animation="spin" icon={Loading03Icon} />
@@ -179,21 +183,7 @@ export const ConnectorsSettingsPanel = () => {
 
           return (
             <SettingsRow
-              action={
-                connector.provider === "google_calendar" &&
-                connector.accounts.length > 0 ? (
-                  <LinkButton
-                    search={{ workspace: "calendar" }}
-                    size="sm"
-                    to="/"
-                    variant="secondary"
-                  >
-                    Manage calendars
-                  </LinkButton>
-                ) : (
-                  connectionAction
-                )
-              }
+              action={connectionAction}
               icon={<ConnectorIcon provider={connector.provider} />}
               key={connector.provider}
               title={connector.displayName}

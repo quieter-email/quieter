@@ -11,7 +11,7 @@ import {
   Flag01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
-import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
+import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { Icon } from "@quieter/ui/icon";
@@ -35,15 +35,23 @@ const API_MAILBOX_ITEMS = SIDEBAR_MAILBOX_ITEMS.filter(
 );
 
 type SidebarMailboxNavProps = {
+  allInboxesActive: boolean;
   animateEntrance: boolean;
+  embedded: boolean;
+  mailboxId: string | null;
   mailboxProvider: "api" | "gmail" | "managed" | null;
+  onRequestClose?: () => void;
   selectedMailbox: MailboxCategory | null;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
 };
 
 export const SidebarMailboxNav = ({
+  allInboxesActive,
   animateEntrance,
+  embedded,
+  mailboxId,
   mailboxProvider,
+  onRequestClose,
   onSelectMailbox,
   selectedMailbox,
 }: SidebarMailboxNavProps) => {
@@ -69,14 +77,28 @@ export const SidebarMailboxNav = ({
             className="w-full"
             index={index + 3}
           >
-            <SidebarNavItem
+            <SidebarMailboxNavItem
               active={isActive}
               aria-current={isActive ? "page" : undefined}
               // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom row spacing.
               className="justify-start gap-3 px-3 text-left"
               // oxlint-enable shadcn/no-restyle
+              mailboxSearch={
+                embedded
+                  ? undefined
+                  : {
+                      mailbox: item.id,
+                      mailboxId,
+                      messageId: null,
+                      view: allInboxesActive ? "all-inboxes" : "inbox",
+                      workspace: null,
+                    }
+              }
               onClick={() => {
-                onSelectMailbox(item.id);
+                if (embedded) {
+                  onSelectMailbox(item.id);
+                }
+                onRequestClose?.();
               }}
               size="sm"
               type="button"
@@ -84,7 +106,7 @@ export const SidebarMailboxNav = ({
             >
               <Icon tone="default" icon={item.icon} />
               {item.label}
-            </SidebarNavItem>
+            </SidebarMailboxNavItem>
           </SidebarEntrance>
         );
       })}

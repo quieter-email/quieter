@@ -96,6 +96,7 @@ export const mailboxSearchSchema = z.object({
   calendarView: calendarViewSchema.optional().catch(undefined),
   chatId: optionalMinLengthSearchString(),
   compose: optionalLiteralSearchValue("mailto"),
+  gmail: z.enum(["connected", "error"]).optional(),
   gmailLink: optionalLiteralSearchValue("complete"),
   mailbox: mailboxSearchCategory(),
   mailboxId: optionalMinLengthSearchString(),

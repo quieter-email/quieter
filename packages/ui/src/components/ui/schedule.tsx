@@ -19,6 +19,7 @@ import { IconButtonTooltip } from "./icon-button-tooltip";
 
 export type ScheduleItem = {
   allDay: boolean;
+  color?: string;
   date: string;
   detail?: string;
   endMinute: number;
@@ -58,8 +59,10 @@ export type ScheduleProps = {
   onSlotClick: (input: {
     allDay: boolean;
     date: string;
+    endMinute?: number;
     minute: number;
   }) => void;
+  selectedDate?: string;
   selectedId?: string;
   today: string;
   view: "day" | "week" | "month" | "agenda";
@@ -68,6 +71,7 @@ export type ScheduleProps = {
 const hourHeight = 56;
 type ScheduleStyle = CSSProperties & {
   "--schedule-columns"?: string;
+  "--schedule-event-color"?: string;
   "--schedule-height"?: string;
   "--schedule-left"?: string;
   "--schedule-min-width"?: string;
@@ -75,7 +79,7 @@ type ScheduleStyle = CSSProperties & {
   "--schedule-width"?: string;
 };
 const hours = Array.from({ length: 24 }, (_, hour) => hour);
-const minuteLabels = Array.from({ length: 48 }, (_, index) => index * 30);
+const minuteLabels = Array.from({ length: 96 }, (_, index) => index * 15);
 const dateFormatter = new Intl.DateTimeFormat("en", {
   day: "numeric",
   month: "long",
@@ -106,10 +110,38 @@ const formatMinute = (minute: number) => {
   return `${String(hour).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 };
 
+const getSlotMinute = ({
+  boundary,
+  button,
+  clientY,
+}: {
+  boundary: "start" | "end";
+  button: HTMLButtonElement;
+  clientY: number;
+}) => {
+  const bounds = button.parentElement?.getBoundingClientRect();
+  if (!bounds) {
+    return null;
+  }
+  const position = ((clientY - bounds.top) * 60) / hourHeight / 15;
+  const minute =
+    (boundary === "start" ? Math.floor(position) : Math.round(position)) * 15;
+  return Math.max(0, Math.min(boundary === "start" ? 1425 : 1440, minute));
+};
+
 type PositionedItem = {
   column: number;
   columns: number;
   item: ScheduleItem;
+};
+
+type SlotSelection = {
+  anchorMinute: number;
+  date: string;
+  minute: number;
+  originY: number;
+  phase: "pending" | "selecting";
+  pointerId: number;
 };
 
 const positionTimedItems = (items: ScheduleItem[]): PositionedItem[] => {
@@ -160,6 +192,7 @@ export const Schedule = ({
   onEventMove,
   onEventResize,
   onSlotClick,
+  selectedDate,
   selectedId,
   today,
   view,
@@ -173,6 +206,9 @@ export const Schedule = ({
     offsetMinute: number;
   } | null>(null);
   const slotHelpId = useId();
+  const selectionRef = useRef<SlotSelection | null>(null);
+  const suppressSlotClickRef = useRef(false);
+  const [selection, setSelection] = useState<SlotSelection | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [resize, setResize] = useState<{
@@ -275,11 +311,11 @@ export const Schedule = ({
     let targetDate = date;
     switch (event.key) {
       case "ArrowUp": {
-        targetMinute -= 30;
+        targetMinute -= 15;
         break;
       }
       case "ArrowDown": {
-        targetMinute += 30;
+        targetMinute += 15;
         break;
       }
       case "ArrowLeft": {
@@ -295,7 +331,7 @@ export const Schedule = ({
         break;
       }
       case "End": {
-        targetMinute = 1410;
+        targetMinute = 1425;
         break;
       }
       case "PageUp": {
@@ -313,13 +349,21 @@ export const Schedule = ({
     event.preventDefault();
     scrollRef.current
       ?.querySelector<HTMLButtonElement>(
-        `[data-slot-date="${targetDate}"][data-slot-minute="${Math.max(0, Math.min(1410, targetMinute))}"]`
+        `[data-slot-date="${targetDate}"][data-slot-minute="${Math.max(0, Math.min(1425, targetMinute))}"]`
       )
       ?.focus();
   };
 
   const renderEvent = (item: ScheduleItem, compact = false) => {
     const duration = item.endMinute - item.startMinute;
+    // Calendar colors come from external calendars and cannot use fixed theme tokens.
+    const externalColor =
+      item.color && /^#(?:[\da-f]{3}|[\da-f]{6})$/iu.test(item.color)
+        ? item.color
+        : undefined;
+    const eventColorStyle: ScheduleStyle | undefined = externalColor
+      ? { "--schedule-event-color": externalColor }
+      : undefined;
     return (
       // Schedule targets need data-sized geometry, drag anchors and dense event typography.
       // Shared Button sizes cannot express this timed positioning or month-row interaction.
@@ -328,7 +372,9 @@ export const Schedule = ({
         aria-pressed={selectedId === item.id}
         className={cn(
           "group/event @container/event-card relative isolate z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm border border-l-2 bg-card px-2 py-1 text-left text-caption transition-colors outline-none before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-sm hover:brightness-95 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg aria-pressed:ring-2 aria-pressed:ring-primary motion-reduce:transition-none",
-          toneClasses[item.tone ?? "primary"],
+          externalColor
+            ? "border-(--schedule-event-color)/40 border-l-(--schedule-event-color) text-fg before:bg-(--schedule-event-color)/15"
+            : toneClasses[item.tone ?? "primary"],
           {
             "h-full": !compact,
             "opacity-40": draggingId === item.id,
@@ -348,6 +394,7 @@ export const Schedule = ({
         onDragStart={(event) => {
           beginDrag(event, item, !compact && !item.allDay);
         }}
+        style={eventColorStyle}
         title={`${item.title}${item.allDay ? "" : `, ${formatMinute(item.startMinute)} – ${formatMinute(item.endMinute)}`}${item.detail ? `, ${item.detail}` : ""}`}
         type="button"
       >
@@ -379,7 +426,13 @@ export const Schedule = ({
   };
 
   const renderAgendaDay = (date: string, dayItems: ScheduleItem[]) => (
-    <section className="border-b border-border py-4" key={date}>
+    <section
+      className={cn("border-b border-border py-4", {
+        "-mx-2 rounded-sm bg-secondary/30 px-2": date === selectedDate,
+      })}
+      data-selected-date={date === selectedDate || undefined}
+      key={date}
+    >
       <h3
         className={cn("mb-3 text-body-sm font-medium", {
           "text-primary": date === today,
@@ -389,8 +442,14 @@ export const Schedule = ({
         {date === today ? (
           <span className="ml-2 text-caption font-normal">Today</span>
         ) : null}
+        {date === selectedDate ? (
+          <span className="sr-only">, selected date</span>
+        ) : null}
       </h3>
       <div className="space-y-2">
+        {dayItems.length === 0 ? (
+          <p className="text-caption text-muted-fg">No events on this day.</p>
+        ) : null}
         {dayItems.map((item) => (
           <div
             className="grid grid-cols-[5rem_minmax(0,1fr)] items-start gap-3"
@@ -407,7 +466,9 @@ export const Schedule = ({
   );
 
   if (view === "agenda") {
-    const occupied = [...days].filter(([, dayItems]) => dayItems.length > 0);
+    const occupied = [...days].filter(
+      ([date, dayItems]) => dayItems.length > 0 || date === selectedDate
+    );
     return (
       <div
         aria-label="Calendar agenda"
@@ -457,9 +518,14 @@ export const Schedule = ({
           <div className="grid min-h-0 min-w-xl flex-1 auto-rows-fr grid-cols-7">
             {dates.map((date) => {
               const dayItems = days.get(date) ?? [];
+              const dateVariant = date === selectedDate ? "secondary" : "ghost";
               return (
                 <div
-                  className="min-h-28 min-w-0 border-r border-b border-border p-1.5 last:border-r-0"
+                  className={cn(
+                    "min-h-28 min-w-0 border-r border-b border-border p-1.5 last:border-r-0",
+                    { "bg-secondary/30": date === selectedDate }
+                  )}
+                  data-selected-date={date === selectedDate || undefined}
                   key={date}
                   onDragOver={(event) => {
                     if (dragRef.current) {
@@ -477,7 +543,7 @@ export const Schedule = ({
                         onSlotClick({ allDay: true, date, minute: 0 });
                       }}
                       size="compact"
-                      variant={date === today ? "default" : "ghost"}
+                      variant={date === today ? "default" : dateVariant}
                     >
                       <span
                         className={cn({
@@ -485,6 +551,9 @@ export const Schedule = ({
                         })}
                       >
                         {Number(date.slice(8))}
+                        {date === selectedDate ? (
+                          <span className="sr-only">, selected date</span>
+                        ) : null}
                       </span>
                     </Button>
                   </div>
@@ -549,6 +618,16 @@ export const Schedule = ({
   const currentTimeStyle: ScheduleStyle = {
     "--schedule-top": `${((currentMinute ?? 0) * hourHeight) / 60}px`,
   };
+  const selectionStart = selection
+    ? Math.min(selection.anchorMinute, selection.minute)
+    : 0;
+  const selectionEnd = selection
+    ? Math.max(selectionStart + 15, selection.anchorMinute, selection.minute)
+    : 0;
+  const selectionStyle: ScheduleStyle = {
+    "--schedule-height": `${((selectionEnd - selectionStart) * hourHeight) / 60}px`,
+    "--schedule-top": `${(selectionStart * hourHeight) / 60}px`,
+  };
   return (
     <div
       aria-label={`${view === "day" ? "Day" : "Week"} calendar`}
@@ -556,8 +635,9 @@ export const Schedule = ({
       ref={scrollRef}
     >
       <p className="sr-only" id={slotHelpId}>
-        Use arrow keys to choose a time and Enter to create an event. Open any
-        event to edit its date and time.
+        Drag to choose a time range, or click to create an event. Use arrow keys
+        to choose a time in 15-minute steps and Enter to create an event. Press
+        Escape to cancel a selection. Open any event to edit its date and time.
       </p>
       <div
         className="sticky top-0 z-30 grid w-full min-w-[var(--schedule-min-width)] grid-cols-[var(--schedule-columns)] border-b border-border bg-card"
@@ -569,21 +649,27 @@ export const Schedule = ({
             className={cn(
               "flex min-h-8 items-center justify-center gap-1.5 border-b-2 border-transparent px-2 py-1",
               {
-                "border-q-blue bg-q-blue/15": date === today,
+                "border-border-strong bg-secondary text-secondary-fg":
+                  date === selectedDate && date !== today,
+                "border-primary bg-primary/10 text-primary": date === today,
               }
             )}
+            data-selected-date={date === selectedDate || undefined}
             key={date}
           >
             <span
               className={cn("text-caption", {
-                "font-medium": date === today,
-                "text-muted-fg": date !== today,
+                "font-medium": date === today || date === selectedDate,
+                "text-muted-fg": date !== today && date !== selectedDate,
               })}
             >
               {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
             </span>
             <span className="text-caption font-medium">
               {Number(date.slice(8))}
+              {date === selectedDate ? (
+                <span className="sr-only">, selected date</span>
+              ) : null}
             </span>
           </div>
         ))}
@@ -592,7 +678,11 @@ export const Schedule = ({
         </div>
         {dates.map((date) => (
           <div
-            className="relative min-h-8 space-y-1 border-t border-r border-border py-1 last:border-r-0"
+            className={cn(
+              "relative min-h-8 space-y-1 border-t border-r border-border px-0.5 py-1 last:border-r-0",
+              { "bg-secondary/20": date === selectedDate }
+            )}
+            data-selected-date={date === selectedDate || undefined}
             key={date}
             onDragOver={(event) => {
               if (dragRef.current) {
@@ -640,7 +730,10 @@ export const Schedule = ({
         </div>
         {dates.map((date) => (
           <div
-            className="relative border-r border-border last:border-r-0"
+            className={cn("relative border-r border-border last:border-r-0", {
+              "bg-secondary/20": date === selectedDate,
+            })}
+            data-selected-date={date === selectedDate || undefined}
             key={date}
             onDragOver={(event) => {
               if (dragRef.current) {
@@ -656,22 +749,150 @@ export const Schedule = ({
                 "--schedule-top": `${(minute * hourHeight) / 60}px`,
               };
               return (
-                // Native grid cells preserve half-hour hit areas and roving keyboard focus.
                 <button
                   aria-describedby={slotHelpId}
                   aria-label={`Create event on ${dateFormatter.format(new Date(`${date}T12:00:00Z`))} at ${formatMinute(minute)}`}
                   className={cn(
-                    "absolute inset-x-0 top-[var(--schedule-top)] h-7 border-b border-border/40 text-left outline-none hover:bg-control-hover/50 focus-visible:z-10 focus-visible:bg-control-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                    { "border-b-border": minute % 60 === 30 }
+                    "absolute inset-x-0 top-[var(--schedule-top)] h-3.5 cursor-crosshair border-b border-transparent text-left outline-none focus-visible:z-10 focus-visible:bg-control-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                    {
+                      "border-b-border": minute % 60 === 45,
+                      "border-b-border/40": minute % 60 === 15,
+                    }
                   )}
                   data-slot-date={date}
                   data-slot-minute={minute}
                   key={minute}
-                  onClick={() => {
-                    onSlotClick({ allDay: false, date, minute });
+                  onClick={(event) => {
+                    if (event.detail !== 0 && suppressSlotClickRef.current) {
+                      suppressSlotClickRef.current = false;
+                      return;
+                    }
+                    const clickedMinute =
+                      event.detail === 0
+                        ? minute
+                        : (getSlotMinute({
+                            boundary: "start",
+                            button: event.currentTarget,
+                            clientY: event.clientY,
+                          }) ?? minute);
+                    onSlotClick({ allDay: false, date, minute: clickedMinute });
                   }}
                   onKeyDown={(event) => {
+                    if (event.key === "Escape" && selectionRef.current) {
+                      const { pointerId } = selectionRef.current;
+                      selectionRef.current = null;
+                      suppressSlotClickRef.current = true;
+                      setSelection(null);
+                      if (event.currentTarget.hasPointerCapture(pointerId)) {
+                        event.currentTarget.releasePointerCapture(pointerId);
+                      }
+                      event.preventDefault();
+                      return;
+                    }
                     moveSlotFocus(event, date, minute);
+                  }}
+                  onLostPointerCapture={() => {
+                    if (selectionRef.current) {
+                      selectionRef.current = null;
+                      suppressSlotClickRef.current = true;
+                      setSelection(null);
+                    }
+                  }}
+                  onPointerCancel={() => {
+                    selectionRef.current = null;
+                    suppressSlotClickRef.current = true;
+                    setSelection(null);
+                  }}
+                  onPointerDown={(event) => {
+                    suppressSlotClickRef.current = false;
+                    // Touch keeps native vertical scrolling and tap creation.
+                    if (
+                      event.button !== 0 ||
+                      !event.isPrimary ||
+                      event.pointerType === "touch" ||
+                      dragRef.current ||
+                      resize
+                    ) {
+                      return;
+                    }
+                    const anchorMinute = getSlotMinute({
+                      boundary: "start",
+                      button: event.currentTarget,
+                      clientY: event.clientY,
+                    });
+                    if (anchorMinute === null) {
+                      return;
+                    }
+                    event.preventDefault();
+                    event.currentTarget.focus({ preventScroll: true });
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    selectionRef.current = {
+                      anchorMinute,
+                      date,
+                      minute: anchorMinute,
+                      originY: event.clientY,
+                      phase: "pending",
+                      pointerId: event.pointerId,
+                    };
+                  }}
+                  onPointerMove={(event) => {
+                    const activeSelection = selectionRef.current;
+                    if (
+                      !activeSelection ||
+                      activeSelection.pointerId !== event.pointerId ||
+                      (activeSelection.phase === "pending" &&
+                        Math.abs(event.clientY - activeSelection.originY) < 4)
+                    ) {
+                      return;
+                    }
+                    const nextMinute = getSlotMinute({
+                      boundary: "end",
+                      button: event.currentTarget,
+                      clientY: event.clientY,
+                    });
+                    if (nextMinute === null) {
+                      return;
+                    }
+                    const nextSelection: SlotSelection = {
+                      ...activeSelection,
+                      minute: nextMinute,
+                      phase: "selecting",
+                    };
+                    selectionRef.current = nextSelection;
+                    setSelection(nextSelection);
+                  }}
+                  onPointerUp={(event) => {
+                    const activeSelection = selectionRef.current;
+                    if (activeSelection?.pointerId !== event.pointerId) {
+                      return;
+                    }
+                    selectionRef.current = null;
+                    setSelection(null);
+                    if (
+                      event.currentTarget.hasPointerCapture(event.pointerId)
+                    ) {
+                      event.currentTarget.releasePointerCapture(
+                        event.pointerId
+                      );
+                    }
+                    if (activeSelection.phase !== "selecting") {
+                      return;
+                    }
+                    suppressSlotClickRef.current = true;
+                    const startMinute = Math.min(
+                      activeSelection.anchorMinute,
+                      activeSelection.minute
+                    );
+                    onSlotClick({
+                      allDay: false,
+                      date: activeSelection.date,
+                      endMinute: Math.max(
+                        startMinute + 15,
+                        activeSelection.anchorMinute,
+                        activeSelection.minute
+                      ),
+                      minute: startMinute,
+                    });
                   }}
                   style={slotStyle}
                   tabIndex={date === dates[0] && minute === 540 ? 0 : -1}
@@ -693,7 +914,7 @@ export const Schedule = ({
                 };
                 return (
                   <div
-                    className="group/event-slot absolute top-[var(--schedule-top)] left-[var(--schedule-left)] z-10 h-[var(--schedule-height)] w-[var(--schedule-width)] min-w-0"
+                    className="group/event-slot absolute top-[var(--schedule-top)] left-[var(--schedule-left)] z-10 h-[var(--schedule-height)] w-[var(--schedule-width)] min-w-0 p-0.5"
                     key={`${item.id}:${date}`}
                     style={eventStyle}
                   >
@@ -702,7 +923,7 @@ export const Schedule = ({
                       <IconButtonTooltip label="Resize event, or use arrow keys">
                         <button
                           aria-label={`Resize ${item.title}. Use up or down arrows to adjust by 15 minutes.`}
-                          className="absolute inset-x-1 bottom-0 z-20 h-2 cursor-ns-resize touch-none rounded-b-sm opacity-0 outline-none group-hover/event-slot:opacity-100 after:mx-auto after:mt-1 after:block after:h-0.5 after:w-6 after:rounded-full after:bg-fg/30 focus-visible:bg-primary/20 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
+                          className="absolute inset-x-1 bottom-0.5 z-20 h-2 cursor-ns-resize touch-none rounded-b-sm opacity-0 outline-none group-hover/event-slot:opacity-100 after:mx-auto after:mt-1 after:block after:h-0.5 after:w-6 after:rounded-full after:bg-fg/30 focus-visible:bg-primary/20 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
                           onClick={(event) => {
                             event.stopPropagation();
                           }}
@@ -795,6 +1016,15 @@ export const Schedule = ({
                 );
               }
             )}
+            {selection?.date === date ? (
+              <div
+                aria-live="polite"
+                className="pointer-events-none absolute inset-x-0.5 top-[var(--schedule-top)] z-20 h-[var(--schedule-height)] overflow-hidden rounded-xs border border-primary/40 bg-primary/15 px-1 text-micro text-primary"
+                style={selectionStyle}
+              >
+                {formatMinute(selectionStart)} to {formatMinute(selectionEnd)}
+              </div>
+            ) : null}
             {date === today && currentMinute !== undefined ? (
               <div
                 aria-label={`Current time ${formatMinute(currentMinute)}`}

@@ -130,9 +130,9 @@ suite("remembered Gmail unsubscribe requests", () => {
     );
     CREATE UNIQUE INDEX active_draft_send ON "gmailComposeOperation" ("mailboxId", "draftId") WHERE kind='send' AND status IN ('submitting','unknown','accepted');
     CREATE TABLE mailbox (id text PRIMARY KEY, "ownerUserId" text, provider text, status text, "emailAddress" text, "organizationId" text, "contentRevision" bigint DEFAULT 0);
-    CREATE TABLE "gmailCredential" ("mailboxId" text PRIMARY KEY, "accessTokenExpiresAt" timestamp, "encryptedAccessToken" text, "encryptedRefreshToken" text);
+    CREATE TABLE "gmailCredential" ("mailboxId" text PRIMARY KEY, "accessTokenExpiresAt" timestamp, "encryptedAccessToken" text, "encryptedRefreshToken" text, scopes text NOT NULL DEFAULT '');
     INSERT INTO mailbox VALUES ('mailbox','owner','gmail','connected','owner@example.com','organization',0), ('other','other-owner','gmail','connected','other@example.com','organization',0);
-    INSERT INTO "gmailCredential" VALUES ('mailbox','2100-01-01','fixture',null), ('other','2100-01-01','fixture',null);
+    INSERT INTO "gmailCredential" ("mailboxId", "accessTokenExpiresAt", "encryptedAccessToken", "encryptedRefreshToken") VALUES ('mailbox','2100-01-01','fixture',null), ('other','2100-01-01','fixture',null);
     CREATE TABLE acceptance_failure (enabled boolean);
     INSERT INTO acceptance_failure VALUES (false);
     CREATE FUNCTION reject_acceptance() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN

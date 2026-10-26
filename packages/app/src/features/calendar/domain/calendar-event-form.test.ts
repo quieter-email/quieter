@@ -103,4 +103,30 @@ describe("calendar event edit changes", () => {
       createCalendarEventChanges({ draft, original: recurringMeeting })
     ).toBeUndefined();
   });
+
+  it("keeps an event color override on an unrelated edit and can restore calendar inheritance", () => {
+    const original = {
+      ...recurringMeeting,
+      color: "#7986cb",
+      colorOverride: "#7986cb",
+    };
+    const form = createCalendarEventForm(
+      { event: original, kind: "edit", scope: "occurrence" },
+      "Europe/Berlin"
+    );
+    const renamed = parseCalendarEventForm(
+      { ...form, title: "Updated meeting" },
+      original
+    );
+    expect(
+      createCalendarEventChanges({ draft: renamed, original })
+    ).not.toHaveProperty("color");
+    const inherited = parseCalendarEventForm(
+      { ...form, color: null },
+      original
+    );
+    expect(
+      createCalendarEventChanges({ draft: inherited, original })
+    ).toMatchObject({ color: null });
+  });
 });

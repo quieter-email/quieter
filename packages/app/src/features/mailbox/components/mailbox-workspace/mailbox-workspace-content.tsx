@@ -784,13 +784,6 @@ const MailboxWorkspaceContentInner = ({
                   allInboxesActive={allInboxesActive}
                   groups={mailboxGroups}
                   onComposeNewMail={onComposeNewMail}
-                  onOpenCalendar={() => {
-                    onMobileOpenChange(false);
-                    void setMailboxSearch(
-                      { workspace: "calendar" },
-                      { replace: false }
-                    );
-                  }}
                   onMobileOpenChange={onMobileOpenChange}
                   onReorderMailboxSwitcher={onReorderMailboxSwitcher}
                   onReconnectMailbox={onReconnectMailbox}
@@ -812,7 +805,6 @@ const MailboxWorkspaceContentInner = ({
                       onSelectView("labels");
                     }
                   }}
-                  onManageSnippets={onManageSnippets}
                   onSelectMailbox={onSelectMailbox}
                   onSelectMailboxId={onSelectMailboxId}
                   onSelectView={onSelectView}
@@ -852,13 +844,6 @@ const MailboxWorkspaceContentInner = ({
                     <CalendarWorkspace
                       isMobileSidebarOpen={layoutState.isMobileSidebarOpen}
                       onMobileSidebarOpenChange={onMobileOpenChange}
-                      onBackToMail={() => {
-                        onMobileOpenChange(false);
-                        void setMailboxSearch(
-                          { workspace: null },
-                          { replace: false }
-                        );
-                      }}
                       userId={userId}
                     />
                   </Suspense>

@@ -94,6 +94,8 @@ import type { TokenFieldToken } from "@quieter/ui/token-field";
 import { useCallback, useState } from "react";
 import type { ReactNode } from "react";
 
+import { CalendarTimeZonePicker } from "../../calendar/components/calendar-time-zone-picker";
+
 // Sample data only. Real mentions come from the user's connected apps.
 const showcaseTokens: TokenFieldToken[] = [
   {
@@ -176,6 +178,7 @@ const scheduleDates = {
 const sampleScheduleItems: ScheduleItem[] = [
   {
     allDay: true,
+    color: "#33b679",
     date: "2026-10-21",
     endMinute: 1440,
     id: "sample-release",
@@ -185,6 +188,7 @@ const sampleScheduleItems: ScheduleItem[] = [
   },
   {
     allDay: false,
+    color: "#039be5",
     date: "2026-10-20",
     detail: "Studio",
     endMinute: 660,
@@ -318,13 +322,15 @@ const ScheduleShowcase = () => {
               )
             );
           }}
-          onSlotClick={({ allDay, date, minute }) => {
+          onSlotClick={({ allDay, date, endMinute, minute }) => {
             setItems((previous) => [
               ...previous,
               {
                 allDay,
                 date,
-                endMinute: allDay ? 1440 : minute + 30,
+                endMinute: allDay
+                  ? 1440
+                  : (endMinute ?? Math.min(1440, minute + 30)),
                 id: crypto.randomUUID(),
                 startMinute: minute,
                 title: "New event",
@@ -332,6 +338,7 @@ const ScheduleShowcase = () => {
               },
             ]);
           }}
+          selectedDate={view === "day" ? "2026-10-23" : "2026-10-22"}
           selectedId={selectedId}
           today="2026-10-23"
           view={view}
@@ -404,6 +411,7 @@ export const DesignSystemShowcase = () => {
   const [labelColor, setLabelColor] = useState<MailboxLabelColor>("blue");
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [showPromptContext, setShowPromptContext] = useState(true);
+  const [timeZone, setTimeZone] = useState("Europe/Berlin");
 
   return (
     <main className="@container min-h-dvh text-fg">
@@ -904,6 +912,33 @@ export const DesignSystemShowcase = () => {
                 </SelectContent>
               </Select>
             </InputGroup>
+          </Row>
+          <Row label="Searchable choice">
+            <CalendarTimeZonePicker
+              aria-label="Sample time zone"
+              className="w-64 max-w-full"
+              onValueChange={setTimeZone}
+              value={timeZone}
+            />
+          </Row>
+          <Row label="Searchable toolbar choice">
+            <CalendarTimeZonePicker
+              aria-label="Sample toolbar time zone"
+              className="max-w-40"
+              onValueChange={setTimeZone}
+              size="sm"
+              value={timeZone}
+              variant="ghost"
+            />
+          </Row>
+          <Row label="Searchable choice, disabled">
+            <CalendarTimeZonePicker
+              aria-label="Disabled sample time zone"
+              className="w-64 max-w-full"
+              disabled
+              onValueChange={setTimeZone}
+              value={timeZone}
+            />
           </Row>
           <Row label="Textarea">
             <Textarea
