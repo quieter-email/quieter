@@ -5,32 +5,59 @@ import {
   Calendar03Icon,
   Image01Icon,
 } from "@hugeicons/core-free-icons";
+import { ORPCError } from "@orpc/client";
 import {
   applyEmailPreferences,
-  fixNonReadableColors,
   getCalendarLinks,
   linkifyText,
+  normalizeMailContentId,
   preprocessEmailHtml,
 } from "@quieter/app/features/message-thread/domain/mail-html";
-import type {
-  CalendarLink,
-  ProcessedMailHtml,
-} from "@quieter/app/features/message-thread/domain/mail-html";
+import type { CalendarLink } from "@quieter/app/features/message-thread/domain/mail-html";
 import { useExternalImagesEnabled } from "@quieter/app/features/settings/domain/external-images-setting";
+import { isExpectedClientError } from "@quieter/app/lib/client-error-reporting";
+import type { MessageListItem } from "@quieter/app/lib/mail";
+import { loadMessageAttachment } from "@quieter/app/lib/mail/attachments";
 import { Button, buttonVariants } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { useColorMode } from "@quieter/ui/color-mode";
 import { Icon } from "@quieter/ui/icon";
+import * as Sentry from "@sentry/react";
+import { useQueries } from "@tanstack/react-query";
+import type { UseQueryResult } from "@tanstack/react-query";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 type MessageBodyProps = {
-  html?: string;
-  text?: string;
+  mailboxId: string;
+  message: Pick<
+    MessageListItem,
+    "id" | "bodyHtml" | "bodyText" | "inlineImages"
+  >;
   isLoading?: boolean;
   loadExternalImages?: boolean;
 };
 
 const REMOTE_IMAGE_REGEX = /^https?:\/\//iu;
+
+const focusMailElement = (element: HTMLElement) => {
+  if (element.tabIndex < 0 && !element.hasAttribute("tabindex")) {
+    element.setAttribute("tabindex", "-1");
+    element.addEventListener(
+      "blur",
+      () => {
+        element.removeAttribute("tabindex");
+      },
+      {
+        once: true,
+      }
+    );
+  }
+  element.focus({ preventScroll: true });
+};
+
+const combineInlineImageQueries = (queries: UseQueryResult<File>[]) => ({
+  errors: queries.map((query) => query.error),
+  files: queries.map((query) => query.data),
+});
 
 const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
   if (links.length === 0) {
@@ -77,59 +104,169 @@ const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
 
 const HtmlMessageBodyContent = ({
   html,
+  inlineImages,
   loadExternalImages,
+  mailboxId,
+  messageId,
 }: {
   html: string;
+  inlineImages: MessageListItem["inlineImages"];
   loadExternalImages?: boolean;
+  mailboxId: string;
+  messageId: string;
 }) => {
-  const { colorMode } = useColorMode();
   const externalImagesEnabled = useExternalImagesEnabled();
   const [cspViolation, setCspViolation] = useState(false);
   const [temporaryImagesEnabled, setTemporaryImagesEnabled] = useState(false);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const shadowRootRef = useRef<ShadowRoot | null>(null);
+  const reportedInlineImageErrorsRef = useRef(new WeakSet<Error>());
   // react-doctor-disable-next-line react-doctor/no-event-handler
   const shouldLoadImages =
     (loadExternalImages ?? externalImagesEnabled) || temporaryImagesEnabled;
-  const processedMail: ProcessedMailHtml = useMemo(
-    () =>
-      applyEmailPreferences(
-        preprocessEmailHtml(html),
-        shouldLoadImages,
-        colorMode
-      ),
-    [colorMode, html, shouldLoadImages]
+  const preprocessedHtml = useMemo(() => preprocessEmailHtml(html), [html]);
+  const processedMail = useMemo(
+    () => applyEmailPreferences(preprocessedHtml, shouldLoadImages, "light"),
+    [preprocessedHtml, shouldLoadImages]
   );
+  const inlineAttachments = useMemo(() => {
+    const referencedContentIds = new Set(processedMail.referencedContentIds);
+    const attachments = new Map<
+      string,
+      NonNullable<MessageListItem["inlineImages"]>[number] | null
+    >();
+
+    for (const attachment of inlineImages ?? []) {
+      const contentId = normalizeMailContentId(attachment.contentId);
+      if (!contentId || !referencedContentIds.has(contentId)) {
+        continue;
+      }
+      attachments.set(
+        contentId,
+        attachments.has(contentId) ? null : attachment
+      );
+    }
+
+    return [...attachments].flatMap(([contentId, attachment]) =>
+      attachment ? [{ attachment, contentId }] : []
+    );
+  }, [inlineImages, processedMail.referencedContentIds]);
+  const inlineImageQueries = useQueries({
+    combine: combineInlineImageQueries,
+    queries: inlineAttachments.map(({ attachment }) => ({
+      queryFn: async ({ signal }: { signal: AbortSignal }) =>
+        await loadMessageAttachment({
+          attachment,
+          mailboxId,
+          messageId,
+          signal,
+        }),
+      queryKey: [
+        "message-attachment",
+        mailboxId,
+        messageId,
+        attachment.attachmentId,
+      ],
+      staleTime: Infinity,
+    })),
+  });
   const remoteImagesPresent =
     !shouldLoadImages && processedMail.hasBlockedImages;
 
   useEffect(() => {
-    if (!hostRef.current) {
+    for (const error of inlineImageQueries.errors) {
+      if (
+        error &&
+        !isExpectedClientError(error) &&
+        !(error instanceof ORPCError && error.status < 500) &&
+        error.name !== "AbortError" &&
+        !reportedInlineImageErrorsRef.current.has(error)
+      ) {
+        reportedInlineImageErrorsRef.current.add(error);
+        Sentry.captureException(
+          new Error("An inline message image could not be loaded."),
+          { tags: { boundary: "message-inline-image" } }
+        );
+      }
+    }
+  }, [inlineImageQueries.errors]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) {
       return;
+    }
+
+    // `all` leaves custom properties inherited from the app intact.
+    const inheritedCustomProperties = [...getComputedStyle(host)].filter(
+      (property) => property.startsWith("--")
+    );
+    for (const property of inheritedCustomProperties) {
+      host.style.setProperty(property, "initial");
     }
 
     let shadowRoot = shadowRootRef.current;
     if (!shadowRoot) {
-      shadowRoot = hostRef.current.attachShadow({ mode: "open" });
+      shadowRoot = host.attachShadow({ mode: "open" });
       shadowRootRef.current = shadowRoot;
     }
 
+    const previousElements = [...shadowRoot.querySelectorAll("*")];
+    const detailsStates = previousElements.flatMap((element, index) =>
+      element instanceof HTMLDetailsElement
+        ? [{ index, open: element.open }]
+        : []
+    );
+    const focusedElementIndex = shadowRoot.activeElement
+      ? previousElements.indexOf(shadowRoot.activeElement)
+      : -1;
+    const inlineImageUrls = new Map<string, string>();
+    for (const [index, { contentId }] of inlineAttachments.entries()) {
+      const file = inlineImageQueries.files[index];
+      if (file) {
+        inlineImageUrls.set(contentId, URL.createObjectURL(file));
+      }
+    }
+
+    const resolvedMail = applyEmailPreferences(
+      preprocessedHtml,
+      shouldLoadImages,
+      "light",
+      inlineImageUrls
+    );
     const parsedDocument = new DOMParser().parseFromString(
-      processedMail.processedHtml,
+      resolvedMail.processedHtml,
       "text/html"
     );
-    shadowRoot.replaceChildren(
-      ...[...parsedDocument.head.childNodes].map((node) =>
-        document.importNode(node, true)
-      ),
-      ...[...parsedDocument.body.childNodes].map((node) =>
-        document.importNode(node, true)
-      )
+    const nextDocument = document.importNode(
+      parsedDocument.documentElement,
+      true
     );
-    fixNonReadableColors(shadowRoot, {
-      defaultBackground: colorMode === "dark" ? "#1A1A1A" : "#ffffff",
-    });
-  }, [colorMode, processedMail]);
+    const nextElements = [nextDocument, ...nextDocument.querySelectorAll("*")];
+    for (const { index, open } of detailsStates) {
+      const element = nextElements[index];
+      if (element instanceof HTMLDetailsElement) {
+        element.open = open;
+      }
+    }
+    shadowRoot.replaceChildren(nextDocument);
+
+    const nextFocusedElement = nextElements[focusedElementIndex];
+    if (nextFocusedElement instanceof HTMLElement) {
+      focusMailElement(nextFocusedElement);
+    }
+
+    return () => {
+      for (const objectUrl of inlineImageUrls.values()) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [
+    inlineAttachments,
+    inlineImageQueries.files,
+    preprocessedHtml,
+    shouldLoadImages,
+  ]);
 
   const handleImageError = useEffectEvent((event: Event) => {
     const { target } = event;
@@ -143,7 +280,6 @@ const HtmlMessageBodyContent = ({
     ) {
       setCspViolation(true);
     }
-    target.style.display = "none";
   });
 
   useEffect(() => {
@@ -156,7 +292,7 @@ const HtmlMessageBodyContent = ({
 
     const handleClick = (event: Event) => {
       const { target } = event;
-      if (!(target instanceof HTMLElement)) {
+      if (!(target instanceof Element)) {
         return;
       }
 
@@ -164,24 +300,57 @@ const HtmlMessageBodyContent = ({
       if (!link) {
         return;
       }
+      if (
+        event instanceof MouseEvent &&
+        event.type === "auxclick" &&
+        event.button !== 1
+      ) {
+        return;
+      }
 
       event.preventDefault();
       const href = link.getAttribute("href");
-      if (
-        typeof href === "string" &&
-        (href.startsWith("http://") || href.startsWith("https://"))
-      ) {
+      if (!href) {
+        return;
+      }
+      if (href.startsWith("#")) {
+        let fragment = href.slice(1);
+        try {
+          fragment = decodeURIComponent(fragment);
+        } catch {
+          // Malformed escapes can still be literal element IDs.
+        }
+        const destination = fragment
+          ? (root.querySelector(`#${CSS.escape(fragment)}`) ??
+            [...root.querySelectorAll("a[name]")].find(
+              (anchor) => anchor.getAttribute("name") === fragment
+            ))
+          : root.querySelector("body");
+        if (destination instanceof HTMLElement) {
+          let ancestor: HTMLElement | null = destination;
+          while (ancestor) {
+            if (ancestor instanceof HTMLDetailsElement) {
+              ancestor.open = true;
+            }
+            ancestor = ancestor.parentElement;
+          }
+          destination.scrollIntoView({ block: "start" });
+          focusMailElement(destination);
+        }
+      } else if (REMOTE_IMAGE_REGEX.test(href)) {
         window.open(href, "_blank", "noopener,noreferrer");
-      } else if (typeof href === "string" && href.startsWith("mailto:")) {
+      } else if (/^mailto:/iu.test(href)) {
         window.location.href = href;
       }
     };
 
     root.addEventListener("click", handleClick);
+    root.addEventListener("auxclick", handleClick);
 
     return () => {
       root.removeEventListener("error", handleImageError, true);
       root.removeEventListener("click", handleClick);
+      root.removeEventListener("auxclick", handleClick);
     };
   }, []);
 
@@ -219,18 +388,22 @@ const HtmlMessageBodyContent = ({
           </Button>
         </section>
       )}
-      <div
-        className="w-full max-w-full min-w-0 flex-1 overflow-x-hidden bg-transparent text-fg"
-        ref={hostRef}
-      />
+      <div className="relative isolate w-full max-w-full min-w-0 overflow-x-auto contain-content">
+        <div
+          ref={hostRef}
+          style={{
+            // oxlint-disable shadcn/no-inline-styles -- Sender documents must not inherit app presentation.
+            all: "initial",
+            direction: "ltr",
+            display: "block",
+            unicodeBidi: "normal",
+            // oxlint-enable shadcn/no-inline-styles
+          }}
+        />
+      </div>
     </>
   );
 };
-
-const HtmlMessageBody = (props: {
-  html: string;
-  loadExternalImages?: boolean;
-}) => <HtmlMessageBodyContent key={props.html} {...props} />;
 
 const MessageBodyLoadingSkeleton = () => (
   <output aria-label="Loading message content" className="block space-y-3 p-4">
@@ -282,13 +455,13 @@ const PlainTextMessageBody = ({ text }: { text: string }) => {
 };
 
 export const MessageBody = ({
-  html,
   isLoading,
   loadExternalImages,
-  text,
+  mailboxId,
+  message,
 }: MessageBodyProps) => {
-  const fallbackText = text?.trim();
-  const htmlBody = html?.trim();
+  const fallbackText = message.bodyText?.trim();
+  const htmlBody = message.bodyHtml?.trim();
 
   if (!htmlBody && !fallbackText && isLoading === true) {
     return <MessageBodyLoadingSkeleton />;
@@ -299,6 +472,13 @@ export const MessageBody = ({
   }
 
   return (
-    <HtmlMessageBody html={htmlBody} loadExternalImages={loadExternalImages} />
+    <HtmlMessageBodyContent
+      html={htmlBody}
+      inlineImages={message.inlineImages}
+      key={JSON.stringify([mailboxId, message.id, htmlBody])}
+      loadExternalImages={loadExternalImages}
+      mailboxId={mailboxId}
+      messageId={message.id}
+    />
   );
 };

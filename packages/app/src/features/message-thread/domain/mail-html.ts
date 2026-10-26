@@ -1,33 +1,16 @@
-import { CssSanitizer } from "@barkleapp/css-sanitizer";
-import Color from "color";
-import type { ColorInstance } from "color";
 import DOMPurify from "dompurify";
 import type { Config } from "dompurify";
 
-const REPLACEMENT_CHARACTER_REGEX = /\uFFFD/gu;
+import { sanitizeMailCss } from "./mail-css";
+
 const TRACKING_PIXEL_SIZE = new Set(["0", "1"]);
 const TEXT_URL_REGEX = /\bhttps?:\/\/[^\s<>"']+/giu;
-const OKLCH_COLOR_REGEX = /^oklch\(\s*(?<value>.+?)\s*\)$/iu;
-const SAFE_STYLE_OPTIONS = {
-  allowedProperties: [
-    "color",
-    "background-color",
-    "font-size",
-    "margin",
-    "padding",
-    "text-align",
-    "border",
-    "display",
-  ],
-  disallowedAtRules: ["import", "keyframes"],
-  disallowedFunctions: ["expression", "url"],
-};
-const cssSanitizer = new CssSanitizer();
 
 export type ProcessedMailHtml = {
   calendarLinks: CalendarLink[];
   hasBlockedImages: boolean;
   processedHtml: string;
+  referencedContentIds: string[];
 };
 
 export type CalendarLink = {
@@ -48,213 +31,12 @@ export type LinkifiedTextSegment =
       value: string;
     };
 
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, value));
-
-const linearSrgbToRgb = (value: number): number => {
-  const channel =
-    value <= 0.0031308
-      ? 12.92 * value
-      : 1.055 * Math.abs(value) ** (1 / 2.4) * Math.sign(value) - 0.055;
-  return Math.round(clamp(channel, 0, 1) * 255);
-};
-
-const parseCssColorNumber = (value: string): number | undefined => {
-  if (value === "none") {
-    return undefined;
-  }
-
-  if (value.endsWith("%")) {
-    const percentage = Number(value.slice(0, -1));
-    return Number.isFinite(percentage) ? percentage / 100 : undefined;
-  }
-
-  const number = Number(value);
-  return Number.isFinite(number) ? number : undefined;
-};
-
-const parseCssHue = (value: string): number | undefined => {
-  if (value === "none") {
-    return undefined;
-  }
-
-  const match =
-    /^(?<number>[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(?<unit>deg|grad|rad|turn)?$/iu.exec(
-      value
-    );
-  const number = Number(match?.groups?.number);
-  if (!Number.isFinite(number)) {
-    return undefined;
-  }
-
-  const unit = match?.groups?.unit?.toLowerCase();
-  if (unit === "rad") {
-    return number;
-  }
-  if (unit === "turn") {
-    return number * 2 * Math.PI;
-  }
-  if (unit === "grad") {
-    return (number / 200) * Math.PI;
-  }
-
-  return (number * Math.PI) / 180;
-};
-
-const parseOklchColor = (value: string): ColorInstance | undefined => {
-  const match = OKLCH_COLOR_REGEX.exec(value);
-  if (match?.groups?.value === undefined) {
-    return undefined;
-  }
-  const oklchValue = match.groups.value;
-  if (oklchValue === "") {
-    return undefined;
-  }
-
-  const [rawChannels, rawAlpha] = oklchValue.split("/");
-  if ((rawChannels ?? "") === "") {
-    return undefined;
-  }
-
-  const [rawLightness, rawChroma, rawHue] = rawChannels
-    .trim()
-    .split(/[\s,]+/u)
-    .filter(Boolean);
-  if (
-    (rawLightness ?? "") === "" ||
-    (rawChroma ?? "") === "" ||
-    (rawHue ?? "") === ""
-  ) {
-    return undefined;
-  }
-
-  const lightness = parseCssColorNumber(rawLightness);
-  const chroma = parseCssColorNumber(rawChroma);
-  const hue = parseCssHue(rawHue);
-  const alpha =
-    (rawAlpha ?? "") === "" ? 1 : parseCssColorNumber(rawAlpha.trim());
-  if (
-    lightness === undefined ||
-    chroma === undefined ||
-    hue === undefined ||
-    alpha === undefined
-  ) {
-    return undefined;
-  }
-
-  const a = chroma * Math.cos(hue);
-  const b = chroma * Math.sin(hue);
-  const l = lightness + 0.3963377774 * a + 0.2158037573 * b;
-  const m = lightness - 0.1055613458 * a - 0.0638541728 * b;
-  const s = lightness - 0.0894841775 * a - 1.291485548 * b;
-  const l3 = l ** 3;
-  const m3 = m ** 3;
-  const s3 = s ** 3;
-
-  return Color.rgb(
-    linearSrgbToRgb(4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3),
-    linearSrgbToRgb(-1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3),
-    linearSrgbToRgb(-0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3)
-  ).alpha(clamp(alpha, 0, 1));
-};
-
-const parseCssColor = (value: string): ColorInstance | undefined => {
-  const color = value.trim();
-  if ((color ?? "") === "" || color.startsWith("var(") || color === "inherit") {
-    return undefined;
-  }
-
-  try {
-    return Color(color);
-  } catch {
-    return parseOklchColor(color);
-  }
-};
-
-const getEffectiveBackgroundColor = (
-  element: HTMLElement,
-  defaultBackground: string
-) => {
-  let current: HTMLElement | null = element;
-  while (current) {
-    const background = parseCssColor(getComputedStyle(current).backgroundColor);
-    if (background !== undefined && background.alpha() >= 1) {
-      return background.rgb();
-    }
-    current = current.parentElement;
-  }
-  return Color(defaultBackground);
-};
-
-// Runs after processed mail is mounted because readable color fixes need computed DOM styles.
-export const fixNonReadableColors = (
-  rootElement: ParentNode,
-  options?: { minContrast?: number; defaultBackground?: string }
-) => {
-  const { defaultBackground = "#ffffff", minContrast = 3.5 } = options ?? {};
-  const elements = [...rootElement.querySelectorAll("*")];
-  if (rootElement instanceof HTMLElement) {
-    elements.unshift(rootElement);
-  }
-
-  for (const element of elements) {
-    if (!(element instanceof HTMLElement)) {
-      continue;
-    }
-
-    const style = getComputedStyle(element);
-    if (style.display === "none" || style.visibility === "hidden") {
-      continue;
-    }
-
-    if (
-      style.color.startsWith("var(") ||
-      style.color === "transparent" ||
-      style.color === "inherit"
-    ) {
-      continue;
-    }
-
-    const textColor = parseCssColor(style.color);
-    if (textColor === undefined) {
-      continue;
-    }
-
-    const effectiveBackground = getEffectiveBackgroundColor(
-      element,
-      defaultBackground
-    );
-    const blendedText =
-      textColor.alpha() < 1
-        ? effectiveBackground.mix(textColor, textColor.alpha())
-        : textColor;
-    const contrast = blendedText.contrast(effectiveBackground);
-
-    if (contrast < minContrast) {
-      const blackContrast = Color("#000000").contrast(effectiveBackground);
-      const whiteContrast = Color("#ffffff").contrast(effectiveBackground);
-      element.style.color =
-        blackContrast >= whiteContrast ? "#000000" : "#ffffff";
-    }
-  }
-};
-
-const mergeRelValues = (value?: string): string => {
-  const values = new Set(["noopener", "noreferrer"]);
-  for (const token of value?.split(/\s+/u) ?? []) {
-    const normalized = token.trim().toLowerCase();
-    if (normalized) {
-      values.add(normalized);
-    }
-  }
-  return [...values].join(" ");
-};
-
 const EMAIL_SANITIZE_CONFIG: Config = {
   ADD_ATTR: [
     "align",
     "bgcolor",
     "border",
+    "background",
     "cellpadding",
     "cellspacing",
     "colspan",
@@ -265,100 +47,24 @@ const EMAIL_SANITIZE_CONFIG: Config = {
     "width",
   ],
   ADD_TAGS: ["details", "summary", "style"],
+  FORBID_TAGS: [
+    "audio",
+    "base",
+    "button",
+    "dialog",
+    "embed",
+    "form",
+    "iframe",
+    "input",
+    "link",
+    "meta",
+    "object",
+    "select",
+    "textarea",
+    "video",
+  ],
+  USE_PROFILES: { html: true },
   WHOLE_DOCUMENT: true,
-};
-
-const createMailRenderStyles = (theme: MailRenderTheme): string => {
-  const isDarkTheme = theme === "dark";
-  const focusInner = isDarkTheme ? "#bfdbfe" : "#1d4ed8";
-  const focusOuter = isDarkTheme
-    ? "rgba(96, 165, 250, 0.45)"
-    : "rgba(37, 99, 235, 0.4)";
-
-  return `
-    <style type="text/css">
-      :host {
-        display: block;
-        width: 100%;
-        max-width: 100%;
-        overflow: hidden;
-        line-height: 1.5;
-        background-color: ${isDarkTheme ? "#1A1A1A" : "#ffffff"};
-        color: ${isDarkTheme ? "#ffffff" : "#000000"};
-      }
-
-      *, *::before, *::after {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        max-width: 100%;
-        padding: 0;
-        overflow-wrap: anywhere;
-      }
-
-      img, video, iframe, object, svg {
-        max-width: 100% !important;
-      }
-
-      img, video {
-        height: auto !important;
-      }
-
-      a {
-        cursor: pointer;
-        color: ${isDarkTheme ? "#60a5fa" : "#2563eb"};
-        overflow-wrap: anywhere;
-        text-decoration-line: underline;
-        text-decoration-thickness: 1px;
-        text-underline-offset: 0.14em;
-      }
-
-      a:focus-visible {
-        border-radius: 2px !important;
-        box-shadow: 0 0 0 2px ${focusOuter} !important;
-        outline: 1px solid ${focusInner} !important;
-        outline-offset: 0 !important;
-      }
-
-      table {
-        border-collapse: collapse;
-        max-width: 100% !important;
-      }
-
-      ::selection {
-        background: #b3d4fc;
-        text-shadow: none;
-      }
-
-      details.quoted-toggle {
-        border-left: 2px solid ${isDarkTheme ? "#374151" : "#d1d5db"};
-        padding-left: 8px;
-        margin-top: 0.75rem;
-      }
-
-      details.quoted-toggle summary {
-        cursor: pointer;
-        color: ${isDarkTheme ? "#9CA3AF" : "#6B7280"};
-        list-style: none;
-        user-select: none;
-      }
-
-      details.quoted-toggle summary::-webkit-details-marker {
-        display: none;
-      }
-
-      [data-theme-color="muted"] {
-        color: ${isDarkTheme ? "#9CA3AF" : "#6B7280"};
-      }
-    </style>
-  `;
-};
-
-const sanitizeEmailHtml = (rawHtml: string): string => {
-  const sanitized = DOMPurify.sanitize(rawHtml, EMAIL_SANITIZE_CONFIG);
-  return sanitized.replaceAll(REPLACEMENT_CHARACTER_REGEX, "");
 };
 
 const createDocument = (html: string): Document => {
@@ -520,7 +226,7 @@ const linkifyBareUrls = (document: Document) => {
       link.href = segment.href;
       link.textContent = segment.value;
       link.target = "_blank";
-      link.rel = mergeRelValues();
+      link.rel = "noopener noreferrer";
       fragment.append(link);
     }
 
@@ -552,30 +258,18 @@ const removePreheaderContent = (document: Document) => {
   }
 };
 
-const collapseQuoted = (document: Document, selector: string) => {
-  for (const element of document.querySelectorAll(selector)) {
+const collapseQuoted = (document: Document) => {
+  for (const element of document.querySelectorAll(".gmail_quote")) {
     if (element.closest("details.quoted-toggle")) {
       continue;
     }
 
     const details = document.createElement("details");
     details.className = "quoted-toggle";
-    details.setAttribute("style", "margin-top:1em;");
     const summary = document.createElement("summary");
-    summary.setAttribute("style", "cursor:pointer;");
-    summary.dataset.themeColor = "muted";
     summary.textContent = "Show quoted text";
-    details.append(summary, ...element.childNodes);
     element.replaceWith(details);
-  }
-};
-
-const sanitizeStyleTags = (document: Document) => {
-  for (const styleElement of document.querySelectorAll("style")) {
-    styleElement.textContent = cssSanitizer.sanitizeCss(
-      styleElement.textContent ?? "",
-      SAFE_STYLE_OPTIONS
-    );
+    details.append(summary, element);
   }
 };
 
@@ -594,90 +288,324 @@ const removeTrackingPixels = (document: Document) => {
   }
 };
 
-const getStyleDimension = (
-  style: string,
-  property: "height" | "width"
-): string | undefined => {
-  const match = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`, "iu").exec(
-    style
-  );
-  return match?.[1]?.trim();
+const BLOCKED_RESOURCE_ATTRIBUTES = new Set([
+  "action",
+  "archive",
+  "attributionsrc",
+  "autofocus",
+  "cite",
+  "classid",
+  "codebase",
+  "command",
+  "commandfor",
+  "data",
+  "datasrc",
+  "download",
+  "dynsrc",
+  "exportparts",
+  "formaction",
+  "icon",
+  "is",
+  "longdesc",
+  "lowsrc",
+  "manifest",
+  "part",
+  "ping",
+  "popover",
+  "popovertarget",
+  "popovertargetaction",
+  "poster",
+  "profile",
+  "slot",
+  "srcdoc",
+  "usemap",
+  "xlink:href",
+  "xml:base",
+]);
+const IMAGE_DATA_URL_REGEX =
+  /^data:image\/(?:avif|bmp|gif|jpeg|png|webp|x-icon);base64,[a-z\d+/]*={0,2}$/iu;
+const MAIL_RENDER_STYLES = `
+  html {
+    background: #ffffff;
+    color: #000000;
+    color-scheme: light;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    line-height: normal;
+  }
+  body { margin: 0; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+  details.quoted-toggle {
+    border-left: 2px solid #d1d5db;
+    margin-top: 0.75em;
+    padding-left: 8px;
+  }
+  details.quoted-toggle > summary {
+    color: #6b7280;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+  details.quoted-toggle > summary::-webkit-details-marker { display: none; }
+`;
+
+export const normalizeMailContentId = (value: string): string | undefined => {
+  let normalized = value.trim();
+  if (/^cid:/iu.test(normalized)) {
+    try {
+      normalized = decodeURIComponent(normalized.slice(4));
+    } catch {
+      return undefined;
+    }
+  }
+  normalized = normalized.trim().replaceAll(/^<|>$/gu, "").toLowerCase();
+  // oxlint-disable-next-line eslint/no-control-regex -- Reject URL controls and invalid CID delimiters.
+  return normalized.length > 0 && !/[\u0000-\u0020<>]/u.test(normalized)
+    ? normalized
+    : undefined;
 };
 
-const normalizeCssSize = (value: string | undefined): string | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-  const size = value.trim();
-  if (size === "") {
-    return undefined;
-  }
-
-  if (/^\d+(?:\.\d+)?$/u.test(size)) {
-    return `${size}px`;
-  }
-
-  if (/^\d+(?:\.\d+)?(?:px|em|rem|%|vw|vh|vmin|vmax)$/iu.test(size)) {
-    return size;
-  }
-
-  return undefined;
+type MailImagePolicy = {
+  hasBlockedImages: boolean;
+  referencedContentIds: Set<string>;
+  resolveImage: (value: string) => string | null;
 };
 
-const createBlockedImagePlaceholder = (
-  document: Document,
-  image: HTMLImageElement,
-  src: string
-) => {
-  const style = image.getAttribute("style") ?? "";
-  const width = normalizeCssSize(
-    image.getAttribute("width") ?? getStyleDimension(style, "width")
-  );
-  const height = normalizeCssSize(
-    image.getAttribute("height") ?? getStyleDimension(style, "height")
-  );
-  const placeholder = document.createElement("span");
-  const placeholderStyles =
-    (width ?? "") !== "" || (height ?? "") !== ""
-      ? ["display:inline-block"]
-      : ["display:none"];
+const createImagePolicy = ({
+  inlineImageUrls,
+  preserveContentIds,
+  shouldLoadImages,
+}: {
+  inlineImageUrls?: ReadonlyMap<string, string>;
+  preserveContentIds: boolean;
+  shouldLoadImages: boolean;
+}): MailImagePolicy => {
+  const policy: MailImagePolicy = {
+    hasBlockedImages: false,
+    referencedContentIds: new Set(),
+    resolveImage: (value): string | null => {
+      const source = value.trim();
+      // oxlint-disable-next-line eslint/no-control-regex -- Reject URL controls before protocol classification.
+      if (source === "" || /[\u0000-\u001F\u007F]/u.test(source)) {
+        return null;
+      }
+      if (/^cid:/iu.test(source)) {
+        const contentId = normalizeMailContentId(source);
+        if (contentId === undefined) {
+          return null;
+        }
+        policy.referencedContentIds.add(contentId);
+        if (preserveContentIds) {
+          return `cid:${encodeURIComponent(contentId)}`;
+        }
+        const ownedUrl = inlineImageUrls?.get(contentId);
+        return ownedUrl !== undefined && ownedUrl.startsWith("blob:")
+          ? ownedUrl
+          : null;
+      }
+      if (source.startsWith("#") || IMAGE_DATA_URL_REGEX.test(source)) {
+        return source;
+      }
 
-  if ((width ?? "") !== "") {
-    placeholderStyles.push(`width:${width}`);
-  }
-  if ((height ?? "") !== "") {
-    placeholderStyles.push(`height:${height}`);
+      let url: URL;
+      try {
+        url = new URL(source.startsWith("//") ? `https:${source}` : source);
+      } catch {
+        return null;
+      }
+      if (
+        (url.protocol !== "http:" && url.protocol !== "https:") ||
+        url.username !== "" ||
+        url.password !== ""
+      ) {
+        return null;
+      }
+      if (!shouldLoadImages) {
+        policy.hasBlockedImages = true;
+        return null;
+      }
+      return url.href;
+    },
+  };
+  return policy;
+};
+
+const sanitizeImageSet = (
+  source: string,
+  resolveImage: MailImagePolicy["resolveImage"]
+): string => {
+  const candidates: { descriptor: string; source: string }[] = [];
+  let remaining = source;
+
+  while (remaining !== "") {
+    remaining = remaining.replace(/^[\s,]+/u, "");
+    if (remaining === "") {
+      break;
+    }
+    const urlMatch = /^\S+/u.exec(remaining);
+    if (urlMatch === null) {
+      return "";
+    }
+    const [rawUrl] = urlMatch;
+    remaining = remaining.slice(rawUrl.length);
+    const imageSource = rawUrl.replace(/,+$/u, "");
+    let descriptor = "";
+    if (imageSource === rawUrl) {
+      const comma = remaining.indexOf(",");
+      descriptor = (
+        comma === -1 ? remaining : remaining.slice(0, comma)
+      ).trim();
+      remaining = comma === -1 ? "" : remaining.slice(comma + 1);
+      if (descriptor !== "" && !/^(?:\d+w|(?:\d*\.)?\d+x)$/u.test(descriptor)) {
+        return "";
+      }
+    }
+    candidates.push({ descriptor, source: imageSource });
   }
 
-  placeholder.setAttribute("aria-hidden", "true");
-  placeholder.setAttribute("style", placeholderStyles.join(";"));
-  placeholder.append(document.createComment(` blocked image: ${src} `));
-  return placeholder;
+  return candidates
+    .flatMap((candidate) => {
+      const resolved = resolveImage(candidate.source);
+      return resolved === null
+        ? []
+        : [
+            `${resolved}${candidate.descriptor ? ` ${candidate.descriptor}` : ""}`,
+          ];
+    })
+    .join(", ");
+};
+
+const applyDocumentPolicy = (document: Document, policy: MailImagePolicy) => {
+  // oxlint-disable-next-line unicorn/no-useless-spread -- Removing children mutates the live collection.
+  for (const child of [...document.head.children]) {
+    if (child.tagName !== "STYLE") {
+      child.remove();
+    }
+  }
+
+  for (const element of document.querySelectorAll("*")) {
+    if (
+      element.tagName === "SOURCE" &&
+      element.parentElement?.tagName !== "PICTURE"
+    ) {
+      element.remove();
+      continue;
+    }
+    // oxlint-disable-next-line unicorn/no-useless-spread -- Attribute removal mutates the live collection.
+    for (const attribute of [...element.attributes]) {
+      const name = attribute.name.toLowerCase();
+      if (BLOCKED_RESOURCE_ATTRIBUTES.has(name) || name.startsWith("on")) {
+        element.removeAttribute(attribute.name);
+        continue;
+      }
+      if (name === "style") {
+        const css = sanitizeMailCss(attribute.value, {
+          context: "declarationList",
+          resolveImage: policy.resolveImage,
+        });
+        if (css === "") {
+          element.removeAttribute(name);
+        } else {
+          element.setAttribute(name, css);
+        }
+        continue;
+      }
+      if (name === "background" || name === "src") {
+        const resolved =
+          name === "background" || element.tagName === "IMG"
+            ? policy.resolveImage(attribute.value)
+            : null;
+        if (resolved === null) {
+          element.removeAttribute(name);
+        } else {
+          element.setAttribute(name, resolved);
+        }
+        continue;
+      }
+      if (name === "srcset") {
+        const resolved =
+          element.tagName === "IMG" || element.tagName === "SOURCE"
+            ? sanitizeImageSet(attribute.value, policy.resolveImage)
+            : "";
+        if (resolved === "") {
+          element.removeAttribute(name);
+        } else {
+          element.setAttribute(name, resolved);
+        }
+        continue;
+      }
+      if (name !== "href") {
+        continue;
+      }
+      if (element.tagName !== "A" && element.tagName !== "AREA") {
+        element.removeAttribute(name);
+        continue;
+      }
+      const href = attribute.value.trim();
+      if (href.startsWith("#")) {
+        element.setAttribute(name, href);
+        element.removeAttribute("target");
+        continue;
+      }
+      let url: URL;
+      try {
+        url = new URL(href.startsWith("//") ? `https:${href}` : href);
+      } catch {
+        element.removeAttribute(name);
+        continue;
+      }
+      if (!["http:", "https:", "mailto:", "tel:"].includes(url.protocol)) {
+        element.removeAttribute(name);
+        continue;
+      }
+      element.setAttribute(name, url.href);
+      element.setAttribute("target", "_blank");
+      element.setAttribute("rel", "noopener noreferrer");
+    }
+
+    if (element.tagName === "STYLE") {
+      element.textContent = sanitizeMailCss(element.textContent ?? "", {
+        context: "stylesheet",
+        resolveImage: policy.resolveImage,
+      });
+    }
+    if (element.tagName === "IMG") {
+      element.setAttribute("referrerpolicy", "no-referrer");
+    }
+  }
 };
 
 export const preprocessEmailHtml = (html: string): string => {
-  const document = createDocument(sanitizeEmailHtml(html));
-
-  sanitizeStyleTags(document);
-  collapseQuoted(document, "blockquote");
-  collapseQuoted(document, ".gmail_quote");
-  for (const element of document.querySelectorAll("title")) {
-    element.remove();
-  }
+  const document = createDocument(
+    DOMPurify.sanitize(html, EMAIL_SANITIZE_CONFIG)
+  );
+  applyDocumentPolicy(
+    document,
+    createImagePolicy({ preserveContentIds: true, shouldLoadImages: true })
+  );
+  collapseQuoted(document);
   removeTrackingPixels(document);
   removePreheaderContent(document);
   linkifyBareUrls(document);
-
   return document.documentElement.outerHTML;
 };
 
 export const applyEmailPreferences = (
   preprocessedHtml: string,
   shouldLoadImages: boolean,
-  theme: MailRenderTheme
+  _theme: MailRenderTheme,
+  inlineImageUrls?: ReadonlyMap<string, string>
 ): ProcessedMailHtml => {
-  let hasBlockedImages = false;
   const document = createDocument(preprocessedHtml);
+  const policy = createImagePolicy({
+    inlineImageUrls,
+    preserveContentIds: false,
+    shouldLoadImages,
+  });
+  applyDocumentPolicy(document, policy);
   const calendarLinks = getCalendarLinks(
     Array.from(document.querySelectorAll("a"), (link) =>
       link.closest("details.quoted-toggle")
@@ -685,33 +613,14 @@ export const applyEmailPreferences = (
         : (link.getAttribute("href") ?? "")
     )
   );
-
-  if (!shouldLoadImages) {
-    for (const image of document.querySelectorAll("img")) {
-      const src = image.getAttribute("src") ?? "";
-      if (src !== "" && !src.startsWith("cid:")) {
-        hasBlockedImages = true;
-        image.replaceWith(createBlockedImagePlaceholder(document, image, src));
-      }
-    }
-  }
-
-  for (const link of document.querySelectorAll("a")) {
-    const target = link.getAttribute("target");
-    let linkTarget = "_blank";
-    if ((target ?? "") !== "") {
-      linkTarget = target ?? "_blank";
-    }
-    link.setAttribute("target", linkTarget);
-    link.setAttribute(
-      "rel",
-      mergeRelValues(link.getAttribute("rel") ?? undefined)
-    );
-  }
+  const defaults = document.createElement("style");
+  defaults.textContent = MAIL_RENDER_STYLES;
+  document.head.prepend(defaults);
 
   return {
     calendarLinks,
-    hasBlockedImages,
-    processedHtml: `${createMailRenderStyles(theme)}${document.documentElement.outerHTML}`,
+    hasBlockedImages: policy.hasBlockedImages,
+    processedHtml: document.documentElement.outerHTML,
+    referencedContentIds: [...policy.referencedContentIds],
   };
 };

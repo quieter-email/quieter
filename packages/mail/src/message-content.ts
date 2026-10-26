@@ -1,3 +1,9 @@
+import type { CssNode } from "css-tree";
+import parse from "css-tree/parser";
+import { ident } from "css-tree/utils";
+import walk from "css-tree/walker";
+import { Parser } from "htmlparser2";
+
 import type { MessagePart, MessageAttachment } from "./messages";
 
 type ExtractedMessageContent = {
@@ -120,7 +126,11 @@ const repairLikelyUtf8Mojibake = (value: string): string => {
     : value;
 };
 
-const CID_REFERENCE_REGEX = /cid:(?<contentId>[^"' >]+)/giu;
+const CSS_IMAGE_STRING_FUNCTIONS = new Set([
+  "image",
+  "image-set",
+  "-webkit-image-set",
+]);
 
 const decodeBytesAsText = (bytes: Uint8Array, charset: string): string => {
   const normalizedCharset = charset.trim().toLowerCase();
@@ -291,7 +301,10 @@ const normalizeContentId = (value?: string): string | undefined => {
   }
 
   const normalized = trimmed.replaceAll(/^<|>$/gu, "").toLowerCase();
-  return normalized.length > 0 ? normalized : undefined;
+  // oxlint-disable-next-line eslint/no-control-regex -- MIME Content-IDs cannot contain URL controls or delimiters.
+  return normalized.length > 0 && !/[\u0000-\u0020\u007F<>]/u.test(normalized)
+    ? normalized
+    : undefined;
 };
 
 const extractReferencedInlineContentIds = (
@@ -306,12 +319,116 @@ const extractReferencedInlineContentIds = (
   }
 
   const contentIds = new Set<string>();
-  for (const match of html.matchAll(CID_REFERENCE_REGEX)) {
-    const contentId = normalizeContentId(match.groups?.contentId);
+  const addContentId = (value: string) => {
+    const source = value.trim();
+    if (!/^cid:/iu.test(source)) {
+      return;
+    }
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(source.slice(4));
+    } catch {
+      return;
+    }
+    const contentId = normalizeContentId(decoded);
     if (contentId !== undefined) {
       contentIds.add(contentId);
     }
-  }
+  };
+  const addCssContentIds = (
+    css: string,
+    context: "declarationList" | "stylesheet"
+  ) => {
+    let ast: CssNode;
+    try {
+      ast = parse(css, { context, parseCustomProperty: true });
+    } catch {
+      return;
+    }
+    walk(ast, (node) => {
+      if (node.type === "Url") {
+        addContentId(node.value);
+      } else if (
+        node.type === "Function" &&
+        CSS_IMAGE_STRING_FUNCTIONS.has(ident.decode(node.name).toLowerCase())
+      ) {
+        for (const child of node.children) {
+          if (child.type === "String") {
+            addContentId(child.value);
+          }
+        }
+      }
+    });
+  };
+  const addSourceSetContentIds = (sourceSet: string) => {
+    const sources: string[] = [];
+    let remaining = sourceSet;
+    while (remaining !== "") {
+      remaining = remaining.replace(/^[\s,]+/u, "");
+      if (remaining === "") {
+        break;
+      }
+      const urlMatch = /^\S+/u.exec(remaining);
+      if (urlMatch === null) {
+        return;
+      }
+      const [rawUrl] = urlMatch;
+      remaining = remaining.slice(rawUrl.length);
+      const source = rawUrl.replace(/,+$/u, "");
+      if (source === rawUrl) {
+        const comma = remaining.indexOf(",");
+        const descriptor = (
+          comma === -1 ? remaining : remaining.slice(0, comma)
+        ).trim();
+        remaining = comma === -1 ? "" : remaining.slice(comma + 1);
+        if (
+          descriptor !== "" &&
+          !/^(?:\d+w|(?:\d*\.)?\d+x)$/u.test(descriptor)
+        ) {
+          return;
+        }
+      }
+      sources.push(source);
+    }
+    for (const source of sources) {
+      addContentId(source);
+    }
+  };
+  let style: string | undefined;
+  const parser = new Parser({
+    onclosetag: (name) => {
+      if (name === "style" && style !== undefined) {
+        addCssContentIds(style, "stylesheet");
+        style = undefined;
+      }
+    },
+    onopentag: (name, attributes) => {
+      if (name === "style") {
+        style = "";
+      }
+      if (name === "img" && attributes.src !== undefined) {
+        addContentId(attributes.src);
+      }
+      if (attributes.background !== undefined) {
+        addContentId(attributes.background);
+      }
+      if (
+        (name === "img" || name === "source") &&
+        attributes.srcset !== undefined
+      ) {
+        addSourceSetContentIds(attributes.srcset);
+      }
+      if (attributes.style !== undefined) {
+        addCssContentIds(attributes.style, "declarationList");
+      }
+    },
+    ontext: (text) => {
+      if (style !== undefined) {
+        style += text;
+      }
+    },
+  });
+  parser.end(html);
 
   return contentIds;
 };

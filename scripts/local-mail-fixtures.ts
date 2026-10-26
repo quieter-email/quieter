@@ -2,14 +2,23 @@ import { assertLocalEnvFile } from "@quieter/env/local-doctor";
 import { requireServerEnv } from "@quieter/env/server";
 
 assertLocalEnvFile(".env.local");
-const [ownerEmail, mode] = process.argv.slice(2);
+const [ownerEmail, ...flags] = process.argv.slice(2);
 if (ownerEmail === undefined || !ownerEmail.includes("@")) {
-  throw new Error("Use dev:fixtures <email-of-your-local-login>.");
+  throw new Error(
+    "Use dev:fixtures <email-of-your-local-login> [--fresh | --rendering]."
+  );
+}
+if (
+  flags.some((flag) => flag !== "--fresh" && flag !== "--rendering") ||
+  (flags.includes("--fresh") && flags.includes("--rendering"))
+) {
+  throw new Error("Choose either --fresh or --rendering.");
 }
 const response = await fetch("http://127.0.0.1:8787/__dev/mail/seed", {
   body: JSON.stringify({
-    fresh: mode === "--fresh",
+    fresh: flags.includes("--fresh"),
     ownerEmail,
+    rendering: flags.includes("--rendering"),
   }),
   headers: {
     authorization: `Bearer ${requireServerEnv("QUIETER_LOCAL_WORKER_TOKEN")}`,

@@ -56,6 +56,7 @@ export default {
           .object({
             fresh: z.boolean().optional(),
             ownerEmail: z.email(),
+            rendering: z.boolean().optional(),
           })
           .safeParse(await readBoundedJson(request, 4096));
         if (!input.success) {
@@ -68,6 +69,7 @@ export default {
             async () =>
               await seedLocalManagedMail(input.data.ownerEmail, {
                 fresh: input.data.fresh,
+                rendering: input.data.rendering,
               })
           )
         );

@@ -30,6 +30,7 @@ import type {
 } from "@quieter/mail/messages";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
 import { getUnsubscribeKey } from "@quieter/mail/unsubscribe";
+import { decodeHTML } from "entities";
 import { z } from "zod";
 
 const headerSchema = z.object({
@@ -985,6 +986,7 @@ const toMessageListItem = async (
   const unsubscribeTargets = extractListUnsubscribeTargets(
     getHeader(message, "List-Unsubscribe")
   );
+  const snippet = decodeMimeHeaderValue(message.snippet);
 
   return {
     attachments:
@@ -1018,7 +1020,7 @@ const toMessageListItem = async (
     senderAvatarUrls: await getSenderAvatarUrls(from, {
       headers: message.payload?.headers ?? [],
     }),
-    snippet: decodeMimeHeaderValue(message.snippet),
+    snippet: snippet === undefined ? undefined : decodeHTML(snippet),
     subject: getHeader(message, "Subject"),
     threadAttachmentCount: options.threadSummary?.attachmentCount,
     threadAttachmentNames: options.threadSummary?.attachmentNames,
@@ -1773,6 +1775,7 @@ export const listMessagesForAgent = async (
     if (options?.mailbox && !isMessageInMailbox(options.mailbox, labelIds)) {
       return [];
     }
+    const snippet = decodeMimeHeaderValue(message.snippet);
 
     return [
       {
@@ -1782,7 +1785,7 @@ export const listMessagesForAgent = async (
         internalDate: message.internalDate,
         isUnread: hasUnreadLabel(labelIds),
         labelIds,
-        snippet: decodeMimeHeaderValue(message.snippet),
+        snippet: snippet === undefined ? undefined : decodeHTML(snippet),
         subject: getHeader(message, "Subject"),
         threadId: message.threadId,
         to: getHeader(message, "To"),
@@ -2031,13 +2034,14 @@ export const getThreadWithDetails = async (
   const threadLabelIds = [
     ...new Set(resolvedMessages.flatMap((message) => message.labelIds ?? [])),
   ];
+  const snippet = decodeMimeHeaderValue(thread.snippet);
 
   return {
     messages: resolvedMessages.map((message) => ({
       ...message,
       threadLabelIds,
     })),
-    snippet: decodeMimeHeaderValue(thread.snippet),
+    snippet: snippet === undefined ? undefined : decodeHTML(snippet),
     subject,
     threadId: thread.id,
   };
@@ -2084,6 +2088,7 @@ export const getMessageInspector = async (
     name: header.name,
     value: decodeMimeHeaderValue(header.value) ?? header.value,
   }));
+  const snippet = decodeMimeHeaderValue(fullMessage.snippet);
 
   return {
     bcc: getHeader(fullMessage, "Bcc"),
@@ -2099,7 +2104,7 @@ export const getMessageInspector = async (
     rawText: decodeRawMessageText(rawMessage.raw),
     references: getHeader(fullMessage, "References"),
     replyTo: getHeader(fullMessage, "Reply-To"),
-    snippet: decodeMimeHeaderValue(fullMessage.snippet),
+    snippet: snippet === undefined ? undefined : decodeHTML(snippet),
     subject: getHeader(fullMessage, "Subject"),
     to: getHeader(fullMessage, "To"),
   };

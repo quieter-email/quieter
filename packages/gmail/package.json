@@ -9,6 +9,7 @@
   "dependencies": {
     "@quieter/env": "workspace:*",
     "@quieter/mail": "workspace:*",
+    "entities": "^8.1.0",
     "zod": "catalog:"
   },
   "devDependencies": {

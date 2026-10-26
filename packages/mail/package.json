@@ -32,15 +32,18 @@
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
+    "css-tree": "3.2.1",
     "fast-xml-parser": "catalog:",
     "fast-xml-validator": "1.4.2",
     "html-to-text": "10.0.1",
+    "htmlparser2": "10.1.0",
     "nodemailer": "^10.1.0",
     "postal-mime": "^4.0.5",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@quieter/config": "workspace:*",
+    "@types/css-tree": "3.2.0",
     "@types/html-to-text": "9.0.4",
     "@types/node": "catalog:",
     "typescript": "catalog:",
