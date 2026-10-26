@@ -1,34 +1,14 @@
 import { z } from "zod";
 
 import {
-  addIcsAttachmentToGoogleCalendar,
   connectorProviderSchema,
   disconnectConnector,
   listConnectors,
   startConnectorOAuth,
 } from "../connectors/service";
-import { mailboxIdSchema, protectedProcedure } from "./base";
+import { protectedProcedure } from "./base";
 
 export const connectorsRouter = {
-  addGoogleCalendarIcsAttachment: protectedProcedure
-    .input(
-      z.object({
-        attachmentId: z.string().trim().min(1),
-        calendarId: z.string().trim().min(1).optional(),
-        connectionId: z.string().trim().min(1).optional(),
-        mailboxId: mailboxIdSchema,
-        messageId: z.string().trim().min(1),
-      })
-    )
-    .handler(
-      async ({ context, input }) =>
-        await addIcsAttachmentToGoogleCalendar({
-          ...input,
-          signal: context.signal,
-          userId: context.userId,
-        })
-    ),
-
   disconnect: protectedProcedure
     .input(
       z.object({

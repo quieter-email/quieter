@@ -46,7 +46,7 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -84,7 +84,6 @@ export const SettingsSidebar = ({
   searchResults?: ReactNode;
 }) => {
   const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
-  const navigate = useNavigate({ from: "/settings" });
   const { tab, from, organizationView, organizationId } =
     settingsRouteApi.useSearch();
   const { organizations, organizationsState, team, teamId } = useSettingsTeam();
@@ -100,17 +99,7 @@ export const SettingsSidebar = ({
     member ? normalizeOrganizationRole(member.role) : null,
     { organization: ["update"] }
   );
-  const open = (destination: SettingsDestination) => {
-    onRequestClose?.();
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        ...settingsDestinationSearch(destination, teamId),
-      }),
-      to: ".",
-    });
-  };
-  const navigationButton = (
+  const navigationLink = (
     title: string,
     destination: SettingsDestination,
     selected: boolean
@@ -120,9 +109,19 @@ export const SettingsSidebar = ({
       key={title}
       aria-current={selected ? "page" : undefined}
       className="justify-start text-left"
-      onClick={() => {
-        open(destination);
-      }}
+      nativeButton={false}
+      onClick={onRequestClose}
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders an anchor through its render slot.
+      role="link"
+      render={
+        <Link
+          search={(previous) => ({
+            ...previous,
+            ...settingsDestinationSearch(destination, teamId),
+          })}
+          to="/settings"
+        />
+      }
       variant="ghost"
       size="sm"
     >
@@ -135,9 +134,10 @@ export const SettingsSidebar = ({
       <div className="mb-3 flex items-center justify-between px-1">
         <Button
           className="justify-start"
-          onClick={() => {
-            void navigate({ to: from });
-          }}
+          nativeButton={false}
+          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders an anchor through its render slot.
+          role="link"
+          render={<Link to={from} />}
           variant="ghost"
           size="sm"
         >
@@ -165,7 +165,7 @@ export const SettingsSidebar = ({
           <div className="space-y-0">
             <p className="px-2 py-1 text-caption text-muted-fg">Personal</p>
             {PERSONAL_ITEMS.map((item) =>
-              navigationButton(
+              navigationLink(
                 item.title,
                 { tab: item.tab },
                 item.tab === tab ||
@@ -176,7 +176,7 @@ export const SettingsSidebar = ({
               )
             )}
             {isDemoModeAvailable() &&
-              navigationButton(
+              navigationLink(
                 "Development",
                 { tab: "development" },
                 tab === "development"
@@ -208,10 +208,11 @@ export const SettingsSidebar = ({
                     checked={item.id === team?.id}
                     closeOnSelect
                     key={item.id}
-                    onCheckedChange={() => {
-                      onRequestClose?.();
-                      void navigate({
-                        search: (previous) => ({
+                    nativeButton={false}
+                    onClick={onRequestClose}
+                    render={
+                      <Link
+                        search={(previous) => ({
                           ...previous,
                           domainId: "",
                           mailboxId: "",
@@ -222,19 +223,30 @@ export const SettingsSidebar = ({
                             previous.domainId !== ""
                               ? ""
                               : previous.section,
-                        }),
-                        to: ".",
-                      });
-                    }}
+                        })}
+                        to="/settings"
+                      />
+                    }
                   >
                     {item.name}
                   </DropdownMenuCheckboxItem>
                 ))}
                 {organizations.length > 0 && <DropdownMenuSeparator />}
                 <DropdownMenuItem
-                  onSelect={() => {
-                    open({ organizationId: "", tab: "organization" });
-                  }}
+                  nativeButton={false}
+                  onSelect={onRequestClose}
+                  render={
+                    <Link
+                      search={(previous) => ({
+                        ...previous,
+                        ...settingsDestinationSearch(
+                          { organizationId: "", tab: "organization" },
+                          teamId
+                        ),
+                      })}
+                      to="/settings"
+                    />
+                  }
                 >
                   <Icon icon={UserGroupIcon} size={14} />
                   Teams & invitations
@@ -266,7 +278,7 @@ export const SettingsSidebar = ({
                     []
                   ) : (
                     <div key={item.view}>
-                      {navigationButton(
+                      {navigationLink(
                         item.title,
                         { organizationView: item.view, tab: "organization" },
                         tab === "organization" &&
@@ -274,7 +286,7 @@ export const SettingsSidebar = ({
                           settingsTeamSection(organizationView) === item.view
                       )}
                       {item.view === "members" &&
-                        navigationButton(
+                        navigationLink(
                           "Mailboxes",
                           { tab: "mailboxes" },
                           tab === "mailboxes"

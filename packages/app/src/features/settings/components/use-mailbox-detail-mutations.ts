@@ -1,5 +1,7 @@
 import { getSettingsReturnTo } from "@quieter/app/features/settings/components/mailboxes-settings-shared";
 import { getOrganizationMailDomainsQueryKey } from "@quieter/app/features/settings/components/organization-settings/mail-domains";
+import { authClient } from "@quieter/app/lib/auth";
+import { calendarAccountsQueryOptions } from "@quieter/app/lib/calendar-query";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { openGoogleAccountLink } from "@quieter/app/lib/google-account-link";
 import { mailCache } from "@quieter/app/lib/mail-cache";
@@ -58,7 +60,10 @@ export const useMailboxDetailMutations = (
 ) => {
   const navigate = useNavigate({ from: "/settings" });
   const queryClient = useQueryClient();
-  const [isStartingGmail, setIsStartingGmail] = useState(false);
+  const userId = authClient.useSession().data?.user.id;
+  const [startingGmailMailboxId, setStartingGmailMailboxId] = useState<
+    string | null
+  >(null);
 
   /**
    * Patches both the mailbox list and the managed detail record, because the
@@ -170,6 +175,14 @@ export const useMailboxDetailMutations = (
     );
     await Promise.all([
       mailCache.removeMailbox(mailboxId),
+      ...(userId
+        ? [
+            queryClient.invalidateQueries({
+              queryKey: calendarAccountsQueryOptions(userId).queryKey,
+              refetchType: "all",
+            }),
+          ]
+        : []),
       invalidateMailboxes(),
       queryClient.invalidateQueries({
         queryKey: getGmailUnreadCountsQueryKey(),
@@ -283,7 +296,7 @@ export const useMailboxDetailMutations = (
     organizationId?: string;
     organizations: { id: string }[];
   }) => {
-    setIsStartingGmail(true);
+    setStartingGmailMailboxId(input?.mailboxId ?? "new");
     try {
       await openGoogleAccountLink({
         mailboxId: input?.mailboxId,
@@ -293,18 +306,19 @@ export const useMailboxDetailMutations = (
         returnTo: getSettingsReturnTo(input?.mailboxId),
       });
     } catch (error) {
-      setIsStartingGmail(false);
       toastError(error, {
         boundary: "gmail-connect",
         fallback: "Could not start Gmail connection.",
       });
+    } finally {
+      setStartingGmailMailboxId(null);
     }
   };
 
   return {
     deleteManagedMailboxMutation,
     disconnectMailboxMutation,
-    isStartingGmail,
+    isStartingGmail: startingGmailMailboxId === selectedMailboxId,
     moveGmailMailboxMutation,
     removeManagedMailboxDivisionGrantMutation,
     removeManagedMailboxGrantMutation,

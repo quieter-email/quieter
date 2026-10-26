@@ -25,6 +25,10 @@ export const calendarTimeZoneSchema = z
 
 const instantSchema = z.iso.datetime({ offset: true });
 const identifierSchema = z.string().trim().min(1).max(1024);
+export const calendarColorSchema = z
+  .string()
+  .length(7, "Choose a valid color.")
+  .regex(/^#[\da-f]{6}$/iu, "Choose a valid color.");
 
 export const calendarRefSchema = z
   .object({
@@ -111,6 +115,7 @@ export const calendarEventDraftSchema = z
     addMeeting: z.boolean().default(false),
     attendees: z.array(guestSchema).max(200).default([]),
     availability: z.enum(["busy", "free"]).default("busy"),
+    color: calendarColorSchema.nullable().optional(),
     description: z.string().max(50_000).default(""),
     location: z.string().max(2000).default(""),
     recurrence: recurrenceSchema.default([]),
@@ -128,6 +133,7 @@ export const calendarEventPatchSchema = z
     availability: calendarEventDraftSchema.shape.availability
       .unwrap()
       .optional(),
+    color: calendarEventDraftSchema.shape.color,
     description: calendarEventDraftSchema.shape.description.unwrap().optional(),
     location: calendarEventDraftSchema.shape.location.unwrap().optional(),
     recurrence: calendarEventDraftSchema.shape.recurrence.unwrap().optional(),
@@ -142,16 +148,25 @@ export const calendarEventPatchSchema = z
     "Provide a change to save."
   );
 
-export const calendarAccountSchema = z.object({
+const calendarAccountBaseSchema = z.object({
   email: z.string().nullable(),
   id: identifierSchema,
   name: z.string(),
-  status: z.enum(["connected", "needs-reconnect"]),
 });
+export const calendarAccountSchema = z.discriminatedUnion("status", [
+  calendarAccountBaseSchema.extend({
+    mailboxId: identifierSchema,
+    status: z.enum(["connected", "needs-permission", "needs-reconnect"]),
+  }),
+  calendarAccountBaseSchema.extend({
+    mailboxId: z.null(),
+    status: z.literal("needs-mailbox"),
+  }),
+]);
 
 export const calendarSummarySchema = calendarRefSchema.extend({
   access: z.enum(["busy", "read", "write", "owner"]),
-  color: z.string().optional(),
+  color: calendarColorSchema.optional(),
   name: z.string(),
   primary: z.boolean(),
   selected: z.boolean(),
@@ -168,6 +183,8 @@ export const calendarEventSchema = calendarEventRefSchema.extend({
     })
   ),
   availability: z.enum(["busy", "free"]),
+  color: calendarColorSchema.optional(),
+  colorOverride: calendarColorSchema.optional(),
   description: z.string(),
   location: z.string(),
   meetingPending: z.boolean(),
@@ -214,6 +231,9 @@ export const calendarCreateInputSchema = calendarRefSchema.extend({
 export const calendarUpdateInputSchema = calendarEventRefSchema.extend({
   changes: calendarEventPatchSchema,
   version: z.string().min(1).max(1000),
+});
+export const calendarUpdateColorInputSchema = calendarRefSchema.extend({
+  color: calendarColorSchema,
 });
 export const calendarDeleteInputSchema = calendarEventRefSchema.extend({
   version: z.string().min(1).max(1000),

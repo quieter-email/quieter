@@ -4,11 +4,13 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 
 import { getSessionUser } from "#/lib/auth.functions";
+import { getGmailCallbackError } from "#/lib/gmail-callback-result.functions";
 
 export const Route = createFileRoute("/_app/")({
   validateSearch: zodValidator(mailboxSearchSchema),
+  loaderDeps: ({ search }) => ({ gmail: search.gmail }),
   ssr: "data-only",
-  loader: async ({ location }) => {
+  loader: async ({ deps, location }) => {
     const user = await getSessionUser();
 
     if (!user) {
@@ -28,6 +30,7 @@ export const Route = createFileRoute("/_app/")({
     }
 
     return {
+      gmailError: deps.gmail === "error" ? await getGmailCallbackError() : null,
       user,
     };
   },

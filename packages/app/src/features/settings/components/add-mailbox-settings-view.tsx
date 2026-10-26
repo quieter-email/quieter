@@ -149,14 +149,15 @@ export const AddMailboxSettingsView = ({
         returnTo: getSettingsReturnTo(),
       });
     } catch (error) {
-      workflowStore.setState((state) => ({
-        ...state,
-        isStartingGmail: false,
-      }));
       toastError(error, {
         boundary: "gmail-connect",
         fallback: "Could not start Gmail connection.",
       });
+    } finally {
+      workflowStore.setState((state) => ({
+        ...state,
+        isStartingGmail: false,
+      }));
     }
   };
 
@@ -179,13 +180,14 @@ export const AddMailboxSettingsView = ({
   return (
     <div className={settingsSurfaceVariants({ variant: "page" })}>
       <SettingsPageHeader title="Add a mailbox">
-        Connect Gmail or create a mailbox with your own domain.
+        Connect Gmail and its calendars, or create a mailbox with your own
+        domain.
       </SettingsPageHeader>
 
       {mailboxType === undefined ? (
         <SettingsRows>
           <SettingsNavigationRow
-            description="Connect your Gmail inbox to Quieter."
+            description="Connect your Gmail inbox and Google Calendar with one account."
             icon={<Icon aria-hidden icon={Mail01Icon} />}
             onClick={() => {
               workflowStore.setState((state) => ({
@@ -212,7 +214,10 @@ export const AddMailboxSettingsView = ({
       ) : null}
 
       {mailboxType === "gmail" ? (
-        <SettingsSection title="Connect Gmail">
+        <SettingsSection
+          description="Google will ask you to allow mail and calendar access. Your mailbox and calendars stay private to you."
+          title="Connect Gmail"
+        >
           <SettingsCard>
             <div className={settingsSurfaceVariants({ variant: "body" })}>
               <Field>

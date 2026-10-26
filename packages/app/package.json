@@ -26,7 +26,6 @@
     "./components/telemetry-provider": "./src/components/telemetry-provider.tsx",
     "./components/vertical-slot": "./src/components/vertical-slot.tsx",
     "./env": "./src/env.ts",
-    "./features/ai/domain/connector-tokens": "./src/features/ai/domain/connector-tokens.ts",
     "./features/chat/components/agent-workspace": "./src/features/chat/components/agent-workspace.tsx",
     "./features/chat/components/assistant-sidebar": "./src/features/chat/components/assistant-sidebar.tsx",
     "./features/chat/components/assistant-sidebar-context": "./src/features/chat/components/assistant-sidebar-context.tsx",

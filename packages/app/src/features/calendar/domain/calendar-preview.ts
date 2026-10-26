@@ -10,10 +10,19 @@ import {
 
 import { addCalendarDays } from "./calendar-event-form";
 
+export const calendarPreviewEventColors = [
+  "#7986cb",
+  "#33b679",
+  "#f6bf26",
+  "#d50000",
+  "#8e24aa",
+];
+
 export const calendarPreviewAccounts: CalendarAccount[] = [
   {
     email: "alex@example.com",
     id: "preview-calendar-account",
+    mailboxId: "preview-mailbox",
     name: "Alex Morgan",
     status: "connected",
   },
@@ -23,6 +32,7 @@ export const calendarPreviewCalendars: CalendarSummary[] = [
   {
     access: "owner",
     calendarId: "preview-work",
+    color: "#7986cb",
     connectionId: "preview-calendar-account",
     name: "Work",
     primary: true,
@@ -33,6 +43,7 @@ export const calendarPreviewCalendars: CalendarSummary[] = [
   {
     access: "owner",
     calendarId: "preview-personal",
+    color: "#33b679",
     connectionId: "preview-calendar-account",
     name: "Personal",
     primary: false,

@@ -13,10 +13,6 @@ import {
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
 import { authClient } from "@quieter/app/lib/auth";
-import {
-  connectorsQueryOptions,
-  openConnectorLink,
-} from "@quieter/app/lib/connectors-query";
 import { toastError } from "@quieter/app/lib/error-toast";
 import type { MessageAttachment } from "@quieter/app/lib/mail";
 import { downloadAttachmentFromServer } from "@quieter/app/lib/mail/attachments";
@@ -24,7 +20,6 @@ import { getErrorMessage } from "@quieter/app/lib/orpc-errors";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
-import { useQuery } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
 
 import { CalendarInvitationDialog } from "./calendar-invitation-dialog";
@@ -201,26 +196,13 @@ export const MessageAttachments = ({
   const userId = authClient.useSession().data?.user.id;
   const [calendarAttachment, setCalendarAttachment] =
     useState<ThreadAttachment | null>(null);
-  const [activeCalendarAttachmentKey, setActiveCalendarAttachmentKey] =
-    useState<string | null>(null);
   const [activeDownloadAttachmentKey, setActiveDownloadAttachmentKey] =
     useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const hasCalendarAttachments = attachments.some(isCalendarAttachment);
-  const { data: connectorsData, isLoading: areConnectorsLoading } = useQuery({
-    ...connectorsQueryOptions(),
-    enabled: hasCalendarAttachments,
-  });
 
   if (attachments.length === 0) {
     return null;
   }
-
-  const googleCalendarConnector = connectorsData?.connectors.find(
-    (connector) => connector.provider === "google_calendar"
-  );
-  const isGoogleCalendarConnected =
-    googleCalendarConnector?.status === "connected";
 
   const handleDownload = async (attachment: ThreadAttachment) => {
     const attachmentKey = `${attachment.messageId}:${attachment.attachmentId}`;
@@ -250,37 +232,6 @@ export const MessageAttachments = ({
     );
   };
 
-  const handleCalendarAction = async (attachment: ThreadAttachment) => {
-    const attachmentKey = `${attachment.messageId}:${attachment.attachmentId}`;
-    setActiveCalendarAttachmentKey(attachmentKey);
-    setErrorMessage(null);
-
-    const performAction = async () => {
-      if (!isGoogleCalendarConnected) {
-        await openConnectorLink({
-          provider: "google_calendar",
-          returnTo: "/settings?tab=connectors",
-        });
-        return;
-      }
-
-      setCalendarAttachment(attachment);
-    };
-    const [calendarResult] = await Promise.allSettled([performAction()]);
-    if (calendarResult.status === "rejected") {
-      toastError(calendarResult.reason, { boundary: "calendar-invitation" });
-      setErrorMessage(
-        getErrorMessage(
-          calendarResult.reason,
-          `Could not add ${attachment.fileName} to Google Calendar.`
-        )
-      );
-    }
-    setActiveCalendarAttachmentKey((current) =>
-      current === attachmentKey ? null : current
-    );
-  };
-
   return (
     <section
       aria-label="Attachments"
@@ -299,8 +250,6 @@ export const MessageAttachments = ({
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         {attachments.map((attachment) => {
           const attachmentKey = `${attachment.messageId}:${attachment.attachmentId}`;
-          const isCalendarPending =
-            activeCalendarAttachmentKey === attachmentKey;
           const isDownloadPending =
             activeDownloadAttachmentKey === attachmentKey;
           const isCalendarInvite = isCalendarAttachment(attachment);
@@ -311,22 +260,14 @@ export const MessageAttachments = ({
             attachment.fileName
           );
 
-          let calendarActionLabel = "Connect Google Calendar";
-          if (areConnectorsLoading) {
-            calendarActionLabel = "Checking Calendar";
-          } else if (isGoogleCalendarConnected) {
-            calendarActionLabel = "Add to Google Calendar";
-          }
-
           return (
             <Fragment key={attachmentKey}>
               {isCalendarInvite ? (
                 <Button
-                  aria-busy={isCalendarPending}
                   className="max-w-full min-w-0"
-                  disabled={isCalendarPending || areConnectorsLoading}
+                  disabled={!userId}
                   onClick={() => {
-                    void handleCalendarAction(attachment);
+                    setCalendarAttachment(attachment);
                   }}
                   title={attachment.fileName}
                   size="compact"
@@ -336,22 +277,12 @@ export const MessageAttachments = ({
                   <span className="flex size-5 shrink-0 items-center justify-center text-muted-fg">
                     <Icon
                       aria-hidden="true"
-                      animation={
-                        isCalendarPending || areConnectorsLoading
-                          ? "pulse"
-                          : undefined
-                      }
                       size={14}
-                      tone={
-                        isCalendarPending || areConnectorsLoading
-                          ? "default"
-                          : undefined
-                      }
                       icon={CalendarAdd01Icon}
                     />
                   </span>
                   <span className="min-w-0 truncate font-medium">
-                    {calendarActionLabel}
+                    Add to calendar
                   </span>
                 </Button>
               ) : null}

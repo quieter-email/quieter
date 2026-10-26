@@ -16,7 +16,9 @@ const redirectWithStatus = (
     status === "connected" &&
     mailboxId !== undefined &&
     mailboxId !== "" &&
-    redirectUrl.pathname === "/"
+    redirectUrl.pathname === "/" &&
+    redirectUrl.search === "" &&
+    redirectUrl.hash === ""
   ) {
     redirectUrl.searchParams.set("gmailLink", "complete");
     redirectUrl.searchParams.set("mailboxId", mailboxId);
@@ -36,14 +38,16 @@ export const Route = createFileRoute("/api/gmail/callback")({
         let failureReturnTo = getSettingsReturnTo();
         deleteCookie("gmail-callback-error", { path: "/" });
         try {
-          const { completeGmailOAuth, getGmailOAuthCallbackMailboxId } =
+          const { completeGmailOAuth, getGmailOAuthCallbackContext } =
             await import("@quieter/orpc/mailbox");
           if (state) {
-            const mailboxId = await getGmailOAuthCallbackMailboxId({
+            const context = await getGmailOAuthCallbackContext({
               headers: request.headers,
               state,
             });
-            failureReturnTo = getSettingsReturnTo(mailboxId ?? "");
+            if (context !== null) {
+              failureReturnTo = context.returnTo;
+            }
           }
           if (!code || !state || url.searchParams.has("error")) {
             return redirectWithStatus(request.url, failureReturnTo, "error");

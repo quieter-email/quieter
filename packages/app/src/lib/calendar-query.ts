@@ -108,7 +108,17 @@ export const calendarEventsQueryOptions = (
   queryOptions<Awaited<ReturnType<typeof rpc.calendar.events>>>({
     ...calendarCacheOptions,
     queryFn: async ({ signal }) =>
-      await rpc.calendar.events({ ...ref, ...range }, { signal }),
+      await rpc.calendar.events(
+        {
+          calendarId: ref.calendarId,
+          connectionId: ref.connectionId,
+          end: range.end,
+          query: range.query,
+          start: range.start,
+          timeZone: range.timeZone,
+        },
+        { signal }
+      ),
     queryKey: [
       ...getCalendarConnectionQueryKey(userId, ref.connectionId),
       "calendar",
@@ -127,7 +137,15 @@ export const calendarEventQueryOptions = (
 ) =>
   queryOptions<Awaited<ReturnType<typeof rpc.calendar.event>>>({
     ...calendarCacheOptions,
-    queryFn: async ({ signal }) => await rpc.calendar.event(ref, { signal }),
+    queryFn: async ({ signal }) =>
+      await rpc.calendar.event(
+        {
+          calendarId: ref.calendarId,
+          connectionId: ref.connectionId,
+          eventId: ref.eventId,
+        },
+        { signal }
+      ),
     queryKey: getCalendarEventQueryKey(userId, ref),
     staleTime: 60 * 1000,
   });

@@ -1,6 +1,7 @@
 "use client";
 
 import { MoreVerticalIcon } from "@hugeicons/core-free-icons";
+import { applyMailboxSearchPatch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import { useUnifiedInboxPreferences } from "@quieter/app/features/mailbox/domain/unified-inbox";
 import {
   SIDEBAR_LABEL_VISIBILITY_EVENT,
@@ -16,8 +17,9 @@ import {
 } from "@quieter/app/features/message-search/state/message-list-search-state";
 import type { MailSidebar } from "@quieter/app/features/navigation/components/mail-sidebar";
 import { MailboxOrganizer } from "@quieter/app/features/navigation/components/mailbox-organizer";
-import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
+import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
+import { mailboxSearchSchema } from "@quieter/app/route-search";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -31,21 +33,22 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { useQueries } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
 import { Fragment, useEffect, useState } from "react";
 
 export const UnifiedSidebarLabelNav = ({
   groups,
+  mailboxId,
   userId,
-  onSearch,
-  onManageLabels,
+  onRequestClose,
   searchQuery,
 }: {
   groups: ComponentProps<typeof MailSidebar>["groups"];
+  mailboxId: string | null;
   userId: string;
   searchQuery: string;
-  onSearch: (query: string) => void;
-  onManageLabels: (mailboxId?: string) => void;
+  onRequestClose?: () => void;
 }) => {
   const preferences = useUnifiedInboxPreferences(userId);
   const [rulesMailboxId, setRulesMailboxId] = useState<string | null>(null);
@@ -147,9 +150,29 @@ export const UnifiedSidebarLabelNav = ({
                   {(mailbox.provider === "gmail" ||
                     mailbox.grantRole === "manager") && (
                     <DropdownMenuItem
-                      onSelect={() => {
-                        onManageLabels(mailbox.id);
-                      }}
+                      onSelect={onRequestClose}
+                      render={
+                        <Link
+                          replace
+                          resetScroll={false}
+                          search={(previous) =>
+                            applyMailboxSearchPatch(
+                              mailboxSearchSchema.parse(previous),
+                              {
+                                chatId:
+                                  mailbox.id === mailboxId ? undefined : null,
+                                mailboxId: mailbox.id,
+                                messageId: null,
+                                query: null,
+                                threadId: null,
+                                view: "labels",
+                                workspace: null,
+                              }
+                            )
+                          }
+                          to="/"
+                        />
+                      }
                     >
                       Manage labels for {mailbox.emailAddress}
                     </DropdownMenuItem>
@@ -179,10 +202,23 @@ export const UnifiedSidebarLabelNav = ({
         )}
         {labels.map(([nameKey, label]) => {
           const isActive = selectedLabelKeys.has(nameKey);
+          const nextQuery = serializeStructuredSearchState({
+            ...search,
+            filters: [
+              ...search.filters.filter(
+                (filter) =>
+                  filter.type !== "label" ||
+                  normalizeLabelSelectionKey(filter.value) !== nameKey
+              ),
+              ...(isActive
+                ? []
+                : [{ type: "label" as const, value: label.name }]),
+            ],
+          });
           return (
-            <SidebarNavItem
+            <SidebarMailboxNavItem
               active={isActive}
-              aria-pressed={isActive}
+              aria-current={isActive ? "page" : undefined}
               // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom label-row spacing.
               className={cn(
                 "min-w-0 justify-start text-left text-caption font-normal squircle",
@@ -193,23 +229,13 @@ export const UnifiedSidebarLabelNav = ({
               )}
               // oxlint-enable shadcn/no-restyle
               key={nameKey}
-              onClick={() => {
-                onSearch(
-                  serializeStructuredSearchState({
-                    ...search,
-                    filters: [
-                      ...search.filters.filter(
-                        (filter) =>
-                          filter.type !== "label" ||
-                          normalizeLabelSelectionKey(filter.value) !== nameKey
-                      ),
-                      ...(isActive
-                        ? []
-                        : [{ type: "label" as const, value: label.name }]),
-                    ],
-                  })
-                );
+              mailboxSearch={{
+                mailboxId,
+                messageId: null,
+                query: nextQuery,
+                workspace: null,
               }}
+              onClick={onRequestClose}
               size="sm"
               type="button"
               variant="ghost"
@@ -222,7 +248,7 @@ export const UnifiedSidebarLabelNav = ({
                 }
               />
               <span className="min-w-0 truncate">{label.name}</span>
-            </SidebarNavItem>
+            </SidebarMailboxNavItem>
           );
         })}
         {loadingCount > 0 && (

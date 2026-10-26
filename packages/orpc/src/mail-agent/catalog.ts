@@ -14,6 +14,10 @@ import { reportError } from "@quieter/observability";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
+import {
+  getCalendarAccountForUser,
+  listCalendarAccountsForUser,
+} from "../calendar/service";
 import { connectorDisplayNames } from "../connectors/contracts";
 import { listLinearMcpToolsForUser } from "../connectors/linear-mcp";
 import { hasRequiredConnectorScopes } from "../connectors/runtime";
@@ -135,13 +139,32 @@ export const getAgentAccounts = async (userId: string) => {
       status: connectorCredential.status,
     })
     .from(connectorCredential)
-    .where(eq(connectorCredential.userId, userId));
-  return accounts.map((account) => ({
-    connectionId: account.id,
-    label: `${connectorDisplayNames[account.provider]}, ${account.displayName ?? account.providerWorkspaceName ?? account.accountEmail ?? account.providerAccountId}`,
-    provider: account.provider,
-    status: account.status,
-  }));
+    .where(
+      and(
+        eq(connectorCredential.userId, userId),
+        eq(connectorCredential.provider, "linear")
+      )
+    );
+  const { accounts: calendarAccounts } = await listCalendarAccountsForUser({
+    userId,
+  });
+  return [
+    ...accounts.map((account) => ({
+      connectionId: account.id,
+      label: `${connectorDisplayNames.linear}, ${account.displayName ?? account.providerWorkspaceName ?? account.accountEmail ?? account.providerAccountId}`,
+      provider: "linear" as const,
+      status: account.status,
+    })),
+    ...calendarAccounts.map((account) => ({
+      connectionId: account.id,
+      label: `Google Calendar, ${account.name}`,
+      provider: "google_calendar" as const,
+      status:
+        account.status === "connected"
+          ? ("connected" as const)
+          : ("needs_reconnect" as const),
+    })),
+  ];
 };
 
 export const loadAgentCatalog = async (input: {
@@ -207,15 +230,15 @@ export const loadAgentCatalog = async (input: {
     .where(
       and(
         eq(connectorCredential.userId, input.userId),
-        inArray(connectorCredential.id, input.connectionIds)
+        inArray(connectorCredential.id, input.connectionIds),
+        eq(connectorCredential.provider, "linear")
       )
     );
   if (
-    accounts.length !== input.connectionIds.length ||
     accounts.some(
       (account) =>
         account.status !== "connected" ||
-        !hasRequiredConnectorScopes(account.provider, account.scopes ?? "")
+        !hasRequiredConnectorScopes("linear", account.scopes ?? "")
     )
   ) {
     throw new ORPCError("BAD_REQUEST", {
@@ -223,19 +246,33 @@ export const loadAgentCatalog = async (input: {
         "A mentioned account is unavailable. Reconnect it or remove its mention and review again.",
     });
   }
-  for (const account of accounts) {
-    const accountLabel =
-      account.displayName ??
-      account.providerWorkspaceName ??
-      account.accountEmail ??
-      account.providerAccountId;
-    const base = {
-      accountLabel,
-      connectionId: account.id,
-      provider: account.provider,
-      scope: "connector" as const,
-    };
-    if (account.provider === "google_calendar") {
+  for (const connectionId of input.connectionIds) {
+    const account = accounts.find((candidate) => candidate.id === connectionId);
+    if (account === undefined) {
+      const calendarAccount = await getCalendarAccountForUser({
+        connectionId,
+        userId: input.userId,
+      }).catch((error: unknown) => {
+        if (error instanceof ORPCError && error.code === "NOT_FOUND") {
+          throw new ORPCError("BAD_REQUEST", {
+            message:
+              "A mentioned account is unavailable. Reconnect it or remove its mention and review again.",
+          });
+        }
+        throw error;
+      });
+      if (calendarAccount.status !== "connected") {
+        throw new ORPCError("BAD_REQUEST", {
+          message:
+            "A mentioned account is unavailable. Reconnect it or remove its mention and review again.",
+        });
+      }
+      const base = {
+        accountLabel: calendarAccount.name,
+        connectionId,
+        provider: "google_calendar" as const,
+        scope: "connector" as const,
+      };
       tools.push(
         {
           ...base,
@@ -253,7 +290,7 @@ export const loadAgentCatalog = async (input: {
             "Read events from a calendar discovered in this connected account, using explicit start and end instants and its time zone. If the result is truncated, narrow the range or query before drawing conclusions.",
           inputSchema: z.toJSONSchema(
             calendarLookupSchema.safeExtend({
-              connectionId: z.literal(account.id),
+              connectionId: z.literal(connectionId),
             })
           ),
           label: "Read calendar events",
@@ -266,7 +303,7 @@ export const loadAgentCatalog = async (input: {
           description: "Create a calendar event without guests or invitations.",
           inputSchema: z.toJSONSchema(
             calendarEventSchema.safeExtend({
-              connectionId: z.literal(account.id),
+              connectionId: z.literal(connectionId),
             })
           ),
           label: "Create a calendar event",
@@ -277,6 +314,17 @@ export const loadAgentCatalog = async (input: {
       );
       continue;
     }
+    const accountLabel =
+      account.displayName ??
+      account.providerWorkspaceName ??
+      account.accountEmail ??
+      account.providerAccountId;
+    const base = {
+      accountLabel,
+      connectionId: account.id,
+      provider: "linear" as const,
+      scope: "connector" as const,
+    };
     const discovered = await listLinearMcpToolsForUser({
       connectionId: account.id,
       signal: input.signal,

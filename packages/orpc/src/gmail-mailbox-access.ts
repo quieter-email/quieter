@@ -11,12 +11,18 @@ import {
   encryptGmailCredentialSecret,
 } from "./gmail-credential-crypto";
 
+export const CALENDAR_SCOPES = [
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar.calendarlist",
+] as const;
+
 export const GMAIL_SCOPES = [
   "openid",
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/userinfo.profile",
   "https://mail.google.com/",
   "https://www.googleapis.com/auth/gmail.modify",
+  ...CALENDAR_SCOPES,
 ] as const;
 
 /**
@@ -156,6 +162,7 @@ const performGmailAccessTokenRefresh = async (record: {
   encryptedAccessToken: string | null;
   encryptedRefreshToken: string | null;
   id: string;
+  scopes: string;
 }) => {
   if (!record.encryptedRefreshToken) {
     await db
@@ -215,7 +222,7 @@ const performGmailAccessTokenRefresh = async (record: {
         now.getTime() + refreshed.expires_in * 1000
       ),
       encryptedAccessToken: encryptSecret(refreshed.access_token),
-      scopes: refreshed.scope ?? GMAIL_SCOPES.join(" "),
+      scopes: refreshed.scope ?? record.scopes,
       updatedAt: now,
     })
     .where(
@@ -285,6 +292,7 @@ const getOwnedGmailCredential = async (mailboxId: string, userId: string) => {
       encryptedAccessToken: gmailCredential.encryptedAccessToken,
       encryptedRefreshToken: gmailCredential.encryptedRefreshToken,
       id: mailbox.id,
+      scopes: gmailCredential.scopes,
       status: mailbox.status,
     })
     .from(mailbox)
@@ -356,16 +364,22 @@ const isGmailAuthError = (error: unknown) =>
       error.googleStatus.toUpperCase() === "UNAUTHENTICATED"));
 
 export const runAuthorizedGmailMailbox = async <TValue>(
-  input: { mailboxId: string; retryUnauthorized?: boolean; userId: string },
+  input: {
+    isUnauthorized?: (error: unknown) => boolean;
+    mailboxId: string;
+    retryUnauthorized?: boolean;
+    userId: string;
+  },
   runner: (accessToken: string) => Promise<TValue>
 ): Promise<TValue> => {
+  const isUnauthorized = input.isUnauthorized ?? isGmailAuthError;
   const { accessToken, mailbox: authorizedMailbox } =
     await getAuthorizedGmailMailbox(input);
 
   try {
     return await runner(accessToken);
   } catch (error) {
-    if (input.retryUnauthorized === false || !isGmailAuthError(error)) {
+    if (input.retryUnauthorized === false || !isUnauthorized(error)) {
       throw error;
     }
   }
@@ -375,7 +389,7 @@ export const runAuthorizedGmailMailbox = async <TValue>(
   try {
     return await runner(refreshedAccessToken);
   } catch (error) {
-    if (!isGmailAuthError(error)) {
+    if (!isUnauthorized(error)) {
       throw error;
     }
 

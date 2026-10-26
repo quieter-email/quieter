@@ -104,13 +104,20 @@ const normalizeEmailAddress = (emailAddress: string) =>
 const normalizeReturnTo = (returnTo: string | undefined) => {
   const normalized = returnTo?.trim();
   if (
-    normalized &&
-    normalized.startsWith("/") &&
-    !normalized.startsWith("//")
+    normalized === undefined ||
+    !normalized.startsWith("/") ||
+    normalized.startsWith("//") ||
+    // oxlint-disable-next-line eslint/no-control-regex -- Reject control characters before URL normalization can discard them.
+    /[\\\u0000-\u001F\u007F]/u.test(returnTo ?? "")
   ) {
-    return normalized;
+    return "/settings";
   }
-  return "/settings";
+  const origin = "https://quieter.invalid";
+  const returnUrl = new URL(normalized, origin);
+  if (returnUrl.origin !== origin || returnUrl.pathname.startsWith("//")) {
+    return "/settings";
+  }
+  return `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`;
 };
 
 const createCodeVerifier = () => randomBytes(48).toString("base64url");
@@ -802,7 +809,10 @@ export const startGmailOAuth = async (input: {
   );
   authorizationUrl.searchParams.set("code_challenge_method", "S256");
   authorizationUrl.searchParams.set("include_granted_scopes", "true");
-  authorizationUrl.searchParams.set("prompt", "consent select_account");
+  authorizationUrl.searchParams.set(
+    "prompt",
+    loginHint ? "consent" : "consent select_account"
+  );
   authorizationUrl.searchParams.set("redirect_uri", config.redirectUri);
   authorizationUrl.searchParams.set("response_type", "code");
   authorizationUrl.searchParams.set("scope", GMAIL_SCOPES.join(" "));
@@ -1124,7 +1134,7 @@ const resolveGmailOAuthMailboxIdentity = (input: {
   return { encryptedRefreshToken, existingMailboxId, mailboxId };
 };
 
-export const getGmailOAuthCallbackMailboxId = async (input: {
+export const getGmailOAuthCallbackContext = async (input: {
   headers: Headers;
   state: string;
 }) => {
@@ -1134,7 +1144,10 @@ export const getGmailOAuthCallbackMailboxId = async (input: {
     return null;
   }
   const [context] = await db
-    .select({ mailboxId: gmailOAuthState.mailboxId })
+    .select({
+      mailboxId: gmailOAuthState.mailboxId,
+      returnTo: gmailOAuthState.returnTo,
+    })
     .from(gmailOAuthState)
     .where(
       and(
@@ -1143,7 +1156,9 @@ export const getGmailOAuthCallbackMailboxId = async (input: {
       )
     )
     .limit(1);
-  return context?.mailboxId ?? null;
+  return context === undefined
+    ? null
+    : { ...context, returnTo: normalizeReturnTo(context.returnTo) };
 };
 
 export const completeGmailOAuth = async (input: {
@@ -1251,7 +1266,7 @@ export const completeGmailOAuth = async (input: {
 
   return {
     mailboxId,
-    returnTo: oauthState.returnTo,
+    returnTo: normalizeReturnTo(oauthState.returnTo),
   };
 };
 

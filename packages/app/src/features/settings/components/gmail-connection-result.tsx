@@ -1,5 +1,7 @@
 "use client";
 
+import { authClient } from "@quieter/app/lib/auth";
+import { getCalendarQueryKey } from "@quieter/app/lib/calendar-query";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { settingsRouteApi } from "@quieter/app/lib/route-apis";
@@ -11,6 +13,7 @@ import { useEffect } from "react";
 export const GmailConnectionResult = () => {
   const navigate = useNavigate({ from: "/settings" });
   const queryClient = useQueryClient();
+  const userId = authClient.useSession().data?.user.id;
   const { gmail } = settingsRouteApi.useSearch();
   const { gmailError } = settingsRouteApi.useLoaderData();
 
@@ -24,6 +27,11 @@ export const GmailConnectionResult = () => {
       void queryClient.invalidateQueries({
         queryKey: getMailboxesQueryKey(),
       });
+      if (userId) {
+        void queryClient.invalidateQueries({
+          queryKey: getCalendarQueryKey(userId),
+        });
+      }
     } else {
       toastError(gmailError, {
         boundary: "gmail-connect",
@@ -43,7 +51,7 @@ export const GmailConnectionResult = () => {
       }),
       to: ".",
     });
-  }, [gmail, gmailError, navigate, queryClient]);
+  }, [gmail, gmailError, navigate, queryClient, userId]);
 
   return null;
 };

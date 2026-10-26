@@ -1,8 +1,12 @@
+import { ORPCError } from "@orpc/server";
 import {
   foregroundSnapshotSchema,
   resolveCalendarWriteReview,
 } from "@quieter/ai/chat-tools";
-import type { CalendarWriteToolName } from "@quieter/ai/chat-tools";
+import type {
+  CalendarWriteReview,
+  CalendarWriteToolName,
+} from "@quieter/ai/chat-tools";
 import {
   calendarEventDraftSchema,
   calendarEventSchema,
@@ -52,7 +56,14 @@ const account = {
   id: "connection-1",
   name: "Personal",
   status: "connected",
-} satisfies CalendarAccount;
+} satisfies Pick<CalendarAccount, "email" | "id" | "name" | "status">;
+const accountSnapshots = [
+  { account, label: "a persisted calendar connector" },
+  {
+    account: { ...account, mailboxId: "mailbox-1" } satisfies CalendarAccount,
+    label: "a Gmail mailbox",
+  },
+];
 const calendar = {
   access: "owner",
   calendarId: "calendar-1",
@@ -106,10 +117,12 @@ const updateInput = {
 
 const approvedTranscript = ({
   input,
+  sourceAccount = account,
   sourceEvent = event,
   toolName,
 }: {
   input: unknown;
+  sourceAccount?: CalendarWriteReview["account"];
   sourceEvent?: typeof event;
   toolName: CalendarWriteToolName;
 }): UIMessage[] => [
@@ -119,7 +132,7 @@ const approvedTranscript = ({
       {
         input: { connectionId: account.id },
         output: {
-          accounts: [account],
+          accounts: [sourceAccount],
           calendars: [calendar],
           fetchedAt: new Date().toISOString(),
           status: "success",
@@ -168,49 +181,59 @@ describe("calendar tool approvals", () => {
     });
   });
 
-  test("binds a write to its approved exchange, tool call, target and changes", () => {
-    const approved = {
-      foreground,
-      input: updateInput,
-      toolCallId: "change-1",
-      toolName: "update_calendar_event" as const,
-      transcript: approvedTranscript({
-        input: updateInput,
-        toolName: "update_calendar_event",
-      }),
-    };
-    expect(() => {
-      assertCalendarToolApproval(approved);
-    }).not.toThrow();
-    for (const patch of [
-      { input: { ...updateInput, connectionId: "another-account" } },
-      { input: { ...updateInput, eventId: "series-1" } },
-      { input: { ...updateInput, changes: { title: "Unreviewed change" } } },
-      { toolCallId: "another-call" },
-      { foreground: { ...foreground, exchangeId: crypto.randomUUID() } },
-    ]) {
-      expect(() => {
-        assertCalendarToolApproval({ ...approved, ...patch });
-      }).toThrow(/approve|differs/iu);
-    }
-  });
-
-  test("requires read evidence at the approved version before an event write", () => {
-    const transcript = approvedTranscript({
-      input: updateInput,
-      sourceEvent: { ...event, version: "old-version" },
-      toolName: "update_calendar_event",
-    });
-    expect(() => {
-      assertCalendarToolApproval({
+  test.each(accountSnapshots)(
+    "binds $label writes to their approved exchange, tool call, target and changes",
+    ({ account: sourceAccount }) => {
+      const approved = {
         foreground,
         input: updateInput,
         toolCallId: "change-1",
+        toolName: "update_calendar_event" as const,
+        transcript: approvedTranscript({
+          input: updateInput,
+          sourceAccount,
+          toolName: "update_calendar_event",
+        }),
+      };
+      expect(() => {
+        assertCalendarToolApproval(approved);
+      }).not.toThrow();
+      for (const patch of [
+        { input: { ...updateInput, connectionId: "another-account" } },
+        { input: { ...updateInput, calendarId: "another-calendar" } },
+        { input: { ...updateInput, eventId: "series-1" } },
+        { input: { ...updateInput, version: "another-version" } },
+        { input: { ...updateInput, changes: { title: "Unreviewed change" } } },
+        { toolCallId: "another-call" },
+        { foreground: { ...foreground, exchangeId: crypto.randomUUID() } },
+      ]) {
+        expect(() => {
+          assertCalendarToolApproval({ ...approved, ...patch });
+        }).toThrow(/approve|differs/iu);
+      }
+    }
+  );
+
+  test.each(accountSnapshots)(
+    "requires $label read evidence at the approved version before an event write",
+    ({ account: sourceAccount }) => {
+      const transcript = approvedTranscript({
+        input: updateInput,
+        sourceAccount,
+        sourceEvent: { ...event, version: "old-version" },
         toolName: "update_calendar_event",
-        transcript,
       });
-    }).toThrow(/read/iu);
-  });
+      expect(() => {
+        assertCalendarToolApproval({
+          foreground,
+          input: updateInput,
+          toolCallId: "change-1",
+          toolName: "update_calendar_event",
+          transcript,
+        });
+      }).toThrow(/read/iu);
+    }
+  );
 
   test("shows the fetched occurrence or series as the actual recurrence target", () => {
     const occurrence = resolveCalendarWriteReview({
@@ -305,4 +328,38 @@ describe("calendar tool approvals", () => {
       })
     ).resolves.not.toBe(operationId);
   });
+
+  test.each(accountSnapshots)(
+    "reauthorizes $label writes even when historical metadata claims access",
+    async ({ account: sourceAccount }) => {
+      mocks.create.mockRejectedValueOnce(
+        new ORPCError("FORBIDDEN", {
+          message: "Calendar access was revoked.",
+        })
+      );
+      const context = createCalendarToolsContext({
+        foreground,
+        transcript: approvedTranscript({
+          input: createInput,
+          sourceAccount,
+          toolName: "create_calendar_event",
+        }),
+        userId: "signed-in-user",
+      });
+      const result = await context.createEvent(createInput, {
+        toolCallId: "change-1",
+      });
+      expect(result.status).toBe("error");
+      expect(result).toHaveProperty(
+        "error",
+        expect.stringMatching(/revoked/iu)
+      );
+      expect(mocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          connectionId: account.id,
+          userId: "signed-in-user",
+        })
+      );
+    }
+  );
 });

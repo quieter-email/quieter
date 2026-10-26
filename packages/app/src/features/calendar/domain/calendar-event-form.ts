@@ -26,6 +26,7 @@ export type CalendarEventForm = {
   attendees: string;
   availability: CalendarEventDraft["availability"];
   calendarKey: string;
+  color: string | null;
   description: string;
   endDate: string;
   endTime: string;
@@ -83,6 +84,7 @@ export const createCalendarEventForm = (
     calendarKey: getCalendarRefKey(
       editor.kind === "edit" ? editor.event : editor.ref
     ),
+    color: event?.colorOverride ?? null,
     description: event?.description ?? "",
     endDate: end.date,
     endTime: end.time.slice(0, 5),
@@ -182,6 +184,7 @@ export const parseCalendarEventForm = (
     addMeeting: form.addMeeting,
     attendees,
     availability: form.availability,
+    color: form.color,
     description: form.description,
     location: form.location,
     recurrence: form.recurrence,
@@ -202,6 +205,12 @@ export const createCalendarEventChanges = ({
   const changes: CalendarEventPatch = {};
   if (draft.title !== original.title) {
     changes.title = draft.title;
+  }
+  if (
+    draft.color !== undefined &&
+    draft.color !== (original.colorOverride ?? null)
+  ) {
+    changes.color = draft.color;
   }
   if (draft.description !== original.description) {
     changes.description = draft.description;

@@ -189,6 +189,62 @@ describe("calendar cache ownership and recovery", () => {
     client.clear();
   });
 
+  test("an owned mailbox needing reconnect keeps its calendar list but removes private event content", async () => {
+    const userId = crypto.randomUUID();
+    const client = new QueryClient();
+    setQueryPersistenceUser(userId, client);
+    const scope = ["calendar", userId, "connection", "work"];
+    const calendarListKey = [...scope, "calendars"];
+    const eventKey = [...scope, "calendar", "primary", "event", "planning"];
+    const calendarList = {
+      calendars: [
+        {
+          access: "owner",
+          calendarId: "primary",
+          connectionId: "work",
+          name: "Work schedule",
+          primary: true,
+          selected: true,
+          supportsMeetings: true,
+          timeZone: "Europe/Berlin",
+        },
+      ],
+    };
+    client.setQueryData(calendarListKey, calendarList);
+    client.setQueryData(eventKey, meeting);
+    await persistQueryByKey(calendarListKey, client);
+    await persistQueryByKey(eventKey, client);
+    client.removeQueries({ queryKey: calendarListKey });
+    const unbind = bindCalendarCache(client, userId);
+    client.setQueryData(["calendar", userId, "accounts"], {
+      accounts: [
+        {
+          email: "alex@example.com",
+          id: "work",
+          mailboxId: "owned-mailbox",
+          name: "Alex",
+          status: "needs-reconnect",
+        },
+      ],
+    });
+    await vi.waitFor(async () => {
+      expect(client.getQueryData(eventKey)).toBeUndefined();
+      await expect(
+        queryPersister.retrieveQuery(JSON.stringify(eventKey))
+      ).resolves.toBeUndefined();
+      await expect(
+        queryPersister.retrieveQuery(JSON.stringify(calendarListKey))
+      ).resolves.toMatchObject({
+        calendars: [{ connectionId: "work", name: "Work schedule" }],
+      });
+    });
+    expect(client.getQueryData(calendarListKey)).toMatchObject({
+      calendars: [{ connectionId: "work" }],
+    });
+    unbind();
+    client.clear();
+  });
+
   test("moving an event updates saved months and keeps other visits and details available offline", async () => {
     const userId = crypto.randomUUID();
     const client = new QueryClient();

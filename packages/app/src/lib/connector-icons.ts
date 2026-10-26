@@ -6,7 +6,6 @@ import type { ConnectorProvider } from "@quieter/app/lib/connectors-query";
  * from the connector list itself.
  */
 const connectorIcons = {
-  google_calendar: { className: "", src: "/google-calendar.svg" },
   linear: { className: "invert dark:invert-0", src: "/linear.svg" },
 } as const satisfies Record<
   ConnectorProvider,

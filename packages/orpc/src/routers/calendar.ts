@@ -1,5 +1,6 @@
 import {
   calendarAccountSchema,
+  calendarColorSchema,
   calendarCreateInputSchema,
   calendarDeleteInputSchema,
   calendarEventRefSchema,
@@ -10,20 +11,24 @@ import {
   calendarRespondInputSchema,
   calendarSummarySchema,
   calendarUpdateInputSchema,
+  calendarUpdateColorInputSchema,
 } from "@quieter/calendar";
 import { z } from "zod";
 
+import { importCalendarInvitationAttachmentForUser } from "../calendar/invitation-import";
 import {
   createCalendarEventForUser,
   deleteCalendarEventForUser,
   getCalendarEventForUser,
   listCalendarAccountsForUser,
   listCalendarEventsForUser,
+  listCalendarColorsForUser,
   listCalendarsForUser,
   respondToCalendarEventForUser,
   updateCalendarEventForUser,
+  updateCalendarColorForUser,
 } from "../calendar/service";
-import { protectedProcedure } from "./base";
+import { mailboxIdSchema, protectedProcedure } from "./base";
 
 export const calendarRouter = {
   accounts: protectedProcedure
@@ -48,6 +53,18 @@ export const calendarRouter = {
     .handler(
       async ({ context, input }) =>
         await listCalendarsForUser({
+          ...input,
+          signal: context.signal,
+          userId: context.userId,
+        })
+    ),
+
+  colors: protectedProcedure
+    .input(calendarRefSchema.pick({ connectionId: true }))
+    .output(z.object({ colors: z.array(calendarColorSchema) }))
+    .handler(
+      async ({ context, input }) =>
+        await listCalendarColorsForUser({
           ...input,
           signal: context.signal,
           userId: context.userId,
@@ -102,6 +119,25 @@ export const calendarRouter = {
         })
     ),
 
+  importInvitation: protectedProcedure
+    .input(
+      z.object({
+        attachmentId: z.string().trim().min(1),
+        calendarId: z.string().trim().min(1).optional(),
+        connectionId: z.string().trim().min(1).optional(),
+        mailboxId: mailboxIdSchema,
+        messageId: z.string().trim().min(1),
+      })
+    )
+    .handler(
+      async ({ context, input }) =>
+        await importCalendarInvitationAttachmentForUser({
+          ...input,
+          signal: context.signal,
+          userId: context.userId,
+        })
+    ),
+
   respond: protectedProcedure
     .input(calendarRespondInputSchema)
     .output(calendarMutationResultSchema)
@@ -120,6 +156,18 @@ export const calendarRouter = {
     .handler(
       async ({ context, input }) =>
         await updateCalendarEventForUser({
+          ...input,
+          signal: context.signal,
+          userId: context.userId,
+        })
+    ),
+
+  updateColor: protectedProcedure
+    .input(calendarUpdateColorInputSchema)
+    .output(calendarSummarySchema)
+    .handler(
+      async ({ context, input }) =>
+        await updateCalendarColorForUser({
           ...input,
           signal: context.signal,
           userId: context.userId,

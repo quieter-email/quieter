@@ -15,9 +15,13 @@ import {
   createCalendarEventForUser,
   deleteCalendarEventForUser,
   getCalendarEventForUser,
+  importCalendarInvitationForUser,
+  listCalendarEventsForUser,
   respondToCalendarEventForUser,
   updateCalendarEventForUser,
+  updateCalendarColorForUser,
 } from "../src/calendar/service";
+import { CALENDAR_SCOPES } from "../src/gmail-mailbox-access";
 
 const mocks = vi.hoisted(() => {
   const env: {
@@ -40,14 +44,14 @@ vi.mock("@quieter/database/client", async (importOriginal) => {
   const { drizzle } = await import("drizzle-orm/pg-proxy");
   return { ...actual, db: drizzle(mocks.query) };
 });
-vi.mock(import("../src/connectors/runtime"), async (importOriginal) => {
+vi.mock(import("../src/gmail-mailbox-access"), async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    runAuthorizedConnector: async <T>(
-      input: Parameters<typeof actual.runAuthorizedConnector>[0],
-      run: (token: string, signal?: AbortSignal) => T | Promise<T>
-    ): Promise<T> => await run("owned-test-token", input.signal),
+    runAuthorizedGmailMailbox: async <T>(
+      _input: Parameters<typeof actual.runAuthorizedGmailMailbox>[0],
+      run: (token: string) => Promise<T>
+    ): Promise<T> => await run("owned-test-token"),
   };
 });
 vi.mock(import("@quieter/env/server"), async (importOriginal) => {
@@ -101,8 +105,19 @@ describe("calendar account isolation and mutations", () => {
     mocks.env.mode = "write";
     mocks.env.allowlist = `owner@example.com,${reference.calendarId}`;
     mocks.env.deployment = "local";
-    mocks.query.mockReset().mockImplementation(async () => ({
-      rows: [[mocks.accountEmail, reference.connectionId]],
+    mocks.query.mockReset().mockImplementation(async (query) => ({
+      rows: query.includes('from "connectorCredential"')
+        ? []
+        : [
+            [
+              null,
+              mocks.accountEmail,
+              "owned-subject",
+              reference.connectionId,
+              CALENDAR_SCOPES.join(" "),
+              "connected",
+            ],
+          ],
     }));
   });
   afterEach(() => vi.unstubAllGlobals());
@@ -116,10 +131,10 @@ describe("calendar account isolation and mutations", () => {
     });
     expect(request).not.toHaveBeenCalled();
     const [query, values] = mocks.query.mock.calls[0] ?? [];
-    expect(query).toContain('"connectorCredential"."userId" =');
-    expect(query).toContain('"connectorCredential"."id" =');
+    expect(query).toContain('"mailbox"."ownerUserId" =');
+    expect(query).toContain('"mailbox"."provider" =');
     expect(values).toContain(reference.userId);
-    expect(values).toContain(reference.connectionId);
+    expect(values).toContain("gmail");
   });
 
   test("every mutation requires local write mode before any provider request", async () => {
@@ -143,6 +158,7 @@ describe("calendar account isolation and mutations", () => {
         response: "accepted",
         version: event.etag,
       }),
+      updateCalendarColorForUser({ ...reference, color: "#123456" }),
     ];
     const results = await Promise.allSettled(operations);
     for (const result of results) {
@@ -152,6 +168,135 @@ describe("calendar account isolation and mutations", () => {
       });
     }
     expect(request).not.toHaveBeenCalled();
+  });
+
+  test("calendar color preferences stay owner scoped and support subscribed read-only calendars", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (_url, init) => {
+        const body: unknown =
+          typeof init?.body === "string"
+            ? JSON.parse(z.string().parse(init.body))
+            : undefined;
+        return Response.json({
+          ...calendar,
+          accessRole: "reader",
+          ...(init?.method === "PATCH"
+            ? {
+                backgroundColor: z
+                  .object({ backgroundColor: z.string() })
+                  .parse(body).backgroundColor,
+              }
+            : {}),
+        });
+      });
+    vi.stubGlobal("fetch", request);
+    mocks.query.mockResolvedValueOnce({ rows: [] });
+    await expect(
+      updateCalendarColorForUser({ ...reference, color: "#123456" })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(request).not.toHaveBeenCalled();
+    mocks.env.allowlist = "owner@example.com";
+    await expect(
+      updateCalendarColorForUser({ ...reference, color: "#123456" })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(
+      request.mock.calls.some(([, init]) => init?.method === "PATCH")
+    ).toBeFalsy();
+    mocks.env.allowlist = `owner@example.com,${reference.calendarId}`;
+    await expect(
+      updateCalendarColorForUser({ ...reference, color: "#123456" })
+    ).resolves.toMatchObject({
+      access: "read",
+      calendarId: reference.calendarId,
+      color: "#123456",
+      connectionId: reference.connectionId,
+    });
+    const [url, init] =
+      request.mock.calls.find(([, entry]) => entry?.method === "PATCH") ?? [];
+    expect(url).toContain(
+      "/users/me/calendarList/team-calendar?colorRgbFormat=true"
+    );
+    expect(JSON.parse(z.string().parse(init?.body))).toMatchObject({
+      backgroundColor: "#123456",
+    });
+  });
+
+  test("reads, event writes, replies, and imported invitations keep the same resolved event color", async () => {
+    const colored = {
+      ...event,
+      colorId: "event-color",
+      organizer: { self: true },
+    };
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      const target = new URL(new Request(url).url);
+      if (target.pathname.includes("calendarList")) {
+        return Response.json({ ...calendar, backgroundColor: "#654321" });
+      }
+      if (target.pathname.endsWith("/colors")) {
+        return Response.json({
+          calendar: {},
+          event: {
+            "event-color": { background: "#123456", foreground: "#ffffff" },
+          },
+        });
+      }
+      return Response.json(
+        target.pathname.endsWith("/events")
+          ? { ...colored, items: [colored] }
+          : colored
+      );
+    });
+    vi.stubGlobal("fetch", request);
+    const resolved = { color: "#123456", colorOverride: "#123456" };
+    await expect(getCalendarEventForUser(reference)).resolves.toMatchObject(
+      resolved
+    );
+    await expect(
+      listCalendarEventsForUser({
+        ...reference,
+        end: "2026-10-25T00:00:00Z",
+        start: "2026-10-20T00:00:00Z",
+        timeZone: "UTC",
+      })
+    ).resolves.toMatchObject({ events: [resolved] });
+    await expect(
+      createCalendarEventForUser({
+        ...reference,
+        event: { ...draft, color: "#123456" },
+        operationId: "d2d2a899-ed59-475e-a806-c8e42b847e9a",
+      })
+    ).resolves.toMatchObject({ event: resolved });
+    await expect(
+      updateCalendarEventForUser({
+        ...reference,
+        changes: { color: "#123456" },
+        version: event.etag,
+      })
+    ).resolves.toMatchObject({ event: resolved });
+    await expect(
+      respondToCalendarEventForUser({
+        ...reference,
+        response: "accepted",
+        version: event.etag,
+      })
+    ).resolves.toMatchObject({ event: resolved });
+    await expect(
+      importCalendarInvitationForUser({
+        ...reference,
+        event: { end: event.end, start: event.start, summary: event.summary },
+        fallbackUid: "imported-event",
+      })
+    ).resolves.toMatchObject({ event: resolved });
+    const writes = request.mock.calls
+      .filter(([, init]) => init?.method === "POST" || init?.method === "PATCH")
+      .map(([, init]) => {
+        const body: unknown = JSON.parse(z.string().parse(init?.body));
+        return body;
+      });
+    expect(writes).toContainEqual(
+      expect.objectContaining({ colorId: "event-color" })
+    );
   });
 
   test("requires actual credential email and separately allows shared targets", async () => {

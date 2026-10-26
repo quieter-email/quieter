@@ -7,39 +7,46 @@ import type {
   CalendarEventRef,
   CalendarMutationResult,
   CalendarRef,
+  CalendarSummary,
   calendarCreateInputSchema,
   calendarDeleteInputSchema,
   calendarEventsInputSchema,
   calendarRespondInputSchema,
   calendarUpdateInputSchema,
+  calendarUpdateColorInputSchema,
 } from "@quieter/calendar";
 import { db } from "@quieter/database/client";
-import { connectorCredential } from "@quieter/database/schema";
+import {
+  connectorCredential,
+  gmailCredential,
+  mailbox,
+} from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 import type { z } from "zod";
 
 import type { GoogleCalendarEventDraft } from "../connectors/ical";
+import { ConnectorHttpError } from "../connectors/runtime";
 import {
-  ConnectorHttpError,
-  GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
-  hasRequiredConnectorScopes,
-  runAuthorizedConnector,
-} from "../connectors/runtime";
+  CALENDAR_SCOPES,
+  runAuthorizedGmailMailbox,
+} from "../gmail-mailbox-access";
 import {
   createGoogleEvent,
   deleteGoogleEvent,
   getGoogleCalendar,
+  getGoogleColors,
   getGoogleEvent,
   googleEventChanges,
   importGoogleEvent,
   listGoogleCalendars,
   listGoogleEvents,
+  patchGoogleCalendarColor,
   patchGoogleEvent,
   toCalendarEvent,
   toCalendarSummary,
 } from "./google";
-import type { GoogleCalendar } from "./google";
+import type { GoogleCalendar, GoogleEvent } from "./google";
 
 type UserRequest = {
   retryUnauthorized?: boolean;
@@ -55,8 +62,26 @@ type CalendarContext = {
   signal?: AbortSignal;
 };
 
+const readCalendarEvent = async (
+  context: CalendarContext,
+  event: GoogleEvent
+): Promise<CalendarEvent> => {
+  const colors =
+    event.colorId ||
+    (!context.calendar.backgroundColor && context.calendar.colorId)
+      ? await getGoogleColors(context)
+      : undefined;
+  return toCalendarEvent({ ...context, colors, event });
+};
+
 const readCalendarFailure = (error: unknown): never => {
   if (error instanceof ORPCError) {
+    if (error.code === "MAILBOX_SCOPE_REPAIR_REQUIRED") {
+      throw new ORPCError("UNAUTHORIZED", {
+        cause: error,
+        message: "Reconnect this mailbox to use its calendars.",
+      });
+    }
     throw error;
   }
   if (error instanceof ConnectorHttpError) {
@@ -97,38 +122,139 @@ const readCalendarFailure = (error: unknown): never => {
   throw error;
 };
 
-const getOwnedConnection = async (
-  input: UserRequest & { connectionId: string }
-) => {
-  const [credential] = await db
-    .select({
-      accountEmail: connectorCredential.accountEmail,
-      id: connectorCredential.id,
-    })
-    .from(connectorCredential)
-    .where(
-      and(
-        eq(connectorCredential.userId, input.userId),
-        eq(connectorCredential.provider, GOOGLE_CALENDAR_CONNECTOR_PROVIDER),
-        eq(connectorCredential.id, input.connectionId)
-      )
+export const listCalendarAccountsForUser = async (
+  input: UserRequest
+): Promise<{ accounts: CalendarAccount[]; isConfigured: boolean }> => {
+  input.signal?.throwIfAborted();
+  const [mailboxes, legacyAccounts] = await Promise.all([
+    db
+      .select({
+        displayName: mailbox.displayName,
+        emailAddress: mailbox.emailAddress,
+        googleSubject: gmailCredential.googleSubject,
+        id: mailbox.id,
+        scopes: gmailCredential.scopes,
+        status: mailbox.status,
+      })
+      .from(mailbox)
+      .leftJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
+      .where(
+        and(
+          eq(mailbox.ownerUserId, input.userId),
+          eq(mailbox.provider, "gmail")
+        )
+      ),
+    db
+      .select({
+        accountEmail: connectorCredential.accountEmail,
+        displayName: connectorCredential.displayName,
+        id: connectorCredential.id,
+        providerAccountId: connectorCredential.providerAccountId,
+      })
+      .from(connectorCredential)
+      .where(
+        and(
+          eq(connectorCredential.userId, input.userId),
+          eq(connectorCredential.provider, "google_calendar")
+        )
+      ),
+  ]);
+  const legacyBySubject = new Map(
+    legacyAccounts.map((account) => [account.providerAccountId, account])
+  );
+  const matchedLegacyIds = new Set<string>();
+  const accounts: CalendarAccount[] = mailboxes.map((record) => {
+    const legacy = record.googleSubject
+      ? legacyBySubject.get(record.googleSubject)
+      : undefined;
+    if (legacy) {
+      matchedLegacyIds.add(legacy.id);
+    }
+    const grantedScopes = new Set((record.scopes ?? "").split(/\s+/u));
+    let status: CalendarAccount["status"] = CALENDAR_SCOPES.every((scope) =>
+      grantedScopes.has(scope)
     )
-    .limit(1);
-  if (credential === undefined) {
+      ? "connected"
+      : "needs-permission";
+    if (record.status !== "connected" || record.googleSubject === null) {
+      status = "needs-reconnect";
+    }
+    return {
+      email: record.emailAddress,
+      id: legacy?.id ?? record.id,
+      mailboxId: record.id,
+      name: record.displayName ?? record.emailAddress,
+      status,
+    };
+  });
+  for (const legacy of legacyAccounts) {
+    if (!matchedLegacyIds.has(legacy.id)) {
+      accounts.push({
+        email: legacy.accountEmail,
+        id: legacy.id,
+        mailboxId: null,
+        name: legacy.displayName ?? legacy.accountEmail ?? "Calendar account",
+        status: "needs-mailbox",
+      });
+    }
+  }
+  return {
+    accounts,
+    isConfigured: Boolean(
+      serverEnv.BETTER_AUTH_URL &&
+      serverEnv.GOOGLE_GMAIL_CLIENT_ID &&
+      serverEnv.GOOGLE_GMAIL_CLIENT_SECRET &&
+      serverEnv.GMAIL_TOKEN_ENCRYPTION_KEY
+    ),
+  };
+};
+
+export const getCalendarAccountForUser = async (
+  input: UserRequest & { connectionId: string }
+): Promise<CalendarAccount> => {
+  const { accounts } = await listCalendarAccountsForUser(input);
+  const account =
+    accounts.find((candidate) => candidate.mailboxId === input.connectionId) ??
+    accounts.find((candidate) => candidate.id === input.connectionId);
+  if (account === undefined) {
     throw new ORPCError("NOT_FOUND", {
       message: "This calendar account is not connected.",
     });
   }
-  return credential;
+  return { ...account, id: input.connectionId };
+};
+
+const getAuthorizedCalendarAccount = async (
+  input: UserRequest & { connectionId: string }
+) => {
+  const account = await getCalendarAccountForUser(input);
+  if (account.status === "needs-mailbox") {
+    throw new ORPCError("FORBIDDEN", {
+      message: "Connect this account as a Gmail mailbox to use its calendar.",
+    });
+  }
+  if (account.status === "needs-permission") {
+    throw new ORPCError("FORBIDDEN", {
+      message:
+        "Enable calendar access for this Gmail mailbox before trying again.",
+    });
+  }
+  if (account.status === "needs-reconnect") {
+    throw new ORPCError("UNAUTHORIZED", {
+      message: "Reconnect this Gmail mailbox before trying again.",
+    });
+  }
+  return account;
 };
 
 const withCalendar = async <T>(
   input: CalendarRequest,
-  write: boolean,
+  access: "read" | "event-write" | "preference-write",
   run: (context: CalendarContext) => Promise<T>
 ): Promise<T> => {
-  const credential = await getOwnedConnection(input);
-  const localWrite = write && serverEnv.QUIETER_DEPLOYMENT_ENV === "local";
+  const account = await getAuthorizedCalendarAccount(input);
+  const localWrite =
+    access !== "read" && serverEnv.QUIETER_DEPLOYMENT_ENV === "local";
   const allowed = new Set(
     (serverEnv.QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS ?? "")
       .split(",")
@@ -138,8 +264,8 @@ const withCalendar = async <T>(
   if (
     localWrite &&
     (serverEnv.QUIETER_LOCAL_PROVIDER_MODE !== "write" ||
-      !credential.accountEmail ||
-      !allowed.has(credential.accountEmail.toLowerCase()))
+      !account.email ||
+      !allowed.has(account.email.toLowerCase()))
   ) {
     throw new ORPCError("FORBIDDEN", {
       message:
@@ -147,16 +273,24 @@ const withCalendar = async <T>(
     });
   }
   try {
-    return await runAuthorizedConnector(
-      { ...input, provider: GOOGLE_CALENDAR_CONNECTOR_PROVIDER },
-      async (accessToken, signal) => {
+    return await runAuthorizedGmailMailbox(
+      {
+        isUnauthorized: (error) =>
+          error instanceof ConnectorHttpError && error.status === 401,
+        mailboxId: account.mailboxId,
+        retryUnauthorized: input.retryUnauthorized,
+        userId: input.userId,
+      },
+      async (accessToken) => {
+        const { signal } = input;
+        signal?.throwIfAborted();
         const calendar = await getGoogleCalendar({
           accessToken,
           calendarId: input.calendarId,
           signal,
         });
         if (
-          write &&
+          access === "event-write" &&
           calendar.accessRole !== "owner" &&
           calendar.accessRole !== "writer" &&
           calendar.accessRole !== "writerWithoutPrivateAccess"
@@ -190,60 +324,36 @@ const withCalendar = async <T>(
   }
 };
 
-export const listCalendarAccountsForUser = async (
-  input: UserRequest
-): Promise<{ accounts: CalendarAccount[]; isConfigured: boolean }> => {
-  const credentials = await db
-    .select({
-      accountEmail: connectorCredential.accountEmail,
-      displayName: connectorCredential.displayName,
-      id: connectorCredential.id,
-      scopes: connectorCredential.scopes,
-      status: connectorCredential.status,
-    })
-    .from(connectorCredential)
-    .where(
-      and(
-        eq(connectorCredential.userId, input.userId),
-        eq(connectorCredential.provider, GOOGLE_CALENDAR_CONNECTOR_PROVIDER)
-      )
-    );
-  return {
-    accounts: credentials.map((credential) => ({
-      email: credential.accountEmail,
-      id: credential.id,
-      name:
-        credential.displayName ?? credential.accountEmail ?? "Calendar account",
-      status:
-        credential.status === "connected" &&
-        hasRequiredConnectorScopes(
-          GOOGLE_CALENDAR_CONNECTOR_PROVIDER,
-          credential.scopes ?? ""
-        )
-          ? "connected"
-          : "needs-reconnect",
-    })),
-    isConfigured: Boolean(
-      serverEnv.BETTER_AUTH_URL &&
-      serverEnv.GOOGLE_CALENDAR_CLIENT_ID &&
-      serverEnv.GOOGLE_CALENDAR_CLIENT_SECRET &&
-      serverEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY
-    ),
-  };
-};
-
 export const listCalendarsForUser = async (
   input: UserRequest & { connectionId: string }
 ) => {
-  await getOwnedConnection(input);
+  const account = await getAuthorizedCalendarAccount(input);
   try {
-    return await runAuthorizedConnector(
-      { ...input, provider: GOOGLE_CALENDAR_CONNECTOR_PROVIDER },
-      async (accessToken, signal) => {
+    return await runAuthorizedGmailMailbox(
+      {
+        isUnauthorized: (error) =>
+          error instanceof ConnectorHttpError && error.status === 401,
+        mailboxId: account.mailboxId,
+        retryUnauthorized: input.retryUnauthorized,
+        userId: input.userId,
+      },
+      async (accessToken) => {
+        const { signal } = input;
+        signal?.throwIfAborted();
         const calendars = await listGoogleCalendars({ accessToken, signal });
+        const colors = calendars.some(
+          (calendar) =>
+            !calendar.backgroundColor && calendar.colorId !== undefined
+        )
+          ? await getGoogleColors({ accessToken, signal })
+          : undefined;
         return {
           calendars: calendars.map((calendar) =>
-            toCalendarSummary({ calendar, connectionId: input.connectionId })
+            toCalendarSummary({
+              calendar,
+              colors,
+              connectionId: input.connectionId,
+            })
           ),
         };
       }
@@ -253,10 +363,49 @@ export const listCalendarsForUser = async (
   }
 };
 
+export const listCalendarColorsForUser = async (
+  input: UserRequest & { connectionId: string }
+): Promise<{ colors: string[] }> => {
+  const account = await getAuthorizedCalendarAccount(input);
+  try {
+    return await runAuthorizedGmailMailbox(
+      {
+        isUnauthorized: (error) =>
+          error instanceof ConnectorHttpError && error.status === 401,
+        mailboxId: account.mailboxId,
+        retryUnauthorized: input.retryUnauthorized,
+        userId: input.userId,
+      },
+      async (accessToken) => {
+        const colors = await getGoogleColors({
+          accessToken,
+          signal: input.signal,
+        });
+        return {
+          colors: Object.values(colors.event).map((color) => color.background),
+        };
+      }
+    );
+  } catch (error) {
+    return readCalendarFailure(error);
+  }
+};
+
+export const updateCalendarColorForUser = async (
+  input: z.infer<typeof calendarUpdateColorInputSchema> & UserRequest
+): Promise<CalendarSummary> =>
+  await withCalendar(input, "preference-write", async (context) => {
+    const calendar = await patchGoogleCalendarColor({
+      ...context,
+      color: input.color,
+    });
+    return toCalendarSummary({ calendar, connectionId: context.connectionId });
+  });
+
 export const listCalendarEventsForUser = async (
   input: z.infer<typeof calendarEventsInputSchema> & UserRequest
 ): Promise<{ events: CalendarEvent[] }> =>
-  await withCalendar(input, false, async (context) => {
+  await withCalendar(input, "read", async (context) => {
     const events = await listGoogleEvents({
       ...context,
       end: input.end,
@@ -264,25 +413,35 @@ export const listCalendarEventsForUser = async (
       start: input.start,
       timeZone: input.timeZone,
     });
+    const colors =
+      events.some((event) => event.colorId) ||
+      (!context.calendar.backgroundColor && context.calendar.colorId)
+        ? await getGoogleColors(context)
+        : undefined;
     return {
-      events: events.map((event) => toCalendarEvent({ ...context, event })),
+      events: events.map((event) =>
+        toCalendarEvent({ ...context, colors, event })
+      ),
     };
   });
 
 export const getCalendarEventForUser = async (
   input: CalendarEventRef & UserRequest
 ): Promise<CalendarEvent> =>
-  await withCalendar(input, false, async (context) =>
-    toCalendarEvent({
-      ...context,
-      event: await getGoogleEvent({ ...context, eventId: input.eventId }),
-    })
+  await withCalendar(
+    input,
+    "read",
+    async (context) =>
+      await readCalendarEvent(
+        context,
+        await getGoogleEvent({ ...context, eventId: input.eventId })
+      )
   );
 
 export const createCalendarEventForUser = async (
   input: z.infer<typeof calendarCreateInputSchema> & UserRequest
 ): Promise<CalendarMutationResult> =>
-  await withCalendar(input, true, async (context) => {
+  await withCalendar(input, "event-write", async (context) => {
     if (
       input.event.addMeeting &&
       context.calendar.conferenceProperties?.allowedConferenceSolutionTypes?.includes(
@@ -295,6 +454,7 @@ export const createCalendarEventForUser = async (
     }
     const event = await createGoogleEvent({
       ...context,
+      colors: input.event.color ? await getGoogleColors(context) : undefined,
       event: input.event,
       operationId: input.operationId,
       userId: input.userId,
@@ -303,7 +463,7 @@ export const createCalendarEventForUser = async (
       action: "created",
       calendarId: context.calendarId,
       connectionId: context.connectionId,
-      event: toCalendarEvent({ ...context, event }),
+      event: await readCalendarEvent(context, event),
       eventId: event.id,
       status: "success",
     };
@@ -312,7 +472,7 @@ export const createCalendarEventForUser = async (
 export const updateCalendarEventForUser = async (
   input: z.infer<typeof calendarUpdateInputSchema> & UserRequest
 ): Promise<CalendarMutationResult> =>
-  await withCalendar(input, true, async (context) => {
+  await withCalendar(input, "event-write", async (context) => {
     const current = await getGoogleEvent({
       ...context,
       eventId: input.eventId,
@@ -359,6 +519,7 @@ export const updateCalendarEventForUser = async (
     }
     const body = googleEventChanges({
       changes: input.changes,
+      colors: input.changes.color ? await getGoogleColors(context) : undefined,
       current,
       meetingRequestId: createHash("sha256")
         .update(
@@ -381,7 +542,7 @@ export const updateCalendarEventForUser = async (
       action: "updated",
       calendarId: context.calendarId,
       connectionId: context.connectionId,
-      event: toCalendarEvent({ ...context, event }),
+      event: await readCalendarEvent(context, event),
       eventId: event.id,
       status: "success",
     };
@@ -390,7 +551,7 @@ export const updateCalendarEventForUser = async (
 export const deleteCalendarEventForUser = async (
   input: z.infer<typeof calendarDeleteInputSchema> & UserRequest
 ): Promise<CalendarMutationResult> =>
-  await withCalendar(input, true, async (context) => {
+  await withCalendar(input, "event-write", async (context) => {
     const current = await getGoogleEvent({
       ...context,
       eventId: input.eventId,
@@ -423,7 +584,7 @@ export const deleteCalendarEventForUser = async (
 export const respondToCalendarEventForUser = async (
   input: z.infer<typeof calendarRespondInputSchema> & UserRequest
 ): Promise<CalendarMutationResult> =>
-  await withCalendar(input, true, async (context) => {
+  await withCalendar(input, "event-write", async (context) => {
     const current = await getGoogleEvent({
       ...context,
       eventId: input.eventId,
@@ -459,7 +620,7 @@ export const respondToCalendarEventForUser = async (
       action: "responded",
       calendarId: context.calendarId,
       connectionId: context.connectionId,
-      event: toCalendarEvent({ ...context, event }),
+      event: await readCalendarEvent(context, event),
       eventId: event.id,
       status: "success",
     };
@@ -469,7 +630,10 @@ export const resolveCalendarImportTargetForUser = async (
   input: UserRequest & { calendarId?: string; connectionId?: string }
 ): Promise<CalendarRef> => {
   if (input.connectionId) {
-    await getOwnedConnection({ ...input, connectionId: input.connectionId });
+    await getAuthorizedCalendarAccount({
+      ...input,
+      connectionId: input.connectionId,
+    });
     return {
       calendarId: input.calendarId ?? "primary",
       connectionId: input.connectionId,
@@ -497,7 +661,7 @@ export const importCalendarInvitationForUser = async (
     fallbackUid: string;
   }
 ) =>
-  await withCalendar(input, true, async (context) => {
+  await withCalendar(input, "event-write", async (context) => {
     const event = await importGoogleEvent({
       ...context,
       event: {
@@ -508,6 +672,7 @@ export const importCalendarInvitationForUser = async (
     return {
       calendarId: context.calendarId,
       connectionId: context.connectionId,
+      event: await readCalendarEvent(context, event),
       htmlLink: event.htmlLink,
       id: event.id,
       status: "success" as const,

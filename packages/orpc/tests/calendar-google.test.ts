@@ -1,13 +1,18 @@
 /* oxlint-disable eslint/require-await -- Fetch mocks preserve the asynchronous transport contract. */
-import { calendarEventDraftSchema } from "@quieter/calendar";
+import {
+  calendarEventDraftSchema,
+  calendarUpdateColorInputSchema,
+} from "@quieter/calendar";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 
 import {
   createGoogleEvent,
+  getGoogleColors,
   googleEventChanges,
   listGoogleEvents,
   toCalendarEvent,
+  toCalendarSummary,
 } from "../src/calendar/google";
 
 const calendar = {
@@ -34,6 +39,106 @@ const current = {
 
 describe("calendar provider boundary", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  test("resolves live event colors while preserving custom calendar colors and default inheritance", async () => {
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url) =>
+      Response.json(
+        new Request(url).url.endsWith("/colors")
+          ? {
+              calendar: {
+                "calendar-tone": {
+                  background: "#123456",
+                  foreground: "#ffffff",
+                },
+              },
+              event: {
+                "event-tone": { background: "#aabbcc", foreground: "#000000" },
+              },
+            }
+          : { items: [{ ...current, colorId: "event-tone" }] }
+      )
+    );
+    vi.stubGlobal("fetch", request);
+    const sources = await listGoogleEvents(auth);
+    const colors = await getGoogleColors(auth);
+    const customCalendar = {
+      ...calendar,
+      backgroundColor: "#654321",
+      colorId: "calendar-tone",
+    };
+    const mapped = sources.map((event) =>
+      toCalendarEvent({
+        calendar: customCalendar,
+        colors,
+        connectionId: "account-1",
+        event,
+      })
+    );
+    expect(mapped[0]).toMatchObject({
+      color: "#aabbcc",
+      colorOverride: "#aabbcc",
+    });
+    expect(mapped[0]).not.toHaveProperty("colorId");
+    expect(
+      toCalendarSummary({
+        calendar: customCalendar,
+        colors,
+        connectionId: "account-1",
+      }).color
+    ).toBe("#654321");
+    const inherited = toCalendarEvent({
+      calendar: customCalendar,
+      colors,
+      connectionId: "account-1",
+      event: current,
+    });
+    expect(inherited.color).toBe("#654321");
+    expect(inherited).not.toHaveProperty("colorOverride");
+    expect(
+      toCalendarEvent({
+        calendar: { ...calendar, colorId: "calendar-tone" },
+        colors,
+        connectionId: "account-1",
+        event: current,
+      }).color
+    ).toBe("#123456");
+    expect(
+      googleEventChanges({
+        changes: { color: "#AABBCC" },
+        colors,
+        meetingRequestId: "meeting-1",
+      })
+    ).toMatchObject({ colorId: "event-tone" });
+    expect(
+      googleEventChanges({
+        changes: { color: null },
+        colors,
+        meetingRequestId: "meeting-1",
+      })
+    ).toMatchObject({ colorId: null });
+    expect(() =>
+      googleEventChanges({
+        changes: { color: "#abcdef" },
+        colors,
+        meetingRequestId: "meeting-1",
+      })
+    ).toThrow(/available event colors/u);
+    expect(
+      calendarUpdateColorInputSchema.safeParse({
+        calendarId: calendar.id,
+        color: "red; display:none",
+        connectionId: "account-1",
+      }).success
+    ).toBeFalsy();
+    request.mockRejectedValue(
+      new Error("The cached palette should remain available.")
+    );
+    await expect(
+      getGoogleColors({ accessToken: "another-owner-token" })
+    ).resolves.toMatchObject({
+      event: { "event-tone": { background: "#aabbcc" } },
+    });
+  });
 
   test("loads every recurring-expanded page and keeps exclusive all-day dates", async () => {
     const request = vi

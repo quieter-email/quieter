@@ -3,6 +3,7 @@
 import { Loading03Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { MailboxAccessPill } from "@quieter/app/features/mailbox/components/mailbox-access-pill";
 import type { MailboxGrantRole } from "@quieter/app/features/mailbox/components/mailbox-access-pill";
+import { GmailCalendarConnectionRow } from "@quieter/app/features/settings/components/gmail-mailbox-detail-sections";
 import { runDetached } from "@quieter/app/features/settings/components/mailboxes-settings-shared";
 import {
   SettingsRow,
@@ -158,12 +159,20 @@ export const MailboxDetailGeneralSection = ({
               <span className="text-caption text-muted-fg">Connected</span>
             )
           }
-          title="Connection"
+          title="Mail connection"
         >
           {mailbox.connectionStatus === "needs_reconnect"
             ? "Reconnect through Google to resume reading and sending mail."
             : "Quieter can read and send mail for this account."}
         </SettingsRow>
+      )}
+      {mailbox.provider === "gmail" && (
+        <GmailCalendarConnectionRow
+          key={mailbox.id}
+          connectionStatus={mailbox.connectionStatus}
+          emailAddress={mailbox.emailAddress}
+          mailboxId={mailbox.id}
+        />
       )}
     </SettingsRows>
   </SettingsSection>
