@@ -39,7 +39,7 @@ export const ToolbarGroup = ({
 );
 
 const toolbarButtonVariants = cva(
-  "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm font-medium whitespace-nowrap text-muted-fg transition-[background-color,color,transform] duration-150 ease-out select-none hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none active:scale-[0.97] active:bg-muted/80 active:text-fg disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+  "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm font-medium whitespace-nowrap text-muted-fg transition-[background-color,color,scale] duration-150 ease-out select-none hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none active:scale-[0.97] active:bg-muted/80 active:text-fg disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
   {
     defaultVariants: {
       size: "default",

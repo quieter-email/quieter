@@ -29,14 +29,6 @@
   );
 }
 
-:root {
-  --app-motion-duration-enter: 150ms;
-  --app-motion-duration-feedback: 150ms;
-  --app-motion-duration-layout: 250ms;
-  --app-motion-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --app-motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -46,9 +38,13 @@
     transition-property:
       color, background-color, border-color, box-shadow, opacity !important;
     transition-delay: 0ms !important;
-    transition-duration: var(--app-motion-duration-feedback) !important;
+    transition-duration: var(--app-motion-duration-feedback);
     transition-timing-function: var(--app-motion-ease-out) !important;
     scroll-behavior: auto !important;
+  }
+
+  [data-instant] {
+    transition: none !important;
   }
 }
 

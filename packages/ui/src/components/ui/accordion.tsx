@@ -35,14 +35,16 @@ export const AccordionTrigger = ({
 }) => (
   <AccordionPrimitive.Trigger
     className={cn(
-      "flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-body font-medium text-fg transition-transform duration-100 ease-out squircle hover:bg-muted/40 focus-visible:border-ring focus-visible:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "group/accordion-trigger flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-body font-medium text-fg transition-transform duration-100 ease-out squircle hover:bg-muted/40 focus-visible:border-ring focus-visible:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
       className
     )}
     {...props}
   >
     <span className="min-w-0 flex-1">{children}</span>
     <span className="shrink-0 text-muted-fg">
-      {indicator ?? <ChevronDownIcon className="size-4" />}
+      {indicator ?? (
+        <ChevronDownIcon className="size-4 transition-transform duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-data-panel-open/accordion-trigger:rotate-180 motion-reduce:transition-none" />
+      )}
     </span>
   </AccordionPrimitive.Trigger>
 );
@@ -53,7 +55,7 @@ export const AccordionPanel = ({
 }: ComponentPropsWithoutRef<typeof AccordionPrimitive.Panel>) => (
   <AccordionPrimitive.Panel
     className={cn(
-      "overflow-hidden border-t px-4 py-3 text-body text-muted-fg",
+      "overflow-hidden border-t px-4 py-3 text-body text-muted-fg transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) data-ending-style:opacity-0 data-starting-style:opacity-0",
       className
     )}
     {...props}

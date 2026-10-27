@@ -1,0 +1,234 @@
+{
+  "purpose": "Verify continuous popup scaling, interaction lifecycle, and reduced motion. This is not a device FPS benchmark.",
+  "surface": "Local /design-system, sample data only, Chromium 156 on Linux.",
+  "comparison": {
+    "method": "Five alternating before/after runs in one browser session. Only transition-property changes between opacity/transform and opacity/scale. requestAnimationFrame samples computed scale during entry and exit. The dialog must open and unmount each time.",
+    "cause": "Tailwind generates a separate scale property. Transitioning transform does not animate that scale property.",
+    "trials": [
+      {
+        "errors": 0,
+        "exitIntermediate": 0,
+        "intermediate": 0,
+        "properties": ["opacity"],
+        "run": 0,
+        "side": "before"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 3,
+        "intermediate": 5,
+        "properties": ["opacity", "scale"],
+        "run": 0,
+        "side": "after"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 0,
+        "intermediate": 0,
+        "properties": ["opacity"],
+        "run": 1,
+        "side": "before"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 4,
+        "intermediate": 5,
+        "properties": ["opacity", "scale"],
+        "run": 1,
+        "side": "after"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 0,
+        "intermediate": 0,
+        "properties": ["opacity"],
+        "run": 2,
+        "side": "before"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 4,
+        "intermediate": 5,
+        "properties": ["opacity", "scale"],
+        "run": 2,
+        "side": "after"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 0,
+        "intermediate": 0,
+        "properties": ["opacity"],
+        "run": 3,
+        "side": "before"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 4,
+        "intermediate": 5,
+        "properties": ["opacity", "scale"],
+        "run": 3,
+        "side": "after"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 0,
+        "intermediate": 0,
+        "properties": ["opacity"],
+        "run": 4,
+        "side": "before"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 4,
+        "intermediate": 5,
+        "properties": ["opacity", "scale"],
+        "run": 4,
+        "side": "after"
+      }
+    ],
+    "medianEntryIntermediateFrames": {
+      "before": 0,
+      "after": 5
+    },
+    "errors": 0
+  },
+  "finalPointerChecks": {
+    "menu": {
+      "samples": 40,
+      "animatedProperties": ["opacity", "scale"],
+      "distinctScaleSamples": 10
+    },
+    "popover": {
+      "samples": 7,
+      "animatedProperties": ["opacity", "scale"],
+      "distinctScaleSamples": 5
+    },
+    "tooltip": {
+      "samples": 53,
+      "animatedProperties": ["opacity", "scale"],
+      "distinctScaleSamples": 10
+    }
+  },
+  "finalLifecycleChecks": {
+    "normal": {
+      "surfaces": [
+        {
+          "name": "dialog",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "menu",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "popover",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "select",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "searchable-select",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        }
+      ],
+      "rapidReopen": true,
+      "errors": 0
+    },
+    "reducedMotion": {
+      "surfaces": [
+        {
+          "name": "dialog",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "menu",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "popover",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "select",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "searchable-select",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        }
+      ],
+      "rapidReopen": true,
+      "errors": 0
+    }
+  },
+  "reducedMotion": {
+    "dialog": {
+      "animatedProperties": ["opacity"],
+      "scales": ["1", "none"],
+      "instantDuration": "0s"
+    },
+    "menu": {
+      "animatedProperties": [],
+      "scales": ["1", "none"],
+      "instantDuration": "0s"
+    },
+    "popover": {
+      "animatedProperties": [],
+      "scales": ["1", "none"],
+      "instantDuration": "0s"
+    },
+    "select": {
+      "animatedProperties": ["opacity"],
+      "scales": ["1", "none"],
+      "instantDuration": "0s"
+    },
+    "searchable-select": {
+      "animatedProperties": ["opacity"],
+      "scales": ["1", "none"],
+      "instantDuration": "0s"
+    }
+  },
+  "manualChecks": [
+    "Default accordion chevron rotates and detail content fades. Custom indicator stays still.",
+    "Light and dark appearances inspected. The 390px viewport has no horizontal overflow.",
+    "Dialog fits the narrow viewport and keeps focus inside. Escape restores focus to the trigger.",
+    "Drawer opens and dismisses with Escape.",
+    "Nested menu opens with pointer hover."
+  ],
+  "limits": [
+    "Headless browser samples cannot establish frame rate on the user browser, GPU, or high-refresh display.",
+    "Full-screen backdrop blur and dynamic panel layout were not identified as a measured bottleneck."
+  ]
+}

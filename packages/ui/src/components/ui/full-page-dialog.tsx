@@ -14,10 +14,10 @@ export const FullPageDialogContent = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Popup>) => (
   <DialogPrimitive.Portal>
-    <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm transition-opacity duration-200 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0" />
+    <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm transition-opacity duration-200 ease-(--app-motion-ease-out) data-ending-style:opacity-0 data-ending-style:duration-150 data-starting-style:opacity-0" />
     <DialogPrimitive.Popup
       className={cn(
-        "fixed inset-2 z-50 flex flex-col overflow-hidden rounded-xl border bg-bg-surface text-fg shadow-2xl transition-[opacity,scale] duration-200 ease-out will-change-[opacity,scale] data-ending-style:scale-[0.99] data-ending-style:opacity-0 data-starting-style:scale-[0.99] data-starting-style:opacity-0 sm:inset-4 lg:inset-6",
+        "fixed inset-2 z-50 flex flex-col overflow-hidden rounded-xl border bg-bg-surface text-fg shadow-2xl transition-[opacity,scale] duration-200 ease-(--app-motion-ease-out) will-change-[opacity,scale] data-ending-style:scale-[0.99] data-ending-style:opacity-0 data-ending-style:duration-150 data-starting-style:scale-[0.99] data-starting-style:opacity-0 motion-reduce:transition-opacity motion-reduce:data-ending-style:scale-100 motion-reduce:data-starting-style:scale-100 sm:inset-4 lg:inset-6",
         className
       )}
       {...props}
