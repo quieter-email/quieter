@@ -1,6 +1,6 @@
 "use client";
 
-import { appMotionDuration } from "@quieter/app/features/motion/app-motion";
+import { getAppFlyInMotion } from "@quieter/app/features/motion/app-motion";
 import { cn } from "@quieter/ui/cn";
 import { cva } from "class-variance-authority";
 import { m, useReducedMotion } from "motion/react";
@@ -38,14 +38,13 @@ export const SidebarEntrance = ({
 
   return (
     <m.div
-      animate={{ opacity: 1 }}
       className={className}
-      initial={shouldAnimate ? { opacity: 0 } : false}
-      transition={{
-        delay: shouldAnimate && reducedMotion !== true ? index * 0.075 : 0,
-        duration: reducedMotion === true ? appMotionDuration.feedback : 0.5,
-        ease: "easeOut",
-      }}
+      {...getAppFlyInMotion({
+        animate: shouldAnimate,
+        axis: "x",
+        index,
+        reducedMotion,
+      })}
     >
       {children}
     </m.div>

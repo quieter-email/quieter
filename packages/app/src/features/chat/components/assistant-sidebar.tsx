@@ -92,7 +92,7 @@ export const AssistantSidebar = ({
         "[data-assistant-composer]"
       );
       if (composer && document.activeElement === panel) {
-        composer.focus();
+        composer.focus({ preventScroll: true });
         observer.disconnect();
       }
     });
@@ -100,7 +100,7 @@ export const AssistantSidebar = ({
       const composer = panel?.querySelector<HTMLElement>(
         "[data-assistant-composer]"
       );
-      (composer ?? panel)?.focus();
+      (composer ?? panel)?.focus({ preventScroll: true });
       if (!composer && panel) {
         observer.observe(panel, { childList: true, subtree: true });
       }
@@ -118,7 +118,7 @@ export const AssistantSidebar = ({
       className={cn(
         workspaceGutterClassName,
         // oxlint-disable-next-line shadcn/no-arbitrary-values -- Width reserves space as the adjacent mailbox resizes with the sidebar.
-        "absolute inset-y-0 right-0 z-20 w-full shrink-0 overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none xl:relative xl:inset-auto",
+        "absolute inset-y-0 right-0 z-20 w-full shrink-0 overflow-hidden transition-[width] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-out) motion-reduce:transition-none xl:relative xl:inset-auto",
         {
           "pointer-events-none xl:w-0": !open,
           "xl:w-[clamp(20rem,26vw,25rem)]": open,
@@ -128,11 +128,11 @@ export const AssistantSidebar = ({
       id={id}
       inert={!open}
     >
-      {/* Reserve the sidebar's width while translating a stable-width panel, so the mailbox and assistant move together without scaling text. */}
+      {/* Anchor the docked panel to its resizing edge so interrupted transitions stay together without scaling text. */}
       <div
         className={cn(
           // oxlint-disable-next-line shadcn/no-arbitrary-values -- Visibility changes after the sidebar's translate and opacity transition.
-          "absolute inset-y-0 right-0 w-full p-(--workspace-gutter) transition-[transform,opacity,visibility] duration-200 ease-out motion-reduce:transition-none xl:w-[clamp(20rem,26vw,25rem)] xl:pl-0",
+          "absolute inset-y-0 right-0 w-full p-(--workspace-gutter) transition-[translate,opacity,visibility] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-out) motion-reduce:transition-none xl:right-auto xl:left-0 xl:w-[clamp(20rem,26vw,25rem)] xl:translate-x-0 xl:pl-0",
           {
             "invisible translate-x-full opacity-0": !open,
             "visible translate-x-0 opacity-100": open,
