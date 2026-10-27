@@ -1,4 +1,10 @@
-import { generateText, NoOutputGeneratedError, Output } from "ai";
+import {
+  generateText,
+  JSONParseError,
+  NoObjectGeneratedError,
+  NoOutputGeneratedError,
+  Output,
+} from "ai";
 import type { z } from "zod";
 
 import { defaultChatModel } from "./chat-models";
@@ -23,9 +29,9 @@ const reasoningProviderOptions = (
       };
 
 /**
- * Structured generation with one retry for empty output. The schema is enforced
- * through the AI SDK output parser, and usage across completed attempts is
- * reported once with OpenRouter cost accounting included.
+ * Structured generation with one retry for malformed JSON or eligible empty
+ * output. The SDK enforces the schema, and completed attempts contribute to one
+ * usage report with OpenRouter cost accounting included.
  */
 export const runStructuredGeneration = async <TOutput>(input: {
   abortSignal?: AbortSignal;
@@ -65,11 +71,18 @@ export const runStructuredGeneration = async <TOutput>(input: {
         });
         return result.output;
       } catch (error) {
+        const retryableOutput =
+          (NoOutputGeneratedError.isInstance(error) &&
+            input.retryEmptyOutput !== false) ||
+          (NoObjectGeneratedError.isInstance(error) &&
+            JSONParseError.isInstance(error.cause) &&
+            (input.retryEmptyOutput !== false ||
+              (error.text?.trim().length ?? 0) > 0) &&
+            (error.finishReason === "stop" || error.finishReason === "length"));
         if (
           attempt > 0 ||
-          input.retryEmptyOutput === false ||
           input.abortSignal?.aborted === true ||
-          !NoOutputGeneratedError.isInstance(error)
+          !retryableOutput
         ) {
           throw error;
         }
