@@ -5,6 +5,10 @@ description: Configure which models pstack uses per role and at what reasoning b
 
 # Setup pstack
 
+In Codex, Claude Code, or OpenCode, follow [the native setup steps](../../pstack/setup.md) instead of the Cursor-specific steps below.
+
+Read [the client adapter](../../pstack/harnesses.md) before applying tool, model, transcript, or permission instructions. It overrides the Cursor-specific defaults below.
+
 Write pstack's model settings, one model per role:
 
 - **Cursor:** `~/.cursor/rules/pstack-models.mdc`, an always-applied rule.

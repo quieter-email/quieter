@@ -45,8 +45,9 @@ yarn-error.log*
 # Local scratch (never commit)
 .scratch/
 
-# Local agent tooling (never commit)
-.opencode/
+# Local agent tooling, except shared skill discovery
+.opencode/*
+!.opencode/skills
 
 # Generated git hook scripts (source lives at .vite-hooks/pre-commit)
 .vite-hooks/_/

@@ -6,6 +6,8 @@ disable-model-invocation: true
 
 # Show me your work
 
+Read [the client adapter](../../pstack/harnesses.md) before applying tool, model, transcript, or permission instructions. It overrides the Cursor-specific defaults below.
+
 Keep one canonical log.
 
 ## The format
