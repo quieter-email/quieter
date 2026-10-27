@@ -944,6 +944,21 @@ export const DesignSystemShowcase = () => {
               />
             </InputGroup>
           </Row>
+          <Row label="Borderless input">
+            <Input
+              aria-label="Example borderless input"
+              chrome="ghost"
+              className="w-64"
+              placeholder="Focus to edit"
+            />
+            <Input
+              aria-label="Example borderless title"
+              chrome="ghost"
+              className="w-64"
+              defaultValue="Event title"
+              size="lg"
+            />
+          </Row>
           <Row label="Input, invalid">
             <Input
               aria-invalid

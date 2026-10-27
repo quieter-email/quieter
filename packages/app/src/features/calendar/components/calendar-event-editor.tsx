@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowRight01Icon,
   Calendar03Icon,
   Cancel01Icon,
   Clock01Icon,
@@ -294,7 +295,7 @@ export const CalendarEventEditor = ({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <fieldset
-          className="min-w-0 space-y-4 px-5 pt-2 pb-5"
+          className="@container min-w-0 space-y-4 px-5 pt-2 pb-5"
           disabled={pending}
         >
           {state.problem ? (
@@ -346,7 +347,7 @@ export const CalendarEventEditor = ({
               ) : null}
             </div>
           ) : null}
-          <Field>
+          <Field className="ml-6 w-auto">
             <FieldLabel className="sr-only" htmlFor="calendar-event-title">
               Title
             </FieldLabel>
@@ -372,12 +373,14 @@ export const CalendarEventEditor = ({
             {preview ||
             isOccurrence ||
             (editor.kind === "edit" && editor.scope === "series") ? (
-              <FieldDescription>{description}</FieldDescription>
+              <FieldDescription className="ml-2.5">
+                {description}
+              </FieldDescription>
             ) : null}
           </Field>
           {onScopeChange && editor.kind === "edit" ? (
-            <Field>
-              <FieldLabel htmlFor="calendar-event-scope">
+            <Field className="ml-6 w-auto">
+              <FieldLabel className="ml-2.5" htmlFor="calendar-event-scope">
                 Apply changes to
               </FieldLabel>
               <Select
@@ -402,7 +405,7 @@ export const CalendarEventEditor = ({
                 </SelectContent>
               </Select>
               {dirty ? (
-                <FieldDescription>
+                <FieldDescription className="ml-2.5">
                   Save or cancel your changes before switching.
                 </FieldDescription>
               ) : null}
@@ -410,7 +413,7 @@ export const CalendarEventEditor = ({
           ) : null}
           <div className="space-y-1">
             <label
-              className="ml-6 flex cursor-pointer items-center gap-2 py-1 text-body-sm"
+              className="flex cursor-pointer items-center gap-2 py-1 text-body-sm"
               htmlFor="calendar-event-all-day"
             >
               <Checkbox
@@ -426,112 +429,129 @@ export const CalendarEventEditor = ({
               >
                 <CheckboxIndicator />
               </Checkbox>
-              All day
+              <span className="ml-2.5">All day</span>
             </label>
-            <div className="flex items-start gap-2">
-              <Icon className="mt-2" icon={Clock01Icon} tone="muted" />
-              <div className="min-w-0 flex-1">
-                <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                  <Field>
-                    <FieldLabel htmlFor="calendar-event-start-date">
-                      Starts
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 @min-[18rem]:grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
+              <Icon className="mt-2" icon={Calendar03Icon} tone="muted" />
+              <Field className="min-w-0">
+                <FieldLabel
+                  className="sr-only"
+                  htmlFor="calendar-event-start-date"
+                >
+                  Starts
+                </FieldLabel>
+                <Input
+                  chrome="ghost"
+                  id="calendar-event-start-date"
+                  onChange={(event) => {
+                    store.setState((current) => ({
+                      ...current,
+                      values: {
+                        ...current.values,
+                        startDate: event.target.value,
+                      },
+                    }));
+                  }}
+                  required
+                  type="date"
+                  value={form.startDate}
+                />
+              </Field>
+              <Icon
+                className="mt-2.5"
+                icon={ArrowRight01Icon}
+                size={12}
+                tone="muted"
+              />
+              <Field className="min-w-0">
+                <FieldLabel
+                  className="sr-only"
+                  htmlFor="calendar-event-end-date"
+                >
+                  Ends
+                </FieldLabel>
+                <Input
+                  chrome="ghost"
+                  id="calendar-event-end-date"
+                  min={form.startDate}
+                  onChange={(event) => {
+                    store.setState((current) => ({
+                      ...current,
+                      values: {
+                        ...current.values,
+                        endDate: event.target.value,
+                      },
+                    }));
+                  }}
+                  required
+                  type="date"
+                  value={form.endDate}
+                />
+                {form.allDay ? (
+                  <FieldDescription className="ml-2.5">
+                    Includes this date.
+                  </FieldDescription>
+                ) : null}
+              </Field>
+              {form.allDay ? null : (
+                <>
+                  <Icon className="mt-2" icon={Clock01Icon} tone="muted" />
+                  <Field className="min-w-0">
+                    <FieldLabel
+                      className="sr-only"
+                      htmlFor="calendar-event-start-time"
+                    >
+                      Start time
                     </FieldLabel>
                     <Input
                       chrome="ghost"
-                      id="calendar-event-start-date"
+                      id="calendar-event-start-time"
                       onChange={(event) => {
                         store.setState((current) => ({
                           ...current,
                           values: {
                             ...current.values,
-                            startDate: event.target.value,
+                            startTime: event.target.value,
                           },
                         }));
                       }}
                       required
-                      type="date"
-                      value={form.startDate}
+                      type="time"
+                      value={form.startTime}
                     />
                   </Field>
-                  <Field>
-                    <FieldLabel htmlFor="calendar-event-end-date">
-                      Ends
+                  <Icon
+                    className="mt-2.5"
+                    icon={ArrowRight01Icon}
+                    size={12}
+                    tone="muted"
+                  />
+                  <Field className="min-w-0">
+                    <FieldLabel
+                      className="sr-only"
+                      htmlFor="calendar-event-end-time"
+                    >
+                      End time
                     </FieldLabel>
                     <Input
                       chrome="ghost"
-                      id="calendar-event-end-date"
-                      min={form.startDate}
+                      id="calendar-event-end-time"
                       onChange={(event) => {
                         store.setState((current) => ({
                           ...current,
                           values: {
                             ...current.values,
-                            endDate: event.target.value,
+                            endTime: event.target.value,
                           },
                         }));
                       }}
                       required
-                      type="date"
-                      value={form.endDate}
+                      type="time"
+                      value={form.endTime}
                     />
-                    {form.allDay ? (
-                      <FieldDescription>Includes this date.</FieldDescription>
-                    ) : null}
                   </Field>
-                  {form.allDay ? null : (
-                    <>
-                      <Field>
-                        <FieldLabel
-                          className="sr-only"
-                          htmlFor="calendar-event-start-time"
-                        >
-                          Start time
-                        </FieldLabel>
-                        <Input
-                          chrome="ghost"
-                          id="calendar-event-start-time"
-                          onChange={(event) => {
-                            store.setState((current) => ({
-                              ...current,
-                              values: {
-                                ...current.values,
-                                startTime: event.target.value,
-                              },
-                            }));
-                          }}
-                          required
-                          type="time"
-                          value={form.startTime}
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel
-                          className="sr-only"
-                          htmlFor="calendar-event-end-time"
-                        >
-                          End time
-                        </FieldLabel>
-                        <Input
-                          chrome="ghost"
-                          id="calendar-event-end-time"
-                          onChange={(event) => {
-                            store.setState((current) => ({
-                              ...current,
-                              values: {
-                                ...current.values,
-                                endTime: event.target.value,
-                              },
-                            }));
-                          }}
-                          required
-                          type="time"
-                          value={form.endTime}
-                        />
-                      </Field>
-                    </>
-                  )}
-                </div>
-              </div>
+                </>
+              )}
             </div>
             {form.allDay ? null : (
               <Field>
@@ -603,7 +623,7 @@ export const CalendarEventEditor = ({
                     </SelectContent>
                   </Select>
                   {repeat === "preserve" ? (
-                    <FieldDescription className="col-span-2">
+                    <FieldDescription className="col-start-2 ml-2.5">
                       Existing repeat rules will stay unchanged.
                     </FieldDescription>
                   ) : null}
@@ -633,7 +653,7 @@ export const CalendarEventEditor = ({
                   placeholder="Add guests"
                   value={form.attendees}
                 />
-                <FieldDescription>
+                <FieldDescription className="ml-2.5">
                   <span className="sr-only">
                     Separate email addresses with commas.{" "}
                   </span>
@@ -645,7 +665,7 @@ export const CalendarEventEditor = ({
             </div>
             {baseEvent?.organizer &&
             !baseEvent.attendees.some((guest) => guest.organizer) ? (
-              <div className="ml-6 space-y-1">
+              <div className="ml-6 space-y-1 pl-2.5">
                 <Text size="caption" tone="muted">
                   Organizer
                 </Text>
@@ -657,7 +677,7 @@ export const CalendarEventEditor = ({
               </div>
             ) : null}
             {baseEvent !== undefined && baseEvent.attendees.length > 0 ? (
-              <ul className="ml-6 space-y-2">
+              <ul className="ml-6 space-y-2 pl-2.5">
                 {baseEvent.attendees.map((guest) => (
                   <li className="min-w-0 text-body-sm" key={guest.email}>
                     <p className="truncate" title={guest.email}>
@@ -680,7 +700,7 @@ export const CalendarEventEditor = ({
               </ul>
             ) : null}
             {baseEvent?.permissions.respond === true && self && onRespond ? (
-              <Field>
+              <Field className="ml-8.5 w-auto">
                 <FieldLabel>Your response</FieldLabel>
                 <div className="flex gap-2">
                   {(
@@ -751,35 +771,37 @@ export const CalendarEventEditor = ({
               </Button>
             ) : null}
             {baseEvent?.meetingPending === true ? (
-              <p className="text-caption text-muted-fg">
+              <p className="ml-6 pl-2.5 text-caption text-muted-fg">
                 Your meeting link is being prepared.
               </p>
             ) : null}
             {selectedCalendar?.supportsMeetings === true ? (
-              <label
-                className="flex cursor-pointer items-center gap-2 text-body-sm"
-                htmlFor="calendar-event-add-meeting"
-              >
-                <Checkbox
-                  disabled={pending}
-                  id="calendar-event-add-meeting"
-                  checked={form.addMeeting}
-                  onCheckedChange={(checked) => {
-                    store.setState((current) => ({
-                      ...current,
-                      values: { ...current.values, addMeeting: checked },
-                    }));
-                  }}
-                >
-                  <CheckboxIndicator />
-                </Checkbox>
+              <div className="flex items-center gap-2 py-1">
                 <Icon icon={Video01Icon} tone="muted" />
-                Video meeting
-              </label>
+                <label
+                  className="ml-2.5 flex cursor-pointer items-center gap-2 text-body-sm"
+                  htmlFor="calendar-event-add-meeting"
+                >
+                  <Checkbox
+                    disabled={pending}
+                    id="calendar-event-add-meeting"
+                    checked={form.addMeeting}
+                    onCheckedChange={(checked) => {
+                      store.setState((current) => ({
+                        ...current,
+                        values: { ...current.values, addMeeting: checked },
+                      }));
+                    }}
+                  >
+                    <CheckboxIndicator />
+                  </Checkbox>
+                  Video meeting
+                </label>
+              </div>
             ) : null}
             <div className="flex items-start gap-2">
               <Icon className="mt-2" icon={TextAlignLeftIcon} tone="muted" />
-              <Field>
+              <Field className="ml-1.5">
                 <FieldLabel
                   className="sr-only"
                   htmlFor="calendar-event-description"
@@ -816,7 +838,9 @@ export const CalendarEventEditor = ({
                   Calendar
                 </FieldLabel>
                 {editor.kind === "edit" ? (
-                  <Text size="sm">{selectedCalendar?.name ?? "Calendar"}</Text>
+                  <Text className="ml-2.5" size="sm">
+                    {selectedCalendar?.name ?? "Calendar"}
+                  </Text>
                 ) : (
                   <Select
                     disabled={pending}
@@ -958,9 +982,12 @@ export const CalendarEventEditor = ({
               </div>
             </Field>
             {form.reminderKind === "custom" ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="ml-6 grid grid-cols-2 gap-3">
                 <Field>
-                  <FieldLabel htmlFor="calendar-event-reminder-minutes">
+                  <FieldLabel
+                    className="ml-2.5"
+                    htmlFor="calendar-event-reminder-minutes"
+                  >
                     Minutes before
                   </FieldLabel>
                   <Input
@@ -983,7 +1010,10 @@ export const CalendarEventEditor = ({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="calendar-event-reminder-method">
+                  <FieldLabel
+                    className="ml-2.5"
+                    htmlFor="calendar-event-reminder-method"
+                  >
                     Notify by
                   </FieldLabel>
                   <Select
