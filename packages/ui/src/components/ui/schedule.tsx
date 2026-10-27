@@ -4,7 +4,9 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, KeyboardEvent, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
+import { formatTimeMinute } from "../../lib/date-time";
 import { Button } from "./button";
+import { useDateTimePreferences } from "./date-time-preferences";
 import {
   Dialog,
   DialogBody,
@@ -24,6 +26,7 @@ export type ScheduleItem = {
   detail?: string;
   endMinute: number;
   id: string;
+  occurrenceId?: string;
   preview?: true;
   startMinute: number;
   title: string;
@@ -104,12 +107,6 @@ const toneClasses = {
   success: "[--schedule-event-color:var(--success)]",
   warning: "[--schedule-event-color:var(--warning)]",
 } satisfies Record<NonNullable<ScheduleItem["tone"]>, string>;
-
-const formatMinute = (minute: number) => {
-  const hour = Math.floor(minute / 60);
-  const remainder = Math.floor(minute % 60);
-  return `${String(hour).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
-};
 
 const getSlotMinute = ({
   boundary,
@@ -199,6 +196,7 @@ export const Schedule = ({
   today,
   view,
 }: ScheduleProps) => {
+  const { timeFormat } = useDateTimePreferences();
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     allDay: boolean;
@@ -237,7 +235,7 @@ export const Schedule = ({
             return (
               <button
                 aria-describedby={slotHelpId}
-                aria-label={`Create event on ${dateLabel} at ${formatMinute(minute)}`}
+                aria-label={`Create event on ${dateLabel} at ${formatTimeMinute(minute, timeFormat)}`}
                 className={cn(
                   "absolute inset-x-0 top-[var(--schedule-top)] h-3.5 cursor-crosshair text-left outline-none hover:bg-control-hover focus-visible:z-10 focus-visible:bg-control-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                   {
@@ -257,7 +255,7 @@ export const Schedule = ({
         ] as const;
       })
     );
-  }, [dates, slotHelpId, view]);
+  }, [dates, slotHelpId, timeFormat, view]);
 
   const days = useMemo(() => {
     const grouped = new Map<string, ScheduleItem[]>(
@@ -409,7 +407,7 @@ export const Schedule = ({
       // Schedule targets need data-sized geometry, drag anchors and dense event typography.
       // Shared Button sizes cannot express this timed positioning or month-row interaction.
       <button
-        aria-label={`${item.title}, ${item.allDay ? "all day" : `${formatMinute(item.startMinute)} to ${formatMinute(item.endMinute)}`}. ${item.preview ? "Unsaved event preview." : "Open event to edit."}`}
+        aria-label={`${item.title}, ${item.allDay ? "all day" : `${formatTimeMinute(item.startMinute, timeFormat)} to ${formatTimeMinute(item.endMinute, timeFormat)}`}. ${item.preview ? "Unsaved event preview." : "Open event to edit."}`}
         aria-pressed={item.preview ? undefined : selectedId === item.id}
         className={cn(
           "group/event @container/event-card relative z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm bg-[color-mix(in_srgb,var(--schedule-event-color)_30%,var(--card))] px-2 py-1 text-left text-body-sm leading-4 text-fg transition-[color,background-color,box-shadow] duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg enabled:hover:brightness-95 data-selected:ring-2 data-selected:ring-primary motion-reduce:transition-none",
@@ -423,7 +421,7 @@ export const Schedule = ({
         data-selected={selectedId === item.id || undefined}
         disabled={item.preview}
         draggable={Boolean(onEventMove) && !item.preview}
-        key={`${item.id}:${item.date}`}
+        key={`${item.occurrenceId ?? item.id}:${item.date}`}
         onClick={() => {
           if (item.preview) {
             return;
@@ -438,7 +436,7 @@ export const Schedule = ({
           beginDrag(event, item, !compact && !item.allDay);
         }}
         style={eventColorStyle}
-        title={`${item.title}${item.allDay ? "" : `, ${formatMinute(item.startMinute)} – ${formatMinute(item.endMinute)}`}${item.detail ? `, ${item.detail}` : ""}`}
+        title={`${item.title}${item.allDay ? "" : `, ${formatTimeMinute(item.startMinute, timeFormat)} – ${formatTimeMinute(item.endMinute, timeFormat)}`}${item.detail ? `, ${item.detail}` : ""}`}
         type="button"
       >
         <span
@@ -449,14 +447,15 @@ export const Schedule = ({
         >
           {presentation === "compact" && !item.allDay ? (
             <span className="mr-1 font-normal">
-              {formatMinute(item.startMinute)}
+              {formatTimeMinute(item.startMinute, timeFormat)}
             </span>
           ) : null}
           {item.title}
         </span>
         {!compact && !item.allDay && duration >= 45 ? (
           <span className="w-full shrink-0 truncate text-micro">
-            {formatMinute(item.startMinute)} – {formatMinute(item.endMinute)}
+            {formatTimeMinute(item.startMinute, timeFormat)} –{" "}
+            {formatTimeMinute(item.endMinute, timeFormat)}
           </span>
         ) : null}
         {!compact && duration >= 90 && item.detail ? (
@@ -498,10 +497,12 @@ export const Schedule = ({
         {dayItems.map((item) => (
           <div
             className="grid grid-cols-[5rem_minmax(0,1fr)] items-start gap-3"
-            key={`${item.id}:${date}`}
+            key={`${item.occurrenceId ?? item.id}:${date}`}
           >
             <p className="pt-1 text-caption text-muted-fg">
-              {item.allDay ? "All day" : formatMinute(item.startMinute)}
+              {item.allDay
+                ? "All day"
+                : formatTimeMinute(item.startMinute, timeFormat)}
             </p>
             {renderEvent(item, "agenda")}
           </div>
@@ -681,8 +682,8 @@ export const Schedule = ({
   }
 
   const columnStyle: ScheduleStyle = {
-    "--schedule-columns": `3rem repeat(${dates.length}, minmax(6.5rem, 1fr))`,
-    "--schedule-min-width": `${48 + dates.length * 104}px`,
+    "--schedule-columns": `${timeFormat === "12h" ? "4rem" : "3rem"} repeat(${dates.length}, minmax(6.5rem, 1fr))`,
+    "--schedule-min-width": `${(timeFormat === "12h" ? 64 : 48) + dates.length * 104}px`,
   };
   const currentTimeStyle: ScheduleStyle = {
     "--schedule-top": `${((currentMinute ?? 0) * hourHeight) / 60}px`,
@@ -793,11 +794,11 @@ export const Schedule = ({
             };
             return (
               <span
-                className="absolute top-[var(--schedule-top)] right-2 -translate-y-1/2 text-micro text-muted-fg"
+                className="absolute top-[var(--schedule-top)] right-2 -translate-y-1/2 text-micro whitespace-nowrap text-muted-fg"
                 key={hour}
                 style={hourStyle}
               >
-                {hour === 0 ? "" : formatMinute(hour * 60)}
+                {hour === 0 ? "" : formatTimeMinute(hour * 60, timeFormat)}
               </span>
             );
           })}
@@ -1014,7 +1015,7 @@ export const Schedule = ({
                 return (
                   <div
                     className="group/event-slot absolute top-[var(--schedule-top)] left-[var(--schedule-left)] z-10 h-[var(--schedule-height)] w-[var(--schedule-width)] min-w-0 p-0.5"
-                    key={`${item.id}:${date}`}
+                    key={`${item.occurrenceId ?? item.id}:${date}`}
                     style={eventStyle}
                   >
                     {renderEvent({ ...item, endMinute })}
@@ -1127,12 +1128,13 @@ export const Schedule = ({
                 )}
                 style={selectionStyle}
               >
-                {formatMinute(selectionStart)} to {formatMinute(selectionEnd)}
+                {formatTimeMinute(selectionStart, timeFormat)} to{" "}
+                {formatTimeMinute(selectionEnd, timeFormat)}
               </div>
             ) : null}
             {date === today && currentMinute !== undefined ? (
               <div
-                aria-label={`Current time ${formatMinute(currentMinute)}`}
+                aria-label={`Current time ${formatTimeMinute(currentMinute, timeFormat)}`}
                 className="pointer-events-none absolute inset-x-0 top-[var(--schedule-top)] z-20 border-t border-primary before:absolute before:-top-1 before:-left-1 before:size-2 before:rounded-full before:bg-primary"
                 style={currentTimeStyle}
               />

@@ -223,7 +223,6 @@ const CalendarSidebarContent = ({
             }
           }}
           selected={selectedDate}
-          weekStartsOn={1}
         />
         <div className="space-y-6 px-1">
           {accounts.map((account) => (

@@ -333,7 +333,9 @@ export const user = pgTable("user", {
   name: text("name").notNull(),
   onboardingCompletedAt: timestamp("onboardingCompletedAt"),
   termsAcceptedAt: timestamp("termsAcceptedAt"),
+  timeFormat: text("timeFormat").$type<"12h" | "24h">(),
   updatedAt: timestamp("updatedAt").notNull(),
+  weekStartsOn: integer("weekStartsOn").$type<0 | 1 | 2 | 3 | 4 | 5 | 6>(),
 });
 
 export const userAiContext = pgTable(

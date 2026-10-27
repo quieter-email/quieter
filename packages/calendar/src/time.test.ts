@@ -10,6 +10,32 @@ import {
 } from "./time";
 
 describe("calendar date ranges", () => {
+  test("aligns week and month ranges to the selected first weekday", () => {
+    const week = getCalendarRange({
+      date: "2027-01-01",
+      timeZone: "Europe/Berlin",
+      view: "week",
+      weekStartsOn: 0,
+    });
+    expect(week.dates[0]).toBe("2026-12-27");
+    expect(week.dates.at(-1)).toBe("2027-01-02");
+    expect(week.start).toBe("2026-12-26T23:00:00Z");
+    const month = getCalendarDates({
+      date: "2026-03-12",
+      view: "month",
+      weekStartsOn: 6,
+    });
+    expect(month[0]).toBe("2026-02-28");
+    expect(month).toContain("2026-03-31");
+    expect(
+      getCalendarDates({
+        date: "2027-01-03",
+        view: "week",
+        weekStartsOn: 0,
+      })[0]
+    ).toBe("2027-01-03");
+  });
+
   test("keeps weeks on Monday across a year boundary", () => {
     const dates = getCalendarDates({ date: "2027-01-01", view: "week" });
     expect(dates).toHaveLength(7);

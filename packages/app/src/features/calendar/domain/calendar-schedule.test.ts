@@ -6,7 +6,7 @@ import {
   createCalendarEventForm,
   getCalendarRefKey,
 } from "./calendar-event-form";
-import { getCalendarScheduleItems } from "./calendar-schedule";
+import { getCalendarSchedule } from "./calendar-schedule";
 
 const calendar = calendarSummarySchema.parse({
   access: "owner",
@@ -56,7 +56,7 @@ const context = {
 
 describe("calendar schedule creation previews", () => {
   it("keeps the configured time visible before unrelated fields are valid", () => {
-    const items = getCalendarScheduleItems({
+    const { items } = getCalendarSchedule({
       ...context,
       draft: {
         form: {
@@ -103,7 +103,7 @@ describe("calendar schedule creation previews", () => {
       problem: "an impossible all-day date",
     },
   ])("hides $problem without removing saved events", ({ changes }) => {
-    const items = getCalendarScheduleItems({
+    const { items } = getCalendarSchedule({
       ...context,
       draft: { form: { ...form, ...changes }, id: "draft:creation" },
     });
@@ -113,7 +113,7 @@ describe("calendar schedule creation previews", () => {
   });
 
   it("uses the same all-day segmentation for saved and configured multi-day events", () => {
-    const items = getCalendarScheduleItems({
+    const { items } = getCalendarSchedule({
       ...context,
       draft: {
         form: {
@@ -173,7 +173,7 @@ describe("calendar schedule creation previews", () => {
       ["UTC", 1350, 60],
       ["Europe/Berlin", 1410, 120],
     ] satisfies [string, number, number][]) {
-      const items = getCalendarScheduleItems({
+      const { items } = getCalendarSchedule({
         ...context,
         draft: { form: overnightForm, id: "draft:creation" },
         events: [overnight],
@@ -190,6 +190,57 @@ describe("calendar schedule creation previews", () => {
     }
   });
 
+  it("previews repeated draft dates using the saved event segmentation", () => {
+    const { items, previewIssue } = getCalendarSchedule({
+      ...context,
+      draft: {
+        form: { ...form, recurrence: ["RRULE:FREQ=DAILY;COUNT=3"] },
+        id: "draft:creation",
+      },
+    });
+    expect(previewIssue).toBeUndefined();
+    expect(items.filter((item) => item.preview)).toMatchObject([
+      { date: "2026-10-27", endMinute: 720, startMinute: 600 },
+      { date: "2026-10-28", endMinute: 720, startMinute: 600 },
+      { date: "2026-10-29", endMinute: 720, startMinute: 600 },
+    ]);
+  });
+
+  it("keeps overlapping recurring occurrences distinct while grouping draft interactions", () => {
+    const { items } = getCalendarSchedule({
+      ...context,
+      draft: {
+        form: {
+          ...form,
+          allDay: true,
+          endDate: "2026-10-29",
+          recurrence: ["RRULE:FREQ=DAILY;COUNT=2"],
+          startDate: "2026-10-27",
+        },
+        id: "draft:creation",
+      },
+      events: [],
+    });
+    const overlapping = items.filter((item) => item.date === "2026-10-28");
+    expect(overlapping).toHaveLength(2);
+    expect(overlapping[0]?.id).toBe(overlapping[1]?.id);
+    expect(overlapping[0]?.occurrenceId).not.toBe(overlapping[1]?.occurrenceId);
+    expect(overlapping.every((item) => item.preview)).toBeTruthy();
+  });
+
+  it("reports an unavailable draft preview without removing saved events", () => {
+    const { items, previewIssue } = getCalendarSchedule({
+      ...context,
+      draft: {
+        form: { ...form, recurrence: ["RRULE:FREQ=SECONDLY"] },
+        id: "draft:creation",
+      },
+    });
+    expect(previewIssue).toBeTruthy();
+    expect(items).toHaveLength(1);
+    expect(items[0]?.preview).toBeUndefined();
+  });
+
   it("honors overrides and restores the selected calendar's inherited color", () => {
     const otherCalendar = {
       ...calendar,
@@ -197,7 +248,7 @@ describe("calendar schedule creation previews", () => {
       connectionId: "other-account",
     };
     const customColor = "#993366";
-    const overrideItems = getCalendarScheduleItems({
+    const { items: overrideItems } = getCalendarSchedule({
       ...context,
       calendars: [otherCalendar, calendar],
       draft: { form: { ...form, color: customColor }, id: "draft:creation" },
@@ -212,7 +263,7 @@ describe("calendar schedule creation previews", () => {
       },
       { color: customColor, preview: true },
     ]);
-    const inheritedItems = getCalendarScheduleItems({
+    const { items: inheritedItems } = getCalendarSchedule({
       ...context,
       calendars: [otherCalendar, calendar],
       draft: {
@@ -228,7 +279,7 @@ describe("calendar schedule creation previews", () => {
       { color: calendar.color },
       { color: otherCalendar.color, preview: true },
     ]);
-    const fallbackItems = getCalendarScheduleItems({
+    const { items: fallbackItems } = getCalendarSchedule({
       ...context,
       calendars: [],
     });

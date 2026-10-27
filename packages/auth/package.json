@@ -9,6 +9,7 @@
     "./organization-api-key": "./src/organization-api-key.ts",
     "./polar-webhooks": "./src/polar-webhooks.ts",
     "./preview-personas": "./src/preview-personas.ts",
+    "./regional-time": "./src/regional-time.ts",
     "./session": "./src/session.ts",
     "./terms-acceptance": "./src/terms-acceptance.ts",
     "./user-status": "./src/user-status.ts"

@@ -48,6 +48,7 @@ import {
   AlertDialogTitle,
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
+import { useDateTimePreferences } from "@quieter/ui/date-time-preferences";
 import {
   Dialog,
   DialogContent,
@@ -95,7 +96,11 @@ import {
   getCalendarRefKey,
 } from "../domain/calendar-event-form";
 import type { CalendarEditor } from "../domain/calendar-event-form";
-import { getCalendarScheduleItems } from "../domain/calendar-schedule";
+import {
+  getVisibleCalendarEventRef,
+  toggleCalendarGroupVisibility,
+} from "../domain/calendar-groups";
+import { getCalendarSchedule } from "../domain/calendar-schedule";
 import { CalendarEventDetails } from "./calendar-event-details";
 import { CalendarEventEditor } from "./calendar-event-editor";
 import { CalendarSidebar } from "./calendar-sidebar";
@@ -150,6 +155,7 @@ const CalendarWorkspaceContent = ({
   userId,
   preview,
 }: CalendarWorkspaceProps & { preview: string | null }) => {
+  const { weekStartsOn } = useDateTimePreferences();
   const assistant = use(AssistantSidebarContext);
   const route = useMailboxRouteSearch();
   const queryClient = useQueryClient();
@@ -195,8 +201,8 @@ const CalendarWorkspaceContent = ({
   const date = route.calendarDate ?? now.date;
   const view = route.calendarView ?? "week";
   const range = useMemo(
-    () => getCalendarRange({ date, timeZone, view }),
-    [date, timeZone, view]
+    () => getCalendarRange({ date, timeZone, view, weekStartsOn }),
+    [date, timeZone, view, weekStartsOn]
   );
   const preferencesKey = `quieter:calendar-preferences:${userId}:${preview ?? "live"}`;
   const initialPreferences = useMemo<string[]>(() => {
@@ -270,15 +276,13 @@ const CalendarWorkspaceContent = ({
           eventId: route.calendarEventId,
         }
       : undefined;
-  const selectedRef =
-    requestedEventRef &&
-    data.visibleCalendars.some(
-      (calendar) =>
-        calendar.connectionId === requestedEventRef.connectionId &&
-        calendar.calendarId === requestedEventRef.calendarId
-    )
-      ? requestedEventRef
-      : undefined;
+  const selectedRef = requestedEventRef
+    ? getVisibleCalendarEventRef({
+        groups: data.calendarGroups,
+        hiddenCalendarKeys: ui.hiddenCalendarKeys,
+        ref: requestedEventRef,
+      })
+    : undefined;
   const selectedOptions = calendarEventQueryOptions(
     userId,
     selectedRef ?? {
@@ -688,7 +692,7 @@ const CalendarWorkspaceContent = ({
       .includes(ui.search.toLocaleLowerCase())
   );
   const selectedAccount = data.accounts.find(
-    (account) => account.id === requestedEventRef?.connectionId
+    (account) => account.id === (selectedRef ?? requestedEventRef)?.connectionId
   );
   const selectedNeedsAccess =
     selectedAccount !== undefined && selectedAccount.status !== "connected";
@@ -777,7 +781,7 @@ const CalendarWorkspaceContent = ({
     activeEditor?.kind === "create"
       ? `draft:${activeEditor.operationId}`
       : undefined;
-  const items = getCalendarScheduleItems({
+  const { items, previewIssue } = getCalendarSchedule({
     calendars: data.calendars,
     dates: range.dates,
     draft: draftForm && draftId ? { form: draftForm, id: draftId } : undefined,
@@ -790,6 +794,10 @@ const CalendarWorkspaceContent = ({
       <CalendarEventEditor
         calendars={data.calendars}
         editor={activeEditor}
+        locationSuggestions={data.events.flatMap((event) =>
+          event.location ? [event.location] : []
+        )}
+        previewIssue={previewIssue}
         key={
           activeEditor.kind === "edit"
             ? `${getCalendarEventKey(activeEditor.event)}-${activeEditor.scope}`
@@ -1030,7 +1038,7 @@ const CalendarWorkspaceContent = ({
         calendars={data.calendars}
         canCreate={writableCalendars.length > 0}
         date={date}
-        hiddenCalendarKeys={ui.hiddenCalendarKeys}
+        hiddenCalendarKeys={data.hiddenCalendarKeys}
         isConfigured={data.isConfigured}
         isMobileOpen={isMobileSidebarOpen}
         onConnect={(target) => {
@@ -1044,15 +1052,16 @@ const CalendarWorkspaceContent = ({
         }}
         onMobileOpenChange={onMobileSidebarOpenChange}
         onToggleCalendar={(calendar: CalendarSummary) => {
-          const key = getCalendarRefKey(calendar);
-          const hiddenCalendarKeys = ui.hiddenCalendarKeys.includes(key)
-            ? ui.hiddenCalendarKeys.filter((item) => item !== key)
-            : [...ui.hiddenCalendarKeys, key];
+          const hiddenCalendarKeys = toggleCalendarGroupVisibility({
+            calendar,
+            groups: data.calendarGroups,
+            hiddenCalendarKeys: ui.hiddenCalendarKeys,
+          });
           store.setState((current) => ({ ...current, hiddenCalendarKeys }));
           if (
-            calendar.connectionId === selectedRef?.connectionId &&
+            selectedRef &&
             calendar.calendarId === selectedRef.calendarId &&
-            hiddenCalendarKeys.includes(key)
+            hiddenCalendarKeys.includes(getCalendarRefKey(selectedRef))
           ) {
             closeEvent();
           }
