@@ -17,7 +17,9 @@ OpenCode loads skills through its `skill` tool. Skills do not create slash comma
 
 The [client adapter](../.agents/pstack/harnesses.md) maps delegation, models, questions, history, and optional Cursor features to each client. Tool-dependent skills link to it, including when invoked directly. `AGENTS.md` remains the project policy. `CLAUDE.md` imports that policy for Claude Code.
 
-Outside Cursor, unconfigured roles inherit the parent model. Run `setup-pstack` to choose native models and supported reasoning settings. Settings remain per user and per client. No model preferences or credentials are installed by this repository. The [native setup instructions](../.agents/pstack/setup.md) list the settings paths and configuration behavior.
+Unconfigured roles inherit the parent model in every client. Run `setup-pstack` to choose which models handle coding, hard debugging, investigation, writing, verification, and review panels. Setup asks for each requested client and preserves existing choices. Settings remain per user and per client. No model preferences or credentials are installed by this repository. The [setup instructions](../.agents/pstack/setup.md) describe the questions and settings format.
+
+The [model policy](../.agents/pstack/models.md) supports following verified successors within a chosen model series, asking before upgrades, and pinning exact versions. Release following checks native harness support and existing access. It preserves task-specific model choices and persistent exceptions. Discovery runs during setup and the first explicit model selection in a new chat, without a background monitor. Model IDs stay in personal settings rather than bundled role instructions. An optional expert role provides a limited second opinion while implementation and verification stay on their regular models.
 
 For OpenCode Go, connect the subscription through `/connect` and select an available model through `/models`. Inspect the installed catalog with `opencode models`. If that version does not expose the Go provider, update OpenCode before connecting it. Pstack does not change providers or configure billing. OpenCode agents inherit the active model unless a confirmed native agent supplies a different one.
 
@@ -51,7 +53,7 @@ vp install
 vp run pstack:check
 ```
 
-The installer refreshes the canonical skills and source lock entries. The adaptation script restores the client routing, native skill links, public help links, installed plan paths, portable worktree audit, and Vite+ dependency handling. It also reapplies the reviewed statechart fixes in `.agents/pstack/statechart-fixes.patch`. Its inputs are the installed files and the pinned revision in `skills-lock.json`. It is safe to rerun. If an upstream change prevents the patch from applying, reconcile the source before updating.
+The installer refreshes the canonical skills and source lock entries. The adaptation script restores the client routing, native skill links, public help links, installed plan paths, portable worktree audit, and Vite+ dependency handling. It also reapplies the reviewed statechart fixes and model-routing changes from `.agents/pstack/*.patch`. Its inputs are the installed files and the pinned revision in `skills-lock.json`. It is safe to rerun. If an upstream change prevents a patch from applying, reconcile the source before updating.
 
 Keep the adapter and native setup instructions under `.agents/pstack/`, outside the directories the installer replaces. Review any new upstream dependencies and tool assumptions before committing. Compare the result with the source revision so a changed upstream entry point does not silently bypass an adaptation.
 

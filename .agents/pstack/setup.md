@@ -1,16 +1,64 @@
-# Set up native pstack models
+# Set up pstack models
 
-For Codex, Claude Code, and OpenCode, follow these steps instead of the Cursor slug transformations in `setup-pstack`. Keep the role labels from that skill. Do not change authentication, subscriptions, project permissions, or a user's primary model as part of model setup.
+Follow these steps for Codex, Cursor, Claude Code, OpenCode including Go, and other harnesses. Read the [client adapter](harnesses.md) and [model policy](models.md). Do not change authentication, subscriptions, permissions, or the user's primary chat model.
 
-1. Identify the running client from the session's tools. Read its settings path from [the adapter](harnesses.md). Load existing role choices. If only the legacy shared settings file exists, keep choices that are valid in this client.
-2. Inspect the models the native delegation tool accepts. In Claude Code, use confirmed native aliases such as `inherit`, `sonnet`, `opus`, or `haiku` only when available. In Codex, use the models exposed to this session. In OpenCode, use `opencode models`, the connected provider list, and the active agent configuration. Do not read or print credential files. A listed but unconnected provider is not available access.
-3. Ask for a reasoning budget only if the user has not supplied one. Offer small, medium, large, and unlimited. Map these to medium, high, xhigh, and max effort only where supported. Keep the native model ID unchanged. If the client has no matching effort control, retain its native setting and say so.
-4. Build the role table. Use `inherit-parent` for unconfigured roles. Preserve valid user choices. Let the user adjust the table, then confirm it unless the requested choices already authorize the exact settings. Keep panel lengths explicit. Report when the available models cannot supply different model families.
-5. Validate each explicit model against the native tool and provider access. Use `auto` and `inherit-parent` as pstack aliases for omitting a model override. Do not send either alias as a model ID. In Claude Code, the native `inherit` alias also means inheritance.
-6. Write only this client's settings file. Start with `# budget: <label> (<supported effort>)`, then write one `<role>: <value>` line per role. Claude Code loads the rule automatically. Codex and OpenCode read their file when a role is selected. Report the path and any unsupported effort or model choices.
+## Discover the requested harnesses
 
-OpenCode's `task` tool selects an agent rather than accepting an arbitrary model override. To configure a role on a different model, create a native subagent under the user's OpenCode `agents/` directory with `mode: subagent`, a concise description, and the exact confirmed `model: provider/model-id`. Reference it as `agent:<name>` in the role table. Do not replace an existing agent without including that change in the confirmed table. Do not set permission overrides. An inherited role needs no custom agent and uses `general`.
+Identify the running harness from the exposed tools. Ask which other harnesses the user wants configured when the request covers more than this session. Shared instructions support every harness. Personal model preferences belong in each user's settings.
 
-For example, `how explorer: inherit-parent` works in each client. `how explorer: agent:pstack-explorer` works in OpenCode only after that native agent is configured. A Cursor model name with a reasoning suffix is not a portable model choice.
+Read existing choices from the adapter's settings paths. Inspect accepted models, supported effort and speed controls, and provider access for the requested harnesses. In Codex, use this session's exposed model choices. In Cursor, use its native model catalog. In Claude Code, use only confirmed native aliases or IDs. In OpenCode, inspect `opencode models`, connected providers, and agent configuration. Never print credentials.
 
-The verification-skill offers in `setup-pstack` remain optional. Skip them when the project already has appropriate checks or the user asked only to update the installation.
+If another harness is unavailable, ask for its native model names when needed. Record the preference as pending verification without treating it as an available model or replacing a working choice. Do not translate another harness's display name into a guessed ID.
+
+## Ask about tasks
+
+Ask only for preferences the user has not already supplied. Prefer the native question tool. Group roles into understandable task choices, then expand the answers using this table. Let the user override individual roles.
+
+| Task choice | Role labels |
+| --- | --- |
+| Routine coding and fixes | `feature, refactoring`, `bug-fix`, `perf-issue`, `hillclimb` |
+| Hard debugging and architecture | `hardest tasks` |
+| Code exploration and investigation | `how explorer`, `why investigators`, `reflect tooling` |
+| Writing, explanation, and judgment | `judgment and prose`, `how explainer`, `why synthesizer`, `reflect judgment, divergent, synthesizer` |
+| Verification workers | `swarm workers` |
+| Design and review panels | `arena runners`, `architect runners`, `interrogate reviewers`, `arena cross-judge pool` |
+
+Offer an optional `expert consultation` role when the user wants a stronger model for occasional second opinions. Ask which situations merit it and how many consultations a task may use. Keep it separate from implementation, verification, and panel models. This role stays disabled unless explicitly configured.
+
+Ask which models should handle those tasks in each requested harness. A choice of one model for everything fills every required role, including panel entries. Keep the optional expert disabled without an explicit consultation request. When the user says a model should handle most work, offer it as the default and ask only about exceptions. Preserve panel counts. Explain when the available models cannot provide different model families.
+
+Ask about effort and speed only when not supplied. Offer native inheritance, or small, medium, large, and unlimited reasoning budgets where supported. Keep inheritance when the user has no preference.
+
+Ask how to handle new releases. Offer `follow-family`, `ask`, and `pinned` with the meanings in the model policy. For `follow-family`, record the approved product series and access tier for each explicit model choice. Allow exact-version pins and role-specific exceptions. Do not replace the user's preferences with new bundled defaults on reruns.
+
+## Write the choices
+
+Show the resolved task-to-model table for each requested harness, with effort, speed, panel counts, and release preferences. Ask only about unresolved choices. The user's explicit selections authorize those settings without another confirmation.
+
+Validate explicit IDs against the harness and provider access. Use `inherit-parent` for undecided roles. Do not activate unverified cross-harness choices. Preserve them in a clearly marked pending section so setup in that harness can validate them later.
+
+Write only the requested harnesses' settings files. Keep the existing `<role>: <value>` format. Panel values are comma-separated lists. Store effort separately from IDs unless the native catalog encodes it in IDs. For OpenCode, use `agent:<name>` only after configuring and verifying that native subagent.
+
+Record these metadata fields as comments above the role lines:
+
+```text
+# budget: inherit
+# speed: inherit
+# releases: follow-family
+# verified: YYYY-MM-DD
+# approved series and access: <native model or agent> = <user-approved product series and existing access tier>
+```
+
+Use the user's selected release preference in place of the example. For a specific effort choice, retain the native effort or the existing `# budget: <label> (<effort>)` form. Record role-specific pins, effort, speed, and approved series beside the affected role. Do not claim a verification date for pending choices.
+
+Write one line for every role label in the table above. Add `expert consultation` only when requested, with its triggers and limits beside it. With no model choices, scalar roles use `inherit-parent`, panels use `inherit-parent, inherit-parent`, and the cross-judge pool uses `inherit-parent`. Repeated entries count toward panel size. The cross-judge pool supplies one judge rather than a judge per entry.
+
+In Cursor, retain `alwaysApply: true` and the rule description in YAML frontmatter. Other harnesses use plain Markdown. Preserve unrelated user notes and pending choices. Report the written paths, resolved models, inherited settings, and any access or model-diversity gaps.
+
+## Configure OpenCode agents when needed
+
+OpenCode's `task` selects an agent, not an arbitrary model. To use a different model, configure a native subagent in its supported `agents/` directory. Set `mode: subagent`, a concise description, and the exact confirmed `model: provider/model-id`. Keep permission settings intact. Reuse an existing matching agent or include any replacement in the resolved table. An inherited role needs no custom agent and uses `general`.
+
+When following a new release, update the associated agent's model as well as its resolved preference. Keep another role's pin or effort override on a separate agent when their settings would conflict.
+
+Offer verification-skill generation only when the user wants broader setup and the project lacks suitable checks. Skip those offers for a model-preference update.
