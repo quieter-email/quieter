@@ -656,7 +656,7 @@ export const createGoogleEvent = async (
         id,
       },
       method: "POST",
-      path: `/calendars/${encodeURIComponent(input.calendarId)}/events?conferenceDataVersion=1&sendUpdates=all`,
+      path: `/calendars/${encodeURIComponent(input.calendarId)}/events?conferenceDataVersion=1&sendUpdates=none`,
     });
     return eventSchema.parse(await response.json());
   } catch (error) {
@@ -684,12 +684,17 @@ export const createGoogleEvent = async (
 };
 
 export const patchGoogleEvent = async (
-  input: GoogleTarget & { body: unknown; eventId: string; version: string }
+  input: GoogleTarget & {
+    body: unknown;
+    eventId: string;
+    sendUpdates?: "all" | "none";
+    version: string;
+  }
 ): Promise<GoogleEvent> => {
   const response = await requestGoogle({
     ...input,
     method: "PATCH",
-    path: `/calendars/${encodeURIComponent(input.calendarId)}/events/${encodeURIComponent(input.eventId)}?conferenceDataVersion=1&sendUpdates=all`,
+    path: `/calendars/${encodeURIComponent(input.calendarId)}/events/${encodeURIComponent(input.eventId)}?conferenceDataVersion=1&sendUpdates=${input.sendUpdates ?? "none"}`,
   });
   return eventSchema.parse(await response.json());
 };
@@ -700,7 +705,7 @@ export const deleteGoogleEvent = async (
   await requestGoogle({
     ...input,
     method: "DELETE",
-    path: `/calendars/${encodeURIComponent(input.calendarId)}/events/${encodeURIComponent(input.eventId)}?sendUpdates=all`,
+    path: `/calendars/${encodeURIComponent(input.calendarId)}/events/${encodeURIComponent(input.eventId)}?sendUpdates=none`,
   });
 };
 
