@@ -1,0 +1,53 @@
+diff --git a/.agents/skills/statechart/scripts/passes/region-check.ts b/.agents/skills/statechart/scripts/passes/region-check.ts
+index ae499230..f5e79627 100644
+--- a/.agents/skills/statechart/scripts/passes/region-check.ts
++++ b/.agents/skills/statechart/scripts/passes/region-check.ts
+@@ -31,16 +31,18 @@ export function regionsLie(
+   };
+   const addMove = (moves: Map<string, Move>, m: Move) =>
+     moves.set(tupleKey([m.from, m.text, m.to]), m);
+-  let product: string[][] = [[]];
+-  for (const r of regions) {
+-    const next: string[][] = [];
+-    for (const c of product)
+-      for (const s of r.states) if (s.start) next.push([...c, tupleKey(s.path)]);
+-    product = next;
++  function* initialCombinations(region = 0, prefix: string[] = []): Generator<string[]> {
++    if (region === regions.length) {
++      yield prefix;
++      return;
++    }
++    for (const state of regions[region].states)
++      if (state.start)
++        yield* initialCombinations(region + 1, [...prefix, tupleKey(state.path)]);
+   }
+   const realStarts = new Set<string>();
+   for (const i of starts) realStarts.add(tupleKey(combo(i)));
+-  for (const c of product)
++  for (const c of initialCombinations())
+     if (!realStarts.has(tupleKey(c)))
+       return `The regions chart starts at ${words(c)}, where the model never starts.`;
+   for (const [i, r] of regions.entries())
+diff --git a/.agents/skills/statechart/scripts/run.ts b/.agents/skills/statechart/scripts/run.ts
+index 4efd368e..5cfbc818 100644
+--- a/.agents/skills/statechart/scripts/run.ts
++++ b/.agents/skills/statechart/scripts/run.ts
+@@ -192,7 +192,8 @@ const runToFiles = (
+ 
+ async function findTlc(cwd: string) {
+   const { TLA2TOOLS, JAVA } = process.env;
+-  if (TLA2TOOLS) return { jar: TLA2TOOLS, java: JAVA || "java" };
++  const java = JAVA && (JAVA.includes("/") || JAVA.includes("\\")) ? path.resolve(JAVA) : JAVA;
++  if (TLA2TOOLS) return { jar: path.resolve(TLA2TOOLS), java: java || "java" };
+   const mise = (...args: string[]) =>
+     runChild("mise", args, { cwd, env: { ...process.env, MISE_CEILING_PATHS: cwd } });
+   const where = () =>
+@@ -208,7 +209,7 @@ async function findTlc(cwd: string) {
+   }
+   return {
+     jar: path.join(found[0].stdout.trim(), "tla2tools.jar"),
+-    java: JAVA || found[1].stdout.trim(),
++    java: java || found[1].stdout.trim(),
+   };
+ }
+ 

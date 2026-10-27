@@ -51,7 +51,7 @@ vp install
 vp run pstack:check
 ```
 
-The installer refreshes the canonical skills and source lock entries. The adaptation script restores the client routing, native skill links, public help links, installed plan paths, portable worktree audit, and Vite+ dependency handling. Its inputs are the installed files and the pinned revision in `skills-lock.json`. It is safe to rerun.
+The installer refreshes the canonical skills and source lock entries. The adaptation script restores the client routing, native skill links, public help links, installed plan paths, portable worktree audit, and Vite+ dependency handling. It also reapplies the reviewed statechart fixes in `.agents/pstack/statechart-fixes.patch`. Its inputs are the installed files and the pinned revision in `skills-lock.json`. It is safe to rerun. If an upstream change prevents the patch from applying, reconcile the source before updating.
 
 Keep the adapter and native setup instructions under `.agents/pstack/`, outside the directories the installer replaces. Review any new upstream dependencies and tool assumptions before committing. Compare the result with the source revision so a changed upstream entry point does not silently bypass an adaptation.
 

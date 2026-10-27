@@ -31,16 +31,18 @@ export function regionsLie(
   };
   const addMove = (moves: Map<string, Move>, m: Move) =>
     moves.set(tupleKey([m.from, m.text, m.to]), m);
-  let product: string[][] = [[]];
-  for (const r of regions) {
-    const next: string[][] = [];
-    for (const c of product)
-      for (const s of r.states) if (s.start) next.push([...c, tupleKey(s.path)]);
-    product = next;
+  function* initialCombinations(region = 0, prefix: string[] = []): Generator<string[]> {
+    if (region === regions.length) {
+      yield prefix;
+      return;
+    }
+    for (const state of regions[region].states)
+      if (state.start)
+        yield* initialCombinations(region + 1, [...prefix, tupleKey(state.path)]);
   }
   const realStarts = new Set<string>();
   for (const i of starts) realStarts.add(tupleKey(combo(i)));
-  for (const c of product)
+  for (const c of initialCombinations())
     if (!realStarts.has(tupleKey(c)))
       return `The regions chart starts at ${words(c)}, where the model never starts.`;
   for (const [i, r] of regions.entries())

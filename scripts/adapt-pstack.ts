@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -199,6 +200,21 @@ state.devDependencies = {
   pele: "1.9.0",
 };
 writeFileSync(statePackage, `${JSON.stringify(state, null, 2)}\n`);
+
+const statechartPatch = path.join(
+  root,
+  ".agents/pstack/statechart-fixes.patch"
+);
+const patchCheck = spawnSync("git", ["apply", "--check", statechartPatch], {
+  cwd: root,
+});
+if (patchCheck.status === 0) {
+  execFileSync("git", ["apply", statechartPatch], { cwd: root });
+} else {
+  execFileSync("git", ["apply", "--reverse", "--check", statechartPatch], {
+    cwd: root,
+  });
+}
 
 for (const client of [".claude", ".opencode"]) {
   const directory = path.join(root, client);
