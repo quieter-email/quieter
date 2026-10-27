@@ -380,6 +380,10 @@ describe("calendar account isolation and mutations", () => {
       attendees: [{ email: "owner@example.com", responseStatus: "accepted" }],
       attendeesOmitted: true,
     });
+    const mutation = request.mock.calls.find(
+      ([, init]) => init?.method === "PATCH"
+    );
+    expect(mutation?.[0]).toContain("sendUpdates=all");
     request.mockImplementation(async (url) =>
       Response.json(
         new Request(url).url.includes("calendarList")

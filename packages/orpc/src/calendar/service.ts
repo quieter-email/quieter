@@ -614,6 +614,7 @@ export const respondToCalendarEventForUser = async (
         attendeesOmitted: true,
       },
       eventId: current.id,
+      sendUpdates: "all",
       version: input.version,
     });
     return {
