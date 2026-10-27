@@ -14,9 +14,11 @@ The canonical files are in `.agents/skills/`. `.claude/skills` and `.opencode/sk
 | Cursor | `/poteto-mode` | `~/.cursor/rules/pstack-models.mdc` |
 | Pi and other clients | The client's skill loader | `~/.agents/pstack-models.md` |
 
+The settings paths above are optional personal overrides. [Repository preferences](preferences.md) supply the shared defaults on every machine, including model series, release following, and consultation limits. Read both sources through [the model policy](models.md).
+
 OpenCode skills are not slash commands. `/poteto-mode` works there only if a separate custom command exists. This installation uses its native skill loader.
 
-In Codex and OpenCode, read the settings file when selecting a role. If the client-specific file is absent, read the legacy `~/.agents/pstack-models.md`, but use only models available in this client. Claude Code loads its rules automatically and can also read that legacy file when its rule is absent. Run `setup-pstack` through [the native setup steps](setup.md) to change settings.
+Read this harness's settings when selecting a role. If the Codex, Claude Code, or OpenCode file is absent, read the legacy `~/.agents/pstack-models.md`, but use only choices available in this client. Honor native config-home overrides when resolving these default paths. Run `setup-pstack` through [the setup steps](setup.md) to change settings.
 
 ## Delegate with native tools
 
@@ -35,7 +37,7 @@ Codex forks can constrain model overrides. Use only the combinations of context 
 
 ## Choose available models
 
-Outside Cursor, an unconfigured role inherits the parent model. Cursor's Grok and Claude defaults are examples for Cursor, not evidence that another client can call those models. A rejected or unavailable configured model falls back to the parent with one disclosure. Do not switch provider, buy access, or alter credentials to fill a review seat. Several agents on one model are several perspectives, not a multi-model review.
+Follow [the model policy](models.md) before selecting any role's model, effort, or speed. It applies in every harness and overrides model defaults and fallback rules in upstream prose. Unconfigured roles inherit the parent. Setup asks which models should handle which tasks in each harness and records how to adopt new releases. A listed model is not evidence of provider access.
 
 OpenCode Go is a provider subscription used from OpenCode. It does not change skill discovery or the task tool. Run `opencode models` to inspect the installed client's catalog, then check connected providers through `/connect` and `/models`. A catalog entry alone does not prove authorization. Keep provider-qualified IDs exactly as returned. Do not replace a Go model with a paid Zen, Anthropic, or OpenAI model.
 
