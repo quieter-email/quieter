@@ -71,27 +71,31 @@ export function regionsLie(
         if (a.from === c[i] && holds(a.condition, rest)) append(enabled, a.label, { i, a });
     }
     for (const [text, list] of enabled) {
-      let groups: Enabled[][] = [];
+      let groups: Iterable<Enabled[]>;
       if (together.has(text)) {
         const byRegion = new Map<number, Enabled[]>();
         for (const m of list) append(byRegion, m.i, m);
-        groups = [[]];
-        for (const opts of byRegion.values()) {
-          const next: Enabled[][] = [];
-          for (const g of groups) for (const m of opts) next.push([...g, m]);
-          groups = next;
+        const options = [...byRegion.values()];
+        function* combinations(region = 0, prefix: Enabled[] = []): Generator<Enabled[]> {
+          if (region === options.length) {
+            yield prefix;
+            return;
+          }
+          for (const m of options[region])
+            yield* combinations(region + 1, [...prefix, m]);
         }
-      } else for (const m of list) groups.push([m]);
+        groups = combinations();
+      } else groups = list.map((m) => [m]);
       for (const group of groups) {
         const to = [...c];
         for (const { i, a } of group) to[i] = a.to;
-        addMove(drawn, { from: c, text, to });
+        const k = tupleKey([c, text, to]);
+        if (!real.has(k))
+          return `The regions chart lets ${words(c)} go to ${words(to)} by ${text}, which the model never does.`;
+        drawn.set(k, { from: c, text, to });
       }
     }
   }
-  for (const [k, extra] of drawn)
-    if (!real.has(k))
-      return `The regions chart lets ${words(extra.from)} go to ${words(extra.to)} by ${extra.text}, which the model never does.`;
   for (const [k, missing] of real)
     if (!drawn.has(k))
       return `The model goes from ${words(missing.from)} to ${words(missing.to)} by ${missing.text}, which the regions chart cannot show.`;
