@@ -107,6 +107,26 @@ describe("calendar event form time", () => {
 });
 
 describe("calendar event edit changes", () => {
+  it("deduplicates guest email casing without changing saved guest metadata", () => {
+    const form = createCalendarEventForm(
+      { event: recurringMeeting, kind: "edit", scope: "occurrence" },
+      "Europe/Berlin"
+    );
+    const draft = parseCalendarEventForm(
+      { ...form, attendees: "GUEST@example.com; guest@EXAMPLE.com" },
+      recurringMeeting
+    );
+    expect(draft.attendees).toHaveLength(1);
+    expect(draft.attendees[0]).toMatchObject({
+      email: recurringMeeting.attendees[0]?.email,
+      name: "Guest",
+      optional: true,
+    });
+    expect(
+      createCalendarEventChanges({ draft, original: recurringMeeting })
+    ).toBeUndefined();
+  });
+
   it("renames a recurring meeting without changing its time, guests or inherited settings", () => {
     const form = createCalendarEventForm(
       { event: recurringMeeting, kind: "edit", scope: "occurrence" },

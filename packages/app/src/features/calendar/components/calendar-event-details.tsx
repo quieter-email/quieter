@@ -56,7 +56,7 @@ export const CalendarEventDetails = ({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 px-5 py-4">
-        <Text as="h2" className="flex-1" size="lg" truncate weight="medium">
+        <Text as="h2" className="flex-1" size="sm" truncate weight="medium">
           Event details
         </Text>
         <IconButtonTooltip label="Close event details">
@@ -75,7 +75,7 @@ export const CalendarEventDetails = ({
           <Pill size="xs" tone="neutral">
             {calendarName}
           </Pill>
-          <Text as="h3" size="lg" weight="medium">
+          <Text as="h3" size="sm" weight="medium">
             {event.title || "Untitled event"}
           </Text>
           {event.permissions.edit ? null : (
@@ -123,27 +123,6 @@ export const CalendarEventDetails = ({
             </Pill>
           ) : null}
         </div>
-        {event.meetingUrl ? (
-          <Button
-            fullWidth
-            nativeButton={false}
-            render={
-              <a
-                aria-label="Join video meeting"
-                href={event.meetingUrl}
-                rel="noreferrer"
-                target="_blank"
-              />
-            }
-          >
-            Join video meeting
-          </Button>
-        ) : null}
-        {!event.meetingUrl && event.meetingPending ? (
-          <p className="text-body-sm text-muted-fg">
-            Your meeting link is being prepared. Refresh in a moment.
-          </p>
-        ) : null}
         {event.location ? (
           <div className="space-y-1">
             <h4 className="text-caption text-muted-fg">Location</h4>

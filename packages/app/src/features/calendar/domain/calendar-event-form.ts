@@ -170,11 +170,23 @@ export const parseCalendarEventForm = (
     .split(/[,;\n]/u)
     .map((email) => email.trim())
     .filter(Boolean);
-  const attendees = [...new Set(guests)].map((email) => {
+  const seenEmails = new Set<string>();
+  const attendees = guests.flatMap((email) => {
+    const normalizedEmail = email.toLowerCase();
+    if (seenEmails.has(normalizedEmail)) {
+      return [];
+    }
+    seenEmails.add(normalizedEmail);
     const guest = original?.attendees.find(
-      (attendee) => attendee.email === email
+      (attendee) => attendee.email.toLowerCase() === normalizedEmail
     );
-    return { email, name: guest?.name, optional: guest?.optional ?? false };
+    return [
+      {
+        email: guest?.email ?? email,
+        name: guest?.name,
+        optional: guest?.optional ?? false,
+      },
+    ];
   });
   let reminders: CalendarEventDraft["reminders"] = { kind: "default" };
   if (form.reminderKind === "none") {

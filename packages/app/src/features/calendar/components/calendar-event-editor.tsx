@@ -13,7 +13,6 @@ import {
   SquareLock01Icon,
   TextAlignLeftIcon,
   UserGroupIcon,
-  Video01Icon,
 } from "@hugeicons/core-free-icons";
 import { getCalendarConnectionQueryKey } from "@quieter/app/lib/calendar-query";
 import { toastError } from "@quieter/app/lib/error-toast";
@@ -367,7 +366,6 @@ export const CalendarEventEditor = ({
               }}
               placeholder="Untitled event"
               required
-              size="lg"
               value={form.title}
             />
             {preview ||
@@ -431,7 +429,7 @@ export const CalendarEventEditor = ({
               </Checkbox>
               <span className="ml-2.5">All day</span>
             </label>
-            <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 @min-[18rem]:grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
+            <div className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-2 gap-y-1 @min-[18rem]:grid-cols-[1rem_minmax(0,1fr)_auto_minmax(0,1fr)]">
               <Icon className="mt-2" icon={Calendar03Icon} tone="muted" />
               <Field className="min-w-0">
                 <FieldLabel
@@ -555,7 +553,7 @@ export const CalendarEventEditor = ({
             </div>
             {form.allDay ? null : (
               <Field>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+                <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
                   <Icon icon={Globe02Icon} tone="muted" />
                   <FieldLabel
                     className="sr-only"
@@ -581,7 +579,7 @@ export const CalendarEventEditor = ({
             )}
             {isOccurrence ? null : (
               <Field>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+                <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
                   <Icon icon={RepeatIcon} tone="muted" />
                   <FieldLabel
                     className="sr-only"
@@ -650,13 +648,10 @@ export const CalendarEventEditor = ({
                       },
                     }));
                   }}
-                  placeholder="Add guests"
+                  placeholder="Guest emails, separated by commas"
                   value={form.attendees}
                 />
                 <FieldDescription className="ml-2.5">
-                  <span className="sr-only">
-                    Separate email addresses with commas.{" "}
-                  </span>
                   {preview
                     ? "No invitations are sent from this preview."
                     : "Saving sends invitations and event updates to guests."}
@@ -727,7 +722,7 @@ export const CalendarEventEditor = ({
               </Field>
             ) : null}
             <Field>
-              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+              <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
                 <Icon icon={Location01Icon} tone="muted" />
                 <FieldLabel
                   className="sr-only"
@@ -753,54 +748,10 @@ export const CalendarEventEditor = ({
                 />
               </div>
             </Field>
-            {baseEvent?.meetingUrl ? (
-              <Button
-                fullWidth
-                nativeButton={false}
-                render={
-                  <a
-                    aria-label="Join video meeting"
-                    href={baseEvent.meetingUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  />
-                }
-              >
-                <Icon icon={Video01Icon} />
-                Join video meeting
-              </Button>
-            ) : null}
-            {baseEvent?.meetingPending === true ? (
-              <p className="ml-6 pl-2.5 text-caption text-muted-fg">
-                Your meeting link is being prepared.
-              </p>
-            ) : null}
-            {selectedCalendar?.supportsMeetings === true ? (
-              <div className="flex items-center gap-2 py-1">
-                <Icon icon={Video01Icon} tone="muted" />
-                <label
-                  className="ml-2.5 flex cursor-pointer items-center gap-2 text-body-sm"
-                  htmlFor="calendar-event-add-meeting"
-                >
-                  <Checkbox
-                    disabled={pending}
-                    id="calendar-event-add-meeting"
-                    checked={form.addMeeting}
-                    onCheckedChange={(checked) => {
-                      store.setState((current) => ({
-                        ...current,
-                        values: { ...current.values, addMeeting: checked },
-                      }));
-                    }}
-                  >
-                    <CheckboxIndicator />
-                  </Checkbox>
-                  Video meeting
-                </label>
-              </div>
-            ) : null}
             <div className="flex items-start gap-2">
-              <Icon className="mt-2" icon={TextAlignLeftIcon} tone="muted" />
+              <span className="flex h-9 items-center">
+                <Icon icon={TextAlignLeftIcon} tone="muted" />
+              </span>
               <Field className="ml-1.5">
                 <FieldLabel
                   className="sr-only"
@@ -829,7 +780,7 @@ export const CalendarEventEditor = ({
           </div>
           <div className="space-y-1 border-t border-border pt-3">
             <Field>
-              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+              <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
                 <Icon icon={Calendar03Icon} tone="muted" />
                 <FieldLabel
                   className="sr-only"
@@ -870,7 +821,7 @@ export const CalendarEventEditor = ({
               </div>
             </Field>
             <Field>
-              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+              <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
                 <Icon icon={PaintBoardIcon} tone="muted" />
                 <FieldLabel className="sr-only">Event color</FieldLabel>
                 <Popover>
@@ -941,7 +892,7 @@ export const CalendarEventEditor = ({
               </div>
             </Field>
             <Field>
-              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+              <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
                 <Icon icon={Notification02Icon} tone="muted" />
                 <FieldLabel
                   className="sr-only"
@@ -1054,7 +1005,7 @@ export const CalendarEventEditor = ({
             ) : null}
             <div className="space-y-1">
               <Field>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+                <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
                   <Icon icon={Clock01Icon} tone="muted" />
                   <FieldLabel
                     className="sr-only"
@@ -1091,7 +1042,7 @@ export const CalendarEventEditor = ({
                 </div>
               </Field>
               <Field>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+                <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
                   <Icon icon={SquareLock01Icon} tone="muted" />
                   <FieldLabel
                     className="sr-only"
