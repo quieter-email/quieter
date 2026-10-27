@@ -6,6 +6,8 @@ disable-model-invocation: true
 
 # Automate me
 
+Read [the client adapter](../../pstack/harnesses.md) before applying tool, model, transcript, or permission instructions. It overrides the Cursor-specific defaults below.
+
 A guided flow for turning the user's working conventions into a skill agents will follow. The output is one `-mode` skill tailored to them (e.g. `jay-mode`, `priya-mode`).
 
 This skill orchestrates three others: an inline mining pass (see step 1), your harness's skill-authoring skill (authoring), and the **unslop** skill (prose discipline). It sequences them. It doesn't replace them.

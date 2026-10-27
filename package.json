@@ -6,6 +6,8 @@
   "scripts": {
     "mail:benchmark": "vp run @quieter/env#build && node --env-file=.env.local scripts/run-mail-benchmark.ts",
     "agent:doctor": "node scripts/agent-tooling-doctor.ts",
+    "pstack:adapt": "node scripts/adapt-pstack.ts",
+    "pstack:check": "node scripts/check-pstack.ts && node --test .agents/pstack/*.test.ts",
     "billing:sync-credit-usage-polar": "vp run @quieter/billing#credit-usage:sync",
     "billing:sync-polar": "vp run @quieter/billing#catalog:sync",
     "build": "vp run -r build",
