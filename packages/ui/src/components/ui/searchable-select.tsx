@@ -7,7 +7,8 @@ import { useMemo } from "react";
 import { cn } from "../../lib/cn";
 import { Icon } from "./icon";
 import { CheckIcon, ChevronDownIcon } from "./icons";
-import { inputVariants } from "./input";
+import { Input } from "./input";
+import { InputAddon, InputGroup } from "./input-group";
 import { selectTriggerVariants } from "./select";
 import type { SelectTriggerProps } from "./select";
 
@@ -103,13 +104,20 @@ export const SearchableSelect = ({
             aria-label={ariaLabel}
             className="flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) origin-(--transform-origin) flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 motion-reduce:transition-none"
           >
-            <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1">
-              <Icon aria-hidden icon={Search01Icon} size={16} tone="muted" />
-              <ComboboxPrimitive.Input
-                aria-label={searchPlaceholder}
-                className={inputVariants({ chrome: "ghost" })}
-                placeholder={searchPlaceholder}
-              />
+            <div className="shrink-0 border-b border-border p-2">
+              <InputGroup>
+                <InputAddon
+                  aria-hidden
+                  className="ml-3 flex shrink-0 items-center"
+                >
+                  <Icon icon={Search01Icon} size={14} tone="muted" />
+                </InputAddon>
+                <ComboboxPrimitive.Input
+                  aria-label={searchPlaceholder}
+                  placeholder={searchPlaceholder}
+                  render={<Input chrome="attached" />}
+                />
+              </InputGroup>
             </div>
             <ComboboxPrimitive.Empty className="text-center text-body-sm text-muted-fg">
               <p className="px-3 py-4">{emptyMessage}</p>
