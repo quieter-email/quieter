@@ -3,6 +3,7 @@ import type {
   AutoLabelSettings,
   MailAutoLabelHistory,
 } from "@quieter/mail/auto-label";
+import type { OtpToken } from "@quieter/mail/otp-token";
 import { z } from "zod";
 
 import type { AiUsageReport } from "./chat-usage";
@@ -10,6 +11,7 @@ import type { AiUsageReport } from "./chat-usage";
 export const AUTO_LABEL_MODEL = "typesafe/jev-1.13";
 
 export type AutomationMailMessage = {
+  otpToken?: OtpToken;
   attachments?: { fileName: string; mimeType: string }[];
   bcc?: string | null;
   bodyHtml?: string | null;

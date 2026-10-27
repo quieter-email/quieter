@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 import { extractMailAddress } from "./compose/schema";
+import {
+  otpTokenSchema,
+  parseOtpTokenHeaders,
+  serializeOtpToken,
+} from "./otp-token";
 
 export { sendMessageResultSchema } from "./delivery";
 export type { SendMessageResult } from "./delivery";
@@ -137,6 +142,7 @@ export const sendMessageInputSchema = z
     idempotencyKey: z.string().trim().min(1).max(255).optional(),
     metadata: z.record(z.string(), jsonMetadataValueSchema).optional(),
     openTracking: z.boolean().optional(),
+    otpToken: otpTokenSchema.optional(),
     replyTo: addressListSchema.optional(),
     subject: z.string().trim().min(1),
     tags: z.array(sendTagSchema).default([]),
@@ -155,6 +161,42 @@ export const sendMessageInputSchema = z
     }
   )
   .superRefine((input, ctx) => {
+    const otpHeaders = (
+      Array.isArray(input.headers)
+        ? input.headers
+        : Object.entries(input.headers ?? {}).map(([name, value]) => ({
+            name,
+            value,
+          }))
+    ).filter(({ name }) => name.toLowerCase() === "otp-token");
+    if (otpHeaders.length > 1 || (input.otpToken && otpHeaders.length > 0)) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Provide exactly one OTP token, using otpToken or a custom header.",
+        path: ["headers"],
+      });
+    } else if (otpHeaders.length === 1 && !parseOtpTokenHeaders(otpHeaders)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Invalid OTP-Token header.",
+        path: ["headers"],
+      });
+    }
+    const validOtp = otpTokenSchema.safeParse(input.otpToken);
+    const otpValue = validOtp.success
+      ? serializeOtpToken(validOtp.data)
+      : otpHeaders[0]?.value;
+    // Nodemailer folds at 76 columns but extends through an unbroken segment.
+    // Reserve that prefix so every physical line stays within RFC 5322's 998 columns.
+    if (otpValue?.split(/[\t ]/u).some((part) => part.length > 998 - 76)) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "OTP-Token contains a value too long for an email header line.",
+        path: [input.otpToken ? "otpToken" : "headers"],
+      });
+    }
     const addressFields = [
       ["from", [input.from]],
       ["to", input.to],

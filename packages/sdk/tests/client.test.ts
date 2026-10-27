@@ -1,3 +1,7 @@
+import { parseOtpTokenHeaders } from "@quieter/mail/otp-token";
+import { parseRawMailMessage } from "@quieter/mail/raw-message";
+import { sendMessageInputSchema } from "@quieter/mail/send";
+import { buildSendMimeMessage } from "@quieter/mail/send-mime";
 /* oxlint-disable require-await -- Fetch fixtures retain the async contract without external I/O. */
 import { jsx } from "react/jsx-runtime";
 import { describe, expect, test } from "vite-plus/test";
@@ -218,4 +222,42 @@ describe(Quieter, () => {
     );
     expect(suppressions[0]?.reason).toBe("complaint");
   });
+});
+
+describe("OTP sending and extraction", () => {
+  test.each([false, true])(
+    "SDK sends OTP through real request validation and MIME, React=%s",
+    async (react) => {
+      const otpToken = { code: ' 12"34\\56 ', origin: "https://example.com" };
+      const options = {
+        apiKey: "quieter_test",
+        fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          const payload = sendMessageInputSchema.parse(await request.json());
+          const mime = await buildSendMimeMessage(payload);
+          const parsed = await parseRawMailMessage(mime.raw);
+          expect(parseOtpTokenHeaders(parsed.headers)).toStrictEqual(otpToken);
+          expect(react ? parsed.bodyHtml : parsed.bodyText).toContain(
+            "Sign in"
+          );
+          return Response.json({ messageId: "one", sent: true });
+        },
+      };
+      const input = {
+        from: "a@example.com",
+        otpToken,
+        subject: "Code",
+        text: "Sign in",
+        to: "b@example.com",
+      };
+      if (react) {
+        await new ReactQuieter(options).send({
+          ...input,
+          react: jsx("p", { children: "Sign in" }),
+        });
+      } else {
+        await new Quieter(options).send(input);
+      }
+    }
+  );
 });

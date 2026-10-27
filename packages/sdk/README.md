@@ -42,3 +42,17 @@ await quieter.send({
 ```
 
 Version 0.0.3 moves React input to `quieter/react`. Existing React callers need to change that import. API credentials and the fetch implementation are private, and internal attachment-normalization helpers are no longer exported. `openTracking` is supported by the shared send contract.
+
+## Verification codes
+
+Send an [experimental OTP-Token header](https://mikewest.github.io/otp-token/draft-goto-otp-token.html) with a verification email. Use the canonical origin of your site without a trailing slash. The React client accepts the same option.
+
+```ts
+await quieter.send({
+  from: "Example <login@example.com>",
+  to: "person@example.com",
+  subject: "Your verification code",
+  text: "Your verification code is 123456",
+  otpToken: { code: "123456", origin: "https://example.com" },
+});
+```

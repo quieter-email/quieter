@@ -19,6 +19,7 @@ import {
 } from "@quieter/database/schema";
 import { partitionAutoLabelCandidates } from "@quieter/mail/auto-label-matching";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
+import { parseOtpTokenHeaders } from "@quieter/mail/otp-token";
 import { reportError } from "@quieter/observability";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 
@@ -76,6 +77,7 @@ const toAutomationMessage = (
       message.direction === "outbound"
         ? [MAILBOX_LABELS.sent]
         : labelsByState[message.mailboxState],
+    otpToken: parseOtpTokenHeaders(message.headers ?? []) ?? undefined,
     snippet: message.snippet,
     subject: message.subject,
     threadId: message.threadId,

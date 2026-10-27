@@ -28,7 +28,8 @@
     "./auto-label": "./src/auto-label.ts",
     "./auto-label-matching": "./src/auto-label-matching.ts",
     "./unsubscribe": "./src/unsubscribe.ts",
-    "./capture": "./src/capture.ts"
+    "./capture": "./src/capture.ts",
+    "./otp-token": "./src/otp-token.ts"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
@@ -39,6 +40,7 @@
     "htmlparser2": "10.1.0",
     "nodemailer": "^10.1.0",
     "postal-mime": "^4.0.5",
+    "structured-headers": "2.1.1",
     "zod": "catalog:"
   },
   "devDependencies": {
