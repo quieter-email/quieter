@@ -108,27 +108,25 @@ export const messageOf = (error: unknown) =>
     ? error.message
     : inspect(error);
 
-const joined = (files: string[]): Output => {
-  const fds: number[] = [];
-  const sizes: number[] = [];
-  for (const f of files) {
-    const fd = fs.openSync(f, "r");
-    fds.push(fd);
-    sizes.push(fs.fstatSync(fd).size);
-  }
-  return {
-    *[Symbol.iterator]() {
-      for (let f = 0; f < fds.length; f++)
-        for (let pos = 0; pos < sizes[f];) {
-          const buf = Buffer.allocUnsafe(Math.min(PART, sizes[f] - pos));
-          const n = fs.readSync(fds[f], buf, 0, buf.length, pos);
+const joined = (files: string[]): Output => ({
+  *[Symbol.iterator]() {
+    for (const file of files) {
+      const fd = fs.openSync(file, "r");
+      try {
+        const size = fs.fstatSync(fd).size;
+        for (let pos = 0; pos < size;) {
+          const buf = Buffer.allocUnsafe(Math.min(PART, size - pos));
+          const n = fs.readSync(fd, buf, 0, buf.length, pos);
           if (!n) break;
           pos += n;
           yield buf.subarray(0, n);
         }
-    },
-  };
-};
+      } finally {
+        fs.closeSync(fd);
+      }
+    }
+  },
+});
 
 const utf8 = new TextDecoder("utf-8", { ignoreBOM: true });
 
@@ -166,9 +164,9 @@ const runToFiles = (
   new Promise<FileResult>((resolve) => {
     const files = [`${out}.stdout`, `${out}.stderr`];
     const fds: number[] = [];
-    for (const f of files) fds.push(fs.openSync(f, "w"));
     let child: ChildProcess;
     try {
+      for (const f of files) fds.push(fs.openSync(f, "w"));
       child = spawn(file, args, { ...options, stdio: ["ignore", ...fds] });
     } finally {
       for (const fd of fds) fs.closeSync(fd);
@@ -213,7 +211,7 @@ async function findTlc(cwd: string) {
   };
 }
 
-const exitClass = (status: number | null) =>
+const exitClass = (status: number | null): CheckResult["exit"] =>
   status === 0 ? 0 : status === 11 || status === 12 || status === 13 ? 1 : 2;
 
 const tail = (r: FileResult) => {
@@ -268,7 +266,11 @@ function* only(marks: Iterable<Mark>, rules: Set<string>) {
   }
 }
 
-export async function check(specFile: string, configFile: string): Promise<CheckResult> {
+export async function check<T>(
+  specFile: string,
+  configFile: string,
+  consume: (result: CheckResult) => T | Promise<T>,
+): Promise<T> {
   const cfg = readConfig({ file: configFile, text: fs.readFileSync(configFile, "utf8") });
   const checks = readChecks({ configFile, config: cfg });
   const folder = path.dirname(path.resolve(specFile));
@@ -453,13 +455,13 @@ export async function check(specFile: string, configFile: string): Promise<Check
             addPast(graph, counterexample, spec.variables, rule, past, excludes, find);
         }
         const properties = propertiesWith((trace) => lasso(graph, trace, spec.variables, find));
-        return {
+        return await consume({
           ...common,
           graph,
           paths: undefined,
           properties,
           drawing,
-        };
+        });
       }
     }
     const drawn = pathGraph(spec.variables);
@@ -469,13 +471,13 @@ export async function check(specFile: string, configFile: string): Promise<Check
       if (outcome === "broken" && messages)
         paths.push(drawn.bug(rule, readCounterexample(messages)));
     }
-    return {
+    return await consume({
       ...common,
       graph: drawn.graph,
       paths,
       properties: propertiesWith(drawn.lasso),
       drawing: undefined,
-    };
+    });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

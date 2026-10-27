@@ -14,20 +14,23 @@ try {
     viewFile ? await import(pathToFileURL(path.resolve(viewFile)).href) : {},
     inspect,
   );
-  const { files, exit } = compile(await check(specFile, configFile), view);
-  const draft = path.join(stage, "draft");
-  fs.mkdirSync(draft);
-  for (const [name, parts] of files) {
-    const fd = fs.openSync(path.join(draft, name), "wx");
-    try {
-      for (const part of parts)
-        fs.writeSync(fd, typeof part === "string" ? Buffer.from(part) : part);
-      fs.writeSync(fd, "\n");
-    } finally {
-      fs.closeSync(fd);
+  const exit = await check(specFile, configFile, (result) => {
+    const { files, exit } = compile(result, view);
+    const draft = path.join(stage, "draft");
+    fs.mkdirSync(draft);
+    for (const [name, parts] of files) {
+      const fd = fs.openSync(path.join(draft, name), "wx");
+      try {
+        for (const part of parts)
+          fs.writeSync(fd, typeof part === "string" ? Buffer.from(part) : part);
+        fs.writeSync(fd, "\n");
+      } finally {
+        fs.closeSync(fd);
+      }
     }
-  }
-  fs.renameSync(draft, path.join(stage, "done"));
+    fs.renameSync(draft, path.join(stage, "done"));
+    return exit;
+  });
   process.exit(exit);
 } catch (error) {
   console.error(messageOf(error));

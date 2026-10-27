@@ -392,8 +392,8 @@ test(
     const saved = process.env.TMPDIR;
     process.env.TMPDIR = tmp;
     try {
-      await check(`${login}.tla`, `${login}.cfg`);
-      await assert.rejects(check(`${base}.tla`, `${base}.cfg`), /SANY could not read/);
+      await check(`${login}.tla`, `${login}.cfg`, () => {});
+      await assert.rejects(check(`${base}.tla`, `${base}.cfg`, () => {}), /SANY could not read/);
     } finally {
       if (saved === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = saved;
