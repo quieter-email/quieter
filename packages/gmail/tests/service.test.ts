@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vite-plus/test";
 
 import {
   extractListUnsubscribeTargets,
+  getMessageWithDetails,
   getGmailMessageCount,
   getMailboxSyncDelta,
   getGmailMessageThreadAssociations,
@@ -982,4 +983,48 @@ describe("Gmail watch and history", () => {
       globalThis.fetch = originalFetch;
     }
   });
+});
+
+describe("OTP sending and extraction", () => {
+  test.each(["valid", "duplicate", "nested"] as const)(
+    "loads top-level OTP metadata only, %s",
+    async (kind) => {
+      const header = {
+        name: "OTP-Token",
+        value: '"123456"; origin="https://example.com"',
+      };
+      const headersByKind = {
+        duplicate: [header, { ...header, name: "otp-token" }],
+        nested: [],
+        valid: [header],
+      };
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async () => {
+          await Promise.resolve();
+          return Response.json({
+            id: "otp-message",
+            payload: {
+              headers: headersByKind[kind],
+              mimeType: "text/plain",
+              parts: [{ headers: [header], mimeType: "text/plain" }],
+            },
+            threadId: "otp-thread",
+          });
+        });
+      try {
+        const message = await getMessageWithDetails(
+          "test-token",
+          "otp-message"
+        );
+        expect(message.otpToken).toStrictEqual(
+          kind === "valid"
+            ? { code: "123456", origin: "https://example.com" }
+            : undefined
+        );
+      } finally {
+        fetchMock.mockRestore();
+      }
+    }
+  );
 });

@@ -1483,6 +1483,9 @@ importers:
       postal-mime:
         specifier: ^4.0.5
         version: 4.0.5
+      structured-headers:
+        specifier: 2.1.1
+        version: 2.1.1
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -8655,6 +8658,10 @@ packages:
 
   strnum@2.4.2:
     resolution: {integrity: sha512-rDG3Ah4TV0k1hWvLSzkZtMmLN9+eS+h3knq4MP6A42Y3Yh5qGNnOUs1jJkoSr8FG5dsL28c7KgkIBzSEykqtuw==}
+
+  structured-headers@2.1.1:
+    resolution: {integrity: sha512-Ub9mpW7mtzUC7yM7Vrl+CwvHvXa4WhKWROUM9YKmkOsI55dMSg2rhiA7Q5vwRixQk1ndQ2m8YiM6YhO+GJn9LQ==}
+    engines: {node: '>=18', npm: '>=6'}
 
   stubborn-fs@2.0.0:
     resolution: {integrity: sha512-Y0AvSwDw8y+nlSNFXMm2g6L51rBGdAQT20J3YSOqxC53Lo3bjWRtr2BKcfYoAf352WYpsZSTURrA0tqhfgudPA==}
@@ -16237,6 +16244,8 @@ snapshots:
   strnum@2.4.2:
     dependencies:
       anynum: 1.0.1
+
+  structured-headers@2.1.1: {}
 
   stubborn-fs@2.0.0:
     dependencies:

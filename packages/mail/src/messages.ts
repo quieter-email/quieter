@@ -1,5 +1,6 @@
 import type { ComposeDraftAnchor } from "./compose/schema";
 import type { MailCategory } from "./data-plane";
+import type { OtpToken } from "./otp-token";
 
 export type { MailCategory as MailboxCategory } from "./data-plane";
 
@@ -27,6 +28,7 @@ export type MessagePart = {
 };
 
 export type MessageListItem = {
+  otpToken?: OtpToken;
   isImportant?: boolean;
   threadIsImportant?: boolean;
   receivedAt?: string;

@@ -37,6 +37,7 @@ import {
 } from "./verification-codes/crypto";
 import {
   shouldInspectIncomingVerificationCode,
+  getVerificationCodeExpiry,
   validateVerificationCodeCandidate,
 } from "./verification-codes/validation";
 
@@ -388,29 +389,6 @@ export const processMailVerificationCode = async ({
   let extractionUsage: AiUsageReport | undefined;
   let extractionAttempted = false;
   try {
-    const budget = await getMailAutomationAiBudgetStatus({
-      organizationId,
-      userId,
-    });
-    if (!budget.allowed) {
-      const deferredAt = new Date();
-      await db
-        .update(mailboxVerificationCode)
-        .set({
-          leaseToken: null,
-          leaseUntil: null,
-          nextAttemptAt: new Date(deferredAt.getTime() + RETRY_MAX_MS),
-          updatedAt: deferredAt,
-        })
-        .where(
-          and(
-            eq(mailboxVerificationCode.id, claimed.id),
-            eq(mailboxVerificationCode.leaseToken, leaseToken)
-          )
-        );
-      return;
-    }
-
     const message = await loadMessage();
     if (message && message.id !== messageId) {
       throw new Error("Verification code message identity mismatch.");
@@ -451,45 +429,78 @@ export const processMailVerificationCode = async ({
       return;
     }
 
-    let probability: number | undefined;
-    try {
-      probability = await detectMailVerificationCode({
-        message,
-        onUsage: (reported) => {
-          screenUsage = reported;
-        },
+    let { model } = claimed;
+    let detail: ReturnType<typeof validateVerificationCodeCandidate>;
+    if (message.otpToken) {
+      detail = {
+        code: message.otpToken.code,
+        expiresAt: getVerificationCodeExpiry(message, new Date()),
+        service: message.otpToken.origin,
+      };
+    } else {
+      const budget = await getMailAutomationAiBudgetStatus({
+        organizationId,
+        userId,
       });
-    } catch (error) {
-      reportError(error, {
-        operation: "verification-code:screen",
+      if (!budget.allowed) {
+        const deferredAt = new Date();
+        await db
+          .update(mailboxVerificationCode)
+          .set({
+            leaseToken: null,
+            leaseUntil: null,
+            nextAttemptAt: new Date(deferredAt.getTime() + RETRY_MAX_MS),
+            updatedAt: deferredAt,
+          })
+          .where(
+            and(
+              eq(mailboxVerificationCode.id, claimed.id),
+              eq(mailboxVerificationCode.leaseToken, leaseToken)
+            )
+          );
+        return;
+      }
+
+      let probability: number | undefined;
+      try {
+        probability = await detectMailVerificationCode({
+          message,
+          onUsage: (reported) => {
+            screenUsage = reported;
+          },
+        });
+      } catch (error) {
+        reportError(error, {
+          operation: "verification-code:screen",
+        });
+      }
+      const extractCode = probability === undefined || probability >= 0.2;
+      extractionAttempted = extractCode;
+      model =
+        extractCode ||
+        (claimed.model !== null && claimed.model !== AUTO_LABEL_MODEL)
+          ? COMBINED_CODE_MODEL
+          : AUTO_LABEL_MODEL;
+      const candidate = extractCode
+        ? await extractMailVerificationCode({
+            message,
+            model: VERIFICATION_CODE_MODEL,
+            onUsage: (reported) => {
+              extractionUsage = reported;
+            },
+          })
+        : { code: null, expiresInSeconds: null, service: null };
+      detail = validateVerificationCodeCandidate({
+        candidate,
+        message,
+        now: new Date(),
       });
     }
-    const extractCode = probability === undefined || probability >= 0.2;
-    extractionAttempted = extractCode;
-    const model =
-      extractCode ||
-      (claimed.model !== null && claimed.model !== AUTO_LABEL_MODEL)
-        ? COMBINED_CODE_MODEL
-        : AUTO_LABEL_MODEL;
-    const candidate = extractCode
-      ? await extractMailVerificationCode({
-          message,
-          model: VERIFICATION_CODE_MODEL,
-          onUsage: (reported) => {
-            extractionUsage = reported;
-          },
-        })
-      : { code: null, expiresInSeconds: null, service: null };
     const usage = accumulateVerificationCodeUsage(
       claimed,
       screenUsage,
       extractionUsage
     );
-    const detail = validateVerificationCodeCandidate({
-      candidate,
-      message,
-      now: new Date(),
-    });
     const internalDate = Number(message.internalDate);
     const receivedAt = new Date(
       Number.isFinite(internalDate) && internalDate > 0
