@@ -451,7 +451,7 @@ export const MailSidebar = ({
     const timeout = window.setTimeout(() => {
       hasPlayedSidebarEntrance = true;
       setAnimateEntrance(false);
-    }, 650);
+    }, 750);
     return () => {
       window.clearTimeout(timeout);
     };
@@ -459,6 +459,7 @@ export const MailSidebar = ({
 
   return (
     <WorkspaceSidebar
+      animateEntrance={animateEntrance}
       isMobileOpen={isMobileOpen}
       onMobileOpenChange={onMobileOpenChange}
       label="Mail sidebar"

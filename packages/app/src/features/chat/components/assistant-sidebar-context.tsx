@@ -28,8 +28,7 @@ export const AssistantSidebarTrigger = ({
     <div
       aria-hidden={sidebar.open}
       className={cn(
-        // oxlint-disable-next-line shadcn/no-arbitrary-values -- Collapse the launcher's footprint and toolbar gap together with the sidebar.
-        "flex shrink-0 self-stretch overflow-hidden transition-[width,opacity,margin-inline-start] duration-200 ease-out motion-reduce:transition-none",
+        "flex shrink-0 self-stretch overflow-hidden transition-opacity duration-200 ease-out motion-reduce:transition-none",
         {
           "pointer-events-none w-0 opacity-0": sidebar.open,
           "w-8 opacity-100": !sidebar.open,

@@ -1,10 +1,9 @@
 "use client";
 
-import { getAppFlyInMotion } from "@quieter/app/features/motion/app-motion";
+import { getAppStaggerDelay } from "@quieter/app/features/motion/app-motion";
 import { cn } from "@quieter/ui/cn";
+import { workspaceSidebarEntranceClassName } from "@quieter/ui/workspace-sidebar";
 import { cva } from "class-variance-authority";
-import { m, useReducedMotion } from "motion/react";
-import { useState } from "react";
 import type { ReactNode } from "react";
 
 const sidebarSurfaceVariants = cva("squircle rounded-md", {
@@ -31,25 +30,23 @@ export const SidebarEntrance = ({
   children,
   className,
   index = 0,
-}: SidebarEntranceProps) => {
-  const reducedMotion = useReducedMotion();
-  // oxlint-disable-next-line react/hook-use-state -- Preserve the entrance preference for this mount.
-  const [shouldAnimate] = useState(animateEntrance);
-
-  return (
-    <m.div
-      className={className}
-      {...getAppFlyInMotion({
-        animate: shouldAnimate,
-        axis: "x",
-        index,
-        reducedMotion,
-      })}
-    >
-      {children}
-    </m.div>
-  );
-};
+}: SidebarEntranceProps) => (
+  <div
+    className={cn(className, {
+      [workspaceSidebarEntranceClassName]: animateEntrance,
+    })}
+    style={
+      animateEntrance
+        ? {
+            // oxlint-disable-next-line shadcn/no-inline-styles -- The app owns the bounded entrance sequence.
+            transitionDelay: `${getAppStaggerDelay(index)}s`,
+          }
+        : undefined
+    }
+  >
+    {children}
+  </div>
+);
 
 type SidebarActiveSurfaceProps = {
   className?: string;

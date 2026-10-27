@@ -89,7 +89,7 @@ export const AssistantSidebar = ({
     const panel = panelRef.current;
     const observer = new MutationObserver(() => {
       const composer = panel?.querySelector<HTMLElement>(
-        "[data-assistant-composer]"
+        "[data-assistant-composer]:not(:disabled)"
       );
       if (composer && document.activeElement === panel) {
         composer.focus({ preventScroll: true });
@@ -98,11 +98,15 @@ export const AssistantSidebar = ({
     });
     const frame = window.requestAnimationFrame(() => {
       const composer = panel?.querySelector<HTMLElement>(
-        "[data-assistant-composer]"
+        "[data-assistant-composer]:not(:disabled)"
       );
       (composer ?? panel)?.focus({ preventScroll: true });
       if (!composer && panel) {
-        observer.observe(panel, { childList: true, subtree: true });
+        observer.observe(panel, {
+          attributeFilter: ["disabled"],
+          childList: true,
+          subtree: true,
+        });
       }
     });
     return () => {
@@ -117,10 +121,10 @@ export const AssistantSidebar = ({
       aria-label="Quieter assistant"
       className={cn(
         workspaceGutterClassName,
-        // oxlint-disable-next-line shadcn/no-arbitrary-values -- Width reserves space as the adjacent mailbox resizes with the sidebar.
-        "absolute inset-y-0 right-0 z-20 w-full shrink-0 overflow-hidden transition-[width] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-out) motion-reduce:transition-none xl:relative xl:inset-auto",
+        "absolute inset-y-0 right-0 z-20 w-full shrink-0 overflow-visible xl:relative xl:inset-auto",
         {
           "pointer-events-none xl:w-0": !open,
+          // oxlint-disable-next-line shadcn/no-arbitrary-values -- The docked panel reserves a viewport-relative width.
           "xl:w-[clamp(20rem,26vw,25rem)]": open,
         }
       )}
@@ -128,13 +132,14 @@ export const AssistantSidebar = ({
       id={id}
       inert={!open}
     >
-      {/* Anchor the docked panel to its resizing edge so interrupted transitions stay together without scaling text. */}
       <div
         className={cn(
-          // oxlint-disable-next-line shadcn/no-arbitrary-values -- Visibility changes after the sidebar's translate and opacity transition.
-          "absolute inset-y-0 right-0 w-full p-(--workspace-gutter) transition-[translate,opacity,visibility] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-out) motion-reduce:transition-none xl:right-auto xl:left-0 xl:w-[clamp(20rem,26vw,25rem)] xl:translate-x-0 xl:pl-0",
+          // oxlint-disable-next-line shadcn/no-arbitrary-values -- The surface keeps its docked width independently of the reserved space.
+          "absolute inset-y-0 right-0 w-full p-(--workspace-gutter) transition-[translate,opacity] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-out) motion-reduce:transition-none xl:w-[clamp(20rem,26vw,25rem)] xl:pl-0",
           {
-            "invisible translate-x-full opacity-0": !open,
+            // oxlint-disable-next-line shadcn/no-arbitrary-values -- Delay hiding until the exit finishes while making entry immediately focusable.
+            "invisible translate-x-full opacity-0 transition-[translate,opacity,visibility]":
+              !open,
             "visible translate-x-0 opacity-100": open,
           }
         )}
@@ -144,7 +149,7 @@ export const AssistantSidebar = ({
           aria-label="Quieter assistant"
           className={cn(
             workspaceSectionVariants({ layout: "surface" }),
-            "relative m-0 h-full w-full p-0 text-fg"
+            "relative m-0 h-full w-full p-0 text-fg outline-hidden"
           )}
           data-assistant-panel
           open
