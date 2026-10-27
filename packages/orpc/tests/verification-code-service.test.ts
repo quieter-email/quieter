@@ -17,6 +17,8 @@ type TestRow = {
   cachedTokens: number | null;
   completionTokens: number | null;
   costUsd: number | null;
+  encryptedCode?: string | null;
+  service?: string | null;
   id: string;
   leaseToken: string | null;
   mailboxId: string;
@@ -99,6 +101,8 @@ vi.mock(import("@quieter/database/client"), () => {
       }),
       update: () => ({
         set: (value: {
+          encryptedCode?: string | null;
+          service?: string | null;
           attemptCount?: number;
           cacheWriteTokens?: number;
           cachedTokens?: number;
@@ -143,6 +147,8 @@ vi.mock(import("@quieter/database/client"), () => {
               if (row.leaseToken === null) {
                 return [];
               }
+              row.encryptedCode = value.encryptedCode;
+              row.service = value.service;
               row.leaseToken = null;
               row.attemptCount = value.attemptCount ?? row.attemptCount;
               row.cacheWriteTokens =
@@ -270,7 +276,7 @@ describe("verification code processing", () => {
     expect(fixtures.rows.get("message-1")?.processed).toBeTruthy();
   });
 
-  test("budget denial defers work without loading mail and resumes when due", async () => {
+  test("budget denial defers AI fallback and resumes when due", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     fixtures.budget.mockResolvedValue({ allowed: false });
     fixtures.extracted.mockResolvedValue({
@@ -305,7 +311,7 @@ describe("verification code processing", () => {
 
     await processMailVerificationCode(input);
 
-    expect(loadMessage).not.toHaveBeenCalled();
+    expect(loadMessage).toHaveBeenCalledOnce();
     expect(fixtures.extracted).not.toHaveBeenCalled();
     expect(fixtures.screened).not.toHaveBeenCalled();
     expect(fixtures.rows.get("message-1")?.processed).toBeFalsy();
@@ -317,11 +323,11 @@ describe("verification code processing", () => {
 
     fixtures.budget.mockResolvedValue({ allowed: true });
     await processMailVerificationCode(input);
-    expect(loadMessage).not.toHaveBeenCalled();
+    expect(loadMessage).toHaveBeenCalledOnce();
 
     vi.setSystemTime(new Date(retryAt.getTime() + 1));
     await processMailVerificationCode(input);
-    expect(loadMessage).toHaveBeenCalledOnce();
+    expect(loadMessage).toHaveBeenCalledTimes(2);
     expect(fixtures.extracted).toHaveBeenCalledOnce();
     expect(fixtures.rows.get("message-1")?.processed).toBeTruthy();
   });
@@ -472,68 +478,79 @@ describe("verification code processing", () => {
     expect(stored?.processedAt?.getTime()).toBeGreaterThan(receivedAt);
   });
 
-  test("failed extraction usage is billed with successful retry only once", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    fixtures.screened.mockImplementation(async (input) => {
-      await Promise.resolve();
-      input.onUsage?.({
-        cacheWriteTokens: 0,
-        cachedTokens: 0,
-        completionTokens: 1,
-        costUsd: 0.001,
-        promptTokens: 10,
-      });
-      return 0.9;
-    });
-    fixtures.extracted
-      .mockRejectedValueOnce(new Error("provider failure"))
-      .mockImplementationOnce(async (input) => {
+  test.each([false, true])(
+    "failed extraction usage is billed with successful retry only once, header=%s",
+    async (header) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      fixtures.screened.mockImplementation(async (input) => {
         await Promise.resolve();
         input.onUsage?.({
           cacheWriteTokens: 0,
           cachedTokens: 0,
-          completionTokens: 2,
-          costUsd: 0.002,
-          promptTokens: 20,
+          completionTokens: 1,
+          costUsd: 0.001,
+          promptTokens: 10,
         });
-        return { code: "482193", expiresInSeconds: null, service: null };
+        return 0.9;
       });
-    const input = {
-      loadMessage: async () => {
-        await Promise.resolve();
-        return {
-          bodyText: "Your sign-in code is 482193",
-          id: "message-1",
-          internalDate: String(Date.now()),
-          threadId: "thread-1",
-        };
-      },
-      mailboxId: "mailbox-1",
-      messageId: "message-1",
-      organizationId: "org-1",
-      userId: "user-1",
-    };
+      fixtures.extracted
+        .mockRejectedValueOnce(new Error("provider failure"))
+        .mockImplementationOnce(async (input) => {
+          await Promise.resolve();
+          input.onUsage?.({
+            cacheWriteTokens: 0,
+            cachedTokens: 0,
+            completionTokens: 2,
+            costUsd: 0.002,
+            promptTokens: 20,
+          });
+          return { code: "482193", expiresInSeconds: null, service: null };
+        });
+      const input = {
+        loadMessage: async () => {
+          await Promise.resolve();
+          return {
+            bodyText: "Your sign-in code is 482193",
+            id: "message-1",
+            internalDate: String(Date.now()),
+            otpToken:
+              header && fixtures.rows.get("message-1")?.nextAttemptAt
+                ? { code: "482193", origin: "https://example.com" }
+                : undefined,
+            threadId: "thread-1",
+          };
+        },
+        mailboxId: "mailbox-1",
+        messageId: "message-1",
+        organizationId: "org-1",
+        userId: "user-1",
+      };
 
-    await processMailVerificationCode(input);
-    expect(fixtures.rows.get("message-1")?.processed).toBeFalsy();
-    expect(fixtures.rows.get("message-1")?.costUsd).toBeCloseTo(0.001);
+      await processMailVerificationCode(input);
+      expect(fixtures.rows.get("message-1")?.processed).toBeFalsy();
+      expect(fixtures.rows.get("message-1")?.costUsd).toBeCloseTo(0.001);
 
-    await processMailVerificationCode(input);
-    expect(fixtures.extracted).toHaveBeenCalledOnce();
-    const retryAt = fixtures.rows.get("message-1")?.nextAttemptAt;
-    expect(retryAt).toBeInstanceOf(Date);
-    if (!retryAt) {
-      throw new Error("Expected a scheduled retry.");
+      await processMailVerificationCode(input);
+      expect(fixtures.extracted).toHaveBeenCalledOnce();
+      const retryAt = fixtures.rows.get("message-1")?.nextAttemptAt;
+      expect(retryAt).toBeInstanceOf(Date);
+      if (!retryAt) {
+        throw new Error("Expected a scheduled retry.");
+      }
+      vi.setSystemTime(new Date(retryAt.getTime() + 1));
+      await processMailVerificationCode(input);
+      await processMailVerificationCode(input);
+
+      expect(fixtures.rows.get("message-1")?.costUsd).toBeCloseTo(
+        header ? 0.001 : 0.004
+      );
+      expect(fixtures.billed).toHaveBeenCalledOnce();
+      expect(fixtures.billed.mock.calls[0]?.[0].costUsd).toBeCloseTo(
+        header ? 0.001 : 0.004
+      );
+      expect(fixtures.published).toHaveBeenCalledOnce();
     }
-    vi.setSystemTime(new Date(retryAt.getTime() + 1));
-    await processMailVerificationCode(input);
-    await processMailVerificationCode(input);
-
-    expect(fixtures.rows.get("message-1")?.costUsd).toBeCloseTo(0.004);
-    expect(fixtures.billed).toHaveBeenCalledOnce();
-    expect(fixtures.billed.mock.calls[0]?.[0].costUsd).toBeCloseTo(0.004);
-    expect(fixtures.published).toHaveBeenCalledOnce();
-  });
+  );
 
   test("failed attempts wait longer before each retry", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -578,4 +595,82 @@ describe("verification code processing", () => {
     await processMailVerificationCode(input);
     expect(fixtures.extracted).toHaveBeenCalledTimes(2);
   });
+});
+
+describe("OTP sending and extraction", () => {
+  test("explicit OTP bypasses budget and AI and is idempotent", async () => {
+    fixtures.rows.clear();
+    fixtures.budget.mockClear().mockResolvedValue({ allowed: false });
+    fixtures.screened.mockClear();
+    fixtures.extracted.mockClear();
+    fixtures.published.mockClear();
+    fixtures.billed.mockClear();
+    const input = {
+      loadMessage: async () => {
+        await Promise.resolve();
+        return {
+          id: "message-1",
+          internalDate: String(Date.now()),
+          otpToken: { code: ' 12"34 ', origin: "https://example.com" },
+          threadId: "thread-header",
+        };
+      },
+      mailboxId: "mailbox-header",
+      messageId: "message-1",
+      organizationId: "org-1",
+      userId: "user-1",
+    };
+    await processMailVerificationCode(input);
+    await processMailVerificationCode(input);
+    expect(fixtures.budget).not.toHaveBeenCalled();
+    expect(fixtures.screened).not.toHaveBeenCalled();
+    expect(fixtures.extracted).not.toHaveBeenCalled();
+    expect(fixtures.rows.get("message-1")?.processed).toBeTruthy();
+    expect(fixtures.rows.get("message-1")?.costUsd).toBeNull();
+    expect(fixtures.rows.get("message-1")?.encryptedCode).toBe(' 12"34 ');
+    expect(fixtures.rows.get("message-1")?.service).toBe("https://example.com");
+    expect(fixtures.published).toHaveBeenCalledOnce();
+    expect(fixtures.billed).not.toHaveBeenCalled();
+  });
+
+  test.each(["SENT", "DRAFT", "SPAM", "TRASH", "old", "lost-lease"])(
+    "explicit OTP preserves exclusion and ownership, %s",
+    async (state) => {
+      fixtures.rows.clear();
+      fixtures.budget.mockClear();
+      fixtures.screened.mockClear();
+      fixtures.extracted.mockClear();
+      fixtures.published.mockClear();
+      fixtures.billed.mockClear();
+      await processMailVerificationCode({
+        loadMessage: async () => {
+          await Promise.resolve();
+          if (state === "lost-lease") {
+            const row = fixtures.rows.get("message-1");
+            if (row) {
+              row.leaseToken = null;
+            }
+          }
+          return {
+            id: "message-1",
+            internalDate: String(
+              Date.now() - (state === "old" ? 3 * 60 * 60_000 : 0)
+            ),
+            labelIds: [state],
+            otpToken: { code: "123456", origin: "https://example.com" },
+            threadId: "thread-1",
+          };
+        },
+        mailboxId: "mailbox-1",
+        messageId: "message-1",
+        organizationId: "org-1",
+        userId: "user-1",
+      });
+      expect(fixtures.budget).not.toHaveBeenCalled();
+      expect(fixtures.screened).not.toHaveBeenCalled();
+      expect(fixtures.extracted).not.toHaveBeenCalled();
+      expect(fixtures.published).not.toHaveBeenCalled();
+      expect(fixtures.billed).not.toHaveBeenCalled();
+    }
+  );
 });

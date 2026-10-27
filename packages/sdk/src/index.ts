@@ -21,6 +21,7 @@ import { QuieterApiError } from "./api-error";
 export { QuieterApiError } from "./api-error";
 export type QuieterAddress = SendMessageRequest["to"];
 export type QuieterHeader = SendHeader;
+export type QuieterOtpToken = NonNullable<SendMessageRequest["otpToken"]>;
 export type QuieterTag = NonNullable<SendMessageRequest["tags"]>[number];
 export type QuieterSendResult = SendMessageResult;
 export type QuieterDeliveryStatus = DeliveryStatus;

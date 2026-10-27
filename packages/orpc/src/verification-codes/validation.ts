@@ -43,6 +43,28 @@ export const shouldInspectIncomingVerificationCode = (
   );
 };
 
+export const getVerificationCodeExpiry = (
+  message: AutomationMailMessage,
+  now: Date,
+  expiresInSeconds?: number | null
+): Date => {
+  const internalDate = Number(message.internalDate);
+  const receivedAt =
+    Number.isFinite(internalDate) && internalDate > 0
+      ? internalDate
+      : Date.parse(message.date ?? "");
+  const validityMs = Math.min(
+    (expiresInSeconds ?? DEFAULT_VALIDITY_MS / 1000) * 1000,
+    MAX_VALIDITY_MS
+  );
+  const expiresAt = new Date(
+    (Number.isFinite(receivedAt)
+      ? Math.min(receivedAt, now.getTime())
+      : now.getTime()) + validityMs
+  );
+  return expiresAt;
+};
+
 export const validateVerificationCodeCandidate = ({
   candidate,
   message,
@@ -82,23 +104,13 @@ export const validateVerificationCodeCandidate = ({
     return null;
   }
 
-  const internalDate = Number(message.internalDate);
-  const receivedAt =
-    Number.isFinite(internalDate) && internalDate > 0
-      ? internalDate
-      : Date.parse(message.date ?? "");
-  const validityMs = Math.min(
-    (candidate.expiresInSeconds ?? DEFAULT_VALIDITY_MS / 1000) * 1000,
-    MAX_VALIDITY_MS
-  );
-  const expiresAt = new Date(
-    (Number.isFinite(receivedAt)
-      ? Math.min(receivedAt, now.getTime())
-      : now.getTime()) + validityMs
-  );
   return {
     code,
-    expiresAt,
+    expiresAt: getVerificationCodeExpiry(
+      message,
+      now,
+      candidate.expiresInSeconds
+    ),
     service: candidate.service?.trim().slice(0, 80) || null,
   };
 };

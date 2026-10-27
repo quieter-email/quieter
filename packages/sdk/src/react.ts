@@ -8,7 +8,25 @@ import type {
   QuieterSendResult,
 } from "./index";
 
-export * from "./index";
+export { QuieterApiError } from "./index";
+export type {
+  QuieterAddress,
+  QuieterAttachment,
+  QuieterDeliveryEvent,
+  QuieterDeliveryStatus,
+  QuieterFetch,
+  QuieterHeader,
+  QuieterListSuppressionsOptions,
+  QuieterMessageDelivery,
+  QuieterOptions,
+  QuieterOtpToken,
+  QuieterRecipientSuppression,
+  QuieterRequestOptions,
+  QuieterSendBaseInput,
+  QuieterSendOptions,
+  QuieterSendResult,
+  QuieterTag,
+} from "./index";
 export type QuieterSendInput =
   | CoreSendInput
   | (Omit<CoreSendInput, "html"> & { html?: never; react: ReactElement });

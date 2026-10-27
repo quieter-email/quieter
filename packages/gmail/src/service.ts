@@ -28,6 +28,7 @@ import type {
   MailboxSyncDelta,
   MessagePart,
 } from "@quieter/mail/messages";
+import { parseOtpTokenHeaders } from "@quieter/mail/otp-token";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
 import { getUnsubscribeKey } from "@quieter/mail/unsubscribe";
 import { decodeHTML } from "entities";
@@ -1015,6 +1016,7 @@ const toMessageListItem = async (
     isUnread: hasUnreadLabel(labelIds),
     labelIds,
     messageHeaderId: getHeader(message, "Message-ID"),
+    otpToken: parseOtpTokenHeaders(message.payload?.headers ?? []) ?? undefined,
     references: getHeader(message, "References"),
     replyTo: getHeader(message, "Reply-To"),
     senderAvatarUrls: await getSenderAvatarUrls(from, {

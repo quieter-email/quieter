@@ -1,5 +1,6 @@
 import MailComposer from "nodemailer/lib/mail-composer";
 
+import { serializeOtpToken } from "./otp-token";
 import {
   getSendEnvelopeAddress,
   getSendEnvelopeAddressList,
@@ -40,6 +41,12 @@ export const buildSendMimeMessage = async (
   const messageHeaderId =
     options?.messageId ?? `<${crypto.randomUUID()}@${domain}>`;
   const headers = normalizeSendHeaders(message.headers);
+  if (message.otpToken) {
+    headers.push({
+      name: "OTP-Token",
+      value: serializeOtpToken(message.otpToken),
+    });
+  }
   const attachments = message.attachments.map((attachment) => ({
     bytes: Buffer.from(attachment.content, "base64"),
     contentId: attachment.contentId ?? null,
@@ -60,7 +67,13 @@ export const buildSendMimeMessage = async (
     disableFileAccess: true,
     disableUrlAccess: true,
     from: message.from,
-    headers: headers.map(({ name, value }) => ({ key: name, value })),
+    headers: headers.map(({ name, value }) => ({
+      key: name,
+      value:
+        name.toLowerCase() === "otp-token"
+          ? { foldLines: true, prepared: true, value }
+          : value,
+    })),
     html:
       options?.htmlTransform && message.html !== undefined
         ? options.htmlTransform(message.html)
