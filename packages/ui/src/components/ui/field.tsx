@@ -6,13 +6,14 @@ import type { VariantProps } from "class-variance-authority";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
-import { GhostFieldShell } from "./input";
 import {
+  ghostInputClassName,
   inputControlClassName,
   inputControlSizeVariants,
 } from "./input-chrome";
 
 const fieldControlVariants = cva(`squircle ${inputControlClassName}`, {
+  compoundVariants: [{ chrome: "ghost", className: "px-2.5" }],
   defaultVariants: {
     chrome: "default",
     size: "default",
@@ -26,7 +27,7 @@ const fieldControlVariants = cva(`squircle ${inputControlClassName}`, {
         "h-11 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none",
       default:
         "rounded-md border border-border bg-input shadow-sm read-only:cursor-default read-only:bg-input",
-      ghost: "border-0 bg-transparent shadow-none read-only:bg-transparent",
+      ghost: ghostInputClassName,
     },
     size: inputControlSizeVariants,
   },
@@ -78,21 +79,9 @@ export const FieldControl = ({
   size,
   ...props
 }: Omit<ComponentPropsWithoutRef<typeof FieldPrimitive.Control>, "size"> &
-  VariantProps<typeof fieldControlVariants>) => {
-  const control = (
-    <FieldPrimitive.Control
-      className={cn(
-        fieldControlVariants({ chrome, size }),
-        { "min-w-0 flex-1": chrome === "ghost" },
-        className
-      )}
-      {...props}
-    />
-  );
-
-  if (chrome !== "ghost") {
-    return control;
-  }
-
-  return <GhostFieldShell>{control}</GhostFieldShell>;
-};
+  VariantProps<typeof fieldControlVariants>) => (
+  <FieldPrimitive.Control
+    className={cn(fieldControlVariants({ chrome, size }), className)}
+    {...props}
+  />
+);

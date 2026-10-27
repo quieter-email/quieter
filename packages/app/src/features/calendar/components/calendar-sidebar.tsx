@@ -4,11 +4,9 @@ import {
   Add01Icon,
   ArrowLeft01Icon,
   Cancel01Icon,
-  LayoutRightIcon,
   MoreHorizontalIcon,
-  Settings01Icon,
 } from "@hugeicons/core-free-icons";
-import { AssistantSidebarContext } from "@quieter/app/features/chat/components/assistant-sidebar-context";
+import { SidebarFooterLinks } from "@quieter/app/features/navigation/components/sidebar-footer-links";
 import type { CalendarAccount, CalendarSummary } from "@quieter/calendar";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
@@ -26,7 +24,7 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Pill } from "@quieter/ui/pill";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { Link, useLocation } from "@tanstack/react-router";
-import { use, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { getCalendarRefKey } from "../domain/calendar-event-form";
@@ -103,6 +101,7 @@ const CalendarColorControl = ({
           disabled={disabled}
           label={`Change ${calendar.name} color`}
           onValueChange={setDraftColor}
+          trigger="swatch"
           value={draftColor ?? color}
         />
       </div>
@@ -155,7 +154,6 @@ const CalendarSidebarContent = ({
 }: Omit<CalendarSidebarProps, "isMobileOpen" | "onMobileOpenChange"> & {
   close?: () => void;
 }) => {
-  const assistant = use(AssistantSidebarContext);
   const returnTo = useLocation({ select: (location) => location.href });
   const selectedDate = new Date(`${date}T12:00:00`);
   return (
@@ -204,11 +202,11 @@ const CalendarSidebarContent = ({
           close?.();
         }}
       >
-        <Icon aria-hidden icon={Add01Icon} />
         New event
       </Button>
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
         <Calendar
+          className="mx-auto"
           mode="single"
           month={selectedDate}
           onMonthChange={(month) => {
@@ -227,7 +225,7 @@ const CalendarSidebarContent = ({
           selected={selectedDate}
           weekStartsOn={1}
         />
-        <div className="space-y-5 px-1">
+        <div className="space-y-6 px-1">
           {accounts.map((account) => (
             <section className="space-y-2" key={account.id}>
               <div className="flex min-w-0 items-center gap-1">
@@ -361,35 +359,8 @@ const CalendarSidebarContent = ({
           )}
         </div>
       </div>
-      <div className="space-y-1">
-        {assistant && !assistant.open ? (
-          <Button
-            aria-controls={assistant.panelId}
-            aria-expanded={assistant.open}
-            data-assistant-launcher
-            fullWidth
-            onClick={(event) => {
-              assistant.onOpen(event.currentTarget);
-              close?.();
-            }}
-            variant="ghost"
-          >
-            <Icon aria-hidden icon={LayoutRightIcon} />
-            Open assistant
-          </Button>
-        ) : null}
-        <Button
-          fullWidth
-          nativeButton={false}
-          onClick={close}
-          render={<Link search={{ from: returnTo }} to="/settings" />}
-          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native anchor through its render slot.
-          role="link"
-          variant="ghost"
-        >
-          <Icon aria-hidden icon={Settings01Icon} />
-          Settings
-        </Button>
+      <div className="mx-4 mb-4">
+        <SidebarFooterLinks onRequestClose={close} />
       </div>
     </div>
   );

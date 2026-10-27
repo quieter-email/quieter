@@ -272,15 +272,20 @@ export const useCalendarData = ({
           ...input.event,
           ...input.changes,
           attendees:
-            input.changes.attendees?.map((guest) => ({
-              ...guest,
-              organizer: false,
-              response:
-                input.event.attendees.find(
-                  (original) => original.email === guest.email
-                )?.response ?? "needs-action",
-              self: guest.email === "alex@example.com",
-            })) ?? input.event.attendees,
+            input.changes.attendees?.map((guest) => {
+              const existing = input.event.attendees.find(
+                (original) =>
+                  original.email.toLowerCase() === guest.email.toLowerCase()
+              );
+              return {
+                ...guest,
+                organizer: existing?.organizer ?? false,
+                response: existing?.response ?? "needs-action",
+                self:
+                  existing?.self ??
+                  guest.email.toLowerCase() === "alex@example.com",
+              };
+            }) ?? input.event.attendees,
           color:
             input.changes.color === undefined
               ? input.event.color

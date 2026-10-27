@@ -15,6 +15,8 @@ import {
   getZonedDateTimeFields,
 } from "@quieter/calendar/time";
 
+import { parseAdvancedRecurrence } from "./calendar-recurrence";
+
 export type CalendarEditor =
   | {
       kind: "create";
@@ -35,10 +37,14 @@ export type CalendarEventForm = {
   endDate: string;
   endTime: string;
   location: string;
+  optionalGuestEmails: string[];
   recurrence: string[];
   reminderKind: "default" | "none" | "custom";
-  reminderMethod: "notification" | "email";
-  reminderMinutes: string;
+  reminderItems: {
+    id: string;
+    method: "notification" | "email";
+    minutesBefore: string;
+  }[];
   startDate: string;
   startTime: string;
   timeZone: string;
@@ -74,11 +80,11 @@ export const createCalendarEventForm = (
     time.kind === "timed"
       ? getZonedDateTimeFields({ instant: time.end, timeZone: zone })
       : { date: addCalendarDays(time.endDate, -1), time: "10:00" };
-  const reminder =
-    event?.reminders.kind === "custom" ? event.reminders.items[0] : undefined;
+  const reminders =
+    event?.reminders.kind === "custom" ? event.reminders.items : [];
   let reminderKind: CalendarEventForm["reminderKind"] = "default";
   if (event?.reminders.kind === "custom") {
-    reminderKind = reminder ? "custom" : "none";
+    reminderKind = reminders.length > 0 ? "custom" : "none";
   }
   return {
     addMeeting: Boolean(event?.meetingUrl || event?.meetingPending),
@@ -93,10 +99,20 @@ export const createCalendarEventForm = (
     endDate: end.date,
     endTime: end.time.slice(0, 5),
     location: event?.location ?? "",
+    optionalGuestEmails:
+      event?.attendees
+        .filter((guest) => guest.optional)
+        .map((guest) => guest.email) ?? [],
     recurrence: event?.recurrence ?? [],
+    reminderItems:
+      reminders.length > 0
+        ? reminders.map((reminder, index) => ({
+            id: `reminder-${index}`,
+            method: reminder.method,
+            minutesBefore: String(reminder.minutesBefore),
+          }))
+        : [{ id: "reminder-0", method: "notification", minutesBefore: "30" }],
     reminderKind,
-    reminderMethod: reminder?.method ?? "notification",
-    reminderMinutes: String(reminder?.minutesBefore ?? 30),
     startDate: start.date,
     startTime: start.time.slice(0, 5),
     timeZone: zone,
@@ -166,30 +182,56 @@ export const parseCalendarEventForm = (
   form: CalendarEventForm,
   original?: CalendarEvent
 ): CalendarEventDraft => {
+  const time = parseCalendarEventFormTime(form, original);
+  if (
+    form.recurrence.length > 0 &&
+    (!original ||
+      JSON.stringify(form.recurrence) !== JSON.stringify(original.recurrence) ||
+      JSON.stringify(time) !== JSON.stringify(original.time))
+  ) {
+    parseAdvancedRecurrence(form.recurrence.join("\n"), {
+      allDay: form.allDay,
+      startDate: form.startDate,
+      timeZone: form.timeZone,
+    });
+  }
   const guests = form.attendees
     .split(/[,;\n]/u)
     .map((email) => email.trim())
     .filter(Boolean);
-  const attendees = [...new Set(guests)].map((email) => {
+  const optionalEmails = new Set(
+    form.optionalGuestEmails.map((email) => email.toLowerCase())
+  );
+  const seenEmails = new Set<string>();
+  const attendees = guests.flatMap((email) => {
+    const normalizedEmail = email.toLowerCase();
+    if (seenEmails.has(normalizedEmail)) {
+      return [];
+    }
+    seenEmails.add(normalizedEmail);
     const guest = original?.attendees.find(
-      (attendee) => attendee.email === email
+      (attendee) => attendee.email.toLowerCase() === normalizedEmail
     );
-    return { email, name: guest?.name, optional: guest?.optional ?? false };
+    return [
+      {
+        email: guest?.email ?? email,
+        name: guest?.name,
+        optional: optionalEmails.has(normalizedEmail),
+      },
+    ];
   });
   let reminders: CalendarEventDraft["reminders"] = { kind: "default" };
   if (form.reminderKind === "none") {
     reminders = { items: [], kind: "custom" };
   } else if (form.reminderKind === "custom") {
-    const previous =
-      original?.reminders.kind === "custom" ? original.reminders.items : [];
     reminders = {
-      items: [
-        {
-          method: form.reminderMethod,
-          minutesBefore: Number(form.reminderMinutes),
-        },
-        ...previous.slice(1),
-      ],
+      items: form.reminderItems.map((reminder) => ({
+        method: reminder.method,
+        minutesBefore:
+          reminder.minutesBefore.trim() === ""
+            ? Number.NaN
+            : Number(reminder.minutesBefore),
+      })),
       kind: "custom",
     };
   }
@@ -202,7 +244,7 @@ export const parseCalendarEventForm = (
     location: form.location,
     recurrence: form.recurrence,
     reminders,
-    time: parseCalendarEventFormTime(form, original),
+    time,
     title: form.title,
     visibility: form.visibility,
   });
