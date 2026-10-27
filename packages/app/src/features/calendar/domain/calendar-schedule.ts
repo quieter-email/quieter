@@ -3,6 +3,7 @@ import type {
   CalendarEventTime,
   CalendarSummary,
 } from "@quieter/calendar";
+import { getCalendarRecurrencePreview } from "@quieter/calendar/recurrence";
 import { splitCalendarEventTime } from "@quieter/calendar/time";
 import type { ScheduleItem } from "@quieter/ui/schedule";
 
@@ -13,7 +14,7 @@ import {
 } from "./calendar-event-form";
 import type { CalendarEventForm } from "./calendar-event-form";
 
-export const getCalendarScheduleItems = ({
+export const getCalendarSchedule = ({
   calendars,
   dates,
   draft,
@@ -25,10 +26,11 @@ export const getCalendarScheduleItems = ({
   draft?: { form: CalendarEventForm; id: string };
   events: CalendarEvent[];
   timeZone: string;
-}): ScheduleItem[] => {
+}): { items: ScheduleItem[]; previewIssue?: string } => {
+  let previewIssue: string | undefined;
   const records: (Pick<
     ScheduleItem,
-    "color" | "detail" | "id" | "preview" | "title" | "tone"
+    "color" | "detail" | "id" | "occurrenceId" | "preview" | "title" | "tone"
   > & { time: CalendarEventTime })[] = events.map((event) => {
     const calendar = calendars.find(
       (candidate) =>
@@ -55,21 +57,32 @@ export const getCalendarScheduleItems = ({
       const calendar = calendars.find(
         (candidate) => getCalendarRefKey(candidate) === draft.form.calendarKey
       );
-      records.push({
-        color: draft.form.color ?? calendar?.color,
-        detail: draft.form.location,
-        id: draft.id,
-        preview: true,
+      const preview = getCalendarRecurrencePreview({
+        dates,
+        recurrence: draft.form.recurrence,
         time,
-        title: draft.form.title.trim() || "Untitled event",
-        tone: "blue",
+        timeZone,
       });
+      previewIssue = preview.issue;
+      for (const occurrence of preview.times) {
+        records.push({
+          color: draft.form.color ?? calendar?.color,
+          detail: draft.form.location,
+          id: draft.id,
+          occurrenceId: `${draft.id}:${occurrence.kind === "all-day" ? occurrence.startDate : occurrence.start}`,
+          preview: true,
+          time: occurrence,
+          title: draft.form.title.trim() || "Untitled event",
+          tone: "blue",
+        });
+      }
     }
   }
-  return records.flatMap(({ time, ...record }) =>
+  const items = records.flatMap(({ time, ...record }) =>
     splitCalendarEventTime({ dates, time, timeZone }).map((segment) => ({
       ...record,
       ...segment,
     }))
   );
+  return { items, previewIssue };
 };

@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@quieter/ui/alert-dialog";
+import { Autocomplete } from "@quieter/ui/autocomplete";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
@@ -33,6 +34,7 @@ import {
   ComposerContextChip,
   PromptComposerFrame,
 } from "@quieter/ui/composer-chrome";
+import { DatePicker } from "@quieter/ui/date-picker";
 import {
   Dialog,
   DialogCloseButton,
@@ -88,6 +90,7 @@ import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Text } from "@quieter/ui/text";
 import { Textarea } from "@quieter/ui/textarea";
 import { ThemePicker } from "@quieter/ui/theme-picker";
+import { TimePicker } from "@quieter/ui/time-picker";
 import { toast } from "@quieter/ui/toast";
 import { TokenField } from "@quieter/ui/token-field";
 import type { TokenFieldToken } from "@quieter/ui/token-field";
@@ -471,6 +474,9 @@ export const DesignSystemShowcase = () => {
   const [labelColor, setLabelColor] = useState<MailboxLabelColor>("blue");
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [showPromptContext, setShowPromptContext] = useState(true);
+  const [location, setLocation] = useState("");
+  const [date, setDate] = useState("2026-10-27");
+  const [time, setTime] = useState("14:35");
   const [timeZone, setTimeZone] = useState("Europe/Berlin");
 
   return (
@@ -861,6 +867,45 @@ export const DesignSystemShowcase = () => {
         </Section>
 
         <Section title="Form controls">
+          <Row label="Autocomplete">
+            <Autocomplete
+              aria-label="Example location"
+              value={location}
+              onValueChange={setLocation}
+              options={["Studio", "Boardroom"]}
+              placeholder="Add a location"
+            />
+          </Row>
+          <Row label="Date and time">
+            <div className="flex gap-2">
+              <DatePicker
+                aria-label="Example date"
+                value={date}
+                onValueChange={setDate}
+              />
+              <TimePicker
+                aria-label="Example time"
+                value={time}
+                onValueChange={setTime}
+              />
+            </div>
+          </Row>
+          <Row label="Date and time, quiet">
+            <div className="flex gap-2">
+              <DatePicker
+                chrome="ghost"
+                aria-label="Quiet example date"
+                value={date}
+                onValueChange={setDate}
+              />
+              <TimePicker
+                chrome="ghost"
+                aria-label="Quiet example time"
+                value={time}
+                onValueChange={setTime}
+              />
+            </div>
+          </Row>
           <Row label="Input">
             <Input
               aria-label="Default input"
@@ -1013,6 +1058,14 @@ export const DesignSystemShowcase = () => {
               disabled
               onValueChange={setTimeZone}
               value={timeZone}
+            />
+          </Row>
+          <Row label="Compact notes">
+            <Textarea
+              variant="compact-prompt"
+              rows={1}
+              aria-label="Compact notes"
+              placeholder="Add a description"
             />
           </Row>
           <Row label="Textarea">

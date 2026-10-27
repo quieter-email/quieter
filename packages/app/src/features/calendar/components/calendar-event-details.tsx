@@ -4,6 +4,7 @@ import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import type { CalendarEvent } from "@quieter/calendar";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
+import { useDateTimePreferences } from "@quieter/ui/date-time-preferences";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Pill } from "@quieter/ui/pill";
@@ -41,6 +42,7 @@ export const CalendarEventDetails = ({
   pending: boolean;
   timeZone: string;
 }) => {
+  const { timeFormat } = useDateTimePreferences();
   const self = event.attendees.find((attendee) => attendee.self);
   const dateFormatter = new Intl.DateTimeFormat(undefined, {
     day: "numeric",
@@ -50,6 +52,7 @@ export const CalendarEventDetails = ({
   });
   const timeFormatter = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
+    hour12: timeFormat === "12h",
     minute: "2-digit",
     timeZone,
   });

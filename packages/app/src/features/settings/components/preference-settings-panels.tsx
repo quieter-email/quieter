@@ -36,6 +36,7 @@ import {
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { ThemePicker } from "@quieter/ui/theme-picker";
 
+import { DateTimeSettings } from "./date-time-settings";
 import { DefaultMailboxSetting } from "./default-mailbox-setting";
 import {
   SettingsCard,
@@ -59,6 +60,7 @@ export const PreferencesSettingsPanel = () => {
   return (
     <div className={settingsSurfaceVariants({ variant: "page" })}>
       <DefaultMailboxSetting />
+      <DateTimeSettings />
       <SettingsSection title="Appearance">
         <SettingsRows>
           <SettingsRow

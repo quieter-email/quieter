@@ -14,6 +14,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useLayoutEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
 
+import { AccountDateTimeProvider } from "../features/settings/components/account-date-time-provider";
+
 const SessionQueryProvider = ({
   children,
   userId,
@@ -70,10 +72,12 @@ export const AppProviders = ({ children }: PropsWithChildren) => {
       }}
     >
       <SessionQueryProvider key={userId ?? "anonymous"} userId={userId}>
-        <KeyboardShortcutsProvider>
-          <MailtoProtocolHandler />
-          {children}
-        </KeyboardShortcutsProvider>
+        <AccountDateTimeProvider userId={userId}>
+          <KeyboardShortcutsProvider>
+            <MailtoProtocolHandler />
+            {children}
+          </KeyboardShortcutsProvider>
+        </AccountDateTimeProvider>
       </SessionQueryProvider>
     </HotkeysProvider>
   );

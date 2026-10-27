@@ -6,7 +6,6 @@ import {
   Cancel01Icon,
   Clock01Icon,
   Globe02Icon,
-  Location01Icon,
   PaintBoardIcon,
   SquareLock01Icon,
   TextAlignLeftIcon,
@@ -24,6 +23,7 @@ import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { ColorSwatch } from "@quieter/ui/color-swatch";
+import { DatePicker } from "@quieter/ui/date-picker";
 import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
@@ -43,6 +43,7 @@ import {
 } from "@quieter/ui/select";
 import { Text } from "@quieter/ui/text";
 import { Textarea } from "@quieter/ui/textarea";
+import { TimePicker } from "@quieter/ui/time-picker";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "@tanstack/react-store";
 import { useEffect } from "react";
@@ -58,13 +59,17 @@ import {
 import type { CalendarEditor } from "../domain/calendar-event-form";
 import { calendarPreviewEventColors } from "../domain/calendar-preview";
 import { CalendarEventGuests } from "./calendar-event-guests";
+import { CalendarEventLocation } from "./calendar-event-location";
 import { CalendarEventRecurrence } from "./calendar-event-recurrence";
 import { CalendarEventReminders } from "./calendar-event-reminders";
 import { CalendarTimeZonePicker } from "./calendar-time-zone-picker";
 
+const emptyLocationSuggestions: readonly string[] = [];
+
 export const CalendarEventEditor = ({
   calendars,
   editor,
+  locationSuggestions = emptyLocationSuggestions,
   onClose,
   onDelete,
   onRespond,
@@ -73,12 +78,14 @@ export const CalendarEventEditor = ({
   onSave,
   pending,
   preview,
+  previewIssue,
   store,
   timeZone,
   userId,
 }: {
   calendars: CalendarSummary[];
   editor: CalendarEditor;
+  locationSuggestions?: readonly string[];
   onClose: () => void;
   onDelete?: () => void;
   onRespond?: (
@@ -95,6 +102,7 @@ export const CalendarEventEditor = ({
   }) => Promise<CalendarEvent | undefined>;
   pending: boolean;
   preview: boolean;
+  previewIssue?: string;
   store: ReturnType<typeof createCalendarEventEditorStore>;
   timeZone: string;
   userId: string;
@@ -417,20 +425,20 @@ export const CalendarEventEditor = ({
                 >
                   Starts
                 </FieldLabel>
-                <Input
+                <DatePicker
                   chrome="ghost"
                   id="calendar-event-start-date"
-                  onChange={(event) => {
+                  onValueChange={(value) => {
                     store.setState((current) => ({
                       ...current,
                       values: {
                         ...current.values,
-                        startDate: event.target.value,
+                        startDate: value,
                       },
                     }));
                   }}
                   required
-                  type="date"
+                  disabled={pending}
                   value={form.startDate}
                 />
               </Field>
@@ -447,21 +455,21 @@ export const CalendarEventEditor = ({
                 >
                   Ends
                 </FieldLabel>
-                <Input
+                <DatePicker
                   chrome="ghost"
                   id="calendar-event-end-date"
                   min={form.startDate}
-                  onChange={(event) => {
+                  onValueChange={(value) => {
                     store.setState((current) => ({
                       ...current,
                       values: {
                         ...current.values,
-                        endDate: event.target.value,
+                        endDate: value,
                       },
                     }));
                   }}
                   required
-                  type="date"
+                  disabled={pending}
                   value={form.endDate}
                 />
                 {form.allDay ? (
@@ -480,20 +488,20 @@ export const CalendarEventEditor = ({
                     >
                       Start time
                     </FieldLabel>
-                    <Input
+                    <TimePicker
                       chrome="ghost"
                       id="calendar-event-start-time"
-                      onChange={(event) => {
+                      onValueChange={(value) => {
                         store.setState((current) => ({
                           ...current,
                           values: {
                             ...current.values,
-                            startTime: event.target.value,
+                            startTime: value,
                           },
                         }));
                       }}
                       required
-                      type="time"
+                      disabled={pending}
                       value={form.startTime}
                     />
                   </Field>
@@ -510,20 +518,20 @@ export const CalendarEventEditor = ({
                     >
                       End time
                     </FieldLabel>
-                    <Input
+                    <TimePicker
                       chrome="ghost"
                       id="calendar-event-end-time"
-                      onChange={(event) => {
+                      onValueChange={(value) => {
                         store.setState((current) => ({
                           ...current,
                           values: {
                             ...current.values,
-                            endTime: event.target.value,
+                            endTime: value,
                           },
                         }));
                       }}
                       required
-                      type="time"
+                      disabled={pending}
                       value={form.endTime}
                     />
                   </Field>
@@ -571,6 +579,16 @@ export const CalendarEventEditor = ({
                 value={form.recurrence}
               />
             )}
+            {previewIssue ? (
+              <Text
+                aria-live="polite"
+                className="ml-8.5"
+                size="caption"
+                tone="muted"
+              >
+                {previewIssue}
+              </Text>
+            ) : null}
           </div>
           <div className="space-y-1 border-t border-border pt-3">
             <CalendarEventGuests
@@ -632,33 +650,17 @@ export const CalendarEventEditor = ({
                 </div>
               </Field>
             ) : null}
-            <Field>
-              <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
-                <Icon icon={Location01Icon} tone="muted" />
-                <FieldLabel
-                  className="sr-only"
-                  htmlFor="calendar-event-location"
-                >
-                  Location
-                </FieldLabel>
-                <Input
-                  chrome="ghost"
-                  id="calendar-event-location"
-                  maxLength={2000}
-                  onChange={(event) => {
-                    store.setState((current) => ({
-                      ...current,
-                      values: {
-                        ...current.values,
-                        location: event.target.value,
-                      },
-                    }));
-                  }}
-                  placeholder="Add location"
-                  value={form.location}
-                />
-              </div>
-            </Field>
+            <CalendarEventLocation
+              disabled={pending}
+              onValueChange={(location) => {
+                store.setState((current) => ({
+                  ...current,
+                  values: { ...current.values, location },
+                }));
+              }}
+              suggestions={locationSuggestions}
+              value={form.location}
+            />
             <div className="flex items-start gap-2">
               <span className="flex h-9 items-center">
                 <Icon icon={TextAlignLeftIcon} tone="muted" />
@@ -671,7 +673,8 @@ export const CalendarEventEditor = ({
                   Description
                 </FieldLabel>
                 <Textarea
-                  variant="prompt"
+                  variant="compact-prompt"
+                  rows={1}
                   id="calendar-event-description"
                   maxLength={50_000}
                   onChange={(event) => {
