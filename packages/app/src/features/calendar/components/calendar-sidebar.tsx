@@ -3,7 +3,6 @@
 import {
   Add01Icon,
   ArrowLeft01Icon,
-  Calendar03Icon,
   Cancel01Icon,
   LayoutRightIcon,
   MoreHorizontalIcon,
@@ -25,7 +24,6 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Pill } from "@quieter/ui/pill";
-import { Text } from "@quieter/ui/text";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { Link, useLocation } from "@tanstack/react-router";
 import { use, useState } from "react";
@@ -193,12 +191,6 @@ const CalendarSidebarContent = ({
             </Button>
           </IconButtonTooltip>
         ) : null}
-      </div>
-      <div className="flex items-center gap-2 px-2">
-        <Icon aria-hidden size={20} tone="muted" icon={Calendar03Icon} />
-        <Text as="h1" size="lg" truncate weight="medium">
-          Calendar
-        </Text>
       </div>
       <Button
         disabled={!canCreate}

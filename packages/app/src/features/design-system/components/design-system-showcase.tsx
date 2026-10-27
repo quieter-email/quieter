@@ -258,6 +258,18 @@ const ScheduleShowcase = () => {
   const [view, setView] = useState<ScheduleProps["view"]>("week");
   const [items, setItems] = useState(sampleScheduleItems);
   const [selectedId, setSelectedId] = useState<string>();
+  const [showPreview, setShowPreview] = useState(false);
+  const creationPreview: ScheduleItem = {
+    allDay: false,
+    date: "2026-10-23",
+    detail: "Still being configured",
+    endMinute: 675,
+    id: "sample-creation-preview",
+    preview: true,
+    startMinute: 630,
+    title: "Draft appointment",
+    tone: "purple",
+  };
 
   return (
     <div className="space-y-3">
@@ -278,9 +290,20 @@ const ScheduleShowcase = () => {
           </Button>
         ))}
         <Button
+          aria-pressed={showPreview}
+          onClick={() => {
+            setShowPreview((previous) => !previous);
+          }}
+          size="sm"
+          variant="option"
+        >
+          Preview a new event
+        </Button>
+        <Button
           onClick={() => {
             setItems(sampleScheduleItems);
             setSelectedId(undefined);
+            setShowPreview(false);
           }}
           size="sm"
           variant="secondary"
@@ -292,7 +315,7 @@ const ScheduleShowcase = () => {
         <Schedule
           currentMinute={640}
           dates={scheduleDates[view]}
-          items={items}
+          items={showPreview ? [...items, creationPreview] : items}
           onEventClick={setSelectedId}
           onEventMove={({ allDay, date, id, minute }) => {
             setItems((previous) =>
@@ -339,7 +362,7 @@ const ScheduleShowcase = () => {
             ]);
           }}
           selectedDate={view === "day" ? "2026-10-23" : "2026-10-22"}
-          selectedId={selectedId}
+          selectedId={showPreview ? creationPreview.id : selectedId}
           today="2026-10-23"
           view={view}
         />

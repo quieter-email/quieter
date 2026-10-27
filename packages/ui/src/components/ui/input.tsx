@@ -29,7 +29,8 @@ export const inputVariants = cva(inputControlClassName, {
   },
   variants: {
     chrome: {
-      attached: "border-0 bg-transparent shadow-none focus-visible:ring-0",
+      attached:
+        "border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0",
       default:
         "squircle rounded-md border border-border bg-input shadow-none read-only:cursor-default read-only:bg-input",
       ghost: "border-0 bg-transparent shadow-none read-only:bg-transparent",
