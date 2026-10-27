@@ -12,6 +12,7 @@ import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
 import { useMailboxRouteSearch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
+import { getAppPresenceMotion } from "@quieter/app/features/motion/app-motion";
 import {
   calendarEventQueryOptions,
   calendarEventsQueryOptions,
@@ -34,7 +35,6 @@ import {
   getCalendarRange,
   getZonedDateTimeFields,
   moveCalendarEventTime,
-  splitCalendarEventTime,
 } from "@quieter/calendar/time";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import {
@@ -59,7 +59,6 @@ import { Input } from "@quieter/ui/input";
 import { Pill } from "@quieter/ui/pill";
 import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
 import { Schedule } from "@quieter/ui/schedule";
-import type { ScheduleItem } from "@quieter/ui/schedule";
 import {
   Select,
   SelectContent,
@@ -72,6 +71,15 @@ import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCreateStore, useSelector } from "@tanstack/react-store";
 import {
+  AnimatePresence,
+  LazyMotion,
+  domAnimation,
+  m,
+  useIsPresent,
+  useReducedMotion,
+} from "motion/react";
+import {
+  useCallback,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -91,6 +99,7 @@ import {
   getCalendarRefKey,
 } from "../domain/calendar-event-form";
 import type { CalendarEditor } from "../domain/calendar-event-form";
+import { getCalendarScheduleItems } from "../domain/calendar-schedule";
 import { CalendarEventDetails } from "./calendar-event-details";
 import { CalendarEventEditor } from "./calendar-event-editor";
 import { CalendarSidebar } from "./calendar-sidebar";
@@ -139,6 +148,32 @@ const subscribeToOnline = (callback: () => void) => {
 };
 const getOnlineSnapshot = () => navigator.onLine;
 const getServerOnlineSnapshot = () => true;
+const CalendarDetailsPanel = ({ children }: { children: ReactNode }) => {
+  const present = useIsPresent();
+  const reducedMotion = useReducedMotion();
+  const presence = getAppPresenceMotion({ reducedMotion });
+  return (
+    <m.aside
+      {...presence}
+      aria-hidden={!present || undefined}
+      aria-label="Event details"
+      className="ml-auto flex w-88 shrink-0 flex-col border-l border-border"
+      exit={
+        reducedMotion === true
+          ? { opacity: 0 }
+          : { opacity: 0, transform: "translate3d(6px, 0, 0)" }
+      }
+      inert={!present}
+      initial={
+        reducedMotion === true
+          ? { opacity: 0 }
+          : { opacity: 0, transform: "translate3d(8px, 0, 0)" }
+      }
+    >
+      {children}
+    </m.aside>
+  );
+};
 const CalendarWorkspaceContent = ({
   isMobileSidebarOpen,
   onMobileSidebarOpenChange,
@@ -153,6 +188,7 @@ const CalendarWorkspaceContent = ({
     getOnlineSnapshot,
     getServerOnlineSnapshot
   );
+  const reducedMotion = useReducedMotion();
   const workspaceRef = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(false);
   useLayoutEffect((): (() => void) | undefined => {
@@ -680,25 +716,6 @@ const CalendarWorkspaceContent = ({
       .toLocaleLowerCase()
       .includes(ui.search.toLocaleLowerCase())
   );
-  const items: ScheduleItem[] = filteredEvents.flatMap((event) => {
-    const calendar = data.calendars.find(
-      (candidate) =>
-        candidate.connectionId === event.connectionId &&
-        candidate.calendarId === event.calendarId
-    );
-    return splitCalendarEventTime({
-      dates: range.dates,
-      time: event.time,
-      timeZone,
-    }).map((segment) => ({
-      ...segment,
-      color: event.colorOverride ?? calendar?.color ?? event.color,
-      detail: event.location,
-      id: getCalendarEventKey(event),
-      title: event.title || "Untitled event",
-      tone: event.status === "tentative" ? "warning" : "blue",
-    }));
-  });
   const selectedAccount = data.accounts.find(
     (account) => account.id === requestedEventRef?.connectionId
   );
@@ -763,6 +780,39 @@ const CalendarWorkspaceContent = ({
         : null
     );
   }
+  const draftStore =
+    activeEditor?.kind === "create" && editorSession?.key === editorKey
+      ? editorSession.store
+      : null;
+  const subscribeToDraft = useCallback(
+    (notify: () => void) => {
+      const subscription = draftStore?.subscribe(notify);
+      return () => {
+        subscription?.unsubscribe();
+      };
+    },
+    [draftStore]
+  );
+  const getDraftSnapshot = useCallback(
+    () => draftStore?.get().values ?? null,
+    [draftStore]
+  );
+  const draftForm = useSyncExternalStore(
+    subscribeToDraft,
+    getDraftSnapshot,
+    getDraftSnapshot
+  );
+  const draftId =
+    activeEditor?.kind === "create"
+      ? `draft:${activeEditor.operationId}`
+      : undefined;
+  const items = getCalendarScheduleItems({
+    calendars: data.calendars,
+    dates: range.dates,
+    draft: draftForm && draftId ? { form: draftForm, id: draftId } : undefined,
+    events: filteredEvents,
+    timeZone,
+  });
   let details: ReactNode = null;
   if (activeEditor && editorSession) {
     details = (
@@ -995,6 +1045,13 @@ const CalendarWorkspaceContent = ({
   } else if (ui.confirmation?.kind === "move") {
     confirmationDescription = `This changes ${ui.confirmation.event.recurringEventId || ui.confirmation.event.recurrence.length > 0 ? "this occurrence only" : "the event time"}.${ui.confirmation.event.attendees.some((guest) => !guest.self) ? " Guests will be notified." : ""}`;
   }
+  const rangeHeading = new Intl.DateTimeFormat(undefined, {
+    month: "long",
+    timeZone,
+    year: "numeric",
+  }).format(
+    new Date(calendarWallTimeToInstant({ date, time: "12:00", timeZone }))
+  );
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1">
       <CalendarSidebar
@@ -1071,15 +1128,15 @@ const CalendarWorkspaceContent = ({
             truncate
             weight="medium"
           >
-            {new Intl.DateTimeFormat(undefined, {
-              month: "long",
-              timeZone,
-              year: "numeric",
-            }).format(
-              new Date(
-                calendarWallTimeToInstant({ date, time: "12:00", timeZone })
-              )
-            )}
+            <LazyMotion features={domAnimation}>
+              <m.span
+                {...getAppPresenceMotion({ distance: 4, reducedMotion })}
+                className="block truncate"
+                key={rangeHeading}
+              >
+                {rangeHeading}
+              </m.span>
+            </LazyMotion>
           </Text>
           <div className="flex items-center gap-1">
             <IconButtonTooltip label="Previous date range">
@@ -1417,20 +1474,22 @@ const CalendarWorkspaceContent = ({
               onSlotClick={createEvent}
               selectedDate={date}
               selectedId={
-                selectedEvent ? getCalendarEventKey(selectedEvent) : undefined
+                draftId ??
+                (selectedEvent ? getCalendarEventKey(selectedEvent) : undefined)
               }
               today={now.date}
               view={view}
             />
           ) : null}
-          {wide && details ? (
-            <aside
-              aria-label="Event details"
-              className="ml-auto flex w-88 shrink-0 flex-col border-l border-border"
-            >
-              {details}
-            </aside>
-          ) : null}
+          <LazyMotion features={domAnimation}>
+            <AnimatePresence initial={false}>
+              {wide && details ? (
+                <CalendarDetailsPanel key="event-details">
+                  {details}
+                </CalendarDetailsPanel>
+              ) : null}
+            </AnimatePresence>
+          </LazyMotion>
         </div>
       </WorkspaceSection>
       {!wide && details && !ui.recurringAction && !ui.confirmation ? (

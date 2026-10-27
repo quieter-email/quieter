@@ -24,6 +24,7 @@ export type ScheduleItem = {
   detail?: string;
   endMinute: number;
   id: string;
+  preview?: true;
   startMinute: number;
   title: string;
   tone?:
@@ -248,7 +249,7 @@ export const Schedule = ({
     item: ScheduleItem,
     timed: boolean
   ) => {
-    if (!onEventMove) {
+    if (!onEventMove || item.preview) {
       return;
     }
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -368,22 +369,28 @@ export const Schedule = ({
       // Schedule targets need data-sized geometry, drag anchors and dense event typography.
       // Shared Button sizes cannot express this timed positioning or month-row interaction.
       <button
-        aria-label={`${item.title}, ${item.allDay ? "all day" : `${formatMinute(item.startMinute)} to ${formatMinute(item.endMinute)}`}. Open event to edit.`}
-        aria-pressed={selectedId === item.id}
+        aria-label={`${item.title}, ${item.allDay ? "all day" : `${formatMinute(item.startMinute)} to ${formatMinute(item.endMinute)}`}. ${item.preview ? "Unsaved event preview." : "Open event to edit."}`}
+        aria-pressed={item.preview ? undefined : selectedId === item.id}
         className={cn(
-          "group/event @container/event-card relative isolate z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm border border-l-2 bg-card px-2 py-1 text-left text-caption transition-colors outline-none before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-sm hover:brightness-95 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg aria-pressed:ring-2 aria-pressed:ring-primary motion-reduce:transition-none",
+          "group/event @container/event-card relative isolate z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm border bg-card px-2 py-1 text-left text-caption transition-[color,background-color,border-color,box-shadow] duration-150 ease-out outline-none before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg enabled:hover:brightness-95 data-selected:ring-2 data-selected:ring-primary motion-reduce:transition-none",
           externalColor
-            ? "border-(--schedule-event-color)/40 border-l-(--schedule-event-color) text-fg before:bg-(--schedule-event-color)/15"
+            ? "border-(--schedule-event-color)/40 text-fg before:bg-(--schedule-event-color)/15"
             : toneClasses[item.tone ?? "primary"],
           {
             "h-full": !compact,
             "opacity-40": draggingId === item.id,
+            "py-0.5": !compact && !item.allDay && duration < 30,
             "py-0.5 text-micro": compact,
           }
         )}
-        draggable={Boolean(onEventMove)}
+        data-selected={selectedId === item.id || undefined}
+        disabled={item.preview}
+        draggable={Boolean(onEventMove) && !item.preview}
         key={`${item.id}:${item.date}`}
         onClick={() => {
+          if (item.preview) {
+            return;
+          }
           setExpandedDate(null);
           onEventClick(item.id);
         }}
@@ -427,9 +434,12 @@ export const Schedule = ({
 
   const renderAgendaDay = (date: string, dayItems: ScheduleItem[]) => (
     <section
-      className={cn("border-b border-border py-4", {
-        "-mx-2 rounded-sm bg-secondary/30 px-2": date === selectedDate,
-      })}
+      className={cn(
+        "border-b border-border py-4 transition-colors duration-150 motion-reduce:transition-none",
+        {
+          "-mx-2 rounded-sm bg-secondary/30 px-2": date === selectedDate,
+        }
+      )}
       data-selected-date={date === selectedDate || undefined}
       key={date}
     >
@@ -517,12 +527,15 @@ export const Schedule = ({
           </div>
           <div className="grid min-h-0 min-w-xl flex-1 auto-rows-fr grid-cols-7">
             {dates.map((date) => {
-              const dayItems = days.get(date) ?? [];
+              const dayItems = (days.get(date) ?? []).toSorted(
+                (left, right) =>
+                  Number(Boolean(right.preview)) - Number(Boolean(left.preview))
+              );
               const dateVariant = date === selectedDate ? "secondary" : "ghost";
               return (
                 <div
                   className={cn(
-                    "min-h-28 min-w-0 border-r border-b border-border p-1.5 last:border-r-0",
+                    "min-h-28 min-w-0 border-r border-b border-border p-1.5 transition-colors duration-150 last:border-r-0 motion-reduce:transition-none",
                     { "bg-secondary/30": date === selectedDate }
                   )}
                   data-selected-date={date === selectedDate || undefined}
@@ -647,7 +660,7 @@ export const Schedule = ({
         {dates.map((date) => (
           <div
             className={cn(
-              "flex min-h-8 items-center justify-center gap-1.5 border-b-2 border-transparent px-2 py-1",
+              "flex min-h-8 items-center justify-center gap-1.5 border-b-2 border-transparent px-2 py-1 transition-colors duration-150 motion-reduce:transition-none",
               {
                 "border-border-strong bg-secondary text-secondary-fg":
                   date === selectedDate && date !== today,
@@ -919,7 +932,7 @@ export const Schedule = ({
                     style={eventStyle}
                   >
                     {renderEvent({ ...item, endMinute })}
-                    {onEventResize ? (
+                    {onEventResize && !item.preview ? (
                       <IconButtonTooltip label="Resize event, or use arrow keys">
                         <button
                           aria-label={`Resize ${item.title}. Use up or down arrows to adjust by 15 minutes.`}
@@ -1019,7 +1032,13 @@ export const Schedule = ({
             {selection?.date === date ? (
               <div
                 aria-live="polite"
-                className="pointer-events-none absolute inset-x-0.5 top-[var(--schedule-top)] z-20 h-[var(--schedule-height)] overflow-hidden rounded-xs border border-primary/40 bg-primary/15 px-1 text-micro text-primary"
+                className={cn(
+                  "pointer-events-none absolute inset-x-0.5 top-[var(--schedule-top)] z-20 h-[var(--schedule-height)] overflow-hidden rounded-xs border border-primary/40 bg-primary/15 px-2 py-1 text-caption font-medium text-primary",
+                  {
+                    "flex items-center px-1.5 py-0 text-micro leading-none":
+                      selectionEnd - selectionStart < 30,
+                  }
+                )}
                 style={selectionStyle}
               >
                 {formatMinute(selectionStart)} to {formatMinute(selectionEnd)}

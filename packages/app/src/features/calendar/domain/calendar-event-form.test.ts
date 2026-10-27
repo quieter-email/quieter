@@ -5,6 +5,7 @@ import {
   createCalendarEventChanges,
   createCalendarEventForm,
   parseCalendarEventForm,
+  parseCalendarEventFormTime,
 } from "./calendar-event-form";
 
 const recurringMeeting = calendarEventSchema.parse({
@@ -40,6 +41,69 @@ const recurringMeeting = calendarEventSchema.parse({
   title: "Weekly conversation",
   version: "current",
   visibility: "private",
+});
+
+describe("calendar event form time", () => {
+  const form = createCalendarEventForm(
+    { event: recurringMeeting, kind: "edit", scope: "occurrence" },
+    "Europe/Berlin"
+  );
+
+  it("preserves repeated-hour instants while unrelated fields are incomplete", () => {
+    const time = parseCalendarEventFormTime(
+      {
+        ...form,
+        attendees: "guest@",
+        reminderKind: "custom",
+        reminderMinutes: "unfinished",
+        title: "",
+      },
+      recurringMeeting
+    );
+    expect(time).toMatchObject(recurringMeeting.time);
+  });
+
+  it("converts an inclusive all-day end date to the exclusive time contract", () => {
+    expect(
+      parseCalendarEventFormTime({
+        ...form,
+        allDay: true,
+        endDate: "2026-10-27",
+        startDate: "2026-10-25",
+      })
+    ).toMatchObject({
+      endDate: "2026-10-28",
+      kind: "all-day",
+      startDate: "2026-10-25",
+    });
+  });
+
+  it.each([
+    {
+      changes: { allDay: true, endDate: "2026-02-30", startDate: "2026-02-28" },
+      problem: "an impossible all-day end date before date arithmetic",
+    },
+    {
+      changes: { allDay: true, endDate: "2026-10-24" },
+      problem: "an all-day end before the start",
+    },
+    {
+      changes: { endTime: "09:00", startTime: "10:00" },
+      problem: "a timed end before the start",
+    },
+    {
+      changes: { endTime: "10:00", startTime: "10:00" },
+      problem: "a zero-duration timed event",
+    },
+    {
+      changes: { endDate: "", startTime: "" },
+      problem: "partially entered date and time fields",
+    },
+  ])("rejects $problem", ({ changes }) => {
+    expect(() => parseCalendarEventFormTime({ ...form, ...changes })).toThrow(
+      Error
+    );
+  });
 });
 
 describe("calendar event edit changes", () => {

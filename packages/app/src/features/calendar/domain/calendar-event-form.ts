@@ -1,4 +1,8 @@
-import { calendarEventDraftSchema } from "@quieter/calendar";
+import {
+  calendarDateSchema,
+  calendarEventDraftSchema,
+  calendarEventTimeSchema,
+} from "@quieter/calendar";
 import type {
   CalendarEvent,
   CalendarEventDraft,
@@ -101,20 +105,12 @@ export const createCalendarEventForm = (
   };
 };
 
-export const parseCalendarEventForm = (
+export const parseCalendarEventFormTime = (
   form: CalendarEventForm,
   original?: CalendarEvent
-): CalendarEventDraft => {
-  const guests = form.attendees
-    .split(/[,;\n]/u)
-    .map((email) => email.trim())
-    .filter(Boolean);
-  const attendees = [...new Set(guests)].map((email) => {
-    const guest = original?.attendees.find(
-      (attendee) => attendee.email === email
-    );
-    return { email, name: guest?.name, optional: guest?.optional ?? false };
-  });
+): CalendarEventTime => {
+  calendarDateSchema.parse(form.startDate);
+  calendarDateSchema.parse(form.endDate);
   const originalTime = original?.time;
   const originalStart =
     originalTime?.kind === "timed"
@@ -163,6 +159,23 @@ export const parseCalendarEventForm = (
           timeZone: form.timeZone,
         };
   }
+  return calendarEventTimeSchema.parse(time);
+};
+
+export const parseCalendarEventForm = (
+  form: CalendarEventForm,
+  original?: CalendarEvent
+): CalendarEventDraft => {
+  const guests = form.attendees
+    .split(/[,;\n]/u)
+    .map((email) => email.trim())
+    .filter(Boolean);
+  const attendees = [...new Set(guests)].map((email) => {
+    const guest = original?.attendees.find(
+      (attendee) => attendee.email === email
+    );
+    return { email, name: guest?.name, optional: guest?.optional ?? false };
+  });
   let reminders: CalendarEventDraft["reminders"] = { kind: "default" };
   if (form.reminderKind === "none") {
     reminders = { items: [], kind: "custom" };
@@ -189,7 +202,7 @@ export const parseCalendarEventForm = (
     location: form.location,
     recurrence: form.recurrence,
     reminders,
-    time,
+    time: parseCalendarEventFormTime(form, original),
     title: form.title,
     visibility: form.visibility,
   });

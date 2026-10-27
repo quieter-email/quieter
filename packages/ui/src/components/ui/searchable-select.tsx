@@ -101,7 +101,7 @@ export const SearchableSelect = ({
         >
           <ComboboxPrimitive.Popup
             aria-label={ariaLabel}
-            className="flex max-h-[min(24rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) origin-(--transform-origin) flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 motion-reduce:transition-none"
+            className="flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) origin-(--transform-origin) flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 motion-reduce:transition-none"
           >
             <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1">
               <Icon aria-hidden icon={Search01Icon} size={16} tone="muted" />
@@ -111,8 +111,8 @@ export const SearchableSelect = ({
                 placeholder={searchPlaceholder}
               />
             </div>
-            <ComboboxPrimitive.Empty className="px-3 py-6 text-center text-body-sm text-muted-fg">
-              {emptyMessage}
+            <ComboboxPrimitive.Empty className="text-center text-body-sm text-muted-fg">
+              <p className="px-3 py-4">{emptyMessage}</p>
             </ComboboxPrimitive.Empty>
             <ComboboxPrimitive.List className="min-h-0 overflow-y-auto overscroll-contain p-1 empty:p-0">
               {(option: SearchableSelectOption) => (
