@@ -14,6 +14,8 @@ The canonical files are in `.agents/skills/`. `.claude/skills` and `.opencode/sk
 | Cursor | `/poteto-mode` | `~/.cursor/rules/pstack-models.mdc` |
 | Pi and other clients | The client's skill loader | `~/.agents/pstack-models.md` |
 
+The settings paths above are optional personal overrides. [Repository preferences](preferences.md) supply the shared defaults on every machine, including model series, release following, and consultation limits. Read both sources through [the model policy](models.md).
+
 OpenCode skills are not slash commands. `/poteto-mode` works there only if a separate custom command exists. This installation uses its native skill loader.
 
 Read this harness's settings when selecting a role. If the Codex, Claude Code, or OpenCode file is absent, read the legacy `~/.agents/pstack-models.md`, but use only choices available in this client. Honor native config-home overrides when resolving these default paths. Run `setup-pstack` through [the setup steps](setup.md) to change settings.
