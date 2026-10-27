@@ -47,7 +47,7 @@ export const ContextMenuContent = ({
       <ContextMenuPrimitive.Popup
         className={cn(
           menuPopupClassName,
-          "will-change-[opacity,transform]",
+          "will-change-[opacity,scale]",
           className
         )}
         {...props}

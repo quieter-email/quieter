@@ -87,7 +87,7 @@ export const DropdownMenuContent = ({
         <MenuPrimitive.Popup
           className={cn(
             menuPopupClassName,
-            "will-change-[translate,opacity,height,width]",
+            "will-change-[opacity,scale]",
             { [menuCompactPopupClassName]: size === "compact" },
             className
           )}
@@ -127,7 +127,7 @@ export const DropdownMenuSubmenuContent = ({
           <MenuPrimitive.Popup
             className={cn(
               menuPopupClassName,
-              "will-change-[opacity,transform]",
+              "will-change-[opacity,scale]",
               { [menuCompactPopupClassName]: resolvedSize === "compact" },
               className
             )}

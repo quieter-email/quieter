@@ -5,7 +5,7 @@ export const overlayBackdropClassName =
   "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0";
 
 export const overlayPopupClassName =
-  "fixed top-1/2 left-1/2 z-50 w-[min(92vw,30rem)] -translate-1/2 overflow-hidden rounded-xl border shadow-lg transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0";
+  "fixed top-1/2 left-1/2 z-50 w-[min(92vw,30rem)] -translate-1/2 overflow-hidden rounded-xl border shadow-lg transition-[opacity,scale] duration-150 ease-out will-change-[opacity,scale] data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0";
 
 export const overlayTitleClassName = "truncate text-body-lg font-medium";
 
