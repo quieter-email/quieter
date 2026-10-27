@@ -176,7 +176,11 @@ const CalendarSidebarContent = ({
           role="link"
           variant="ghost"
         >
-          <Icon aria-hidden icon={ArrowLeft01Icon} />
+          <Icon
+            aria-hidden
+            className="absolute start-3"
+            icon={ArrowLeft01Icon}
+          />
           Back to Mail
         </Button>
         {close ? (
