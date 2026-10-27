@@ -63,8 +63,14 @@ describe("calendar schedule creation previews", () => {
           ...form,
           attendees: "unfinished@",
           location: "Garden room",
+          reminderItems: [
+            {
+              id: "draft-reminder",
+              method: "notification",
+              minutesBefore: "unfinished",
+            },
+          ],
           reminderKind: "custom",
-          reminderMinutes: "unfinished",
           title: "",
         },
         id: "draft:creation",

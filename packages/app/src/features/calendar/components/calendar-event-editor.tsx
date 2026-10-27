@@ -7,12 +7,9 @@ import {
   Clock01Icon,
   Globe02Icon,
   Location01Icon,
-  Notification02Icon,
   PaintBoardIcon,
-  RepeatIcon,
   SquareLock01Icon,
   TextAlignLeftIcon,
-  UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 import { getCalendarConnectionQueryKey } from "@quieter/app/lib/calendar-query";
 import { toastError } from "@quieter/app/lib/error-toast";
@@ -60,16 +57,10 @@ import {
 } from "../domain/calendar-event-form";
 import type { CalendarEditor } from "../domain/calendar-event-form";
 import { calendarPreviewEventColors } from "../domain/calendar-preview";
+import { CalendarEventGuests } from "./calendar-event-guests";
+import { CalendarEventRecurrence } from "./calendar-event-recurrence";
+import { CalendarEventReminders } from "./calendar-event-reminders";
 import { CalendarTimeZonePicker } from "./calendar-time-zone-picker";
-
-const repeatOptions = [
-  { label: "Does not repeat", value: "none" },
-  { label: "Every day", value: "DAILY" },
-  { label: "Every week", value: "WEEKLY" },
-  { label: "Every month", value: "MONTHLY" },
-  { label: "Every year", value: "YEARLY" },
-  { label: "Custom repeat rule, preserved", value: "preserve" },
-];
 
 export const CalendarEventEditor = ({
   calendars,
@@ -148,18 +139,6 @@ export const CalendarEventEditor = ({
   const colors = preview
     ? calendarPreviewEventColors
     : (colorsQuery.data?.colors ?? []);
-  let repeat = "preserve";
-  if (form.recurrence.length === 0) {
-    repeat = "none";
-  } else {
-    const frequency =
-      /^RRULE:FREQ=(?<frequency>DAILY|WEEKLY|MONTHLY|YEARLY)$/u.exec(
-        form.recurrence[0]
-      )?.groups?.frequency;
-    if (form.recurrence.length === 1 && frequency) {
-      repeat = frequency;
-    }
-  }
   const isOccurrence =
     editor.kind === "edit" &&
     editor.scope === "occurrence" &&
@@ -271,7 +250,7 @@ export const CalendarEventEditor = ({
         void submit();
       }}
     >
-      <div className="flex items-center gap-2 px-5 py-4">
+      <div className="flex shrink-0 items-center gap-2 px-5 py-4">
         <Text as="h2" className="flex-1" size="sm" weight="medium">
           {editor.kind === "create" ? "New event" : "Event details"}
         </Text>
@@ -578,86 +557,41 @@ export const CalendarEventEditor = ({
               </Field>
             )}
             {isOccurrence ? null : (
-              <Field>
-                <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
-                  <Icon icon={RepeatIcon} tone="muted" />
-                  <FieldLabel
-                    className="sr-only"
-                    htmlFor="calendar-event-repeat"
-                  >
-                    Repeat
-                  </FieldLabel>
-                  <Select
-                    disabled={pending}
-                    items={repeatOptions}
-                    onValueChange={(value) => {
-                      if (value && value !== "preserve") {
-                        store.setState((current) => ({
-                          ...current,
-                          values: {
-                            ...current.values,
-                            recurrence:
-                              value === "none" ? [] : [`RRULE:FREQ=${value}`],
-                          },
-                        }));
-                      }
-                    }}
-                    value={repeat}
-                  >
-                    <SelectTrigger id="calendar-event-repeat" variant="ghost">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {repeatOptions
-                        .filter(
-                          (option) =>
-                            option.value !== "preserve" || repeat === "preserve"
-                        )
-                        .map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                  {repeat === "preserve" ? (
-                    <FieldDescription className="col-start-2 ml-2.5">
-                      Existing repeat rules will stay unchanged.
-                    </FieldDescription>
-                  ) : null}
-                </div>
-              </Field>
+              <CalendarEventRecurrence
+                allDay={form.allDay}
+                disabled={pending}
+                onChange={(recurrence) => {
+                  store.setState((current) => ({
+                    ...current,
+                    values: { ...current.values, recurrence },
+                  }));
+                }}
+                startDate={form.startDate}
+                timeZone={form.timeZone}
+                value={form.recurrence}
+              />
             )}
           </div>
           <div className="space-y-1 border-t border-border pt-3">
-            <div className="flex items-start gap-2">
-              <Icon className="mt-2" icon={UserGroupIcon} tone="muted" />
-              <Field>
-                <FieldLabel className="sr-only" htmlFor="calendar-event-guests">
-                  Guests
-                </FieldLabel>
-                <Input
-                  chrome="ghost"
-                  id="calendar-event-guests"
-                  onChange={(event) => {
-                    store.setState((current) => ({
-                      ...current,
-                      values: {
-                        ...current.values,
-                        attendees: event.target.value,
-                      },
-                    }));
-                  }}
-                  placeholder="Guest emails, separated by commas"
-                  value={form.attendees}
-                />
-                <FieldDescription className="ml-2.5">
-                  {preview
-                    ? "No invitations are sent from this preview."
-                    : "Saving sends invitations and event updates to guests."}
-                </FieldDescription>
-              </Field>
-            </div>
+            <CalendarEventGuests
+              attendees={baseEvent?.attendees}
+              disabled={pending}
+              onChange={(attendees) => {
+                store.setState((current) => ({
+                  ...current,
+                  values: { ...current.values, attendees },
+                }));
+              }}
+              onOptionalGuestEmailsChange={(optionalGuestEmails) => {
+                store.setState((current) => ({
+                  ...current,
+                  values: { ...current.values, optionalGuestEmails },
+                }));
+              }}
+              optionalGuestEmails={form.optionalGuestEmails}
+              preview={preview}
+              value={form.attendees}
+            />
             {baseEvent?.organizer &&
             !baseEvent.attendees.some((guest) => guest.organizer) ? (
               <div className="ml-6 space-y-1 pl-2.5">
@@ -670,29 +604,6 @@ export const CalendarEventEditor = ({
                     (baseEvent.organizer.self ? "You" : "Event organizer")}
                 </Text>
               </div>
-            ) : null}
-            {baseEvent !== undefined && baseEvent.attendees.length > 0 ? (
-              <ul className="ml-6 space-y-2 pl-2.5">
-                {baseEvent.attendees.map((guest) => (
-                  <li className="min-w-0 text-body-sm" key={guest.email}>
-                    <p className="truncate" title={guest.email}>
-                      {guest.name ?? guest.email}
-                      {guest.self ? " (you)" : ""}
-                    </p>
-                    <p className="text-caption text-muted-fg">
-                      {guest.organizer ? "Organizer, " : ""}
-                      {
-                        {
-                          accepted: "Going",
-                          declined: "Declined",
-                          "needs-action": "Awaiting response",
-                          tentative: "Maybe",
-                        }[guest.response]
-                      }
-                    </p>
-                  </li>
-                ))}
-              </ul>
             ) : null}
             {baseEvent?.permissions.respond === true && self && onRespond ? (
               <Field className="ml-8.5 w-auto">
@@ -891,118 +802,23 @@ export const CalendarEventEditor = ({
                 </Popover>
               </div>
             </Field>
-            <Field>
-              <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
-                <Icon icon={Notification02Icon} tone="muted" />
-                <FieldLabel
-                  className="sr-only"
-                  htmlFor="calendar-event-reminder"
-                >
-                  Reminder
-                </FieldLabel>
-                <Select
-                  disabled={pending}
-                  items={[
-                    { label: "Default reminder", value: "default" },
-                    { label: "No reminder", value: "none" },
-                    { label: "Custom reminder", value: "custom" },
-                  ]}
-                  onValueChange={(value) => {
-                    if (
-                      value === "default" ||
-                      value === "none" ||
-                      value === "custom"
-                    ) {
-                      store.setState((current) => ({
-                        ...current,
-                        values: { ...current.values, reminderKind: value },
-                      }));
-                    }
-                  }}
-                  value={form.reminderKind}
-                >
-                  <SelectTrigger id="calendar-event-reminder" variant="ghost">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">Default reminder</SelectItem>
-                    <SelectItem value="none">No reminder</SelectItem>
-                    <SelectItem value="custom">Custom reminder</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </Field>
-            {form.reminderKind === "custom" ? (
-              <div className="ml-6 grid grid-cols-2 gap-3">
-                <Field>
-                  <FieldLabel
-                    className="ml-2.5"
-                    htmlFor="calendar-event-reminder-minutes"
-                  >
-                    Minutes before
-                  </FieldLabel>
-                  <Input
-                    chrome="ghost"
-                    id="calendar-event-reminder-minutes"
-                    max={40_320}
-                    min={0}
-                    onChange={(event) => {
-                      store.setState((current) => ({
-                        ...current,
-                        values: {
-                          ...current.values,
-                          reminderMinutes: event.target.value,
-                        },
-                      }));
-                    }}
-                    required
-                    type="number"
-                    value={form.reminderMinutes}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel
-                    className="ml-2.5"
-                    htmlFor="calendar-event-reminder-method"
-                  >
-                    Notify by
-                  </FieldLabel>
-                  <Select
-                    disabled={pending}
-                    items={[
-                      { label: "Notification", value: "notification" },
-                      { label: "Email", value: "email" },
-                    ]}
-                    onValueChange={(value) => {
-                      if (value === "notification" || value === "email") {
-                        store.setState((current) => ({
-                          ...current,
-                          values: { ...current.values, reminderMethod: value },
-                        }));
-                      }
-                    }}
-                    value={form.reminderMethod}
-                  >
-                    <SelectTrigger
-                      id="calendar-event-reminder-method"
-                      variant="ghost"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="notification">Notification</SelectItem>
-                      <SelectItem value="email">Email</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                {state.baseEvent?.reminders.kind === "custom" &&
-                state.baseEvent.reminders.items.length > 1 ? (
-                  <p className="col-span-2 text-caption text-muted-fg">
-                    Additional reminders on this event are preserved.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
+            <CalendarEventReminders
+              disabled={pending}
+              items={form.reminderItems}
+              kind={form.reminderKind}
+              onItemsChange={(reminderItems) => {
+                store.setState((current) => ({
+                  ...current,
+                  values: { ...current.values, reminderItems },
+                }));
+              }}
+              onKindChange={(reminderKind) => {
+                store.setState((current) => ({
+                  ...current,
+                  values: { ...current.values, reminderKind },
+                }));
+              }}
+            />
             <div className="space-y-1">
               <Field>
                 <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
@@ -1092,7 +908,7 @@ export const CalendarEventEditor = ({
         </fieldset>
       </div>
       {dirty || editor.kind === "create" || onDelete ? (
-        <div className="p-5">
+        <div className="shrink-0 p-5">
           <ActionFooter>
             {dirty || editor.kind === "create" ? (
               <Button

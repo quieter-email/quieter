@@ -652,7 +652,7 @@ export const Schedule = ({
         {dates.map((date, index) => (
           <div
             className={cn(
-              "flex items-center justify-center gap-1.5 border-border/50 px-2 py-1",
+              "flex min-h-8 items-center justify-center gap-1.5 border-border/50 px-2 py-1",
               { "border-r": index < dates.length - 1 }
             )}
             data-selected-date={date === selectedDate || undefined}
@@ -667,14 +667,9 @@ export const Schedule = ({
               {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
             </span>
             <span
-              className={cn(
-                "flex size-7 items-center justify-center rounded-sm text-body-sm font-medium",
-                {
-                  "bg-primary text-primary-fg": date === today,
-                  "bg-secondary text-secondary-fg":
-                    date === selectedDate && date !== today,
-                }
-              )}
+              className={cn("text-body-sm font-medium", {
+                "text-primary": date === today,
+              })}
             >
               {Number(date.slice(8))}
               {date === selectedDate ? (

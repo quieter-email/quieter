@@ -1536,7 +1536,7 @@ const CalendarWorkspaceContent = ({
                 </DialogDescription>
               </DialogHeader>
             </div>
-            <div className="flex max-h-[80dvh] flex-col">{details}</div>
+            <div className="flex h-[80dvh] min-h-0 flex-col">{details}</div>
           </DialogContent>
         </Dialog>
       ) : null}
