@@ -418,6 +418,8 @@ export const Schedule = ({
             "h-full": !compact,
             "py-0.5": !compact && !item.allDay && duration < 60,
             "py-1 text-caption": compact,
+            "transition-[opacity,scale] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) motion-reduce:transition-opacity starting:scale-[0.98] starting:opacity-0 motion-reduce:starting:scale-100":
+              item.preview,
           }
         )}
         data-selected={selectedId === item.id || undefined}

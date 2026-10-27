@@ -40,6 +40,7 @@ import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
+import { entranceMotionVariants } from "@quieter/ui/motion";
 import {
   Select,
   SelectContent,
@@ -184,427 +185,443 @@ export const AddMailboxSettingsView = ({
         domain.
       </SettingsPageHeader>
 
-      {mailboxType === undefined ? (
-        <SettingsRows>
-          <SettingsNavigationRow
-            description="Connect your Gmail inbox and Google Calendar with one account."
-            icon={<Icon aria-hidden icon={Mail01Icon} />}
-            onClick={() => {
-              workflowStore.setState((state) => ({
-                ...state,
-                isSharedDetailsVisible: false,
-                mailboxType: "gmail",
-              }));
-            }}
-            title="Gmail"
-          />
-          <SettingsNavigationRow
-            description="Create a custom mailbox with your own domain."
-            icon={<Icon aria-hidden icon={Mail01Icon} />}
-            onClick={() => {
-              workflowStore.setState((state) => ({
-                ...state,
-                isSharedDetailsVisible: false,
-                mailboxType: "shared",
-              }));
-            }}
-            title="Quieter managed mailbox"
-          />
-        </SettingsRows>
-      ) : null}
+      <div
+        className={entranceMotionVariants({ effect: "slide" })}
+        key={
+          mailboxType === "shared" && isSharedDetailsVisible
+            ? "address"
+            : (mailboxType ?? "choose")
+        }
+      >
+        {mailboxType === undefined ? (
+          <SettingsRows>
+            <SettingsNavigationRow
+              description="Connect your Gmail inbox and Google Calendar with one account."
+              icon={<Icon aria-hidden icon={Mail01Icon} />}
+              onClick={() => {
+                workflowStore.setState((state) => ({
+                  ...state,
+                  isSharedDetailsVisible: false,
+                  mailboxType: "gmail",
+                }));
+              }}
+              title="Gmail"
+            />
+            <SettingsNavigationRow
+              description="Create a custom mailbox with your own domain."
+              icon={<Icon aria-hidden icon={Mail01Icon} />}
+              onClick={() => {
+                workflowStore.setState((state) => ({
+                  ...state,
+                  isSharedDetailsVisible: false,
+                  mailboxType: "shared",
+                }));
+              }}
+              title="Quieter managed mailbox"
+            />
+          </SettingsRows>
+        ) : null}
 
-      {mailboxType === "gmail" ? (
-        <SettingsSection
-          description="Google will ask you to allow mail and calendar access. Your mailbox and calendars stay private to you."
-          title="Connect Gmail"
-        >
-          <SettingsCard>
-            <div className={settingsSurfaceVariants({ variant: "body" })}>
-              <Field>
-                <FieldLabel htmlFor="gmail-team">Team</FieldLabel>
-                <Select
-                  items={placementItems}
-                  onValueChange={(value) => {
-                    workflowStore.setState((state) => ({
-                      ...state,
-                      gmailOrganizationId: value ?? "",
-                    }));
-                  }}
-                  value={gmailOrganizationId || teamId}
-                >
-                  <SelectTrigger
-                    aria-label="Gmail mailbox team"
-                    id="gmail-team"
-                  >
-                    <SelectValue placeholder="Select team" />
-                  </SelectTrigger>
-                  <SelectContent align="start">
-                    {organizations.map((organization) => (
-                      <SelectItem key={organization.id} value={organization.id}>
-                        {organization.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-            <SettingsInsetRow>
-              <ActionFooter>
-                <Button onClick={goBack} variant="secondary">
-                  <Icon aria-hidden icon={ArrowLeft01Icon} />
-                  Back
-                </Button>
-                <Button
-                  disabled={isStartingGmail || organizations.length === 0}
-                  onClick={() => {
-                    runDetached(startGmailConnection);
-                  }}
-                  pending={isStartingGmail}
-                  pendingLabel="Opening Google"
-                >
-                  <Icon aria-hidden icon={Mail01Icon} />
-                  Connect Gmail
-                </Button>
-              </ActionFooter>
-            </SettingsInsetRow>
-          </SettingsCard>
-        </SettingsSection>
-      ) : null}
-
-      {mailboxType === "shared" && !isSharedDetailsVisible ? (
-        <SettingsSection title="Mailbox team">
-          <SettingsCard>
-            <div className={settingsSurfaceVariants({ variant: "body" })}>
-              <Field>
-                <FieldLabel htmlFor="shared-team">Team</FieldLabel>
-                <Select
-                  items={placementItems}
-                  onValueChange={(value) => {
-                    workflowStore.setState((state) => ({
-                      ...state,
-                      managedDivisionId: null,
-                      managedDomain: undefined,
-                      managedOrganizationId: value ?? "",
-                      managedOwnerUserId: "",
-                      receiveWholeDomain: false,
-                    }));
-                  }}
-                  value={selectedManagedOrganizationId || null}
-                >
-                  <SelectTrigger aria-label="Mailbox team" id="shared-team">
-                    <SelectValue placeholder="Select team" />
-                  </SelectTrigger>
-                  <SelectContent align="start">
-                    {organizations.map((organization) => (
-                      <SelectItem key={organization.id} value={organization.id}>
-                        {organization.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-            <SettingsInsetRow>
-              <ActionFooter>
-                <Button onClick={goBack} variant="secondary">
-                  <Icon aria-hidden icon={ArrowLeft01Icon} />
-                  Back
-                </Button>
-                <Button
-                  disabled={
-                    selectedManagedOrganizationId === "" ||
-                    isCreateManagedOrganizationPending ||
-                    !canCreateManagedMailbox
-                  }
-                  onClick={() => {
-                    workflowStore.setState((state) => ({
-                      ...state,
-                      isSharedDetailsVisible: true,
-                    }));
-                  }}
-                >
-                  Continue
-                  <Icon aria-hidden icon={ArrowRight01Icon} />
-                </Button>
-              </ActionFooter>
-            </SettingsInsetRow>
-          </SettingsCard>
-        </SettingsSection>
-      ) : null}
-
-      {mailboxType === "shared" && isSharedDetailsVisible ? (
-        <SettingsSection title="Mailbox address">
-          <SettingsCard>
-            <div className={settingsSurfaceVariants({ variant: "body" })}>
-              <Field>
-                <FieldLabel htmlFor="mailbox-access-mode">Access</FieldLabel>
-                <Select
-                  items={[
-                    { label: "Shared inbox", value: "shared" },
-                    { label: "Private mailbox", value: "private" },
-                  ]}
-                  value={managedAccessMode}
-                  onValueChange={(value) => {
-                    if (value === "private" || value === "shared") {
-                      workflowStore.setState((state) => ({
-                        ...state,
-                        managedAccessMode: value,
-                        managedDivisionId: null,
-                      }));
-                    }
-                  }}
-                >
-                  <SelectTrigger id="mailbox-access-mode">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="shared">Shared inbox</SelectItem>
-                    <SelectItem value="private">Private mailbox</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FieldDescription>
-                  {managedAccessMode === "private"
-                    ? "Only the selected owner can use this mailbox initially. You can grant individual access later."
-                    : "Work together with people who have direct or division access."}
-                </FieldDescription>
-              </Field>
-              {managedAccessMode === "private" && (
+        {mailboxType === "gmail" ? (
+          <SettingsSection
+            description="Google will ask you to allow mail and calendar access. Your mailbox and calendars stay private to you."
+            title="Connect Gmail"
+          >
+            <SettingsCard>
+              <div className={settingsSurfaceVariants({ variant: "body" })}>
                 <Field>
-                  <FieldLabel htmlFor="mailbox-owner">Owner</FieldLabel>
+                  <FieldLabel htmlFor="gmail-team">Team</FieldLabel>
                   <Select
-                    items={(createManagedOrganization?.members ?? []).map(
-                      (member) => ({
-                        label: member.user.name || member.user.email,
-                        value: member.userId,
-                      })
-                    )}
-                    value={managedOwnerUserId || null}
+                    items={placementItems}
                     onValueChange={(value) => {
                       workflowStore.setState((state) => ({
                         ...state,
-                        managedOwnerUserId: value ?? "",
+                        gmailOrganizationId: value ?? "",
                       }));
                     }}
+                    value={gmailOrganizationId || teamId}
                   >
-                    <SelectTrigger id="mailbox-owner">
-                      <SelectValue placeholder="Choose a team member" />
+                    <SelectTrigger
+                      aria-label="Gmail mailbox team"
+                      id="gmail-team"
+                    >
+                      <SelectValue placeholder="Select team" />
                     </SelectTrigger>
-                    <SelectContent>
-                      {(createManagedOrganization?.members ?? []).map(
-                        (member) => (
-                          <SelectItem key={member.userId} value={member.userId}>
-                            {member.user.name || member.user.email}
-                          </SelectItem>
-                        )
-                      )}
+                    <SelectContent align="start">
+                      {organizations.map((organization) => (
+                        <SelectItem
+                          key={organization.id}
+                          value={organization.id}
+                        >
+                          {organization.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </Field>
-              )}
+              </div>
+              <SettingsInsetRow>
+                <ActionFooter>
+                  <Button onClick={goBack} variant="secondary">
+                    <Icon aria-hidden icon={ArrowLeft01Icon} />
+                    Back
+                  </Button>
+                  <Button
+                    disabled={isStartingGmail || organizations.length === 0}
+                    onClick={() => {
+                      runDetached(startGmailConnection);
+                    }}
+                    pending={isStartingGmail}
+                    pendingLabel="Opening Google"
+                  >
+                    <Icon aria-hidden icon={Mail01Icon} />
+                    Connect Gmail
+                  </Button>
+                </ActionFooter>
+              </SettingsInsetRow>
+            </SettingsCard>
+          </SettingsSection>
+        ) : null}
 
-              <Field>
-                <FieldLabel htmlFor="display-name">Display name</FieldLabel>
-                <TextFieldInput
-                  id="display-name"
-                  onChange={(event) => {
-                    workflowStore.setState((state) => ({
-                      ...state,
-                      managedDisplayName: event.currentTarget.value,
-                    }));
-                  }}
-                  placeholder="Support"
-                  value={managedDisplayName}
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="local-part">Email address</FieldLabel>
-                <InputGroup>
-                  <TextFieldInput
-                    aria-label="Mailbox address"
-                    chrome="attached"
-                    id="local-part"
-                    onChange={(event) => {
+        {mailboxType === "shared" && !isSharedDetailsVisible ? (
+          <SettingsSection title="Mailbox team">
+            <SettingsCard>
+              <div className={settingsSurfaceVariants({ variant: "body" })}>
+                <Field>
+                  <FieldLabel htmlFor="shared-team">Team</FieldLabel>
+                  <Select
+                    items={placementItems}
+                    onValueChange={(value) => {
                       workflowStore.setState((state) => ({
                         ...state,
-                        managedLocalPart: event.currentTarget.value.replaceAll(
-                          /[@\s]/gu,
-                          ""
-                        ),
+                        managedDivisionId: null,
+                        managedDomain: undefined,
+                        managedOrganizationId: value ?? "",
+                        managedOwnerUserId: "",
+                        receiveWholeDomain: false,
                       }));
                     }}
-                    placeholder="support"
-                    value={managedLocalPart}
-                  />
-                  <InputAddon aria-hidden>@</InputAddon>
-                  {verifiedDomains.length > 0 ? (
+                    value={selectedManagedOrganizationId || null}
+                  >
+                    <SelectTrigger aria-label="Mailbox team" id="shared-team">
+                      <SelectValue placeholder="Select team" />
+                    </SelectTrigger>
+                    <SelectContent align="start">
+                      {organizations.map((organization) => (
+                        <SelectItem
+                          key={organization.id}
+                          value={organization.id}
+                        >
+                          {organization.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+              <SettingsInsetRow>
+                <ActionFooter>
+                  <Button onClick={goBack} variant="secondary">
+                    <Icon aria-hidden icon={ArrowLeft01Icon} />
+                    Back
+                  </Button>
+                  <Button
+                    disabled={
+                      selectedManagedOrganizationId === "" ||
+                      isCreateManagedOrganizationPending ||
+                      !canCreateManagedMailbox
+                    }
+                    onClick={() => {
+                      workflowStore.setState((state) => ({
+                        ...state,
+                        isSharedDetailsVisible: true,
+                      }));
+                    }}
+                  >
+                    Continue
+                    <Icon aria-hidden icon={ArrowRight01Icon} />
+                  </Button>
+                </ActionFooter>
+              </SettingsInsetRow>
+            </SettingsCard>
+          </SettingsSection>
+        ) : null}
+
+        {mailboxType === "shared" && isSharedDetailsVisible ? (
+          <SettingsSection title="Mailbox address">
+            <SettingsCard>
+              <div className={settingsSurfaceVariants({ variant: "body" })}>
+                <Field>
+                  <FieldLabel htmlFor="mailbox-access-mode">Access</FieldLabel>
+                  <Select
+                    items={[
+                      { label: "Shared inbox", value: "shared" },
+                      { label: "Private mailbox", value: "private" },
+                    ]}
+                    value={managedAccessMode}
+                    onValueChange={(value) => {
+                      if (value === "private" || value === "shared") {
+                        workflowStore.setState((state) => ({
+                          ...state,
+                          managedAccessMode: value,
+                          managedDivisionId: null,
+                        }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="mailbox-access-mode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="shared">Shared inbox</SelectItem>
+                      <SelectItem value="private">Private mailbox</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    {managedAccessMode === "private"
+                      ? "Only the selected owner can use this mailbox initially. You can grant individual access later."
+                      : "Work together with people who have direct or division access."}
+                  </FieldDescription>
+                </Field>
+                {managedAccessMode === "private" && (
+                  <Field>
+                    <FieldLabel htmlFor="mailbox-owner">Owner</FieldLabel>
                     <Select
-                      items={verifiedDomains.map((domain) => ({
-                        label: domain.domain,
-                        value: domain.domain,
-                      }))}
+                      items={(createManagedOrganization?.members ?? []).map(
+                        (member) => ({
+                          label: member.user.name || member.user.email,
+                          value: member.userId,
+                        })
+                      )}
+                      value={managedOwnerUserId || null}
                       onValueChange={(value) => {
                         workflowStore.setState((state) => ({
                           ...state,
-                          managedDomain: value ?? undefined,
+                          managedOwnerUserId: value ?? "",
                         }));
                       }}
-                      value={selectedDomain}
                     >
-                      <SelectTrigger
-                        aria-label="Mailbox domain"
-                        size="sm"
-                        variant="attached"
-                      >
-                        <SelectValue />
+                      <SelectTrigger id="mailbox-owner">
+                        <SelectValue placeholder="Choose a team member" />
                       </SelectTrigger>
-                      <SelectContent align="end">
-                        {verifiedDomains.map((domain) => (
-                          <SelectItem key={domain.id} value={domain.domain}>
-                            {domain.domain}
-                          </SelectItem>
-                        ))}
+                      <SelectContent>
+                        {(createManagedOrganization?.members ?? []).map(
+                          (member) => (
+                            <SelectItem
+                              key={member.userId}
+                              value={member.userId}
+                            >
+                              {member.user.name || member.user.email}
+                            </SelectItem>
+                          )
+                        )}
                       </SelectContent>
                     </Select>
-                  ) : (
-                    <span className="px-2.5 text-body text-muted-fg">
-                      {areManagedDomainsLoading
-                        ? "loading…"
-                        : "no receiving domain"}
-                    </span>
-                  )}
-                </InputGroup>
-                {verifiedDomains.length === 0 && !areManagedDomainsLoading ? (
-                  <FieldDescription>
-                    Add and verify a send-and-receive domain in{" "}
-                    {selectedManagedOrganization?.name ?? "team"} settings
-                    before creating a mailbox.
-                  </FieldDescription>
-                ) : null}
-              </Field>
+                  </Field>
+                )}
 
-              {managedAccessMode === "shared" && (
                 <Field>
-                  <FieldLabel htmlFor="division">Division</FieldLabel>
-                  <Select
-                    items={[
-                      { label: "No division", value: "none" },
-                      ...(managedDivisionsData?.divisions ?? []).map(
-                        (division) => ({
-                          label: division.name,
-                          value: division.id,
-                        })
-                      ),
-                    ]}
-                    onValueChange={(value) => {
+                  <FieldLabel htmlFor="display-name">Display name</FieldLabel>
+                  <TextFieldInput
+                    id="display-name"
+                    onChange={(event) => {
                       workflowStore.setState((state) => ({
                         ...state,
-                        managedDivisionId:
-                          value === "none" ? null : (value ?? null),
+                        managedDisplayName: event.currentTarget.value,
                       }));
                     }}
-                    value={managedDivisionId ?? "none"}
-                  >
-                    <SelectTrigger id="division">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent align="start">
-                      <SelectItem value="none">No division</SelectItem>
-                      {(managedDivisionsData?.divisions ?? []).map(
-                        (division) => (
-                          <SelectItem key={division.id} value={division.id}>
-                            {division.name}
-                          </SelectItem>
-                        )
-                      )}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Support"
+                    value={managedDisplayName}
+                  />
                 </Field>
-              )}
 
-              {selectedDomain === "" ? null : (
-                <label
-                  className="flex cursor-pointer items-center gap-2.5 py-1"
-                  htmlFor="managed-mailbox-whole-domain"
-                >
-                  <Checkbox
-                    checked={receiveWholeDomain}
-                    id="managed-mailbox-whole-domain"
-                    onCheckedChange={(checked) => {
-                      if (typeof checked === "boolean") {
+                <Field>
+                  <FieldLabel htmlFor="local-part">Email address</FieldLabel>
+                  <InputGroup>
+                    <TextFieldInput
+                      aria-label="Mailbox address"
+                      chrome="attached"
+                      id="local-part"
+                      onChange={(event) => {
                         workflowStore.setState((state) => ({
                           ...state,
-                          receiveWholeDomain: checked,
+                          managedLocalPart:
+                            event.currentTarget.value.replaceAll(/[@\s]/gu, ""),
                         }));
-                      }
-                    }}
-                  >
-                    <CheckboxIndicator />
-                  </Checkbox>
-                  <span className="text-body-sm text-fg">
-                    Catch all mail for {selectedDomain}
-                  </span>
-                </label>
-              )}
+                      }}
+                      placeholder="support"
+                      value={managedLocalPart}
+                    />
+                    <InputAddon aria-hidden>@</InputAddon>
+                    {verifiedDomains.length > 0 ? (
+                      <Select
+                        items={verifiedDomains.map((domain) => ({
+                          label: domain.domain,
+                          value: domain.domain,
+                        }))}
+                        onValueChange={(value) => {
+                          workflowStore.setState((state) => ({
+                            ...state,
+                            managedDomain: value ?? undefined,
+                          }));
+                        }}
+                        value={selectedDomain}
+                      >
+                        <SelectTrigger
+                          aria-label="Mailbox domain"
+                          size="sm"
+                          variant="attached"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent align="end">
+                          {verifiedDomains.map((domain) => (
+                            <SelectItem key={domain.id} value={domain.domain}>
+                              {domain.domain}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="px-2.5 text-body text-muted-fg">
+                        {areManagedDomainsLoading
+                          ? "loading…"
+                          : "no receiving domain"}
+                      </span>
+                    )}
+                  </InputGroup>
+                  {verifiedDomains.length === 0 && !areManagedDomainsLoading ? (
+                    <FieldDescription>
+                      Add and verify a send-and-receive domain in{" "}
+                      {selectedManagedOrganization?.name ?? "team"} settings
+                      before creating a mailbox.
+                    </FieldDescription>
+                  ) : null}
+                </Field>
 
-              {createManagedMailboxMutation.isError ? (
-                <Text tone="destructive">
-                  {createManagedMailboxMutation.error?.message ??
-                    "Could not create mailbox."}
-                </Text>
-              ) : null}
-            </div>
-            <SettingsInsetRow>
-              <ActionFooter>
-                <Button onClick={goBack} variant="secondary">
-                  <Icon aria-hidden icon={ArrowLeft01Icon} />
-                  Back
-                </Button>
-                <Button
-                  disabled={
-                    trimmedLocalPart === "" ||
-                    selectedDomain === "" ||
-                    !canCreateManagedMailbox ||
-                    (managedAccessMode === "private" &&
-                      managedOwnerUserId === "")
-                  }
-                  onClick={() => {
-                    createManagedMailboxMutation.mutate(
-                      {
-                        accessMode: managedAccessMode,
-                        displayName: managedDisplayName,
-                        divisionId:
-                          managedAccessMode === "private"
-                            ? null
-                            : managedDivisionId,
-                        emailAddress: `${trimmedLocalPart}@${selectedDomain}`,
-                        organizationId: selectedManagedOrganizationId,
-                        ownerUserId:
-                          managedAccessMode === "private"
-                            ? managedOwnerUserId
-                            : null,
-                        receiveWholeDomain,
-                      },
-                      {
-                        onError: (error) => {
-                          toastError(error, {
-                            boundary: "mailbox-settings",
-                            fallback: "Could not create mailbox.",
-                          });
+                {managedAccessMode === "shared" && (
+                  <Field>
+                    <FieldLabel htmlFor="division">Division</FieldLabel>
+                    <Select
+                      items={[
+                        { label: "No division", value: "none" },
+                        ...(managedDivisionsData?.divisions ?? []).map(
+                          (division) => ({
+                            label: division.name,
+                            value: division.id,
+                          })
+                        ),
+                      ]}
+                      onValueChange={(value) => {
+                        workflowStore.setState((state) => ({
+                          ...state,
+                          managedDivisionId:
+                            value === "none" ? null : (value ?? null),
+                        }));
+                      }}
+                      value={managedDivisionId ?? "none"}
+                    >
+                      <SelectTrigger id="division">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent align="start">
+                        <SelectItem value="none">No division</SelectItem>
+                        {(managedDivisionsData?.divisions ?? []).map(
+                          (division) => (
+                            <SelectItem key={division.id} value={division.id}>
+                              {division.name}
+                            </SelectItem>
+                          )
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                )}
+
+                {selectedDomain === "" ? null : (
+                  <label
+                    className="flex cursor-pointer items-center gap-2.5 py-1"
+                    htmlFor="managed-mailbox-whole-domain"
+                  >
+                    <Checkbox
+                      checked={receiveWholeDomain}
+                      id="managed-mailbox-whole-domain"
+                      onCheckedChange={(checked) => {
+                        if (typeof checked === "boolean") {
+                          workflowStore.setState((state) => ({
+                            ...state,
+                            receiveWholeDomain: checked,
+                          }));
+                        }
+                      }}
+                    >
+                      <CheckboxIndicator />
+                    </Checkbox>
+                    <span className="text-body-sm text-fg">
+                      Catch all mail for {selectedDomain}
+                    </span>
+                  </label>
+                )}
+
+                {createManagedMailboxMutation.isError ? (
+                  <Text tone="destructive">
+                    {createManagedMailboxMutation.error?.message ??
+                      "Could not create mailbox."}
+                  </Text>
+                ) : null}
+              </div>
+              <SettingsInsetRow>
+                <ActionFooter>
+                  <Button onClick={goBack} variant="secondary">
+                    <Icon aria-hidden icon={ArrowLeft01Icon} />
+                    Back
+                  </Button>
+                  <Button
+                    disabled={
+                      trimmedLocalPart === "" ||
+                      selectedDomain === "" ||
+                      !canCreateManagedMailbox ||
+                      (managedAccessMode === "private" &&
+                        managedOwnerUserId === "")
+                    }
+                    onClick={() => {
+                      createManagedMailboxMutation.mutate(
+                        {
+                          accessMode: managedAccessMode,
+                          displayName: managedDisplayName,
+                          divisionId:
+                            managedAccessMode === "private"
+                              ? null
+                              : managedDivisionId,
+                          emailAddress: `${trimmedLocalPart}@${selectedDomain}`,
+                          organizationId: selectedManagedOrganizationId,
+                          ownerUserId:
+                            managedAccessMode === "private"
+                              ? managedOwnerUserId
+                              : null,
+                          receiveWholeDomain,
                         },
-                      }
-                    );
-                  }}
-                  pending={createManagedMailboxMutation.isPending}
-                  pendingLabel="Creating inbox"
-                >
-                  Create mailbox
-                </Button>
-              </ActionFooter>
-            </SettingsInsetRow>
-          </SettingsCard>
-        </SettingsSection>
-      ) : null}
+                        {
+                          onError: (error) => {
+                            toastError(error, {
+                              boundary: "mailbox-settings",
+                              fallback: "Could not create mailbox.",
+                            });
+                          },
+                        }
+                      );
+                    }}
+                    pending={createManagedMailboxMutation.isPending}
+                    pendingLabel="Creating inbox"
+                  >
+                    Create mailbox
+                  </Button>
+                </ActionFooter>
+              </SettingsInsetRow>
+            </SettingsCard>
+          </SettingsSection>
+        ) : null}
+      </div>
     </div>
   );
 };

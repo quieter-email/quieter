@@ -66,7 +66,7 @@
   --border: oklch(0.86 0.004 264 / 0.8);
   --border-strong: oklch(0.65 0.008 264);
   --input: var(--control);
-  --ring: var(--primary);
+  --ring: var(--muted-fg);
   /* Needs more contrast than the control ladder gives; kept independent. */
   --scrollbar-thumb: oklch(0.84 0.002 264);
   --chart-1: oklch(0.32 0.002 264);
@@ -160,7 +160,7 @@
   --border: oklch(0.34 0.008 264);
   --border-strong: oklch(0.53 0.01 264);
   --input: var(--control);
-  --ring: var(--primary);
+  --ring: var(--muted-fg);
   /* Needs more contrast than the control ladder gives; kept independent. */
   --scrollbar-thumb: oklch(0.36 0.004 264);
   --chart-1: oklch(0.42 0.003 264);
@@ -247,7 +247,7 @@
   --border: color-mix(in srgb, var(--theme-ink) 14%, var(--theme-base));
   --border-strong: color-mix(in srgb, var(--theme-ink) 25%, var(--theme-base));
   --input: var(--control);
-  --ring: var(--theme-primary);
+  --ring: var(--muted-fg);
   --scrollbar-thumb: var(--control-active);
   --chart-1: var(--theme-ink);
   --chart-2: color-mix(in srgb, var(--theme-ink), var(--theme-base) 15%);

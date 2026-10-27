@@ -5,6 +5,7 @@ import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
 import {
+  anchoredPopupMotionClassName,
   overlayBackdropClassName,
   overlayTriggerClassName,
 } from "./overlay-chrome";
@@ -50,7 +51,8 @@ export const PopoverContent = ({
     >
       <PopoverPrimitive.Popup
         className={cn(
-          "z-50 max-w-sm min-w-52 origin-(--transform-origin) rounded-lg border bg-popover p-4 text-popover-fg shadow-md transition-[opacity,scale] duration-150 ease-(--app-motion-ease-out) will-change-[opacity,scale] data-ending-style:scale-95 data-ending-style:opacity-0 data-ending-style:duration-100 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0 motion-reduce:transition-opacity motion-reduce:data-ending-style:scale-100 motion-reduce:data-starting-style:scale-100",
+          anchoredPopupMotionClassName,
+          "z-50 max-w-sm min-w-52 rounded-lg border bg-popover p-4 text-popover-fg shadow-md",
           { "w-80 max-w-(--available-width)": size === "sm" },
           className
         )}

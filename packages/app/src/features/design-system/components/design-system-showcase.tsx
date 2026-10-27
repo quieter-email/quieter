@@ -68,6 +68,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuCheckboxItem,
   DropdownMenuItem,
   DropdownMenuSubmenu,
   DropdownMenuSubmenuContent,
@@ -84,6 +85,7 @@ import {
   MailListRowMetadata,
   mailListRowFrameVariants,
 } from "@quieter/ui/mail-list-row";
+import { entranceMotionVariants } from "@quieter/ui/motion";
 import { Pill } from "@quieter/ui/pill";
 import type { PillTone } from "@quieter/ui/pill";
 import { Schedule } from "@quieter/ui/schedule";
@@ -477,6 +479,7 @@ const copySampleKey = async () => {
 
 export const DesignSystemShowcase = () => {
   const { colorMode, setColorMode } = useColorMode();
+  const [entrancePreview, setEntrancePreview] = useState(0);
   const [successPulse, setSuccessPulse] = useState(false);
   const [checked, setChecked] = useState(true);
   const [tokenFieldValue, setTokenFieldValue] = useState(
@@ -889,6 +892,9 @@ export const DesignSystemShowcase = () => {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
                 <DropdownMenuItem>Mark as read</DropdownMenuItem>
+                <DropdownMenuCheckboxItem defaultChecked>
+                  Show previews
+                </DropdownMenuCheckboxItem>
                 <DropdownMenuSubmenu>
                   <DropdownMenuSubmenuTrigger>
                     Move to
@@ -900,6 +906,33 @@ export const DesignSystemShowcase = () => {
                 </DropdownMenuSubmenu>
               </DropdownMenuContent>
             </DropdownMenu>
+          </Row>
+          <Row label="Content entrances">
+            <Button
+              onClick={() => {
+                setEntrancePreview((current) => current + 1);
+              }}
+              variant="secondary"
+            >
+              Replay entrances
+            </Button>
+            <div className="flex items-center gap-3" key={entrancePreview}>
+              <div className={entranceMotionVariants()}>
+                <Pill>Fade</Pill>
+              </div>
+              <div className={entranceMotionVariants({ effect: "pop" })}>
+                <Pill>Pop</Pill>
+              </div>
+              <div className={entranceMotionVariants({ effect: "slide" })}>
+                <Pill>Slide</Pill>
+              </div>
+            </div>
+          </Row>
+          <Row label="Revealed field">
+            <Field className="w-64 max-w-full" key={entrancePreview} reveal>
+              <FieldLabel htmlFor="revealed-field">Event location</FieldLabel>
+              <Input id="revealed-field" placeholder="Add a location" />
+            </Field>
           </Row>
           <Row label="Delivery disclosure">
             <Accordion className="w-80 max-w-full">

@@ -9,6 +9,7 @@ import { Icon } from "./icon";
 import { CheckIcon, ChevronDownIcon } from "./icons";
 import { Input } from "./input";
 import { InputAddon, InputGroup } from "./input-group";
+import { anchoredPopupMotionClassName } from "./overlay-chrome";
 import { selectTriggerVariants } from "./select";
 import type { SelectTriggerProps } from "./select";
 
@@ -102,7 +103,10 @@ export const SearchableSelect = ({
         >
           <ComboboxPrimitive.Popup
             aria-label={ariaLabel}
-            className="flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) origin-(--transform-origin) flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-md transition-[opacity,scale] duration-150 ease-(--app-motion-ease-out) data-ending-style:scale-95 data-ending-style:opacity-0 data-ending-style:duration-100 data-starting-style:scale-95 data-starting-style:opacity-0 motion-reduce:transition-opacity motion-reduce:data-ending-style:scale-100 motion-reduce:data-starting-style:scale-100"
+            className={cn(
+              anchoredPopupMotionClassName,
+              "flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-md"
+            )}
           >
             <div className="shrink-0 border-b border-border p-2">
               <InputGroup>

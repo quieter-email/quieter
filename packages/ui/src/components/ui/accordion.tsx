@@ -35,7 +35,7 @@ export const AccordionTrigger = ({
 }) => (
   <AccordionPrimitive.Trigger
     className={cn(
-      "group/accordion-trigger flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-body font-medium text-fg transition-transform duration-100 ease-out squircle hover:bg-muted/40 focus-visible:border-ring focus-visible:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "group/accordion-trigger flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-body font-medium text-fg transition-transform duration-100 ease-out squircle hover:bg-muted/40 focus-visible:border-ring focus-visible:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
       className
     )}
     {...props}

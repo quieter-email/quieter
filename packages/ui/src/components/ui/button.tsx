@@ -14,7 +14,7 @@ import { cn } from "../../lib/cn";
 import { Icon } from "./icon";
 
 export const buttonVariants = cva(
-  "inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-body font-medium whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-body font-medium whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     compoundVariants: [
       {

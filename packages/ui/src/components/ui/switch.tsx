@@ -12,7 +12,7 @@ import { cn } from "../../lib/cn";
 import { Icon } from "./icon";
 
 const switchVariants = cva(
-  "squircle inline-flex shrink-0 items-center overflow-hidden rounded-full border border-border bg-switch-track transition-colors duration-150 ease-out focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none data-checked:border-primary data-checked:bg-primary data-disabled:cursor-not-allowed data-disabled:opacity-50",
+  "squircle inline-flex shrink-0 items-center overflow-hidden rounded-full border border-border bg-switch-track transition-colors duration-150 ease-out focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden data-checked:border-primary data-checked:bg-primary data-disabled:cursor-not-allowed data-disabled:opacity-50",
   {
     defaultVariants: { size: "default" },
     variants: {

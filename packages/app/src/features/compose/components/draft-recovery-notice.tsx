@@ -3,6 +3,8 @@ import { restoreComposeDraft } from "@quieter/app/features/compose/domain/draft-
 import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import { entranceMotionVariants } from "@quieter/ui/motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
@@ -48,7 +50,12 @@ export const DraftRecoveryNotice = ({
     return null;
   }
   return (
-    <output className="m-3 flex shrink-0 items-center gap-3 rounded-lg border border-border bg-bg p-3">
+    <output
+      className={cn(
+        "m-3 flex shrink-0 items-center gap-3 rounded-lg border border-border bg-bg p-3",
+        entranceMotionVariants()
+      )}
+    >
       <span className="min-w-0 flex-1 text-body-sm">
         An unfinished draft is saved on this device.
       </span>

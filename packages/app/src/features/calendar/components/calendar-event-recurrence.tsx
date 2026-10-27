@@ -1,5 +1,6 @@
 import { RepeatIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   Dialog,
   DialogBody,
@@ -12,6 +13,7 @@ import {
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { Input } from "@quieter/ui/input";
+import { entranceMotionVariants } from "@quieter/ui/motion";
 import {
   Select,
   SelectContent,
@@ -178,7 +180,7 @@ const CustomRecurrence = ({
             ]}
           />
           {mode === "advanced" ? (
-            <Field>
+            <Field reveal>
               <FieldLabel htmlFor={`${id}-rules`}>Repeat rules</FieldLabel>
               <Textarea
                 id={`${id}-rules`}
@@ -232,7 +234,7 @@ const CustomRecurrence = ({
                 />
               </div>
               {draft.frequency === "WEEKLY" ? (
-                <Field>
+                <Field reveal>
                   <FieldLabel>Repeat on</FieldLabel>
                   <div className="flex flex-wrap gap-1">
                     {recurrenceWeekdays.map((day, index) => (
@@ -274,7 +276,7 @@ const CustomRecurrence = ({
                     }}
                   />
                   {draft.monthly === "date" ? (
-                    <Field>
+                    <Field reveal>
                       <FieldLabel htmlFor={`${id}-month-day`}>
                         Day of month
                       </FieldLabel>
@@ -293,7 +295,12 @@ const CustomRecurrence = ({
                       </Text>
                     </Field>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div
+                      className={cn(
+                        "grid grid-cols-2 gap-3",
+                        entranceMotionVariants()
+                      )}
+                    >
                       <RecurrenceChoice
                         label="Week"
                         value={draft.ordinal}
@@ -351,7 +358,7 @@ const CustomRecurrence = ({
                 }}
               />
               {draft.ending === "date" ? (
-                <Field>
+                <Field reveal>
                   <FieldLabel htmlFor={`${id}-end`}>
                     Last repeat date
                   </FieldLabel>
@@ -370,7 +377,7 @@ const CustomRecurrence = ({
                 </Field>
               ) : null}
               {draft.ending === "count" ? (
-                <Field>
+                <Field reveal>
                   <FieldLabel htmlFor={`${id}-count`}>
                     Number of occurrences
                   </FieldLabel>

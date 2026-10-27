@@ -29,7 +29,7 @@ const toggleGroupVariants = cva(
 );
 
 const toggleVariants = cva(
-  "relative isolate inline-flex shrink-0 items-center justify-center gap-2 bg-transparent font-medium whitespace-nowrap select-none squircle focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+  "relative isolate inline-flex shrink-0 items-center justify-center gap-2 bg-transparent font-medium whitespace-nowrap select-none squircle focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
   {
     defaultVariants: { size: "default", variant: "default" },
     variants: {
