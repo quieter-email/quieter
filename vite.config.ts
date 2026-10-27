@@ -12,6 +12,8 @@ export default defineConfig({
     ignorePatterns: [
       ...(oxfmt.ignorePatterns ?? []),
       ".agents/**",
+      ".claude/skills/**",
+      ".opencode/skills/**",
       ".scratch/**",
       "**/.sst/**",
       "sst-env.d.ts",
@@ -28,6 +30,8 @@ export default defineConfig({
     ignorePatterns: [
       ...(core.ignorePatterns ?? []),
       ".agents/**",
+      ".claude/skills/**",
+      ".opencode/skills/**",
       ".scratch/**",
       "**/.sst/**",
       "sst-env.d.ts",
@@ -538,6 +542,8 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       ".agents/**",
+      ".claude/skills/**",
+      ".opencode/skills/**",
       ".scratch/**",
       "packages/cloudflare/tests/**",
     ],
