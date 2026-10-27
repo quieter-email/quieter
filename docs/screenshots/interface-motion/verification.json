@@ -700,5 +700,38 @@
       }
     ],
     "typing_replays": 0
+  },
+  "calendarIntegration": {
+    "basePr": 433,
+    "baseCommit": "f151a30c044578f598049479c2c9bedd5a29aa19",
+    "sourceHead": "f019383bf3b896f631c2404f4925ba5dbd65af7b",
+    "reviewer": "/root/integration_verifier, independent of implementation",
+    "targetedTests": {
+      "files": 4,
+      "passed": 42,
+      "areas": [
+        "calendar grouping",
+        "calendar schedule previews",
+        "recurrence expansion",
+        "date/time helpers"
+      ]
+    },
+    "sourceChecks": "Formatting, lint, type checks and merge commit hooks passed. Upstream date/time preference and recurrence logic retained.",
+    "browserObservations": [
+      "Arbitrary start time 14:35 and end time 15:45 accepted.",
+      "Five visible daily draft occurrences, with no creation entrance replay while typing.",
+      "Normal-motion time and location popups emit opacity, scale and translate transitions.",
+      "Both date pickers changed the event to October 28, updating the visible draft occurrences.",
+      "Custom repeat Last repeat date uses the shared DatePicker and restricts the preview through October 30.",
+      "Location suggestions and free-text locations both work.",
+      "At 390px in dark mode with reduced motion, time and location popups emit only opacity transitions, with no scale or translation.",
+      "Escape closes the time popup, leaves the event dialog open and restores visible keyboard focus to Start time."
+    ],
+    "data": "Sample calendar only. No provider event writes or mail sends.",
+    "screenshots": [
+      "integrated-recurring-location-light.png",
+      "integrated-calendar-picker-light.png",
+      "integrated-time-mobile-dark.png"
+    ]
   }
 }
