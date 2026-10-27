@@ -73,7 +73,7 @@ for (const { name } of skills) {
   if (name === "setup-pstack") {
     const route =
       "In Codex, Claude Code, or OpenCode, follow [the native setup steps](../../pstack/setup.md) instead of the Cursor-specific steps below.";
-    if (!text.includes(route)) {
+    if (!text.includes("](../../pstack/setup.md)")) {
       text = text.replace("# Setup pstack\n", `# Setup pstack\n\n${route}\n`);
     }
   }
@@ -201,19 +201,18 @@ state.devDependencies = {
 };
 writeFileSync(statePackage, `${JSON.stringify(state, null, 2)}\n`);
 
-const statechartPatch = path.join(
-  root,
-  ".agents/pstack/statechart-fixes.patch"
-);
-const patchCheck = spawnSync("git", ["apply", "--check", statechartPatch], {
-  cwd: root,
-});
-if (patchCheck.status === 0) {
-  execFileSync("git", ["apply", statechartPatch], { cwd: root });
-} else {
-  execFileSync("git", ["apply", "--reverse", "--check", statechartPatch], {
+for (const name of ["statechart-fixes.patch", "model-routing.patch"]) {
+  const patch = path.join(root, ".agents/pstack", name);
+  const patchCheck = spawnSync("git", ["apply", "--check", patch], {
     cwd: root,
   });
+  if (patchCheck.status === 0) {
+    execFileSync("git", ["apply", patch], { cwd: root });
+  } else {
+    execFileSync("git", ["apply", "--reverse", "--check", patch], {
+      cwd: root,
+    });
+  }
 }
 
 for (const client of [".claude", ".opencode"]) {
