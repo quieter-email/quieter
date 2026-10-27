@@ -1,4 +1,8 @@
-import type { CalendarAccount, CalendarSummary } from "@quieter/calendar";
+import type {
+  CalendarAccount,
+  CalendarEventRef,
+  CalendarSummary,
+} from "@quieter/calendar";
 
 import { getCalendarRefKey } from "./calendar-event-form";
 
@@ -68,4 +72,28 @@ export const toggleCalendarGroupVisibility = ({
     }
   }
   return [...hidden];
+};
+
+export const getVisibleCalendarEventRef = ({
+  groups,
+  hiddenCalendarKeys,
+  ref,
+}: {
+  groups: CalendarGroup[];
+  hiddenCalendarKeys: string[];
+  ref: CalendarEventRef;
+}): CalendarEventRef | undefined => {
+  const key = getCalendarRefKey(ref);
+  const group = groups.find((candidate) => candidate.keys.includes(key));
+  if (
+    !group ||
+    group.keys.every((member) => hiddenCalendarKeys.includes(member))
+  ) {
+    return undefined;
+  }
+  return {
+    calendarId: group.calendar.calendarId,
+    connectionId: group.calendar.connectionId,
+    eventId: ref.eventId,
+  };
 };

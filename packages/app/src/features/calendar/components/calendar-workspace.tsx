@@ -96,7 +96,10 @@ import {
   getCalendarRefKey,
 } from "../domain/calendar-event-form";
 import type { CalendarEditor } from "../domain/calendar-event-form";
-import { toggleCalendarGroupVisibility } from "../domain/calendar-groups";
+import {
+  getVisibleCalendarEventRef,
+  toggleCalendarGroupVisibility,
+} from "../domain/calendar-groups";
 import { getCalendarSchedule } from "../domain/calendar-schedule";
 import { CalendarEventDetails } from "./calendar-event-details";
 import { CalendarEventEditor } from "./calendar-event-editor";
@@ -273,15 +276,13 @@ const CalendarWorkspaceContent = ({
           eventId: route.calendarEventId,
         }
       : undefined;
-  const selectedRef =
-    requestedEventRef &&
-    data.visibleCalendars.some(
-      (calendar) =>
-        calendar.connectionId === requestedEventRef.connectionId &&
-        calendar.calendarId === requestedEventRef.calendarId
-    )
-      ? requestedEventRef
-      : undefined;
+  const selectedRef = requestedEventRef
+    ? getVisibleCalendarEventRef({
+        groups: data.calendarGroups,
+        hiddenCalendarKeys: ui.hiddenCalendarKeys,
+        ref: requestedEventRef,
+      })
+    : undefined;
   const selectedOptions = calendarEventQueryOptions(
     userId,
     selectedRef ?? {
@@ -691,7 +692,7 @@ const CalendarWorkspaceContent = ({
       .includes(ui.search.toLocaleLowerCase())
   );
   const selectedAccount = data.accounts.find(
-    (account) => account.id === requestedEventRef?.connectionId
+    (account) => account.id === (selectedRef ?? requestedEventRef)?.connectionId
   );
   const selectedNeedsAccess =
     selectedAccount !== undefined && selectedAccount.status !== "connected";

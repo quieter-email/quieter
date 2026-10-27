@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { getCalendarRefKey } from "./calendar-event-form";
 import {
   getCalendarGroups,
+  getVisibleCalendarEventRef,
   toggleCalendarGroupVisibility,
 } from "./calendar-groups";
 
@@ -93,5 +94,56 @@ describe("calendar groups", () => {
     expect(remaining).toHaveLength(1);
     expect(remaining[0]?.calendar.connectionId).toBe("second");
     expect(remaining[0]?.keys).not.toContain(getCalendarRefKey(holiday));
+  });
+
+  it("opens links through a visible alias and switches detail access to the connected source", () => {
+    const ref = { ...secondHoliday, eventId: "holiday-event" };
+    const groups = getCalendarGroups({
+      accounts,
+      calendars: [holiday, secondHoliday],
+    });
+    const resolved = getVisibleCalendarEventRef({
+      groups,
+      hiddenCalendarKeys: [getCalendarRefKey(holiday)],
+      ref,
+    });
+    expect(resolved).toMatchObject({
+      connectionId: "first",
+      eventId: ref.eventId,
+    });
+    expect(
+      getVisibleCalendarEventRef({
+        groups,
+        hiddenCalendarKeys: groups[0].keys,
+        ref,
+      })
+    ).toBeUndefined();
+    expect(
+      getVisibleCalendarEventRef({
+        groups,
+        hiddenCalendarKeys: [],
+        ref: { ...ref, connectionId: "unknown" },
+      })
+    ).toBeUndefined();
+
+    const reconnectedGroups = getCalendarGroups({
+      accounts: accounts.map((account): CalendarAccount =>
+        account.id === "first"
+          ? {
+              ...account,
+              mailboxId: "mailbox-first",
+              status: "needs-reconnect",
+            }
+          : account
+      ),
+      calendars: [holiday, secondHoliday],
+    });
+    expect(
+      getVisibleCalendarEventRef({
+        groups: reconnectedGroups,
+        hiddenCalendarKeys: [],
+        ref: { ...ref, connectionId: "first" },
+      })
+    ).toMatchObject({ connectionId: "second", eventId: ref.eventId });
   });
 });
