@@ -4,12 +4,14 @@ import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   Cancel01Icon,
+  LayoutRightIcon,
   Loading03Icon,
   RefreshIcon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
+import { AssistantSidebarContext } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
 import { useMailboxRouteSearch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import { getAppPresenceMotion } from "@quieter/app/features/motion/app-motion";
@@ -79,6 +81,7 @@ import {
   useReducedMotion,
 } from "motion/react";
 import {
+  use,
   useCallback,
   useEffect,
   useEffectEvent,
@@ -180,6 +183,7 @@ const CalendarWorkspaceContent = ({
   userId,
   preview,
 }: CalendarWorkspaceProps & { preview: string | null }) => {
+  const assistant = use(AssistantSidebarContext);
   const route = useMailboxRouteSearch();
   const queryClient = useQueryClient();
   const agentWorkspace = useAgentWorkspace();
@@ -1287,6 +1291,23 @@ const CalendarWorkspaceContent = ({
                 <Icon aria-hidden icon={RefreshIcon} />
               </Button>
             </IconButtonTooltip>
+            {assistant && !assistant.open ? (
+              <IconButtonTooltip label="Open assistant">
+                <Button
+                  aria-controls={assistant.panelId}
+                  aria-expanded={assistant.open}
+                  aria-label="Open assistant"
+                  data-assistant-launcher
+                  onClick={(event) => {
+                    assistant.onOpen(event.currentTarget);
+                  }}
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <Icon aria-hidden icon={LayoutRightIcon} />
+                </Button>
+              </IconButtonTooltip>
+            ) : null}
             {!preview && !online ? (
               <Pill size="xs" tone="orange">
                 Offline

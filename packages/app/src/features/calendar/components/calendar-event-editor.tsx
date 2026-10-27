@@ -1,6 +1,19 @@
 "use client";
 
-import { Cancel01Icon } from "@hugeicons/core-free-icons";
+import {
+  Calendar03Icon,
+  Cancel01Icon,
+  Clock01Icon,
+  Globe02Icon,
+  Location01Icon,
+  Notification02Icon,
+  PaintBoardIcon,
+  RepeatIcon,
+  SquareLock01Icon,
+  TextAlignLeftIcon,
+  UserGroupIcon,
+  Video01Icon,
+} from "@hugeicons/core-free-icons";
 import { getCalendarConnectionQueryKey } from "@quieter/app/lib/calendar-query";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { rpc } from "@quieter/app/lib/orpc";
@@ -259,7 +272,7 @@ export const CalendarEventEditor = ({
       }}
     >
       <div className="flex items-center gap-2 px-5 py-4">
-        <Text as="h2" className="flex-1" size="lg" weight="medium">
+        <Text as="h2" className="flex-1" size="sm" weight="medium">
           {editor.kind === "create" ? "New event" : "Event details"}
         </Text>
         {dirty ? (
@@ -281,7 +294,7 @@ export const CalendarEventEditor = ({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <fieldset
-          className="min-w-0 space-y-6 px-5 pt-2 pb-5"
+          className="min-w-0 space-y-4 px-5 pt-2 pb-5"
           disabled={pending}
         >
           {state.problem ? (
@@ -395,618 +408,705 @@ export const CalendarEventEditor = ({
               ) : null}
             </Field>
           ) : null}
-          <label
-            className="flex cursor-pointer items-center gap-2 text-body-sm"
-            htmlFor="calendar-event-all-day"
-          >
-            <Checkbox
-              disabled={pending}
-              id="calendar-event-all-day"
-              checked={form.allDay}
-              onCheckedChange={(checked) => {
-                store.setState((current) => ({
-                  ...current,
-                  values: { ...current.values, allDay: checked },
-                }));
-              }}
-            >
-              <CheckboxIndicator />
-            </Checkbox>
-            All day
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <Field>
-              <FieldLabel htmlFor="calendar-event-start-date">
-                Starts
-              </FieldLabel>
-              <Input
-                chrome="ghost"
-                id="calendar-event-start-date"
-                onChange={(event) => {
-                  store.setState((current) => ({
-                    ...current,
-                    values: {
-                      ...current.values,
-                      startDate: event.target.value,
-                    },
-                  }));
-                }}
-                required
-                type="date"
-                value={form.startDate}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="calendar-event-end-date">Ends</FieldLabel>
-              <Input
-                chrome="ghost"
-                id="calendar-event-end-date"
-                min={form.startDate}
-                onChange={(event) => {
-                  store.setState((current) => ({
-                    ...current,
-                    values: {
-                      ...current.values,
-                      endDate: event.target.value,
-                    },
-                  }));
-                }}
-                required
-                type="date"
-                value={form.endDate}
-              />
-              {form.allDay ? (
-                <FieldDescription>Includes this date.</FieldDescription>
-              ) : null}
-            </Field>
-            {form.allDay ? null : (
-              <>
-                <Field>
-                  <FieldLabel htmlFor="calendar-event-start-time">
-                    Start time
-                  </FieldLabel>
-                  <Input
-                    chrome="ghost"
-                    id="calendar-event-start-time"
-                    onChange={(event) => {
-                      store.setState((current) => ({
-                        ...current,
-                        values: {
-                          ...current.values,
-                          startTime: event.target.value,
-                        },
-                      }));
-                    }}
-                    required
-                    type="time"
-                    value={form.startTime}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="calendar-event-end-time">
-                    End time
-                  </FieldLabel>
-                  <Input
-                    chrome="ghost"
-                    id="calendar-event-end-time"
-                    onChange={(event) => {
-                      store.setState((current) => ({
-                        ...current,
-                        values: {
-                          ...current.values,
-                          endTime: event.target.value,
-                        },
-                      }));
-                    }}
-                    required
-                    type="time"
-                    value={form.endTime}
-                  />
-                </Field>
-              </>
-            )}
-          </div>
-          {form.allDay ? null : (
-            <Field>
-              <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2">
-                <FieldLabel htmlFor="calendar-event-time-zone">
-                  Time zone
-                </FieldLabel>
-                <CalendarTimeZonePicker
-                  aria-label="Event time zone"
-                  disabled={pending}
-                  id="calendar-event-time-zone"
-                  onValueChange={(value) => {
-                    store.setState((current) => ({
-                      ...current,
-                      values: { ...current.values, timeZone: value },
-                    }));
-                  }}
-                  value={form.timeZone}
-                  variant="ghost"
-                />
-              </div>
-            </Field>
-          )}
-          {isOccurrence ? null : (
-            <Field>
-              <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2">
-                <FieldLabel htmlFor="calendar-event-repeat">Repeat</FieldLabel>
-                <Select
-                  disabled={pending}
-                  items={repeatOptions}
-                  onValueChange={(value) => {
-                    if (value && value !== "preserve") {
-                      store.setState((current) => ({
-                        ...current,
-                        values: {
-                          ...current.values,
-                          recurrence:
-                            value === "none" ? [] : [`RRULE:FREQ=${value}`],
-                        },
-                      }));
-                    }
-                  }}
-                  value={repeat}
-                >
-                  <SelectTrigger id="calendar-event-repeat" variant="ghost">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {repeatOptions
-                      .filter(
-                        (option) =>
-                          option.value !== "preserve" || repeat === "preserve"
-                      )
-                      .map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                {repeat === "preserve" ? (
-                  <FieldDescription className="col-span-2">
-                    Existing repeat rules will stay unchanged.
-                  </FieldDescription>
-                ) : null}
-              </div>
-            </Field>
-          )}
-          <Field>
-            <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2">
-              <FieldLabel htmlFor="calendar-event-calendar">
-                Calendar
-              </FieldLabel>
-              {editor.kind === "edit" ? (
-                <Text size="sm">{selectedCalendar?.name ?? "Calendar"}</Text>
-              ) : (
-                <Select
-                  disabled={pending}
-                  items={calendarOptions}
-                  onValueChange={(value) => {
-                    if (value) {
-                      store.setState((current) => ({
-                        ...current,
-                        values: { ...current.values, calendarKey: value },
-                      }));
-                    }
-                  }}
-                  value={form.calendarKey}
-                >
-                  <SelectTrigger id="calendar-event-calendar" variant="ghost">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {calendarOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          </Field>
-          <Field>
-            <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2">
-              <FieldLabel>Event color</FieldLabel>
-              <Popover>
-                <PopoverTrigger
-                  disabled={pending}
-                  render={<Button size="sm" variant="ghost" />}
-                >
-                  <ColorSwatch
-                    color={
-                      form.color ??
-                      selectedCalendar?.color ??
-                      "var(--color-q-blue)"
-                    }
-                  />
-                  {form.color ? "Custom color" : "Calendar default"}
-                </PopoverTrigger>
-                <PopoverContent align="start">
-                  <PopoverTitle>Event color</PopoverTitle>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {colors.map((color) => (
-                      <IconButtonTooltip key={color} label={`Use ${color}`}>
-                        <Button
-                          aria-label={`Use ${color}`}
-                          aria-pressed={form.color === color}
-                          onClick={() => {
-                            store.setState((current) => ({
-                              ...current,
-                              values: { ...current.values, color },
-                            }));
-                          }}
-                          size="icon-sm"
-                          variant="chip"
-                        >
-                          <ColorSwatch color={color} shape="square" size="lg" />
-                        </Button>
-                      </IconButtonTooltip>
-                    ))}
-                  </div>
-                  {colorsQuery.isError ? (
-                    <p className="mt-3 text-caption text-muted-fg">
-                      Colors could not load.
-                    </p>
-                  ) : null}
-                  <div className="mt-3">
-                    <ActionFooter>
-                      <Button
-                        onClick={() => {
-                          store.setState((current) => ({
-                            ...current,
-                            values: { ...current.values, color: null },
-                          }));
-                        }}
-                        size="sm"
-                        variant="secondary"
-                      >
-                        Calendar default
-                      </Button>
-                    </ActionFooter>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </Field>
-          <Field>
-            <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2">
-              <FieldLabel htmlFor="calendar-event-location">
-                Location
-              </FieldLabel>
-              <Input
-                chrome="ghost"
-                id="calendar-event-location"
-                maxLength={2000}
-                onChange={(event) => {
-                  store.setState((current) => ({
-                    ...current,
-                    values: { ...current.values, location: event.target.value },
-                  }));
-                }}
-                placeholder="Add a place"
-                value={form.location}
-              />
-            </div>
-          </Field>
-          {baseEvent?.meetingUrl ? (
-            <Button
-              fullWidth
-              nativeButton={false}
-              render={
-                <a
-                  aria-label="Join video meeting"
-                  href={baseEvent.meetingUrl}
-                  rel="noreferrer"
-                  target="_blank"
-                />
-              }
-            >
-              Join video meeting
-            </Button>
-          ) : null}
-          {baseEvent?.meetingPending === true ? (
-            <p className="text-caption text-muted-fg">
-              Your meeting link is being prepared.
-            </p>
-          ) : null}
-          {selectedCalendar?.supportsMeetings === true ? (
+          <div className="space-y-1">
             <label
-              className="flex cursor-pointer items-center gap-2 text-body-sm"
-              htmlFor="calendar-event-add-meeting"
+              className="ml-6 flex cursor-pointer items-center gap-2 py-1 text-body-sm"
+              htmlFor="calendar-event-all-day"
             >
               <Checkbox
                 disabled={pending}
-                id="calendar-event-add-meeting"
-                checked={form.addMeeting}
+                id="calendar-event-all-day"
+                checked={form.allDay}
                 onCheckedChange={(checked) => {
                   store.setState((current) => ({
                     ...current,
-                    values: { ...current.values, addMeeting: checked },
+                    values: { ...current.values, allDay: checked },
                   }));
                 }}
               >
                 <CheckboxIndicator />
               </Checkbox>
-              Video meeting
+              All day
             </label>
-          ) : null}
-          <Field>
-            <FieldLabel htmlFor="calendar-event-description">
-              Description
-            </FieldLabel>
-            <Textarea
-              variant="prompt"
-              id="calendar-event-description"
-              maxLength={50_000}
-              onChange={(event) => {
-                store.setState((current) => ({
-                  ...current,
-                  values: {
-                    ...current.values,
-                    description: event.target.value,
-                  },
-                }));
-              }}
-              placeholder="Add a note or an agenda"
-              value={form.description}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="calendar-event-guests">Guests</FieldLabel>
-            <Input
-              chrome="ghost"
-              id="calendar-event-guests"
-              onChange={(event) => {
-                store.setState((current) => ({
-                  ...current,
-                  values: {
-                    ...current.values,
-                    attendees: event.target.value,
-                  },
-                }));
-              }}
-              placeholder="Email addresses, separated by commas"
-              value={form.attendees}
-            />
-            <FieldDescription>
-              {preview
-                ? "No invitations are sent from this preview."
-                : "Saving sends invitations and event updates to guests."}
-            </FieldDescription>
-          </Field>
-          {baseEvent?.organizer &&
-          !baseEvent.attendees.some((guest) => guest.organizer) ? (
-            <div className="space-y-1">
-              <Text size="caption" tone="muted">
-                Organizer
-              </Text>
-              <Text as="p" size="sm">
-                {baseEvent.organizer.name ??
-                  baseEvent.organizer.email ??
-                  (baseEvent.organizer.self ? "You" : "Event organizer")}
-              </Text>
-            </div>
-          ) : null}
-          {baseEvent !== undefined && baseEvent.attendees.length > 0 ? (
-            <ul className="space-y-2">
-              {baseEvent.attendees.map((guest) => (
-                <li className="min-w-0 text-body-sm" key={guest.email}>
-                  <p className="truncate" title={guest.email}>
-                    {guest.name ?? guest.email}
-                    {guest.self ? " (you)" : ""}
-                  </p>
-                  <p className="text-caption text-muted-fg">
-                    {guest.organizer ? "Organizer, " : ""}
-                    {
-                      {
-                        accepted: "Going",
-                        declined: "Declined",
-                        "needs-action": "Awaiting response",
-                        tentative: "Maybe",
-                      }[guest.response]
-                    }
-                  </p>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {baseEvent?.permissions.respond === true && self && onRespond ? (
-            <Field>
-              <FieldLabel>Your response</FieldLabel>
-              <div className="flex gap-2">
-                {(
-                  [
-                    { label: "No", value: "declined" },
-                    { label: "Maybe", value: "tentative" },
-                    { label: "Yes", value: "accepted" },
-                  ] as const
-                ).map((response) => (
-                  <Button
-                    aria-pressed={self.response === response.value}
-                    disabled={pending || dirty}
-                    key={response.value}
-                    onClick={() => {
-                      void respond(response.value);
-                    }}
-                    size="sm"
-                    variant="chip"
-                  >
-                    {response.label}
-                  </Button>
-                ))}
+            <div className="flex items-start gap-2">
+              <Icon className="mt-2" icon={Clock01Icon} tone="muted" />
+              <div className="min-w-0 flex-1">
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                  <Field>
+                    <FieldLabel htmlFor="calendar-event-start-date">
+                      Starts
+                    </FieldLabel>
+                    <Input
+                      chrome="ghost"
+                      id="calendar-event-start-date"
+                      onChange={(event) => {
+                        store.setState((current) => ({
+                          ...current,
+                          values: {
+                            ...current.values,
+                            startDate: event.target.value,
+                          },
+                        }));
+                      }}
+                      required
+                      type="date"
+                      value={form.startDate}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="calendar-event-end-date">
+                      Ends
+                    </FieldLabel>
+                    <Input
+                      chrome="ghost"
+                      id="calendar-event-end-date"
+                      min={form.startDate}
+                      onChange={(event) => {
+                        store.setState((current) => ({
+                          ...current,
+                          values: {
+                            ...current.values,
+                            endDate: event.target.value,
+                          },
+                        }));
+                      }}
+                      required
+                      type="date"
+                      value={form.endDate}
+                    />
+                    {form.allDay ? (
+                      <FieldDescription>Includes this date.</FieldDescription>
+                    ) : null}
+                  </Field>
+                  {form.allDay ? null : (
+                    <>
+                      <Field>
+                        <FieldLabel
+                          className="sr-only"
+                          htmlFor="calendar-event-start-time"
+                        >
+                          Start time
+                        </FieldLabel>
+                        <Input
+                          chrome="ghost"
+                          id="calendar-event-start-time"
+                          onChange={(event) => {
+                            store.setState((current) => ({
+                              ...current,
+                              values: {
+                                ...current.values,
+                                startTime: event.target.value,
+                              },
+                            }));
+                          }}
+                          required
+                          type="time"
+                          value={form.startTime}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel
+                          className="sr-only"
+                          htmlFor="calendar-event-end-time"
+                        >
+                          End time
+                        </FieldLabel>
+                        <Input
+                          chrome="ghost"
+                          id="calendar-event-end-time"
+                          onChange={(event) => {
+                            store.setState((current) => ({
+                              ...current,
+                              values: {
+                                ...current.values,
+                                endTime: event.target.value,
+                              },
+                            }));
+                          }}
+                          required
+                          type="time"
+                          value={form.endTime}
+                        />
+                      </Field>
+                    </>
+                  )}
+                </div>
               </div>
-            </Field>
-          ) : null}
-          <Field>
-            <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2">
-              <FieldLabel htmlFor="calendar-event-reminder">
-                Reminder
-              </FieldLabel>
-              <Select
-                disabled={pending}
-                items={[
-                  { label: "Calendar default", value: "default" },
-                  { label: "No reminder", value: "none" },
-                  { label: "Custom reminder", value: "custom" },
-                ]}
-                onValueChange={(value) => {
-                  if (
-                    value === "default" ||
-                    value === "none" ||
-                    value === "custom"
-                  ) {
-                    store.setState((current) => ({
-                      ...current,
-                      values: { ...current.values, reminderKind: value },
-                    }));
-                  }
-                }}
-                value={form.reminderKind}
-              >
-                <SelectTrigger id="calendar-event-reminder" variant="ghost">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="default">Calendar default</SelectItem>
-                  <SelectItem value="none">No reminder</SelectItem>
-                  <SelectItem value="custom">Custom reminder</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
-          </Field>
-          {form.reminderKind === "custom" ? (
-            <div className="grid grid-cols-2 gap-3">
+            {form.allDay ? null : (
               <Field>
-                <FieldLabel htmlFor="calendar-event-reminder-minutes">
-                  Minutes before
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+                  <Icon icon={Globe02Icon} tone="muted" />
+                  <FieldLabel
+                    className="sr-only"
+                    htmlFor="calendar-event-time-zone"
+                  >
+                    Time zone
+                  </FieldLabel>
+                  <CalendarTimeZonePicker
+                    aria-label="Event time zone"
+                    disabled={pending}
+                    id="calendar-event-time-zone"
+                    onValueChange={(value) => {
+                      store.setState((current) => ({
+                        ...current,
+                        values: { ...current.values, timeZone: value },
+                      }));
+                    }}
+                    value={form.timeZone}
+                    variant="ghost"
+                  />
+                </div>
+              </Field>
+            )}
+            {isOccurrence ? null : (
+              <Field>
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+                  <Icon icon={RepeatIcon} tone="muted" />
+                  <FieldLabel
+                    className="sr-only"
+                    htmlFor="calendar-event-repeat"
+                  >
+                    Repeat
+                  </FieldLabel>
+                  <Select
+                    disabled={pending}
+                    items={repeatOptions}
+                    onValueChange={(value) => {
+                      if (value && value !== "preserve") {
+                        store.setState((current) => ({
+                          ...current,
+                          values: {
+                            ...current.values,
+                            recurrence:
+                              value === "none" ? [] : [`RRULE:FREQ=${value}`],
+                          },
+                        }));
+                      }
+                    }}
+                    value={repeat}
+                  >
+                    <SelectTrigger id="calendar-event-repeat" variant="ghost">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {repeatOptions
+                        .filter(
+                          (option) =>
+                            option.value !== "preserve" || repeat === "preserve"
+                        )
+                        .map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  {repeat === "preserve" ? (
+                    <FieldDescription className="col-span-2">
+                      Existing repeat rules will stay unchanged.
+                    </FieldDescription>
+                  ) : null}
+                </div>
+              </Field>
+            )}
+          </div>
+          <div className="space-y-1 border-t border-border pt-3">
+            <div className="flex items-start gap-2">
+              <Icon className="mt-2" icon={UserGroupIcon} tone="muted" />
+              <Field>
+                <FieldLabel className="sr-only" htmlFor="calendar-event-guests">
+                  Guests
                 </FieldLabel>
                 <Input
                   chrome="ghost"
-                  id="calendar-event-reminder-minutes"
-                  max={40_320}
-                  min={0}
+                  id="calendar-event-guests"
                   onChange={(event) => {
                     store.setState((current) => ({
                       ...current,
                       values: {
                         ...current.values,
-                        reminderMinutes: event.target.value,
+                        attendees: event.target.value,
                       },
                     }));
                   }}
-                  required
-                  type="number"
-                  value={form.reminderMinutes}
+                  placeholder="Add guests"
+                  value={form.attendees}
+                />
+                <FieldDescription>
+                  <span className="sr-only">
+                    Separate email addresses with commas.{" "}
+                  </span>
+                  {preview
+                    ? "No invitations are sent from this preview."
+                    : "Saving sends invitations and event updates to guests."}
+                </FieldDescription>
+              </Field>
+            </div>
+            {baseEvent?.organizer &&
+            !baseEvent.attendees.some((guest) => guest.organizer) ? (
+              <div className="ml-6 space-y-1">
+                <Text size="caption" tone="muted">
+                  Organizer
+                </Text>
+                <Text as="p" size="sm">
+                  {baseEvent.organizer.name ??
+                    baseEvent.organizer.email ??
+                    (baseEvent.organizer.self ? "You" : "Event organizer")}
+                </Text>
+              </div>
+            ) : null}
+            {baseEvent !== undefined && baseEvent.attendees.length > 0 ? (
+              <ul className="ml-6 space-y-2">
+                {baseEvent.attendees.map((guest) => (
+                  <li className="min-w-0 text-body-sm" key={guest.email}>
+                    <p className="truncate" title={guest.email}>
+                      {guest.name ?? guest.email}
+                      {guest.self ? " (you)" : ""}
+                    </p>
+                    <p className="text-caption text-muted-fg">
+                      {guest.organizer ? "Organizer, " : ""}
+                      {
+                        {
+                          accepted: "Going",
+                          declined: "Declined",
+                          "needs-action": "Awaiting response",
+                          tentative: "Maybe",
+                        }[guest.response]
+                      }
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {baseEvent?.permissions.respond === true && self && onRespond ? (
+              <Field>
+                <FieldLabel>Your response</FieldLabel>
+                <div className="flex gap-2">
+                  {(
+                    [
+                      { label: "No", value: "declined" },
+                      { label: "Maybe", value: "tentative" },
+                      { label: "Yes", value: "accepted" },
+                    ] as const
+                  ).map((response) => (
+                    <Button
+                      aria-pressed={self.response === response.value}
+                      disabled={pending || dirty}
+                      key={response.value}
+                      onClick={() => {
+                        void respond(response.value);
+                      }}
+                      size="sm"
+                      variant="chip"
+                    >
+                      {response.label}
+                    </Button>
+                  ))}
+                </div>
+              </Field>
+            ) : null}
+            <Field>
+              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+                <Icon icon={Location01Icon} tone="muted" />
+                <FieldLabel
+                  className="sr-only"
+                  htmlFor="calendar-event-location"
+                >
+                  Location
+                </FieldLabel>
+                <Input
+                  chrome="ghost"
+                  id="calendar-event-location"
+                  maxLength={2000}
+                  onChange={(event) => {
+                    store.setState((current) => ({
+                      ...current,
+                      values: {
+                        ...current.values,
+                        location: event.target.value,
+                      },
+                    }));
+                  }}
+                  placeholder="Add location"
+                  value={form.location}
+                />
+              </div>
+            </Field>
+            {baseEvent?.meetingUrl ? (
+              <Button
+                fullWidth
+                nativeButton={false}
+                render={
+                  <a
+                    aria-label="Join video meeting"
+                    href={baseEvent.meetingUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  />
+                }
+              >
+                <Icon icon={Video01Icon} />
+                Join video meeting
+              </Button>
+            ) : null}
+            {baseEvent?.meetingPending === true ? (
+              <p className="text-caption text-muted-fg">
+                Your meeting link is being prepared.
+              </p>
+            ) : null}
+            {selectedCalendar?.supportsMeetings === true ? (
+              <label
+                className="flex cursor-pointer items-center gap-2 text-body-sm"
+                htmlFor="calendar-event-add-meeting"
+              >
+                <Checkbox
+                  disabled={pending}
+                  id="calendar-event-add-meeting"
+                  checked={form.addMeeting}
+                  onCheckedChange={(checked) => {
+                    store.setState((current) => ({
+                      ...current,
+                      values: { ...current.values, addMeeting: checked },
+                    }));
+                  }}
+                >
+                  <CheckboxIndicator />
+                </Checkbox>
+                <Icon icon={Video01Icon} tone="muted" />
+                Video meeting
+              </label>
+            ) : null}
+            <div className="flex items-start gap-2">
+              <Icon className="mt-2" icon={TextAlignLeftIcon} tone="muted" />
+              <Field>
+                <FieldLabel
+                  className="sr-only"
+                  htmlFor="calendar-event-description"
+                >
+                  Description
+                </FieldLabel>
+                <Textarea
+                  variant="prompt"
+                  id="calendar-event-description"
+                  maxLength={50_000}
+                  onChange={(event) => {
+                    store.setState((current) => ({
+                      ...current,
+                      values: {
+                        ...current.values,
+                        description: event.target.value,
+                      },
+                    }));
+                  }}
+                  placeholder="Add description"
+                  value={form.description}
                 />
               </Field>
-              <Field>
-                <FieldLabel htmlFor="calendar-event-reminder-method">
-                  Notify by
+            </div>
+          </div>
+          <div className="space-y-1 border-t border-border pt-3">
+            <Field>
+              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+                <Icon icon={Calendar03Icon} tone="muted" />
+                <FieldLabel
+                  className="sr-only"
+                  htmlFor="calendar-event-calendar"
+                >
+                  Calendar
+                </FieldLabel>
+                {editor.kind === "edit" ? (
+                  <Text size="sm">{selectedCalendar?.name ?? "Calendar"}</Text>
+                ) : (
+                  <Select
+                    disabled={pending}
+                    items={calendarOptions}
+                    onValueChange={(value) => {
+                      if (value) {
+                        store.setState((current) => ({
+                          ...current,
+                          values: { ...current.values, calendarKey: value },
+                        }));
+                      }
+                    }}
+                    value={form.calendarKey}
+                  >
+                    <SelectTrigger id="calendar-event-calendar" variant="ghost">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {calendarOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            </Field>
+            <Field>
+              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+                <Icon icon={PaintBoardIcon} tone="muted" />
+                <FieldLabel className="sr-only">Event color</FieldLabel>
+                <Popover>
+                  <PopoverTrigger
+                    aria-label="Event color"
+                    className="justify-self-start"
+                    disabled={pending}
+                    render={<Button size="sm" variant="ghost" />}
+                  >
+                    <ColorSwatch
+                      color={
+                        form.color ??
+                        selectedCalendar?.color ??
+                        "var(--color-q-blue)"
+                      }
+                    />
+                    {form.color ? "Custom color" : "Calendar default"}
+                  </PopoverTrigger>
+                  <PopoverContent align="start">
+                    <PopoverTitle>Event color</PopoverTitle>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {colors.map((color) => (
+                        <IconButtonTooltip key={color} label={`Use ${color}`}>
+                          <Button
+                            aria-label={`Use ${color}`}
+                            aria-pressed={form.color === color}
+                            onClick={() => {
+                              store.setState((current) => ({
+                                ...current,
+                                values: { ...current.values, color },
+                              }));
+                            }}
+                            size="icon-sm"
+                            variant="chip"
+                          >
+                            <ColorSwatch
+                              color={color}
+                              shape="square"
+                              size="lg"
+                            />
+                          </Button>
+                        </IconButtonTooltip>
+                      ))}
+                    </div>
+                    {colorsQuery.isError ? (
+                      <p className="mt-3 text-caption text-muted-fg">
+                        Colors could not load.
+                      </p>
+                    ) : null}
+                    <div className="mt-3">
+                      <ActionFooter>
+                        <Button
+                          onClick={() => {
+                            store.setState((current) => ({
+                              ...current,
+                              values: { ...current.values, color: null },
+                            }));
+                          }}
+                          size="sm"
+                          variant="secondary"
+                        >
+                          Calendar default
+                        </Button>
+                      </ActionFooter>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </Field>
+            <Field>
+              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+                <Icon icon={Notification02Icon} tone="muted" />
+                <FieldLabel
+                  className="sr-only"
+                  htmlFor="calendar-event-reminder"
+                >
+                  Reminder
                 </FieldLabel>
                 <Select
                   disabled={pending}
                   items={[
-                    { label: "Notification", value: "notification" },
-                    { label: "Email", value: "email" },
+                    { label: "Default reminder", value: "default" },
+                    { label: "No reminder", value: "none" },
+                    { label: "Custom reminder", value: "custom" },
                   ]}
                   onValueChange={(value) => {
-                    if (value === "notification" || value === "email") {
+                    if (
+                      value === "default" ||
+                      value === "none" ||
+                      value === "custom"
+                    ) {
                       store.setState((current) => ({
                         ...current,
-                        values: { ...current.values, reminderMethod: value },
+                        values: { ...current.values, reminderKind: value },
                       }));
                     }
                   }}
-                  value={form.reminderMethod}
+                  value={form.reminderKind}
                 >
-                  <SelectTrigger
-                    id="calendar-event-reminder-method"
-                    variant="ghost"
-                  >
+                  <SelectTrigger id="calendar-event-reminder" variant="ghost">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="notification">Notification</SelectItem>
-                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="default">Default reminder</SelectItem>
+                    <SelectItem value="none">No reminder</SelectItem>
+                    <SelectItem value="custom">Custom reminder</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </Field>
+            {form.reminderKind === "custom" ? (
+              <div className="grid grid-cols-2 gap-3">
+                <Field>
+                  <FieldLabel htmlFor="calendar-event-reminder-minutes">
+                    Minutes before
+                  </FieldLabel>
+                  <Input
+                    chrome="ghost"
+                    id="calendar-event-reminder-minutes"
+                    max={40_320}
+                    min={0}
+                    onChange={(event) => {
+                      store.setState((current) => ({
+                        ...current,
+                        values: {
+                          ...current.values,
+                          reminderMinutes: event.target.value,
+                        },
+                      }));
+                    }}
+                    required
+                    type="number"
+                    value={form.reminderMinutes}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="calendar-event-reminder-method">
+                    Notify by
+                  </FieldLabel>
+                  <Select
+                    disabled={pending}
+                    items={[
+                      { label: "Notification", value: "notification" },
+                      { label: "Email", value: "email" },
+                    ]}
+                    onValueChange={(value) => {
+                      if (value === "notification" || value === "email") {
+                        store.setState((current) => ({
+                          ...current,
+                          values: { ...current.values, reminderMethod: value },
+                        }));
+                      }
+                    }}
+                    value={form.reminderMethod}
+                  >
+                    <SelectTrigger
+                      id="calendar-event-reminder-method"
+                      variant="ghost"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="notification">Notification</SelectItem>
+                      <SelectItem value="email">Email</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                {state.baseEvent?.reminders.kind === "custom" &&
+                state.baseEvent.reminders.items.length > 1 ? (
+                  <p className="col-span-2 text-caption text-muted-fg">
+                    Additional reminders on this event are preserved.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="space-y-1">
+              <Field>
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+                  <Icon icon={Clock01Icon} tone="muted" />
+                  <FieldLabel
+                    className="sr-only"
+                    htmlFor="calendar-event-availability"
+                  >
+                    Show as
+                  </FieldLabel>
+                  <Select
+                    items={[
+                      { label: "Busy", value: "busy" },
+                      { label: "Free", value: "free" },
+                    ]}
+                    onValueChange={(value) => {
+                      if (value === "busy" || value === "free") {
+                        store.setState((current) => ({
+                          ...current,
+                          values: { ...current.values, availability: value },
+                        }));
+                      }
+                    }}
+                    value={form.availability}
+                  >
+                    <SelectTrigger
+                      id="calendar-event-availability"
+                      variant="ghost"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="busy">Busy</SelectItem>
+                      <SelectItem value="free">Free</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </Field>
-              {state.baseEvent?.reminders.kind === "custom" &&
-              state.baseEvent.reminders.items.length > 1 ? (
-                <p className="col-span-2 text-caption text-muted-fg">
-                  Additional reminders on this event are preserved.
-                </p>
-              ) : null}
+              <Field>
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2">
+                  <Icon icon={SquareLock01Icon} tone="muted" />
+                  <FieldLabel
+                    className="sr-only"
+                    htmlFor="calendar-event-visibility"
+                  >
+                    Visibility
+                  </FieldLabel>
+                  <Select
+                    disabled={pending || isOccurrence}
+                    items={[
+                      { label: "Default visibility", value: "default" },
+                      { label: "Private", value: "private" },
+                      { label: "Public", value: "public" },
+                    ]}
+                    onValueChange={(value) => {
+                      if (
+                        value === "default" ||
+                        value === "private" ||
+                        value === "public"
+                      ) {
+                        store.setState((current) => ({
+                          ...current,
+                          values: { ...current.values, visibility: value },
+                        }));
+                      }
+                    }}
+                    value={form.visibility}
+                  >
+                    <SelectTrigger
+                      id="calendar-event-visibility"
+                      variant="ghost"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">
+                        Default visibility
+                      </SelectItem>
+                      <SelectItem value="private">Private</SelectItem>
+                      <SelectItem value="public">Public</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </Field>
             </div>
-          ) : null}
-          <div className="grid grid-cols-2 gap-3">
-            <Field>
-              <FieldLabel htmlFor="calendar-event-availability">
-                Show as
-              </FieldLabel>
-              <Select
-                items={[
-                  { label: "Busy", value: "busy" },
-                  { label: "Free", value: "free" },
-                ]}
-                onValueChange={(value) => {
-                  if (value === "busy" || value === "free") {
-                    store.setState((current) => ({
-                      ...current,
-                      values: { ...current.values, availability: value },
-                    }));
-                  }
-                }}
-                value={form.availability}
-              >
-                <SelectTrigger id="calendar-event-availability" variant="ghost">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="busy">Busy</SelectItem>
-                  <SelectItem value="free">Free</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="calendar-event-visibility">
-                Visibility
-              </FieldLabel>
-              <Select
-                disabled={pending || isOccurrence}
-                items={[
-                  { label: "Calendar default", value: "default" },
-                  { label: "Private", value: "private" },
-                  { label: "Public", value: "public" },
-                ]}
-                onValueChange={(value) => {
-                  if (
-                    value === "default" ||
-                    value === "private" ||
-                    value === "public"
-                  ) {
-                    store.setState((current) => ({
-                      ...current,
-                      values: { ...current.values, visibility: value },
-                    }));
-                  }
-                }}
-                value={form.visibility}
-              >
-                <SelectTrigger id="calendar-event-visibility" variant="ghost">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="default">Calendar default</SelectItem>
-                  <SelectItem value="private">Private</SelectItem>
-                  <SelectItem value="public">Public</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
           </div>
         </fieldset>
       </div>

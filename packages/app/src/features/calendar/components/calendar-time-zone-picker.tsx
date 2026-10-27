@@ -16,7 +16,15 @@ export const CalendarTimeZonePicker = ({
   value,
   ...props
 }: CalendarTimeZonePickerProps) => {
-  const options = useMemo(() => getCalendarTimeZoneOptions(value), [value]);
+  const options = useMemo(
+    () =>
+      getCalendarTimeZoneOptions(value).map((option) => ({
+        ...option,
+        description: option.label,
+        label: option.label.split("/").at(-1) ?? option.label,
+      })),
+    [value]
+  );
 
   return (
     <SearchableSelect

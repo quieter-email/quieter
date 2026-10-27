@@ -1,14 +1,11 @@
 "use client";
 
-import { useHeadlessConsentUI } from "@c15t/react/headless";
 import {
   Cancel01Icon,
   Calendar03Icon,
   Edit01Icon,
-  HelpCircleIcon,
   LayoutRightIcon,
   NoteEditIcon,
-  Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { AssistantSidebarContext } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import {
@@ -27,22 +24,14 @@ import {
 } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
-import { appRuntime } from "@quieter/app/runtime";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
 import { Button } from "@quieter/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
-import { Link, useLocation } from "@tanstack/react-router";
 import { use, useEffect, useState } from "react";
 
+import { SidebarFooterLinks } from "./sidebar-footer-links";
 import { UnifiedSidebarLabelNav } from "./unified-sidebar-label-nav";
 
 type MailSidebarProps = {
@@ -96,86 +85,6 @@ type SidebarContentProps = Omit<
 };
 
 let hasPlayedSidebarEntrance = false;
-
-const BrowserPrivacyPreferencesItem = ({
-  onRequestClose,
-}: {
-  onRequestClose?: () => void;
-}) => {
-  const { openDialog } = useHeadlessConsentUI();
-
-  return (
-    <DropdownMenuItem
-      onSelect={() => {
-        onRequestClose?.();
-        openDialog();
-      }}
-    >
-      Privacy preferences
-    </DropdownMenuItem>
-  );
-};
-
-const SidebarHelpMenu = ({
-  onRequestClose,
-}: {
-  onRequestClose?: () => void;
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-
-  return (
-    <DropdownMenu onOpenChange={setIsOpen} open={isOpen}>
-      <div className="relative rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
-        <IconButtonTooltip label="Help and legal">
-          <DropdownMenuTrigger
-            appearance="icon-transparent"
-            aria-label="Help and legal"
-            className="relative z-10"
-          >
-            <Icon aria-hidden icon={HelpCircleIcon} />
-          </DropdownMenuTrigger>
-        </IconButtonTooltip>
-      </div>
-      <DropdownMenuContent align="end" side="top" size="compact">
-        <DropdownMenuItem
-          onSelect={onRequestClose}
-          render={<Link to="/privacy" />}
-        >
-          Privacy
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={onRequestClose}
-          render={<Link to="/cookies" />}
-        >
-          Cookies
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={onRequestClose}
-          render={<Link to="/terms" />}
-        >
-          Terms
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={onRequestClose}
-          render={<Link to="/imprint" />}
-        >
-          Imprint
-        </DropdownMenuItem>
-        {appRuntime.platform === "desktop" ? null : (
-          <BrowserPrivacyPreferencesItem onRequestClose={onRequestClose} />
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          render={
-            <a href="https://logo.dev" rel="noreferrer" target="_blank">
-              Logos by logo.dev
-            </a>
-          }
-        />
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-};
 
 const SidebarInboxSection = ({
   allInboxesActive = false,
@@ -375,36 +284,15 @@ const SidebarInboxSection = ({
 const SidebarFooter = ({
   animateEntrance,
   onRequestClose,
-}: Pick<SidebarContentProps, "animateEntrance" | "onRequestClose">) => {
-  const returnTo = useLocation({ select: (location) => location.href });
-  return (
-    <SidebarEntrance
-      animateEntrance={animateEntrance}
-      className="mt-auto p-2"
-      index={9}
-    >
-      <div className="flex items-center gap-1">
-        <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
-          <Button
-            aria-label="Settings"
-            // oxlint-disable-next-line shadcn/no-restyle -- Sidebar settings link keeps its row treatment.
-            className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
-            onClick={onRequestClose}
-            nativeButton={false}
-            render={<Link search={{ from: returnTo }} to="/settings" />}
-            // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native anchor through its render slot.
-            role="link"
-            variant="ghost"
-          >
-            <Icon icon={Settings01Icon} />
-            Settings
-          </Button>
-        </div>
-        <SidebarHelpMenu onRequestClose={onRequestClose} />
-      </div>
-    </SidebarEntrance>
-  );
-};
+}: Pick<SidebarContentProps, "animateEntrance" | "onRequestClose">) => (
+  <SidebarEntrance
+    animateEntrance={animateEntrance}
+    className="mt-auto p-2"
+    index={9}
+  >
+    <SidebarFooterLinks onRequestClose={onRequestClose} />
+  </SidebarEntrance>
+);
 
 const SidebarAssistantAction = ({
   onRequestClose,

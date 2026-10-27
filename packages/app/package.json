@@ -146,6 +146,7 @@
     "./features/navigation/components/mailbox-rule-actions": "./src/features/navigation/components/mailbox-rule-actions.tsx",
     "./features/navigation/components/mailbox-rules-panel": "./src/features/navigation/components/mailbox-rules-panel.tsx",
     "./features/navigation/components/mailbox-switcher": "./src/features/navigation/components/mailbox-switcher.tsx",
+    "./features/navigation/components/sidebar-footer-links": "./src/features/navigation/components/sidebar-footer-links.tsx",
     "./features/navigation/components/sidebar-label-nav": "./src/features/navigation/components/sidebar-label-nav.tsx",
     "./features/navigation/components/sidebar-mailbox-nav": "./src/features/navigation/components/sidebar-mailbox-nav.tsx",
     "./features/navigation/components/sidebar-nav-item": "./src/features/navigation/components/sidebar-nav-item.tsx",

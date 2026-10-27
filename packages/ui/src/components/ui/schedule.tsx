@@ -636,7 +636,7 @@ export const Schedule = ({
   return (
     <div
       aria-label={`${view === "day" ? "Day" : "Week"} calendar`}
-      className="relative min-h-0 flex-1 overflow-auto overscroll-contain"
+      className="relative min-h-0 flex-1 overflow-auto overscroll-contain bg-bg-raised"
       ref={scrollRef}
     >
       <p className="sr-only" id={slotHelpId}>
@@ -645,13 +645,16 @@ export const Schedule = ({
         Escape to cancel a selection. Open any event to edit its date and time.
       </p>
       <div
-        className="sticky top-0 z-30 grid w-full min-w-[var(--schedule-min-width)] grid-cols-[var(--schedule-columns)] border-b border-border/50 bg-card"
+        className="sticky top-0 z-30 grid w-full min-w-[var(--schedule-min-width)] grid-cols-[var(--schedule-columns)] border-b border-border/50 bg-bg-raised"
         style={columnStyle}
       >
-        <div />
-        {dates.map((date) => (
+        <div className="border-r border-border/50" />
+        {dates.map((date, index) => (
           <div
-            className="flex flex-col items-center justify-center gap-1 px-2 pt-3 pb-2"
+            className={cn(
+              "flex items-center justify-center gap-1.5 border-border/50 px-2 py-1",
+              { "border-r": index < dates.length - 1 }
+            )}
             data-selected-date={date === selectedDate || undefined}
             key={date}
           >
@@ -680,12 +683,12 @@ export const Schedule = ({
             </span>
           </div>
         ))}
-        <div className="px-1 py-3 text-right text-micro whitespace-nowrap text-muted-fg">
+        <div className="border-t border-r border-border/50 px-1 py-2 text-right text-micro whitespace-nowrap text-muted-fg">
           All day
         </div>
         {dates.map((date) => (
           <div
-            className="relative min-h-10 space-y-1 px-0.5 py-2"
+            className="relative min-h-8 space-y-1 border-t border-r border-border/50 px-0.5 py-1 last:border-r-0"
             data-selected-date={date === selectedDate || undefined}
             key={date}
             onDragOver={(event) => {
