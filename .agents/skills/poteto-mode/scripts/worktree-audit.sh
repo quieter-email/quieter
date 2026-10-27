@@ -28,7 +28,7 @@ cd "$repo" || exit 1
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "error: not a git repo: $repo" >&2; exit 1; }
 
 # Main worktree is the first entry; everything else is a candidate.
-main_wt=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
+main_wt=$(git worktree list --porcelain | sed -n 's/^worktree //p' | head -1)
 
 if [ -z "$base" ]; then
 	for cand in "$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)" origin/main origin/master; do
@@ -46,6 +46,14 @@ origin/*) git fetch origin "+refs/heads/${base#origin/}:refs/remotes/$base" --qu
 	|| echo "warn: could not fetch $base; merged column may be stale" >&2 ;;
 esac
 git rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1 || { echo "error: base ref not found: $base" >&2; exit 1; }
+
+# GNU coreutils (Linux, Homebrew gnubin) reads `stat -f` as file system status
+# and `date -r` as a file, so pick the stat and date flags once.
+if stat -c %Y / >/dev/null 2>&1; then
+	stat_fmt=(-c '%Y'); fmt_day() { date -d "@$1" '+%Y-%m-%d'; }
+else
+	stat_fmt=(-f '%m'); fmt_day() { date -r "$1" '+%Y-%m-%d'; }
+fi
 
 # PR state by branch, fetched once as [{number, state, head}] with a lowercase
 # state. Origin when its CLI can read this repo's PRs, otherwise gh. Empty when
@@ -72,20 +80,12 @@ transcript_dirs() {
 		[ -d "$d" ] && printf '%s\n' "$d"
 	done
 }
-if stat -c '%Y' . >/dev/null 2>&1; then
-	stat_flags=(-c '%Y')
-elif stat -f '%m' . >/dev/null 2>&1; then
-	stat_flags=(-f '%m')
-else
-	echo "error: cannot read transcript modification times with stat" >&2
-	exit 1
-fi
 now=$(date +%s)
 
 echo "# base: $base"
 printf "SIZE\tAGE\tMERGED\tDIRTY\tREMOTE\tPR\tLAST_CHAT\tBUCKET\tWORKTREE\n"
 
-git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r wt; do
+git worktree list --porcelain | sed -n 's/^worktree //p' | while read -r wt; do
 	[ "$wt" = "$main_wt" ] && continue
 
 	size=$(du -sh "$wt" 2>/dev/null | awk '{print $1}')
@@ -123,17 +123,17 @@ git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r wt;
 	dirs=$( { transcript_dirs "$main_wt"; transcript_dirs "$wt"; } | sort -u)
 	if [ -n "$dirs" ]; then
 		f=$(printf '%s\n' "$dirs" | tr '\n' '\0' | xargs -0 rg -l -0 -F -e "${wt}/" -e "${wt}\"" 2>/dev/null \
-			| xargs -0 stat "${stat_flags[@]}" 2>/dev/null | sort -rn | head -1)
+			| xargs -0 stat "${stat_fmt[@]}" 2>/dev/null | sort -rn | head -1)
 		if [ -n "$f" ]; then last_ts="$f"
-			last=$(date -d "@$last_ts" '+%Y-%m-%d' 2>/dev/null \
-				|| date -r "$last_ts" '+%Y-%m-%d' 2>/dev/null \
-				|| printf '%s' "$last_ts"); fi
+			last=$(fmt_day "$last_ts" 2>/dev/null); fi
 	fi
 	recent=$([ "$last_ts" -gt 0 ] 2>/dev/null && [ $(( (now - last_ts) / 86400 )) -le 4 ] && echo yes || echo no)
 
 	case "$dirty" in wip:*) bucket=hold-wip ;; *)
 		case "$pr" in */open|*/draft) bucket=hold-open-pr ;; *)
 			if [ "$recent" = yes ]; then bucket=verify-recent-chat
+			elif [ -d "${CODEX_HOME:-$HOME/.codex}/sessions" ] || [ -d "${XDG_DATA_HOME:-$HOME/.local/share}/opencode" ]; then
+				last="unavailable"; bucket=verify-chat-history
 			elif [ "$merged" = YES ] || [ "$pr" != "-" ]; then bucket=safe
 			else bucket=review; fi ;;
 		esac ;;

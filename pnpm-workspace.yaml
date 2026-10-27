@@ -2,6 +2,7 @@ packages:
   - "apps/*"
   - "packages/*"
   - ".agents/skills/poteto-mode/scripts"
+  - ".agents/skills/statechart/scripts"
 
 autoInstallPeers: false
 strictPeerDependencies: true
