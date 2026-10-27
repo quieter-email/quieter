@@ -8,9 +8,11 @@ import { z } from "zod";
 
 import {
   createGoogleEvent,
+  deleteGoogleEvent,
   getGoogleColors,
   googleEventChanges,
   listGoogleEvents,
+  patchGoogleEvent,
   toCalendarEvent,
   toCalendarSummary,
 } from "../src/calendar/google";
@@ -39,6 +41,52 @@ const current = {
 
 describe("calendar provider boundary", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  test("ordinary event mutations suppress guest notifications", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (_url, init) =>
+        init?.method === "DELETE"
+          ? new Response(null, { status: 204 })
+          : Response.json(current)
+      );
+    vi.stubGlobal("fetch", request);
+    await createGoogleEvent({
+      ...auth,
+      connectionId: "account-1",
+      event: {
+        ...draft,
+        attendees: [{ email: "guest@example.com", optional: false }],
+      },
+      operationId: "operation-1",
+      userId: "owner-1",
+    });
+    await patchGoogleEvent({
+      ...auth,
+      body: { summary: "Changed" },
+      eventId: current.id,
+      version: current.etag,
+    });
+    await deleteGoogleEvent({
+      ...auth,
+      eventId: current.id,
+      version: current.etag,
+    });
+    expect(
+      request.mock.calls.map(([url, init]) => ({
+        method: init?.method,
+        sendUpdates: new URL(new Request(url).url).searchParams.get(
+          "sendUpdates"
+        ),
+      }))
+    ).toStrictEqual(
+      expect.arrayContaining([
+        { method: "POST", sendUpdates: "none" },
+        { method: "PATCH", sendUpdates: "none" },
+        { method: "DELETE", sendUpdates: "none" },
+      ])
+    );
+  });
 
   test("resolves live event colors while preserving custom calendar colors and default inheritance", async () => {
     const request = vi.fn<typeof fetch>().mockImplementation(async (url) =>

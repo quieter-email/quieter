@@ -66,7 +66,7 @@ export const CalendarEventGuests = ({
           <FieldDescription className="ml-2.5">
             {preview
               ? "No invitations are sent from this preview."
-              : "Saving sends invitations and event updates to guests."}
+              : "Guest notifications are off."}
           </FieldDescription>
         </Field>
       </div>
@@ -75,7 +75,7 @@ export const CalendarEventGuests = ({
           const guest = attendees?.find(
             (attendee) => attendee.email.toLowerCase() === email.toLowerCase()
           );
-          let status = preview ? "Preview guest" : "Not invited yet";
+          let status = preview ? "Preview guest" : "Not saved yet";
           if (guest) {
             const responses = {
               accepted: "Accepted",
