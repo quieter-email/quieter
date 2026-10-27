@@ -105,7 +105,7 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
         </div>
         <Toast.Close
           aria-label="Dismiss"
-          className="absolute top-3 right-3 flex size-7 items-center justify-center rounded-md text-muted-fg transition-transform duration-100 ease-out squircle hover:text-fg focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
+          className="absolute top-3 right-3 flex size-7 items-center justify-center rounded-md text-muted-fg transition-transform duration-100 ease-out squircle hover:text-fg focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
         >
           <Icon aria-hidden size={14} icon={Cancel01Icon} />
         </Toast.Close>

@@ -6,6 +6,7 @@ import { Button } from "@quieter/ui/button";
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { Input } from "@quieter/ui/input";
+import { entranceMotionVariants } from "@quieter/ui/motion";
 import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
 import {
   Select,
@@ -261,24 +262,25 @@ export const CalendarEventReminders = ({
     {kind === "custom" ? (
       <div className="ml-6 flex flex-col items-start gap-1">
         {items.map((item, index) => (
-          <CalendarReminderRow
-            key={item.id}
-            item={item}
-            index={index}
-            disabled={disabled}
-            onChange={(updated) => {
-              onItemsChange(
-                items.map((entry) => (entry.id === item.id ? updated : entry))
-              );
-            }}
-            onRemove={() => {
-              const remaining = items.filter((entry) => entry.id !== item.id);
-              onItemsChange(remaining);
-              if (remaining.length === 0) {
-                onKindChange("none");
-              }
-            }}
-          />
+          <div className={entranceMotionVariants()} key={item.id}>
+            <CalendarReminderRow
+              item={item}
+              index={index}
+              disabled={disabled}
+              onChange={(updated) => {
+                onItemsChange(
+                  items.map((entry) => (entry.id === item.id ? updated : entry))
+                );
+              }}
+              onRemove={() => {
+                const remaining = items.filter((entry) => entry.id !== item.id);
+                onItemsChange(remaining);
+                if (remaining.length === 0) {
+                  onKindChange("none");
+                }
+              }}
+            />
+          </div>
         ))}
         <Button
           disabled={disabled || items.length >= 5}

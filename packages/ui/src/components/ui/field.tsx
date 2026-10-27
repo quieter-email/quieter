@@ -11,6 +11,7 @@ import {
   inputControlClassName,
   inputControlSizeVariants,
 } from "./input-chrome";
+import { entranceMotionVariants } from "./motion";
 
 const fieldControlVariants = cva(`squircle ${inputControlClassName}`, {
   compoundVariants: [{ chrome: "ghost", className: "px-2.5" }],
@@ -35,10 +36,17 @@ const fieldControlVariants = cva(`squircle ${inputControlClassName}`, {
 
 export const Field = ({
   className,
+  reveal = false,
   ...props
-}: ComponentPropsWithoutRef<typeof FieldPrimitive.Root>) => (
+}: ComponentPropsWithoutRef<typeof FieldPrimitive.Root> & {
+  reveal?: boolean;
+}) => (
   <FieldPrimitive.Root
-    className={cn("grid w-full gap-1.5", className)}
+    className={cn(
+      "grid w-full gap-1.5",
+      { [entranceMotionVariants()]: reveal },
+      className
+    )}
     {...props}
   />
 );

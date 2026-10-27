@@ -13,7 +13,7 @@ Quieter is a daily-use email client. Its motion is selective but clearly visible
 
 ## Values
 
-The canonical TypeScript values live in `app-motion.ts`; matching CSS values live in `apps/web/src/styles.css`.
+The TypeScript values live in `packages/app/src/features/motion/app-motion.ts`. Shared CSS timing and easing tokens live in `packages/ui/src/styles.css`. Compact CSS transitions use 150ms feedback and entrance timing and 250ms layout timing. The semantic TypeScript entrances use the longer values below.
 
 | Intent                    | Value                             |
 | ------------------------- | --------------------------------- |

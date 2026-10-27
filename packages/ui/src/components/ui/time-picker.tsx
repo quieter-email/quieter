@@ -12,6 +12,7 @@ import { Icon } from "./icon";
 import { CheckIcon } from "./icons";
 import { inputVariants } from "./input";
 import type { Input } from "./input";
+import { anchoredPopupMotionClassName } from "./overlay-chrome";
 import { selectTriggerVariants } from "./select";
 
 export type TimePickerProps = Pick<
@@ -117,7 +118,10 @@ export const TimePicker = ({
         >
           <ComboboxPrimitive.Popup
             aria-label={ariaLabel ?? "Choose time"}
-            className="flex max-h-[min(18rem,var(--available-height))] w-52 max-w-(--available-width) min-w-(--anchor-width) origin-(--transform-origin) flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 motion-reduce:transition-none"
+            className={cn(
+              anchoredPopupMotionClassName,
+              "flex max-h-[min(18rem,var(--available-height))] w-52 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-md"
+            )}
           >
             <div className="shrink-0 border-b border-border p-2">
               <ComboboxPrimitive.Input

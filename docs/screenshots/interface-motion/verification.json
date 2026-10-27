@@ -1,0 +1,737 @@
+{
+  "purpose": "Verify continuous popup scaling, interaction lifecycle, and reduced motion. This is not a device FPS benchmark.",
+  "surface": "Local /design-system, sample data only, Chromium 156 on Linux.",
+  "comparison": {
+    "method": "Five alternating before/after runs in one browser session. Only transition-property changes between opacity/transform and opacity/scale. requestAnimationFrame samples computed scale during entry and exit. The dialog must open and unmount each time.",
+    "cause": "Tailwind generates a separate scale property. Transitioning transform does not animate that scale property.",
+    "trials": [
+      {
+        "errors": 0,
+        "exitIntermediate": 0,
+        "intermediate": 0,
+        "properties": ["opacity"],
+        "run": 0,
+        "side": "before"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 3,
+        "intermediate": 5,
+        "properties": ["opacity", "scale"],
+        "run": 0,
+        "side": "after"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 0,
+        "intermediate": 0,
+        "properties": ["opacity"],
+        "run": 1,
+        "side": "before"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 4,
+        "intermediate": 5,
+        "properties": ["opacity", "scale"],
+        "run": 1,
+        "side": "after"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 0,
+        "intermediate": 0,
+        "properties": ["opacity"],
+        "run": 2,
+        "side": "before"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 4,
+        "intermediate": 5,
+        "properties": ["opacity", "scale"],
+        "run": 2,
+        "side": "after"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 0,
+        "intermediate": 0,
+        "properties": ["opacity"],
+        "run": 3,
+        "side": "before"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 4,
+        "intermediate": 5,
+        "properties": ["opacity", "scale"],
+        "run": 3,
+        "side": "after"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 0,
+        "intermediate": 0,
+        "properties": ["opacity"],
+        "run": 4,
+        "side": "before"
+      },
+      {
+        "errors": 0,
+        "exitIntermediate": 4,
+        "intermediate": 5,
+        "properties": ["opacity", "scale"],
+        "run": 4,
+        "side": "after"
+      }
+    ],
+    "medianEntryIntermediateFrames": {
+      "before": 0,
+      "after": 5
+    },
+    "errors": 0
+  },
+  "finalPointerChecks": {
+    "menu": {
+      "samples": 40,
+      "animatedProperties": ["opacity", "scale"],
+      "distinctScaleSamples": 10
+    },
+    "popover": {
+      "samples": 7,
+      "animatedProperties": ["opacity", "scale"],
+      "distinctScaleSamples": 5
+    },
+    "tooltip": {
+      "samples": 53,
+      "animatedProperties": ["opacity", "scale"],
+      "distinctScaleSamples": 10
+    }
+  },
+  "finalLifecycleChecks": {
+    "normal": {
+      "surfaces": [
+        {
+          "name": "dialog",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "menu",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "popover",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "select",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "searchable-select",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        }
+      ],
+      "rapidReopen": true,
+      "errors": 0
+    },
+    "reducedMotion": {
+      "surfaces": [
+        {
+          "name": "dialog",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "menu",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "popover",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "select",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        },
+        {
+          "name": "searchable-select",
+          "closed": true,
+          "focusRestored": true,
+          "mountSuppressionDuration": "0s",
+          "errors": 0
+        }
+      ],
+      "rapidReopen": true,
+      "errors": 0
+    }
+  },
+  "reducedMotion": {
+    "dialog": {
+      "animatedProperties": ["opacity"],
+      "scales": ["1", "none"],
+      "instantDuration": "0s"
+    },
+    "menu": {
+      "animatedProperties": [],
+      "scales": ["1", "none"],
+      "instantDuration": "0s"
+    },
+    "popover": {
+      "animatedProperties": [],
+      "scales": ["1", "none"],
+      "instantDuration": "0s"
+    },
+    "select": {
+      "animatedProperties": ["opacity"],
+      "scales": ["1", "none"],
+      "instantDuration": "0s"
+    },
+    "searchable-select": {
+      "animatedProperties": ["opacity"],
+      "scales": ["1", "none"],
+      "instantDuration": "0s"
+    }
+  },
+  "manualChecks": [
+    "Default accordion chevron rotates and detail content fades. Custom indicator stays still.",
+    "Light and dark appearances inspected. The 390px viewport has no horizontal overflow.",
+    "Dialog fits the narrow viewport and keeps focus inside. Escape restores focus to the trigger.",
+    "Drawer opens and dismisses with Escape.",
+    "Nested menu opens with pointer hover."
+  ],
+  "limits": "Browser behavior and actual CSS transitions verified in Chromium 156 with sample data. These observations do not establish FPS on a user device. Real mail sends, provider event writes, live recording, and recovery operations were not exercised. Keyboard and screen-reader semantics remain owned by the existing components.",
+  "focus": {
+    "method": "Chromium keyboard open, Escape, actual pointer reopen and hover, keyboard navigation, nonclosing checkbox virtual activation, nested menu keyboard navigation, then forced-colors emulation.",
+    "runs": {
+      "keyboard_open": {
+        "menuCount": 1,
+        "outline": "none",
+        "pointer": false,
+        "role": "menuitem",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklch(0.49 0.008 264) 0px 0px 0px 2px inset, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "text": "Mark as read",
+        "visible": true
+      },
+      "pointer_after_keyboard": {
+        "menuCount": 1,
+        "outline": "none",
+        "pointer": true,
+        "role": "menuitem",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklch(0.49 0.008 264) 0px 0px 0px 0px inset, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "text": "Mark as read",
+        "visible": true
+      },
+      "keyboard_after_pointer": {
+        "menuCount": 1,
+        "outline": "none",
+        "pointer": false,
+        "role": "menuitemcheckbox",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklch(0.49 0.008 264) 0px 0px 0px 2px inset, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "text": "Show previews",
+        "visible": true
+      },
+      "escape_restore": {
+        "menuCount": 0,
+        "outline": "none",
+        "pointer": false,
+        "role": null,
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklch(0.49 0.008 264) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "text": "Open menu",
+        "visible": true
+      },
+      "pointer_checkbox": {
+        "menuCount": 1,
+        "outline": "none",
+        "pointer": true,
+        "role": "menuitemcheckbox",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklch(0.49 0.008 264) 0px 0px 0px 0px inset, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "text": "Show previews",
+        "visible": true
+      },
+      "virtual_checkbox": {
+        "menuCount": 1,
+        "outline": "none",
+        "pointer": false,
+        "role": "menuitemcheckbox",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklch(0.49 0.008 264) 0px 0px 0px 2px inset, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "text": "Show previews",
+        "visible": true
+      }
+    },
+    "nestedKeyboard": {
+      "menuCount": 2,
+      "outline": "none",
+      "pointer": false,
+      "role": "menuitem",
+      "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklch(0.49 0.008 264) 0px 0px 0px 2px inset, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+      "text": "Inbox",
+      "visible": true
+    },
+    "forcedColors": {
+      "active": true,
+      "visible": true,
+      "outline": "solid",
+      "outlineWidth": "2px",
+      "outlineColor": "rgba(5, 0, 73, 0.8)",
+      "shadow": "none"
+    },
+    "contrast": {
+      "failed": [],
+      "minimum": 4.25,
+      "rows": [
+        {
+          "contrasts": {
+            "bg": 5.61,
+            "bg-raised": 6.19,
+            "bg-surface": 6.29,
+            "muted": 5.37,
+            "popover": 6.29
+          },
+          "ring": [94, 96, 101],
+          "theme": "default-light"
+        },
+        {
+          "contrasts": {
+            "bg": 8.15,
+            "bg-raised": 7.4,
+            "bg-surface": 6.84,
+            "muted": 5.91,
+            "popover": 6.84
+          },
+          "ring": [169, 171, 173],
+          "theme": "default-dark"
+        },
+        {
+          "contrasts": {
+            "bg": 7.77,
+            "bg-raised": 8.89,
+            "bg-surface": 9.45,
+            "muted": 6.04,
+            "popover": 8.89
+          },
+          "ring": [68, 69, 70],
+          "theme": "04-porcelain"
+        },
+        {
+          "contrasts": {
+            "bg": 7.44,
+            "bg-raised": 8.38,
+            "bg-surface": 9.19,
+            "muted": 5.8,
+            "popover": 8.38
+          },
+          "ring": [66, 67, 70],
+          "theme": "08-lilac"
+        },
+        {
+          "contrasts": {
+            "bg": 5.78,
+            "bg-raised": 6.63,
+            "bg-surface": 7.3,
+            "muted": 4.65,
+            "popover": 6.63
+          },
+          "ring": [87, 82, 76],
+          "theme": "10-sand"
+        },
+        {
+          "contrasts": {
+            "bg": 9.62,
+            "bg-raised": 8.64,
+            "bg-surface": 8.09,
+            "muted": 7.4,
+            "popover": 8.64
+          },
+          "ring": [181, 181, 184],
+          "theme": "12-eclipse"
+        },
+        {
+          "contrasts": {
+            "bg": 8.39,
+            "bg-raised": 7.58,
+            "bg-surface": 6.77,
+            "muted": 5.94,
+            "popover": 7.58
+          },
+          "ring": [186, 187, 187],
+          "theme": "graphite"
+        },
+        {
+          "contrasts": {
+            "bg": 7.96,
+            "bg-raised": 7,
+            "bg-surface": 6.31,
+            "muted": 5.76,
+            "popover": 7
+          },
+          "ring": [187, 179, 168],
+          "theme": "coffee"
+        },
+        {
+          "contrasts": {
+            "bg": 7.84,
+            "bg-raised": 6.83,
+            "bg-surface": 6.04,
+            "muted": 5.61,
+            "popover": 6.83
+          },
+          "ring": [178, 184, 175],
+          "theme": "moss"
+        },
+        {
+          "contrasts": {
+            "bg": 5.22,
+            "bg-raised": 5.91,
+            "bg-surface": 6.36,
+            "muted": 4.25,
+            "popover": 5.91
+          },
+          "ring": [83, 94, 87],
+          "theme": "sage"
+        }
+      ],
+      "themes": 10
+    }
+  },
+  "interactionEntrances": {
+    "compose_open": [
+      {
+        "compose": true,
+        "id": 4,
+        "property": "translate",
+        "scale": "none",
+        "tag": "DIV",
+        "translate": "0px 4px"
+      },
+      {
+        "compose": true,
+        "id": 4,
+        "property": "opacity",
+        "scale": "none",
+        "tag": "DIV",
+        "translate": "0px 4px"
+      }
+    ],
+    "compose_typing_replays": 0,
+    "attachment_events": [
+      {
+        "compose": false,
+        "id": 5,
+        "property": "opacity",
+        "scale": "0.98",
+        "tag": "LI",
+        "translate": "none"
+      },
+      {
+        "compose": false,
+        "id": 5,
+        "property": "scale",
+        "scale": "0.98",
+        "tag": "LI",
+        "translate": "none"
+      }
+    ],
+    "calendar_create_events": [
+      {
+        "compose": false,
+        "id": 8,
+        "property": "opacity",
+        "scale": "0.98",
+        "tag": "BUTTON",
+        "translate": "none"
+      },
+      {
+        "compose": false,
+        "id": 8,
+        "property": "scale",
+        "scale": "0.98",
+        "tag": "BUTTON",
+        "translate": "none"
+      },
+      {
+        "compose": false,
+        "id": 9,
+        "property": "opacity",
+        "scale": "none",
+        "tag": "DIV",
+        "translate": "none"
+      }
+    ],
+    "calendar_typing_replays": 0,
+    "calendar_reminder_events": [
+      {
+        "compose": false,
+        "id": 10,
+        "property": "opacity",
+        "scale": "none",
+        "tag": "DIV",
+        "translate": "none"
+      },
+      {
+        "compose": false,
+        "id": 11,
+        "property": "opacity",
+        "scale": "none",
+        "tag": "DIV",
+        "translate": "none"
+      }
+    ],
+    "recurrence_date_events": [
+      {
+        "compose": false,
+        "id": 13,
+        "property": "opacity",
+        "scale": "none",
+        "tag": "DIV",
+        "translate": "none"
+      }
+    ],
+    "recurrence_date_edit_replays": 0,
+    "recurrence_field_events": [
+      {
+        "compose": false,
+        "id": 13,
+        "property": "opacity",
+        "scale": "none",
+        "tag": "DIV",
+        "translate": "none"
+      },
+      {
+        "compose": false,
+        "id": 14,
+        "property": "opacity",
+        "scale": "none",
+        "tag": "DIV",
+        "translate": "none"
+      },
+      {
+        "compose": false,
+        "id": 15,
+        "property": "opacity",
+        "scale": "none",
+        "tag": "DIV",
+        "translate": "none"
+      }
+    ],
+    "calendar_reduced_events": [
+      {
+        "compose": false,
+        "id": 16,
+        "property": "opacity",
+        "scale": "none",
+        "tag": "BUTTON",
+        "translate": "none"
+      }
+    ],
+    "calendar_mobile_dialog": {
+      "dialogs": 1,
+      "preview": [
+        {
+          "scale": "none",
+          "translate": "none"
+        }
+      ],
+      "reduced": true
+    }
+  },
+  "directionalMenus": {
+    "pointer_menus": [
+      {
+        "duration": "0.15s",
+        "instant": false,
+        "side": "bottom",
+        "transition": "opacity, scale, translate"
+      },
+      {
+        "duration": "0.15s",
+        "instant": false,
+        "side": "right",
+        "transition": "opacity, scale, translate"
+      }
+    ],
+    "pointer_events": [
+      {
+        "property": "translate",
+        "scale": "0.97",
+        "side": "bottom",
+        "translate": "0px -2px"
+      },
+      {
+        "property": "opacity",
+        "scale": "0.97",
+        "side": "bottom",
+        "translate": "0px -2px"
+      },
+      {
+        "property": "scale",
+        "scale": "0.97",
+        "side": "bottom",
+        "translate": "0px -2px"
+      },
+      {
+        "property": "translate",
+        "scale": "0.97",
+        "side": "right",
+        "translate": "-2px"
+      },
+      {
+        "property": "opacity",
+        "scale": "0.97",
+        "side": "right",
+        "translate": "-2px"
+      },
+      {
+        "property": "scale",
+        "scale": "0.97",
+        "side": "right",
+        "translate": "-2px"
+      }
+    ],
+    "reduced_events": [
+      {
+        "property": "opacity",
+        "scale": "none",
+        "side": "bottom",
+        "translate": "none"
+      },
+      {
+        "property": "opacity",
+        "scale": "none",
+        "side": "right",
+        "translate": "none"
+      }
+    ],
+    "reduced_menus": [
+      {
+        "scale": "none",
+        "side": "bottom",
+        "transition": "color, background-color, border-color, box-shadow, opacity",
+        "translate": "none"
+      },
+      {
+        "scale": "none",
+        "side": "right",
+        "transition": "color, background-color, border-color, box-shadow, opacity",
+        "translate": "none"
+      }
+    ]
+  },
+  "mailboxSetup": {
+    "gmail_step": [
+      {
+        "property": "translate",
+        "scale": "none",
+        "translate": "0px 4px"
+      },
+      {
+        "property": "opacity",
+        "scale": "none",
+        "translate": "0px 4px"
+      }
+    ],
+    "all_step_events": [
+      {
+        "property": "translate",
+        "scale": "none",
+        "translate": "0px 4px"
+      },
+      {
+        "property": "opacity",
+        "scale": "none",
+        "translate": "0px 4px"
+      },
+      {
+        "property": "translate",
+        "scale": "none",
+        "translate": "0px 4px"
+      },
+      {
+        "property": "opacity",
+        "scale": "none",
+        "translate": "0px 4px"
+      },
+      {
+        "property": "translate",
+        "scale": "none",
+        "translate": "0px 4px"
+      },
+      {
+        "property": "opacity",
+        "scale": "none",
+        "translate": "0px 4px"
+      },
+      {
+        "property": "translate",
+        "scale": "none",
+        "translate": "0px 4px"
+      },
+      {
+        "property": "opacity",
+        "scale": "none",
+        "translate": "0px 4px"
+      }
+    ],
+    "typing_replays": 0
+  },
+  "calendarIntegration": {
+    "basePr": 433,
+    "baseCommit": "f151a30c044578f598049479c2c9bedd5a29aa19",
+    "sourceHead": "f019383bf3b896f631c2404f4925ba5dbd65af7b",
+    "reviewer": "/root/integration_verifier, independent of implementation",
+    "targetedTests": {
+      "files": 4,
+      "passed": 42,
+      "areas": [
+        "calendar grouping",
+        "calendar schedule previews",
+        "recurrence expansion",
+        "date/time helpers"
+      ]
+    },
+    "sourceChecks": "Formatting, lint, type checks and merge commit hooks passed. Upstream date/time preference and recurrence logic retained.",
+    "browserObservations": [
+      "Arbitrary start time 14:35 and end time 15:45 accepted.",
+      "Five visible daily draft occurrences, with no creation entrance replay while typing.",
+      "Normal-motion time and location popups emit opacity, scale and translate transitions.",
+      "Both date pickers changed the event to October 28, updating the visible draft occurrences.",
+      "Custom repeat Last repeat date uses the shared DatePicker and restricts the preview through October 30.",
+      "Location suggestions and free-text locations both work.",
+      "At 390px in dark mode with reduced motion, time and location popups emit only opacity transitions, with no scale or translation.",
+      "Escape closes the time popup, leaves the event dialog open and restores visible keyboard focus to Start time."
+    ],
+    "data": "Sample calendar only. No provider event writes or mail sends.",
+    "screenshots": [
+      "integrated-recurring-location-light.png",
+      "integrated-calendar-picker-light.png",
+      "integrated-time-mobile-dark.png"
+    ]
+  }
+}

@@ -75,7 +75,7 @@ export const ColorPicker = ({
       aria-label={label}
       className={
         trigger === "swatch"
-          ? "inline-flex size-3 shrink-0 items-center justify-center rounded-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+          ? "inline-flex size-3 shrink-0 items-center justify-center rounded-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
           : undefined
       }
       disabled={disabled}

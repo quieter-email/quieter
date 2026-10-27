@@ -279,7 +279,7 @@ export const SettingsNavigationRow = ({
   <button
     className={cn(
       settingsSurfaceVariants({ variant: "rowShell" }),
-      "group border border-transparent text-left transition-colors squircle first:rounded-t-lg last:rounded-b-lg hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none focus-visible:ring-inset",
+      "group border border-transparent text-left transition-colors squircle first:rounded-t-lg last:rounded-b-lg hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
       { "pointer-events-none": disabled }
     )}
     disabled={disabled}

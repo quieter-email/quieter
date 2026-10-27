@@ -10,14 +10,17 @@ import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
 import { Icon } from "./icon";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "./icons";
-import { overlayBackdropClassName } from "./overlay-chrome";
+import {
+  anchoredPopupMotionClassName,
+  overlayBackdropClassName,
+} from "./overlay-chrome";
 
 type SelectDensity = "default" | "compact";
 
 const SelectDensityContext = createContext<SelectDensity>("default");
 
 export const selectTriggerVariants = cva(
-  "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap select-none focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     defaultVariants: {
       size: "default",
@@ -129,7 +132,8 @@ export const SelectContent = ({
       <SelectDensityContext.Provider value={size}>
         <SelectPrimitive.Popup
           className={cn(
-            "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 origin-(--transform-origin) overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0 data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
+            anchoredPopupMotionClassName,
+            "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-popover-fg shadow-md data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
             { "min-w-40 p-0.5 text-caption": size === "compact" },
             className
           )}
@@ -148,7 +152,7 @@ export const SelectScrollUpArrow = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollUpArrow>) => (
   <SelectPrimitive.ScrollUpArrow
     className={cn(
-      "flex h-7 items-center justify-center text-muted-fg transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-instant:transition-none data-starting-style:opacity-0",
+      "flex h-7 items-center justify-center text-muted-fg transition-opacity duration-150 ease-(--app-motion-ease-out) data-ending-style:opacity-0 data-ending-style:duration-100 data-instant:transition-none data-starting-style:opacity-0",
       className
     )}
     {...props}
@@ -163,7 +167,7 @@ export const SelectScrollDownArrow = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownArrow>) => (
   <SelectPrimitive.ScrollDownArrow
     className={cn(
-      "flex h-7 items-center justify-center text-muted-fg transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-instant:transition-none data-starting-style:opacity-0",
+      "flex h-7 items-center justify-center text-muted-fg transition-opacity duration-150 ease-(--app-motion-ease-out) data-ending-style:opacity-0 data-ending-style:duration-100 data-instant:transition-none data-starting-style:opacity-0",
       className
     )}
     {...props}
@@ -195,7 +199,7 @@ export const SelectItem = ({
   return (
     <SelectPrimitive.Item
       className={cn(
-        "relative flex min-h-7 cursor-default scroll-my-1 items-center gap-2 rounded-md py-1 pr-8 pl-2.5 text-body text-fg transition-transform duration-100 ease-out select-none squircle focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        "relative flex min-h-7 cursor-default scroll-my-1 items-center gap-2 rounded-md py-1 pr-8 pl-2.5 text-body text-fg transition-transform duration-100 ease-(--app-motion-ease-out) select-none squircle focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
         { "min-h-7 gap-1.5 py-1 pr-7 pl-2 text-caption": size === "compact" },
         className
       )}

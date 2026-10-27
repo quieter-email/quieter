@@ -3,7 +3,9 @@
 import { Autocomplete as AutocompletePrimitive } from "@base-ui/react/autocomplete";
 import type { ComponentProps } from "react";
 
+import { cn } from "../../lib/cn";
 import { Input } from "./input";
+import { anchoredPopupMotionClassName } from "./overlay-chrome";
 
 export type AutocompleteProps = Pick<
   ComponentProps<typeof Input>,
@@ -55,7 +57,12 @@ export const Autocomplete = ({
         collisionPadding={8}
         sideOffset={4}
       >
-        <AutocompletePrimitive.Popup className="flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) origin-(--transform-origin) flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 motion-reduce:transition-none">
+        <AutocompletePrimitive.Popup
+          className={cn(
+            anchoredPopupMotionClassName,
+            "flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-md"
+          )}
+        >
           <AutocompletePrimitive.Empty className="px-3 py-4 text-body-sm text-muted-fg">
             {emptyMessage}
           </AutocompletePrimitive.Empty>

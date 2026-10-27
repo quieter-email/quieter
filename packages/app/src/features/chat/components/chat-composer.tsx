@@ -9,12 +9,14 @@ import {
 import type { ChatModel } from "@quieter/ai/chat-models";
 import { ChatModelPicker } from "@quieter/app/features/chat/components/chat-model-picker";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   ComposerContextChip,
   PromptComposerFrame,
 } from "@quieter/ui/composer-chrome";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { entranceMotionVariants } from "@quieter/ui/motion";
 import { Textarea } from "@quieter/ui/textarea";
 import type { KeyboardEvent, ReactNode, Ref, SubmitEvent } from "react";
 
@@ -126,7 +128,10 @@ export const ChatComposer = ({
         />
         {recording || audioBusy ? (
           <output
-            className="px-1 text-caption text-muted-fg"
+            className={cn(
+              "px-1 text-caption text-muted-fg",
+              entranceMotionVariants()
+            )}
             aria-live="polite"
           >
             {recording

@@ -1,6 +1,7 @@
 "use client";
 
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
+import { mergeProps } from "@base-ui/react/merge-props";
 import type { ComponentPropsWithoutRef, MouseEvent } from "react";
 
 import { cn } from "../../lib/cn";
@@ -9,9 +10,25 @@ import {
   menuPopupClassName,
   menuSeparatorClassName,
 } from "./menu-chrome";
+import { menuFocusProps } from "./menu-focus";
 import { overlayTriggerClassName } from "./overlay-chrome";
 
-export const ContextMenu = ContextMenuPrimitive.Root;
+export const ContextMenu = ({
+  onItemHighlighted,
+  ...props
+}: ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Root>) => (
+  <ContextMenuPrimitive.Root
+    onItemHighlighted={(item, details) => {
+      item?.toggleAttribute(
+        "data-pointer-highlighted",
+        details.reason === "pointer"
+      );
+      onItemHighlighted?.(item, details);
+    }}
+    {...props}
+  />
+);
+
 export const ContextMenuPortal = ContextMenuPrimitive.Portal;
 
 export const ContextMenuTrigger = ({
@@ -45,12 +62,11 @@ export const ContextMenuContent = ({
       sideOffset={sideOffset}
     >
       <ContextMenuPrimitive.Popup
-        className={cn(
-          menuPopupClassName,
-          "will-change-[opacity,transform]",
-          className
+        className={cn(menuPopupClassName, className)}
+        {...mergeProps<typeof ContextMenuPrimitive.Popup>(
+          menuFocusProps,
+          props
         )}
-        {...props}
       />
     </ContextMenuPrimitive.Positioner>
   </ContextMenuPortal>

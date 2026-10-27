@@ -36,6 +36,11 @@ import {
 } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { findRecoverableComposeDraft } from "@quieter/app/features/compose/domain/draft-recovery";
+import {
+  appEaseOut,
+  appMotionDuration,
+  getAppPresenceMotion,
+} from "@quieter/app/features/motion/app-motion";
 import { USER_BILLING_QUERY_KEY } from "@quieter/app/features/settings/domain/billing";
 import { useAudioRecorder } from "@quieter/app/lib/audio-recorder";
 import { prepareTranscriptionRecording } from "@quieter/app/lib/audio-transcription";
@@ -58,6 +63,7 @@ import {
 import { Field, FieldControl, FieldError, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { entranceMotionVariants } from "@quieter/ui/motion";
 import {
   Popover,
   PopoverClose,
@@ -76,7 +82,13 @@ import { Text } from "@quieter/ui/text";
 import { ToolbarButton } from "@quieter/ui/toolbar";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
+import {
+  AnimatePresence,
+  domAnimation,
+  LazyMotion,
+  m,
+  useReducedMotion,
+} from "motion/react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 export type ComposeSenderMailbox = {
@@ -211,6 +223,7 @@ const ReadyComposeSurface = ({
   variant = "workspace",
 }: ComposeSurfaceProps) => {
   const queryClient = useQueryClient();
+  const reducedMotion = useReducedMotion();
   const composeEditorRef = useRef<ComposeEditorHandle | null>(null);
   const mountedRef = useRef(false);
   const [modKeyLabel, setModKeyLabel] = useState("Ctrl");
@@ -1019,13 +1032,36 @@ const ReadyComposeSurface = ({
                       </div>
                     ) : null}
 
-                    {isDraggingFiles ? (
-                      <output className="mx-3 rounded-lg border border-dashed border-primary bg-primary/5 p-3 text-body-sm text-fg">
-                        {canEditBody
-                          ? "Drop files to attach"
-                          : "Wait for this message to finish"}
-                      </output>
-                    ) : null}
+                    <LazyMotion features={domAnimation} strict>
+                      <AnimatePresence initial={false}>
+                        {isDraggingFiles ? (
+                          <m.output
+                            {...getAppPresenceMotion({
+                              distance: 4,
+                              reducedMotion,
+                            })}
+                            className="mx-3 rounded-lg border border-dashed border-primary bg-primary/5 p-3 text-body-sm text-fg"
+                            exit={
+                              reducedMotion === true
+                                ? { opacity: 0 }
+                                : {
+                                    opacity: 0,
+                                    transform: "translate3d(0, 4px, 0)",
+                                  }
+                            }
+                            key="attachment-drop-hint"
+                            transition={{
+                              duration: appMotionDuration.feedback,
+                              ease: appEaseOut,
+                            }}
+                          >
+                            {canEditBody
+                              ? "Drop files to attach"
+                              : "Wait for this message to finish"}
+                          </m.output>
+                        ) : null}
+                      </AnimatePresence>
+                    </LazyMotion>
                     {state.draft.attachments.length > 0 ? (
                       <ul
                         aria-label="Attachments"
@@ -1033,7 +1069,10 @@ const ReadyComposeSurface = ({
                       >
                         {state.draft.attachments.map((attachment) => (
                           <li
-                            className="flex max-w-full min-w-0 items-center gap-2 rounded-lg border border-border bg-control px-2 py-1 text-body-sm"
+                            className={cn(
+                              "flex max-w-full min-w-0 items-center gap-2 rounded-lg border border-border bg-control px-2 py-1 text-body-sm",
+                              entranceMotionVariants({ effect: "pop" })
+                            )}
                             key={attachment.id}
                           >
                             <Icon
@@ -1498,7 +1537,13 @@ export const ComposeWorkspace = ({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-compose-workspace>
+    <div
+      className={cn(
+        "flex h-full min-h-0 flex-col",
+        entranceMotionVariants({ effect: "slide" })
+      )}
+      data-compose-workspace
+    >
       <MobileHeader
         className="px-4 sm:px-6"
         leading="sidebar"

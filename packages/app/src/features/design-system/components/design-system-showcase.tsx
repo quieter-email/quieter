@@ -13,6 +13,13 @@ import { MobileHeader } from "@quieter/app/components/mobile-header";
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
 import { toastError } from "@quieter/app/lib/error-toast";
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
+import {
+  Accordion,
+  AccordionHeader,
+  AccordionItem,
+  AccordionPanel,
+  AccordionTrigger,
+} from "@quieter/ui/accordion";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import {
   AlertDialog,
@@ -28,6 +35,11 @@ import { Autocomplete } from "@quieter/ui/autocomplete";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
+import {
+  Collapsible,
+  CollapsiblePanel,
+  CollapsibleTrigger,
+} from "@quieter/ui/collapsible";
 import { useColorMode } from "@quieter/ui/color-mode";
 import {
   ComposerActionBar,
@@ -55,6 +67,16 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@quieter/ui/drawer";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuItem,
+  DropdownMenuSubmenu,
+  DropdownMenuSubmenuContent,
+  DropdownMenuSubmenuTrigger,
+  DropdownMenuTrigger,
+} from "@quieter/ui/dropdown-menu";
 import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
@@ -65,6 +87,7 @@ import {
   MailListRowMetadata,
   mailListRowFrameVariants,
 } from "@quieter/ui/mail-list-row";
+import { entranceMotionVariants } from "@quieter/ui/motion";
 import { Pill } from "@quieter/ui/pill";
 import type { PillTone } from "@quieter/ui/pill";
 import { Schedule } from "@quieter/ui/schedule";
@@ -459,6 +482,7 @@ const copySampleKey = async () => {
 
 export const DesignSystemShowcase = () => {
   const { colorMode, setColorMode } = useColorMode();
+  const [entrancePreview, setEntrancePreview] = useState(0);
   const [successPulse, setSuccessPulse] = useState(false);
   const [checked, setChecked] = useState(true);
   const [tokenFieldValue, setTokenFieldValue] = useState(
@@ -863,6 +887,96 @@ export const DesignSystemShowcase = () => {
                 <Button>Save</Button>
               </ActionFooter>
             </div>
+          </Row>
+        </Section>
+
+        <Section title="Motion and disclosures">
+          <Row label="Menu and submenu">
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" />}>
+                Open menu
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem>Mark as read</DropdownMenuItem>
+                <DropdownMenuCheckboxItem defaultChecked>
+                  Show previews
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuSubmenu>
+                  <DropdownMenuSubmenuTrigger>
+                    Move to
+                  </DropdownMenuSubmenuTrigger>
+                  <DropdownMenuSubmenuContent>
+                    <DropdownMenuItem>Inbox</DropdownMenuItem>
+                    <DropdownMenuItem>Archive</DropdownMenuItem>
+                  </DropdownMenuSubmenuContent>
+                </DropdownMenuSubmenu>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </Row>
+          <Row label="Content entrances">
+            <Button
+              onClick={() => {
+                setEntrancePreview((current) => current + 1);
+              }}
+              variant="secondary"
+            >
+              Replay entrances
+            </Button>
+            <div className="flex items-center gap-3" key={entrancePreview}>
+              <div className={entranceMotionVariants()}>
+                <Pill>Fade</Pill>
+              </div>
+              <div className={entranceMotionVariants({ effect: "pop" })}>
+                <Pill>Pop</Pill>
+              </div>
+              <div className={entranceMotionVariants({ effect: "slide" })}>
+                <Pill>Slide</Pill>
+              </div>
+            </div>
+          </Row>
+          <Row label="Revealed field">
+            <Field className="w-64 max-w-full" key={entrancePreview} reveal>
+              <FieldLabel htmlFor="revealed-field">Event location</FieldLabel>
+              <Input id="revealed-field" placeholder="Add a location" />
+            </Field>
+          </Row>
+          <Row label="Delivery disclosure">
+            <Accordion className="w-80 max-w-full">
+              <AccordionItem value="delivery">
+                <AccordionHeader>
+                  <AccordionTrigger>Delivery details</AccordionTrigger>
+                </AccordionHeader>
+                <AccordionPanel>
+                  The recipient accepted this sample message.
+                </AccordionPanel>
+              </AccordionItem>
+              <AccordionItem value="attachment">
+                <AccordionHeader>
+                  <AccordionTrigger
+                    indicator={<Icon aria-hidden icon={FileAttachmentIcon} />}
+                  >
+                    Attachment details
+                  </AccordionTrigger>
+                </AccordionHeader>
+                <AccordionPanel>
+                  One sample attachment is included.
+                </AccordionPanel>
+              </AccordionItem>
+            </Accordion>
+          </Row>
+          <Row label="Technical disclosure">
+            <Collapsible>
+              <CollapsibleTrigger render={<Button variant="secondary" />}>
+                Show technical details
+              </CollapsibleTrigger>
+              <CollapsiblePanel>
+                <div className="min-h-0 overflow-hidden">
+                  <Text as="p" className="mt-2" size="sm" tone="muted">
+                    This sample message was delivered successfully.
+                  </Text>
+                </div>
+              </CollapsiblePanel>
+            </Collapsible>
           </Row>
         </Section>
 

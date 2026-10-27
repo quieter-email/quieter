@@ -1,6 +1,7 @@
 "use client";
 
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
+import { mergeProps } from "@base-ui/react/merge-props";
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { createContext, useContext } from "react";
@@ -15,10 +16,41 @@ import {
   menuPopupClassName,
   menuSeparatorClassName,
 } from "./menu-chrome";
+import { menuFocusProps } from "./menu-focus";
 import { overlayTriggerClassName } from "./overlay-chrome";
 
-export const DropdownMenu = MenuPrimitive.Root;
-export const DropdownMenuSubmenu = MenuPrimitive.SubmenuRoot;
+export const DropdownMenu = <Payload = unknown,>({
+  onItemHighlighted,
+  ...props
+}: MenuPrimitive.Root.Props<Payload>) => (
+  <MenuPrimitive.Root
+    onItemHighlighted={(item, details) => {
+      item?.toggleAttribute(
+        "data-pointer-highlighted",
+        details.reason === "pointer"
+      );
+      onItemHighlighted?.(item, details);
+    }}
+    {...props}
+  />
+);
+
+export const DropdownMenuSubmenu = ({
+  onItemHighlighted,
+  ...props
+}: ComponentPropsWithoutRef<typeof MenuPrimitive.SubmenuRoot>) => (
+  <MenuPrimitive.SubmenuRoot
+    onItemHighlighted={(item, details) => {
+      item?.toggleAttribute(
+        "data-pointer-highlighted",
+        details.reason === "pointer"
+      );
+      onItemHighlighted?.(item, details);
+    }}
+    {...props}
+  />
+);
+
 export const DropdownMenuPortal = MenuPrimitive.Portal;
 
 type DropdownMenuDensity = "default" | "compact";
@@ -87,11 +119,10 @@ export const DropdownMenuContent = ({
         <MenuPrimitive.Popup
           className={cn(
             menuPopupClassName,
-            "will-change-[translate,opacity,height,width]",
             { [menuCompactPopupClassName]: size === "compact" },
             className
           )}
-          {...props}
+          {...mergeProps<typeof MenuPrimitive.Popup>(menuFocusProps, props)}
         />
       </DropdownMenuDensityContext.Provider>
     </MenuPrimitive.Positioner>
@@ -127,11 +158,10 @@ export const DropdownMenuSubmenuContent = ({
           <MenuPrimitive.Popup
             className={cn(
               menuPopupClassName,
-              "will-change-[opacity,transform]",
               { [menuCompactPopupClassName]: resolvedSize === "compact" },
               className
             )}
-            {...props}
+            {...mergeProps<typeof MenuPrimitive.Popup>(menuFocusProps, props)}
           />
         </DropdownMenuDensityContext.Provider>
       </MenuPrimitive.Positioner>
@@ -192,7 +222,7 @@ export const DropdownMenuCheckboxItem = ({
   return (
     <MenuPrimitive.CheckboxItem
       className={cn(
-        "relative flex min-h-7 cursor-default items-center gap-2 rounded-md py-1 pr-2.5 pl-8 text-body-sm text-fg transition-transform duration-100 ease-out select-none squircle focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        "relative flex min-h-7 cursor-default items-center gap-2 rounded-md py-1 pr-2.5 pl-8 text-body-sm text-fg transition-transform duration-100 ease-out select-none squircle focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted data-pointer-highlighted:focus-visible:ring-0 data-pointer-highlighted:focus-visible:outline-none motion-reduce:transition-none motion-reduce:active:scale-100",
         { "min-h-7 gap-1.5 py-1 pr-2 pl-7 text-caption": size === "compact" },
         className
       )}

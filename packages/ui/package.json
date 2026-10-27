@@ -43,6 +43,7 @@
     "./input": "./src/components/ui/input.tsx",
     "./input-group": "./src/components/ui/input-group.tsx",
     "./mail-list-row": "./src/components/ui/mail-list-row.tsx",
+    "./motion": "./src/components/ui/motion.ts",
     "./number-field": "./src/components/ui/number-field.tsx",
     "./popover": "./src/components/ui/popover.tsx",
     "./pill": "./src/components/ui/pill.tsx",

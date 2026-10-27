@@ -237,7 +237,7 @@ export const Schedule = ({
                 aria-describedby={slotHelpId}
                 aria-label={`Create event on ${dateLabel} at ${formatTimeMinute(minute, timeFormat)}`}
                 className={cn(
-                  "absolute inset-x-0 top-[var(--schedule-top)] h-3.5 cursor-crosshair text-left outline-none hover:bg-control-hover focus-visible:z-10 focus-visible:bg-control-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                  "absolute inset-x-0 top-[var(--schedule-top)] h-3.5 cursor-crosshair text-left outline-none hover:bg-control-hover focus-visible:z-10 focus-visible:bg-control-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
                   {
                     "before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:border-t before:border-border/50":
                       minute % 60 === 0,
@@ -410,12 +410,14 @@ export const Schedule = ({
         aria-label={`${item.title}, ${item.allDay ? "all day" : `${formatTimeMinute(item.startMinute, timeFormat)} to ${formatTimeMinute(item.endMinute, timeFormat)}`}. ${item.preview ? "Unsaved event preview." : "Open event to edit."}`}
         aria-pressed={item.preview ? undefined : selectedId === item.id}
         className={cn(
-          "group/event @container/event-card relative z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm bg-[color-mix(in_srgb,var(--schedule-event-color)_30%,var(--card))] px-2 py-1 text-left text-body-sm leading-4 text-fg transition-[color,background-color,box-shadow] duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg enabled:hover:brightness-95 data-selected:ring-2 data-selected:ring-primary motion-reduce:transition-none",
+          "group/event @container/event-card relative z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm bg-[color-mix(in_srgb,var(--schedule-event-color)_30%,var(--card))] px-2 py-1 text-left text-body-sm leading-4 text-fg transition-[color,background-color,box-shadow] duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg focus-visible:outline-hidden enabled:hover:brightness-95 data-selected:ring-2 data-selected:ring-primary motion-reduce:transition-none",
           !externalColor && toneClasses[item.tone ?? "primary"],
           {
             "h-full": !compact,
             "py-0.5": !compact && !item.allDay && duration < 60,
             "py-1 text-caption": compact,
+            "transition-[opacity,scale] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) motion-reduce:transition-opacity starting:scale-[0.98] starting:opacity-0 motion-reduce:starting:scale-100":
+              item.preview,
           }
         )}
         data-selected={selectedId === item.id || undefined}
@@ -764,7 +766,7 @@ export const Schedule = ({
             {/* Native hit areas fill each all-day cell without adding a separate control row. */}
             <button
               aria-label={`Create all-day event on ${date}`}
-              className="absolute inset-0 outline-none hover:bg-control-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              className="absolute inset-0 outline-none hover:bg-control-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset"
               onClick={(event) => {
                 if (event.detail === 0) {
                   onSlotCreate({ allDay: true, date, minute: 0 });
@@ -1023,7 +1025,7 @@ export const Schedule = ({
                       <IconButtonTooltip label="Resize event, or use arrow keys">
                         <button
                           aria-label={`Resize ${item.title}. Use up or down arrows to adjust by 15 minutes.`}
-                          className="absolute inset-x-1 bottom-0.5 z-20 h-2 cursor-ns-resize touch-none rounded-b-sm opacity-0 outline-none group-hover/event-slot:opacity-100 after:mx-auto after:mt-1 after:block after:h-0.5 after:w-6 after:rounded-full after:bg-fg/30 focus-visible:bg-primary/20 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
+                          className="absolute inset-x-1 bottom-0.5 z-20 h-2 cursor-ns-resize touch-none rounded-b-sm opacity-0 outline-none group-hover/event-slot:opacity-100 after:mx-auto after:mt-1 after:block after:h-0.5 after:w-6 after:rounded-full after:bg-fg/30 focus-visible:bg-primary/20 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
                           onClick={(event) => {
                             event.stopPropagation();
                           }}

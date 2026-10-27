@@ -48,6 +48,7 @@ import {
   AlertDialogTitle,
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { useDateTimePreferences } from "@quieter/ui/date-time-preferences";
 import {
   Dialog,
@@ -59,6 +60,7 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { entranceMotionVariants } from "@quieter/ui/motion";
 import { Pill } from "@quieter/ui/pill";
 import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
 import { Schedule } from "@quieter/ui/schedule";
@@ -1489,13 +1491,25 @@ const CalendarWorkspaceContent = ({
               aria-label="Event details"
               className="ml-auto flex w-88 shrink-0 flex-col border-l border-border/50"
             >
-              {details ?? (
-                <LazyMotion features={domAnimation}>
-                  <EmptyMessageState
-                    title="No event selected"
-                    description="Select an event to view its details. Double-click an empty time or drag across the calendar to create one."
-                  />
-                </LazyMotion>
+              {details && activeEditor?.kind === "create" ? (
+                <div
+                  className={cn(
+                    "flex min-h-0 flex-1 flex-col",
+                    entranceMotionVariants()
+                  )}
+                  key={activeEditor.operationId}
+                >
+                  {details}
+                </div>
+              ) : (
+                (details ?? (
+                  <LazyMotion features={domAnimation}>
+                    <EmptyMessageState
+                      title="No event selected"
+                      description="Select an event to view its details. Double-click an empty time or drag across the calendar to create one."
+                    />
+                  </LazyMotion>
+                ))
               )}
             </aside>
           ) : null}
