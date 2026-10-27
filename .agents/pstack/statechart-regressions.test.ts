@@ -31,6 +31,30 @@ assert.equal(chart.regions.length, 1);`,
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("correlated synchronized moves fall back without exhausting a bounded process", (context) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "pstack-region-moves-"));
+  context.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  const result = spawnSync(process.execPath, [
+    "--max-old-space-size=64",
+    "--input-type=module",
+    "-e",
+    `import assert from "node:assert/strict";
+import { project } from ${JSON.stringify(pathToFileURL(path.join(scripts, "pipeline.ts")).href)};
+import { walk } from ${JSON.stringify(pathToFileURL(path.join(scripts, "passes/reach.ts")).href)};
+const graph = { states: new Map(), steps: [] };
+for (let value = 0; value <= 100; value++) {
+  graph.states.set(String(value), { vars: { value }, start: value === 0, breaks: [] });
+  if (value) graph.steps.push({ from: "0", to: String(value), action: "Choose" });
+}
+const { chart } = project(graph, walk(graph), {
+  state: ({ value }) => ({ A: String(value), B: String(value), C: String(value), D: String(value) }),
+}, []);
+assert.ok(chart.lie);
+assert.equal(chart.regions.length, 1);`,
+  ], { cwd: scratch, encoding: "utf8", timeout: 20_000 });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("explicit relative Java and TLC paths work after the checker changes directories", (context) => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "pstack-relative-tools-"));
   context.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
