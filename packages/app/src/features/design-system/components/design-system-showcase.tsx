@@ -382,7 +382,7 @@ const ScheduleShowcase = () => {
               )
             );
           }}
-          onSlotClick={({ allDay, date, endMinute, minute }) => {
+          onSlotCreate={({ allDay, date, endMinute, minute }) => {
             setItems((previous) => [
               ...previous,
               {

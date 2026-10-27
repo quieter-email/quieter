@@ -72,14 +72,7 @@ import { Text } from "@quieter/ui/text";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCreateStore, useSelector } from "@tanstack/react-store";
-import {
-  AnimatePresence,
-  LazyMotion,
-  domAnimation,
-  m,
-  useIsPresent,
-  useReducedMotion,
-} from "motion/react";
+import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import {
   use,
   useCallback,
@@ -151,32 +144,6 @@ const subscribeToOnline = (callback: () => void) => {
 };
 const getOnlineSnapshot = () => navigator.onLine;
 const getServerOnlineSnapshot = () => true;
-const CalendarDetailsPanel = ({ children }: { children: ReactNode }) => {
-  const present = useIsPresent();
-  const reducedMotion = useReducedMotion();
-  const presence = getAppPresenceMotion({ reducedMotion });
-  return (
-    <m.aside
-      {...presence}
-      aria-hidden={!present || undefined}
-      aria-label="Event details"
-      className="ml-auto flex w-88 shrink-0 flex-col border-l border-border/50"
-      exit={
-        reducedMotion === true
-          ? { opacity: 0 }
-          : { opacity: 0, transform: "translate3d(6px, 0, 0)" }
-      }
-      inert={!present}
-      initial={
-        reducedMotion === true
-          ? { opacity: 0 }
-          : { opacity: 0, transform: "translate3d(8px, 0, 0)" }
-      }
-    >
-      {children}
-    </m.aside>
-  );
-};
 const CalendarWorkspaceContent = ({
   isMobileSidebarOpen,
   onMobileSidebarOpenChange,
@@ -1497,7 +1464,8 @@ const CalendarWorkspaceContent = ({
                   );
                 }
               }}
-              onSlotClick={createEvent}
+              onSlotCreate={createEvent}
+              onEmptyClick={closeEvent}
               selectedDate={date}
               selectedId={
                 draftId ??
@@ -1507,15 +1475,21 @@ const CalendarWorkspaceContent = ({
               view={view}
             />
           ) : null}
-          <LazyMotion features={domAnimation}>
-            <AnimatePresence initial={false}>
-              {wide && details ? (
-                <CalendarDetailsPanel key="event-details">
-                  {details}
-                </CalendarDetailsPanel>
-              ) : null}
-            </AnimatePresence>
-          </LazyMotion>
+          {wide ? (
+            <aside
+              aria-label="Event details"
+              className="ml-auto flex w-88 shrink-0 flex-col border-l border-border/50"
+            >
+              {details ?? (
+                <LazyMotion features={domAnimation}>
+                  <EmptyMessageState
+                    title="No event selected"
+                    description="Select an event to view its details. Double-click an empty time or drag across the calendar to create one."
+                  />
+                </LazyMotion>
+              )}
+            </aside>
+          ) : null}
         </div>
       </WorkspaceSection>
       {!wide && details && !ui.recurringAction && !ui.confirmation ? (
