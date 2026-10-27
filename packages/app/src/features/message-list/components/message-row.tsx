@@ -17,6 +17,7 @@ import {
   getAppStaggerDelay,
 } from "@quieter/app/features/motion/app-motion";
 import { CopyVerificationCode } from "@quieter/app/features/verification-codes/components/copy-verification-code";
+import { toastError } from "@quieter/app/lib/error-toast";
 import {
   formatMessageListDate,
   parseSender,
@@ -415,7 +416,13 @@ const useMessageRowHandlers = ({
       mailboxProvider !== "api" &&
       !isActionPending
     ) {
-      void mailboxActions.markThreadAsRead(thread.threadId);
+      void (async () => {
+        try {
+          await mailboxActions.markThreadAsRead(thread.threadId);
+        } catch (error) {
+          toastError(error, { boundary: "message-read-state" });
+        }
+      })();
     }
 
     onThreadPress(thread, gesture);

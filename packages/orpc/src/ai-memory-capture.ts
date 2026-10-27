@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
+import { retryIdempotentDatabaseQuery } from "@quieter/database/retry";
 import {
   aiMemoryMailboxState,
   aiMemoryScopeConfig,
@@ -737,66 +738,71 @@ export const processPendingMailMemoryBootstrap = async ({
   if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local" && !allowLocal) {
     return { failed: 0, processed: 0 };
   }
-  const missing = await db
-    .select({
-      id: mailbox.id,
-      managedOwnerUserId: mailbox.managedOwnerUserId,
-      ownerUserId: mailbox.ownerUserId,
-      provider: mailbox.provider,
-    })
-    .from(mailbox)
-    .leftJoin(
-      aiMemoryMailboxState,
-      eq(aiMemoryMailboxState.mailboxId, mailbox.id)
-    )
-    .leftJoin(
-      aiMemoryScopeConfig,
-      eq(
-        aiMemoryScopeConfig.scopeKey,
-        sql`'user:' || case when ${mailbox.provider} = 'gmail' then ${mailbox.ownerUserId} else ${mailbox.managedOwnerUserId} end`
-      )
-    )
-    .where(
-      and(
-        eq(mailbox.status, "connected"),
-        or(
-          isNull(aiMemoryMailboxState.mailboxId),
-          sql`${aiMemoryMailboxState.userId} is distinct from case when ${mailbox.provider} = 'gmail' then ${mailbox.ownerUserId} else ${mailbox.managedOwnerUserId} end`
-        ),
-        or(
-          isNull(aiMemoryScopeConfig.id),
-          eq(aiMemoryScopeConfig.activeLearningEnabled, true)
-        ),
-        or(
-          and(
-            eq(mailbox.provider, "gmail"),
-            isNotNull(mailbox.ownerUserId),
-            userId === undefined ? undefined : eq(mailbox.ownerUserId, userId)
-          ),
-          and(
-            eq(mailbox.provider, "managed"),
-            eq(mailbox.accessMode, "private"),
-            isNotNull(mailbox.managedOwnerUserId),
-            exists(
-              db
-                .select({ id: member.id })
-                .from(member)
-                .where(
-                  and(
-                    eq(member.userId, mailbox.managedOwnerUserId),
-                    eq(member.organizationId, mailbox.organizationId)
-                  )
-                )
-            ),
-            userId === undefined
-              ? undefined
-              : eq(mailbox.managedOwnerUserId, userId)
+  const missing = await retryIdempotentDatabaseQuery(
+    async () =>
+      await db
+        .select({
+          id: mailbox.id,
+          managedOwnerUserId: mailbox.managedOwnerUserId,
+          ownerUserId: mailbox.ownerUserId,
+          provider: mailbox.provider,
+        })
+        .from(mailbox)
+        .leftJoin(
+          aiMemoryMailboxState,
+          eq(aiMemoryMailboxState.mailboxId, mailbox.id)
+        )
+        .leftJoin(
+          aiMemoryScopeConfig,
+          eq(
+            aiMemoryScopeConfig.scopeKey,
+            sql`'user:' || case when ${mailbox.provider} = 'gmail' then ${mailbox.ownerUserId} else ${mailbox.managedOwnerUserId} end`
           )
         )
-      )
-    )
-    .orderBy(asc(mailbox.createdAt), asc(mailbox.id))
-    .limit(limit);
+        .where(
+          and(
+            eq(mailbox.status, "connected"),
+            or(
+              isNull(aiMemoryMailboxState.mailboxId),
+              sql`${aiMemoryMailboxState.userId} is distinct from case when ${mailbox.provider} = 'gmail' then ${mailbox.ownerUserId} else ${mailbox.managedOwnerUserId} end`
+            ),
+            or(
+              isNull(aiMemoryScopeConfig.id),
+              eq(aiMemoryScopeConfig.activeLearningEnabled, true)
+            ),
+            or(
+              and(
+                eq(mailbox.provider, "gmail"),
+                isNotNull(mailbox.ownerUserId),
+                userId === undefined
+                  ? undefined
+                  : eq(mailbox.ownerUserId, userId)
+              ),
+              and(
+                eq(mailbox.provider, "managed"),
+                eq(mailbox.accessMode, "private"),
+                isNotNull(mailbox.managedOwnerUserId),
+                exists(
+                  db
+                    .select({ id: member.id })
+                    .from(member)
+                    .where(
+                      and(
+                        eq(member.userId, mailbox.managedOwnerUserId),
+                        eq(member.organizationId, mailbox.organizationId)
+                      )
+                    )
+                ),
+                userId === undefined
+                  ? undefined
+                  : eq(mailbox.managedOwnerUserId, userId)
+              )
+            )
+          )
+        )
+        .orderBy(asc(mailbox.createdAt), asc(mailbox.id))
+        .limit(limit)
+  );
   for (const selected of missing) {
     const ownerId =
       selected.provider === "gmail"
@@ -816,40 +822,43 @@ export const processPendingMailMemoryBootstrap = async ({
     }
   }
   const cutoff = new Date(Date.now() - BOOTSTRAP_LEASE_MS);
-  const pending = await db
-    .select()
-    .from(aiMemoryMailboxState)
-    .where(
-      and(
-        exists(
-          db
-            .select({ id: mailbox.id })
-            .from(mailbox)
-            .where(
+  const pending = await retryIdempotentDatabaseQuery(
+    async () =>
+      await db
+        .select()
+        .from(aiMemoryMailboxState)
+        .where(
+          and(
+            exists(
+              db
+                .select({ id: mailbox.id })
+                .from(mailbox)
+                .where(
+                  and(
+                    eq(mailbox.id, aiMemoryMailboxState.mailboxId),
+                    eq(mailbox.status, "connected")
+                  )
+                )
+            ),
+            userId === undefined
+              ? undefined
+              : eq(aiMemoryMailboxState.userId, userId),
+            or(
+              eq(aiMemoryMailboxState.status, "pending"),
               and(
-                eq(mailbox.id, aiMemoryMailboxState.mailboxId),
-                eq(mailbox.status, "connected")
+                eq(aiMemoryMailboxState.status, "failed"),
+                lt(aiMemoryMailboxState.updatedAt, cutoff)
+              ),
+              and(
+                eq(aiMemoryMailboxState.status, "processing"),
+                lt(aiMemoryMailboxState.processingAt, cutoff)
               )
             )
-        ),
-        userId === undefined
-          ? undefined
-          : eq(aiMemoryMailboxState.userId, userId),
-        or(
-          eq(aiMemoryMailboxState.status, "pending"),
-          and(
-            eq(aiMemoryMailboxState.status, "failed"),
-            lt(aiMemoryMailboxState.updatedAt, cutoff)
-          ),
-          and(
-            eq(aiMemoryMailboxState.status, "processing"),
-            lt(aiMemoryMailboxState.processingAt, cutoff)
           )
         )
-      )
-    )
-    .orderBy(asc(aiMemoryMailboxState.updatedAt))
-    .limit(limit);
+        .orderBy(asc(aiMemoryMailboxState.updatedAt))
+        .limit(limit)
+  );
   let processed = 0;
   let failed = 0;
   for (const candidate of pending) {

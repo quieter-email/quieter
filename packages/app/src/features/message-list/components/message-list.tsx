@@ -562,8 +562,8 @@ const useMessageListInteractions = ({
           await (
             context?.mailboxActions ?? props.mailboxActions
           ).markThreadAsRead(thread.threadId);
-        } catch {
-          // Ignore mark-read failures during keyboard open.
+        } catch (error) {
+          toastError(error, { boundary: "message-read-state" });
         }
       })();
     }

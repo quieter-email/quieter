@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import type { AiUsageReport } from "../src/chat-usage";
 import { runStructuredGeneration } from "../src/generation";
+import { classifyMailImportance } from "../src/mail-importance";
 
 const state = vi.hoisted(() => ({
   model: vi.fn<() => MockLanguageModelV4>(),
@@ -19,6 +20,7 @@ type Generation = Awaited<ReturnType<MockLanguageModelV4["doGenerate"]>>;
 const response = (input: {
   costUsd?: number;
   empty?: boolean;
+  finishReason?: Generation["finishReason"]["unified"];
   text?: string;
 }): Generation => ({
   content:
@@ -27,7 +29,7 @@ const response = (input: {
       : [{ text: input.text ?? '{"value":42}', type: "text" }],
   finishReason: {
     raw: undefined,
-    unified: input.empty === true ? "length" : "stop",
+    unified: input.finishReason ?? (input.empty === true ? "length" : "stop"),
   },
   ...(input.costUsd === undefined
     ? {}
@@ -117,7 +119,7 @@ describe("structured generation recovery", () => {
     }
   );
 
-  test("does not replay invalid nonempty output and retains its billed usage", async () => {
+  test("does not replay schema-invalid output and retains its billed usage", async () => {
     const model = new MockLanguageModelV4({
       doGenerate: response({ costUsd: 0.125, text: '{"value":"invalid"}' }),
     });
@@ -134,68 +136,204 @@ describe("structured generation recovery", () => {
     );
   });
 
-  test("preserves the final error after an empty attempt", async () => {
-    const finalError = new Error("Generation unavailable");
-    const doGenerate = vi
-      .fn<MockLanguageModelV4["doGenerate"]>()
-      .mockResolvedValueOnce(response({ costUsd: 0.125, empty: true }))
-      .mockRejectedValueOnce(finalError);
-    const model = new MockLanguageModelV4({ doGenerate });
+  test.each(["stop", "length"] as const)(
+    "recovers malformed JSON after %s and reports both billed responses",
+    async (finishReason) => {
+      const model = new MockLanguageModelV4({
+        doGenerate: [
+          response({
+            costUsd: 0.125,
+            finishReason,
+            text: "Here is the JSON requested:\n```json",
+          }),
+          response({ costUsd: 0.25 }),
+        ],
+      });
+      state.model.mockReturnValue(model);
+      const onUsage = vi.fn<(usage: AiUsageReport) => void>();
+
+      await expect(
+        runStructuredGeneration({ ...generationInput, onUsage })
+      ).resolves.toMatchObject({ value: 42 });
+
+      expect(onUsage).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          completionTokens: 10,
+          costUsd: 0.375,
+          promptTokens: 20,
+        })
+      );
+    }
+  );
+
+  test("recovers a malformed importance decision without enabling empty-output retries", async () => {
+    const model = new MockLanguageModelV4({
+      doGenerate: [
+        response({
+          costUsd: 0.125,
+          text: "Here is the JSON requested:\n```json",
+        }),
+        response({ costUsd: 0.25, text: '{"important":false}' }),
+      ],
+    });
+    state.model.mockReturnValue(model);
+    const onUsage = vi.fn<(usage: AiUsageReport) => void>();
+
+    await expect(
+      classifyMailImportance({
+        context: null,
+        message: { id: "synthetic-message", subject: "Routine update" },
+        onUsage,
+      })
+    ).resolves.toMatchObject({ important: false });
+
+    expect(onUsage).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ costUsd: 0.375, promptTokens: 20 })
+    );
+  });
+
+  test("keeps persistent malformed JSON visible and accounts for both responses", async () => {
+    const model = new MockLanguageModelV4({
+      doGenerate: response({ costUsd: 0.125, text: "```json" }),
+    });
     state.model.mockReturnValue(model);
     const onUsage = vi.fn<(usage: AiUsageReport) => void>();
 
     await expect(
       runStructuredGeneration({ ...generationInput, onUsage })
-    ).rejects.toBe(finalError);
+    ).rejects.toThrow(NoObjectGeneratedError);
 
     expect(model.doGenerateCalls).toHaveLength(2);
     expect(onUsage).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ costUsd: 0.125, promptTokens: 10 })
+      expect.objectContaining({ costUsd: 0.25, promptTokens: 20 })
     );
   });
 
-  test("does not retry a provider error that only shares the empty-output name", async () => {
-    const error = new Error("Unavailable");
-    error.name = "AI_NoOutputGeneratedError";
-    const model = new MockLanguageModelV4({
-      doGenerate: vi
+  test.each(["content-filter", "error"] as const)(
+    "does not retry %s output and retains its billed usage",
+    async (finishReason) => {
+      const model = new MockLanguageModelV4({
+        doGenerate: response({
+          costUsd: 0.125,
+          finishReason,
+          text: "Response unavailable",
+        }),
+      });
+      state.model.mockReturnValue(model);
+      const onUsage = vi.fn<(usage: AiUsageReport) => void>();
+
+      await expect(
+        runStructuredGeneration({ ...generationInput, onUsage })
+      ).rejects.toThrow(NoObjectGeneratedError);
+
+      expect(model.doGenerateCalls).toHaveLength(1);
+      expect(onUsage).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ costUsd: 0.125, promptTokens: 10 })
+      );
+    }
+  );
+
+  test.each([
+    ["length", NoOutputGeneratedError],
+    ["stop", NoObjectGeneratedError],
+  ] as const)(
+    "does not retry empty importance output after %s and retains its billed usage",
+    async (finishReason, errorType) => {
+      const model = new MockLanguageModelV4({
+        doGenerate: response({ costUsd: 0.125, empty: true, finishReason }),
+      });
+      state.model.mockReturnValue(model);
+      const onUsage = vi.fn<(usage: AiUsageReport) => void>();
+
+      await expect(
+        classifyMailImportance({
+          context: null,
+          message: { id: "synthetic-message" },
+          onUsage,
+        })
+      ).rejects.toThrow(errorType);
+
+      expect(model.doGenerateCalls).toHaveLength(1);
+      expect(onUsage).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ costUsd: 0.125, promptTokens: 10 })
+      );
+    }
+  );
+
+  test.each([{ empty: true }, { text: "```json" }])(
+    "preserves the final provider error after an unusable response %j",
+    async (firstOutput) => {
+      const finalError = new Error("Generation unavailable");
+      const doGenerate = vi
         .fn<MockLanguageModelV4["doGenerate"]>()
-        .mockRejectedValue(error),
-    });
-    state.model.mockReturnValue(model);
-    const onUsage = vi.fn<(usage: AiUsageReport) => void>();
+        .mockResolvedValueOnce(response({ costUsd: 0.125, ...firstOutput }))
+        .mockRejectedValueOnce(finalError);
+      const model = new MockLanguageModelV4({ doGenerate });
+      state.model.mockReturnValue(model);
+      const onUsage = vi.fn<(usage: AiUsageReport) => void>();
 
-    await expect(
-      runStructuredGeneration({ ...generationInput, onUsage })
-    ).rejects.toBe(error);
+      await expect(
+        runStructuredGeneration({ ...generationInput, onUsage })
+      ).rejects.toBe(finalError);
 
-    expect(model.doGenerateCalls).toHaveLength(1);
-    expect(onUsage).not.toHaveBeenCalled();
-  });
+      expect(model.doGenerateCalls).toHaveLength(2);
+      expect(onUsage).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ costUsd: 0.125, promptTokens: 10 })
+      );
+    }
+  );
 
-  test("does not replay empty output after cancellation", async () => {
-    const controller = new AbortController();
-    const model = new MockLanguageModelV4({
-      // oxlint-disable-next-line eslint/require-await -- The SDK expects a promise-returning provider callback.
-      doGenerate: async () => {
-        controller.abort();
-        return response({ costUsd: 0.125, empty: true });
-      },
-    });
-    state.model.mockReturnValue(model);
-    const onUsage = vi.fn<(usage: AiUsageReport) => void>();
+  test.each(["AI_NoOutputGeneratedError", "AI_NoObjectGeneratedError"])(
+    "does not retry a provider error that only shares the %s name",
+    async (name) => {
+      const error = new Error("Unavailable");
+      error.name = name;
+      const model = new MockLanguageModelV4({
+        doGenerate: vi
+          .fn<MockLanguageModelV4["doGenerate"]>()
+          .mockRejectedValue(error),
+      });
+      state.model.mockReturnValue(model);
+      const onUsage = vi.fn<(usage: AiUsageReport) => void>();
 
-    await expect(
-      runStructuredGeneration({
-        ...generationInput,
-        abortSignal: controller.signal,
-        onUsage,
-      })
-    ).rejects.toThrow(NoOutputGeneratedError);
+      await expect(
+        runStructuredGeneration({ ...generationInput, onUsage })
+      ).rejects.toBe(error);
 
-    expect(model.doGenerateCalls).toHaveLength(1);
-    expect(onUsage).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ costUsd: 0.125, promptTokens: 10 })
-    );
-  });
+      expect(model.doGenerateCalls).toHaveLength(1);
+      expect(onUsage).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each([
+    [{ empty: true }, NoOutputGeneratedError],
+    [{ text: "```json" }, NoObjectGeneratedError],
+  ] as const)(
+    "does not replay an unusable response %j after cancellation",
+    async (output, errorType) => {
+      const controller = new AbortController();
+      const model = new MockLanguageModelV4({
+        // oxlint-disable-next-line eslint/require-await -- The SDK expects a promise-returning provider callback.
+        doGenerate: async () => {
+          controller.abort();
+          return response({ costUsd: 0.125, ...output });
+        },
+      });
+      state.model.mockReturnValue(model);
+      const onUsage = vi.fn<(usage: AiUsageReport) => void>();
+
+      await expect(
+        runStructuredGeneration({
+          ...generationInput,
+          abortSignal: controller.signal,
+          onUsage,
+        })
+      ).rejects.toThrow(errorType);
+
+      expect(model.doGenerateCalls).toHaveLength(1);
+      expect(onUsage).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ costUsd: 0.125, promptTokens: 10 })
+      );
+    }
+  );
 });

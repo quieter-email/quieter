@@ -7,7 +7,6 @@ import type {
   MessageListItem,
   ThreadMessagesResult,
 } from "@quieter/app/lib/mail";
-import type { MessagesQueryData } from "@quieter/app/lib/mail/inbox-query/data";
 import {
   applyBulkChangesInMailbox,
   updateMessageInMailbox,
@@ -15,6 +14,7 @@ import {
   deleteDraftInMailbox,
 } from "@quieter/app/lib/mail/inbox-query/index";
 import type { MailMetadataOperation } from "@quieter/app/lib/mail/inbox-query/index";
+import { findMessageInCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-query/query-cache";
 import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { mailboxesQueryOptions } from "@quieter/app/lib/mailboxes-query";
 import type { MailCommand } from "@quieter/mail/data-plane";
@@ -222,14 +222,7 @@ export const createMailboxActionHandlers = ({
     let threadId = id;
     if (scope === "message") {
       const message =
-        queryClient
-          .getQueriesData<MessagesQueryData>({
-            queryKey: ["messages", mailboxId],
-          })
-          .flatMap(
-            ([, data]) => data?.pages.flatMap((page) => page.messages) ?? []
-          )
-          .find((candidate) => candidate.id === id) ??
+        findMessageInCachedMailboxQueries(queryClient, mailboxId, id) ??
         queryClient
           .getQueriesData<ThreadMessagesResult>({
             queryKey: getMailboxThreadQueriesKey(mailboxId),
