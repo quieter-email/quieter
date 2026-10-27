@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/client";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -7,9 +8,14 @@ export type AudioRecorderRecording = {
   mimeType: string;
 };
 
-type UseAudioRecorderOptions = {
-  mimeType: string;
-};
+const recordingMimeTypes = [
+  "audio/webm;codecs=opus",
+  "audio/mp4;codecs=mp4a.40.2",
+  "audio/ogg;codecs=opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/ogg",
+];
 
 const stopStreamTracks = (stream: MediaStream) => {
   for (const track of stream.getTracks()) {
@@ -21,9 +27,9 @@ const stopStreamTracks = (stream: MediaStream) => {
  * Minimal MediaRecorder wrapper for push-to-talk capture. Recording stops
  * when the caller invokes stop(), which resolves with the encoded clip.
  */
-export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
-  const { mimeType } = options;
+export const useAudioRecorder = () => {
   const [isRecording, setIsRecording] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef(0);
@@ -53,17 +59,31 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
     };
   }, []);
 
-  const isSupported =
+  const preferredMimeType =
     typeof window !== "undefined" &&
     typeof MediaRecorder !== "undefined" &&
-    typeof navigator.mediaDevices?.getUserMedia === "function" &&
-    MediaRecorder.isTypeSupported(mimeType);
+    typeof navigator.mediaDevices?.getUserMedia === "function"
+      ? recordingMimeTypes.find((type) => MediaRecorder.isTypeSupported(type))
+      : undefined;
+  const isSupported = preferredMimeType !== undefined;
 
   const start = useCallback(async () => {
-    if (!isSupported || isRecording || startingRef.current) {
-      throw new Error("Audio recording is unavailable.");
+    if (isRecording || recorderRef.current !== null || startingRef.current) {
+      return;
+    }
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Open the app using a secure connection to access your microphone.",
+      });
+    }
+    if (preferredMimeType === undefined) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This browser cannot record audio. Try another browser.",
+      });
     }
     startingRef.current = true;
+    setIsStarting(true);
     let stream: MediaStream | null = null;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -73,7 +93,9 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
       }
       activeStreamRef.current = stream;
       const ownedStream = stream;
-      const recorder = new MediaRecorder(ownedStream, { mimeType });
+      const recorder = new MediaRecorder(ownedStream, {
+        mimeType: preferredMimeType,
+      });
       chunksRef.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -113,11 +135,48 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
         }
         stopStreamTracks(stream);
       }
+      if (error instanceof DOMException) {
+        let message: string | undefined;
+        switch (error.name) {
+          case "NotAllowedError":
+          case "SecurityError": {
+            message =
+              "Allow microphone access in your browser and device settings, then try again.";
+            break;
+          }
+          case "NotFoundError": {
+            message = "Connect or enable a microphone, then try again.";
+            break;
+          }
+          case "NotReadableError": {
+            message =
+              "Check your microphone and close other apps using it, then try again.";
+            break;
+          }
+          case "AbortError": {
+            message = "Microphone startup was interrupted. Please try again.";
+            break;
+          }
+          case "NotSupportedError": {
+            message = "This browser cannot record audio. Try another browser.";
+            break;
+          }
+          default: {
+            break;
+          }
+        }
+        if (message !== undefined) {
+          throw new ORPCError("BAD_REQUEST", { message });
+        }
+      }
       throw error;
     } finally {
       startingRef.current = false;
+      if (!unmountedRef.current) {
+        setIsStarting(false);
+      }
     }
-  }, [isRecording, isSupported, mimeType]);
+  }, [isRecording, preferredMimeType]);
 
   const stop = useCallback(async (): Promise<AudioRecorderRecording> => {
     const recorder = recorderRef.current;
@@ -139,9 +198,16 @@ export const useAudioRecorder = (options: UseAudioRecorderOptions) => {
     recorder.stop();
     recorderRef.current = null;
     await finished;
+    const mimeType =
+      recorder.mimeType || chunks.find((chunk) => chunk.type.length > 0)?.type;
+    if (!mimeType) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This audio format is not supported.",
+      });
+    }
     const blob = new Blob(chunks, { type: mimeType });
     return { blob, durationMs, mimeType };
-  }, [isRecording, mimeType]);
+  }, [isRecording]);
 
-  return { isRecording, isSupported, start, stop };
+  return { isRecording, isStarting, isSupported, start, stop };
 };

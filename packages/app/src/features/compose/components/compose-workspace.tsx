@@ -291,9 +291,7 @@ const ReadyComposeSurface = ({
     form,
     toggleRecipientVisibility,
   } = compose;
-  const audioRecorder = useAudioRecorder({
-    mimeType: "audio/webm;codecs=opus",
-  });
+  const audioRecorder = useAudioRecorder();
   const transcribeAudioMutation = useMutation({
     ...orpc.chat.transcribeAudio.mutationOptions(),
     onSuccess: async () => {
@@ -311,7 +309,10 @@ const ReadyComposeSurface = ({
     !state.isFinishing &&
     !switchingSender &&
     !!mailboxId;
-  const audioBusy = audioRecorder.isRecording || isTranscribingAudio;
+  const audioBusy =
+    audioRecorder.isStarting ||
+    audioRecorder.isRecording ||
+    isTranscribingAudio;
   const canSubmitCompose =
     ((canEditBody && !senderUnavailable) ||
       (state.open &&
@@ -419,25 +420,19 @@ const ReadyComposeSurface = ({
   };
 
   const handleRecordingStart = () => {
-    if (!canEditBody || isTranscribingAudio) {
+    if (!canEditBody || audioBusy) {
       return;
     }
 
-    if (!audioRecorder.isSupported) {
-      compose.setActiveDraftError(
-        "Audio recording is not supported in this browser."
-      );
-      return;
-    }
-
-    const startRecording = async () => {
+    void (async () => {
       try {
         await audioRecorder.start();
-      } catch {
-        compose.setActiveDraftError("Could not start recording.");
+      } catch (error) {
+        if (mountedRef.current) {
+          toastError(error, { boundary: "compose-microphone" });
+        }
       }
-    };
-    void startRecording();
+    })();
   };
 
   const handleRecordingStop = () => {
@@ -657,6 +652,7 @@ const ReadyComposeSurface = ({
                   onRecordingStart={handleRecordingStart}
                   onRecordingStop={handleRecordingStop}
                   recording={audioRecorder.isRecording}
+                  recordingStarting={audioRecorder.isStarting}
                   recordingSupported={audioRecorder.isSupported}
                   ref={composeEditorRef}
                   transcribing={isTranscribingAudio}
