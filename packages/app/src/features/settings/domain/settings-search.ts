@@ -11,6 +11,24 @@ export type SettingsSearchEntry = SettingsDestination & {
 
 export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   {
+    description: "Preferences / Date and time",
+    id: "time-format",
+    keywords: "time format 12 24 hour clock am pm regional calendar",
+    scope: "personal",
+    section: "time-format",
+    tab: "overview",
+    title: "Time format",
+  },
+  {
+    description: "Preferences / Date and time",
+    id: "start-of-week",
+    keywords: "calendar first start week monday sunday day regional",
+    scope: "personal",
+    section: "start-of-week",
+    tab: "overview",
+    title: "Start of week",
+  },
+  {
     description: "Profile and account security",
     id: "account",
     keywords: "name email password passkey sign out delete account",

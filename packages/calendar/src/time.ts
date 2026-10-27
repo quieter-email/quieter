@@ -5,9 +5,11 @@ import type { CalendarEventTime, CalendarView } from "./contracts";
 export const getCalendarDates = ({
   date,
   view,
+  weekStartsOn = 1,
 }: {
   date: string;
   view: CalendarView;
+  weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
 }): string[] => {
   const selected = Temporal.PlainDate.from(date);
   let start = selected;
@@ -15,13 +17,17 @@ export const getCalendarDates = ({
 
   switch (view) {
     case "week": {
-      start = selected.subtract({ days: selected.dayOfWeek - 1 });
+      start = selected.subtract({
+        days: (selected.dayOfWeek - weekStartsOn + 7) % 7,
+      });
       count = 7;
       break;
     }
     case "month": {
       const first = selected.with({ day: 1 });
-      start = first.subtract({ days: first.dayOfWeek - 1 });
+      start = first.subtract({
+        days: (first.dayOfWeek - weekStartsOn + 7) % 7,
+      });
       count = 42;
       break;
     }
@@ -47,12 +53,14 @@ export const getCalendarRange = ({
   date,
   timeZone,
   view,
+  weekStartsOn,
 }: {
   date: string;
   timeZone: string;
   view: CalendarView;
+  weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
 }): { dates: string[]; end: string; start: string } => {
-  const dates = getCalendarDates({ date, view });
+  const dates = getCalendarDates({ date, view, weekStartsOn });
   const start = Temporal.PlainDate.from(dates[0] ?? date);
   const end = start.add({ days: dates.length });
 

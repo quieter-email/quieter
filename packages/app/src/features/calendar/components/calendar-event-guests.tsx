@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
-import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
+import { Field, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
@@ -63,11 +63,6 @@ export const CalendarEventGuests = ({
             placeholder="Guest emails, separated by commas"
             value={value}
           />
-          <FieldDescription className="ml-2.5">
-            {preview
-              ? "No invitations are sent from this preview."
-              : "Guest notifications are off."}
-          </FieldDescription>
         </Field>
       </div>
       <div className="ml-6 space-y-2 pl-2.5">

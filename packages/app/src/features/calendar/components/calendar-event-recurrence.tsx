@@ -1,6 +1,7 @@
 import { RepeatIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { DatePicker } from "@quieter/ui/date-picker";
 import {
   Dialog,
   DialogBody,
@@ -362,13 +363,12 @@ const CustomRecurrence = ({
                   <FieldLabel htmlFor={`${id}-end`}>
                     Last repeat date
                   </FieldLabel>
-                  <Input
+                  <DatePicker
                     id={`${id}-end`}
-                    type="date"
                     min={context.startDate}
                     value={draft.endDate}
-                    onChange={(event) => {
-                      update({ endDate: event.target.value });
+                    onValueChange={(endDate) => {
+                      update({ endDate });
                     }}
                   />
                   <Text as="p" size="caption" tone="muted">

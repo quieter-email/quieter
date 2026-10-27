@@ -30,6 +30,7 @@ import {
   getCalendarEventKey,
   getCalendarRefKey,
 } from "../domain/calendar-event-form";
+import { getCalendarGroups } from "../domain/calendar-groups";
 import {
   calendarPreviewAccounts,
   calendarPreviewCalendars,
@@ -99,12 +100,19 @@ export const useCalendarData = ({
     queryKey: previewCalendarsKey,
     staleTime: Infinity,
   });
-  const calendars = preview
+  const sourceCalendars = preview
     ? (previewCalendarsQuery.data ?? [])
     : calendarQueries.flatMap((query) => query.data?.calendars ?? []);
-  const visibleCalendars = calendars.filter(
-    (calendar) => !hiddenCalendarKeys.includes(getCalendarRefKey(calendar))
-  );
+  const calendarGroups = getCalendarGroups({
+    accounts,
+    calendars: sourceCalendars,
+  });
+  const calendars = calendarGroups.map((group) => group.calendar);
+  const visibleCalendars = calendarGroups
+    .filter((group) =>
+      group.keys.some((key) => !hiddenCalendarKeys.includes(key))
+    )
+    .map((group) => group.calendar);
   const requests = preview
     ? []
     : visibleCalendars.flatMap((calendar) =>
@@ -416,10 +424,16 @@ export const useCalendarData = ({
   };
   return {
     accounts,
+    calendarGroups,
     calendars,
     colorMutation,
     events,
     failures,
+    hiddenCalendarKeys: calendarGroups
+      .filter((group) =>
+        group.keys.every((key) => hiddenCalendarKeys.includes(key))
+      )
+      .map((group) => getCalendarRefKey(group.calendar)),
     isConfigured: preview !== null || accountsQuery.data?.isConfigured === true,
     isLoading:
       !preview &&

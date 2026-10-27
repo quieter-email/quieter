@@ -20,6 +20,8 @@ const textareaVariants = cva(
         true: "[field-sizing:content] max-h-96 min-h-40 resize-none overflow-y-auto",
       },
       variant: {
+        "compact-prompt":
+          "[field-sizing:content] max-h-40 min-h-9 resize-none rounded-none border-0 bg-transparent px-1 py-2 text-body-sm leading-5 focus-visible:ring-0",
         // Auto-growing composer field, e.g. the chat input.
         composer: composerStyles,
         "composer-action": `${composerStyles} pr-12`,

@@ -1,6 +1,14 @@
 import { lazy } from "@orpc/server";
 
 export const appRouter = {
+  accountPreferences: lazy(
+    async () =>
+      await import("./account-preferences").then(
+        ({ accountPreferencesRouter }) => ({
+          default: accountPreferencesRouter,
+        })
+      )
+  ),
   ai: lazy(
     async () =>
       await import("./ai").then(({ aiRouter }) => ({ default: aiRouter }))
