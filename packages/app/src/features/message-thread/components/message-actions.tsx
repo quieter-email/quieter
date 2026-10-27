@@ -197,12 +197,17 @@ const createReadStateEntry = (
     id: "toggle-read-state",
     label: isUnread ? "Mark as Read" : "Mark as Unread",
     onAction: () => {
-      if (isUnread) {
-        void props.actions.onMarkAsRead?.(props.message.threadId);
-        return;
-      }
-
-      void props.actions.onMarkAsUnread?.(props.message.threadId);
+      void (async () => {
+        try {
+          if (isUnread) {
+            await props.actions.onMarkAsRead?.(props.message.threadId);
+          } else {
+            await props.actions.onMarkAsUnread?.(props.message.threadId);
+          }
+        } catch (error) {
+          toastError(error, { boundary: "message-read-state" });
+        }
+      })();
     },
     type: "item",
   };
