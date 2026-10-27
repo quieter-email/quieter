@@ -1,4 +1,3 @@
-import { ORPCError } from "@orpc/client";
 import { USER_BILLING_QUERY_KEY } from "@quieter/app/features/settings/domain/billing";
 import { useAudioRecorder } from "@quieter/app/lib/audio-recorder";
 import {
@@ -28,9 +27,7 @@ export const useChatDictation = ({
   mailboxId: string;
   onTranscript: (text: string) => void;
 }) => {
-  const { isRecording, isSupported, start, stop } = useAudioRecorder({
-    mimeType: "audio/webm;codecs=opus",
-  });
+  const { isRecording, isSupported, start, stop } = useAudioRecorder();
   const queryClient = useQueryClient();
   const { mutateAsync } = useMutation({
     mutationFn: async ({
@@ -178,14 +175,7 @@ export const useChatDictation = ({
       await start();
     } catch (error) {
       if (mounted.current && !currentSession.signal.aborted) {
-        toastError(
-          error instanceof DOMException && error.name === "NotAllowedError"
-            ? new ORPCError("BAD_REQUEST", {
-                message: "Allow microphone access in your browser to dictate.",
-              })
-            : error,
-          { boundary: "assistant-microphone" }
-        );
+        toastError(error, { boundary: "assistant-microphone" });
       }
     } finally {
       pending.current = false;

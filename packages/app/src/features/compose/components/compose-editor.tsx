@@ -120,6 +120,7 @@ type ComposeEditorProps = {
   onRecordingStart?: () => void;
   onRecordingStop?: () => void;
   recording?: boolean;
+  recordingStarting?: boolean;
   recordingSupported?: boolean;
   transcribing?: boolean;
   ref?: Ref<ComposeEditorHandle>;
@@ -140,6 +141,7 @@ type ComposeEditorContextValue = {
   onRecordingStart?: () => void;
   onRecordingStop?: () => void;
   recording: boolean;
+  recordingStarting: boolean;
   recordingSupported: boolean;
   transcribing: boolean;
 };
@@ -173,6 +175,7 @@ export const ComposeEditor = ({
   onRecordingStart,
   onRecordingStop,
   recording = false,
+  recordingStarting = false,
   recordingSupported = false,
   transcribing = false,
   ref,
@@ -343,6 +346,7 @@ export const ComposeEditor = ({
       onRecordingStart,
       onRecordingStop,
       recording,
+      recordingStarting,
       recordingSupported,
       transcribing,
     }),
@@ -354,6 +358,7 @@ export const ComposeEditor = ({
       onRecordingStart,
       onRecordingStop,
       recording,
+      recordingStarting,
       recordingSupported,
       transcribing,
     ]
@@ -780,9 +785,12 @@ export const ComposeEditorDictationButton = () => {
     onRecordingStart,
     onRecordingStop,
     recording,
+    recordingStarting,
     recordingSupported,
     transcribing,
   } = useComposeEditor();
+  const recordingLabel = recordingStarting ? "Starting microphone" : "Dictate";
+  const label = recordingSupported ? recordingLabel : "Recording unavailable";
 
   return recording ? (
     <IconButtonTooltip label="Stop recording">
@@ -802,12 +810,12 @@ export const ComposeEditorDictationButton = () => {
       </ToolbarButton>
     </IconButtonTooltip>
   ) : (
-    <IconButtonTooltip
-      label={recordingSupported ? "Dictate" : "Recording unavailable"}
-    >
+    <IconButtonTooltip label={label}>
       <ToolbarButton
-        aria-label={recordingSupported ? "Dictate" : "Recording unavailable"}
-        disabled={disabled || transcribing || !recordingSupported}
+        aria-label={label}
+        disabled={
+          disabled || recordingStarting || transcribing || !recordingSupported
+        }
         onClick={onRecordingStart}
         onMouseDown={(event) => {
           event.preventDefault();
