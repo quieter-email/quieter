@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { CSSProperties, DragEvent, KeyboardEvent } from "react";
+import type { CSSProperties, DragEvent, KeyboardEvent, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
 import { Button } from "./button";
@@ -45,6 +45,7 @@ export type ScheduleProps = {
   dates: string[];
   items: ScheduleItem[];
   onEventClick: (id: string) => void;
+  onEmptyClick?: () => void;
   onEventMove?: (input: {
     allDay: boolean;
     date: string;
@@ -57,7 +58,7 @@ export type ScheduleProps = {
     endMinute: number;
     id: string;
   }) => void;
-  onSlotClick: (input: {
+  onSlotCreate: (input: {
     allDay: boolean;
     date: string;
     endMinute?: number;
@@ -189,9 +190,10 @@ export const Schedule = ({
   dates,
   items,
   onEventClick,
+  onEmptyClick,
   onEventMove,
   onEventResize,
-  onSlotClick,
+  onSlotCreate,
   selectedDate,
   selectedId,
   today,
@@ -218,6 +220,44 @@ export const Schedule = ({
     originY: number;
     startMinute: number;
   } | null>(null);
+
+  const slotsByDate = useMemo(() => {
+    if (view !== "day" && view !== "week") {
+      return new Map<string, ReactNode>();
+    }
+    return new Map(
+      dates.map((date) => {
+        const dateLabel = dateFormatter.format(new Date(`${date}T12:00:00Z`));
+        return [
+          date,
+          minuteLabels.map((minute) => {
+            const slotStyle: ScheduleStyle = {
+              "--schedule-top": `${(minute * hourHeight) / 60}px`,
+            };
+            return (
+              <button
+                aria-describedby={slotHelpId}
+                aria-label={`Create event on ${dateLabel} at ${formatMinute(minute)}`}
+                className={cn(
+                  "absolute inset-x-0 top-[var(--schedule-top)] h-3.5 cursor-crosshair text-left outline-none hover:bg-control-hover focus-visible:z-10 focus-visible:bg-control-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                  {
+                    "before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:border-t before:border-border/50":
+                      minute % 60 === 0,
+                  }
+                )}
+                data-slot-date={date}
+                data-slot-minute={minute}
+                key={minute}
+                style={slotStyle}
+                tabIndex={date === dates[0] && minute === 540 ? 0 : -1}
+                type="button"
+              />
+            );
+          }),
+        ] as const;
+      })
+    );
+  }, [dates, slotHelpId, view]);
 
   const days = useMemo(() => {
     const grouped = new Map<string, ScheduleItem[]>(
@@ -300,7 +340,7 @@ export const Schedule = ({
   };
 
   const moveSlotFocus = (
-    event: KeyboardEvent<HTMLButtonElement>,
+    event: KeyboardEvent<HTMLDivElement>,
     date: string,
     minute: number
   ) => {
@@ -487,7 +527,7 @@ export const Schedule = ({
             {dates[0] ? (
               <Button
                 onClick={() => {
-                  onSlotClick({
+                  onSlotCreate({
                     allDay: false,
                     date: dates[0] ?? today,
                     minute: 540,
@@ -532,6 +572,23 @@ export const Schedule = ({
                   className="min-h-28 min-w-0 border-t border-r border-border/50 px-2 py-3 nth-[7n]:border-r-0"
                   data-selected-date={date === selectedDate || undefined}
                   key={date}
+                  role="presentation"
+                  onClick={(event) => {
+                    if (
+                      event.target instanceof Element &&
+                      !event.target.closest("button")
+                    ) {
+                      onEmptyClick?.();
+                    }
+                  }}
+                  onDoubleClick={(event) => {
+                    if (
+                      event.target instanceof Element &&
+                      !event.target.closest("button")
+                    ) {
+                      onSlotCreate({ allDay: true, date, minute: 0 });
+                    }
+                  }}
                   onDragOver={(event) => {
                     if (dragRef.current) {
                       event.preventDefault();
@@ -544,8 +601,15 @@ export const Schedule = ({
                   <div className="mb-2 flex items-center justify-between">
                     <Button
                       aria-label={`Create event on ${dateFormatter.format(new Date(`${date}T12:00:00Z`))}`}
-                      onClick={() => {
-                        onSlotClick({ allDay: true, date, minute: 0 });
+                      onClick={(event) => {
+                        if (event.detail === 0) {
+                          onSlotCreate({ allDay: true, date, minute: 0 });
+                        } else if (event.detail === 1) {
+                          onEmptyClick?.();
+                        }
+                      }}
+                      onDoubleClick={() => {
+                        onSlotCreate({ allDay: true, date, minute: 0 });
                       }}
                       size="compact"
                       variant={date === today ? "default" : dateVariant}
@@ -640,9 +704,10 @@ export const Schedule = ({
       ref={scrollRef}
     >
       <p className="sr-only" id={slotHelpId}>
-        Drag to choose a time range, or click to create an event. Use arrow keys
-        to choose a time in 15-minute steps and Enter to create an event. Press
-        Escape to cancel a selection. Open any event to edit its date and time.
+        Drag to choose a time range, or double-click to create an event. Use
+        arrow keys to choose a time in 15-minute steps and Enter to create an
+        event. Press Escape to cancel a selection. Open any event to edit its
+        date and time.
       </p>
       <div
         className="sticky top-0 z-30 grid w-full min-w-[var(--schedule-min-width)] grid-cols-[var(--schedule-columns)] border-b border-border/50 bg-bg-raised"
@@ -699,8 +764,15 @@ export const Schedule = ({
             <button
               aria-label={`Create all-day event on ${date}`}
               className="absolute inset-0 outline-none hover:bg-control-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-              onClick={() => {
-                onSlotClick({ allDay: true, date, minute: 0 });
+              onClick={(event) => {
+                if (event.detail === 0) {
+                  onSlotCreate({ allDay: true, date, minute: 0 });
+                } else if (event.detail === 1) {
+                  onEmptyClick?.();
+                }
+              }}
+              onDoubleClick={() => {
+                onSlotCreate({ allDay: true, date, minute: 0 });
               }}
               type="button"
             />
@@ -743,163 +815,190 @@ export const Schedule = ({
             onDrop={(event) => {
               dropEvent(event, date, false, true);
             }}
-          >
-            {minuteLabels.map((minute) => {
-              const slotStyle: ScheduleStyle = {
-                "--schedule-top": `${(minute * hourHeight) / 60}px`,
+            onClick={(event) => {
+              const button = event.target;
+              if (
+                !(button instanceof HTMLButtonElement) ||
+                !Object.hasOwn(button.dataset, "slotMinute")
+              ) {
+                return;
+              }
+              const minute = Number(button.dataset.slotMinute);
+              if (event.detail === 0) {
+                onSlotCreate({ allDay: false, date, minute });
+              } else if (event.detail === 1 && !suppressSlotClickRef.current) {
+                onEmptyClick?.();
+              }
+            }}
+            onDoubleClick={(event) => {
+              const button = event.target;
+              if (
+                !(button instanceof HTMLButtonElement) ||
+                !Object.hasOwn(button.dataset, "slotMinute")
+              ) {
+                return;
+              }
+              const minute = Number(button.dataset.slotMinute);
+              if (suppressSlotClickRef.current) {
+                return;
+              }
+              const clickedMinute =
+                getSlotMinute({
+                  boundary: "start",
+                  button,
+                  clientY: event.clientY,
+                }) ?? minute;
+              onSlotCreate({
+                allDay: false,
+                date,
+                minute: clickedMinute,
+              });
+            }}
+            onKeyDown={(event) => {
+              const button = event.target;
+              if (
+                !(button instanceof HTMLButtonElement) ||
+                !Object.hasOwn(button.dataset, "slotMinute")
+              ) {
+                return;
+              }
+              const minute = Number(button.dataset.slotMinute);
+              if (event.key === "Escape" && selectionRef.current) {
+                const { pointerId } = selectionRef.current;
+                selectionRef.current = null;
+                suppressSlotClickRef.current = true;
+                setSelection(null);
+                if (button.hasPointerCapture(pointerId)) {
+                  button.releasePointerCapture(pointerId);
+                }
+                event.preventDefault();
+                return;
+              }
+              moveSlotFocus(event, date, minute);
+            }}
+            onLostPointerCapture={() => {
+              if (selectionRef.current) {
+                selectionRef.current = null;
+                suppressSlotClickRef.current = true;
+                setSelection(null);
+              }
+            }}
+            onPointerCancel={() => {
+              selectionRef.current = null;
+              suppressSlotClickRef.current = true;
+              setSelection(null);
+            }}
+            onPointerDown={(event) => {
+              const button = event.target;
+              if (
+                !(button instanceof HTMLButtonElement) ||
+                !Object.hasOwn(button.dataset, "slotMinute")
+              ) {
+                return;
+              }
+              suppressSlotClickRef.current = false;
+              // Touch keeps native vertical scrolling.
+              if (
+                event.button !== 0 ||
+                !event.isPrimary ||
+                event.pointerType === "touch" ||
+                dragRef.current ||
+                resize
+              ) {
+                return;
+              }
+              const anchorMinute = getSlotMinute({
+                boundary: "start",
+                button,
+                clientY: event.clientY,
+              });
+              if (anchorMinute === null) {
+                return;
+              }
+              event.preventDefault();
+              button.focus({ preventScroll: true });
+              button.setPointerCapture(event.pointerId);
+              selectionRef.current = {
+                anchorMinute,
+                date,
+                minute: anchorMinute,
+                originY: event.clientY,
+                phase: "pending",
+                pointerId: event.pointerId,
               };
-              return (
-                <button
-                  aria-describedby={slotHelpId}
-                  aria-label={`Create event on ${dateFormatter.format(new Date(`${date}T12:00:00Z`))} at ${formatMinute(minute)}`}
-                  className={cn(
-                    "absolute inset-x-0 top-[var(--schedule-top)] h-3.5 cursor-crosshair text-left outline-none hover:bg-control-hover focus-visible:z-10 focus-visible:bg-control-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                    {
-                      "before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:border-t before:border-border/50":
-                        minute % 60 === 0,
-                    }
-                  )}
-                  data-slot-date={date}
-                  data-slot-minute={minute}
-                  key={minute}
-                  onClick={(event) => {
-                    if (event.detail !== 0 && suppressSlotClickRef.current) {
-                      suppressSlotClickRef.current = false;
-                      return;
-                    }
-                    const clickedMinute =
-                      event.detail === 0
-                        ? minute
-                        : (getSlotMinute({
-                            boundary: "start",
-                            button: event.currentTarget,
-                            clientY: event.clientY,
-                          }) ?? minute);
-                    onSlotClick({ allDay: false, date, minute: clickedMinute });
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape" && selectionRef.current) {
-                      const { pointerId } = selectionRef.current;
-                      selectionRef.current = null;
-                      suppressSlotClickRef.current = true;
-                      setSelection(null);
-                      if (event.currentTarget.hasPointerCapture(pointerId)) {
-                        event.currentTarget.releasePointerCapture(pointerId);
-                      }
-                      event.preventDefault();
-                      return;
-                    }
-                    moveSlotFocus(event, date, minute);
-                  }}
-                  onLostPointerCapture={() => {
-                    if (selectionRef.current) {
-                      selectionRef.current = null;
-                      suppressSlotClickRef.current = true;
-                      setSelection(null);
-                    }
-                  }}
-                  onPointerCancel={() => {
-                    selectionRef.current = null;
-                    suppressSlotClickRef.current = true;
-                    setSelection(null);
-                  }}
-                  onPointerDown={(event) => {
-                    suppressSlotClickRef.current = false;
-                    // Touch keeps native vertical scrolling and tap creation.
-                    if (
-                      event.button !== 0 ||
-                      !event.isPrimary ||
-                      event.pointerType === "touch" ||
-                      dragRef.current ||
-                      resize
-                    ) {
-                      return;
-                    }
-                    const anchorMinute = getSlotMinute({
-                      boundary: "start",
-                      button: event.currentTarget,
-                      clientY: event.clientY,
-                    });
-                    if (anchorMinute === null) {
-                      return;
-                    }
-                    event.preventDefault();
-                    event.currentTarget.focus({ preventScroll: true });
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    selectionRef.current = {
-                      anchorMinute,
-                      date,
-                      minute: anchorMinute,
-                      originY: event.clientY,
-                      phase: "pending",
-                      pointerId: event.pointerId,
-                    };
-                  }}
-                  onPointerMove={(event) => {
-                    const activeSelection = selectionRef.current;
-                    if (
-                      !activeSelection ||
-                      activeSelection.pointerId !== event.pointerId ||
-                      (activeSelection.phase === "pending" &&
-                        Math.abs(event.clientY - activeSelection.originY) < 4)
-                    ) {
-                      return;
-                    }
-                    const nextMinute = getSlotMinute({
-                      boundary: "end",
-                      button: event.currentTarget,
-                      clientY: event.clientY,
-                    });
-                    if (nextMinute === null) {
-                      return;
-                    }
-                    const nextSelection: SlotSelection = {
-                      ...activeSelection,
-                      minute: nextMinute,
-                      phase: "selecting",
-                    };
-                    selectionRef.current = nextSelection;
-                    setSelection(nextSelection);
-                  }}
-                  onPointerUp={(event) => {
-                    const activeSelection = selectionRef.current;
-                    if (activeSelection?.pointerId !== event.pointerId) {
-                      return;
-                    }
-                    selectionRef.current = null;
-                    setSelection(null);
-                    if (
-                      event.currentTarget.hasPointerCapture(event.pointerId)
-                    ) {
-                      event.currentTarget.releasePointerCapture(
-                        event.pointerId
-                      );
-                    }
-                    if (activeSelection.phase !== "selecting") {
-                      return;
-                    }
-                    suppressSlotClickRef.current = true;
-                    const startMinute = Math.min(
-                      activeSelection.anchorMinute,
-                      activeSelection.minute
-                    );
-                    onSlotClick({
-                      allDay: false,
-                      date: activeSelection.date,
-                      endMinute: Math.max(
-                        startMinute + 15,
-                        activeSelection.anchorMinute,
-                        activeSelection.minute
-                      ),
-                      minute: startMinute,
-                    });
-                  }}
-                  style={slotStyle}
-                  tabIndex={date === dates[0] && minute === 540 ? 0 : -1}
-                  type="button"
-                />
+            }}
+            onPointerMove={(event) => {
+              const button = event.target;
+              if (
+                !(button instanceof HTMLButtonElement) ||
+                !Object.hasOwn(button.dataset, "slotMinute")
+              ) {
+                return;
+              }
+              const activeSelection = selectionRef.current;
+              if (
+                !activeSelection ||
+                activeSelection.pointerId !== event.pointerId ||
+                (activeSelection.phase === "pending" &&
+                  Math.abs(event.clientY - activeSelection.originY) < 4)
+              ) {
+                return;
+              }
+              const nextMinute = getSlotMinute({
+                boundary: "end",
+                button,
+                clientY: event.clientY,
+              });
+              if (nextMinute === null) {
+                return;
+              }
+              const nextSelection: SlotSelection = {
+                ...activeSelection,
+                minute: nextMinute,
+                phase: "selecting",
+              };
+              selectionRef.current = nextSelection;
+              setSelection(nextSelection);
+            }}
+            onPointerUp={(event) => {
+              const button = event.target;
+              if (
+                !(button instanceof HTMLButtonElement) ||
+                !Object.hasOwn(button.dataset, "slotMinute")
+              ) {
+                return;
+              }
+              const activeSelection = selectionRef.current;
+              if (activeSelection?.pointerId !== event.pointerId) {
+                return;
+              }
+              selectionRef.current = null;
+              setSelection(null);
+              if (button.hasPointerCapture(event.pointerId)) {
+                button.releasePointerCapture(event.pointerId);
+              }
+              if (activeSelection.phase !== "selecting") {
+                return;
+              }
+              suppressSlotClickRef.current = true;
+              const startMinute = Math.min(
+                activeSelection.anchorMinute,
+                activeSelection.minute
               );
-            })}
+              onSlotCreate({
+                allDay: false,
+                date: activeSelection.date,
+                endMinute: Math.max(
+                  startMinute + 15,
+                  activeSelection.anchorMinute,
+                  activeSelection.minute
+                ),
+                minute: startMinute,
+              });
+            }}
+            role="presentation"
+          >
+            {slotsByDate.get(date)}
             {positionTimedItems(days.get(date) ?? []).map(
               ({ column, columns: count, item }) => {
                 const endMinute =
