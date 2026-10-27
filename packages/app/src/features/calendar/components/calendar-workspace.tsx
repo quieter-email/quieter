@@ -157,7 +157,7 @@ const CalendarDetailsPanel = ({ children }: { children: ReactNode }) => {
       {...presence}
       aria-hidden={!present || undefined}
       aria-label="Event details"
-      className="ml-auto flex w-88 shrink-0 flex-col border-l border-border"
+      className="ml-auto flex w-88 shrink-0 flex-col border-l border-border/50"
       exit={
         reducedMotion === true
           ? { opacity: 0 }
@@ -939,8 +939,8 @@ const CalendarWorkspaceContent = ({
   } else if (requestedEventRef) {
     details = (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-border px-5 py-4">
-          <Text as="h2" className="flex-1" size="sm" truncate weight="medium">
+        <div className="flex items-center gap-2 px-5 py-4">
+          <Text as="h2" className="flex-1" size="lg" truncate weight="medium">
             Event details
           </Text>
           <IconButtonTooltip label="Close event details">
@@ -1120,174 +1120,179 @@ const CalendarWorkspaceContent = ({
           }}
           title="Calendar"
         />
-        <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
-          <Text
-            as="h2"
-            className="min-w-0 flex-1 basis-32 sm:basis-auto"
-            size="lg"
-            truncate
-            weight="medium"
-          >
-            <LazyMotion features={domAnimation}>
-              <m.span
-                {...getAppPresenceMotion({ distance: 4, reducedMotion })}
-                className="block truncate"
-                key={rangeHeading}
-              >
-                {rangeHeading}
-              </m.span>
-            </LazyMotion>
-          </Text>
-          <div className="flex items-center gap-1">
-            <IconButtonTooltip label="Previous date range">
-              <Button
-                aria-label="Previous date range"
-                onClick={() => {
-                  const offset = -{ agenda: 30, day: 1, month: 1, week: 7 }[
-                    view
-                  ];
-                  const shifted = new Date(`${date}T12:00:00Z`);
-                  if (view === "month") {
-                    shifted.setUTCDate(1);
-                    shifted.setUTCMonth(shifted.getUTCMonth() - 1);
-                  }
-                  void route.setMailboxSearch({
-                    calendarDate:
-                      view === "month"
-                        ? shifted.toISOString().slice(0, 10)
-                        : addCalendarDays(date, offset),
-                  });
-                }}
-                size="icon-sm"
-                variant="ghost"
-              >
-                <Icon aria-hidden icon={ArrowLeft01Icon} />
-              </Button>
-            </IconButtonTooltip>
-            <IconButtonTooltip label="Next date range">
-              <Button
-                aria-label="Next date range"
-                onClick={() => {
-                  const offset = { agenda: 30, day: 1, month: 1, week: 7 }[
-                    view
-                  ];
-                  const shifted = new Date(`${date}T12:00:00Z`);
-                  if (view === "month") {
-                    shifted.setUTCDate(1);
-                    shifted.setUTCMonth(shifted.getUTCMonth() + 1);
-                  }
-                  void route.setMailboxSearch({
-                    calendarDate:
-                      view === "month"
-                        ? shifted.toISOString().slice(0, 10)
-                        : addCalendarDays(date, offset),
-                  });
-                }}
-                size="icon-sm"
-                variant="ghost"
-              >
-                <Icon aria-hidden icon={ArrowRight01Icon} />
-              </Button>
-            </IconButtonTooltip>
-          </div>
-          <Button
-            onClick={() => {
-              void route.setMailboxSearch({ calendarDate: now.date });
-            }}
-            size="sm"
-            variant="secondary"
-          >
-            Today
-          </Button>
-          <Select
-            items={viewOptions}
-            onValueChange={(value) => {
-              if (
-                value === "day" ||
-                value === "week" ||
-                value === "month" ||
-                value === "agenda"
-              ) {
-                void route.setMailboxSearch({ calendarView: value });
-              }
-            }}
-            value={view}
-          >
-            <SelectTrigger
-              aria-label="Calendar view"
-              className="w-24"
-              size="sm"
+        <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Text
+              as="h2"
+              className="mr-2 min-w-0"
+              size="lg"
+              truncate
+              weight="medium"
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {viewOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <CalendarTimeZonePicker
-            aria-label="Display time zone"
-            className="max-w-40"
-            onValueChange={(zone) => {
-              void route.setMailboxSearch({ calendarTimeZone: zone });
-            }}
-            size="sm"
-            value={timeZone}
-            variant="ghost"
-          />
-          <Popover>
-            <IconButtonTooltip
-              label={ui.search ? `Find events: ${ui.search}` : "Find events"}
-            >
-              <PopoverTrigger
-                render={
-                  <Button
-                    aria-label="Find events"
-                    size="icon-sm"
-                    variant={ui.search ? "secondary" : "ghost"}
-                  />
-                }
-              >
-                <Icon aria-hidden icon={Search01Icon} />
-              </PopoverTrigger>
-            </IconButtonTooltip>
-            <PopoverContent align="end">
-              <Input
-                aria-label="Find events in this view"
-                onChange={(event) => {
-                  store.setState((current) => ({
-                    ...current,
-                    search: event.target.value,
-                  }));
-                }}
-                placeholder="Find in this view"
-                size="sm"
-                type="search"
-                value={ui.search}
-              />
-            </PopoverContent>
-          </Popover>
-          <IconButtonTooltip label="Refresh calendars">
+              <LazyMotion features={domAnimation}>
+                <m.span
+                  {...getAppPresenceMotion({ distance: 4, reducedMotion })}
+                  className="block truncate"
+                  key={rangeHeading}
+                >
+                  {rangeHeading}
+                </m.span>
+              </LazyMotion>
+            </Text>
+            <div className="flex items-center gap-1">
+              <IconButtonTooltip label="Previous date range">
+                <Button
+                  aria-label="Previous date range"
+                  onClick={() => {
+                    const offset = -{ agenda: 30, day: 1, month: 1, week: 7 }[
+                      view
+                    ];
+                    const shifted = new Date(`${date}T12:00:00Z`);
+                    if (view === "month") {
+                      shifted.setUTCDate(1);
+                      shifted.setUTCMonth(shifted.getUTCMonth() - 1);
+                    }
+                    void route.setMailboxSearch({
+                      calendarDate:
+                        view === "month"
+                          ? shifted.toISOString().slice(0, 10)
+                          : addCalendarDays(date, offset),
+                    });
+                  }}
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <Icon aria-hidden icon={ArrowLeft01Icon} />
+                </Button>
+              </IconButtonTooltip>
+              <IconButtonTooltip label="Next date range">
+                <Button
+                  aria-label="Next date range"
+                  onClick={() => {
+                    const offset = { agenda: 30, day: 1, month: 1, week: 7 }[
+                      view
+                    ];
+                    const shifted = new Date(`${date}T12:00:00Z`);
+                    if (view === "month") {
+                      shifted.setUTCDate(1);
+                      shifted.setUTCMonth(shifted.getUTCMonth() + 1);
+                    }
+                    void route.setMailboxSearch({
+                      calendarDate:
+                        view === "month"
+                          ? shifted.toISOString().slice(0, 10)
+                          : addCalendarDays(date, offset),
+                    });
+                  }}
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <Icon aria-hidden icon={ArrowRight01Icon} />
+                </Button>
+              </IconButtonTooltip>
+            </div>
             <Button
-              aria-label="Refresh calendars"
-              disabled={preview !== null || data.isRefreshing}
               onClick={() => {
-                void data.refresh();
+                void route.setMailboxSearch({ calendarDate: now.date });
               }}
-              size="icon-sm"
-              variant="ghost"
+              size="sm"
+              variant="secondary"
             >
-              <Icon aria-hidden icon={RefreshIcon} />
+              Today
             </Button>
-          </IconButtonTooltip>
-          {!preview && !online ? (
-            <Pill size="xs" tone="orange">
-              Offline
-            </Pill>
-          ) : null}
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Select
+              items={viewOptions}
+              onValueChange={(value) => {
+                if (
+                  value === "day" ||
+                  value === "week" ||
+                  value === "month" ||
+                  value === "agenda"
+                ) {
+                  void route.setMailboxSearch({ calendarView: value });
+                }
+              }}
+              value={view}
+            >
+              <SelectTrigger
+                aria-label="Calendar view"
+                className="w-24"
+                size="sm"
+                variant="ghost"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {viewOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <CalendarTimeZonePicker
+              aria-label="Display time zone"
+              className="max-w-40"
+              onValueChange={(zone) => {
+                void route.setMailboxSearch({ calendarTimeZone: zone });
+              }}
+              size="sm"
+              value={timeZone}
+              variant="ghost"
+            />
+            <Popover>
+              <IconButtonTooltip
+                label={ui.search ? `Find events: ${ui.search}` : "Find events"}
+              >
+                <PopoverTrigger
+                  render={
+                    <Button
+                      aria-label="Find events"
+                      size="icon-sm"
+                      variant={ui.search ? "secondary" : "ghost"}
+                    />
+                  }
+                >
+                  <Icon aria-hidden icon={Search01Icon} />
+                </PopoverTrigger>
+              </IconButtonTooltip>
+              <PopoverContent align="end">
+                <Input
+                  aria-label="Find events in this view"
+                  onChange={(event) => {
+                    store.setState((current) => ({
+                      ...current,
+                      search: event.target.value,
+                    }));
+                  }}
+                  placeholder="Find in this view"
+                  size="sm"
+                  type="search"
+                  value={ui.search}
+                />
+              </PopoverContent>
+            </Popover>
+            <IconButtonTooltip label="Refresh calendars">
+              <Button
+                aria-label="Refresh calendars"
+                disabled={preview !== null || data.isRefreshing}
+                onClick={() => {
+                  void data.refresh();
+                }}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <Icon aria-hidden icon={RefreshIcon} />
+              </Button>
+            </IconButtonTooltip>
+            {!preview && !online ? (
+              <Pill size="xs" tone="orange">
+                Offline
+              </Pill>
+            ) : null}
+          </div>
           <p aria-live="polite" className="sr-only">
             {syncStatus}
           </p>

@@ -252,6 +252,43 @@ const sampleScheduleItems: ScheduleItem[] = [
     title: "Wrap up the week",
     tone: "muted",
   },
+  {
+    allDay: false,
+    color: "#000000",
+    date: "2026-10-21",
+    endMinute: 555,
+    id: "sample-short-black",
+    startMinute: 540,
+    title: "Quick check-in",
+  },
+  {
+    allDay: false,
+    color: "#ffffff",
+    date: "2026-10-21",
+    endMinute: 600,
+    id: "sample-short-white",
+    startMinute: 570,
+    title: "Review notes and next steps with the team",
+  },
+  {
+    allDay: false,
+    color: "#ffff00",
+    date: "2026-10-22",
+    endMinute: 585,
+    id: "sample-short-yellow",
+    startMinute: 540,
+    title: "Project catch-up",
+  },
+  {
+    allDay: false,
+    color: "#800080",
+    date: "2026-10-22",
+    detail: "A longer conversation",
+    endMinute: 705,
+    id: "sample-purple",
+    startMinute: 615,
+    title: "Planning the next chapter of the product together",
+  },
 ];
 
 const ScheduleShowcase = () => {

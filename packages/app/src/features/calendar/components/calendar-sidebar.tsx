@@ -103,6 +103,7 @@ const CalendarColorControl = ({
           disabled={disabled}
           label={`Change ${calendar.name} color`}
           onValueChange={setDraftColor}
+          trigger="swatch"
           value={draftColor ?? color}
         />
       </div>
@@ -227,7 +228,7 @@ const CalendarSidebarContent = ({
           selected={selectedDate}
           weekStartsOn={1}
         />
-        <div className="space-y-5 px-1">
+        <div className="space-y-6 px-1">
           {accounts.map((account) => (
             <section className="space-y-2" key={account.id}>
               <div className="flex min-w-0 items-center gap-1">

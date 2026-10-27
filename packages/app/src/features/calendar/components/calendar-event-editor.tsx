@@ -258,8 +258,8 @@ export const CalendarEventEditor = ({
         void submit();
       }}
     >
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <Text as="h2" className="flex-1" size="sm" weight="medium">
+      <div className="flex items-center gap-2 px-5 py-4">
+        <Text as="h2" className="flex-1" size="lg" weight="medium">
           {editor.kind === "create" ? "New event" : "Event details"}
         </Text>
         {dirty ? (
@@ -280,7 +280,10 @@ export const CalendarEventEditor = ({
         </IconButtonTooltip>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <fieldset className="min-w-0 space-y-4 px-4 py-3" disabled={pending}>
+        <fieldset
+          className="min-w-0 space-y-6 px-5 pt-2 pb-5"
+          disabled={pending}
+        >
           {state.problem ? (
             <p className="text-body-sm text-destructive" role="alert">
               {state.problem}
@@ -1008,7 +1011,7 @@ export const CalendarEventEditor = ({
         </fieldset>
       </div>
       {dirty || editor.kind === "create" || onDelete ? (
-        <div className="border-t border-border p-4">
+        <div className="p-5">
           <ActionFooter>
             {dirty || editor.kind === "create" ? (
               <Button
