@@ -1,0 +1,77 @@
+[
+  {
+    "kind": "compose",
+    "mode": "direct",
+    "errors": 0,
+    "unhandled": 0,
+    "keyboard": null,
+    "input": "Ready.",
+    "focused": true,
+    "disabled": false,
+    "sidebarOpen": false
+  },
+  {
+    "kind": "compose",
+    "mode": "keyboard",
+    "errors": 0,
+    "unhandled": 0,
+    "keyboard": {
+      "trusted": true,
+      "detail": 0
+    },
+    "input": "Ready.",
+    "focused": true,
+    "disabled": false,
+    "sidebarOpen": false
+  },
+  {
+    "kind": "snippets",
+    "mode": "direct",
+    "errors": 0,
+    "unhandled": 0,
+    "keyboard": null,
+    "input": "Ready.",
+    "focused": true,
+    "disabled": false,
+    "sidebarOpen": false
+  },
+  {
+    "kind": "snippets",
+    "mode": "keyboard",
+    "errors": 0,
+    "unhandled": 0,
+    "keyboard": {
+      "trusted": true,
+      "detail": 0
+    },
+    "input": "Ready.",
+    "focused": true,
+    "disabled": false,
+    "sidebarOpen": false
+  },
+  {
+    "kind": "chat",
+    "mode": "keyboard",
+    "errors": 0,
+    "unhandled": 0,
+    "keyboard": {
+      "trusted": true,
+      "detail": 0
+    },
+    "input": "",
+    "focused": false,
+    "disabled": true,
+    "sidebarOpen": true
+  },
+  {
+    "kind": "chat",
+    "mode": "persisted-open",
+    "errors": 0,
+    "unhandled": 0,
+    "keyboard": null,
+    "input": "",
+    "focused": false,
+    "disabled": true,
+    "sidebarOpen": true
+  }
+]

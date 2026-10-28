@@ -1,0 +1,45 @@
+{
+  "viewport": 1280,
+  "miniCalendar": {
+    "light": {
+      "clipped": [],
+      "count": 42,
+      "last": {
+        "bottom": 402,
+        "height": 32,
+        "left": 214,
+        "right": 246,
+        "top": 370,
+        "width": 32,
+        "x": 214,
+        "y": 370
+      },
+      "theme": "light"
+    },
+    "dark": {
+      "clipped": [],
+      "count": 42,
+      "last": {
+        "bottom": 402,
+        "height": 32,
+        "left": 214,
+        "right": 246,
+        "top": 370,
+        "width": 32,
+        "x": 214,
+        "y": 370
+      },
+      "theme": "dark c15t-dark"
+    }
+  },
+  "calendarPresets": [
+    {
+      "color": "#ab7733",
+      "label": "Use Work color"
+    },
+    {
+      "color": "#33b679",
+      "label": "Use Personal color"
+    }
+  ]
+}

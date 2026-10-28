@@ -1,0 +1,80 @@
+[
+  {
+    "kind": "compose",
+    "mode": "failure",
+    "errorVisible": true,
+    "prewarmUnhandled": 0,
+    "backRecovered": true,
+    "reloadRecovered": {
+      "unhandled": 0,
+      "errors": 0,
+      "body": true
+    }
+  },
+  {
+    "kind": "compose",
+    "mode": "out-of-order",
+    "stayedOnRequestedView": {
+      "mailbox": "inbox",
+      "sidebarClosed": true,
+      "visibleCompose": false,
+      "visibleSnippets": false,
+      "focusInClosedSidebar": false,
+      "unhandled": 0,
+      "errors": 0
+    },
+    "returnReady": true
+  },
+  {
+    "kind": "snippets",
+    "mode": "failure",
+    "errorVisible": true,
+    "prewarmUnhandled": 0,
+    "backRecovered": true,
+    "reloadRecovered": {
+      "unhandled": 0,
+      "errors": 0,
+      "body": true
+    }
+  },
+  {
+    "kind": "snippets",
+    "mode": "out-of-order",
+    "stayedOnRequestedView": {
+      "mailbox": "inbox",
+      "sidebarClosed": true,
+      "visibleCompose": false,
+      "visibleSnippets": false,
+      "focusInClosedSidebar": false,
+      "unhandled": 0,
+      "errors": 0
+    },
+    "returnReady": true
+  },
+  {
+    "kind": "chat",
+    "mode": "failure",
+    "errorVisible": true,
+    "prewarmUnhandled": 0,
+    "backRecovered": true,
+    "reloadRecovered": {
+      "unhandled": 0,
+      "errors": 0,
+      "body": true
+    }
+  },
+  {
+    "kind": "chat",
+    "mode": "out-of-order",
+    "stayedOnRequestedView": {
+      "mailbox": "inbox",
+      "sidebarClosed": true,
+      "visibleCompose": false,
+      "visibleSnippets": false,
+      "focusInClosedSidebar": false,
+      "unhandled": 0,
+      "errors": 0
+    },
+    "returnReady": true
+  }
+]

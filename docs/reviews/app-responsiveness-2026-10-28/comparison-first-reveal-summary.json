@@ -1,0 +1,108 @@
+{
+  "compose": {
+    "baseline": {
+      "runs": 5,
+      "medianReadyMs": 372.699999988079,
+      "readyRangeMs": [364.800000011921, 388.199999988079],
+      "medianNextPaintMs": 944.0999999642372,
+      "nextPaintRangeMs": [923.5999999642372, 958.0999999642372]
+    },
+    "head": {
+      "runs": 5,
+      "medianReadyMs": 98,
+      "readyRangeMs": [95.80000001192091, 132],
+      "medianNextPaintMs": 99.60000002384186,
+      "nextPaintRangeMs": [97, 135]
+    }
+  },
+  "snippets": {
+    "baseline": {
+      "runs": 5,
+      "medianReadyMs": 335.19999998807907,
+      "readyRangeMs": [334.10000002384186, 344.5999999642372],
+      "medianNextPaintMs": 911,
+      "nextPaintRangeMs": [869.5, 940.4000000357628]
+    },
+    "head": {
+      "runs": 5,
+      "medianReadyMs": 48.39999997615814,
+      "readyRangeMs": [46.89999997615814, 75],
+      "medianNextPaintMs": 49.09999996423721,
+      "nextPaintRangeMs": [47.59999996423721, 76.90000003576279]
+    }
+  },
+  "sidebar": {
+    "baseline": {
+      "runs": 5,
+      "medianReadyMs": 338.5,
+      "readyRangeMs": [329.10000002384186, 344.69999998807907],
+      "medianNextPaintMs": 344.9000000357628,
+      "nextPaintRangeMs": [344.69999998807907, 361.5],
+      "ordinary": {
+        "bodyMs": 509,
+        "inputDisabled": true,
+        "paintMs": 511.800000011921,
+        "shellMs": 57.30000001192093,
+        "start": 2782.199999988079
+      },
+      "geometry": [
+        {
+          "mainWidths": 1,
+          "sidebarWidthRange": [374.3905029296875, 374.390625]
+        },
+        {
+          "mainWidths": 1,
+          "sidebarWidthRange": [374.3905029296875, 374.3907470703125]
+        },
+        {
+          "mainWidths": 1,
+          "sidebarWidthRange": [374.390625, 374.3907470703125]
+        },
+        {
+          "mainWidths": 1,
+          "sidebarWidthRange": [374.390625, 374.3907470703125]
+        },
+        {
+          "mainWidths": 1,
+          "sidebarWidthRange": [374.3905029296875, 374.390625]
+        }
+      ]
+    },
+    "head": {
+      "runs": 5,
+      "medianReadyMs": 100.70000004768372,
+      "readyRangeMs": [80.19999998807907, 145.5999999642372],
+      "medianNextPaintMs": 106.5,
+      "nextPaintRangeMs": [84.09999996423721, 149.89999997615814],
+      "ordinary": {
+        "bodyMs": 294,
+        "inputDisabled": true,
+        "paintMs": 298.89999997615814,
+        "shellMs": 39.59999996423721,
+        "start": 2759.400000035763
+      },
+      "geometry": [
+        {
+          "mainWidths": 15,
+          "sidebarWidthRange": [374.390625, 374.390625]
+        },
+        {
+          "mainWidths": 15,
+          "sidebarWidthRange": [374.390625, 374.390625]
+        },
+        {
+          "mainWidths": 14,
+          "sidebarWidthRange": [374.390625, 374.390625]
+        },
+        {
+          "mainWidths": 15,
+          "sidebarWidthRange": [374.390625, 374.390625]
+        },
+        {
+          "mainWidths": 15,
+          "sidebarWidthRange": [374.390625, 374.390625]
+        }
+      ]
+    }
+  }
+}

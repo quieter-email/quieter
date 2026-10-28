@@ -1,0 +1,9 @@
+{
+  "afterRelease": {
+    "mailbox": "compose",
+    "mailboxId": "demo:alternate",
+    "body": "Alternate signature",
+    "sourceCorrect": true,
+    "wrongMailboxSeen": false
+  }
+}
