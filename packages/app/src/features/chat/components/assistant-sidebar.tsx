@@ -119,30 +119,13 @@ export const AssistantSidebar = ({
     <aside
       aria-hidden={!open}
       aria-label="Quieter assistant"
-      className={cn(
-        workspaceGutterClassName,
-        "absolute inset-y-0 right-0 z-20 w-full shrink-0 overflow-visible xl:relative xl:inset-auto",
-        {
-          "pointer-events-none xl:w-0": !open,
-          // oxlint-disable-next-line shadcn/no-arbitrary-values -- The docked panel reserves a viewport-relative width.
-          "xl:w-[clamp(20rem,26vw,25rem)]": open,
-        }
-      )}
+      className={cn(workspaceGutterClassName, "relative h-full w-full")}
       data-assistant-sidebar
       id={id}
       inert={!open}
     >
       <div
-        className={cn(
-          // oxlint-disable-next-line shadcn/no-arbitrary-values -- The surface keeps its docked width independently of the reserved space.
-          "absolute inset-y-0 right-0 w-full p-(--workspace-gutter) transition-[translate,opacity] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-out) motion-reduce:transition-none xl:w-[clamp(20rem,26vw,25rem)] xl:pl-0",
-          {
-            // oxlint-disable-next-line shadcn/no-arbitrary-values -- Delay hiding until the exit finishes while making entry immediately focusable.
-            "invisible translate-x-full opacity-0 transition-[translate,opacity,visibility]":
-              !open,
-            "visible translate-x-0 opacity-100": open,
-          }
-        )}
+        className="absolute inset-0 p-(--workspace-gutter) xl:pl-0"
         data-assistant-surface
       >
         <dialog

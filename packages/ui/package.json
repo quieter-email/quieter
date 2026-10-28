@@ -68,6 +68,7 @@
     "./toaster": "./src/components/ui/toaster.tsx",
     "./toggle": "./src/components/ui/toggle.tsx",
     "./toolbar": "./src/components/ui/toolbar.tsx",
+    "./workspace-dock": "./src/components/ui/workspace-dock.tsx",
     "./workspace-sidebar": "./src/components/ui/workspace-sidebar.tsx",
     "./workspace-section": "./src/components/ui/workspace-section.tsx",
     "./tooltip": "./src/components/ui/tooltip.tsx",

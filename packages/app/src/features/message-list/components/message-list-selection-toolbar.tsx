@@ -6,6 +6,10 @@ import {
   MoreHorizontalIcon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
+import {
+  AssistantSidebarContext,
+  AssistantSidebarTrigger,
+} from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { MessageLabelsMenu } from "@quieter/app/features/message-labels/components/message-labels-menu";
 import type {
   MessageListBulkAction,
@@ -21,7 +25,7 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { useLayoutEffect, useRef, useState } from "react";
+import { use, useLayoutEffect, useRef, useState } from "react";
 
 /** One 36px control plus the 8px gap that follows it. */
 const ACTION_SLOT_WIDTH_PX = 44;
@@ -29,6 +33,7 @@ const ACTION_SLOT_WIDTH_PX = 44;
 const SELECTION_SUMMARY_WIDTH_PX = 120;
 /** Overflow menu, divider, and the clear button that always close the row. */
 const TRAILING_CONTROLS_WIDTH_PX = 89;
+const ASSISTANT_TRIGGER_SLOT_WIDTH_PX = 40;
 
 /**
  * Promotes as many actions to their own button as the header row can hold.
@@ -43,36 +48,38 @@ const useInlineActionCapacity = ({
   reservedWidth: number;
 }) => {
   const rowRef = useRef<HTMLDivElement | null>(null);
-  const [rowWidth, setRowWidth] = useState(0);
+  const [inlineActionCapacity, setInlineActionCapacity] = useState(0);
 
-  useLayoutEffect(() => {
+  useLayoutEffect((): (() => void) | undefined => {
     const row = rowRef.current;
     if (row === null) {
-      return () => {
-        // Nothing to observe before the row is mounted.
-      };
+      return undefined;
     }
 
-    setRowWidth(row.getBoundingClientRect().width);
+    const updateCapacity = (width: number) => {
+      const capacity = Math.max(
+        0,
+        Math.min(
+          availableActionCount,
+          Math.floor((width - reservedWidth) / ACTION_SLOT_WIDTH_PX)
+        )
+      );
+      setInlineActionCapacity(capacity);
+    };
+    updateCapacity(row.getBoundingClientRect().width);
 
     const observer = new ResizeObserver(([entry]) => {
-      setRowWidth(entry?.contentRect.width ?? 0);
+      updateCapacity(entry?.contentRect.width ?? 0);
     });
     observer.observe(row);
 
     return () => {
       observer.disconnect();
     };
-  }, []);
+  }, [availableActionCount, reservedWidth]);
 
   return {
-    inlineActionCapacity: Math.max(
-      0,
-      Math.min(
-        availableActionCount,
-        Math.floor((rowWidth - reservedWidth) / ACTION_SLOT_WIDTH_PX)
-      )
-    ),
+    inlineActionCapacity,
     rowRef,
   };
 };
@@ -183,13 +190,16 @@ export const MessageListSelectionToolbar = ({
   pending: boolean;
   selectedCount: number;
 }) => {
+  const assistant = use(AssistantSidebarContext);
+  const assistantTriggerVisible = assistant !== null && !assistant.open;
   const promotedActions = actions.filter((action) => action.promoted === true);
   const { inlineActionCapacity, rowRef } = useInlineActionCapacity({
     availableActionCount: promotedActions.length,
     reservedWidth:
       SELECTION_SUMMARY_WIDTH_PX +
       TRAILING_CONTROLS_WIDTH_PX +
-      (labels === null ? 0 : ACTION_SLOT_WIDTH_PX),
+      (labels === null ? 0 : ACTION_SLOT_WIDTH_PX) +
+      (assistantTriggerVisible ? ASSISTANT_TRIGGER_SLOT_WIDTH_PX : 0),
   });
   const inlineActions = promotedActions.slice(0, inlineActionCapacity);
   const inlineActionIds = new Set(inlineActions.map((action) => action.id));
@@ -277,6 +287,7 @@ export const MessageListSelectionToolbar = ({
             <Icon aria-hidden icon={Cancel01Icon} />
           </Button>
         </IconButtonTooltip>
+        <AssistantSidebarTrigger className="data-[sidebar-open=true]:-ms-2" />
       </div>
 
       {pending && (

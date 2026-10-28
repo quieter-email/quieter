@@ -285,6 +285,7 @@ export const MessageListScrollPane = ({
 
   const rowHeightEstimateRef = useRef(MESSAGE_ROW_HEIGHT_PX);
   const measuredWidthRef = useRef(0);
+  const pendingLayoutAnimationRef = useRef<Animation | null>(null);
   const pendingAnchorRef = useRef<
     (Pick<VirtualItem, "index" | "key"> & { offsetWithinRow: number }) | null
   >(null);
@@ -312,65 +313,95 @@ export const MessageListScrollPane = ({
     },
     overscan: MESSAGE_LIST_OVERSCAN,
   });
-  const updateRowMeasurements = useCallback(() => {
-    const element = selection.scrollRef.current;
-    if (!element || element.clientWidth <= 0 || element.clientHeight <= 0) {
-      return false;
-    }
-    const width = element.clientWidth;
-    const rows = element.querySelectorAll<HTMLLIElement>("li[data-index]");
-    const firstRow = element.querySelector<HTMLLIElement>("li[data-index]");
-    const height = firstRow?.offsetHeight ?? 0;
-    if (
-      !firstRow &&
-      measuredWidthRef.current !== width &&
-      !pendingAnchorRef.current
-    ) {
-      const anchor = messageVirtualizer.getVirtualItemForOffset(
-        element.scrollTop
-      );
-      if (anchor) {
+  const updateRowMeasurements = useCallback(
+    function updateRowMeasurements(force = false): boolean {
+      const element = selection.scrollRef.current;
+      if (!element || element.clientWidth <= 0 || element.clientHeight <= 0) {
+        return false;
+      }
+      const layout = element.closest("[data-workspace-dock-main]");
+      const animation = layout
+        ?.getAnimations()
+        .find(
+          (candidate) =>
+            candidate instanceof CSSTransition &&
+            candidate.transitionProperty === "width" &&
+            candidate.playState !== "finished" &&
+            candidate.playState !== "idle"
+        );
+      if (animation) {
+        if (pendingLayoutAnimationRef.current !== animation) {
+          pendingLayoutAnimationRef.current = animation;
+          const settled = async () => {
+            await Promise.allSettled([animation.finished]);
+            if (pendingLayoutAnimationRef.current === animation) {
+              pendingLayoutAnimationRef.current = null;
+              updateRowMeasurements(true);
+            }
+          };
+          void settled();
+        }
+        return true;
+      }
+      const layoutSettled = force || pendingLayoutAnimationRef.current !== null;
+      pendingLayoutAnimationRef.current = null;
+      const width = element.clientWidth;
+      const rows = element.querySelectorAll<HTMLLIElement>("li[data-index]");
+      const firstRow = element.querySelector<HTMLLIElement>("li[data-index]");
+      const height = firstRow?.offsetHeight ?? 0;
+      if (
+        !firstRow &&
+        measuredWidthRef.current !== width &&
+        !pendingAnchorRef.current
+      ) {
+        const anchor = messageVirtualizer.getVirtualItemForOffset(
+          element.scrollTop
+        );
+        if (anchor) {
+          pendingAnchorRef.current = {
+            index: anchor.index,
+            key: anchor.key,
+            offsetWithinRow:
+              element.scrollTop -
+              anchor.start -
+              Number(getComputedStyle(element).paddingTop.replace("px", "")),
+          };
+        }
+      }
+      if (
+        height <= 0 ||
+        (!layoutSettled &&
+          measuredWidthRef.current === width &&
+          rowHeightEstimateRef.current === height)
+      ) {
+        return false;
+      }
+
+      const viewportTop = element.getBoundingClientRect().top;
+      let anchorRow = firstRow;
+      for (const row of rows) {
+        if (row.getBoundingClientRect().top > viewportTop) {
+          break;
+        }
+        anchorRow = row;
+      }
+      if (anchorRow?.dataset.threadId && !pendingAnchorRef.current) {
         pendingAnchorRef.current = {
-          index: anchor.index,
-          key: anchor.key,
-          offsetWithinRow:
-            element.scrollTop -
-            anchor.start -
-            Number(getComputedStyle(element).paddingTop.replace("px", "")),
+          index: Number(anchorRow.dataset.index),
+          key: anchorRow.dataset.threadId,
+          offsetWithinRow: viewportTop - anchorRow.getBoundingClientRect().top,
         };
       }
-    }
-    if (
-      height <= 0 ||
-      (measuredWidthRef.current === width &&
-        rowHeightEstimateRef.current === height)
-    ) {
-      return false;
-    }
-
-    const viewportTop = element.getBoundingClientRect().top;
-    let anchorRow = firstRow;
-    for (const row of rows) {
-      if (row.getBoundingClientRect().top > viewportTop) {
-        break;
+      measuredWidthRef.current = width;
+      rowHeightEstimateRef.current = height;
+      messageVirtualizer.measure();
+      for (const row of rows) {
+        messageVirtualizer.measureElement(row);
       }
-      anchorRow = row;
-    }
-    if (anchorRow?.dataset.threadId && !pendingAnchorRef.current) {
-      pendingAnchorRef.current = {
-        index: Number(anchorRow.dataset.index),
-        key: anchorRow.dataset.threadId,
-        offsetWithinRow: viewportTop - anchorRow.getBoundingClientRect().top,
-      };
-    }
-    measuredWidthRef.current = width;
-    rowHeightEstimateRef.current = height;
-    messageVirtualizer.measure();
-    for (const row of rows) {
-      messageVirtualizer.measureElement(row);
-    }
-    return true;
-  }, [messageVirtualizer, selection.scrollRef]);
+      return true;
+    },
+    [messageVirtualizer, selection.scrollRef]
+  );
 
   useLayoutEffect((): (() => void) | undefined => {
     const element = selection.scrollRef.current;
@@ -383,6 +414,7 @@ export const MessageListScrollPane = ({
     observer.observe(element);
     return () => {
       observer.disconnect();
+      pendingLayoutAnimationRef.current = null;
     };
   }, [selection.scrollRef, updateRowMeasurements]);
 
