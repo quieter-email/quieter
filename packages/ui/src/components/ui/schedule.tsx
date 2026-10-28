@@ -679,29 +679,33 @@ export const Schedule = ({
         {dates.map((date, index) => (
           <div
             className={cn(
-              "flex min-h-8 items-center justify-center gap-1.5 border-border/50 px-2 py-1",
+              "flex min-h-8 items-center justify-center border-border/50 px-2",
               { "border-r": index < dates.length - 1 }
             )}
             data-selected-date={date === selectedDate || undefined}
             key={date}
           >
             <span
-              className={cn("text-caption", {
-                "font-medium": date === today || date === selectedDate,
-                "text-muted-fg": date !== today && date !== selectedDate,
-              })}
+              aria-current={date === today ? "date" : undefined}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-sm px-2 py-1",
+                { "bg-primary text-primary-fg": date === today }
+              )}
             >
-              {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
-            </span>
-            <span
-              className={cn("text-body-sm font-medium", {
-                "text-primary": date === today,
-              })}
-            >
-              {Number(date.slice(8))}
-              {date === selectedDate ? (
-                <span className="sr-only">, selected date</span>
-              ) : null}
+              <span
+                className={cn("text-caption", {
+                  "font-medium": date === today || date === selectedDate,
+                  "text-muted-fg": date !== today && date !== selectedDate,
+                })}
+              >
+                {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
+              </span>
+              <span className="text-body-sm font-medium">
+                {Number(date.slice(8))}
+                {date === selectedDate ? (
+                  <span className="sr-only">, selected date</span>
+                ) : null}
+              </span>
             </span>
           </div>
         ))}
