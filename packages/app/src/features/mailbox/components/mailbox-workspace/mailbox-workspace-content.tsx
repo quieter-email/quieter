@@ -59,17 +59,11 @@ import {
 } from "react";
 import type { ComponentProps, ReactNode } from "react";
 
-const ChatView = lazy(loadChatView);
-
 const CalendarWorkspace = lazy(async () => {
   const { CalendarWorkspace: Workspace } =
     await import("@quieter/app/features/calendar/components/calendar-workspace");
   return { default: Workspace };
 });
-
-const ComposeWorkspace = lazy(loadComposeWorkspace);
-
-const SnippetWorkspace = lazy(loadSnippetWorkspace);
 
 const messagePanelsClassName = cn(
   workspaceGutterClassName,
@@ -169,6 +163,130 @@ const ComposeWorkspaceLoading = ({
     </output>
   </div>
 );
+
+const SnippetWorkspaceLoading = () => (
+  <WorkspaceSection centered className="lg:col-span-2">
+    <output
+      aria-label="Loading snippets"
+      aria-live="polite"
+      className="flex items-center gap-3 text-body text-muted-fg"
+    >
+      <Icon aria-hidden size={20} animation="spin" icon={Loading03Icon} />
+      Loading snippets…
+    </output>
+  </WorkspaceSection>
+);
+
+const AssistantLoading = () => (
+  <p className="p-4 text-body-sm text-muted-fg" data-assistant-loading>
+    Loading assistant…
+  </p>
+);
+
+type WorkspaceModuleResource<Module> = {
+  load: () => Promise<Module>;
+  readonly module: Module | undefined;
+};
+
+const createWorkspaceModuleResource = <Module,>(
+  load: () => Promise<Module>
+): WorkspaceModuleResource<Module> => {
+  let module: Module | undefined;
+  return {
+    async load() {
+      module = await load();
+      return module;
+    },
+    get module() {
+      return module;
+    },
+  };
+};
+
+const composeWorkspaceResource =
+  createWorkspaceModuleResource(loadComposeWorkspace);
+
+const snippetWorkspaceResource =
+  createWorkspaceModuleResource(loadSnippetWorkspace);
+
+const chatViewResource = createWorkspaceModuleResource(loadChatView);
+
+// Keep module loading in state so Suspense cannot postpone a ready workspace.
+const useWorkspaceModule = <Module,>(
+  resource: WorkspaceModuleResource<Module>
+) => {
+  const [loadState, setLoadState] = useState<
+    { module: Module } | { error: unknown } | null
+  >(() => (resource.module === undefined ? null : { module: resource.module }));
+
+  useEffect((): (() => void) | undefined => {
+    if (loadState !== null) {
+      return undefined;
+    }
+    let active = true;
+    const load = async () => {
+      try {
+        const module = await resource.load();
+        if (active) {
+          setLoadState({ module });
+        }
+      } catch (error) {
+        if (active) {
+          setLoadState({ error });
+        }
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [loadState, resource]);
+
+  if (loadState === null) {
+    return null;
+  }
+  if ("error" in loadState) {
+    throw loadState.error;
+  }
+  return loadState.module;
+};
+
+const ComposeWorkspace = (
+  props: ComponentProps<
+    Awaited<ReturnType<typeof loadComposeWorkspace>>["default"]
+  >
+) => {
+  const module = useWorkspaceModule(composeWorkspaceResource);
+  if (module === null) {
+    return <ComposeWorkspaceLoading onOpenSidebar={props.onOpenSidebar} />;
+  }
+  const Workspace = module.default;
+  return <Workspace {...props} />;
+};
+
+const SnippetWorkspace = (
+  props: ComponentProps<
+    Awaited<ReturnType<typeof loadSnippetWorkspace>>["default"]
+  >
+) => {
+  const module = useWorkspaceModule(snippetWorkspaceResource);
+  if (module === null) {
+    return <SnippetWorkspaceLoading />;
+  }
+  const Workspace = module.default;
+  return <Workspace {...props} />;
+};
+
+const ChatView = (
+  props: ComponentProps<Awaited<ReturnType<typeof loadChatView>>["default"]>
+) => {
+  const module = useWorkspaceModule(chatViewResource);
+  if (module === null) {
+    return <AssistantLoading />;
+  }
+  const View = module.default;
+  return <View {...props} />;
+};
 
 const NoMailboxWorkspace = ({
   connectError,
@@ -493,25 +611,7 @@ const MailboxWorkspaceContentInner = ({
   } else if (activeMailbox === null) {
     mailboxContent = (
       <div className="absolute inset-0 min-h-0 min-w-0 overflow-hidden">
-        <Suspense
-          fallback={
-            <WorkspaceSection centered className="lg:col-span-2">
-              <output
-                aria-label="Loading snippets"
-                aria-live="polite"
-                className="flex items-center gap-3 text-body text-muted-fg"
-              >
-                <Icon
-                  aria-hidden
-                  size={20}
-                  animation="spin"
-                  icon={Loading03Icon}
-                />
-                Loading snippets…
-              </output>
-            </WorkspaceSection>
-          }
-        >
+        <Suspense fallback={<SnippetWorkspaceLoading />}>
           <SnippetWorkspace
             key={selectedMailboxId}
             mailboxId={selectedMailboxId}
@@ -868,16 +968,7 @@ const MailboxWorkspaceContentInner = ({
                     }}
                   >
                     {assistantOpened ? (
-                      <Suspense
-                        fallback={
-                          <p
-                            className="p-4 text-body-sm text-muted-fg"
-                            data-assistant-loading
-                          >
-                            Loading assistant…
-                          </p>
-                        }
-                      >
+                      <Suspense fallback={<AssistantLoading />}>
                         {allInboxesActive && (
                           <p className="border-b border-border px-4 py-2 text-caption text-muted-fg">
                             Assistant for{" "}
