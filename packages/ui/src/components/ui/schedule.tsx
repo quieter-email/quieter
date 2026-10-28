@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { CSSProperties, DragEvent, KeyboardEvent, ReactNode } from "react";
+import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
 import { formatTimeMinute } from "../../lib/date-time";
@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "./dialog";
 import { IconButtonTooltip } from "./icon-button-tooltip";
+import { useScheduleEventDrag } from "./use-schedule-event-drag";
 
 export type ScheduleItem = {
   allDay: boolean;
@@ -198,13 +199,13 @@ export const Schedule = ({
 }: ScheduleProps) => {
   const { timeFormat } = useDateTimePreferences();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{
-    allDay: boolean;
-    date: string;
-    id: string;
-    minute: number;
-    offsetMinute: number;
-  } | null>(null);
+  const eventDrag = useScheduleEventDrag({
+    hourHeight,
+    onEventMove,
+    rangeKey: `${view}:${dates.join(",")}`,
+    scrollRef,
+    timeFormat,
+  });
   const slotHelpId = useId();
   const selectionRef = useRef<SlotSelection | null>(null);
   const suppressSlotClickRef = useRef(false);
@@ -274,68 +275,19 @@ export const Schedule = ({
     return grouped;
   }, [dates, items]);
 
+  const positionedDays = useMemo(
+    () =>
+      new Map(
+        dates.map((date) => [date, positionTimedItems(days.get(date) ?? [])])
+      ),
+    [dates, days]
+  );
+
   useEffect(() => {
     if ((view === "day" || view === "week") && scrollRef.current) {
       scrollRef.current.scrollTop = 7.75 * hourHeight;
     }
   }, [view]);
-
-  const beginDrag = (
-    event: DragEvent<HTMLButtonElement>,
-    item: ScheduleItem,
-    timed: boolean
-  ) => {
-    if (!onEventMove || item.preview) {
-      return;
-    }
-    const bounds = event.currentTarget.getBoundingClientRect();
-    dragRef.current = {
-      allDay: item.allDay,
-      date: item.date,
-      id: item.id,
-      minute: item.startMinute,
-      offsetMinute: timed
-        ? Math.max(0, ((event.clientY - bounds.top) * 60) / hourHeight)
-        : 0,
-    };
-    event.dataTransfer.setData("application/x-quieter-schedule-event", item.id);
-    event.dataTransfer.effectAllowed = "move";
-  };
-
-  const dropEvent = (
-    event: DragEvent<HTMLElement>,
-    date: string,
-    allDay: boolean,
-    timed = false
-  ) => {
-    const dragged = dragRef.current;
-    if (!dragged || !onEventMove) {
-      return;
-    }
-    event.preventDefault();
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const minute = timed
-      ? Math.max(
-          0,
-          Math.min(
-            1425,
-            Math.round(
-              (((event.clientY - bounds.top) * 60) / hourHeight -
-                dragged.offsetMinute) /
-                15
-            ) * 15
-          )
-        )
-      : dragged.minute;
-    onEventMove({
-      allDay,
-      date,
-      id: dragged.id,
-      minute: allDay ? 0 : minute,
-      source: { date: dragged.date, minute: dragged.minute },
-    });
-    dragRef.current = null;
-  };
 
   const moveSlotFocus = (
     event: KeyboardEvent<HTMLDivElement>,
@@ -410,9 +362,13 @@ export const Schedule = ({
         aria-label={`${item.title}, ${item.allDay ? "all day" : `${formatTimeMinute(item.startMinute, timeFormat)} to ${formatTimeMinute(item.endMinute, timeFormat)}`}. ${item.preview ? "Unsaved event preview." : "Open event to edit."}`}
         aria-pressed={item.preview ? undefined : selectedId === item.id}
         className={cn(
-          "group/event @container/event-card relative z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm bg-[color-mix(in_srgb,var(--schedule-event-color)_30%,var(--card))] px-2 py-1 text-left text-body-sm leading-4 text-fg transition-[color,background-color,box-shadow] duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg focus-visible:outline-hidden enabled:hover:brightness-95 data-selected:ring-2 data-selected:ring-primary motion-reduce:transition-none",
+          "group/event @container/event-card relative z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm bg-[color-mix(in_srgb,var(--schedule-event-color)_30%,var(--card))] px-2 py-1 text-left text-body-sm leading-4 text-fg transition-colors duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-bg focus-visible:outline-hidden enabled:hover:brightness-95 data-dragging:opacity-35 data-selected:ring-2 data-selected:ring-primary motion-reduce:transition-none",
           !externalColor && toneClasses[item.tone ?? "primary"],
           {
+            "cursor-grab active:cursor-grabbing":
+              Boolean(onEventMove) &&
+              !item.preview &&
+              presentation !== "agenda",
             "h-full": !compact,
             "py-0.5": !compact && !item.allDay && duration < 60,
             "py-1 text-caption": compact,
@@ -421,22 +377,30 @@ export const Schedule = ({
           }
         )}
         data-selected={selectedId === item.id || undefined}
+        data-schedule-event=""
         disabled={item.preview}
-        draggable={Boolean(onEventMove) && !item.preview}
+        draggable={false}
         key={`${item.occurrenceId ?? item.id}:${item.date}`}
-        onClick={() => {
-          if (item.preview) {
+        onClick={(event) => {
+          if (
+            item.preview ||
+            (event.detail !== 0 && eventDrag.consumeClick())
+          ) {
             return;
           }
           setExpandedDate(null);
           onEventClick(item.id);
         }}
-        onDragEnd={() => {
-          dragRef.current = null;
+        onKeyDown={eventDrag.handleKeyDown}
+        onLostPointerCapture={eventDrag.handleCancel}
+        onPointerCancel={eventDrag.handleCancel}
+        onPointerDown={(event) => {
+          if (presentation !== "agenda") {
+            eventDrag.handlePointerDown(event, item, !compact && !item.allDay);
+          }
         }}
-        onDragStart={(event) => {
-          beginDrag(event, item, !compact && !item.allDay);
-        }}
+        onPointerMove={eventDrag.handlePointerMove}
+        onPointerUp={eventDrag.handlePointerUp}
         style={eventColorStyle}
         title={`${item.title}${item.allDay ? "" : `, ${formatTimeMinute(item.startMinute, timeFormat)} – ${formatTimeMinute(item.endMinute, timeFormat)}`}${item.detail ? `, ${item.detail}` : ""}`}
         type="button"
@@ -555,6 +519,7 @@ export const Schedule = ({
         <div
           aria-label="Month calendar"
           className="flex min-h-0 flex-1 flex-col overflow-auto"
+          ref={scrollRef}
         >
           <div className="grid min-w-xl grid-cols-7">
             {dates.slice(0, 7).map((date) => (
@@ -572,7 +537,9 @@ export const Schedule = ({
               const dateVariant = date === selectedDate ? "secondary" : "ghost";
               return (
                 <div
-                  className="min-h-28 min-w-0 border-t border-r border-border/50 px-2 py-3 nth-[7n]:border-r-0"
+                  className="min-h-28 min-w-0 border-t border-r border-border/50 px-2 py-3 data-schedule-drop-active:bg-primary/5 nth-[7n]:border-r-0"
+                  data-schedule-drop-date={date}
+                  data-schedule-drop-kind="date"
                   data-selected-date={date === selectedDate || undefined}
                   key={date}
                   role="presentation"
@@ -591,14 +558,6 @@ export const Schedule = ({
                     ) {
                       onSlotCreate({ allDay: true, date, minute: 0 });
                     }
-                  }}
-                  onDragOver={(event) => {
-                    if (dragRef.current) {
-                      event.preventDefault();
-                    }
-                  }}
-                  onDrop={(event) => {
-                    dropEvent(event, date, dragRef.current?.allDay ?? false);
                   }}
                 >
                   <div className="mb-2 flex items-center justify-between">
@@ -751,17 +710,11 @@ export const Schedule = ({
         </div>
         {dates.map((date) => (
           <div
-            className="relative min-h-8 space-y-1 border-t border-r border-border/50 px-0.5 py-1 last:border-r-0"
+            className="relative min-h-8 space-y-1 border-t border-r border-border/50 px-0.5 py-1 last:border-r-0 data-schedule-drop-active:bg-primary/5"
+            data-schedule-drop-date={date}
+            data-schedule-drop-kind="all-day"
             data-selected-date={date === selectedDate || undefined}
             key={date}
-            onDragOver={(event) => {
-              if (dragRef.current) {
-                event.preventDefault();
-              }
-            }}
-            onDrop={(event) => {
-              dropEvent(event, date, true);
-            }}
           >
             {/* Native hit areas fill each all-day cell without adding a separate control row. */}
             <button
@@ -807,17 +760,11 @@ export const Schedule = ({
         </div>
         {dates.map((date) => (
           <div
-            className="relative border-r border-border/50 last:border-r-0"
+            className="relative border-r border-border/50 last:border-r-0 data-schedule-drop-active:bg-primary/5"
+            data-schedule-drop-date={date}
+            data-schedule-drop-kind="time"
             data-selected-date={date === selectedDate || undefined}
             key={date}
-            onDragOver={(event) => {
-              if (dragRef.current) {
-                event.preventDefault();
-              }
-            }}
-            onDrop={(event) => {
-              dropEvent(event, date, false, true);
-            }}
             onClick={(event) => {
               const button = event.target;
               if (
@@ -905,7 +852,7 @@ export const Schedule = ({
                 event.button !== 0 ||
                 !event.isPrimary ||
                 event.pointerType === "touch" ||
-                dragRef.current ||
+                eventDrag.activeRef.current ||
                 resize
               ) {
                 return;
@@ -955,6 +902,12 @@ export const Schedule = ({
               if (nextMinute === null) {
                 return;
               }
+              if (
+                activeSelection.phase === "selecting" &&
+                activeSelection.minute === nextMinute
+              ) {
+                return;
+              }
               const nextSelection: SlotSelection = {
                 ...activeSelection,
                 minute: nextMinute,
@@ -1002,7 +955,7 @@ export const Schedule = ({
             role="presentation"
           >
             {slotsByDate.get(date)}
-            {positionTimedItems(days.get(date) ?? []).map(
+            {(positionedDays.get(date) ?? []).map(
               ({ column, columns: count, item }) => {
                 const endMinute =
                   resize?.id === item.id && resize.date === date
@@ -1085,12 +1038,16 @@ export const Schedule = ({
                                     hourHeight) /
                                   15
                               ) * 15;
+                            const nextEndMinute = Math.max(
+                              resize.startMinute + 15,
+                              Math.min(1440, target)
+                            );
+                            if (nextEndMinute === resize.endMinute) {
+                              return;
+                            }
                             setResize({
                               ...resize,
-                              endMinute: Math.max(
-                                resize.startMinute + 15,
-                                Math.min(1440, target)
-                              ),
+                              endMinute: nextEndMinute,
                             });
                           }}
                           onPointerUp={() => {

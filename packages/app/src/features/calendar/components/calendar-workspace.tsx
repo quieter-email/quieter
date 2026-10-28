@@ -160,6 +160,7 @@ const CalendarWorkspaceContent = ({
   const { weekStartsOn } = useDateTimePreferences();
   const assistant = use(AssistantSidebarContext);
   const route = useMailboxRouteSearch();
+  const { setMailboxSearch } = route;
   const queryClient = useQueryClient();
   const agentWorkspace = useAgentWorkspace();
   const online = useSyncExternalStore(
@@ -305,7 +306,7 @@ const CalendarWorkspaceContent = ({
       ),
     initialData: () =>
       selectedRef
-        ? data.events.find(
+        ? data.confirmedEvents.find(
             (event) =>
               getCalendarEventKey(event) === getCalendarEventKey(selectedRef)
           )
@@ -344,11 +345,14 @@ const CalendarWorkspaceContent = ({
   let selectedEvent: CalendarEvent | undefined;
   if (selectedRef) {
     selectedEvent = preview
-      ? data.events.find(
+      ? data.confirmedEvents.find(
           (event) =>
             getCalendarEventKey(event) === getCalendarEventKey(selectedRef)
         )
       : selectedQuery.data;
+  }
+  if (selectedEvent) {
+    selectedEvent = data.displayEvent(selectedEvent);
   }
   const visibleRefs = data.visibleCalendars.map((calendar) => ({
     calendarId: calendar.calendarId,
@@ -376,7 +380,7 @@ const CalendarWorkspaceContent = ({
   useLayoutEffect(() => {
     bridgeState.current = renderedWorkspace;
   });
-  const setRoute = useEffectEvent(route.setMailboxSearch);
+  const setRoute = useEffectEvent(setMailboxSearch);
   useLayoutEffect(
     () =>
       agentWorkspace?.registerCalendar({
@@ -451,12 +455,16 @@ const CalendarWorkspaceContent = ({
     };
   }, [prefetchFingerprint]);
   const closeEvent = () => {
-    store.setState((current) => ({ ...current, editor: null }));
-    void route.setMailboxSearch({ calendarEventId: null });
+    store.setState((current) =>
+      current.editor === null ? current : { ...current, editor: null }
+    );
+    void setMailboxSearch({ calendarEventId: null });
   };
   const selectEvent = (event: CalendarEvent) => {
-    store.setState((current) => ({ ...current, editor: null }));
-    void route.setMailboxSearch({
+    store.setState((current) =>
+      current.editor === null ? current : { ...current, editor: null }
+    );
+    void setMailboxSearch({
       calendarConnectionId: event.connectionId,
       calendarEventId: event.eventId,
       calendarId: event.calendarId,
@@ -688,11 +696,16 @@ const CalendarWorkspaceContent = ({
   const eventsByKey = new Map(
     data.events.map((event) => [getCalendarEventKey(event), event])
   );
-  const filteredEvents = data.events.filter((event) =>
-    `${event.title} ${event.location} ${event.description}`
-      .toLocaleLowerCase()
-      .includes(ui.search.toLocaleLowerCase())
-  );
+  const filteredEvents = useMemo(() => {
+    const search = ui.search.toLocaleLowerCase();
+    return search === ""
+      ? data.events
+      : data.events.filter((event) =>
+          `${event.title} ${event.location} ${event.description}`
+            .toLocaleLowerCase()
+            .includes(search)
+        );
+  }, [data.events, ui.search]);
   const selectedAccount = data.accounts.find(
     (account) => account.id === (selectedRef ?? requestedEventRef)?.connectionId
   );
@@ -722,9 +735,9 @@ const CalendarWorkspaceContent = ({
       ui.editor.event.eventId === selectedEvent.recurringEventId)
       ? {
           ...ui.editor,
-          event: preview
-            ? ui.editor.event
-            : (editingQuery.data ?? ui.editor.event),
+          event: data.displayEvent(
+            preview ? ui.editor.event : (editingQuery.data ?? ui.editor.event)
+          ),
         }
       : null;
   const activeEditor: CalendarEditor | null =
@@ -783,18 +796,24 @@ const CalendarWorkspaceContent = ({
     activeEditor?.kind === "create"
       ? `draft:${activeEditor.operationId}`
       : undefined;
-  const { items, previewIssue } = getCalendarSchedule({
-    calendars: data.calendars,
-    dates: range.dates,
-    draft: draftForm && draftId ? { form: draftForm, id: draftId } : undefined,
-    events: filteredEvents,
-    timeZone,
-  });
+  const { items, previewIssue } = useMemo(
+    () =>
+      getCalendarSchedule({
+        calendars: data.calendars,
+        dates: range.dates,
+        draft:
+          draftForm && draftId ? { form: draftForm, id: draftId } : undefined,
+        events: filteredEvents,
+        timeZone,
+      }),
+    [data.calendars, range.dates, draftForm, draftId, filteredEvents, timeZone]
+  );
   let details: ReactNode = null;
   if (activeEditor && editorSession) {
     details = (
       <CalendarEventEditor
         calendars={data.calendars}
+        events={data.events}
         editor={activeEditor}
         locationSuggestions={data.events.flatMap((event) =>
           event.location ? [event.location] : []
@@ -1050,7 +1069,7 @@ const CalendarWorkspaceContent = ({
           createEvent({ allDay: false, date, minute: 540 });
         }}
         onDateChange={(nextDate) => {
-          void route.setMailboxSearch({ calendarDate: nextDate });
+          void setMailboxSearch({ calendarDate: nextDate });
         }}
         onMobileOpenChange={onMobileSidebarOpenChange}
         onToggleCalendar={(calendar: CalendarSummary) => {
@@ -1134,7 +1153,7 @@ const CalendarWorkspaceContent = ({
                       shifted.setUTCDate(1);
                       shifted.setUTCMonth(shifted.getUTCMonth() - 1);
                     }
-                    void route.setMailboxSearch({
+                    void setMailboxSearch({
                       calendarDate:
                         view === "month"
                           ? shifted.toISOString().slice(0, 10)
@@ -1159,7 +1178,7 @@ const CalendarWorkspaceContent = ({
                       shifted.setUTCDate(1);
                       shifted.setUTCMonth(shifted.getUTCMonth() + 1);
                     }
-                    void route.setMailboxSearch({
+                    void setMailboxSearch({
                       calendarDate:
                         view === "month"
                           ? shifted.toISOString().slice(0, 10)
@@ -1175,7 +1194,7 @@ const CalendarWorkspaceContent = ({
             </div>
             <Button
               onClick={() => {
-                void route.setMailboxSearch({ calendarDate: now.date });
+                void setMailboxSearch({ calendarDate: now.date });
               }}
               size="sm"
               variant="secondary"
@@ -1193,7 +1212,7 @@ const CalendarWorkspaceContent = ({
                   value === "month" ||
                   value === "agenda"
                 ) {
-                  void route.setMailboxSearch({ calendarView: value });
+                  void setMailboxSearch({ calendarView: value });
                 }
               }}
               value={view}
@@ -1218,7 +1237,7 @@ const CalendarWorkspaceContent = ({
               aria-label="Display time zone"
               className="max-w-40"
               onValueChange={(zone) => {
-                void route.setMailboxSearch({ calendarTimeZone: zone });
+                void setMailboxSearch({ calendarTimeZone: zone });
               }}
               size="sm"
               value={timeZone}

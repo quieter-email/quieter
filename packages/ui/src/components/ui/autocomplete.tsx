@@ -63,7 +63,7 @@ export const Autocomplete = ({
             "flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-md"
           )}
         >
-          <AutocompletePrimitive.Empty className="px-3 py-4 text-body-sm text-muted-fg">
+          <AutocompletePrimitive.Empty className="px-3 py-4 text-body-sm text-muted-fg empty:p-0">
             {emptyMessage}
           </AutocompletePrimitive.Empty>
           <AutocompletePrimitive.List className="min-h-0 overflow-y-auto overscroll-contain p-1 empty:p-0">

@@ -11,11 +11,9 @@ import { toastError } from "@quieter/app/lib/error-toast";
 import { rpc } from "@quieter/app/lib/orpc";
 import { persistQueryByKey } from "@quieter/app/lib/query-persister";
 import type {
+  CalendarAccount,
   CalendarEvent,
-  CalendarEventDraft,
-  CalendarEventPatch,
   CalendarMutationResult,
-  CalendarRef,
   CalendarSummary,
 } from "@quieter/calendar";
 import {
@@ -24,33 +22,42 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import type { UseQueryResult } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef } from "react";
 
 import {
   getCalendarEventKey,
   getCalendarRefKey,
 } from "../domain/calendar-event-form";
 import { getCalendarGroups } from "../domain/calendar-groups";
+import { createCalendarEventDisplay } from "../domain/calendar-mutation";
+import type { CalendarMutation } from "../domain/calendar-mutation";
 import {
   calendarPreviewAccounts,
   calendarPreviewCalendars,
   createCalendarPreviewEvents,
 } from "../domain/calendar-preview";
 
-export type CalendarMutation =
-  | {
-      kind: "create";
-      ref: CalendarRef;
-      draft: CalendarEventDraft;
-      operationId: string;
-    }
-  | { kind: "update"; event: CalendarEvent; changes: CalendarEventPatch }
-  | { kind: "delete"; event: CalendarEvent }
-  | {
-      kind: "respond";
-      event: CalendarEvent;
-      response: "accepted" | "tentative" | "declined";
-    };
+const combineCalendarQueries = (
+  queries: UseQueryResult<Awaited<ReturnType<typeof rpc.calendar.calendars>>>[]
+) => ({
+  calendars: queries.flatMap((query) => query.data?.calendars ?? []),
+  queries,
+});
+
+const combineEventQueries = (
+  queries: UseQueryResult<Awaited<ReturnType<typeof rpc.calendar.events>>>[]
+) => ({
+  events: [
+    ...new Map(
+      queries
+        .toSorted((left, right) => left.dataUpdatedAt - right.dataUpdatedAt)
+        .flatMap((query) => query.data?.events ?? [])
+        .map((event) => [getCalendarEventKey(event), event])
+    ).values(),
+  ],
+  queries,
+});
 
 export const useCalendarData = ({
   date,
@@ -75,10 +82,13 @@ export const useCalendarData = ({
       ? ["calendar-preview", userId, preview, "accounts"]
       : accountsOptions.queryKey,
   });
-  const accounts = preview
-    ? calendarPreviewAccounts
-    : (accountsQuery.data?.accounts ?? []);
-  const calendarQueries = useQueries({
+  const accounts = useMemo<CalendarAccount[]>(
+    () =>
+      preview ? calendarPreviewAccounts : (accountsQuery.data?.accounts ?? []),
+    [accountsQuery.data?.accounts, preview]
+  );
+  const calendarResults = useQueries({
+    combine: combineCalendarQueries,
     queries: preview
       ? []
       : accounts.map((account) => ({
@@ -86,6 +96,7 @@ export const useCalendarData = ({
           enabled: preview === null && account.status === "connected",
         })),
   });
+  const calendarQueries = calendarResults.queries;
   const previewCalendarsKey = [
     "calendar-preview",
     userId,
@@ -100,25 +111,50 @@ export const useCalendarData = ({
     queryKey: previewCalendarsKey,
     staleTime: Infinity,
   });
-  const sourceCalendars = preview
-    ? (previewCalendarsQuery.data ?? [])
-    : calendarQueries.flatMap((query) => query.data?.calendars ?? []);
-  const calendarGroups = getCalendarGroups({
-    accounts,
-    calendars: sourceCalendars,
-  });
-  const calendars = calendarGroups.map((group) => group.calendar);
-  const visibleCalendars = calendarGroups
-    .filter((group) =>
-      group.keys.some((key) => !hiddenCalendarKeys.includes(key))
-    )
-    .map((group) => group.calendar);
-  const requests = preview
-    ? []
-    : visibleCalendars.flatMap((calendar) =>
-        getCalendarCacheMonthRanges(range).map((month) => ({ calendar, month }))
-      );
-  const eventQueries = useQueries({
+  const calendarGroups = useMemo(
+    () =>
+      getCalendarGroups({
+        accounts,
+        calendars: preview
+          ? (previewCalendarsQuery.data ?? [])
+          : calendarResults.calendars,
+      }),
+    [accounts, calendarResults.calendars, preview, previewCalendarsQuery.data]
+  );
+  const calendars = useMemo(
+    () => calendarGroups.map((group) => group.calendar),
+    [calendarGroups]
+  );
+  const visibleCalendars = useMemo(
+    () =>
+      calendarGroups
+        .filter((group) =>
+          group.keys.some((key) => !hiddenCalendarKeys.includes(key))
+        )
+        .map((group) => group.calendar),
+    [calendarGroups, hiddenCalendarKeys]
+  );
+  const monthRanges = useMemo(
+    () =>
+      getCalendarCacheMonthRanges({
+        end: range.end,
+        query: range.query,
+        start: range.start,
+        timeZone: range.timeZone,
+      }),
+    [range.end, range.query, range.start, range.timeZone]
+  );
+  const requests = useMemo(
+    () =>
+      preview
+        ? []
+        : visibleCalendars.flatMap((calendar) =>
+            monthRanges.map((month) => ({ calendar, month }))
+          ),
+    [monthRanges, preview, visibleCalendars]
+  );
+  const eventResults = useQueries({
+    combine: combineEventQueries,
     queries: requests.map(({ calendar, month }) => ({
       ...calendarEventsQueryOptions(userId, calendar, month),
       enabled:
@@ -130,6 +166,7 @@ export const useCalendarData = ({
         ),
     })),
   });
+  const eventQueries = eventResults.queries;
   const previewKey = [
     "calendar-preview",
     userId,
@@ -147,22 +184,19 @@ export const useCalendarData = ({
     queryKey: previewKey,
     staleTime: Infinity,
   });
-  const events = preview
-    ? (previewQuery.data ?? []).filter((event) =>
-        visibleCalendars.some(
-          (calendar) =>
-            calendar.calendarId === event.calendarId &&
-            calendar.connectionId === event.connectionId
-        )
-      )
-    : [
-        ...new Map(
-          eventQueries
-            .toSorted((left, right) => left.dataUpdatedAt - right.dataUpdatedAt)
-            .flatMap((query) => query.data?.events ?? [])
-            .map((event) => [getCalendarEventKey(event), event])
-        ).values(),
-      ];
+  const confirmedEvents = useMemo(
+    () =>
+      preview
+        ? (previewQuery.data ?? []).filter((event) =>
+            visibleCalendars.some(
+              (calendar) =>
+                calendar.calendarId === event.calendarId &&
+                calendar.connectionId === event.connectionId
+            )
+          )
+        : eventResults.events,
+    [eventResults.events, preview, previewQuery.data, visibleCalendars]
+  );
   const scopedQueries = [
     ...calendarQueries.map((query, index) => ({
       connectionId: accounts[index]?.id,
@@ -415,6 +449,20 @@ export const useCalendarData = ({
       });
     },
   });
+  const displayEvent = useMemo(
+    () =>
+      createCalendarEventDisplay({
+        isPending: mutation.isPending,
+        variables: mutation.variables,
+      }),
+    [mutation.isPending, mutation.variables]
+  );
+  const events = useMemo(() => {
+    const displayed = confirmedEvents.map(displayEvent);
+    return displayed.some((event, index) => event !== confirmedEvents[index])
+      ? displayed
+      : confirmedEvents;
+  }, [confirmedEvents, displayEvent]);
   const refresh = async () => {
     if (!preview) {
       await queryClient.invalidateQueries({
@@ -427,6 +475,8 @@ export const useCalendarData = ({
     calendarGroups,
     calendars,
     colorMutation,
+    confirmedEvents,
+    displayEvent,
     events,
     failures,
     hiddenCalendarKeys: calendarGroups

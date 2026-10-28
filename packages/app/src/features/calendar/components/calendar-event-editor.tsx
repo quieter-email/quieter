@@ -69,6 +69,7 @@ const emptyLocationSuggestions: readonly string[] = [];
 export const CalendarEventEditor = ({
   calendars,
   editor,
+  events,
   locationSuggestions = emptyLocationSuggestions,
   onClose,
   onDelete,
@@ -85,6 +86,7 @@ export const CalendarEventEditor = ({
 }: {
   calendars: CalendarSummary[];
   editor: CalendarEditor;
+  events: readonly CalendarEvent[];
   locationSuggestions?: readonly string[];
   onClose: () => void;
   onDelete?: () => void;
@@ -144,9 +146,23 @@ export const CalendarEventEditor = ({
     ],
     staleTime: 24 * 60 * 60 * 1000,
   });
-  const colors = preview
-    ? calendarPreviewEventColors
-    : (colorsQuery.data?.colors ?? []);
+  const colors = new Set(
+    (preview
+      ? calendarPreviewEventColors
+      : (colorsQuery.data?.colors ?? [])
+    ).map((color) => color.toLowerCase())
+  );
+  for (const event of events) {
+    if (
+      event.connectionId === selectedCalendar?.connectionId &&
+      event.colorOverride
+    ) {
+      colors.add(event.colorOverride.toLowerCase());
+    }
+  }
+  if (form.color) {
+    colors.add(form.color.toLowerCase());
+  }
   const isOccurrence =
     editor.kind === "edit" &&
     editor.scope === "occurrence" &&
@@ -757,11 +773,11 @@ export const CalendarEventEditor = ({
                   <PopoverContent align="start">
                     <PopoverTitle>Event color</PopoverTitle>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {colors.map((color) => (
+                      {[...colors].map((color) => (
                         <IconButtonTooltip key={color} label={`Use ${color}`}>
                           <Button
                             aria-label={`Use ${color}`}
-                            aria-pressed={form.color === color}
+                            aria-pressed={form.color?.toLowerCase() === color}
                             onClick={() => {
                               store.setState((current) => ({
                                 ...current,
@@ -797,6 +813,11 @@ export const CalendarEventEditor = ({
                           size="sm"
                           variant="secondary"
                         >
+                          <ColorSwatch
+                            color={
+                              selectedCalendar?.color ?? "var(--color-q-blue)"
+                            }
+                          />
                           Calendar default
                         </Button>
                       </ActionFooter>

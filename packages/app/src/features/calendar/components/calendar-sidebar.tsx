@@ -25,7 +25,7 @@ import { Pill } from "@quieter/ui/pill";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { Link, useLocation } from "@tanstack/react-router";
 import { useState } from "react";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 import { getCalendarRefKey } from "../domain/calendar-event-form";
 
@@ -79,14 +79,16 @@ const CalendarColorControl = ({
   disabled,
   onUpdateCalendarColor,
   pending,
+  presets,
 }: Pick<CalendarSidebarProps, "onUpdateCalendarColor"> & {
   calendar: CalendarSummary;
   children: ReactNode;
   disabled: boolean;
   pending: boolean;
+  presets: NonNullable<ComponentProps<typeof ColorPicker>["presets"]>;
 }) => {
   const [draftColor, setDraftColor] = useState<string>();
-  const color = calendar.color ?? "var(--q-blue)";
+  const color = calendar.color?.toLowerCase() ?? "var(--q-blue)";
   const isChanged = draftColor !== undefined && draftColor !== color;
   const applyColor = async (nextColor: string) => {
     if (await onUpdateCalendarColor(calendar, nextColor)) {
@@ -101,6 +103,7 @@ const CalendarColorControl = ({
           disabled={disabled}
           label={`Change ${calendar.name} color`}
           onValueChange={setDraftColor}
+          presets={presets}
           trigger="swatch"
           value={draftColor ?? color}
         />
@@ -135,6 +138,33 @@ const CalendarColorControl = ({
   );
 };
 
+const CalendarMailboxSettingsItem = ({
+  close,
+  mailboxId,
+}: {
+  close?: () => void;
+  mailboxId: CalendarAccount["mailboxId"];
+}) => {
+  const returnTo = useLocation({ select: (location) => location.href });
+  return (
+    <DropdownMenuItem
+      render={
+        <Link
+          onClick={close}
+          search={{
+            from: returnTo,
+            mailboxId: mailboxId ?? "",
+            tab: "mailboxes",
+          }}
+          to="/settings"
+        />
+      }
+    >
+      Manage mailbox
+    </DropdownMenuItem>
+  );
+};
+
 const CalendarSidebarContent = ({
   accounts,
   calendars,
@@ -154,8 +184,21 @@ const CalendarSidebarContent = ({
 }: Omit<CalendarSidebarProps, "isMobileOpen" | "onMobileOpenChange"> & {
   close?: () => void;
 }) => {
-  const returnTo = useLocation({ select: (location) => location.href });
   const selectedDate = new Date(`${date}T12:00:00`);
+  const calendarColorNames = new Map<string, string>();
+  for (const calendar of calendars) {
+    if (calendar.color) {
+      const color = calendar.color.toLowerCase();
+      if (!calendarColorNames.has(color)) {
+        calendarColorNames.set(color, calendar.name);
+      }
+    }
+  }
+  const colorPresets = [...calendarColorNames].map(([color, name]) => ({
+    color,
+    label: `Use ${name} color`,
+    value: color,
+  }));
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 p-4">
       <div className="flex items-center gap-2">
@@ -204,7 +247,7 @@ const CalendarSidebarContent = ({
       >
         New event
       </Button>
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
+      <div className="-mx-2 min-h-0 flex-1 space-y-6 overflow-y-auto">
         <Calendar
           className="mx-auto"
           mode="single"
@@ -224,7 +267,7 @@ const CalendarSidebarContent = ({
           }}
           selected={selectedDate}
         />
-        <div className="space-y-6 px-1">
+        <div className="space-y-6 px-3">
           {accounts.map((account) => (
             <section className="space-y-2" key={account.id}>
               <div className="flex min-w-0 items-center gap-1">
@@ -253,21 +296,10 @@ const CalendarSidebarContent = ({
                       >
                         Reconnect account
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        render={
-                          <Link
-                            onClick={close}
-                            search={{
-                              from: returnTo,
-                              mailboxId: account.mailboxId ?? "",
-                              tab: "mailboxes",
-                            }}
-                            to="/settings"
-                          />
-                        }
-                      >
-                        Manage mailbox
-                      </DropdownMenuItem>
+                      <CalendarMailboxSettingsItem
+                        close={close}
+                        mailboxId={account.mailboxId}
+                      />
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
@@ -307,6 +339,7 @@ const CalendarSidebarContent = ({
                     pending={
                       pendingCalendarColorKey === getCalendarRefKey(calendar)
                     }
+                    presets={colorPresets}
                   >
                     <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-body-sm">
                       <Checkbox

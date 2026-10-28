@@ -4,7 +4,7 @@ import type {
   CalendarSummary,
 } from "@quieter/calendar";
 import { getCalendarRecurrencePreview } from "@quieter/calendar/recurrence";
-import { splitCalendarEventTime } from "@quieter/calendar/time";
+import { createCalendarEventTimeSplitter } from "@quieter/calendar/time";
 import type { ScheduleItem } from "@quieter/ui/schedule";
 
 import {
@@ -78,8 +78,9 @@ export const getCalendarSchedule = ({
       }
     }
   }
+  const splitTime = createCalendarEventTimeSplitter({ dates, timeZone });
   const items = records.flatMap(({ time, ...record }) =>
-    splitCalendarEventTime({ dates, time, timeZone }).map((segment) => ({
+    splitTime(time).map((segment) => ({
       ...record,
       ...segment,
     }))
