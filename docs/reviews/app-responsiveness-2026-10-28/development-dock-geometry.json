@@ -1,0 +1,24 @@
+{
+  "open": {
+    "distinctMainWidths": 14,
+    "distinctSidebarWidths": 1,
+    "maxEdgeGap": 0.019287109375,
+    "glyphScaleAbsent": true,
+    "intermediateFade": true,
+    "rowRectReads": 3
+  },
+  "close": {
+    "distinctMainWidths": 15,
+    "distinctSidebarWidths": 1,
+    "maxEdgeGap": 0.015625,
+    "glyphScaleAbsent": true,
+    "intermediateFade": true,
+    "rowRectReads": 3
+  },
+  "rapidEscape": {
+    "closed": true,
+    "focus": true,
+    "overflow": false
+  },
+  "settledAnimations": 0
+}
