@@ -9,6 +9,7 @@ import {
   isGmailServiceError,
 } from "@quieter/gmail";
 import type { MailMutationResult } from "@quieter/mail/data-plane";
+import { MAILBOX_LABELS } from "@quieter/mail/messages";
 
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
@@ -33,9 +34,7 @@ import {
   learnAiMemoryFromGmailAction,
   learnAiMemoryFromMailAction,
   recordLabelFeedback,
-  recordGmailLabelFeedback,
 } from "./feedback";
-import type { GmailActionContext } from "./feedback";
 import type { MailInputs } from "./inputs";
 
 type MetadataOperation =
@@ -57,12 +56,12 @@ const recordMetadataAction = async (
   {
     accessToken,
     context,
-    gmailContext,
+    labelFeedback,
     input,
   }: {
     accessToken?: string;
     context: MailRequestContext;
-    gmailContext?: GmailActionContext | null;
+    labelFeedback?: Awaited<ReturnType<typeof recordLabelFeedback>>;
     input: { mailboxId: string };
   },
   operation: MetadataOperation | `move:${string}`,
@@ -71,8 +70,26 @@ const recordMetadataAction = async (
   if (messageIds.length === 0) {
     return;
   }
+  let actionName = typeof operation === "string" ? operation : "labels_changed";
+  if (typeof operation !== "string") {
+    const [destination, conflictingDestination] = [
+      { destination: "trash", labelId: MAILBOX_LABELS.trash },
+      { destination: "spam", labelId: MAILBOX_LABELS.spam },
+      { destination: "inbox", labelId: MAILBOX_LABELS.inbox },
+    ].filter(
+      ({ labelId }) => operation.addLabelIds?.includes(labelId) === true
+    );
+    if (destination !== undefined && conflictingDestination === undefined) {
+      actionName = `move:${destination.destination}`;
+    } else if (
+      destination === undefined &&
+      operation.removeLabelIds?.includes(MAILBOX_LABELS.inbox) === true
+    ) {
+      actionName = "move:archive";
+    }
+  }
   const action = {
-    action: typeof operation === "string" ? operation : "labels_changed",
+    action: actionName,
     mailboxId: input.mailboxId,
     messageIds,
     metadata: {
@@ -82,7 +99,7 @@ const recordMetadataAction = async (
             addedLabelIds: (operation.addLabelIds ?? []).join(","),
             removedLabelIds: (operation.removeLabelIds ?? []).join(","),
           }),
-      ...gmailContext,
+      ...labelFeedback,
     },
     targetCount: messageIds.length,
     userId: context.userId,
@@ -130,13 +147,15 @@ const mutateMessage = async (
       ...authorizedInput,
       ...operation,
     });
-    await recordLabelFeedback({
+    const labelFeedback = await recordLabelFeedback({
       ...operation,
       mailboxId: input.mailboxId,
       providerMessageIds: [result.id],
       userId: context.userId,
     });
-    await recordMetadataAction({ context, input }, operation, [result.id]);
+    await recordMetadataAction({ context, input, labelFeedback }, operation, [
+      result.id,
+    ]);
     return result;
   }
   return await callGmail(context, input.mailboxId, async (accessToken) => {
@@ -158,18 +177,17 @@ const mutateMessage = async (
       mailboxId: input.mailboxId,
       messageIds: [result.id],
     });
-    let gmailContext: GmailActionContext | null | undefined;
-    if (typeof operation !== "string") {
-      gmailContext = await recordGmailLabelFeedback({
-        accessToken,
-        ...operation,
-        mailboxId: input.mailboxId,
-        providerMessageIds: [result.id],
-        userId: context.userId,
-      });
-    }
+    const labelFeedback =
+      typeof operation === "string"
+        ? undefined
+        : await recordLabelFeedback({
+            ...operation,
+            mailboxId: input.mailboxId,
+            providerMessageIds: [result.id],
+            userId: context.userId,
+          });
     await recordMetadataAction(
-      { accessToken, context, gmailContext, input },
+      { accessToken, context, input, labelFeedback },
       operation,
       [result.id]
     );
@@ -220,14 +238,14 @@ const mutateThread = async (
       ...authorizedInput,
       ...operation,
     });
-    await recordLabelFeedback({
+    const labelFeedback = await recordLabelFeedback({
       ...operation,
       mailboxId: input.mailboxId,
       providerMessageIds: result.messages.map((message) => message.id),
       userId: context.userId,
     });
     await recordMetadataAction(
-      { context, input },
+      { context, input, labelFeedback },
       operation,
       result.messages.map((message) => message.id)
     );
@@ -248,18 +266,17 @@ const mutateThread = async (
       mailboxId: input.mailboxId,
       messageIds: result.messages.map((message) => message.id),
     });
-    let gmailContext: GmailActionContext | null | undefined;
-    if (typeof operation !== "string") {
-      gmailContext = await recordGmailLabelFeedback({
-        accessToken,
-        ...operation,
-        mailboxId: input.mailboxId,
-        providerMessageIds: result.messages.map((message) => message.id),
-        userId: context.userId,
-      });
-    }
+    const labelFeedback =
+      typeof operation === "string"
+        ? undefined
+        : await recordLabelFeedback({
+            ...operation,
+            mailboxId: input.mailboxId,
+            providerMessageIds: result.messages.map((message) => message.id),
+            userId: context.userId,
+          });
     await recordMetadataAction(
-      { accessToken, context, gmailContext, input },
+      { accessToken, context, input, labelFeedback },
       operation,
       result.messages.map((message) => message.id)
     );
@@ -362,7 +379,7 @@ export const mutationsMailOperations = {
         ),
       ];
       if (input.command.kind === "set-labels") {
-        await recordLabelFeedback({
+        const labelFeedback = await recordLabelFeedback({
           addLabelIds: input.command.addIds,
           mailboxId: input.mailboxId,
           providerMessageIds: messageIds,
@@ -370,7 +387,7 @@ export const mutationsMailOperations = {
           userId: context.userId,
         });
         await recordMetadataAction(
-          { context, input },
+          { context, input, labelFeedback },
           {
             addLabelIds: input.command.addIds,
             removeLabelIds: input.command.removeIds,
@@ -474,8 +491,7 @@ export const mutationsMailOperations = {
             mailboxId: input.mailboxId,
             messageIds,
           });
-          const gmailContext = await recordGmailLabelFeedback({
-            accessToken,
+          const labelFeedback = await recordLabelFeedback({
             addLabelIds: input.command.addIds,
             mailboxId: input.mailboxId,
             providerMessageIds: messageIds,
@@ -483,7 +499,7 @@ export const mutationsMailOperations = {
             userId: context.userId,
           });
           await recordMetadataAction(
-            { accessToken, context, gmailContext, input },
+            { accessToken, context, input, labelFeedback },
             {
               addLabelIds: input.command.addIds,
               removeLabelIds: input.command.removeIds,

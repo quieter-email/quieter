@@ -643,6 +643,51 @@ describe.skipIf(databaseUrl === undefined)(
       expect(hydrated?.isImportant).toBeTruthy();
     });
 
+    test.each([true, false])(
+      "retains every successful importance %s target as action context while excluding another mailbox",
+      async (important) => {
+        const mailboxId = await createMailbox();
+        const otherMailboxId = await createMailbox();
+        const messages = await Promise.all(
+          Array.from({ length: 4 }, async () => await capture(mailboxId))
+        );
+        const foreign = await capture(otherMailboxId);
+        const result = await setMailImportance({
+          actorUserId: ownerId,
+          important,
+          mailboxId,
+          targets: [
+            ...messages.map(({ id, threadId }) => ({
+              messageIds: [id],
+              threadId,
+            })),
+            { messageIds: [foreign.id], threadId: foreign.threadId },
+          ],
+        });
+        expect(result.targets.at(-1)?.status).toBe("failed");
+        const events = await db
+          .select()
+          .from(userAiContextEvent)
+          .where(
+            and(
+              eq(userAiContextEvent.mailboxId, mailboxId),
+              eq(userAiContextEvent.userId, ownerId),
+              eq(userAiContextEvent.kind, "mail_action")
+            )
+          );
+        const actionMessageIds = events.map(
+          ({ metadata }) => metadata.messageId
+        );
+        expect(actionMessageIds).toStrictEqual(
+          expect.arrayContaining(messages.map(({ id }) => id))
+        );
+        expect(actionMessageIds).not.toContain(foreign.id);
+        expect(
+          events.every(({ metadata }) => metadata.messageContextOnly === true)
+        ).toBeTruthy();
+      }
+    );
+
     test("rejects cross-thread and cross-mailbox targets without revisions or learning", async () => {
       const mailboxId = await createMailbox();
       const otherMailboxId = await createMailbox();

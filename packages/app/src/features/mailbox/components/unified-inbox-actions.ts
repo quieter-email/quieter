@@ -171,14 +171,6 @@ export const createUnifiedInboxActions = ({
     moveThreadsToTrash: async (threads) => {
       await runBulkAction("moveThreadsToTrash", threads);
     },
-    setMessageImportance: async (id, important) => {
-      const context = contextsByMessageId.get(id);
-      const original = originalMessageById.get(id);
-      if (!context || !original) {
-        throw new Error("This message is no longer available.");
-      }
-      await context.mailboxActions.setMessageImportance(original.id, important);
-    },
     setThreadImportance: async (id, important) => {
       const context = contextsByThreadId.get(id);
       const original = originalThreadById.get(id);
