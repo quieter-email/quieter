@@ -23,7 +23,7 @@ export const WorkspaceDock = ({
       <div
         aria-hidden={expanded && contentInert}
         className={cn(
-          "relative flex min-h-0 w-full min-w-0 shrink-0 flex-col overflow-hidden bg-transparent transition-none duration-(--app-motion-duration-layout) ease-(--app-motion-ease-out) motion-reduce:transition-none xl:transition-[width]",
+          "relative isolate flex min-h-0 w-full min-w-0 shrink-0 flex-col overflow-hidden bg-transparent transition-none duration-(--app-motion-duration-layout) ease-(--app-motion-ease-out) motion-reduce:transition-none xl:transition-[width]",
           {
             "xl:w-[calc(100%-var(--workspace-dock-width))]": expanded,
           }

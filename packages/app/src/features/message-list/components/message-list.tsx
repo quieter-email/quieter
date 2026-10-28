@@ -143,13 +143,29 @@ const buildMessageListHotkeys = (
   },
   {
     callback: (event: KeyboardEvent) => {
-      if (shouldIgnoreAppShortcut(event)) {
+      const control =
+        event.target instanceof Element
+          ? event.target.closest(
+              "button, a[href], input, select, textarea, summary, [role='button'], [role='link']"
+            )
+          : null;
+      if (
+        event.defaultPrevented ||
+        shouldIgnoreAppShortcut(event) ||
+        (control !== null && !control.matches("[data-message-row-trigger]"))
+      ) {
         return;
       }
+      event.preventDefault();
+      event.stopPropagation();
       context.openFocusedThread();
     },
     hotkey: "Enter",
-    options: { enabled: context.listNavigationHotkeysEnabled },
+    options: {
+      enabled: context.listNavigationHotkeysEnabled,
+      preventDefault: false,
+      stopPropagation: false,
+    },
   },
   {
     callback: (event: KeyboardEvent) => {
