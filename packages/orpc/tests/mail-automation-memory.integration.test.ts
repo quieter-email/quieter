@@ -1,6 +1,7 @@
 import { db } from "@quieter/database/client";
 import {
   aiMemory as memoryRecord,
+  gmailCapturedMessage,
   gmailLabel,
   mailAutoLabelFeedback,
   mailbox,
@@ -11,6 +12,8 @@ import {
   user,
 } from "@quieter/database/schema";
 import type { getMessageWithDetails } from "@quieter/gmail";
+import { analyzeMailMessage } from "@quieter/mail/capture";
+import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   afterAll,
@@ -158,6 +161,82 @@ describe.skipIf(state.databaseUrl === undefined)(
 
     afterAll(async () => {
       await db.$client.end();
+    });
+
+    test("learns a retained Gmail sender's first label correction and removal without provider reads", async () => {
+      const now = new Date();
+      const snapshot: CapturedMailSnapshot = {
+        attachments: [],
+        bodyHtml: null,
+        bodyText: message.bodyText,
+        headers: [
+          { name: "From", value: message.from },
+          { name: "To", value: message.to },
+          { name: "Subject", value: message.subject },
+        ],
+        id: message.id,
+        internalDate: String(now.getTime()),
+        labelIds: [labelId],
+        providerRevision: "100",
+        threadId: message.threadId,
+        truncation: {
+          attachments: false,
+          bodyHtml: false,
+          bodyText: false,
+          headers: false,
+        },
+      };
+      await db.insert(gmailCapturedMessage).values({
+        analysis: analyzeMailMessage(snapshot),
+        capturedAt: now,
+        mailboxId,
+        messageId: message.id,
+        providerRevision: snapshot.providerRevision,
+        snapshot,
+        source: "on_demand",
+        updatedAt: now,
+      });
+
+      await recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        providerMessageIds: [message.id],
+        userId,
+      });
+      const added = await loadAiAgentContext({
+        agent: "auto_label",
+        mailboxId,
+        query: message.from,
+        userId,
+      });
+      expect(added.memory).toStrictEqual(
+        expect.stringContaining("team@example.test")
+      );
+      expect(added.memory).toContain("Launch planning");
+
+      await recordMailAutoLabelFeedback({
+        mailboxId,
+        providerMessageIds: [message.id],
+        removeLabelIds: [labelId],
+        userId,
+      });
+      const removed = await loadAiAgentContext({
+        agent: "auto_label",
+        mailboxId,
+        query: message.from,
+        userId,
+      });
+      expect(removed.memory).toContain("team@example.test");
+      const policies = await db
+        .select({ metadata: memoryRecord.metadata })
+        .from(memoryRecord)
+        .where(eq(memoryRecord.userId, userId));
+      expect(
+        policies.find(
+          ({ metadata }) => metadata.feedbackSource === "team@example.test"
+        )?.metadata.policy
+      ).toBe("suppress");
+      expect(state.getMessage).not.toHaveBeenCalled();
     });
 
     test("makes the first sender-specific correction available after delayed hydration without another action", async () => {
