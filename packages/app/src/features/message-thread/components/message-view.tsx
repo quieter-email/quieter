@@ -4,6 +4,8 @@ import {
   ArrowLeft01Icon,
   ArrowRightDoubleIcon,
   Edit01Icon,
+  Flag01Icon,
+  FlagOffIcon,
   Loading03Icon,
   MailReply02Icon,
   MailReplyAll02Icon,
@@ -203,15 +205,29 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     replyTarget.display?.trim() ||
     replyTarget.email?.trim() ||
     "sender";
-  const setMessageImportance = mailboxActions.canSetImportance
-    ? async (messageId: string, important: boolean) => {
-        try {
-          await mailboxActions.setMessageImportance(messageId, important);
-        } catch (error) {
-          toastError(error, { boundary: "message-importance" });
-        }
-      }
-    : undefined;
+  const threadIsImportant =
+    message.threadIsImportant ??
+    threadMessages.some((item) => item.isImportant === true);
+  const threadActions = createMailboxThreadMessageActionHandlers({
+    mailboxActions,
+    onBackToList,
+    supportsFolders: mailboxProvider === "gmail",
+    supportsLabels: true,
+    supportsUnsubscribe: mailboxProvider === "gmail",
+  });
+  const canSetThreadImportance =
+    mailboxProvider !== "api" &&
+    threadActions.onSetImportance !== undefined &&
+    visibleMessages.some(
+      (item) =>
+        !item.draftId &&
+        item.labelIds?.some(
+          (id) => id === MAILBOX_LABELS.sent || id === MAILBOX_LABELS.drafts
+        ) !== true
+    );
+  const importanceLabel = threadIsImportant
+    ? "Mark conversation as not important"
+    : "Mark conversation as important";
   const showInlineCompose = canComposeFromMailbox && activeMailbox !== "drafts";
   const showReplyAll = hasDistinctReplyAllRecipients(
     hotkeyMessage,
@@ -260,7 +276,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             {subject}
           </Text>
           {!isSingleMessageThread && (
-            <p className="shrink-0 text-caption text-muted-fg">
+            <p className="hidden shrink-0 text-caption text-muted-fg @md:block">
               {visibleMessages.length}{" "}
               {visibleMessages.length === 1 ? "message" : "messages"}
             </p>
@@ -270,25 +286,41 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             labelIds={threadLabelIds}
             labels={gmailLabels}
           />
+          {canSetThreadImportance && (
+            <IconButtonTooltip label={importanceLabel}>
+              <Button
+                aria-label={importanceLabel}
+                aria-pressed={threadIsImportant}
+                disabled={isActionPending}
+                onClick={() => {
+                  void threadActions.onSetImportance?.(
+                    message.threadId,
+                    !threadIsImportant
+                  );
+                }}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <Icon
+                  aria-hidden
+                  icon={threadIsImportant ? Flag01Icon : FlagOffIcon}
+                  tone={threadIsImportant ? "default" : "muted"}
+                />
+              </Button>
+            </IconButtonTooltip>
+          )}
           {mailboxProvider !== "api" && (
             <div className="shrink-0">
               <MessageActionsDropdown
-                actions={createMailboxThreadMessageActionHandlers({
-                  mailboxActions,
-                  onBackToList,
-                  supportsFolders: mailboxProvider === "gmail",
-                  supportsLabels: true,
-                  supportsUnsubscribe: mailboxProvider === "gmail",
-                })}
+                actions={threadActions}
                 isPending={isActionPending}
                 isUnread={threadIsUnread}
                 mailbox={activeMailbox}
                 mailboxId={mailboxId}
                 message={{
                   ...message,
-                  threadIsImportant:
-                    message.threadIsImportant ??
-                    threadMessages.some((item) => item.isImportant === true),
+                  threadIsImportant,
                 }}
                 threadLabelIds={threadLabelIds}
               />
@@ -350,7 +382,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             onComposeDraftRequested={
               canComposeFromMailbox ? openInlineCompose : undefined
             }
-            onSetImportance={setMessageImportance}
             onUnsubscribe={
               mailboxProvider === "gmail"
                 ? mailboxActions.unsubscribeFromMessage
@@ -375,7 +406,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           onComposeDraftRequested={
             canComposeFromMailbox ? openInlineCompose : undefined
           }
-          onSetImportance={setMessageImportance}
           onUnsubscribe={
             mailboxProvider === "gmail"
               ? mailboxActions.unsubscribeFromMessage

@@ -4,8 +4,6 @@ import {
   ArrowDown01Icon,
   Edit01Icon,
   NotificationOff01Icon,
-  Flag01Icon,
-  FlagOffIcon,
   Tick01Icon,
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons";
@@ -31,7 +29,7 @@ import {
   formatMessageDate,
   parseSender,
 } from "@quieter/app/lib/gmail/message-utils";
-import { isMessageUnread, MAILBOX_LABELS } from "@quieter/app/lib/mail";
+import { isMessageUnread } from "@quieter/app/lib/mail";
 import type { MessageListItem } from "@quieter/app/lib/mail";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
@@ -270,7 +268,6 @@ const MessageHeaderActions = ({
   onContinueDraft,
   onDetails,
   onUnsubscribe,
-  onSetImportance,
   message,
   isPending,
 }: {
@@ -280,7 +277,6 @@ const MessageHeaderActions = ({
   onDetails: () => void;
   onUnsubscribe?: MessageUnsubscribeAction;
   message: MessageListItem;
-  onSetImportance?: (messageId: string, important: boolean) => Promise<void>;
 }) => {
   const [unsubscribePhase, setUnsubscribePhase] = useState<
     "idle" | "pending" | "success"
@@ -323,42 +319,6 @@ const MessageHeaderActions = ({
           <span>Draft</span>
         </Button>
       )}
-      {onSetImportance !== undefined &&
-        !(
-          message.labelIds?.some(
-            (id) => id === MAILBOX_LABELS.sent || id === MAILBOX_LABELS.drafts
-          ) ?? false
-        ) && (
-          <IconButtonTooltip
-            label={
-              message.isImportant === true
-                ? "Mark message as not important"
-                : "Mark message as important"
-            }
-          >
-            <Button
-              aria-label={
-                message.isImportant === true
-                  ? "Mark message as not important"
-                  : "Mark message as important"
-              }
-              aria-pressed={message.isImportant === true}
-              disabled={isPending}
-              onClick={() => {
-                void onSetImportance(message.id, message.isImportant !== true);
-              }}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              <Icon
-                aria-hidden
-                icon={message.isImportant === true ? Flag01Icon : FlagOffIcon}
-                tone={message.isImportant === true ? "default" : "muted"}
-              />
-            </Button>
-          </IconButtonTooltip>
-        )}
       {(onUnsubscribe !== undefined ||
         unsubscribePhase !== "idle" ||
         unsubscribeRequested) && (
@@ -480,7 +440,6 @@ const ThreadMessageCard = ({
   mailboxProvider,
   message,
   onComposeDraftRequested,
-  onSetImportance,
   onUnsubscribe,
   onToggleExpanded,
   isActionPending,
@@ -494,7 +453,6 @@ const ThreadMessageCard = ({
   mailboxProvider: MessageViewProps["mailboxProvider"];
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
-  onSetImportance?: (messageId: string, important: boolean) => Promise<void>;
   onUnsubscribe?: (messageId: string) => Promise<boolean>;
   onToggleExpanded: () => void;
   verificationCode?: string;
@@ -533,7 +491,6 @@ const ThreadMessageCard = ({
             <MessageHeaderActions
               key={`${mailboxId}:${message.id}`}
               message={message}
-              onSetImportance={onSetImportance}
               onContinueDraft={linkedDraftMessage ? openLinkedDraft : undefined}
               onDetails={() => {
                 setDetailsDialogOpen(true);
@@ -591,7 +548,6 @@ export const SingleMessageCard = ({
   mailboxProvider,
   message,
   onComposeDraftRequested,
-  onSetImportance,
   onUnsubscribe,
   isActionPending,
   verificationCode,
@@ -603,7 +559,6 @@ export const SingleMessageCard = ({
   mailboxProvider: MessageViewProps["mailboxProvider"];
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
-  onSetImportance?: (messageId: string, important: boolean) => Promise<void>;
   onUnsubscribe?: (messageId: string) => Promise<boolean>;
   verificationCode?: string;
 }) => {
@@ -640,7 +595,6 @@ export const SingleMessageCard = ({
           <MessageHeaderActions
             key={`${mailboxId}:${message.id}`}
             message={message}
-            onSetImportance={onSetImportance}
             onContinueDraft={linkedDraftMessage ? openLinkedDraft : undefined}
             onDetails={() => {
               setDetailsDialogOpen(true);
@@ -684,7 +638,6 @@ export const ThreadMessageList = ({
   mailboxProvider,
   messages,
   onComposeDraftRequested,
-  onSetImportance,
   onUnsubscribe,
   isActionPending,
   verificationCodes,
@@ -696,7 +649,6 @@ export const ThreadMessageList = ({
   mailboxProvider: MessageViewProps["mailboxProvider"];
   messages: MessageListItem[];
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
-  onSetImportance?: (messageId: string, important: boolean) => Promise<void>;
   onUnsubscribe?: (messageId: string) => Promise<boolean>;
   verificationCodes: RouterOutputs["mail"]["listVerificationCodes"]["items"];
 }) => {
@@ -726,7 +678,6 @@ export const ThreadMessageList = ({
             mailboxProvider={mailboxProvider}
             message={threadMessage}
             onComposeDraftRequested={onComposeDraftRequested}
-            onSetImportance={onSetImportance}
             onUnsubscribe={onUnsubscribe}
             onToggleExpanded={() => {
               setExpandedMessageIds((current) =>

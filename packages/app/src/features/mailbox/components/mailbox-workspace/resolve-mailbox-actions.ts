@@ -29,7 +29,6 @@ const createReadOnlyMailboxActions = (): MailboxActions =>
     moveMessageToTrash: noopMailboxAction,
     moveThreadToTrash: noopMailboxAction,
     moveThreadsToTrash: noopMailboxAction,
-    setMessageImportance: noopMailboxAction,
     setThreadImportance: noopMailboxAction,
     setThreadsImportance: noopMailboxAction,
     unmarkMessageAsSpam: noopMailboxAction,

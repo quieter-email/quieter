@@ -131,9 +131,6 @@ export const createDemoActions = (
         { destination: "trash", kind: "move" }
       );
     },
-    setMessageImportance: async (id, important) => {
-      await apply([id], "message", { important, kind: "set-importance" });
-    },
     setThreadImportance: async (id, important) => {
       await apply([id], "thread", { important, kind: "set-importance" });
     },
