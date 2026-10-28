@@ -44,6 +44,7 @@ import {
   createNodeFromContent,
   Extension,
   getHTMLFromFragment,
+  Node,
 } from "@tiptap/core";
 import type { Editor, Range } from "@tiptap/core";
 import { FileHandler } from "@tiptap/extension-file-handler";
@@ -88,6 +89,16 @@ const ComposeQuote = Extension.create({
     ];
   },
   name: "composeQuote",
+});
+
+const ComposeSignature = Node.create({
+  content: "block+",
+  defining: true,
+  group: "block",
+  name: "composeSignature",
+  parseHTML: () => [{ tag: 'div[data-quieter-signature="true"]' }],
+  renderHTML: () => ["div", { "data-quieter-signature": "true" }, 0],
+  selectable: false,
 });
 
 const audioWaveBars = [
@@ -222,6 +233,7 @@ export const ComposeEditor = ({
         link: false,
         underline: false,
       }),
+      ComposeSignature,
       // oxlint-disable-next-line react/refs -- Tiptap invokes suggestion callbacks after render, when command options and input refs are current.
       SlashCommands.configure({
         getItems: (query, currentEditor) =>

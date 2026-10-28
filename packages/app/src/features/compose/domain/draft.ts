@@ -444,7 +444,7 @@ export const appendComposeSignature = (
   const signatureHtml = `<div ${COMPOSE_SIGNATURE_MARKER}="true"><br>${html || textToComposeBodyHtml(text ?? "")}</div>`;
   const nextHtml = authoredHtml.trim()
     ? `${authoredHtml}${signatureHtml}`
-    : signatureHtml.replace("<br>", "");
+    : `<p></p>${signatureHtml.replace("<br>", "")}`;
   const signatureText = text || htmlToText(html ?? "");
   const nextText = draft.bodyText.trim()
     ? `${draft.bodyText.trim()}\n\n${signatureText}`
