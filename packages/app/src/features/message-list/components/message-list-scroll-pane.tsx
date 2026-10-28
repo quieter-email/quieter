@@ -18,7 +18,10 @@ import type { RouterOutputs } from "@quieter/orpc";
 import { Icon } from "@quieter/ui/icon";
 import { mailListRowParts } from "@quieter/ui/mail-list-row";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+  measureElement as measureVirtualElement,
+  useVirtualizer,
+} from "@tanstack/react-virtual";
 import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 
@@ -322,24 +325,31 @@ export const MessageListScrollPane = ({
     gap: MESSAGE_ROW_GAP_PX,
     getItemKey: (index) => threadedMessages[index].threadId ?? index,
     getScrollElement: () => selection.scrollRef.current,
-    measureElement: (element, _entry, instance) => {
+    measureElement: (element, entry, instance) => {
+      const index = instance.indexFromElement(element);
+      const key = instance.options.getItemKey(index);
+      const cachedHeight = instance.itemSizeCache.get(key);
+      const previousHeight =
+        cachedHeight ??
+        instance.measurementsCache[index]?.size ??
+        rowHeightEstimateRef.current;
+      const height = measureVirtualElement(element, entry, instance);
       const viewport = selection.scrollRef.current;
       if (
+        height > 0 &&
+        height !== previousHeight &&
         !pendingAnchorRef.current &&
         viewport &&
-        measuredWidthRef.current > 0 &&
-        viewport.clientWidth > 0 &&
-        viewport.clientWidth !== measuredWidthRef.current
+        measuredWidthRef.current > 0
       ) {
-        pendingAnchorRef.current = getScrollAnchor(viewport, instance);
+        const width = viewport.clientWidth;
+        if (width > 0 && width !== measuredWidthRef.current) {
+          pendingAnchorRef.current = getScrollAnchor(viewport, instance);
+        }
       }
-      const height = element.offsetHeight;
-      const key = instance.options.getItemKey(
-        instance.indexFromElement(element)
-      );
       return height > 0
         ? height
-        : (instance.itemSizeCache.get(key) ?? rowHeightEstimateRef.current);
+        : (cachedHeight ?? rowHeightEstimateRef.current);
     },
     overscan: MESSAGE_LIST_OVERSCAN,
   });
