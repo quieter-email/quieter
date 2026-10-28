@@ -19,7 +19,7 @@ import { Icon } from "@quieter/ui/icon";
 import { mailListRowParts } from "@quieter/ui/mail-list-row";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { VirtualItem } from "@tanstack/react-virtual";
+import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 
 const MESSAGE_ROW_HEIGHT_PX = 68;
@@ -43,6 +43,28 @@ type MessageListScrollPaneProps = {
   onKeyboardOpenMessage?: () => void;
   selection: ReturnType<typeof useMessageListSelection>;
   threadedMessages: ThreadListEntry[];
+};
+
+type MessageListScrollAnchor = Pick<VirtualItem, "index" | "key"> & {
+  offsetWithinRow: number;
+};
+
+const getScrollAnchor = (
+  element: HTMLDivElement,
+  virtualizer: Virtualizer<HTMLDivElement, HTMLLIElement>,
+  scrollOffset = element.scrollTop
+): MessageListScrollAnchor | null => {
+  const paddingTop = Number(
+    getComputedStyle(element).paddingTop.replace("px", "")
+  );
+  const anchor = virtualizer.getVirtualItemForOffset(scrollOffset - paddingTop);
+  return anchor
+    ? {
+        index: anchor.index,
+        key: anchor.key,
+        offsetWithinRow: scrollOffset - paddingTop - anchor.start,
+      }
+    : null;
 };
 
 const loadMoreIfNeeded = ({
@@ -285,10 +307,8 @@ export const MessageListScrollPane = ({
 
   const rowHeightEstimateRef = useRef(MESSAGE_ROW_HEIGHT_PX);
   const measuredWidthRef = useRef(0);
-  const pendingLayoutAnimationRef = useRef<Animation | null>(null);
-  const pendingAnchorRef = useRef<
-    (Pick<VirtualItem, "index" | "key"> & { offsetWithinRow: number }) | null
-  >(null);
+  const pendingLayoutRef = useRef<{ animation: Animation | null } | null>(null);
+  const pendingAnchorRef = useRef<MessageListScrollAnchor | null>(null);
   const previousActiveMessageIdRef = useRef(list.activeMessageId);
   const pendingFocusRef = useRef<{
     threadId: string;
@@ -303,6 +323,16 @@ export const MessageListScrollPane = ({
     getItemKey: (index) => threadedMessages[index].threadId ?? index,
     getScrollElement: () => selection.scrollRef.current,
     measureElement: (element, _entry, instance) => {
+      const viewport = selection.scrollRef.current;
+      if (
+        !pendingAnchorRef.current &&
+        viewport &&
+        measuredWidthRef.current > 0 &&
+        viewport.clientWidth > 0 &&
+        viewport.clientWidth !== measuredWidthRef.current
+      ) {
+        pendingAnchorRef.current = getScrollAnchor(viewport, instance);
+      }
       const height = element.offsetHeight;
       const key = instance.options.getItemKey(
         instance.indexFromElement(element)
@@ -330,12 +360,16 @@ export const MessageListScrollPane = ({
             candidate.playState !== "idle"
         );
       if (animation) {
-        if (pendingLayoutAnimationRef.current !== animation) {
-          pendingLayoutAnimationRef.current = animation;
+        pendingAnchorRef.current ??= getScrollAnchor(
+          element,
+          messageVirtualizer
+        );
+        if (pendingLayoutRef.current?.animation !== animation) {
+          pendingLayoutRef.current = { animation };
           const settled = async () => {
             await Promise.allSettled([animation.finished]);
-            if (pendingLayoutAnimationRef.current === animation) {
-              pendingLayoutAnimationRef.current = null;
+            if (pendingLayoutRef.current?.animation === animation) {
+              pendingLayoutRef.current.animation = null;
               updateRowMeasurements(true);
             }
           };
@@ -343,8 +377,8 @@ export const MessageListScrollPane = ({
         }
         return true;
       }
-      const layoutSettled = force || pendingLayoutAnimationRef.current !== null;
-      pendingLayoutAnimationRef.current = null;
+      const layoutSettled = force || pendingLayoutRef.current !== null;
+      pendingLayoutRef.current = null;
       const width = element.clientWidth;
       const rows = element.querySelectorAll<HTMLLIElement>("li[data-index]");
       const firstRow = element.querySelector<HTMLLIElement>("li[data-index]");
@@ -354,19 +388,7 @@ export const MessageListScrollPane = ({
         measuredWidthRef.current !== width &&
         !pendingAnchorRef.current
       ) {
-        const anchor = messageVirtualizer.getVirtualItemForOffset(
-          element.scrollTop
-        );
-        if (anchor) {
-          pendingAnchorRef.current = {
-            index: anchor.index,
-            key: anchor.key,
-            offsetWithinRow:
-              element.scrollTop -
-              anchor.start -
-              Number(getComputedStyle(element).paddingTop.replace("px", "")),
-          };
-        }
+        pendingAnchorRef.current = getScrollAnchor(element, messageVirtualizer);
       }
       if (
         height <= 0 ||
@@ -413,10 +435,17 @@ export const MessageListScrollPane = ({
     });
     observer.observe(element);
     return () => {
+      pendingAnchorRef.current ??= getScrollAnchor(
+        element,
+        messageVirtualizer,
+        messageVirtualizer.scrollOffset ?? element.scrollTop
+      );
       observer.disconnect();
-      pendingLayoutAnimationRef.current = null;
+      if (pendingLayoutRef.current) {
+        pendingLayoutRef.current.animation = null;
+      }
     };
-  }, [selection.scrollRef, updateRowMeasurements]);
+  }, [messageVirtualizer, selection.scrollRef, updateRowMeasurements]);
 
   const virtualItems = messageVirtualizer.getVirtualItems();
   const codeThreadIdBuckets = useMemo(() => {
@@ -648,6 +677,20 @@ export const MessageListScrollPane = ({
   return (
     <div
       className={mailListRowParts.viewport}
+      onScrollCapture={(event) => {
+        if (
+          pendingLayoutRef.current &&
+          Math.abs(
+            event.currentTarget.scrollTop -
+              (messageVirtualizer.scrollOffset ?? event.currentTarget.scrollTop)
+          ) > 1
+        ) {
+          pendingAnchorRef.current = getScrollAnchor(
+            event.currentTarget,
+            messageVirtualizer
+          );
+        }
+      }}
       onScroll={() => {
         if (selection.isProgrammaticScrollToTopRef.current) {
           return;
