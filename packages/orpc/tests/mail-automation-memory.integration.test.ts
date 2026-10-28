@@ -1,6 +1,7 @@
 import { db } from "@quieter/database/client";
 import {
   aiMemory as memoryRecord,
+  gmailCapturedMessage,
   gmailLabel,
   mailAutoLabelFeedback,
   mailbox,
@@ -11,6 +12,8 @@ import {
   user,
 } from "@quieter/database/schema";
 import type { getMessageWithDetails } from "@quieter/gmail";
+import { analyzeMailMessage } from "@quieter/mail/capture";
+import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   afterAll,
@@ -160,6 +163,157 @@ describe.skipIf(state.databaseUrl === undefined)(
       await db.$client.end();
     });
 
+    test("learns a retained Gmail sender's first label correction and removal without provider reads", async () => {
+      const now = new Date();
+      const snapshot: CapturedMailSnapshot = {
+        attachments: [],
+        bodyHtml: null,
+        bodyText: message.bodyText,
+        headers: [
+          { name: "From", value: message.from },
+          { name: "To", value: message.to },
+          { name: "Subject", value: message.subject },
+        ],
+        id: message.id,
+        internalDate: String(now.getTime()),
+        labelIds: [labelId],
+        providerRevision: "100",
+        threadId: message.threadId,
+        truncation: {
+          attachments: false,
+          bodyHtml: false,
+          bodyText: false,
+          headers: false,
+        },
+      };
+      await db.insert(gmailCapturedMessage).values({
+        analysis: analyzeMailMessage(snapshot),
+        capturedAt: now,
+        mailboxId,
+        messageId: message.id,
+        providerRevision: snapshot.providerRevision,
+        snapshot,
+        source: "on_demand",
+        updatedAt: now,
+      });
+
+      await recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        providerMessageIds: [message.id],
+        userId,
+      });
+      const added = await loadAiAgentContext({
+        agent: "auto_label",
+        mailboxId,
+        query: message.from,
+        userId,
+      });
+      expect(added.memory).toStrictEqual(
+        expect.stringContaining("team@example.test")
+      );
+      expect(added.memory).toContain("Launch planning");
+
+      await recordMailAutoLabelFeedback({
+        mailboxId,
+        providerMessageIds: [message.id],
+        removeLabelIds: [labelId],
+        userId,
+      });
+      const removed = await loadAiAgentContext({
+        agent: "auto_label",
+        mailboxId,
+        query: message.from,
+        userId,
+      });
+      expect(removed.memory).toContain("team@example.test");
+      const policies = await db
+        .select({ metadata: memoryRecord.metadata })
+        .from(memoryRecord)
+        .where(eq(memoryRecord.userId, userId));
+      expect(
+        policies.find(
+          ({ metadata }) => metadata.feedbackSource === "team@example.test"
+        )?.metadata.policy
+      ).toBe("suppress");
+      expect(state.getMessage).not.toHaveBeenCalled();
+    });
+
+    test("excludes deleted and foreign captures with the same message ID from sender feedback", async () => {
+      const now = new Date();
+      const otherMailboxId = crypto.randomUUID();
+      await db.insert(mailbox).values({
+        accessMode: "private",
+        createdAt: now,
+        emailAddress: `${otherMailboxId}@example.test`,
+        id: otherMailboxId,
+        organizationId,
+        ownerUserId: nextOwnerId,
+        provider: "gmail",
+        updatedAt: now,
+      });
+      const snapshot: CapturedMailSnapshot = {
+        attachments: [],
+        bodyHtml: null,
+        bodyText: message.bodyText,
+        headers: [{ name: "From", value: "private@elsewhere.test" }],
+        id: message.id,
+        internalDate: String(now.getTime()),
+        labelIds: [labelId],
+        providerRevision: "100",
+        threadId: message.threadId,
+        truncation: {
+          attachments: false,
+          bodyHtml: false,
+          bodyText: false,
+          headers: false,
+        },
+      };
+      await db.insert(gmailCapturedMessage).values([
+        {
+          analysis: null,
+          capturedAt: now,
+          deletedAt: now,
+          mailboxId,
+          messageId: message.id,
+          providerRevision: snapshot.providerRevision,
+          snapshot: null,
+          source: "on_demand",
+          updatedAt: now,
+        },
+        {
+          analysis: analyzeMailMessage(snapshot),
+          capturedAt: now,
+          mailboxId: otherMailboxId,
+          messageId: message.id,
+          providerRevision: snapshot.providerRevision,
+          snapshot,
+          source: "on_demand",
+          updatedAt: now,
+        },
+      ]);
+
+      await recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        providerMessageIds: [message.id],
+        userId,
+      });
+      const [feedback] = await db
+        .select({ source: mailAutoLabelFeedback.source })
+        .from(mailAutoLabelFeedback)
+        .where(eq(mailAutoLabelFeedback.mailboxId, mailboxId));
+      expect(feedback).toMatchObject({ source: null });
+      const context = await loadAiAgentContext({
+        agent: "auto_label",
+        mailboxId,
+        query: "private@elsewhere.test",
+        userId,
+      });
+      expect(context.memory).toBeNull();
+      expect(state.getMessage).not.toHaveBeenCalled();
+    });
+
     test("makes the first sender-specific correction available after delayed hydration without another action", async () => {
       await recordMailAutoLabelFeedback({
         addLabelIds: [labelId],
@@ -189,6 +343,98 @@ describe.skipIf(state.databaseUrl === undefined)(
       });
       expect(after.memory).toContain("team@example.test");
       expect(after.memory).toContain("Launch planning");
+    });
+
+    test("does not retain corrections made while learning is paused for later profile refresh", async () => {
+      const config = await aiMemory.getPersonalAiMemoryScopeConfig(userId);
+      const paused = await aiMemory.updateAiMemoryScopeConfig({
+        ...config,
+        activeLearningEnabled: false,
+        userId,
+      });
+      await recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        messageSources: { [message.id]: "team@example.test" },
+        providerMessageIds: [message.id],
+        userId,
+      });
+      await expect(
+        db
+          .select()
+          .from(mailAutoLabelFeedback)
+          .where(eq(mailAutoLabelFeedback.mailboxId, mailboxId))
+      ).resolves.toHaveLength(0);
+
+      await aiMemory.updateAiMemoryScopeConfig({
+        ...paused,
+        activeLearningEnabled: true,
+        userId,
+      });
+      await refreshAutoLabelMemoryProfile(mailboxId, userId);
+      const context = await loadAiAgentContext({
+        agent: "auto_label",
+        mailboxId,
+        query: message.from,
+        userId,
+      });
+      expect(context.memory).toBeNull();
+    });
+
+    test("discards an in-flight correction across a pause and resume before feedback capture", async () => {
+      const readConfig = aiMemory.getPersonalAiMemoryScopeConfig;
+      const configRead =
+        Promise.withResolvers<Awaited<ReturnType<typeof readConfig>>>();
+      const release = Promise.withResolvers<null>();
+      vi.spyOn(
+        aiMemory,
+        "getPersonalAiMemoryScopeConfig"
+      ).mockImplementationOnce(async (actorUserId) => {
+        const config = await readConfig(actorUserId);
+        configRead.resolve(config);
+        await release.promise;
+        return config;
+      });
+      const correction = recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        messageSources: { [message.id]: "team@example.test" },
+        providerMessageIds: [message.id],
+        userId,
+      });
+      const config = await configRead.promise;
+      try {
+        const paused = await aiMemory.updateAiMemoryScopeConfig({
+          ...config,
+          activeLearningEnabled: false,
+          userId,
+        });
+        await aiMemory.updateAiMemoryScopeConfig({
+          ...paused,
+          activeLearningEnabled: true,
+          userId,
+        });
+        release.resolve(null);
+        await correction;
+        await expect(
+          db
+            .select()
+            .from(mailAutoLabelFeedback)
+            .where(eq(mailAutoLabelFeedback.mailboxId, mailboxId))
+        ).resolves.toHaveLength(0);
+
+        await refreshAutoLabelMemoryProfile(mailboxId, userId);
+        const context = await loadAiAgentContext({
+          agent: "auto_label",
+          mailboxId,
+          query: message.from,
+          userId,
+        });
+        expect(context.memory).toBeNull();
+      } finally {
+        release.resolve(null);
+        await correction;
+      }
     });
 
     test("retries a failed profile refresh after the sender was already hydrated", async () => {

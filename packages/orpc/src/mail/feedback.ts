@@ -1,14 +1,6 @@
-import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 
 import type { learnAiMemoryFromMailAction as LearnAiMemoryFromMailAction } from "../ai-memory";
-
-const SYSTEM_LABEL_IDS = new Set<string>(Object.values(MAILBOX_LABELS));
-
-export type GmailActionContext = {
-  senderDomains: string;
-  subjects: string;
-};
 
 type MailActionMemoryInput = Parameters<typeof LearnAiMemoryFromMailAction>[0];
 
@@ -23,35 +15,11 @@ export const recordLabelFeedback = async (input: {
   try {
     const { recordMailAutoLabelFeedback } =
       await import("../mail-automation/memory");
-    await recordMailAutoLabelFeedback(input);
+    return await recordMailAutoLabelFeedback(input);
   } catch (error) {
     reportError(error, { operation: "mail:record-auto-label-feedback" });
-  }
-};
-
-export const recordGmailLabelFeedback = async (input: {
-  accessToken: string;
-  addLabelIds?: string[];
-  mailboxId: string;
-  providerMessageIds: string[];
-  removeLabelIds?: string[];
-  userId: string;
-}) => {
-  if (
-    [...(input.addLabelIds ?? []), ...(input.removeLabelIds ?? [])].every(
-      (labelId) => SYSTEM_LABEL_IDS.has(labelId)
-    )
-  ) {
     return null;
   }
-  await recordLabelFeedback({
-    addLabelIds: input.addLabelIds,
-    mailboxId: input.mailboxId,
-    providerMessageIds: input.providerMessageIds,
-    removeLabelIds: input.removeLabelIds,
-    userId: input.userId,
-  });
-  return null;
 };
 
 export const learnAiMemoryFromMailAction = async (

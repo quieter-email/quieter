@@ -55,8 +55,8 @@ import { z } from "zod";
 
 import {
   buildMailMemoryQuery,
+  learnAiMemoryFromMailAction,
   loadAiAgentContext,
-  recordAiMemoryEvent,
   serializeAiAgentContext,
 } from "./ai-memory";
 import { getMailboxMemoryActor } from "./ai-memory-capture";
@@ -508,21 +508,11 @@ export const setMailImportance = async (input: {
       type: "mailbox.changed",
     });
     try {
-      await recordAiMemoryEvent({
-        kind: "mail_action",
+      await learnAiMemoryFromMailAction({
+        action: input.important ? "mark_important" : "mark_not_important",
         mailboxId: input.mailboxId,
-        metadata: {
-          action: input.important ? "mark_important" : "mark_not_important",
-          senders: result.sources
-            .slice(0, 3)
-            .map(({ message }) => (message.from ?? "").slice(0, 180))
-            .join("; "),
-          subjects: result.sources
-            .slice(0, 3)
-            .map(({ message }) => (message.subject ?? "").slice(0, 180))
-            .join("; "),
-          targetCount: appliedThreadIds.length,
-        },
+        messageIds: result.sources.map(({ message }) => message.id),
+        targetCount: appliedThreadIds.length,
         userId: input.actorUserId,
       });
     } catch (error) {

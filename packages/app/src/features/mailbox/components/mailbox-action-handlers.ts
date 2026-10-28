@@ -2,11 +2,7 @@
 
 import { toastError } from "@quieter/app/lib/error-toast";
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
-import type {
-  MailboxCategory,
-  MessageListItem,
-  ThreadMessagesResult,
-} from "@quieter/app/lib/mail";
+import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
 import {
   applyBulkChangesInMailbox,
   updateMessageInMailbox,
@@ -14,8 +10,6 @@ import {
   deleteDraftInMailbox,
 } from "@quieter/app/lib/mail/inbox-query/index";
 import type { MailMetadataOperation } from "@quieter/app/lib/mail/inbox-query/index";
-import { findMessageInCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-query/query-cache";
-import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { mailboxesQueryOptions } from "@quieter/app/lib/mailboxes-query";
 import type { MailCommand } from "@quieter/mail/data-plane";
 import type { QueryClient } from "@tanstack/react-query";
@@ -214,42 +208,6 @@ export const createMailboxActionHandlers = ({
     }
   };
 
-  const setImportance = async (
-    id: string,
-    scope: "message" | "thread",
-    important: boolean
-  ) => {
-    let threadId = id;
-    if (scope === "message") {
-      const message =
-        findMessageInCachedMailboxQueries(queryClient, mailboxId, id) ??
-        queryClient
-          .getQueriesData<ThreadMessagesResult>({
-            queryKey: getMailboxThreadQueriesKey(mailboxId),
-          })
-          .flatMap(([, data]) => data?.messages ?? [])
-          .find((candidate) => candidate.id === id);
-      if (!message) {
-        throw new Error("This message is no longer available.");
-      }
-      ({ threadId } = message);
-    }
-    await runAction(scope, id, async () => {
-      const result = await applyBulkChangesInMailbox(
-        queryClient,
-        mailboxId,
-        [{ messageIds: scope === "thread" ? [] : [id], threadId }],
-        { important, kind: "set-importance" }
-      );
-      const failed = result.targets.find(
-        (target) => target.status === "failed"
-      );
-      if (failed) {
-        throw new Error("Could not update this conversation.");
-      }
-    });
-  };
-
   const deleteDraft = async (message: MessageListItem) => {
     const { draftId } = message;
     if (!draftId) {
@@ -365,11 +323,21 @@ export const createMailboxActionHandlers = ({
         kind: "move",
       });
     },
-    setMessageImportance: async (id: string, important: boolean) => {
-      await setImportance(id, "message", important);
-    },
-    setThreadImportance: async (id: string, important: boolean) => {
-      await setImportance(id, "thread", important);
+    setThreadImportance: async (threadId: string, important: boolean) => {
+      await runAction("thread", threadId, async () => {
+        const result = await applyBulkChangesInMailbox(
+          queryClient,
+          mailboxId,
+          [{ messageIds: [], threadId }],
+          { important, kind: "set-importance" }
+        );
+        const failed = result.targets.find(
+          (target) => target.status === "failed"
+        );
+        if (failed) {
+          throw new Error("Could not update this conversation.");
+        }
+      });
     },
     setThreadsImportance: async (
       threads: ThreadListEntry[],
