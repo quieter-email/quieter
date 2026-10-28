@@ -105,11 +105,11 @@ export const Calendar = ({
           ),
           root: cn("w-fit text-body text-fg", defaultClassNames.root),
           selected: cn(
-            "[&>button]:bg-primary [&>button]:text-primary-fg [&>button]:shadow-sm [&>button]:hover:bg-primary [&>button]:hover:text-primary-fg [&>button]:focus:bg-primary [&>button]:focus:text-primary-fg",
+            "[&:not([data-today])>button]:bg-secondary [&:not([data-today])>button]:text-secondary-fg [&:not([data-today])>button]:shadow-sm [&:not([data-today])>button]:hover:bg-secondary-hover [&:not([data-today])>button]:hover:text-secondary-fg [&:not([data-today])>button]:focus:bg-secondary [&:not([data-today])>button]:focus:text-secondary-fg",
             defaultClassNames.selected
           ),
           today: cn(
-            "[&>button]:font-medium [&>button]:ring-1 [&>button]:ring-border",
+            "[&>button]:bg-primary [&>button]:font-medium [&>button]:text-primary-fg [&>button]:shadow-sm [&>button]:hover:bg-primary-hover [&>button]:hover:text-primary-fg [&>button]:focus:bg-primary [&>button]:focus:text-primary-fg",
             defaultClassNames.today
           ),
           week: cn("grid grid-cols-7 gap-0.5", defaultClassNames.week),
