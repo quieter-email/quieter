@@ -162,17 +162,9 @@ export const useMailboxThreadId = () =>
     select: (search) => search.threadId,
   });
 
-export const useMailboxRouteSearch = () => {
-  const calendarSearch = inboxRouteApi.useSearch({
-    select: (search) => ({
-      calendarConnectionId: search.calendarConnectionId,
-      calendarDate: search.calendarDate,
-      calendarEventId: search.calendarEventId,
-      calendarId: search.calendarId,
-      calendarTimeZone: search.calendarTimeZone,
-      calendarView: search.calendarView,
-      workspace: search.workspace,
-    }),
+export const useMailWorkspaceRouteSearch = () => {
+  const workspace = inboxRouteApi.useSearch({
+    select: (search) => search.workspace,
   });
   const routeMailbox = inboxRouteApi.useSearch({
     select: (search) => search.mailbox,
@@ -213,7 +205,6 @@ export const useMailboxRouteSearch = () => {
   const setMailboxSearch = useMailboxSearchActions();
 
   return {
-    ...calendarSearch,
     activeMailbox,
     chatId,
     compose,
@@ -237,5 +228,22 @@ export const useMailboxRouteSearch = () => {
     setMailboxSearch,
     threadId,
     view: view ?? "inbox",
+    workspace,
   };
+};
+
+export const useMailboxRouteSearch = () => {
+  const mailSearch = useMailWorkspaceRouteSearch();
+  const calendarSearch = inboxRouteApi.useSearch({
+    select: (search) => ({
+      calendarConnectionId: search.calendarConnectionId,
+      calendarDate: search.calendarDate,
+      calendarEventId: search.calendarEventId,
+      calendarId: search.calendarId,
+      calendarTimeZone: search.calendarTimeZone,
+      calendarView: search.calendarView,
+    }),
+    structuralSharing: true,
+  });
+  return { ...mailSearch, ...calendarSearch };
 };

@@ -5,7 +5,7 @@ import type { ComposeDraftState } from "@quieter/app/features/compose/domain/dra
 import { parseMailtoComposeDraft } from "@quieter/app/features/compose/domain/mailto";
 import { shouldIgnoreAppShortcut } from "@quieter/app/features/hotkeys/domain/hotkey-guards";
 import { MailboxWorkspaceContent } from "@quieter/app/features/mailbox/components/mailbox-workspace/mailbox-workspace-content";
-import { useMailboxRouteSearch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
+import { useMailWorkspaceRouteSearch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import { useMailboxSelection } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-selection";
 import { useWorkspaceUiState } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-workspace-ui-state";
 import {
@@ -65,7 +65,7 @@ const useChatActions = ({
   chats: RouterOutputs["chat"]["list"];
   selectedMailboxId: string | null;
   setMailboxSearch: ReturnType<
-    typeof useMailboxRouteSearch
+    typeof useMailWorkspaceRouteSearch
   >["setMailboxSearch"];
 }) => {
   const queryClient = useQueryClient();
@@ -133,7 +133,7 @@ const useChatActions = ({
 };
 
 type SetMailboxSearch = ReturnType<
-  typeof useMailboxRouteSearch
+  typeof useMailWorkspaceRouteSearch
 >["setMailboxSearch"];
 type MailboxProvider = "api" | "gmail" | "managed" | null;
 
@@ -513,7 +513,10 @@ const useMailboxWorkspaceActions = ({
       return;
     }
     void setMailboxSearch({
-      mailbox: resolvedView === "all-inboxes" ? "inbox" : undefined,
+      mailbox:
+        resolvedView === "all-inboxes" || resolvedView === "labels"
+          ? "inbox"
+          : undefined,
       mailboxId:
         resolvedView === "all-inboxes" && selectedMailboxProvider === "api"
           ? (mailboxes.find((mailbox) => mailbox.provider !== "api")?.id ??
@@ -834,10 +837,36 @@ const MailboxWorkspaceBody = ({
   );
 };
 
+const MailboxSessionNotice = ({
+  failed,
+  onRetry,
+}: {
+  failed: boolean;
+  onRetry: () => void;
+}) => {
+  const returnTo = useLocation({ select: (location) => location.href });
+  return (
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-4 p-6">
+      <Text role="alert">
+        {failed
+          ? "Could not load your account. Please try again."
+          : "Sign in to continue."}
+      </Text>
+      <div className="flex items-center gap-3">
+        <Button onClick={onRetry} type="button">
+          Try again
+        </Button>
+        <LinkButton search={{ returnTo }} to="/auth" variant="outline">
+          Sign in
+        </LinkButton>
+      </div>
+    </main>
+  );
+};
+
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const queryClient = useQueryClient();
   const session = authClient.useSession();
-  const returnTo = useLocation({ select: (location) => location.href });
   useEffect(() => {
     if (session.error && !session.isPending && !session.isRefetching) {
       toastError(session.error, {
@@ -862,7 +891,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     threadId,
     view: requestedView,
     workspace,
-  } = useMailboxRouteSearch();
+  } = useMailWorkspaceRouteSearch();
   const { isMobileSidebarOpen, setIsMobileSidebarOpen } = useWorkspaceUiState();
   const isDemoMode = useDemoModeEnabled();
   const isManagedDemoMode = useManagedDemoModeEnabled();
@@ -1012,28 +1041,13 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     openComposeWorkspace: handleComposeDraftRequested,
   } = composeWorkspace;
   if (!session.isPending && !session.isRefetching && !sessionMatchesUser) {
-    const sessionFailed = !!session.error && session.error.status !== 401;
     return (
-      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 p-6">
-        <Text role="alert">
-          {sessionFailed
-            ? "Could not load your account. Please try again."
-            : "Sign in to continue."}
-        </Text>
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={() => {
-              void session.refetch();
-            }}
-            type="button"
-          >
-            Try again
-          </Button>
-          <LinkButton search={{ returnTo }} to="/auth" variant="outline">
-            Sign in
-          </LinkButton>
-        </div>
-      </main>
+      <MailboxSessionNotice
+        failed={!!session.error && session.error.status !== 401}
+        onRetry={() => {
+          void session.refetch();
+        }}
+      />
     );
   }
   if (!isWorkspaceReady) {

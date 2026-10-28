@@ -304,6 +304,7 @@ export const SidebarLabelNav = ({
                       applyMailboxSearchPatch(
                         mailboxSearchSchema.parse(previous),
                         {
+                          mailbox: "inbox",
                           mailboxId,
                           messageId: null,
                           query: null,

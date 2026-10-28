@@ -16,7 +16,6 @@ import {
 } from "@quieter/ai/chat-tools";
 import type { ForegroundSnapshot } from "@quieter/ai/chat-tools";
 import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
-import { useMailboxRouteSearch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import {
   hasOrganizationAiAccess,
   USER_BILLING_QUERY_KEY,
@@ -32,6 +31,7 @@ import { toastError } from "@quieter/app/lib/error-toast";
 import { getMessagesQueryKey } from "@quieter/app/lib/mail/inbox-query/index";
 import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { rpc } from "@quieter/app/lib/orpc";
+import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appFetch, getApiUrl } from "@quieter/app/runtime";
 import { calendarMutationResultSchema } from "@quieter/calendar";
 import type { RouterOutputs } from "@quieter/orpc";
@@ -66,7 +66,9 @@ const ChatSession = ({
   }
   const queryClient = useQueryClient();
   const userId = authClient.useSession().data?.user.id;
-  const { workspace: activeWorkspace } = useMailboxRouteSearch();
+  const activeWorkspace = inboxRouteApi.useSearch({
+    select: (search) => search.workspace,
+  });
   const [input, setInput] = useState("");
   const [model, setModel] = useState<ChatModel | "auto">("auto");
   const mailContext = useChatMailContext(

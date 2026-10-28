@@ -326,7 +326,11 @@ export const ComposeEditor = ({
     }
 
     // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent
-    const current = normalizeComposeBodyHtml(editor.getHTML());
+    const currentHtml = editor.getHTML();
+    if (currentHtml === html) {
+      return;
+    }
+    const current = normalizeComposeBodyHtml(currentHtml);
     const next = normalizeComposeBodyHtml(html);
 
     if (current === next) {
