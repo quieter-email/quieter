@@ -1,0 +1,298 @@
+{
+  "runtime": "v26.11.1",
+  "results": [
+    {
+      "count": 11,
+      "view": "week",
+      "dates": 7,
+      "trials": [
+        {
+          "beforeMs": 12.70831899999996,
+          "afterMs": 2.233965000000012,
+          "outputCount": 11
+        },
+        {
+          "beforeMs": 9.65856100000002,
+          "afterMs": 1.481283000000019,
+          "outputCount": 11
+        },
+        {
+          "beforeMs": 10.91269699999998,
+          "afterMs": 1.8455559999999878,
+          "outputCount": 11
+        },
+        {
+          "beforeMs": 7.703809999999976,
+          "afterMs": 4.862332999999978,
+          "outputCount": 11
+        },
+        {
+          "beforeMs": 5.405803999999989,
+          "afterMs": 1.0619739999999638,
+          "outputCount": 11
+        }
+      ]
+    },
+    {
+      "count": 11,
+      "view": "month",
+      "dates": 42,
+      "trials": [
+        {
+          "beforeMs": 25.93546200000003,
+          "afterMs": 2.9756479999999783,
+          "outputCount": 11
+        },
+        {
+          "beforeMs": 33.461026999999945,
+          "afterMs": 4.488790999999992,
+          "outputCount": 11
+        },
+        {
+          "beforeMs": 35.45431199999996,
+          "afterMs": 4.737117000000012,
+          "outputCount": 11
+        },
+        {
+          "beforeMs": 32.29152099999999,
+          "afterMs": 2.8417570000000296,
+          "outputCount": 11
+        },
+        {
+          "beforeMs": 32.125139000000104,
+          "afterMs": 3.088339000000019,
+          "outputCount": 11
+        }
+      ]
+    },
+    {
+      "count": 11,
+      "view": "agenda",
+      "dates": 30,
+      "trials": [
+        {
+          "beforeMs": 21.620168000000035,
+          "afterMs": 2.048257000000035,
+          "outputCount": 7
+        },
+        {
+          "beforeMs": 17.674317000000087,
+          "afterMs": 1.8142270000000735,
+          "outputCount": 7
+        },
+        {
+          "beforeMs": 15.888381999999979,
+          "afterMs": 1.99555799999996,
+          "outputCount": 7
+        },
+        {
+          "beforeMs": 17.893057,
+          "afterMs": 1.8011719999999514,
+          "outputCount": 7
+        },
+        {
+          "beforeMs": 17.74780499999997,
+          "afterMs": 1.7964550000000372,
+          "outputCount": 7
+        }
+      ]
+    },
+    {
+      "count": 100,
+      "view": "week",
+      "dates": 7,
+      "trials": [
+        {
+          "beforeMs": 50.768573999999944,
+          "afterMs": 4.156517000000008,
+          "outputCount": 100
+        },
+        {
+          "beforeMs": 47.330926999999974,
+          "afterMs": 4.015050999999971,
+          "outputCount": 100
+        },
+        {
+          "beforeMs": 44.63893299999995,
+          "afterMs": 4.2421170000000075,
+          "outputCount": 100
+        },
+        {
+          "beforeMs": 43.74797899999999,
+          "afterMs": 4.897429999999986,
+          "outputCount": 100
+        },
+        {
+          "beforeMs": 56.20976500000006,
+          "afterMs": 3.2985869999999977,
+          "outputCount": 100
+        }
+      ]
+    },
+    {
+      "count": 100,
+      "view": "month",
+      "dates": 42,
+      "trials": [
+        {
+          "beforeMs": 233.67478400000005,
+          "afterMs": 5.121057999999948,
+          "outputCount": 100
+        },
+        {
+          "beforeMs": 238.623511,
+          "afterMs": 7.6679330000001755,
+          "outputCount": 100
+        },
+        {
+          "beforeMs": 209.32260599999995,
+          "afterMs": 6.4050310000002355,
+          "outputCount": 100
+        },
+        {
+          "beforeMs": 216.72128199999997,
+          "afterMs": 4.923839000000044,
+          "outputCount": 100
+        },
+        {
+          "beforeMs": 191.5914630000002,
+          "afterMs": 4.850350000000162,
+          "outputCount": 100
+        }
+      ]
+    },
+    {
+      "count": 100,
+      "view": "agenda",
+      "dates": 30,
+      "trials": [
+        {
+          "beforeMs": 136.436279,
+          "afterMs": 3.953515000000152,
+          "outputCount": 63
+        },
+        {
+          "beforeMs": 137.70039300000008,
+          "afterMs": 3.3891660000003867,
+          "outputCount": 63
+        },
+        {
+          "beforeMs": 138.88989700000002,
+          "afterMs": 3.474235000000135,
+          "outputCount": 63
+        },
+        {
+          "beforeMs": 136.42463799999996,
+          "afterMs": 3.3676660000000993,
+          "outputCount": 63
+        },
+        {
+          "beforeMs": 129.91994999999997,
+          "afterMs": 3.392342000000099,
+          "outputCount": 63
+        }
+      ]
+    },
+    {
+      "count": 500,
+      "view": "week",
+      "dates": 7,
+      "trials": [
+        {
+          "beforeMs": 184.2200469999998,
+          "afterMs": 15.472361999999976,
+          "outputCount": 500
+        },
+        {
+          "beforeMs": 195.8026030000001,
+          "afterMs": 13.614763000000039,
+          "outputCount": 500
+        },
+        {
+          "beforeMs": 191.5507859999998,
+          "afterMs": 18.719019000000117,
+          "outputCount": 500
+        },
+        {
+          "beforeMs": 198.48973000000024,
+          "afterMs": 15.251105999999709,
+          "outputCount": 500
+        },
+        {
+          "beforeMs": 195.40764099999978,
+          "afterMs": 14.994101999999657,
+          "outputCount": 500
+        }
+      ]
+    },
+    {
+      "count": 500,
+      "view": "month",
+      "dates": 42,
+      "trials": [
+        {
+          "beforeMs": 1007.1118980000001,
+          "afterMs": 16.58451999999943,
+          "outputCount": 500
+        },
+        {
+          "beforeMs": 976.8992529999996,
+          "afterMs": 17.29338100000041,
+          "outputCount": 500
+        },
+        {
+          "beforeMs": 1070.7651240000005,
+          "afterMs": 28.141696999999112,
+          "outputCount": 500
+        },
+        {
+          "beforeMs": 1026.4401509999989,
+          "afterMs": 23.375575000000026,
+          "outputCount": 500
+        },
+        {
+          "beforeMs": 1108.5030430000006,
+          "afterMs": 17.63605600000119,
+          "outputCount": 500
+        }
+      ]
+    },
+    {
+      "count": 500,
+      "view": "agenda",
+      "dates": 30,
+      "trials": [
+        {
+          "beforeMs": 751.4904420000003,
+          "afterMs": 12.390402000000904,
+          "outputCount": 316
+        },
+        {
+          "beforeMs": 736.5157070000005,
+          "afterMs": 13.252621000001454,
+          "outputCount": 316
+        },
+        {
+          "beforeMs": 730.3245879999995,
+          "afterMs": 12.062255999999252,
+          "outputCount": 316
+        },
+        {
+          "beforeMs": 702.8604240000004,
+          "afterMs": 11.603183999999601,
+          "outputCount": 316
+        },
+        {
+          "beforeMs": 755.5308210000003,
+          "afterMs": 15.055116999999882,
+          "outputCount": 316
+        }
+      ]
+    }
+  ],
+  "boundaryConversions": {
+    "before": 38220,
+    "after": 84
+  },
+  "errors": 0
+}

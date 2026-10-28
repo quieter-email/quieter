@@ -1,0 +1,23 @@
+{
+  "source": "8d2ff77d",
+  "before": {
+    "composeFocused": true,
+    "search": "?mailbox=inbox&mailboxId=demo%3Amailbox&view=inbox"
+  },
+  "after": {
+    "search": "?mailbox=inbox&mailboxId=demo%3Amailbox&messageId=demo-stripe-1&threadId=demo-stripe-1&view=inbox",
+    "proof": {
+      "keys": [
+        {
+          "target": "BUTTON",
+          "text": "Compose",
+          "trusted": true,
+          "prevented": true
+        }
+      ],
+      "clicks": []
+    },
+    "composeVisible": false,
+    "focus": "Open message actions"
+  }
+}

@@ -117,6 +117,11 @@ import { TimePicker } from "@quieter/ui/time-picker";
 import { toast } from "@quieter/ui/toast";
 import { TokenField } from "@quieter/ui/token-field";
 import type { TokenFieldToken } from "@quieter/ui/token-field";
+import { WorkspaceDock } from "@quieter/ui/workspace-dock";
+import {
+  workspaceGutterClassName,
+  WorkspaceSection,
+} from "@quieter/ui/workspace-section";
 import { useCallback, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -439,6 +444,62 @@ const ScheduleShowcase = () => {
   );
 };
 
+const WorkspaceDockShowcase = () => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="space-y-3">
+      <Button
+        onClick={() => {
+          setOpen((current) => !current);
+        }}
+        variant="secondary"
+      >
+        {open ? "Close side panel" : "Open side panel"}
+      </Button>
+      <div className="flex h-64">
+        <WorkspaceDock
+          open={open}
+          sidebar={
+            <div
+              className={cn(
+                workspaceGutterClassName,
+                "h-full p-(--workspace-gutter) xl:pl-0"
+              )}
+            >
+              <WorkspaceSection className="h-full" layout="surface">
+                <div className="space-y-3 p-4">
+                  <Text weight="medium">Side panel</Text>
+                  <Text size="sm" tone="muted">
+                    The panel slides at its full width.
+                  </Text>
+                  <Button
+                    onClick={() => {
+                      setOpen(false);
+                    }}
+                    variant="secondary"
+                  >
+                    Close panel
+                  </Button>
+                </div>
+              </WorkspaceSection>
+            </div>
+          }
+        >
+          <WorkspaceSection>
+            <div className="space-y-3 p-4">
+              <Text weight="medium">Workspace</Text>
+              <Text size="sm" tone="muted">
+                Text and controls keep their size as the workspace adjusts.
+              </Text>
+              <Input aria-label="Workspace draft" placeholder="Write a draft" />
+            </div>
+          </WorkspaceSection>
+        </WorkspaceDock>
+      </div>
+    </div>
+  );
+};
+
 const Section = ({
   children,
   description,
@@ -547,6 +608,13 @@ export const DesignSystemShowcase = () => {
               </div>
             ))}
           </div>
+        </Section>
+
+        <Section
+          description="The workspace and its full-width side panel move together without scaling the content."
+          title="Workspace dock"
+        >
+          <WorkspaceDockShowcase />
         </Section>
 
         <Section title="Borders">

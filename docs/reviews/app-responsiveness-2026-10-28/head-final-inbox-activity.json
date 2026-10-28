@@ -1,0 +1,254 @@
+[
+  {
+    "case": "hidden-open-return",
+    "before": {
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "assistant": {
+        "width": 332.796875,
+        "x": 1280
+      },
+      "query": {
+        "fetchStatus": "idle",
+        "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "pageSizes": [
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+        ],
+        "pages": 27,
+        "records": 393,
+        "threads": 360
+      },
+      "rendered": 42,
+      "rowHeights": [48],
+      "scrollHeight": 17352,
+      "scrollTop": 7217,
+      "search": null,
+      "selected": ["release-inbox-0150"],
+      "width": 1006
+    },
+    "after": {
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "assistant": {
+        "width": 332.796875,
+        "x": 947.203125
+      },
+      "query": {
+        "fetchStatus": "idle",
+        "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "pageSizes": [
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+        ],
+        "pages": 27,
+        "records": 393,
+        "threads": 360
+      },
+      "rendered": 37,
+      "rowHeights": [68],
+      "scrollHeight": 24552,
+      "scrollTop": 10217,
+      "search": null,
+      "selected": ["release-inbox-0150"],
+      "width": 673
+    }
+  },
+  {
+    "case": "hidden-close-return",
+    "before": {
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "assistant": {
+        "width": 332.796875,
+        "x": 947.203125
+      },
+      "query": {
+        "fetchStatus": "idle",
+        "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "pageSizes": [
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+        ],
+        "pages": 27,
+        "records": 393,
+        "threads": 360
+      },
+      "rendered": 37,
+      "rowHeights": [68],
+      "scrollHeight": 24552,
+      "scrollTop": 10217,
+      "search": null,
+      "selected": ["release-inbox-0150"],
+      "width": 673
+    },
+    "after": {
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "assistant": {
+        "width": 332.796875,
+        "x": 1280
+      },
+      "query": {
+        "fetchStatus": "idle",
+        "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "pageSizes": [
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+        ],
+        "pages": 27,
+        "records": 393,
+        "threads": 360
+      },
+      "rendered": 42,
+      "rowHeights": [48],
+      "scrollHeight": 17352,
+      "scrollTop": 7217,
+      "search": null,
+      "selected": ["release-inbox-0150"],
+      "width": 1006
+    }
+  },
+  {
+    "case": "hide-during-open-close-hidden-return",
+    "before": {
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "assistant": {
+        "width": 332.796875,
+        "x": 1280
+      },
+      "query": {
+        "fetchStatus": "idle",
+        "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "pageSizes": [
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+        ],
+        "pages": 27,
+        "records": 393,
+        "threads": 360
+      },
+      "rendered": 42,
+      "rowHeights": [48],
+      "scrollHeight": 17352,
+      "scrollTop": 7217,
+      "search": null,
+      "selected": ["release-inbox-0150"],
+      "width": 1006
+    },
+    "after": {
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "assistant": {
+        "width": 332.796875,
+        "x": 1280
+      },
+      "query": {
+        "fetchStatus": "idle",
+        "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "pageSizes": [
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+        ],
+        "pages": 27,
+        "records": 393,
+        "threads": 360
+      },
+      "rendered": 42,
+      "rowHeights": [48],
+      "scrollHeight": 17352,
+      "scrollTop": 7217,
+      "search": null,
+      "selected": ["release-inbox-0150"],
+      "width": 1006
+    }
+  },
+  {
+    "case": "return-during-close",
+    "before": {
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "assistant": {
+        "width": 332.796875,
+        "x": 947.203125
+      },
+      "query": {
+        "fetchStatus": "idle",
+        "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "pageSizes": [
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+        ],
+        "pages": 27,
+        "records": 393,
+        "threads": 360
+      },
+      "rendered": 37,
+      "rowHeights": [68],
+      "scrollHeight": 24552,
+      "scrollTop": 10217,
+      "search": null,
+      "selected": ["release-inbox-0150"],
+      "width": 673
+    },
+    "after": {
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "assistant": {
+        "width": 332.796875,
+        "x": 1280
+      },
+      "query": {
+        "fetchStatus": "idle",
+        "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "pageSizes": [
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+        ],
+        "pages": 27,
+        "records": 393,
+        "threads": 360
+      },
+      "rendered": 42,
+      "rowHeights": [48],
+      "scrollHeight": 17352,
+      "scrollTop": 7217,
+      "search": null,
+      "selected": ["release-inbox-0150"],
+      "width": 1006
+    }
+  }
+]

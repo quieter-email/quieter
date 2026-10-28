@@ -1,0 +1,168 @@
+{
+  "drag": {
+    "ghosts": 1,
+    "markers": 1,
+    "dragging": 1,
+    "mutations": 0,
+    "capture": true,
+    "events": 500
+  },
+  "escape": {
+    "ghosts": 0,
+    "markers": 0,
+    "dragging": 0,
+    "mutations": 0,
+    "capture": false,
+    "events": 500
+  },
+  "noop": {
+    "ghosts": 0,
+    "markers": 0,
+    "dragging": 0,
+    "mutations": 0,
+    "capture": false,
+    "events": 500
+  },
+  "lostCapture": {
+    "ghosts": 0,
+    "markers": 0,
+    "dragging": 0,
+    "mutations": 0,
+    "capture": false,
+    "events": 500
+  },
+  "outside": {
+    "ghosts": 0,
+    "markers": 0,
+    "dragging": 0,
+    "mutations": 0,
+    "capture": false,
+    "events": 500
+  },
+  "pending": {
+    "ghosts": 0,
+    "markers": 0,
+    "dragging": 0,
+    "mutations": 1,
+    "capture": false,
+    "events": 500,
+    "labels": ["Performance event 029, 10:00 to 10:30. Open event to edit."],
+    "mutation": {
+      "kind": "update",
+      "eventId": "release-perf-28",
+      "time": {
+        "end": "2026-10-25T10:30:00Z",
+        "kind": "timed",
+        "start": "2026-10-25T10:00:00Z",
+        "timeZone": "UTC"
+      }
+    }
+  },
+  "drop": {
+    "ghosts": 0,
+    "markers": 0,
+    "dragging": 0,
+    "mutations": 1,
+    "capture": false,
+    "events": 500,
+    "labels": ["Performance event 029, 10:00 to 10:30. Open event to edit."]
+  },
+  "pointerEvents": [
+    {
+      "type": "pointerdown",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "pointermove",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "pointerdown",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "pointermove",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "pointermove",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "pointerup",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "pointerdown",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "pointermove",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "pointerdown",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "pointermove",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "pointerup",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "pointerdown",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "pointermove",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "pointerup",
+      "id": 1,
+      "trusted": true
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 1,
+      "trusted": true
+    }
+  ],
+  "trusted": true
+}

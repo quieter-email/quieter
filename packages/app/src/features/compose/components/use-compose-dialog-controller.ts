@@ -170,6 +170,8 @@ export const useComposeDialogController = ({
       showCc: resolved.recipients.cc.trim() !== "",
     };
   });
+  // oxlint-disable-next-line react/hook-use-state -- Later draft and action changes write the form explicitly.
+  const [defaultValues] = useState(() => draftToComposeFormValues(state.draft));
   const assistantUnsavedRef = useRef(state.draft.assistantUnsaved === true);
   const needsSaveRef = useRef(initialDraftNeedsSave && persistDrafts);
   const activeDraftRef = useRef(state.draft);
@@ -418,7 +420,7 @@ export const useComposeDialogController = ({
   };
 
   const form = useForm({
-    defaultValues: draftToComposeFormValues(state.draft),
+    defaultValues,
     onSubmit: async ({ value }) => {
       await submitComposeForm(value);
     },

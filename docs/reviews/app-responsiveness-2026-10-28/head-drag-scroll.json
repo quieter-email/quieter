@@ -1,0 +1,17 @@
+{
+  "before": {
+    "top": 434,
+    "ghosts": 1,
+    "mutations": 1
+  },
+  "during": {
+    "top": 554,
+    "ghosts": 1,
+    "mutations": 1
+  },
+  "after": {
+    "top": 554,
+    "ghosts": 0,
+    "mutations": 1
+  }
+}

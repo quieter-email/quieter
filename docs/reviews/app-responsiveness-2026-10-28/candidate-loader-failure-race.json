@@ -1,0 +1,37 @@
+[
+  {
+    "kind": "compose",
+    "hoverRequested": true,
+    "state": {
+      "retry": true,
+      "back": true,
+      "loading": false,
+      "unhandled": [],
+      "errors": []
+    },
+    "inboxRecovered": true
+  },
+  {
+    "kind": "snippets",
+    "hoverRequested": true,
+    "state": {
+      "retry": true,
+      "back": true,
+      "loading": false,
+      "unhandled": [],
+      "errors": []
+    },
+    "inboxRecovered": true
+  },
+  {
+    "kind": "interrupted-compose",
+    "hoverRequested": true,
+    "state": {
+      "mailbox": "snippets",
+      "snippetVisible": true,
+      "composeVisible": false,
+      "unhandled": [],
+      "errors": []
+    }
+  }
+]

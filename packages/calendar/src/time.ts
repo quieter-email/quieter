@@ -102,61 +102,66 @@ export const calendarWallTimeToInstant = ({
     .toInstant()
     .toString();
 
-export const splitCalendarEventTime = ({
+export const createCalendarEventTimeSplitter = ({
   dates,
-  time,
   timeZone,
 }: {
   dates: string[];
-  time: CalendarEventTime;
   timeZone: string;
-}): {
-  allDay: boolean;
-  date: string;
-  endMinute: number;
-  startMinute: number;
-}[] => {
-  if (time.kind === "all-day") {
-    return dates
-      .filter((date) => date >= time.startDate && date < time.endDate)
-      .map((date) => ({
-        allDay: true,
-        date,
-        endMinute: 1440,
-        startMinute: 0,
-      }));
-  }
-
-  const eventStart = Temporal.Instant.from(time.start);
-  const eventEnd = Temporal.Instant.from(time.end);
-  return dates.flatMap((date) => {
+}) => {
+  const days = dates.map((date) => {
     const day = Temporal.PlainDate.from(date);
-    const dayStart = day.toZonedDateTime(timeZone).toInstant();
-    const dayEnd = day.add({ days: 1 }).toZonedDateTime(timeZone).toInstant();
-    if (
-      Temporal.Instant.compare(eventStart, dayEnd) >= 0 ||
-      Temporal.Instant.compare(eventEnd, dayStart) <= 0
-    ) {
-      return [];
+    return {
+      date,
+      end: day.add({ days: 1 }).toZonedDateTime(timeZone).epochNanoseconds,
+      start: day.toZonedDateTime(timeZone).epochNanoseconds,
+    };
+  });
+
+  return (
+    time: CalendarEventTime
+  ): {
+    allDay: boolean;
+    date: string;
+    endMinute: number;
+    startMinute: number;
+  }[] => {
+    if (time.kind === "all-day") {
+      return days
+        .filter(({ date }) => date >= time.startDate && date < time.endDate)
+        .map(({ date }) => ({
+          allDay: true,
+          date,
+          endMinute: 1440,
+          startMinute: 0,
+        }));
     }
 
-    const startsBeforeDay = Temporal.Instant.compare(eventStart, dayStart) < 0;
-    const endsAfterDay = Temporal.Instant.compare(eventEnd, dayEnd) >= 0;
-    const localStart = eventStart.toZonedDateTimeISO(timeZone);
-    const localEnd = eventEnd.toZonedDateTimeISO(timeZone);
-    return [
-      {
-        allDay: false,
-        date,
-        endMinute: endsAfterDay
+    const eventStart = Temporal.Instant.from(time.start);
+    const eventEnd = Temporal.Instant.from(time.end);
+    const start = eventStart.epochNanoseconds;
+    const end = eventEnd.epochNanoseconds;
+    const occupiedDays = days.filter(
+      (day) => start < day.end && end > day.start
+    );
+    if (occupiedDays.length === 0) {
+      return [];
+    }
+    const localStart = eventStart.toZonedDateTimeISO(timeZone).toPlainTime();
+    const localEnd = eventEnd.toZonedDateTimeISO(timeZone).toPlainTime();
+    return occupiedDays.map((day) => ({
+      allDay: false,
+      date: day.date,
+      endMinute:
+        end >= day.end
           ? 1440
           : localEnd.hour * 60 + localEnd.minute + localEnd.second / 60,
-        startMinute: startsBeforeDay
+      startMinute:
+        start < day.start
           ? 0
           : localStart.hour * 60 + localStart.minute + localStart.second / 60,
-      },
-    ];
-  });
+    }));
+  };
 };
 
 export const moveCalendarEventTime = ({

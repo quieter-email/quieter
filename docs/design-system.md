@@ -36,6 +36,7 @@ Before changing a UI, read the relevant component and its closest existing calle
 | Modal, destructive confirmation, mobile panel | `Dialog`, `AlertDialog`, `Drawer` |
 | Overlay finishing actions | Shared overlay footer or `ActionFooter` |
 | Workspace panel | `WorkspaceSection`, `WorkspaceSidebar` |
+| Sliding workspace sidebar | `WorkspaceDock` |
 | Settings | Shared `settings-layout` components; app wrappers add anchors |
 | Composer | `composer-chrome` components, including `ComposerActionBar` for reply actions |
 | Tokenized editor | `TokenField` |
@@ -113,6 +114,8 @@ App themes are defined in `APP_THEMES` in `lib/brand-themes.ts`, separately from
 Spacing uses the existing Tailwind scale with a 4px base, including half steps. There is no separate named spacing scale to invent. Repeated settings and workspace spacing belongs in those shared layouts. Unique viewport constraints and measured positions may use layout values without becoming global tokens.
 
 Workspace panels are edge to edge below the desktop breakpoint, with no outer gutter, border, rounding, or shadow. Desktop panels keep an 8px gutter and their existing frame. Themes can adjust desktop gutters and settings row padding through shared tokens. `WorkspaceSection` owns the gutter for both full-page panels and grid cells. A layout wrapper that positions adjacent panels, including docked chat, imports `workspaceGutterClassName` from the same module and uses `--workspace-gutter`. Do not add another gutter between a trailing sidebar and the preceding panel's existing margin. Settings, Labels, Snippets and their loading states use the shared tokens. Internal cards and controls keep their own borders and rounding.
+
+`WorkspaceDock` coordinates a fixed-width sidebar sliding from the right with the adjacent content's width transition. On narrow screens the sidebar covers the content. App code supplies the sidebar, open state and background inertness; the shared component owns geometry and motion, including reduced motion. Virtualized content keeps individual row measurements live and defers full-list measurement until the width transition settles, preserving its scroll anchor through reversals.
 
 The default radius ladder is `xs` 8px, `sm` 10px, `md` 12px, `lg` 14px, and `xl` 16px. The ladder follows the active theme's base radius. Larger existing steps remain available for intentionally larger shells. Controls own their radii. Supported browsers apply the existing superellipse corner shaping globally, and `squircle` can reassert it within a local override.
 

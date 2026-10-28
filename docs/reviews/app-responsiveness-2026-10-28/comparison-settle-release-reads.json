@@ -1,0 +1,102 @@
+{
+  "bf": [
+    {
+      "opening": true,
+      "reads": {
+        "height": 505,
+        "width": 174
+      },
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "work": {
+        "fetchStatus": "idle",
+        "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "pageSizes": [
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+        ],
+        "pages": 27,
+        "records": 393,
+        "threads": 360
+      }
+    },
+    {
+      "opening": false,
+      "reads": {
+        "height": 634,
+        "width": 195
+      },
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "work": {
+        "fetchStatus": "idle",
+        "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "pageSizes": [
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+        ],
+        "pages": 27,
+        "records": 393,
+        "threads": 360
+      }
+    }
+  ],
+  "candidate": [
+    {
+      "opening": true,
+      "reads": {
+        "height": 41,
+        "width": 28
+      },
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "work": {
+        "fetchStatus": "idle",
+        "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "pageSizes": [
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+        ],
+        "pages": 27,
+        "records": 393,
+        "threads": 360
+      }
+    },
+    {
+      "opening": false,
+      "reads": {
+        "height": 135,
+        "width": 26
+      },
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "work": {
+        "fetchStatus": "idle",
+        "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "pageSizes": [
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+          15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+        ],
+        "pages": 27,
+        "records": 393,
+        "threads": 360
+      }
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "bf": {
+    "open": {
+      "runs": 5,
+      "maxTaskMedianMs": 72,
+      "maxTaskRangeMs": [0, 78],
+      "blockingMedianMs": 28,
+      "widthEndMedianMs": 285.89999997615814
+    },
+    "close": {
+      "runs": 5,
+      "maxTaskMedianMs": 85,
+      "maxTaskRangeMs": [83, 99],
+      "blockingMedianMs": 39,
+      "widthEndMedianMs": 286.4000000357628
+    },
+    "all": {
+      "maxTaskMedianMs": 80.5,
+      "maxTaskRangeMs": [0, 99],
+      "blockingMedianMs": 37.0
+    },
+    "metadata": {
+      "source": "bf7d31c77ebc33b69f926b30a17b310518b19002",
+      "fixture": {
+        "attachmentMessages": 196,
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "metadataPreserved": [
+          "senderAvatarUrls",
+          "isUnread",
+          "isImportant",
+          "threadIsImportant",
+          "threadLabelIds",
+          "threadMessageCount",
+          "threadAttachmentCount",
+          "threadAttachmentNames",
+          "attachments",
+          "unsubscribeMailto"
+        ],
+        "nestedMessages": 426,
+        "optionalMetadata": 426,
+        "pages": 27,
+        "records": 393,
+        "supportedLocalDemoSourceSeeded": true,
+        "threadKeysMailboxScoped": true,
+        "threads": 360
+      },
+      "completeListHash": "1073971d8a8341913525259470fa1a1781ac9727142ce2f0602741d47be39949",
+      "bodyNodes": 3086,
+      "viewport": {
+        "h": 900,
+        "w": 1280
+      }
+    }
+  },
+  "candidate": {
+    "open": {
+      "runs": 5,
+      "maxTaskMedianMs": 80,
+      "maxTaskRangeMs": [70, 93],
+      "blockingMedianMs": 37,
+      "widthEndMedianMs": 294.4000000357628
+    },
+    "close": {
+      "runs": 5,
+      "maxTaskMedianMs": 83,
+      "maxTaskRangeMs": [76, 94],
+      "blockingMedianMs": 46,
+      "widthEndMedianMs": 295.69999998807907
+    },
+    "all": {
+      "maxTaskMedianMs": 81.5,
+      "maxTaskRangeMs": [70, 94],
+      "blockingMedianMs": 41.5
+    },
+    "metadata": {
+      "source": "978a603164a77243066fac9a0e67661497a9bbc7",
+      "fixture": {
+        "attachmentMessages": 196,
+        "key": ["messages", "demo:mailbox", "inbox", ""],
+        "metadataPreserved": [
+          "senderAvatarUrls",
+          "isUnread",
+          "isImportant",
+          "threadIsImportant",
+          "threadLabelIds",
+          "threadMessageCount",
+          "threadAttachmentCount",
+          "threadAttachmentNames",
+          "attachments",
+          "unsubscribeMailto"
+        ],
+        "nestedMessages": 426,
+        "optionalMetadata": 426,
+        "pages": 27,
+        "records": 393,
+        "supportedLocalDemoSourceSeeded": true,
+        "threadKeysMailboxScoped": true,
+        "threads": 360
+      },
+      "completeListHash": "1073971d8a8341913525259470fa1a1781ac9727142ce2f0602741d47be39949",
+      "bodyNodes": 3086,
+      "viewport": {
+        "h": 900,
+        "w": 1280
+      }
+    }
+  }
+}

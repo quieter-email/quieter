@@ -1,12 +1,13 @@
 import { describe, expect, test } from "vite-plus/test";
 
+import type { CalendarEventTime } from "./contracts";
 import {
   calendarWallTimeToInstant,
+  createCalendarEventTimeSplitter,
   getCalendarDates,
   getCalendarRange,
   getZonedDateTimeFields,
   moveCalendarEventTime,
-  splitCalendarEventTime,
 } from "./time";
 
 describe("calendar date ranges", () => {
@@ -102,14 +103,14 @@ describe("calendar wall times", () => {
 
 describe("calendar event segmentation", () => {
   test("clips a multi-day event and excludes a midnight end from the next date", () => {
-    const segments = splitCalendarEventTime({
+    const splitTime = createCalendarEventTimeSplitter({
       dates: ["2026-10-22", "2026-10-23", "2026-10-24"],
-      time: {
-        end: "2026-10-23T22:00:00Z",
-        kind: "timed",
-        start: "2026-10-22T21:30:00Z",
-        timeZone: "Europe/Berlin",
-      },
+      timeZone: "Europe/Berlin",
+    });
+    const segments = splitTime({
+      end: "2026-10-23T22:00:00Z",
+      kind: "timed",
+      start: "2026-10-22T21:30:00Z",
       timeZone: "Europe/Berlin",
     });
     expect(segments).toHaveLength(2);
@@ -126,10 +127,14 @@ describe("calendar event segmentation", () => {
   });
 
   test("keeps all-day dates fixed across display zones and excludes the end date", () => {
-    const segments = splitCalendarEventTime({
+    const splitTime = createCalendarEventTimeSplitter({
       dates: ["2026-12-31", "2027-01-01", "2027-01-02"],
-      time: { endDate: "2027-01-02", kind: "all-day", startDate: "2026-12-31" },
       timeZone: "Pacific/Honolulu",
+    });
+    const segments = splitTime({
+      endDate: "2027-01-02",
+      kind: "all-day",
+      startDate: "2026-12-31",
     });
     expect(segments).toHaveLength(2);
     expect(segments.map((segment) => segment.date)).toContain("2026-12-31");
@@ -138,14 +143,14 @@ describe("calendar event segmentation", () => {
   });
 
   test("clips at the actual midnight boundary on a short daylight-saving day", () => {
-    const segments = splitCalendarEventTime({
+    const splitTime = createCalendarEventTimeSplitter({
       dates: ["2026-03-28", "2026-03-29", "2026-03-30"],
-      time: {
-        end: "2026-03-29T22:30:00Z",
-        kind: "timed",
-        start: "2026-03-28T23:30:00Z",
-        timeZone: "Europe/Berlin",
-      },
+      timeZone: "Europe/Berlin",
+    });
+    const segments = splitTime({
+      end: "2026-03-29T22:30:00Z",
+      kind: "timed",
+      start: "2026-03-28T23:30:00Z",
       timeZone: "Europe/Berlin",
     });
     expect(segments).toHaveLength(2);
@@ -162,18 +167,53 @@ describe("calendar event segmentation", () => {
   });
 
   test("preserves both sides of a repeated hour without inventing a different wall time", () => {
+    const splitTime = createCalendarEventTimeSplitter({
+      dates: ["2026-10-25"],
+      timeZone: "Europe/Berlin",
+    });
     expect(
-      splitCalendarEventTime({
-        dates: ["2026-10-25"],
-        time: {
-          end: "2026-10-25T01:15:00Z",
-          kind: "timed",
-          start: "2026-10-25T00:45:00Z",
-          timeZone: "Europe/Berlin",
-        },
+      splitTime({
+        end: "2026-10-25T01:15:00Z",
+        kind: "timed",
+        start: "2026-10-25T00:45:00Z",
         timeZone: "Europe/Berlin",
       })[0]
     ).toMatchObject({ endMinute: 135, startMinute: 165 });
+  });
+
+  test("keeps independent display zones when splitting several events", () => {
+    const dates = ["2026-03-28", "2026-03-29"];
+    const berlin = createCalendarEventTimeSplitter({
+      dates,
+      timeZone: "Europe/Berlin",
+    });
+    const honolulu = createCalendarEventTimeSplitter({
+      dates,
+      timeZone: "Pacific/Honolulu",
+    });
+    const time: CalendarEventTime = {
+      end: "2026-03-29T00:30:00Z",
+      kind: "timed",
+      start: "2026-03-28T23:30:00Z",
+      timeZone: "Europe/Berlin",
+    };
+    expect(honolulu(time)[0]).toMatchObject({
+      date: "2026-03-28",
+      endMinute: 870,
+      startMinute: 810,
+    });
+    expect(berlin(time)[0]).toMatchObject({
+      date: "2026-03-29",
+      endMinute: 90,
+      startMinute: 30,
+    });
+    expect(
+      berlin({
+        endDate: "2026-03-30",
+        kind: "all-day",
+        startDate: "2026-03-28",
+      }).map((segment) => segment.date)
+    ).toContain("2026-03-28");
   });
 });
 

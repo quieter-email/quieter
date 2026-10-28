@@ -21,7 +21,6 @@ import { MailboxMessagesPanel } from "@quieter/app/features/mailbox/components/m
 import {
   useMailboxMessageId,
   useMailboxSearchActions,
-  useMailboxRouteSearch,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import {
   loadChatView,
@@ -35,10 +34,12 @@ import { MailSidebar } from "@quieter/app/features/navigation/components/mail-si
 import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/components/mailbox-switcher";
 import { useMailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
+import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { Text } from "@quieter/ui/text";
+import { WorkspaceDock } from "@quieter/ui/workspace-dock";
 import {
   WorkspaceSection,
   workspaceGutterClassName,
@@ -58,17 +59,11 @@ import {
 } from "react";
 import type { ComponentProps, ReactNode } from "react";
 
-const ChatView = lazy(loadChatView);
-
 const CalendarWorkspace = lazy(async () => {
   const { CalendarWorkspace: Workspace } =
     await import("@quieter/app/features/calendar/components/calendar-workspace");
   return { default: Workspace };
 });
-
-const ComposeWorkspace = lazy(loadComposeWorkspace);
-
-const SnippetWorkspace = lazy(loadSnippetWorkspace);
 
 const messagePanelsClassName = cn(
   workspaceGutterClassName,
@@ -168,6 +163,130 @@ const ComposeWorkspaceLoading = ({
     </output>
   </div>
 );
+
+const SnippetWorkspaceLoading = () => (
+  <WorkspaceSection centered className="lg:col-span-2">
+    <output
+      aria-label="Loading snippets"
+      aria-live="polite"
+      className="flex items-center gap-3 text-body text-muted-fg"
+    >
+      <Icon aria-hidden size={20} animation="spin" icon={Loading03Icon} />
+      Loading snippets…
+    </output>
+  </WorkspaceSection>
+);
+
+const AssistantLoading = () => (
+  <p className="p-4 text-body-sm text-muted-fg" data-assistant-loading>
+    Loading assistant…
+  </p>
+);
+
+type WorkspaceModuleResource<Module> = {
+  load: () => Promise<Module>;
+  readonly module: Module | undefined;
+};
+
+const createWorkspaceModuleResource = <Module,>(
+  load: () => Promise<Module>
+): WorkspaceModuleResource<Module> => {
+  let module: Module | undefined;
+  return {
+    async load() {
+      module = await load();
+      return module;
+    },
+    get module() {
+      return module;
+    },
+  };
+};
+
+const composeWorkspaceResource =
+  createWorkspaceModuleResource(loadComposeWorkspace);
+
+const snippetWorkspaceResource =
+  createWorkspaceModuleResource(loadSnippetWorkspace);
+
+const chatViewResource = createWorkspaceModuleResource(loadChatView);
+
+// Keep module loading in state so Suspense cannot postpone a ready workspace.
+const useWorkspaceModule = <Module,>(
+  resource: WorkspaceModuleResource<Module>
+) => {
+  const [loadState, setLoadState] = useState<
+    { module: Module } | { error: unknown } | null
+  >(() => (resource.module === undefined ? null : { module: resource.module }));
+
+  useEffect((): (() => void) | undefined => {
+    if (loadState !== null) {
+      return undefined;
+    }
+    let active = true;
+    const load = async () => {
+      try {
+        const module = await resource.load();
+        if (active) {
+          setLoadState({ module });
+        }
+      } catch (error) {
+        if (active) {
+          setLoadState({ error });
+        }
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [loadState, resource]);
+
+  if (loadState === null) {
+    return null;
+  }
+  if ("error" in loadState) {
+    throw loadState.error;
+  }
+  return loadState.module;
+};
+
+const ComposeWorkspace = (
+  props: ComponentProps<
+    Awaited<ReturnType<typeof loadComposeWorkspace>>["default"]
+  >
+) => {
+  const module = useWorkspaceModule(composeWorkspaceResource);
+  if (module === null) {
+    return <ComposeWorkspaceLoading onOpenSidebar={props.onOpenSidebar} />;
+  }
+  const Workspace = module.default;
+  return <Workspace {...props} />;
+};
+
+const SnippetWorkspace = (
+  props: ComponentProps<
+    Awaited<ReturnType<typeof loadSnippetWorkspace>>["default"]
+  >
+) => {
+  const module = useWorkspaceModule(snippetWorkspaceResource);
+  if (module === null) {
+    return <SnippetWorkspaceLoading />;
+  }
+  const Workspace = module.default;
+  return <Workspace {...props} />;
+};
+
+const ChatView = (
+  props: ComponentProps<Awaited<ReturnType<typeof loadChatView>>["default"]>
+) => {
+  const module = useWorkspaceModule(chatViewResource);
+  if (module === null) {
+    return <AssistantLoading />;
+  }
+  const View = module.default;
+  return <View {...props} />;
+};
 
 const NoMailboxWorkspace = ({
   connectError,
@@ -346,7 +465,9 @@ const MailboxWorkspaceContentInner = ({
   const onePanelDesktop = mailLayout === "one-panel";
   const messageId = useMailboxMessageId() ?? null;
   const setMailboxSearch = useMailboxSearchActions();
-  const { workspace } = useMailboxRouteSearch();
+  const workspace = inboxRouteApi.useSearch({
+    select: (search) => search.workspace,
+  });
   const calendarActive = workspace === "calendar";
   const allInboxesActive = selectedView === "all-inboxes";
   const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);
@@ -490,25 +611,7 @@ const MailboxWorkspaceContentInner = ({
   } else if (activeMailbox === null) {
     mailboxContent = (
       <div className="absolute inset-0 min-h-0 min-w-0 overflow-hidden">
-        <Suspense
-          fallback={
-            <WorkspaceSection centered className="lg:col-span-2">
-              <output
-                aria-label="Loading snippets"
-                aria-live="polite"
-                className="flex items-center gap-3 text-body text-muted-fg"
-              >
-                <Icon
-                  aria-hidden
-                  size={20}
-                  animation="spin"
-                  icon={Loading03Icon}
-                />
-                Loading snippets…
-              </output>
-            </WorkspaceSection>
-          }
-        >
+        <Suspense fallback={<SnippetWorkspaceLoading />}>
           <SnippetWorkspace
             key={selectedMailboxId}
             mailboxId={selectedMailboxId}
@@ -769,6 +872,7 @@ const MailboxWorkspaceContentInner = ({
                   calendarActive ||
                   isComposeMailbox ||
                   isSnippetMailbox ||
+                  (onePanelDesktop && Boolean(messageId)) ||
                   selectedView === "labels" ||
                   selectedMailboxNeedsReconnect,
               }
@@ -795,11 +899,13 @@ const MailboxWorkspaceContentInner = ({
                           sourceMailboxId === selectedMailboxId
                             ? undefined
                             : null,
+                        mailbox: "inbox",
                         mailboxId: sourceMailboxId,
                         messageId: null,
                         query: null,
                         threadId: null,
                         view: "labels",
+                        workspace: null,
                       });
                     } else {
                       onSelectView("labels");
@@ -819,130 +925,112 @@ const MailboxWorkspaceContentInner = ({
               ) : null}
             </Activity>
 
-            <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-              <div
-                aria-hidden={
-                  assistantOpen &&
-                  assistantNarrow &&
-                  selectedMailboxProvider !== "api"
-                }
-                inert={
-                  assistantOpen &&
-                  assistantNarrow &&
-                  selectedMailboxProvider !== "api"
-                }
-                className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent"
-              >
-                <Activity mode={calendarActive ? "visible" : "hidden"}>
-                  <Suspense
-                    fallback={
-                      <p className="p-6 text-body-sm text-muted-fg">
-                        Loading calendar…
-                      </p>
-                    }
-                  >
-                    <CalendarWorkspace
-                      isMobileSidebarOpen={layoutState.isMobileSidebarOpen}
-                      onMobileSidebarOpenChange={onMobileOpenChange}
-                      userId={userId}
-                    />
-                  </Suspense>
-                </Activity>
-                <Activity mode={calendarActive ? "hidden" : "visible"}>
-                  <div className="relative min-h-0 flex-1">
-                    {mailboxContent}
-                  </div>
-                  {!allInboxesActive &&
-                  !isComposeMailbox &&
-                  !isDemoMode &&
-                  !isManagedDemoMode &&
-                  selectedMailboxId !== null ? (
-                    <DraftRecoveryNotice
-                      mailboxId={selectedMailboxId}
-                      onResume={onComposeDraftRequested}
-                    />
-                  ) : null}
-                </Activity>
-              </div>
-              {selectedMailboxId && selectedMailboxProvider !== "api" ? (
-                <AssistantSidebar
-                  id={assistantPanelId}
-                  focusRequest={assistantFocusRequest}
-                  open={assistantOpen}
-                  activeChatId={chatId}
-                  chats={chats.map((chat) => ({
-                    ...chat,
-                    title: chat.title ?? "New chat",
-                  }))}
-                  onChatSelect={(id) => {
-                    agentWorkspace?.control.cancel();
-                    onSelectChat(id);
-                  }}
-                  onNewChat={() => {
-                    agentWorkspace?.control.cancel();
-                    onCreateChat();
-                  }}
-                  onDeleteChat={(deletedChatId) => {
-                    agentWorkspace?.control.cancel();
-                    onDeleteChat(deletedChatId);
-                  }}
-                  onRenameChat={onRenameChat}
-                  onMinimize={() => {
-                    assistantAutoCollapsedRef.current = false;
-                    agentWorkspace?.control.cancel();
-                    setAssistantOpen(false);
-                    try {
-                      localStorage.setItem(
-                        "quieter:assistant-sidebar-closed",
-                        "true"
-                      );
-                    } catch {
-                      // Closing remains available without persistent storage.
-                    }
-                    restoreAssistantTriggerFocus();
-                  }}
-                >
-                  {assistantOpened ? (
-                    <Suspense
-                      fallback={
-                        <p
-                          className="p-4 text-body-sm text-muted-fg"
-                          data-assistant-loading
-                        >
-                          Loading assistant…
-                        </p>
+            <WorkspaceDock
+              contentInert={assistantNarrow}
+              open={assistantOpen}
+              sidebar={
+                selectedMailboxId && selectedMailboxProvider !== "api" ? (
+                  <AssistantSidebar
+                    id={assistantPanelId}
+                    focusRequest={assistantFocusRequest}
+                    open={assistantOpen}
+                    activeChatId={chatId}
+                    chats={chats.map((chat) => ({
+                      ...chat,
+                      title: chat.title ?? "New chat",
+                    }))}
+                    onChatSelect={(id) => {
+                      agentWorkspace?.control.cancel();
+                      onSelectChat(id);
+                    }}
+                    onNewChat={() => {
+                      agentWorkspace?.control.cancel();
+                      onCreateChat();
+                    }}
+                    onDeleteChat={(deletedChatId) => {
+                      agentWorkspace?.control.cancel();
+                      onDeleteChat(deletedChatId);
+                    }}
+                    onRenameChat={onRenameChat}
+                    onMinimize={() => {
+                      assistantAutoCollapsedRef.current = false;
+                      agentWorkspace?.control.cancel();
+                      setAssistantOpen(false);
+                      try {
+                        localStorage.setItem(
+                          "quieter:assistant-sidebar-closed",
+                          "true"
+                        );
+                      } catch {
+                        // Closing remains available without persistent storage.
                       }
-                    >
-                      {allInboxesActive && (
-                        <p className="border-b border-border px-4 py-2 text-caption text-muted-fg">
-                          Assistant for{" "}
-                          {mailboxes
-                            .find((mailbox) => mailbox.id === selectedMailboxId)
-                            ?.displayName?.trim() || currentUserEmail}
-                        </p>
-                      )}
-                      <ChatView
-                        docked
-                        visible={assistantOpen}
-                        activeMailbox={activeMailbox ?? "inbox"}
-                        mailContext={chatContext}
-                        chatId={chatId}
-                        draftChatKey={draftChatKey}
-                        mailboxId={selectedMailboxId}
-                        mailboxOrganizationId={
-                          mailboxGroups.find((group) =>
-                            group.mailboxes.some(
-                              (mailbox) => mailbox.id === selectedMailboxId
-                            )
-                          )?.id ?? ""
-                        }
-                        onChatIdChange={onChatIdChange}
-                      />
-                    </Suspense>
-                  ) : null}
-                </AssistantSidebar>
-              ) : null}
-            </div>
+                      restoreAssistantTriggerFocus();
+                    }}
+                  >
+                    {assistantOpened ? (
+                      <Suspense fallback={<AssistantLoading />}>
+                        {allInboxesActive && (
+                          <p className="border-b border-border px-4 py-2 text-caption text-muted-fg">
+                            Assistant for{" "}
+                            {mailboxes
+                              .find(
+                                (mailbox) => mailbox.id === selectedMailboxId
+                              )
+                              ?.displayName?.trim() || currentUserEmail}
+                          </p>
+                        )}
+                        <ChatView
+                          docked
+                          visible={assistantOpen}
+                          activeMailbox={activeMailbox ?? "inbox"}
+                          mailContext={chatContext}
+                          chatId={chatId}
+                          draftChatKey={draftChatKey}
+                          mailboxId={selectedMailboxId}
+                          mailboxOrganizationId={
+                            mailboxGroups.find((group) =>
+                              group.mailboxes.some(
+                                (mailbox) => mailbox.id === selectedMailboxId
+                              )
+                            )?.id ?? ""
+                          }
+                          onChatIdChange={onChatIdChange}
+                        />
+                      </Suspense>
+                    ) : null}
+                  </AssistantSidebar>
+                ) : null
+              }
+            >
+              <Activity mode={calendarActive ? "visible" : "hidden"}>
+                <Suspense
+                  fallback={
+                    <p className="p-6 text-body-sm text-muted-fg">
+                      Loading calendar…
+                    </p>
+                  }
+                >
+                  <CalendarWorkspace
+                    isMobileSidebarOpen={layoutState.isMobileSidebarOpen}
+                    onMobileSidebarOpenChange={onMobileOpenChange}
+                    userId={userId}
+                  />
+                </Suspense>
+              </Activity>
+              <Activity mode={calendarActive ? "hidden" : "visible"}>
+                <div className="relative min-h-0 flex-1">{mailboxContent}</div>
+                {!allInboxesActive &&
+                !isComposeMailbox &&
+                !isDemoMode &&
+                !isManagedDemoMode &&
+                selectedMailboxId !== null ? (
+                  <DraftRecoveryNotice
+                    mailboxId={selectedMailboxId}
+                    onResume={onComposeDraftRequested}
+                  />
+                ) : null}
+              </Activity>
+            </WorkspaceDock>
           </div>
         </main>
       </AssistantSidebarContext>

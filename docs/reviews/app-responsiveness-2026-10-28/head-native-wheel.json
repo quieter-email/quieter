@@ -1,0 +1,80 @@
+{
+  "geometry": {
+    "x": 668,
+    "y": 480,
+    "height": 822,
+    "scrollHeight": 1409,
+    "width": 822
+  },
+  "gestures": [
+    {
+      "deltaY": 120,
+      "before": {
+        "top": 200,
+        "events": 0
+      },
+      "after": {
+        "top": 320,
+        "events": 1
+      }
+    },
+    {
+      "deltaY": 120,
+      "before": {
+        "top": 320,
+        "events": 1
+      },
+      "after": {
+        "top": 440,
+        "events": 2
+      }
+    },
+    {
+      "deltaY": -120,
+      "before": {
+        "top": 440,
+        "events": 2
+      },
+      "after": {
+        "top": 320,
+        "events": 3
+      }
+    },
+    {
+      "deltaY": -120,
+      "before": {
+        "top": 320,
+        "events": 3
+      },
+      "after": {
+        "top": 200,
+        "events": 4
+      }
+    },
+    {
+      "deltaY": 120,
+      "before": {
+        "top": 200,
+        "events": 4
+      },
+      "after": {
+        "top": 320,
+        "events": 5
+      }
+    },
+    {
+      "deltaY": -120,
+      "before": {
+        "top": 320,
+        "events": 5
+      },
+      "after": {
+        "top": 200,
+        "events": 6
+      }
+    }
+  ],
+  "longTasks": [],
+  "eventCount": 6,
+  "note": "Native CDP mouse-wheel input targets the actual scroll viewport; timestamps are not physical display FPS."
+}

@@ -1,0 +1,16 @@
+{
+  "sourceSHA": "978a603164a77243066fac9a0e67661497a9bbc7",
+  "port": 3044,
+  "matrixViews": [
+    "mail-one-panel",
+    "mail-two-panels",
+    "mail-two-panel-detail",
+    "mail-one-panel-detail",
+    "compose",
+    "snippets",
+    "calendar",
+    "calendar-editor",
+    "reduced-motion-one-panel"
+  ],
+  "separatePerViewFiles": "candidate-dock-<view>.json"
+}

@@ -18,8 +18,11 @@ import type { RouterOutputs } from "@quieter/orpc";
 import { Icon } from "@quieter/ui/icon";
 import { mailListRowParts } from "@quieter/ui/mail-list-row";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import type { VirtualItem } from "@tanstack/react-virtual";
+import {
+  measureElement as measureVirtualElement,
+  useVirtualizer,
+} from "@tanstack/react-virtual";
+import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 
 const MESSAGE_ROW_HEIGHT_PX = 68;
@@ -43,6 +46,28 @@ type MessageListScrollPaneProps = {
   onKeyboardOpenMessage?: () => void;
   selection: ReturnType<typeof useMessageListSelection>;
   threadedMessages: ThreadListEntry[];
+};
+
+type MessageListScrollAnchor = Pick<VirtualItem, "index" | "key"> & {
+  offsetWithinRow: number;
+};
+
+const getScrollAnchor = (
+  element: HTMLDivElement,
+  virtualizer: Virtualizer<HTMLDivElement, HTMLLIElement>,
+  scrollOffset = element.scrollTop
+): MessageListScrollAnchor | null => {
+  const paddingTop = Number(
+    getComputedStyle(element).paddingTop.replace("px", "")
+  );
+  const anchor = virtualizer.getVirtualItemForOffset(scrollOffset - paddingTop);
+  return anchor
+    ? {
+        index: anchor.index,
+        key: anchor.key,
+        offsetWithinRow: scrollOffset - paddingTop - anchor.start,
+      }
+    : null;
 };
 
 const loadMoreIfNeeded = ({
@@ -285,9 +310,8 @@ export const MessageListScrollPane = ({
 
   const rowHeightEstimateRef = useRef(MESSAGE_ROW_HEIGHT_PX);
   const measuredWidthRef = useRef(0);
-  const pendingAnchorRef = useRef<
-    (Pick<VirtualItem, "index" | "key"> & { offsetWithinRow: number }) | null
-  >(null);
+  const pendingLayoutRef = useRef<{ animation: Animation | null } | null>(null);
+  const pendingAnchorRef = useRef<MessageListScrollAnchor | null>(null);
   const previousActiveMessageIdRef = useRef(list.activeMessageId);
   const pendingFocusRef = useRef<{
     threadId: string;
@@ -301,76 +325,115 @@ export const MessageListScrollPane = ({
     gap: MESSAGE_ROW_GAP_PX,
     getItemKey: (index) => threadedMessages[index].threadId ?? index,
     getScrollElement: () => selection.scrollRef.current,
-    measureElement: (element, _entry, instance) => {
-      const height = element.offsetHeight;
-      const key = instance.options.getItemKey(
-        instance.indexFromElement(element)
-      );
+    measureElement: (element, entry, instance) => {
+      const index = instance.indexFromElement(element);
+      const key = instance.options.getItemKey(index);
+      const cachedHeight = instance.itemSizeCache.get(key);
+      const previousHeight =
+        cachedHeight ??
+        instance.measurementsCache[index]?.size ??
+        rowHeightEstimateRef.current;
+      const height = measureVirtualElement(element, entry, instance);
+      const viewport = selection.scrollRef.current;
+      if (
+        height > 0 &&
+        height !== previousHeight &&
+        !pendingAnchorRef.current &&
+        viewport &&
+        measuredWidthRef.current > 0
+      ) {
+        const width = viewport.clientWidth;
+        if (width > 0 && width !== measuredWidthRef.current) {
+          pendingAnchorRef.current = getScrollAnchor(viewport, instance);
+        }
+      }
       return height > 0
         ? height
-        : (instance.itemSizeCache.get(key) ?? rowHeightEstimateRef.current);
+        : (cachedHeight ?? rowHeightEstimateRef.current);
     },
     overscan: MESSAGE_LIST_OVERSCAN,
   });
-  const updateRowMeasurements = useCallback(() => {
-    const element = selection.scrollRef.current;
-    if (!element || element.clientWidth <= 0 || element.clientHeight <= 0) {
-      return false;
-    }
-    const width = element.clientWidth;
-    const rows = element.querySelectorAll<HTMLLIElement>("li[data-index]");
-    const firstRow = element.querySelector<HTMLLIElement>("li[data-index]");
-    const height = firstRow?.offsetHeight ?? 0;
-    if (
-      !firstRow &&
-      measuredWidthRef.current !== width &&
-      !pendingAnchorRef.current
-    ) {
-      const anchor = messageVirtualizer.getVirtualItemForOffset(
-        element.scrollTop
-      );
-      if (anchor) {
+  const updateRowMeasurements = useCallback(
+    function updateRowMeasurements(force = false): boolean {
+      const element = selection.scrollRef.current;
+      if (!element || element.clientWidth <= 0 || element.clientHeight <= 0) {
+        return false;
+      }
+      const layout = element.closest("[data-workspace-dock-main]");
+      const animation = layout
+        ?.getAnimations()
+        .find(
+          (candidate) =>
+            candidate instanceof CSSTransition &&
+            candidate.transitionProperty === "width" &&
+            candidate.playState !== "finished" &&
+            candidate.playState !== "idle"
+        );
+      if (animation) {
+        pendingAnchorRef.current ??= getScrollAnchor(
+          element,
+          messageVirtualizer
+        );
+        if (pendingLayoutRef.current?.animation !== animation) {
+          pendingLayoutRef.current = { animation };
+          const settled = async () => {
+            await Promise.allSettled([animation.finished]);
+            if (pendingLayoutRef.current?.animation === animation) {
+              pendingLayoutRef.current.animation = null;
+              updateRowMeasurements(true);
+            }
+          };
+          void settled();
+        }
+        return true;
+      }
+      const layoutSettled = force || pendingLayoutRef.current !== null;
+      pendingLayoutRef.current = null;
+      const width = element.clientWidth;
+      const rows = element.querySelectorAll<HTMLLIElement>("li[data-index]");
+      const firstRow = element.querySelector<HTMLLIElement>("li[data-index]");
+      const height = firstRow?.offsetHeight ?? 0;
+      if (
+        !firstRow &&
+        measuredWidthRef.current !== width &&
+        !pendingAnchorRef.current
+      ) {
+        pendingAnchorRef.current = getScrollAnchor(element, messageVirtualizer);
+      }
+      if (
+        height <= 0 ||
+        (!layoutSettled &&
+          measuredWidthRef.current === width &&
+          rowHeightEstimateRef.current === height)
+      ) {
+        return false;
+      }
+
+      const viewportTop = element.getBoundingClientRect().top;
+      let anchorRow = firstRow;
+      for (const row of rows) {
+        if (row.getBoundingClientRect().top > viewportTop) {
+          break;
+        }
+        anchorRow = row;
+      }
+      if (anchorRow?.dataset.threadId && !pendingAnchorRef.current) {
         pendingAnchorRef.current = {
-          index: anchor.index,
-          key: anchor.key,
-          offsetWithinRow:
-            element.scrollTop -
-            anchor.start -
-            Number(getComputedStyle(element).paddingTop.replace("px", "")),
+          index: Number(anchorRow.dataset.index),
+          key: anchorRow.dataset.threadId,
+          offsetWithinRow: viewportTop - anchorRow.getBoundingClientRect().top,
         };
       }
-    }
-    if (
-      height <= 0 ||
-      (measuredWidthRef.current === width &&
-        rowHeightEstimateRef.current === height)
-    ) {
-      return false;
-    }
-
-    const viewportTop = element.getBoundingClientRect().top;
-    let anchorRow = firstRow;
-    for (const row of rows) {
-      if (row.getBoundingClientRect().top > viewportTop) {
-        break;
+      measuredWidthRef.current = width;
+      rowHeightEstimateRef.current = height;
+      messageVirtualizer.measure();
+      for (const row of rows) {
+        messageVirtualizer.measureElement(row);
       }
-      anchorRow = row;
-    }
-    if (anchorRow?.dataset.threadId && !pendingAnchorRef.current) {
-      pendingAnchorRef.current = {
-        index: Number(anchorRow.dataset.index),
-        key: anchorRow.dataset.threadId,
-        offsetWithinRow: viewportTop - anchorRow.getBoundingClientRect().top,
-      };
-    }
-    measuredWidthRef.current = width;
-    rowHeightEstimateRef.current = height;
-    messageVirtualizer.measure();
-    for (const row of rows) {
-      messageVirtualizer.measureElement(row);
-    }
-    return true;
-  }, [messageVirtualizer, selection.scrollRef]);
+      return true;
+    },
+    [messageVirtualizer, selection.scrollRef]
+  );
 
   useLayoutEffect((): (() => void) | undefined => {
     const element = selection.scrollRef.current;
@@ -382,9 +445,17 @@ export const MessageListScrollPane = ({
     });
     observer.observe(element);
     return () => {
+      pendingAnchorRef.current ??= getScrollAnchor(
+        element,
+        messageVirtualizer,
+        messageVirtualizer.scrollOffset ?? element.scrollTop
+      );
       observer.disconnect();
+      if (pendingLayoutRef.current) {
+        pendingLayoutRef.current.animation = null;
+      }
     };
-  }, [selection.scrollRef, updateRowMeasurements]);
+  }, [messageVirtualizer, selection.scrollRef, updateRowMeasurements]);
 
   const virtualItems = messageVirtualizer.getVirtualItems();
   const codeThreadIdBuckets = useMemo(() => {
@@ -616,6 +687,20 @@ export const MessageListScrollPane = ({
   return (
     <div
       className={mailListRowParts.viewport}
+      onScrollCapture={(event) => {
+        if (
+          pendingLayoutRef.current &&
+          Math.abs(
+            event.currentTarget.scrollTop -
+              (messageVirtualizer.scrollOffset ?? event.currentTarget.scrollTop)
+          ) > 1
+        ) {
+          pendingAnchorRef.current = getScrollAnchor(
+            event.currentTarget,
+            messageVirtualizer
+          );
+        }
+      }}
       onScroll={() => {
         if (selection.isProgrammaticScrollToTopRef.current) {
           return;

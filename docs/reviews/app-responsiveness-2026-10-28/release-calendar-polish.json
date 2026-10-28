@@ -1,0 +1,38 @@
+{
+  "fixture": {
+    "customCalendarColor": "#ab7733",
+    "customEventColor": "#4e7f91"
+  },
+  "location": {
+    "first": {
+      "bottom": 542,
+      "height": 32,
+      "left": 1096,
+      "right": 1406,
+      "top": 510,
+      "width": 310,
+      "x": 1096,
+      "y": 510
+    },
+    "location": "C130",
+    "options": ["C130"],
+    "popup": {
+      "bottom": 546,
+      "height": 40,
+      "left": 1092,
+      "right": 1410,
+      "top": 506,
+      "width": 318,
+      "x": 1092,
+      "y": 506
+    }
+  },
+  "colors": [
+    "Use #7986cb",
+    "Use #33b679",
+    "Use #f6bf26",
+    "Use #d50000",
+    "Use #8e24aa",
+    "Use #4e7f91"
+  ]
+}

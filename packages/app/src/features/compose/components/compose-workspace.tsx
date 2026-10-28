@@ -89,7 +89,13 @@ import {
   m,
   useReducedMotion,
 } from "motion/react";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 export type ComposeSenderMailbox = {
   capabilities: Pick<MailboxCapabilities, "canSetSenderName">;
@@ -226,12 +232,13 @@ const ReadyComposeSurface = ({
   const reducedMotion = useReducedMotion();
   const composeEditorRef = useRef<ComposeEditorHandle | null>(null);
   const mountedRef = useRef(false);
-  const [modKeyLabel, setModKeyLabel] = useState("Ctrl");
-  useEffect(() => {
-    if (/Mac|iPhone|iPad|iPod/u.test(navigator.platform)) {
-      setModKeyLabel("⌘");
-    }
-  }, []);
+  const modKeyLabel = useSyncExternalStore(
+    () => () => {
+      // The operating system has no change event during this page's lifetime.
+    },
+    () => (/Mac|iPhone|iPad|iPod/u.test(navigator.platform) ? "⌘" : "Ctrl"),
+    () => "Ctrl"
+  );
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -637,9 +644,9 @@ const ReadyComposeSurface = ({
                   }}
                   onChange={({ html, text }) => {
                     if (
+                      text !== form.state.values.bodyText ||
                       normalizeComposeBodyHtml(html) !==
-                        normalizeComposeBodyHtml(field.state.value) ||
-                      text !== form.state.values.bodyText
+                        normalizeComposeBodyHtml(field.state.value)
                     ) {
                       handleUserDraftChange();
                     }

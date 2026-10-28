@@ -1,0 +1,71 @@
+{
+  "mobileOpen": {
+    "focusedInSidebar": true,
+    "mainInert": true,
+    "sidebarWidth": 390,
+    "viewport": 390
+  },
+  "tabFocus": [
+    {
+      "documentFocused": true,
+      "inside": true,
+      "mainInert": true,
+      "tag": "BUTTON"
+    },
+    {
+      "documentFocused": true,
+      "inside": true,
+      "mainInert": true,
+      "tag": "BUTTON"
+    },
+    {
+      "documentFocused": true,
+      "inside": true,
+      "mainInert": true,
+      "tag": "BUTTON"
+    },
+    {
+      "documentFocused": false,
+      "inside": false,
+      "mainInert": true,
+      "tag": "BODY"
+    },
+    {
+      "documentFocused": true,
+      "inside": true,
+      "mainInert": true,
+      "tag": "BUTTON"
+    },
+    {
+      "documentFocused": true,
+      "inside": true,
+      "mainInert": true,
+      "tag": "BUTTON"
+    },
+    {
+      "documentFocused": true,
+      "inside": true,
+      "mainInert": true,
+      "tag": "BUTTON"
+    }
+  ],
+  "tabNote": "Background app remains inert; browser chrome stays reachable.",
+  "escapeClose": {
+    "focusVisible": true,
+    "mainInert": false,
+    "restored": true,
+    "sidebarInert": true
+  },
+  "reducedMotion": [
+    {
+      "mainWidthSamples": 1,
+      "sidebarPositionSamples": 1,
+      "reducedMotion": true
+    },
+    {
+      "mainWidthSamples": 1,
+      "sidebarPositionSamples": 1,
+      "reducedMotion": true
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+[
+  {
+    "case": "body-enter",
+    "expected": "release-inbox-0000",
+    "result": {
+      "thread": "release-inbox-0000",
+      "workspace": null
+    }
+  },
+  {
+    "case": "focused-row-enter",
+    "expected": "release-inbox-0001",
+    "result": {
+      "thread": "release-inbox-0001",
+      "workspace": null
+    }
+  },
+  {
+    "case": "j-k-row-enter",
+    "j": {
+      "focused": "release-inbox-0001",
+      "thread": null,
+      "workspace": null
+    },
+    "k": {
+      "focused": "release-inbox-0000",
+      "thread": null,
+      "workspace": null
+    },
+    "result": {
+      "thread": "release-inbox-0000",
+      "workspace": null
+    }
+  },
+  {
+    "case": "selection-button-enter",
+    "result": {
+      "selected": "true",
+      "thread": null
+    }
+  },
+  {
+    "case": "native-checkbox-enter-space",
+    "before": "mixed",
+    "afterEnter": {
+      "checked": "mixed",
+      "thread": null
+    },
+    "afterSpace": {
+      "checked": "true",
+      "thread": null
+    }
+  },
+  {
+    "case": "calendar-link-enter",
+    "result": {
+      "thread": null,
+      "workspace": "calendar"
+    }
+  }
+]
