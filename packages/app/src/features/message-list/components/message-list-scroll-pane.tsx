@@ -105,13 +105,13 @@ const MessageListLoadingSkeleton = () => (
         className="flex h-17 animate-pulse items-center gap-2 rounded-xl px-2 @sm:gap-3 @sm:px-3"
         key={rowId}
       >
-        <div className="size-9.5 shrink-0 rounded-lg bg-muted/80" />
+        <div className="size-9.5 shrink-0 rounded-lg bg-muted" />
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex items-center justify-between gap-4">
-            <div className="h-3 w-32 rounded-md bg-muted/80" />
-            <div className="h-3 w-12 rounded-md bg-muted/70" />
+            <div className="h-3 w-32 rounded-md bg-muted" />
+            <div className="h-3 w-12 rounded-md bg-muted" />
           </div>
-          <div className="h-3 w-3/4 rounded-md bg-muted/70" />
+          <div className="h-3 w-3/4 rounded-md bg-muted" />
         </div>
       </div>
     ))}

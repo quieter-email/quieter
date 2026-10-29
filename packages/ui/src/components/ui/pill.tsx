@@ -28,7 +28,7 @@ export const pillVariants = cva(
         destructive: "bg-destructive/10 text-destructive",
         gray: "bg-q-gray/15 text-q-gray",
         green: "bg-q-green/15 text-q-green",
-        neutral: "bg-muted/40 text-muted-fg",
+        neutral: "bg-muted text-muted-fg",
         orange: "bg-q-orange/15 text-q-orange",
         pink: "bg-q-pink/15 text-q-pink",
         purple: "bg-q-purple/15 text-q-purple",

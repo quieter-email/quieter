@@ -170,7 +170,7 @@ const usageBreakdownConfig = [
     label: "Outbound mail",
   },
   {
-    className: "bg-muted-fg/50",
+    className: "bg-q-gray",
     kind: "other",
     label: "Other",
   },
@@ -202,7 +202,7 @@ const UsageBreakdown = ({
 
   return (
     <div className="mt-3">
-      <div className="flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border/60 squircle">
+      <div className="flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border squircle">
         <div
           className="flex h-full min-w-1 overflow-hidden"
           // oxlint-disable-next-line shadcn/no-inline-styles -- Bar width is measured from cost data.
@@ -674,7 +674,7 @@ const ManagedUsageSettingsForm = ({
       <div className="mt-5 px-4 @md:px-6">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="font-mono text-title-sm font-semibold text-fg">
+            <p className="font-mono text-title-sm font-medium text-fg">
               {formatMoney(managedUsageCostCents)}
             </p>
             <p className="mt-1 text-caption text-muted-fg">used this period</p>
@@ -698,7 +698,7 @@ const ManagedUsageSettingsForm = ({
         </Progress>
       </div>
 
-      <div className="mx-4 mt-5 mb-1 grid divide-y divide-border/70 border-y border-border @md:mx-6 @md:grid-cols-3 @md:divide-x @md:divide-y-0">
+      <div className="mx-4 mt-5 mb-1 grid divide-y divide-border border-y border-border @md:mx-6 @md:grid-cols-3 @md:divide-x @md:divide-y-0">
         <Price
           label="Messages"
           suffix="/ 1K"

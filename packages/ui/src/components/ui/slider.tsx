@@ -73,7 +73,7 @@ export const SliderThumb = ({
 }: ComponentPropsWithoutRef<typeof SliderPrimitive.Thumb>) => (
   <SliderPrimitive.Thumb
     className={cn(
-      "block size-4 rounded-full border border-primary/20 bg-bg-raised shadow-sm transition-transform duration-150 ease-out focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50 motion-safe:hover:scale-105",
+      "block size-4 rounded-full border border-border bg-bg-raised shadow-sm transition-transform duration-150 ease-out focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50 motion-safe:hover:scale-105",
       className
     )}
     {...props}

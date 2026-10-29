@@ -15,7 +15,7 @@ export const ConsentBanner = () => {
   return (
     <section
       aria-label="Cookie consent"
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-bg-surface/95 shadow-lg backdrop-blur-sm"
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-bg-surface shadow-elevation"
     >
       <div className="mx-auto flex max-w-4xl flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <div className="min-w-0 space-y-1">
@@ -26,10 +26,16 @@ export const ConsentBanner = () => {
             {translations.cookieBanner.description}
           </p>
           <p className="flex flex-wrap gap-x-3 gap-y-1 text-caption text-muted-fg">
-            <Link className="underline hover:text-fg" to="/privacy">
+            <Link
+              className="rounded-sm underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+              to="/privacy"
+            >
               Privacy Policy
             </Link>
-            <Link className="underline hover:text-fg" to="/cookies">
+            <Link
+              className="rounded-sm underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+              to="/cookies"
+            >
               Cookie Policy
             </Link>
           </p>

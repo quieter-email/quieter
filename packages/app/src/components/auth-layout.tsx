@@ -35,10 +35,16 @@ export const AuthLayout = ({
           aria-label="Legal"
           className="mt-10 flex justify-center gap-5 text-caption text-muted-fg"
         >
-          <Link className="underline-offset-4 hover:underline" to="/terms">
+          <Link
+            className="rounded-sm underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+            to="/terms"
+          >
             Terms
           </Link>
-          <Link className="underline-offset-4 hover:underline" to="/privacy">
+          <Link
+            className="rounded-sm underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+            to="/privacy"
+          >
             Privacy
           </Link>
         </nav>

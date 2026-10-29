@@ -145,7 +145,7 @@ export const OrganizationBillingSettings = ({
         </p>
       )}
 
-      <div className="mt-3 divide-y divide-border/70 border-t border-border/70">
+      <div className="mt-3 divide-y divide-border border-t border-border">
         {(["managed", "pro"] as const).map((product) => (
           <BillingProductCard
             compact

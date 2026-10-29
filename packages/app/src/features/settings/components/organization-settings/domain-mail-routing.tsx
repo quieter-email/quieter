@@ -337,7 +337,7 @@ const DomainCatchAllPickerBody = ({
   }
   if (candidates.length === 0) {
     return (
-      <p className="rounded-md border border-border bg-muted/15 px-3 py-2 text-caption/5 text-muted-fg squircle">
+      <p className="rounded-md border border-border bg-muted px-3 py-2 text-caption/5 text-muted-fg squircle">
         Create a shared inbox on {domainName} first, then return here.
       </p>
     );

@@ -61,7 +61,7 @@ export const SenderAvatar = ({
     <div
       className={cn(
         senderAvatarVariants({ size }),
-        { "bg-muted/80": showFallback },
+        { "bg-muted": showFallback },
         className
       )}
     >

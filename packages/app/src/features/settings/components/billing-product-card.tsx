@@ -94,7 +94,7 @@ export const BillingProductCard = ({
   return (
     <SettingsCard
       className={cn(settingsSurfaceVariants({ variant: "body" }), {
-        "border-primary/50 bg-primary/4": isCurrent,
+        "border-primary bg-primary/5": isCurrent,
       })}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -114,7 +114,7 @@ export const BillingProductCard = ({
           </p>
         </div>
         <div className="flex shrink-0 flex-col gap-3 sm:items-end">
-          <p className="text-title-md font-semibold tracking-tight text-fg">
+          <p className="text-title-md font-medium text-fg">
             {moneyFormatter.format(product.monthlyPriceCents / 100)}
             <span className="ml-1 text-body font-normal text-muted-fg">
               /mo
@@ -128,7 +128,7 @@ export const BillingProductCard = ({
           <li className="flex items-start gap-2" key={feature}>
             <Icon
               aria-hidden
-              tone="subtle"
+              tone="muted"
               className="mt-0.5"
               icon={CheckmarkCircle02Icon}
             />

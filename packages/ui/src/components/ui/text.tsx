@@ -30,7 +30,6 @@ const textVariants = cva("", {
     },
     weight: {
       medium: "font-medium",
-      semibold: "font-semibold",
     },
   },
 });

@@ -501,10 +501,10 @@ export const ComposeEditorBody = ({
           "min-h-48": density === "comfortable",
         })}
       >
-        <div className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-muted/35 px-4">
+        <div className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-muted px-4">
           {audioWaveBars.map((bar, index) => (
             <span
-              className={cn("h-6 w-1 animate-pulse rounded-full bg-fg/75", {
+              className={cn("h-6 w-1 animate-pulse rounded-full", {
                 "bg-muted-fg": transcribing,
                 "bg-primary": recording,
               })}

@@ -102,7 +102,7 @@ const PlaybookCard = ({
   <section
     className={cn("rounded-lg border p-4", {
       "border-border": state !== "done",
-      "border-success/40 bg-success/5": state === "done",
+      "border-border bg-success/15": state === "done",
     })}
   >
     <div className="flex items-center gap-2">
@@ -111,7 +111,7 @@ const PlaybookCard = ({
         tone={state === "done" ? "success" : "muted"}
         icon={state === "done" ? CheckmarkCircle02Icon : icon}
       />
-      <h3 className="text-body font-medium tracking-tight text-fg">{title}</h3>
+      <h3 className="text-body font-medium text-fg">{title}</h3>
       {requirement === undefined ? null : (
         <Pill size="xs" tone="neutral">
           {requirement}
@@ -211,7 +211,7 @@ const DomainStatusNote = ({ count }: { count: number }) => (
     />
     DNS setup in progress for {count} {count === 1 ? "domain" : "domains"}.
     <Link
-      className="text-fg underline hover:text-fg"
+      className="rounded-sm text-fg underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
       search={{ organizationView: "domains", tab: "organization" }}
       to="/settings"
     >
@@ -325,7 +325,7 @@ const SendingPlaybook = ({
           <ul className="space-y-1 text-body-sm">
             <li>
               <Link
-                className="text-fg underline hover:text-fg"
+                className="rounded-sm text-fg underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
                 search={{ organizationView: "api-keys", tab: "organization" }}
                 to="/settings"
               >
@@ -334,7 +334,7 @@ const SendingPlaybook = ({
             </li>
             <li>
               <a
-                className="text-fg underline hover:text-fg"
+                className="rounded-sm text-fg underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
                 href={getApiUrl("/api/openapi")}
                 rel="noreferrer"
                 target="_blank"

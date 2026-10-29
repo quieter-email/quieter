@@ -74,7 +74,7 @@ const AuthLastUsedHint = () => (
       />
       <span
         // oxlint-disable-next-line shadcn/no-arbitrary-values -- Inherits the parent badge radius by design.
-        className="relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium tracking-wide text-muted-fg squircle"
+        className="relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium text-muted-fg squircle"
       >
         Last used
       </span>

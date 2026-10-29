@@ -51,9 +51,7 @@ export const MobileHeader = ({
         </Button>
       </IconButtonTooltip>
       {title === undefined || title === "" ? null : (
-        <p className="truncate text-body font-medium tracking-tight text-fg">
-          {title}
-        </p>
+        <p className="truncate text-body font-medium text-fg">{title}</p>
       )}
       {children === undefined ? null : (
         <div className="ml-auto flex items-center gap-1">{children}</div>

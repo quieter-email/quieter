@@ -120,7 +120,7 @@ const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
   } = props;
 
   return (
-    <div className="space-y-2 rounded-lg bg-muted/40 p-3 squircle">
+    <div className="space-y-2 rounded-lg bg-muted p-3 squircle">
       <p className="text-caption font-medium text-muted-fg">Then</p>
       <ToggleGroup
         aria-label="Rule action"
@@ -252,7 +252,7 @@ const ManagedRuleLabelsEditor = (props: MailboxOrganizerContentProps) => {
   } = props;
 
   return ruleActionKind === "set-labels" ? (
-    <div className="space-y-2 rounded-lg bg-muted/40 p-3 squircle">
+    <div className="space-y-2 rounded-lg bg-muted p-3 squircle">
       <p className="text-caption font-medium text-muted-fg">Labels</p>
       {(labelsData ?? []).flatMap((label) =>
         label.type === "user"
@@ -687,7 +687,7 @@ const ManagedRulesList = (props: MailboxOrganizerContentProps) => {
   const { rulesData } = props;
 
   return (
-    <div className="mt-5 divide-y">
+    <div className="mt-5 divide-y divide-border">
       {(rulesData ?? []).map((rule, index, rules) => (
         <ManagedRuleRow
           {...props}
@@ -705,7 +705,7 @@ const ManagedRuleBackfill = (props: MailboxOrganizerContentProps) => {
   const { backfillData, cancelBackfill, cancelBackfillMutation } = props;
 
   return backfillData ? (
-    <div className="mt-4 rounded-lg border bg-muted/30 p-3 text-body">
+    <div className="mt-4 rounded-lg border bg-muted p-3 text-body">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="font-medium">Historical rule run</p>
@@ -751,9 +751,7 @@ export const ManagedMailboxRulesPanel = (
 
   return (
     <section>
-      <h2 className="text-body-lg font-semibold tracking-tight">
-        Automatic rules
-      </h2>
+      <h2 className="text-body-lg font-medium">Automatic rules</h2>
       <FullPageDialogDescription className="mt-1">
         Match new inbound mail with the same filters used by search, then apply
         a predictable action.

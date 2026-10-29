@@ -279,7 +279,7 @@ export const MessageListSearchView = ({
                 return (
                   <div
                     className={cn(messageListSearchChipClassName, "gap-1", {
-                      "bg-control-active ring-2 ring-ring/30":
+                      "bg-control-active ring-2 ring-ring":
                         activeDateFilterIndex === index,
                     })}
                     key={filterRenderKey}
@@ -499,7 +499,7 @@ export const MessageListSearchView = ({
             (activeDateFilter.type === "after" ||
               activeDateFilter.type === "before") && (
               <div
-                className="absolute top-full z-40 mt-2 max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] overflow-auto overscroll-contain rounded-lg bg-popover p-2 shadow-lg"
+                className="absolute top-full z-40 mt-2 max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] overflow-auto overscroll-contain rounded-lg border bg-popover p-2 shadow-md"
                 // oxlint-disable-next-line shadcn/no-inline-styles -- Popover anchors to measured input position.
                 style={{ left: datePopoverLeft }}
               >

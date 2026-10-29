@@ -37,7 +37,10 @@ const BrowserConsentPreferencesLink = ({
 
   return (
     <button
-      className={className ?? "underline hover:text-fg"}
+      className={
+        className ??
+        "rounded-sm underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+      }
       onClick={openDialog}
       tabIndex={tabIndex}
       type="button"

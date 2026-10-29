@@ -207,7 +207,7 @@ export const KeyboardShortcutsDialog = ({
               <h2 className="px-1 text-body font-normal text-fg">
                 {section.title}
               </h2>
-              <div className="overflow-hidden rounded-lg border border-border bg-bg-raised/58 squircle">
+              <div className="overflow-hidden rounded-lg border border-border bg-bg-raised squircle">
                 {section.items.map((item) => (
                   <ShortcutRow
                     item={item}

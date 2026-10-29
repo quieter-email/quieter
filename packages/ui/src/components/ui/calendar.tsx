@@ -75,7 +75,7 @@ export const Calendar = ({
             defaultClassNames.day_button
           ),
           disabled: cn(
-            "text-muted-fg/35 [&>button]:cursor-not-allowed [&>button]:opacity-50",
+            "text-muted-fg [&>button]:cursor-not-allowed [&>button]:opacity-50",
             defaultClassNames.disabled
           ),
           hidden: cn("invisible", defaultClassNames.hidden),
@@ -100,7 +100,7 @@ export const Calendar = ({
             defaultClassNames.nav
           ),
           outside: cn(
-            "text-muted-fg/45 [&>button]:text-muted-fg/45",
+            "text-muted-fg [&>button]:text-muted-fg",
             defaultClassNames.outside
           ),
           root: cn("w-fit text-body text-fg", defaultClassNames.root),
