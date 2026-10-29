@@ -26,7 +26,9 @@ describe("privileged workflow trust", () => {
     ["workflow_dispatch", "refs/heads/feature", false, false],
     ["workflow_dispatch", "refs/tags/main", false, false],
     ["workflow_dispatch", "refs/tags/sdk-v1.0.0", false, false],
-    ["release", "refs/tags/sdk-v1.0.0", false, true],
+    ["release", "refs/tags/sdk-v1.0.0", false, false],
+    ["workflow_run", "refs/heads/main", false, true],
+    ["workflow_run", "refs/heads/feature", false, false],
     ["release", "refs/tags/v1.0.0", false, false],
     ["push", "refs/heads/main", false, false],
   ])("authorizes event %s at %s", (eventName, ref, allowBackfill, allowSdk) => {
@@ -84,13 +86,130 @@ describe("privileged workflow trust", () => {
       );
       expect(result).toBe(allowed ? "authorized" : "rejected");
       expect(setOutput.mock.calls).toStrictEqual(
-        allowed ? [["sha", "immutable-event-sha"]] : []
+        allowed
+          ? [
+              ["sha", "immutable-event-sha"],
+              ["tag", ""],
+            ]
+          : []
       );
       expect(compareCommits).toHaveBeenCalledWith(
         expect.objectContaining({
           base: "immutable-event-sha",
           head: "main",
         })
+      );
+    }
+  );
+
+  test.each([
+    [
+      "release",
+      "success",
+      ".github/workflows/sdk-release-request.yml",
+      "owner/repo",
+      "sdk-v1.0.0",
+      true,
+    ],
+    [
+      "workflow_dispatch",
+      "success",
+      ".github/workflows/sdk-release-request.yml",
+      "owner/repo",
+      "sdk-v1.0.0",
+      false,
+    ],
+    [
+      "release",
+      "failure",
+      ".github/workflows/sdk-release-request.yml",
+      "owner/repo",
+      "sdk-v1.0.0",
+      false,
+    ],
+    [
+      "release",
+      "success",
+      ".github/workflows/other.yml",
+      "owner/repo",
+      "sdk-v1.0.0",
+      false,
+    ],
+    [
+      "release",
+      "success",
+      ".github/workflows/sdk-release-request.yml",
+      "attacker/repo",
+      "sdk-v1.0.0",
+      false,
+    ],
+    [
+      "release",
+      "success",
+      ".github/workflows/sdk-release-request.yml",
+      "owner/repo",
+      "main",
+      false,
+    ],
+  ])(
+    "verifies release request %s %s %s %s %s",
+    async (event, conclusion, path, repository, branch, allowed) => {
+      const script: unknown = sdk.getIn([
+        "jobs",
+        "authorize",
+        "steps",
+        0,
+        "with",
+        "script",
+      ]);
+      if (typeof script !== "string") {
+        throw new TypeError("Missing release authorization.");
+      }
+      const compareCommits = vi
+        .fn<() => Promise<{ data: { status: string } }>>()
+        .mockResolvedValue({ data: { status: "ahead" } });
+      const getWorkflowRun = vi.fn<() => Promise<unknown>>().mockResolvedValue({
+        data: {
+          conclusion,
+          event,
+          head_branch: branch,
+          head_repository: { full_name: repository },
+          head_sha: "release-sha",
+          path,
+        },
+      });
+      const setOutput = vi.fn<(key: string, value: string) => void>();
+      const execution: unknown = runInNewContext(
+        `(async () => { ${script} })()`,
+        {
+          context: {
+            eventName: "workflow_run",
+            payload: { workflow_run: { id: 42 } },
+            repo: { owner: "owner", repo: "repo" },
+            sha: "default-main-sha",
+          },
+          core: { info: vi.fn<(message: string) => void>(), setOutput },
+          github: {
+            rest: { actions: { getWorkflowRun }, repos: { compareCommits } },
+          },
+        }
+      );
+      const result = await Promise.resolve(execution).then(
+        () => "authorized",
+        () => "rejected"
+      );
+      expect(result).toBe(allowed ? "authorized" : "rejected");
+      expect(setOutput.mock.calls).toStrictEqual(
+        allowed
+          ? [
+              ["sha", "release-sha"],
+              ["tag", branch],
+            ]
+          : []
+      );
+      expect(compareCommits).toHaveBeenCalledTimes(allowed ? 1 : 0);
+      expect(getWorkflowRun).toHaveBeenCalledWith(
+        expect.objectContaining({ run_id: 42 })
       );
     }
   );

@@ -1,9 +1,9 @@
 name: Publish SDK
 
 on:
-  release:
-    types:
-      - published
+  workflow_run:
+    workflows: [SDK release request]
+    types: [completed]
   workflow_dispatch:
     inputs:
       version:
@@ -13,35 +13,54 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: sdk-publish-${{ github.event.release.tag_name || inputs.version }}
+  group: sdk-publish-${{ github.event.workflow_run.id || inputs.version }}
   cancel-in-progress: false
 
 jobs:
   authorize:
     name: Authorize SDK revision
     if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'release' && startsWith(github.ref, 'refs/tags/sdk-v'))
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_run' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.revision.outputs.sha }}
+      tag: ${{ steps.revision.outputs.tag }}
     steps:
       - name: Verify protected main ancestry
         id: revision
         uses: actions/github-script@v8
         with:
           script: |
+            let sha = context.sha;
+            let tag = '';
+            if (context.eventName === 'workflow_run') {
+              const { data: run } = await github.rest.actions.getWorkflowRun({
+                ...context.repo,
+                run_id: context.payload.workflow_run.id,
+              });
+              if (run.event !== 'release' || run.conclusion !== 'success' ||
+                  run.path !== '.github/workflows/sdk-release-request.yml' ||
+                  run.head_repository?.full_name !== `${context.repo.owner}/${context.repo.repo}` ||
+                  !run.head_branch?.startsWith('sdk-v')) {
+                throw new Error('An authorized SDK release request is required.');
+              }
+              sha = run.head_sha;
+              tag = run.head_branch;
+            }
             const { data } = await github.rest.repos.compareCommits({
               ...context.repo,
-              base: context.sha,
+              base: sha,
               head: 'main',
             });
             if (data.status !== 'ahead' && data.status !== 'identical') {
               throw new Error('The SDK revision must be reachable from main.');
             }
-            core.info(`Authorized SDK revision: ${context.sha}`);
-            core.setOutput('sha', context.sha);
+            core.info(`Authorized SDK revision: ${sha}`);
+            core.setOutput('sha', sha);
+            core.setOutput('tag', tag);
 
   publish:
     needs: authorize
@@ -67,7 +86,7 @@ jobs:
 
       - name: Validate release version
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ needs.authorize.outputs.tag }}
           WORKFLOW_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
