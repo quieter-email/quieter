@@ -23,6 +23,10 @@ console.log(delivery.recipients);
 const suppressedRecipients = await quieter.listSuppressions();
 ```
 
+## Compatibility date
+
+Every request sends `Quieter-Version: 2026-10`. quieter accepts only that date. A new date is published only when a breaking change replaces the current behavior. There is no request body version field.
+
 ## React Email
 
 Install `react` and `@react-email/render`, then import `Quieter` from `quieter/react` to pass a React Email component to `send`. The core `quieter` entry point supports text and HTML without React.

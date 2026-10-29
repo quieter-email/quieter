@@ -1,4 +1,9 @@
 import { serverEnv } from "@quieter/env/server";
+import {
+  API_COMPATIBILITY_DATE,
+  API_VERSION_HEADER,
+  SEND_API_PATH,
+} from "@quieter/mail/public-api";
 import { render } from "@react-email/render";
 import type { ReactElement } from "react";
 
@@ -11,7 +16,6 @@ type AuthMailInput = {
   to: string;
 };
 
-const SEND_API_PATH = "/api/v1/send";
 const authMailSender = serverEnv.QUIETER_AUTH_MAIL_SENDER;
 const shouldLogAuthMail = () =>
   serverEnv.QUIETER_AUTH_MAIL_MODE === "console" ||
@@ -90,6 +94,7 @@ export const sendAuthMail = async (input: AuthMailInput) => {
       accept: "application/json",
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json",
+      [API_VERSION_HEADER]: API_COMPATIBILITY_DATE,
     },
     method: "POST",
   });

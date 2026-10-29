@@ -86,7 +86,7 @@ describe(Quieter, () => {
     });
   });
 
-  test("sends provider-style payloads to /api/v1/send", async () => {
+  test("sends provider-style payloads to /api/send", async () => {
     const calls: Request[] = [];
     const client = new Quieter({
       apiKey: "quieter_test",
@@ -108,8 +108,9 @@ describe(Quieter, () => {
     });
 
     expect(result).toStrictEqual({ messageId: "message-1", sent: true });
-    expect(calls[0]?.url).toBe("https://example.com/api/v1/send");
+    expect(calls[0]?.url).toBe("https://example.com/api/send");
     expect(calls[0]?.headers.get("authorization")).toBe("Bearer quieter_test");
+    expect(calls[0]?.headers.get("Quieter-Version")).toBe("2026-10");
     await expect(calls[0]?.json()).resolves.toMatchObject({
       from: "Demo <demo@example.com>",
       html: "<strong>It works</strong>",
@@ -187,9 +188,7 @@ describe(Quieter, () => {
 
     const delivery = await client.getMessage("message/1");
 
-    expect(requestedUrl).toBe(
-      "https://example.com/api/v1/messages/message%2F1"
-    );
+    expect(requestedUrl).toBe("https://example.com/api/messages/message%2F1");
     expect(delivery.recipients[0]?.status).toBe("delivered");
   });
 
@@ -217,9 +216,7 @@ describe(Quieter, () => {
 
     const suppressions = await client.listSuppressions({ limit: 25 });
 
-    expect(requestedUrl).toBe(
-      "https://example.com/api/v1/suppressions?limit=25"
-    );
+    expect(requestedUrl).toBe("https://example.com/api/suppressions?limit=25");
     expect(suppressions[0]?.reason).toBe("complaint");
   });
 });
