@@ -22,7 +22,7 @@ import {
   composeSenderNameSchema,
 } from "@quieter/mail/compose/schema";
 import { tool } from "ai";
-import type { ToolSet } from "ai";
+import type { ToolSet, UIMessage } from "ai";
 import { z } from "zod";
 
 export const assistantCapabilitySchema = z.enum([
@@ -273,9 +273,58 @@ export const calendarWriteInputSchemas = {
 export type CalendarWriteToolName = keyof typeof calendarWriteInputSchemas;
 export const calendarWriteToolNames = Object.keys(calendarWriteInputSchemas);
 export const approvalRequiredToolNames = [
+  "linear_write",
+  "modify_mail",
+  "save_compose_draft",
   "send_mail",
   ...calendarWriteToolNames,
 ];
+
+const linearConnectionReviewSchema = z.object({
+  account: z.string().nullable(),
+  connectionId: z.string().min(1),
+  workspace: z.string().nullable(),
+});
+export type LinearWriteReview = z.infer<typeof linearConnectionReviewSchema>;
+
+export const resolveLinearWriteReview = (input: {
+  input: unknown;
+  transcript: readonly UIMessage[];
+}): LinearWriteReview | undefined => {
+  const proposed = z
+    .object({ connectionId: z.string(), toolName: z.string() })
+    .safeParse(input.input);
+  if (!proposed.success) {
+    return undefined;
+  }
+  for (const message of input.transcript.toReversed()) {
+    for (const part of message.parts.toReversed()) {
+      if (
+        part.type !== "tool-linear_list_tools" ||
+        part.state !== "output-available"
+      ) {
+        continue;
+      }
+      const result = z
+        .object({
+          connection: linearConnectionReviewSchema,
+          status: z.literal("success"),
+          tools: z.array(z.object({ name: z.string() })),
+        })
+        .safeParse(part.output);
+      if (
+        result.success &&
+        result.data.connection.connectionId === proposed.data.connectionId &&
+        result.data.tools.some(
+          (descriptor) => descriptor.name === proposed.data.toolName
+        )
+      ) {
+        return result.data.connection;
+      }
+    }
+  }
+  return undefined;
+};
 
 export const isCalendarWriteToolName = (
   name: string

@@ -16,7 +16,7 @@ import {
   createForegroundClientTools,
   createForegroundServerTools,
   approvalRequiredToolNames,
-  calendarWriteToolNames,
+  resolveLinearWriteReview,
   editComposeInputSchema,
   editComposeOutputSchema,
   foregroundComposeDraftSchema,
@@ -88,6 +88,7 @@ import { assertAccessibleMailbox } from "../mailbox/service";
 import { createCalendarToolsContext } from "./calendar-tools";
 import { replaceChatParts } from "./continuation";
 import { createLinearChatTools } from "./linear-tools";
+import { assertExactChatToolApproval } from "./tool-approval";
 
 type UIMessagePart = UIMessage["parts"][number];
 
@@ -96,13 +97,7 @@ const CHAT_MAX_COMPLETION_TOKENS = 2048;
 const CHAT_MAX_STEPS = 6;
 const MAIL_TOOL_TIMEOUT_MS = 25_000;
 const FOREGROUND_EXCHANGE_MAX_MS = 5 * 60_000;
-const MUTATING_CHAT_TOOLS = new Set([
-  ...calendarWriteToolNames,
-  "linear_write",
-  "modify_mail",
-  "save_compose_draft",
-  "send_mail",
-]);
+const MUTATING_CHAT_TOOLS = new Set(approvalRequiredToolNames);
 const UNCERTAIN_ACTION_ERROR =
   "The action could not be confirmed. Check the affected item before trying again.";
 
@@ -648,7 +643,7 @@ const assertForegroundExchangeActive = async (input: {
   const foreground = foregroundSnapshotSchema
     .strip()
     .safeParse(
-      [...(message?.parts ?? []), ...(lastUserMessage?.parts ?? [])].find(
+      (lastUserMessage?.parts ?? []).find(
         (part) =>
           typeof part.foreground === "object" &&
           part.foreground !== null &&
@@ -1557,6 +1552,14 @@ export const createAiChatResponse = async (input: {
       ) {
         throw new ChatRequestError(409, UNCERTAIN_ACTION_ERROR);
       }
+      if (claimWrite) {
+        assertExactChatToolApproval({
+          approvedPart: existingPart,
+          exchangeId: assistantMessageId,
+          foreground: validated.foreground,
+          proposedPart: outcome,
+        });
+      }
       const merged = { ...existingPart, ...outcome };
       const parts = existingPart
         ? expectedParts.map((part) => (part === existingPart ? merged : part))
@@ -1592,6 +1595,20 @@ export const createAiChatResponse = async (input: {
         chatId: threadId,
         userId: input.userId,
       });
+      if (
+        toolName === "linear_write" &&
+        resolveLinearWriteReview({
+          input: toolInput,
+          transcript: transcript.filter(
+            (message) => message.id === assistantMessageId
+          ),
+        }) === undefined
+      ) {
+        throw new ChatRequestError(
+          409,
+          "Read the connected account and available actions before requesting approval again."
+        );
+      }
       const part = {
         foreground: validated.foreground,
         input: toolInput,

@@ -9,6 +9,7 @@ import {
   listLinearMcpToolsForUser,
   runLinearMcpToolCallsForUser,
 } from "../connectors/linear-mcp";
+import { getLinearConnectionForUser } from "../connectors/runtime";
 
 const LINEAR_REQUEST_REQUIRED_ERROR =
   "Linear tools require an explicit @Linear request.";
@@ -22,6 +23,11 @@ export const hasLinearConnectorMention = (text: string) =>
 const linearListToolsResultSchema = z.union([
   z.object({ error: z.string(), status: z.literal("error") }),
   z.object({
+    connection: z.object({
+      account: z.string().nullable(),
+      connectionId: z.string(),
+      workspace: z.string().nullable(),
+    }),
     status: z.literal("success"),
     tools: z.array(
       z.object({
@@ -66,6 +72,7 @@ export const createLinearChatTools = (input: {
 
   const callTool = async (inputCall: {
     arguments: Record<string, unknown>;
+    connectionId?: string;
     mode: "read" | "write";
     signal?: AbortSignal;
     toolName: string;
@@ -73,6 +80,13 @@ export const createLinearChatTools = (input: {
     const guard = requestGuard();
     if (guard !== undefined) {
       return guard;
+    }
+
+    if (inputCall.mode === "write" && !inputCall.connectionId) {
+      return {
+        error: "Review the connected account before changing it.",
+        status: "error" as const,
+      };
     }
 
     const mutates = isMutatingLinearMcpTool({ name: inputCall.toolName });
@@ -97,6 +111,7 @@ export const createLinearChatTools = (input: {
             toolName: inputCall.toolName,
           },
         ],
+        connectionId: inputCall.connectionId,
         maxCalls: 1,
         signal: inputCall.signal,
         userId: input.userId,
@@ -123,9 +138,12 @@ export const createLinearChatTools = (input: {
         }
 
         try {
+          const connection = await getLinearConnectionForUser(input.userId);
           return {
+            connection,
             status: "success" as const,
             tools: await listLinearMcpToolsForUser({
+              connectionId: connection.connectionId,
               signal: abortSignal,
               userId: input.userId,
             }),
@@ -157,14 +175,23 @@ export const createLinearChatTools = (input: {
     tools.linear_write = tool({
       description:
         "Call a mutating Linear tool returned by linear_list_tools. Use this for tool names that do not begin with get_, list_, or search_.",
-      execute: async ({ arguments: args, toolName }, { abortSignal }) =>
+      execute: async (
+        { arguments: args, connectionId, toolName },
+        { abortSignal }
+      ) =>
         await callTool({
           arguments: args ?? {},
+          connectionId,
           mode: "write",
           signal: abortSignal,
           toolName,
         }),
-      inputSchema: linearToolCallInputSchema,
+      inputSchema: linearToolCallInputSchema.extend({
+        connectionId: z.string().min(1).max(256).meta({
+          description:
+            "The exact connectionId returned by linear_list_tools for the reviewed account and workspace.",
+        }),
+      }),
       outputSchema: linearToolCallResultSchema,
     });
   }
