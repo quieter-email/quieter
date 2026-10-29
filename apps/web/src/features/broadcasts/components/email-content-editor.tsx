@@ -434,6 +434,7 @@ const ThemeProperties = ({
         onChange={(event) => {
           onChange({ ...design, preheader: event.target.value });
         }}
+        size="sm"
         value={design.preheader}
       />
     </Field>
@@ -455,7 +456,7 @@ const ThemeProperties = ({
         }}
         value={design.theme.fontFamily}
       >
-        <SelectTrigger aria-label="Email font">
+        <SelectTrigger aria-label="Email font" size="sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -471,7 +472,7 @@ const ThemeProperties = ({
       <Text size="caption" tone="muted" weight="medium">
         Colors
       </Text>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2">
         {themeColors.map(({ key, label }) => (
           <Field key={key}>
             <FieldLabel htmlFor={`email-theme-${key}`}>{label}</FieldLabel>
@@ -484,6 +485,7 @@ const ThemeProperties = ({
                   theme: { ...design.theme, [key]: event.target.value },
                 });
               }}
+              size="sm"
               type="color"
               value={design.theme[key]}
             />
@@ -493,38 +495,41 @@ const ThemeProperties = ({
     </div>
     <div className="flex flex-col gap-2">
       <Text size="caption" tone="muted" weight="medium">
-        Layout
+        Layout, px
       </Text>
-      {(
-        [
-          { key: "width", label: "Width", max: 800, min: 480 },
-          { key: "padding", label: "Padding", max: 64, min: 0 },
-          { key: "borderRadius", label: "Corners", max: 32, min: 0 },
-        ] as const
-      ).map(({ key, label, min, max }) => (
-        <Field key={key}>
-          <FieldLabel htmlFor={`email-theme-${key}`}>{label}, px</FieldLabel>
-          <Input
-            id={`email-theme-${key}`}
-            max={max}
-            min={min}
-            onChange={(event) => {
-              onChange({
-                ...design,
-                theme: {
-                  ...design.theme,
-                  [key]: Math.max(
-                    min,
-                    Math.min(max, Number(event.target.value))
-                  ),
-                },
-              });
-            }}
-            type="number"
-            value={design.theme[key]}
-          />
-        </Field>
-      ))}
+      <div className="grid grid-cols-3 gap-2">
+        {(
+          [
+            { key: "width", label: "Width", max: 800, min: 480 },
+            { key: "padding", label: "Padding", max: 64, min: 0 },
+            { key: "borderRadius", label: "Corners", max: 32, min: 0 },
+          ] as const
+        ).map(({ key, label, min, max }) => (
+          <Field key={key}>
+            <FieldLabel htmlFor={`email-theme-${key}`}>{label}</FieldLabel>
+            <Input
+              id={`email-theme-${key}`}
+              max={max}
+              min={min}
+              onChange={(event) => {
+                onChange({
+                  ...design,
+                  theme: {
+                    ...design.theme,
+                    [key]: Math.max(
+                      min,
+                      Math.min(max, Number(event.target.value))
+                    ),
+                  },
+                });
+              }}
+              size="sm"
+              type="number"
+              value={design.theme[key]}
+            />
+          </Field>
+        ))}
+      </div>
     </div>
   </div>
 );
@@ -944,9 +949,9 @@ export const EmailContentEditor = ({
                   }}
                 />
               ) : (
-                <p className="text-caption text-muted-fg">
+                <Text as="p" size="caption" tone="muted">
                   Select a block to edit.
-                </p>
+                </Text>
               )}
             </fieldset>
           ) : undefined

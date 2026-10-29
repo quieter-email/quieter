@@ -15,7 +15,7 @@ export const EmailEditorLayout = ({
   palette?: ReactNode;
   toolbar: ReactNode;
 }) => (
-  <div className="flex min-h-160 flex-col overflow-hidden rounded-xl border border-border bg-bg-surface">
+  <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-bg-surface">
     <div className="flex min-w-0 flex-wrap items-center gap-1.5 border-b border-border px-2 py-1.5">
       {toolbar}
     </div>
@@ -25,8 +25,9 @@ export const EmailEditorLayout = ({
       </div>
     )}
     <div
-      className={cn("grid min-h-0 flex-1", {
-        "lg:grid-cols-[minmax(0,1fr)_16rem]": inspector !== undefined,
+      className={cn("grid", {
+        "lg:grid-cols-[minmax(0,1fr)_16rem] lg:items-start":
+          inspector !== undefined,
       })}
     >
       <div className="min-w-0 overflow-x-auto bg-muted/40 p-4 sm:p-6">
