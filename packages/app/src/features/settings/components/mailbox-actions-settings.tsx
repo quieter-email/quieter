@@ -323,7 +323,7 @@ export const MailboxActionsSettings = ({
 
   return (
     <SettingsSection
-      description="Tell Quieter what to do with mail in this mailbox. Review the instructions and account access before turning it on."
+      description="Tell quieter what to do with mail in this mailbox. Review the instructions and account access before turning it on."
       title="Actions"
     >
       {query.isPending ? (

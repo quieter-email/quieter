@@ -45,7 +45,7 @@ export const HomePage = () => (
       <div className="home-page dark">
         <Reveal onMount as="header" className="home-navigation" stagger={0.16}>
           <RevealChild>
-            <Link aria-label="Quieter home" to="/home">
+            <Link aria-label="quieter home" to="/home">
               <Brand className="h-7 w-28" variant="combination" />
             </Link>
           </RevealChild>

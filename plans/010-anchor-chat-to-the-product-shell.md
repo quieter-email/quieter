@@ -38,7 +38,7 @@ so the chat's own title was never visible.
 
 - Do NOT rename the models. `packages/ai/src/chat-models.ts` already maps ids to curated labels
   ("GPT 5.6 Luna", "Claude Opus 5"); those are product names, not leaked identifiers.
-- Do NOT add a Quieter mark to the empty state. `quieter-mark.tsx` was dead code whose geometry did
+- Do NOT add a quieter mark to the empty state. `quieter-mark.tsx` was dead code whose geometry did
   not match `public/icon.svg` (rounded rects instead of superellipse paths, perfectly concentric
   instead of progressively offset, no backing tile), and it has been deleted. If an inline mark is
   ever wanted, derive it from the real icon paths.

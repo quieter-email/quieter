@@ -2,7 +2,7 @@ export const ONBOARDING_INTENT_OPTIONS = [
   {
     description: "Connect Gmail accounts to read, search, and send from them.",
     id: "gmail",
-    title: "Bring my Gmail inboxes into Quieter",
+    title: "Bring my Gmail inboxes into quieter",
   },
   {
     description: "Send transactional mail from a verified domain.",

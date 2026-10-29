@@ -163,7 +163,7 @@ export const MailboxDetailGeneralSection = ({
         >
           {mailbox.connectionStatus === "needs_reconnect"
             ? "Reconnect through Google to resume reading and sending mail."
-            : "Quieter can read and send mail for this account."}
+            : "quieter can read and send mail for this account."}
         </SettingsRow>
       )}
       {mailbox.provider === "gmail" && (

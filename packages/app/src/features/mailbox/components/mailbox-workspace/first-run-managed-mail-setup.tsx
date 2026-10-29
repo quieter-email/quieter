@@ -264,7 +264,7 @@ const FirstRunDomainStep = ({
       <div>
         <h2 className="text-body font-medium text-fg">2. Verify your domain</h2>
         <p className="mt-1 text-body text-muted-fg">
-          Add a domain so Quieter can create managed mailboxes for your
+          Add a domain so quieter can create managed mailboxes for your
           addresses.
         </p>
       </div>

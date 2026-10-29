@@ -139,7 +139,7 @@ const artwork = (
   return `<path fill="${ink}" d="${geometry.path}" transform="translate(${(width - geometry.width * scale) / 2} ${(height - geometry.height * scale) / 2}) scale(${scale})"/>`;
 };
 const svg = (width: number, height: number, body: string) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><title>Quieter</title>${body}</svg>`;
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><title>quieter</title>${body}</svg>`;
 const render = (
   source: string,
   destination: string,
@@ -271,7 +271,7 @@ const sections = treatments
   .join("");
 writeFileSync(
   path.join(output, "index.html"),
-  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Quieter brand assets</title><style>body{margin:0;background:#0e0f10;color:#eeeef0;font:15px system-ui}main{max-width:1440px;margin:auto;padding:48px 32px}h1{font-size:32px;font-weight:500}p{color:#929599;line-height:1.7}h2{font-size:19px;font-weight:450;margin-top:56px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}a{color:inherit;text-decoration:none}img{display:block;width:100%;aspect-ratio:1.9;object-fit:contain;background:#17181a}span{display:flex;justify-content:space-between;padding-top:12px}small{color:#8e9399}@media(max-width:750px){.grid{grid-template-columns:1fr}main{padding:24px}}</style><main><h1>Quieter</h1><p>Original 004. Custom Geist wordmark.<br>108 images, 12 treatments. Select an image to save the full-size PNG.<br>SVG and transparent PNG masters are in the core folder. Dark and light in core filenames describe the ink color.</p>${sections}</main></html>`
+  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>quieter brand assets</title><style>body{margin:0;background:#0e0f10;color:#eeeef0;font:15px system-ui}main{max-width:1440px;margin:auto;padding:48px 32px}h1{font-size:32px;font-weight:500}p{color:#929599;line-height:1.7}h2{font-size:19px;font-weight:450;margin-top:56px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}a{color:inherit;text-decoration:none}img{display:block;width:100%;aspect-ratio:1.9;object-fit:contain;background:#17181a}span{display:flex;justify-content:space-between;padding-top:12px}small{color:#8e9399}@media(max-width:750px){.grid{grid-template-columns:1fr}main{padding:24px}}</style><main><h1>quieter</h1><p>Original 004. Custom Geist wordmark.<br>108 images, 12 treatments. Select an image to save the full-size PNG.<br>SVG and transparent PNG masters are in the core folder. Dark and light in core filenames describe the ink color.</p>${sections}</main></html>`
 );
 
 const lilac = treatments.find((treatment) => treatment.name === "08-lilac");

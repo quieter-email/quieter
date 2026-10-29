@@ -118,7 +118,7 @@ export const AssistantSidebar = ({
   return (
     <aside
       aria-hidden={!open}
-      aria-label="Quieter assistant"
+      aria-label="quieter assistant"
       className={cn(workspaceGutterClassName, "relative h-full w-full")}
       data-assistant-sidebar
       id={id}
@@ -129,7 +129,7 @@ export const AssistantSidebar = ({
         data-assistant-surface
       >
         <dialog
-          aria-label="Quieter assistant"
+          aria-label="quieter assistant"
           className={cn(
             workspaceSectionVariants({ layout: "surface" }),
             "relative m-0 h-full w-full p-0 text-fg outline-hidden"

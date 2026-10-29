@@ -602,7 +602,7 @@ const ChatSession = ({
       ) : null}
       {canUseAiChat ? null : (
         <p className="px-4 py-4 text-body-sm text-muted-fg">
-          Choose a plan with AI credits in settings to use Quieter.
+          Choose a plan with AI credits in settings to use quieter.
         </p>
       )}
       <ChatComposer

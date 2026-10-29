@@ -33,7 +33,7 @@ export const Route = createFileRoute("/_app/onboarding")({
     return { user };
   },
   head: () => ({
-    meta: [{ title: "Welcome to Quieter" }],
+    meta: [{ title: "Welcome to quieter" }],
   }),
   pendingComponent: LoadingPage,
 });

@@ -1,6 +1,6 @@
 # Contribution Policy
 
-Quieter is source-available under the MIT license, but it is not currently accepting general community contributions.
+quieter is source-available under the MIT license, but it is not currently accepting general community contributions.
 
 Please do not open pull requests or issues for:
 

@@ -248,7 +248,7 @@ export const openApiDocument = {
     },
     securitySchemes: {
       organizationApiKey: {
-        bearerFormat: "Quieter team API key",
+        bearerFormat: "quieter team API key",
         scheme: "bearer",
         type: "http",
       },
@@ -256,7 +256,7 @@ export const openApiDocument = {
   },
   info: {
     description: `REST API for sending mail from verified sender domains and reading delivery state and suppressions. Authenticate every request with a bearer team API key. Send ${API_VERSION_HEADER} set to ${API_COMPATIBILITY_DATE}. Responses repeat that date. A new date is published only when a breaking change replaces this behavior.`,
-    title: "Quieter API",
+    title: "quieter API",
     version: API_COMPATIBILITY_DATE,
   },
   openapi: "3.1.0",

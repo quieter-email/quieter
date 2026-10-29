@@ -118,7 +118,7 @@ const createInitialDemoState = (): DemoMailState => ({
       subject: "Onboarding checklist draft",
       threadId: "demo-thread-onboarding",
       threadMessageCount: 3,
-      to: `Quieter <${DEMO_EMAIL_ADDRESS}>, Theo Byte <theo@figma.com>`,
+      to: `quieter <${DEMO_EMAIL_ADDRESS}>, Theo Byte <theo@figma.com>`,
     }),
     createMessage("demo-thread-notion-2", {
       bodyHtml:
@@ -202,14 +202,14 @@ const createInitialDemoState = (): DemoMailState => ({
     }),
     createMessage("demo-shopify-1", {
       bodyHtml:
-        "<p>The Quieter swag test order shipped today.</p><p>Tracking usually appears within 24 hours after the carrier scan.</p>",
+        "<p>The quieter swag test order shipped today.</p><p>Tracking usually appears within 24 hours after the carrier scan.</p>",
       bodyText:
-        "The Quieter swag test order shipped today.\n\nTracking usually appears within 24 hours after the carrier scan.",
+        "The quieter swag test order shipped today.\n\nTracking usually appears within 24 hours after the carrier scan.",
       date: daysAgo(2.9),
       from: "Shopify <orders@shopify.com>",
       labelIds: [MAILBOX_LABELS.inbox],
       snippet:
-        "The Quieter swag test order shipped today. Tracking usually appears within 24 hours.",
+        "The quieter swag test order shipped today. Tracking usually appears within 24 hours.",
       subject: "Your test order shipped",
       to: DEMO_EMAIL_ADDRESS,
     }),

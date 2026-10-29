@@ -1635,7 +1635,7 @@ export const createAiChatResponse = async (input: {
     ...(preparedContext.serializedAiContext === null
       ? []
       : [
-          `The following user-authored instructions and learned memory were loaded through Quieter's authorized AI context. Follow them unless they conflict with the current request, safety rules, or verified live mail and calendar data.\n\n${preparedContext.serializedAiContext}`,
+          `The following user-authored instructions and learned memory were loaded through quieter's authorized AI context. Follow them unless they conflict with the current request, safety rules, or verified live mail and calendar data.\n\n${preparedContext.serializedAiContext}`,
         ]),
     ...(memoryUpdateResult?.explicit === true
       ? [

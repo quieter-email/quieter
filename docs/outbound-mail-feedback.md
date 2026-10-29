@@ -1,6 +1,6 @@
 # Outbound mail feedback
 
-Quieter publishes outbound delivery events from the configured mail provider to an SNS topic and processes them with an AWS function. Lambda retries failed processing twice before moving the failed asynchronous invocation to a 14-day SQS dead-letter queue. The dead-letter queue has no active consumer and therefore creates no idle polling traffic.
+quieter publishes outbound delivery events from the configured mail provider to an SNS topic and processes them with an AWS function. Lambda retries failed processing twice before moving the failed asynchronous invocation to a 14-day SQS dead-letter queue. The dead-letter queue has no active consumer and therefore creates no idle polling traffic.
 
 The processor stores an immutable, idempotent event for each recipient and a current recipient-level delivery projection. Hard bounces, complaints, and unsubscribes also create an organization-scoped suppression. Both application-managed mail and organization API sends check that suppression before contacting the mail provider.
 
@@ -39,7 +39,7 @@ Recipient projections can be recomputed atomically from the immutable event log.
 
 ## Open tracking
 
-Open tracking is disabled until an organization admin enables it in team settings, optionally letting authorized API senders opt out per send; without that allowance the team setting applies to every message. When active, html messages sent through the organization API or managed compose include a signed marker carrying only the Quieter message header id.
+Open tracking is disabled until an organization admin enables it in team settings, optionally letting authorized API senders opt out per send; without that allowance the team setting applies to every message. When active, html messages sent through the organization API or managed compose include a signed marker carrying only the quieter message header id.
 
 Marker loads are verified by signature, resolved back to the outbound message, and recorded as bounded engagement signals:
 

@@ -15,7 +15,7 @@ const signTokenPayload = (encodedPayload: string, secret: string) =>
     .digest("base64url");
 
 /**
- * Open-tracking markers carry only the Quieter message header id, signed so
+ * Open-tracking markers carry only the quieter message header id, signed so
  * that fabricated or tampered tokens are rejected before any lookup.
  */
 export const buildOpenTrackingToken = (input: {

@@ -15,7 +15,7 @@ I want to create something like resend, but not just for programmatic sending. W
 - Suggest actions for emails with AI
 - Chat with inbox (AI assistant)
 - Templates for emails with AI tab completion
-- Quieter inboxes
+- quieter inboxes
   - Feature-parity with Gmail
   - AI auto reply (drafts)
   - AI priority inbox

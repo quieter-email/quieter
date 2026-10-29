@@ -569,7 +569,7 @@ export const DesignSystemShowcase = () => {
       <div className="mx-auto w-full max-w-4xl space-y-8 px-6 py-10">
         <header>
           <Text as="h1" size="lg" truncate weight="medium">
-            Quieter design system
+            quieter design system
           </Text>
           <p className="mt-2 max-w-prose text-body-sm text-muted-fg">
             Every control the product composes from. If a surface needs

@@ -126,7 +126,7 @@ const toUserMemoryError = (error: unknown) => {
   }
   reportError(error, { operation: "ai-memory:request" });
   return new ORPCError("INTERNAL_SERVER_ERROR", {
-    message: "Quieter could not complete the memory request. Please try again.",
+    message: "quieter could not complete the memory request. Please try again.",
   });
 };
 

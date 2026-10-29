@@ -85,10 +85,10 @@ export const DesktopAuthScreen = () => {
   };
 
   return (
-    <AuthLayout title="Continue to Quieter">
+    <AuthLayout title="Continue to quieter">
       {desktopAuth === null && (
         <p className="mt-6 text-body/6 text-muted-fg">
-          Open the Quieter desktop app and choose Continue in browser to start a
+          Open the quieter desktop app and choose Continue in browser to start a
           new sign-in.
         </p>
       )}
@@ -103,11 +103,11 @@ export const DesktopAuthScreen = () => {
             fullWidth
             type="button"
           >
-            Open Quieter
+            Open quieter
           </Button>
           <TextField>
             <FieldLabel htmlFor="desktop-sign-in-code">
-              App did not open? Paste this code in Quieter.
+              App did not open? Paste this code in quieter.
             </FieldLabel>
             <TextFieldInput
               autoComplete="off"
@@ -139,7 +139,7 @@ export const DesktopAuthScreen = () => {
             type="button"
           >
             {transferMutation.isPending
-              ? "Opening Quieter…"
+              ? "Opening quieter…"
               : `Continue as ${user.name || user.email}`}
           </Button>
           <p className="text-caption/5 text-muted-fg">

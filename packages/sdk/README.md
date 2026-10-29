@@ -1,6 +1,6 @@
 # quieter
 
-TypeScript SDK for the Quieter send API.
+TypeScript SDK for the quieter send API.
 
 ```ts
 import { Quieter } from "quieter";
@@ -25,7 +25,7 @@ const suppressedRecipients = await quieter.listSuppressions();
 
 ## Compatibility date
 
-Every request sends `Quieter-Version: 2026-10`. Quieter accepts only that date. A new date is published only when a breaking change replaces the current behavior. There is no request body version field.
+Every request sends `Quieter-Version: 2026-10`. quieter accepts only that date. A new date is published only when a breaking change replaces the current behavior. There is no request body version field.
 
 ## React Email
 

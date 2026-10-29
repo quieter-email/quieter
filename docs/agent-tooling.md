@@ -57,12 +57,12 @@ After setup, verify tool discovery in the task that will do the debugging. If co
 
 Complete a small read against each provider needed for the feature:
 
-1. Sentry: list the Quieter project and retrieve one issue's error details. Confirm project and environment before interpreting results.
+1. Sentry: list the quieter project and retrieve one issue's error details. Confirm project and environment before interpreting results.
 2. PlanetScale: inspect `quieter/main` metadata and Insights. For SQL, explicitly target the logical database and use a bounded read such as `SELECT current_database()`. Never infer the logical database from the branch name.
 3. Cloudflare: list the account's Workers and retrieve a bounded log or observability result for the relevant Worker. Documentation search does not pass this check.
 4. AWS: use `quieter-readonly` for STS identity, then inspect the relevant Lambda or bounded CloudWatch logs. The MCP `call_boto3` expects operation names such as `GetCallerIdentity`, not `get_caller_identity`.
 5. Polar: discover and describe `organizations_list`, execute it, and confirm the expected environment's organization. Repeat independently for sandbox.
-6. PostHog: list accessible projects through its app connector, then scope any data read to Quieter or its staging project.
+6. PostHog: list accessible projects through its app connector, then scope any data read to quieter or its staging project.
 
 Keep MCP OAuth credentials in Codex's credential store. Application development tokens stay in SST Secrets and ignored local caches. Do not paste raw inventory/configuration, OAuth callback URLs, or provider responses containing credentials into reports.
 

@@ -47,7 +47,7 @@ const parseSendError = async (response: Response) => {
     )
     .catch(() => null);
 
-  return body ?? `Quieter API returned ${response.status}.`;
+  return body ?? `quieter API returned ${response.status}.`;
 };
 
 const getAuthMailBaseUrl = () => {
@@ -114,8 +114,8 @@ export const sendVerificationEmail = async (input: {
 }) => {
   await sendAuthMail({
     react: VerificationEmail({ url: input.url }),
-    subject: "Verify your Quieter email",
-    text: `Confirm this email address to finish setting up Quieter.\n\n${input.url}`,
+    subject: "Verify your quieter email",
+    text: `Confirm this email address to finish setting up quieter.\n\n${input.url}`,
     to: input.email,
   });
 };
@@ -126,8 +126,8 @@ export const sendMagicLinkEmail = async (input: {
 }) => {
   await sendAuthMail({
     react: MagicLinkEmail({ url: input.url }),
-    subject: "Sign in to Quieter",
-    text: `Use this link to sign in to Quieter.\n\n${input.url}`,
+    subject: "Sign in to quieter",
+    text: `Use this link to sign in to quieter.\n\n${input.url}`,
     to: input.email,
   });
 };

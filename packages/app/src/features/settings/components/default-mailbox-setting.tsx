@@ -99,7 +99,7 @@ export const DefaultMailboxSetting = () => {
             }
             title="Default mailbox"
           >
-            Choose which inbox opens when you visit Quieter.
+            Choose which inbox opens when you visit quieter.
           </SettingsRow>
         </SettingsRows>
       )}

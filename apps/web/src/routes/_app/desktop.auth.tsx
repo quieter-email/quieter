@@ -13,7 +13,7 @@ export const Route = createFileRoute("/_app/desktop/auth")({
   loader: async () => ({ user: await getSessionUser() }),
   head: () => ({
     meta: [
-      { title: "Sign in to Quieter desktop" },
+      { title: "Sign in to quieter desktop" },
       { content: "noindex, nofollow", name: "robots" },
       { content: "no-referrer", name: "referrer" },
     ],

@@ -1082,7 +1082,7 @@ export const recordOrganizationMailOpenEvent = async (input: {
 };
 
 /**
- * Records an open-marker load addressed by the Quieter Message-ID header.
+ * Records an open-marker load addressed by the quieter Message-ID header.
  * Tokens never carry database ids, so this resolves the header to the stored
  * outbound message first.
  */

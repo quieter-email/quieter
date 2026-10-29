@@ -144,7 +144,7 @@ export const AiSettingsPanel = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete all memories?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently deletes what Quieter remembers about you.
+              This permanently deletes what quieter remembers about you.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

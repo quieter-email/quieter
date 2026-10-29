@@ -11,7 +11,7 @@
 
 ## Done predicate
 
-An authenticated user can connect their Google Calendar independently of identity and mail, browse their calendars in day, week, month and agenda views, create and edit timed, all-day and recurring events, manage invitations, move events, and delete an occurrence or series. The agent can inspect the user's schedule and propose calendar changes through the existing approval workflow. Mail invitations remain connected to this calendar. Provider changes appear after refresh and focus. Unauthorized users cannot read or change another user's calendars. The responsive workspace follows Quieter's shared controls and the supplied three-panel reference.
+An authenticated user can connect their Google Calendar independently of identity and mail, browse their calendars in day, week, month and agenda views, create and edit timed, all-day and recurring events, manage invitations, move events, and delete an occurrence or series. The agent can inspect the user's schedule and propose calendar changes through the existing approval workflow. Mail invitations remain connected to this calendar. Provider changes appear after refresh and focus. Unauthorized users cannot read or change another user's calendars. The responsive workspace follows quieter's shared controls and the supplied three-panel reference.
 
 ## Units and gates
 

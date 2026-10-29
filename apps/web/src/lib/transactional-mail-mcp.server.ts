@@ -26,7 +26,7 @@ import { reportServerError } from "./server-error-reporting";
 
 const serverInfo = {
   name: "quieter-transactional-mail",
-  title: "Quieter Transactional Mail",
+  title: "quieter Transactional Mail",
   version: "1.0.0",
 };
 
