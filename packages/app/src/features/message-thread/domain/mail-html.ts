@@ -433,6 +433,19 @@ const createImagePolicy = ({
   return policy;
 };
 
+export const resolveComposeImageSource = (
+  source: string,
+  shouldLoadImages: boolean
+): string | null => {
+  if (source.startsWith("blob:")) {
+    return source;
+  }
+  return createImagePolicy({
+    preserveContentIds: true,
+    shouldLoadImages,
+  }).resolveImage(source);
+};
+
 const sanitizeImageSet = (
   source: string,
   resolveImage: MailImagePolicy["resolveImage"]
