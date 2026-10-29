@@ -1,11 +1,11 @@
 import { ORPCError } from "@orpc/server";
-import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
 import type { DatabaseExecutor } from "@quieter/database/client";
 import { mailbox, mailDomain } from "@quieter/database/schema";
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { assertDomainBillingAccess } from "../mail-domain/billing";
 import { setMailDomainCatchAll } from "../mail-domain/catch-all";
 import {
   getDomainConnectAvailability,
@@ -33,18 +33,6 @@ import { verifyMailDomainSetup } from "../mail-domain/verification";
 import { protectedProcedure } from "./base";
 
 const mailDomainModeSchema = z.enum(["send_only", "send_and_receive"]);
-
-const assertDomainBillingAccess = async (organizationId: string) => {
-  const entitlement = await getOrganizationBillingEntitlement({
-    feature: "organizationDomains",
-    organizationId,
-  });
-  if (!entitlement.hasAccess) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "Custom team domains require Team billing.",
-    });
-  }
-};
 
 const countManagedMailboxesForDomain = async (input: {
   database?: DatabaseExecutor;
@@ -470,7 +458,6 @@ export const mailDomainsRouter = {
         organizationId: input.organizationId,
         userId: context.userId,
       });
-      await assertDomainBillingAccess(input.organizationId);
       return await setMailDomainCatchAll(input);
     }),
 
