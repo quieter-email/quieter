@@ -68,6 +68,7 @@ export const createDemoActions = (
         { destination: "archive", kind: "move" }
       );
     },
+    canMarkRead: true,
     canSetImportance: true,
     deleteDraft: async (message) => {
       await apply([message.id], "message", { kind: "delete-permanently" });

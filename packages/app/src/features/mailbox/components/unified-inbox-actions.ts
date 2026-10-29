@@ -89,6 +89,12 @@ export const createUnifiedInboxActions = ({
           "A selected conversation is no longer available. Refresh your inboxes."
         );
       }
+      if (
+        (action === "markThreadsAsRead" || action === "markThreadsAsUnread") &&
+        !context.mailboxActions.canMarkRead
+      ) {
+        throw new Error("You cannot change read status in a selected inbox.");
+      }
       const group = groups.get(context.mailboxId) ?? { context, threads: [] };
       group.threads.push(thread);
       groups.set(context.mailboxId, group);
@@ -116,6 +122,11 @@ export const createUnifiedInboxActions = ({
     },
     archiveThreads: async (threads) => {
       await runBulkAction("archiveThreads", threads);
+    },
+    get canMarkRead() {
+      return [...contextsByThreadId.values()].some(
+        (context) => context.mailboxActions.canMarkRead
+      );
     },
     get canSetImportance() {
       return [...contextsByThreadId.values()].some(
