@@ -1,9 +1,10 @@
 import {
+  ArrowDown01Icon,
   ArrowTurnBackwardIcon,
   ArrowTurnForwardIcon,
-  Download01Icon,
-  Image01Icon,
-  TextBoldIcon,
+  ArrowUp01Icon,
+  Copy01Icon,
+  Delete02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -44,8 +45,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Text } from "@quieter/ui/text";
 import { Textarea } from "@quieter/ui/textarea";
-import { Toolbar, ToolbarButton, ToolbarGroup } from "@quieter/ui/toolbar";
+import {
+  Toolbar,
+  ToolbarButton,
+  ToolbarGroup,
+  ToolbarSeparator,
+} from "@quieter/ui/toolbar";
 import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { useRef } from "react";
 import { z } from "zod";
@@ -257,8 +264,7 @@ const BlockProperties = ({
   block: EmailBlock;
   onChange: (block: EmailBlock) => void;
 }) => (
-  <div className="flex flex-col gap-4">
-    <h3 className="text-body font-medium">{blockNames[block.type]}</h3>
+  <div className="flex flex-col gap-3">
     {"text" in block ? (
       <Field>
         <FieldLabel htmlFor="email-block-text">Text</FieldLabel>
@@ -419,7 +425,7 @@ const ThemeProperties = ({
   design: EmailDesign;
   onChange: (design: EmailDesign) => void;
 }) => (
-  <div className="flex flex-col gap-4">
+  <div className="flex flex-col gap-3">
     <Field>
       <FieldLabel htmlFor="email-preheader">Preview text</FieldLabel>
       <Input
@@ -461,52 +467,65 @@ const ThemeProperties = ({
         </SelectContent>
       </Select>
     </Field>
-    <div className="grid grid-cols-2 gap-3">
-      {themeColors.map(({ key, label }) => (
+    <div className="flex flex-col gap-2">
+      <Text size="caption" tone="muted" weight="medium">
+        Colors
+      </Text>
+      <div className="grid grid-cols-2 gap-3">
+        {themeColors.map(({ key, label }) => (
+          <Field key={key}>
+            <FieldLabel htmlFor={`email-theme-${key}`}>{label}</FieldLabel>
+            <Input
+              id={`email-theme-${key}`}
+              aria-label={`${label} color`}
+              onChange={(event) => {
+                onChange({
+                  ...design,
+                  theme: { ...design.theme, [key]: event.target.value },
+                });
+              }}
+              type="color"
+              value={design.theme[key]}
+            />
+          </Field>
+        ))}
+      </div>
+    </div>
+    <div className="flex flex-col gap-2">
+      <Text size="caption" tone="muted" weight="medium">
+        Layout
+      </Text>
+      {(
+        [
+          { key: "width", label: "Width", max: 800, min: 480 },
+          { key: "padding", label: "Padding", max: 64, min: 0 },
+          { key: "borderRadius", label: "Corners", max: 32, min: 0 },
+        ] as const
+      ).map(({ key, label, min, max }) => (
         <Field key={key}>
-          <FieldLabel htmlFor={`email-theme-${key}`}>{label}</FieldLabel>
+          <FieldLabel htmlFor={`email-theme-${key}`}>{label}, px</FieldLabel>
           <Input
             id={`email-theme-${key}`}
-            aria-label={`${label} color`}
+            max={max}
+            min={min}
             onChange={(event) => {
               onChange({
                 ...design,
-                theme: { ...design.theme, [key]: event.target.value },
+                theme: {
+                  ...design.theme,
+                  [key]: Math.max(
+                    min,
+                    Math.min(max, Number(event.target.value))
+                  ),
+                },
               });
             }}
-            type="color"
+            type="number"
             value={design.theme[key]}
           />
         </Field>
       ))}
     </div>
-    {(
-      [
-        { key: "width", label: "Width", max: 800, min: 480 },
-        { key: "padding", label: "Padding", max: 64, min: 0 },
-        { key: "borderRadius", label: "Corners", max: 32, min: 0 },
-      ] as const
-    ).map(({ key, label, min, max }) => (
-      <Field key={key}>
-        <FieldLabel htmlFor={`email-theme-${key}`}>{label}, px</FieldLabel>
-        <Input
-          id={`email-theme-${key}`}
-          max={max}
-          min={min}
-          onChange={(event) => {
-            onChange({
-              ...design,
-              theme: {
-                ...design.theme,
-                [key]: Math.max(min, Math.min(max, Number(event.target.value))),
-              },
-            });
-          }}
-          type="number"
-          value={design.theme[key]}
-        />
-      </Field>
-    ))}
   </div>
 );
 
@@ -525,7 +544,7 @@ export const EmailContentEditor = ({
     future: [],
     importError: null,
     importKind: "design",
-    inspector: "block",
+    inspector: "theme",
     past: [],
     preview: false,
     selectedId: null,
@@ -549,6 +568,70 @@ export const EmailContentEditor = ({
   };
   const changeDesign = (next: EmailDesign) => {
     change({ design: next, kind: "visual" });
+  };
+  const selectedIndex =
+    design?.blocks.findIndex((block) => block.id === selected?.id) ?? -1;
+  const addBlock = (type: EmailBlock["type"]) => {
+    if (!design || design.blocks.length >= 100) {
+      return;
+    }
+    const block = newBlock(type);
+    const index =
+      selectedIndex === -1 ? design.blocks.length : selectedIndex + 1;
+    changeDesign({
+      ...design,
+      blocks: [
+        ...design.blocks.slice(0, index),
+        block,
+        ...design.blocks.slice(index),
+      ],
+    });
+    store.setState((current) => ({
+      ...current,
+      inspector: "block",
+      selectedId: block.id,
+    }));
+  };
+  const moveSelected = (direction: -1 | 1) => {
+    if (!design || !selected) {
+      return;
+    }
+    const index = design.blocks.findIndex((block) => block.id === selected.id);
+    const target = index + direction;
+    if (index === -1 || target < 0 || target >= design.blocks.length) {
+      return;
+    }
+    const blocks = [...design.blocks];
+    const adjacent = blocks[target];
+    blocks[index] = adjacent;
+    blocks[target] = selected;
+    changeDesign({ ...design, blocks });
+  };
+  const duplicateSelected = () => {
+    if (!design || !selected) {
+      return;
+    }
+    const index = design.blocks.findIndex((block) => block.id === selected.id);
+    const clone = { ...selected, id: crypto.randomUUID() };
+    changeDesign({
+      ...design,
+      blocks: [
+        ...design.blocks.slice(0, index + 1),
+        clone,
+        ...design.blocks.slice(index + 1),
+      ],
+    });
+    store.setState((current) => ({ ...current, selectedId: clone.id }));
+  };
+  const deleteSelected = () => {
+    if (!design || !selected) {
+      return;
+    }
+    changeDesign({
+      ...design,
+      blocks: design.blocks.filter((block) => block.id !== selected.id),
+    });
+    store.setState((current) => ({ ...current, selectedId: null }));
   };
   const importFile = async (file: File) => {
     try {
@@ -676,50 +759,10 @@ export const EmailContentEditor = ({
                 width={design.theme.width}
               >
                 <div className="flex flex-col gap-5 py-6">
-                  {design.blocks.map((block, index) => (
+                  {design.blocks.map((block) => (
                     <EmailCanvasBlock
-                      disabled={disabled}
-                      first={index === 0}
                       key={block.id}
                       label={blockNames[block.type].toLowerCase()}
-                      last={index === design.blocks.length - 1}
-                      onDelete={() => {
-                        changeDesign({
-                          ...design,
-                          blocks: design.blocks.filter(
-                            (item) => item.id !== block.id
-                          ),
-                        });
-                        store.setState((current) => ({
-                          ...current,
-                          selectedId: null,
-                        }));
-                      }}
-                      onDuplicate={() => {
-                        const clone = { ...block, id: crypto.randomUUID() };
-                        changeDesign({
-                          ...design,
-                          blocks: [
-                            ...design.blocks.slice(0, index + 1),
-                            clone,
-                            ...design.blocks.slice(index + 1),
-                          ],
-                        });
-                        store.setState((current) => ({
-                          ...current,
-                          selectedId: clone.id,
-                        }));
-                      }}
-                      onMove={(direction) => {
-                        const blocks = [...design.blocks];
-                        const target = index + direction;
-                        const adjacent = blocks[target];
-                        if (target >= 0 && target < blocks.length) {
-                          blocks[index] = adjacent;
-                          blocks[target] = block;
-                          changeDesign({ ...design, blocks });
-                        }
-                      }}
                       onSelect={() => {
                         store.setState((current) => ({
                           ...current,
@@ -795,33 +838,97 @@ export const EmailContentEditor = ({
         }
         inspector={
           design && !state.preview ? (
-            <fieldset className="flex flex-col gap-4" disabled={disabled}>
-              <Toolbar aria-label="Properties" size="compact">
-                <ToolbarButton
-                  aria-pressed={state.inspector === "block"}
-                  onClick={() => {
-                    store.setState((current) => ({
-                      ...current,
-                      inspector: "block",
-                    }));
-                  }}
-                  variant={state.inspector === "block" ? "selected" : "default"}
-                >
-                  Block
-                </ToolbarButton>
-                <ToolbarButton
-                  aria-pressed={state.inspector === "theme"}
-                  onClick={() => {
-                    store.setState((current) => ({
-                      ...current,
-                      inspector: "theme",
-                    }));
-                  }}
-                  variant={state.inspector === "theme" ? "selected" : "default"}
-                >
-                  Style
-                </ToolbarButton>
-              </Toolbar>
+            <fieldset className="flex flex-col gap-3" disabled={disabled}>
+              <div className="flex flex-col gap-2">
+                <Toolbar aria-label="Properties" size="compact">
+                  <ToolbarButton
+                    aria-pressed={state.inspector === "block"}
+                    onClick={() => {
+                      store.setState((current) => ({
+                        ...current,
+                        inspector: "block",
+                      }));
+                    }}
+                    variant={
+                      state.inspector === "block" ? "selected" : "default"
+                    }
+                  >
+                    Block
+                  </ToolbarButton>
+                  <ToolbarButton
+                    aria-pressed={state.inspector === "theme"}
+                    onClick={() => {
+                      store.setState((current) => ({
+                        ...current,
+                        inspector: "theme",
+                      }));
+                    }}
+                    variant={
+                      state.inspector === "theme" ? "selected" : "default"
+                    }
+                  >
+                    Style
+                  </ToolbarButton>
+                </Toolbar>
+                {selected ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <Text as="span" size="caption" tone="muted">
+                      {blockNames[selected.type]}
+                    </Text>
+                    <div className="flex items-center gap-0.5">
+                      {[
+                        {
+                          actionDisabled: selectedIndex <= 0,
+                          icon: ArrowUp01Icon,
+                          label: "Move block up",
+                          onClick: () => {
+                            moveSelected(-1);
+                          },
+                        },
+                        {
+                          actionDisabled:
+                            selectedIndex < 0 ||
+                            selectedIndex >= design.blocks.length - 1,
+                          icon: ArrowDown01Icon,
+                          label: "Move block down",
+                          onClick: () => {
+                            moveSelected(1);
+                          },
+                        },
+                        {
+                          actionDisabled: false,
+                          icon: Copy01Icon,
+                          label: "Duplicate block",
+                          onClick: duplicateSelected,
+                        },
+                        {
+                          actionDisabled: false,
+                          icon: Delete02Icon,
+                          label: "Delete block",
+                          onClick: deleteSelected,
+                        },
+                      ].map((action) => (
+                        <IconButtonTooltip
+                          key={action.label}
+                          label={action.label}
+                        >
+                          <Button
+                            aria-label={action.label}
+                            disabled={action.actionDisabled}
+                            onClick={() => {
+                              action.onClick();
+                            }}
+                            size="icon-sm"
+                            variant="ghost"
+                          >
+                            <HugeiconsIcon aria-hidden icon={action.icon} />
+                          </Button>
+                        </IconButtonTooltip>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               {state.inspector === "theme" ? (
                 <ThemeProperties design={design} onChange={changeDesign} />
               ) : selected ? (
@@ -846,190 +953,172 @@ export const EmailContentEditor = ({
         }
         palette={
           design && !state.preview ? (
-            <div className="flex flex-row flex-wrap gap-2 xl:flex-col">
-              <h2 className="w-full pb-1 text-caption font-medium text-muted-fg">
-                Add block
-              </h2>
-              {(
-                [
-                  "heading",
-                  "text",
-                  "image",
-                  "button",
-                  "divider",
-                  "spacer",
-                ] as const
-              ).map((type) => (
-                <Button
-                  disabled={disabled || design.blocks.length >= 100}
-                  key={type}
-                  onClick={() => {
-                    const block = newBlock(type);
-                    const selectedIndex = design.blocks.findIndex(
-                      (item) => item.id === state.selectedId
-                    );
-                    const index =
-                      selectedIndex === -1
-                        ? design.blocks.length
-                        : selectedIndex + 1;
-                    changeDesign({
-                      ...design,
-                      blocks: [
-                        ...design.blocks.slice(0, index),
-                        block,
-                        ...design.blocks.slice(index),
-                      ],
-                    });
-                    store.setState((current) => ({
-                      ...current,
-                      inspector: "block",
-                      selectedId: block.id,
-                    }));
-                  }}
-                  size="sm"
-                  variant="outline"
-                >
-                  {type === "image" ? (
-                    <HugeiconsIcon aria-hidden icon={Image01Icon} />
-                  ) : type === "heading" ? (
-                    <HugeiconsIcon aria-hidden icon={TextBoldIcon} />
-                  ) : null}
-                  {blockNames[type]}
-                </Button>
-              ))}
+            <div className="flex min-w-0 items-center gap-2 overflow-x-auto">
+              <Text
+                as="span"
+                className="shrink-0"
+                size="caption"
+                tone="muted"
+                weight="medium"
+              >
+                Add
+              </Text>
+              <Toolbar aria-label="Add block" size="compact">
+                {(
+                  [
+                    "heading",
+                    "text",
+                    "image",
+                    "button",
+                    "divider",
+                    "spacer",
+                  ] as const
+                ).map((type) => (
+                  <ToolbarButton
+                    disabled={disabled || design.blocks.length >= 100}
+                    key={type}
+                    onClick={() => {
+                      addBlock(type);
+                    }}
+                  >
+                    {blockNames[type]}
+                  </ToolbarButton>
+                ))}
+              </Toolbar>
             </div>
           ) : undefined
         }
         toolbar={
           <>
-            <div className="flex flex-wrap items-center gap-2">
-              <Toolbar aria-label="Content format" size="compact">
-                <ToolbarGroup>
-                  {(
-                    [
-                      { kind: "visual", label: "Design" },
-                      { kind: "text", label: "Text" },
-                      { kind: "html", label: "HTML" },
-                    ] as const
-                  ).map(({ kind, label }) => (
-                    <ToolbarButton
-                      aria-pressed={value.kind === kind}
-                      disabled={disabled}
-                      key={kind}
-                      onClick={() => {
-                        if (kind !== value.kind) {
-                          change(
-                            kind === "visual"
-                              ? { design: createEmailDesign(), kind }
-                              : kind === "text"
-                                ? { kind, text: rendered?.text ?? "" }
-                                : {
-                                    html: rendered?.html ?? "",
-                                    kind,
-                                    text: rendered?.text ?? "",
-                                  }
-                          );
-                          store.setState((current) => ({
-                            ...current,
-                            preview: false,
-                            selectedId: null,
-                          }));
-                        }
-                      }}
-                      variant={value.kind === kind ? "selected" : "default"}
-                    >
-                      {label}
-                    </ToolbarButton>
-                  ))}
-                </ToolbarGroup>
-              </Toolbar>
-              <div className="flex gap-0.5">
-                {[
-                  {
-                    icon: ArrowTurnBackwardIcon,
-                    label: "Undo",
-                    snapshots: state.past,
-                    undo: true,
-                  },
-                  {
-                    icon: ArrowTurnForwardIcon,
-                    label: "Redo",
-                    snapshots: state.future,
-                    undo: false,
-                  },
-                ].map(({ icon, label, snapshots, undo }) => (
-                  <IconButtonTooltip key={label} label={label}>
-                    <Button
-                      aria-label={label}
-                      disabled={disabled || snapshots.length === 0}
-                      onClick={() => {
-                        const next = snapshots.at(-1);
-                        if (next) {
-                          store.setState((current) => ({
-                            ...current,
-                            future: undo
-                              ? [...current.future, value]
-                              : current.future.slice(0, -1),
-                            past: undo
-                              ? current.past.slice(0, -1)
-                              : [...current.past, value],
-                          }));
-                          onChange(next);
-                        }
-                      }}
-                      size="icon-sm"
-                      variant="ghost"
-                    >
-                      <HugeiconsIcon aria-hidden icon={icon} />
-                    </Button>
-                  </IconButtonTooltip>
+            <Toolbar aria-label="Content format" size="compact">
+              <ToolbarGroup>
+                {(
+                  [
+                    { kind: "visual", label: "Design" },
+                    { kind: "text", label: "Text" },
+                    { kind: "html", label: "HTML" },
+                  ] as const
+                ).map(({ kind, label }) => (
+                  <ToolbarButton
+                    aria-pressed={value.kind === kind}
+                    disabled={disabled}
+                    key={kind}
+                    onClick={() => {
+                      if (kind !== value.kind) {
+                        change(
+                          kind === "visual"
+                            ? { design: createEmailDesign(), kind }
+                            : kind === "text"
+                              ? { kind, text: rendered?.text ?? "" }
+                              : {
+                                  html: rendered?.html ?? "",
+                                  kind,
+                                  text: rendered?.text ?? "",
+                                }
+                        );
+                        store.setState((current) => ({
+                          ...current,
+                          preview: false,
+                          selectedId: null,
+                        }));
+                      }
+                    }}
+                    variant={value.kind === kind ? "selected" : "default"}
+                  >
+                    {label}
+                  </ToolbarButton>
                 ))}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Toolbar aria-label="Preview size" size="compact">
+              </ToolbarGroup>
+            </Toolbar>
+            <Toolbar aria-label="History" size="compact">
+              {[
+                {
+                  icon: ArrowTurnBackwardIcon,
+                  label: "Undo",
+                  snapshots: state.past,
+                  undo: true,
+                },
+                {
+                  icon: ArrowTurnForwardIcon,
+                  label: "Redo",
+                  snapshots: state.future,
+                  undo: false,
+                },
+              ].map(({ icon, label, snapshots, undo }) => (
+                <IconButtonTooltip key={label} label={label}>
+                  <ToolbarButton
+                    aria-label={label}
+                    disabled={disabled || snapshots.length === 0}
+                    onClick={() => {
+                      const next = snapshots.at(-1);
+                      if (next) {
+                        store.setState((current) => ({
+                          ...current,
+                          future: undo
+                            ? [...current.future, value]
+                            : current.future.slice(0, -1),
+                          past: undo
+                            ? current.past.slice(0, -1)
+                            : [...current.past, value],
+                        }));
+                        onChange(next);
+                      }
+                    }}
+                    size="icon-sm"
+                  >
+                    <HugeiconsIcon aria-hidden icon={icon} />
+                  </ToolbarButton>
+                </IconButtonTooltip>
+              ))}
+            </Toolbar>
+            <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              <Toolbar aria-label="Preview" size="compact">
+                <ToolbarGroup>
+                  <ToolbarButton
+                    aria-pressed={state.device === "desktop"}
+                    onClick={() => {
+                      store.setState((current) => ({
+                        ...current,
+                        device: "desktop",
+                      }));
+                    }}
+                    variant={
+                      state.device === "desktop" ? "selected" : "default"
+                    }
+                  >
+                    Desktop
+                  </ToolbarButton>
+                  <ToolbarButton
+                    aria-pressed={state.device === "mobile"}
+                    onClick={() => {
+                      store.setState((current) => ({
+                        ...current,
+                        device: "mobile",
+                      }));
+                    }}
+                    variant={state.device === "mobile" ? "selected" : "default"}
+                  >
+                    Mobile
+                  </ToolbarButton>
+                </ToolbarGroup>
+                <ToolbarSeparator />
                 <ToolbarButton
-                  aria-pressed={state.device === "desktop"}
+                  aria-pressed={state.preview}
                   onClick={() => {
                     store.setState((current) => ({
                       ...current,
-                      device: "desktop",
+                      preview: !current.preview,
                     }));
                   }}
-                  variant={state.device === "desktop" ? "selected" : "default"}
+                  variant={state.preview ? "selected" : "default"}
                 >
-                  Desktop
-                </ToolbarButton>
-                <ToolbarButton
-                  aria-pressed={state.device === "mobile"}
-                  onClick={() => {
-                    store.setState((current) => ({
-                      ...current,
-                      device: "mobile",
-                    }));
-                  }}
-                  variant={state.device === "mobile" ? "selected" : "default"}
-                >
-                  Mobile
+                  {state.preview ? "Edit" : "Preview"}
                 </ToolbarButton>
               </Toolbar>
-              <Button
-                aria-pressed={state.preview}
-                onClick={() => {
-                  store.setState((current) => ({
-                    ...current,
-                    preview: !current.preview,
-                  }));
-                }}
-                size="sm"
-                variant="ghost"
-              >
-                {state.preview ? "Edit" : "Preview"}
-              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger
                   disabled={disabled}
-                  render={<Button size="sm" variant="outline" />}
+                  render={<Button size="sm" variant="ghost" />}
                 >
                   Import
                 </DropdownMenuTrigger>
@@ -1083,7 +1172,6 @@ export const EmailContentEditor = ({
                 <DropdownMenuTrigger
                   render={<Button size="sm" variant="ghost" />}
                 >
-                  <HugeiconsIcon aria-hidden icon={Download01Icon} />
                   Export
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">

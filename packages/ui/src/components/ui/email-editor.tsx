@@ -1,17 +1,8 @@
 "use client";
 
-import {
-  ArrowDown01Icon,
-  ArrowUp01Icon,
-  Copy01Icon,
-  Delete02Icon,
-} from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
-import { Button } from "./button";
-import { IconButtonTooltip } from "./icon-button-tooltip";
 
 export const EmailEditorLayout = ({
   canvas,
@@ -25,30 +16,26 @@ export const EmailEditorLayout = ({
   toolbar: ReactNode;
 }) => (
   <div className="flex min-h-160 flex-col overflow-hidden rounded-xl border border-border bg-bg-surface">
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5 border-b border-border px-2 py-1.5">
       {toolbar}
     </div>
+    {palette === undefined ? null : (
+      <div className="min-w-0 border-b border-border px-2 py-1.5">
+        {palette}
+      </div>
+    )}
     <div
       className={cn("grid min-h-0 flex-1", {
-        "xl:grid-cols-[9rem_minmax(0,1fr)_15rem]":
-          palette !== undefined && inspector !== undefined,
+        "lg:grid-cols-[minmax(0,1fr)_16rem]": inspector !== undefined,
       })}
     >
-      {palette !== undefined && (
-        <aside
-          aria-label="Email blocks"
-          className="border-b border-border p-3 xl:border-r xl:border-b-0"
-        >
-          {palette}
-        </aside>
-      )}
-      <div className="min-w-0 overflow-x-auto bg-muted/45 p-4 sm:p-7">
+      <div className="min-w-0 overflow-x-auto bg-muted/40 p-4 sm:p-6">
         {canvas}
       </div>
-      {inspector !== undefined && (
+      {inspector === undefined ? null : (
         <aside
           aria-label="Email properties"
-          className="border-t border-border p-4 xl:border-t-0 xl:border-l"
+          className="border-t border-border p-3 lg:border-t-0 lg:border-l"
         >
           {inspector}
         </aside>
@@ -69,7 +56,7 @@ export const EmailCanvas = ({
   width?: number;
 }) => (
   <div
-    className="mx-auto min-h-120 max-w-full shadow-sm transition-[width] duration-150 motion-reduce:transition-none"
+    className="mx-auto max-w-full shadow-sm transition-[width] duration-150 motion-reduce:transition-none"
     // oxlint-disable-next-line shadcn/no-inline-styles -- The email document controls its export width.
     style={{ width: device === "mobile" ? 360 : width, ...style }}
   >
@@ -79,28 +66,16 @@ export const EmailCanvas = ({
 
 export const EmailCanvasBlock = ({
   children,
-  disabled = false,
-  first,
   label,
-  last,
-  onDelete,
-  onDuplicate,
-  onMove,
   onSelect,
   selected,
 }: {
   children: ReactNode;
-  disabled?: boolean;
-  first: boolean;
   label: string;
-  last: boolean;
-  onDelete: () => void;
-  onDuplicate: () => void;
-  onMove: (direction: -1 | 1) => void;
   onSelect: () => void;
   selected: boolean;
 }) => (
-  <div className="group relative">
+  <div className="relative">
     <div className="pointer-events-none">{children}</div>
     <button
       aria-label={`Edit ${label} block`}
@@ -112,54 +87,6 @@ export const EmailCanvasBlock = ({
       onClick={onSelect}
       type="button"
     />
-    {selected && !disabled ? (
-      <div className="absolute -top-9 right-0 z-20 flex items-center gap-0.5 rounded-md border border-border bg-bg-surface p-0.5 shadow-sm">
-        {[
-          {
-            disabled: first,
-            icon: ArrowUp01Icon,
-            label: "Move block up",
-            onClick: () => {
-              onMove(-1);
-            },
-          },
-          {
-            disabled: last,
-            icon: ArrowDown01Icon,
-            label: "Move block down",
-            onClick: () => {
-              onMove(1);
-            },
-          },
-          {
-            disabled: false,
-            icon: Copy01Icon,
-            label: "Duplicate block",
-            onClick: onDuplicate,
-          },
-          {
-            disabled: false,
-            icon: Delete02Icon,
-            label: "Delete block",
-            onClick: onDelete,
-          },
-        ].map((action) => (
-          <IconButtonTooltip key={action.label} label={action.label}>
-            <Button
-              aria-label={action.label}
-              disabled={action.disabled}
-              onClick={() => {
-                action.onClick();
-              }}
-              size="icon-xs"
-              variant="ghost"
-            >
-              <HugeiconsIcon aria-hidden icon={action.icon} />
-            </Button>
-          </IconButtonTooltip>
-        ))}
-      </div>
-    ) : null}
   </div>
 );
 
