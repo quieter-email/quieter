@@ -40,7 +40,7 @@ import {
 // oxlint-disable-next-line node/no-process-env -- Electron's main entrypoint is the environment bootstrap.
 const env = createDesktopEnv(process.env);
 const clientEnv = createWebClientEnv(import.meta.env);
-app.setName("Quieter");
+app.setName("quieter");
 Sentry.init({
   beforeSend: (event, hint) =>
     prepareReportedEvent(event, hint.originalException),
@@ -58,7 +58,7 @@ let mainWindow: BrowserWindow | null = null;
 const credentials = createAuthStorage(() => {
   mainWindow?.webContents.send("better-auth:error", {
     message:
-      "Your sign-in could not be saved securely. Check the available disk space and reopen Quieter.",
+      "Your sign-in could not be saved securely. Check the available disk space and reopen quieter.",
     status: 500,
   });
 });
@@ -135,7 +135,7 @@ const assertTrustedSender = (event: IpcMainInvokeEvent): void => {
     event.senderFrame !== mainWindow.webContents.mainFrame ||
     !isTrustedRendererURL(event.senderFrame.url, developmentURL)
   ) {
-    throw new Error("This window cannot access Quieter.");
+    throw new Error("This window cannot access quieter.");
   }
 };
 
@@ -417,7 +417,7 @@ const createWindow = async (): Promise<void> => {
     minHeight: 620,
     minWidth: 900,
     show: false,
-    title: "Quieter",
+    title: "quieter",
     titleBarOverlay: {
       ...(process.platform === "darwin" ? {} : { color: "#00000000" }),
       height: DESKTOP_TITLE_BAR_HEIGHT,
@@ -557,8 +557,8 @@ const startApp = async (): Promise<void> => {
     Sentry.captureException(error, { tags: { boundary: "desktop-startup" } });
     await Sentry.flush(2000);
     dialog.showErrorBox(
-      "Quieter could not start",
-      "Secure sign-in or the app window could not be initialized. Check your system keychain and reopen Quieter."
+      "quieter could not start",
+      "Secure sign-in or the app window could not be initialized. Check your system keychain and reopen quieter."
     );
     app.quit();
   }
@@ -584,7 +584,7 @@ const flushCredentialsAndQuit = async (): Promise<void> => {
   } catch {
     dialog.showErrorBox(
       "Sign-in could not be saved",
-      "Quieter could not save your sign-in securely. You may need to sign in again next time."
+      "quieter could not save your sign-in securely. You may need to sign in again next time."
     );
   } finally {
     await Sentry.flush(2000);

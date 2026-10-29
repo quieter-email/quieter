@@ -1,7 +1,7 @@
 import type { RouterOutputs } from "@quieter/orpc";
 import type { PillTone } from "@quieter/ui/pill";
 
-/** Maps each delivery tone to Quieter's pill palette for status chips. */
+/** Maps each delivery tone to quieter's pill palette for status chips. */
 export const DELIVERY_PILL_TONES: Record<DeliveryStatusTone, PillTone> = {
   danger: "red",
   neutral: "gray",

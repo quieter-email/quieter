@@ -12,7 +12,7 @@ export const Route = createFileRoute("/_public/terms")({
       },
     ],
     meta: [
-      { title: "Terms of Service | Quieter" },
+      { title: "Terms of Service | quieter" },
       {
         content: "https://quieter.email/terms",
         property: "og:url",
@@ -24,17 +24,17 @@ export const Route = createFileRoute("/_public/terms")({
 function TermsPage() {
   return (
     <LegalDocumentPage
-      description="Terms governing your use of the Quieter email service."
+      description="Terms governing your use of the quieter email service."
       title="Terms of Service"
     >
       <p>
-        By creating a Quieter account, you agree to these Terms of Service and
+        By creating a quieter account, you agree to these Terms of Service and
         our Privacy Policy. If you do not agree, do not use the service.
       </p>
 
       <h2>The service</h2>
       <p>
-        Quieter provides email client functionality for Gmail and managed
+        quieter provides email client functionality for Gmail and managed
         mailboxes, including inbox management, compose, search, team features,
         and optional AI-assisted chat and Gmail labeling.
       </p>

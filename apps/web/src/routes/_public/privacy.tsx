@@ -12,7 +12,7 @@ export const Route = createFileRoute("/_public/privacy")({
       },
     ],
     meta: [
-      { title: "Privacy Policy | Quieter" },
+      { title: "Privacy Policy | quieter" },
       {
         content: "https://quieter.email/privacy",
         property: "og:url",
@@ -24,11 +24,11 @@ export const Route = createFileRoute("/_public/privacy")({
 function PrivacyPage() {
   return (
     <LegalDocumentPage
-      description="How Quieter collects, uses, and protects personal data."
+      description="How quieter collects, uses, and protects personal data."
       title="Privacy Policy"
     >
       <p>
-        Quieter is an email client. This policy describes how we process
+        quieter is an email client. This policy describes how we process
         personal data when you use the website, create an account, connect
         mailboxes, send or receive mail, use billing, or enable AI features.
       </p>
@@ -101,7 +101,7 @@ function PrivacyPage() {
         <li>Sentry for error and reliability monitoring in production.</li>
         <li>
           Hosting, database, mail delivery, and object storage providers used to
-          run Quieter.
+          run quieter.
         </li>
         <li>
           logo.dev for sender logo images where a sender domain logo is
@@ -111,7 +111,7 @@ function PrivacyPage() {
 
       <h2>Google API data</h2>
       <p>
-        Quieter connects to Google when you sign in with Google or connect a
+        quieter connects to Google when you sign in with Google or connect a
         Gmail mailbox. Through Google APIs we access the mailbox content needed
         for the features you use: messages, threads, attachments, labels,
         drafts, send and settings data, plus your basic Google profile and email
@@ -132,7 +132,7 @@ function PrivacyPage() {
         to the mailbox you connected and to members you explicitly grant access
         to, and we retain Google data only as described under retention. You can
         disconnect a mailbox at any time, which stops future access, and you can
-        revoke Google access for Quieter from your{" "}
+        revoke Google access for quieter from your{" "}
         <a
           className="underline hover:text-fg"
           href="https://myaccount.google.com/permissions"
@@ -151,7 +151,7 @@ function PrivacyPage() {
       </p>
       <p>
         The use and transfer to any other app of information received from
-        Google APIs by Quieter will adhere to the{" "}
+        Google APIs by quieter will adhere to the{" "}
         <a
           className="underline hover:text-fg"
           href="https://developers.google.com/terms/api-services-user-data-policy"
@@ -201,7 +201,7 @@ function PrivacyPage() {
 
       <h2>International transfers</h2>
       <p>
-        Quieter is operated from Germany, but some processors may store or
+        quieter is operated from Germany, but some processors may store or
         process data outside Germany or the European Union. Where required, we
         rely on appropriate safeguards offered by those processors.
       </p>

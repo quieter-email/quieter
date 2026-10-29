@@ -485,7 +485,7 @@ export const AuthScreen = () => {
       : undefined;
 
   return (
-    <AuthLayout title="Continue to Quieter">
+    <AuthLayout title="Continue to quieter">
       <AuthCredentials
         electronQuery={electronQuery}
         key={returnTo ?? ""}

@@ -132,7 +132,7 @@ export const startDomainConnect = async (input: {
   if (!discovery.available) {
     throw new ORPCError("BAD_REQUEST", {
       message:
-        "This DNS provider does not support Quieter one-click setup yet.",
+        "This DNS provider does not support quieter one-click setup yet.",
     });
   }
 

@@ -6,7 +6,7 @@ The pstack skills under `.agents/skills/` are from [Lauren Tan's pstack](https:/
 
 ## Fluid Functionalism
 
-Parts of Quieter's measured interaction-surface targeting and animation logic are adapted from [Fluid Functionalism](https://github.com/mickadesign/fluid-functionalism) at commit `08c5f951f072fcccd26316321b83bcf2cdc0bbc0`.
+Parts of quieter's measured interaction-surface targeting and animation logic are adapted from [Fluid Functionalism](https://github.com/mickadesign/fluid-functionalism) at commit `08c5f951f072fcccd26316321b83bcf2cdc0bbc0`.
 
 MIT License
 

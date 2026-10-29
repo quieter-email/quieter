@@ -5,7 +5,7 @@ export const Route = createFileRoute("/_app/design-system")({
   component: DesignSystemShowcase,
   head: () => ({
     meta: [
-      { title: "Design system | Quieter" },
+      { title: "Design system | quieter" },
       { content: "noindex, nofollow", name: "robots" },
     ],
   }),

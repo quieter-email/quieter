@@ -99,7 +99,7 @@ export const PreferencesSettingsPanel = () => {
             }
             title="Color mode"
           >
-            Choose how Quieter looks on this device.
+            Choose how quieter looks on this device.
           </SettingsRow>
           <SettingsRow action={<ThemePicker />} title="Theme">
             Choose a look for your workspace. Your light and dark choices are
@@ -186,7 +186,7 @@ export const PreferencesSettingsPanel = () => {
               action={<ConsentPreferencesLink variant="button" />}
               title="Cookie and analytics preferences"
             >
-              Choose which optional cookies and measurement tools Quieter may
+              Choose which optional cookies and measurement tools quieter may
               use in this browser.
             </SettingsRow>
           )}

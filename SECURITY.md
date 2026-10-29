@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Quieter is deep-alpha software and has no supported production release. Security reports should target the current `main` branch.
+quieter is deep-alpha software and has no supported production release. Security reports should target the current `main` branch.
 
 ## Reporting a Vulnerability
 

@@ -1,6 +1,6 @@
 # Infrastructure Map
 
-Complete map of Quieter's infrastructure as defined by `sst.config.ts` and `infra/`. It reflects the Cloudflare background-job architecture and direct Gmail notification processing.
+Complete map of quieter's infrastructure as defined by `sst.config.ts` and `infra/`. It reflects the Cloudflare background-job architecture and direct Gmail notification processing.
 
 Two providers, one rule: **Cloudflare runs the application and background jobs; AWS runs managed-email transport (SES) plus the temporary receipt bucket. PostgreSQL is the single source of truth.**
 

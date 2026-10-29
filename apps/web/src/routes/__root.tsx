@@ -35,9 +35,9 @@ const organizationJsonLd = {
     },
   ],
   description:
-    "Quieter is an email client that combines your Gmail, shared team mailboxes on your own domain, and transactional sending over an API, with optional AI drafts.",
+    "quieter is an email client that combines your Gmail, shared team mailboxes on your own domain, and transactional sending over an API, with optional AI drafts.",
   logo: "https://quieter.email/icon.svg",
-  name: "Quieter",
+  name: "quieter",
   sameAs: ["https://x.com/leanderriefel", "https://github.com/leanderriefel"],
   url: "https://quieter.email/",
 };
@@ -112,7 +112,7 @@ export const Route = createRootRoute({
         property: "og:title",
       },
       {
-        content: "Quieter",
+        content: "quieter",
         property: "og:site_name",
       },
       {
@@ -126,7 +126,7 @@ export const Route = createRootRoute({
       { content: "1200", property: "og:image:width" },
       { content: "630", property: "og:image:height" },
       {
-        content: "Quieter. Email, without the noise.",
+        content: "quieter. Email, without the noise.",
         property: "og:image:alt",
       },
       {
@@ -146,7 +146,7 @@ export const Route = createRootRoute({
         name: "twitter:image",
       },
       {
-        content: "Quieter. Email, without the noise.",
+        content: "quieter. Email, without the noise.",
         name: "twitter:image:alt",
       },
     ],

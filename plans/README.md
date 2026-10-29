@@ -91,7 +91,7 @@ composition are strengths. Changes there are corrections, not reinterpretations.
 
 ### Design principles
 
-Quieter's product surfaces follow one rule: **quiet structure** — enough hierarchy to make the
+quieter's product surfaces follow one rule: **quiet structure** — enough hierarchy to make the
 product effortless, never enough chrome to make it loud.
 
 - One clear focal point per screen.

@@ -59,7 +59,7 @@ export const MailboxRemovalSettings = ({
           >
             {isManaged
               ? "Delete this mailbox and its saved mail for everyone with access."
-              : "Remove this account's mail and calendar access from Quieter."}
+              : "Remove this account's mail and calendar access from quieter."}
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>
@@ -97,7 +97,7 @@ export const MailboxRemovalSettings = ({
               </>
             ) : (
               <p className="text-body text-muted-fg">
-                Quieter will remove its saved credentials, mailbox data, and
+                quieter will remove its saved credentials, mailbox data, and
                 calendar access. Your Google account, messages in Gmail, and
                 events in Google Calendar stay unchanged.
               </p>

@@ -8,7 +8,7 @@ export const consentEnglishI18n = {
       ...defaultTranslationConfig.translations.en,
       consentManagerDialog: {
         description:
-          "Choose which optional cookies and measurement tools Quieter may use.",
+          "Choose which optional cookies and measurement tools quieter may use.",
         title: "Privacy Settings",
       },
       consentTypes: {
@@ -21,7 +21,7 @@ export const consentEnglishI18n = {
       },
       cookieBanner: {
         description:
-          "Quieter uses essential cookies to run the app. With your permission, we also use measurement tools to understand usage and performance.",
+          "quieter uses essential cookies to run the app. With your permission, we also use measurement tools to understand usage and performance.",
         title: "We value your privacy",
       },
     },

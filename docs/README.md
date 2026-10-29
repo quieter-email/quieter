@@ -1,4 +1,4 @@
-# Quieter Documentation
+# quieter Documentation
 
 - [Development](development.md)
 - [Electron desktop](desktop.md)

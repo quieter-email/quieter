@@ -38,7 +38,7 @@ export const GmailMailboxNameSettings = ({
 
   return (
     <SettingsSection
-      description="Choose how this mailbox appears in Quieter. Its Gmail address remains visible beneath the name."
+      description="Choose how this mailbox appears in quieter. Its Gmail address remains visible beneath the name."
       title="Mailbox name"
     >
       <SettingsCard>

@@ -1,6 +1,6 @@
 # AI memory
 
-Quieter stores categorized plain-text facts about each user. The system learns from mail content, authored writing, conversations and meaningful actions. It consolidates new evidence into existing concepts. It does not use embeddings or an external vector index.
+quieter stores categorized plain-text facts about each user. The system learns from mail content, authored writing, conversations and meaningful actions. It consolidates new evidence into existing concepts. It does not use embeddings or an external vector index.
 
 ## Ownership and authority
 

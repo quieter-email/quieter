@@ -50,7 +50,7 @@ Queues have native local producers and consumers. They support testing message f
 
 Durable Objects run locally with persistent state. Test authenticated WebSocket upgrades, broadcasts, reconnects, and per-mailbox isolation locally. Validate hibernation, rollout behavior, and geographically distributed operation in the deployed stage. Scheduled handlers can be invoked with Cloudflare's scheduled-event testing facility rather than waiting for real time. See [local bindings](https://developers.cloudflare.com/workers/local-development/bindings-per-env/) and [Cron Triggers](https://developers.cloudflare.com/workers/configuration/cron-triggers/).
 
-Local Hyperdrive uses a local connection string to connect directly to PostgreSQL. It does not reproduce cloud pooling and query caching. Quieter disables Hyperdrive caching in infrastructure, but connection lifecycle and pooling still need a deployed check. See [Hyperdrive local development](https://developers.cloudflare.com/hyperdrive/configuration/local-development/).
+Local Hyperdrive uses a local connection string to connect directly to PostgreSQL. It does not reproduce cloud pooling and query caching. quieter disables Hyperdrive caching in infrastructure, but connection lifecycle and pooling still need a deployed check. See [Hyperdrive local development](https://developers.cloudflare.com/hyperdrive/configuration/local-development/).
 
 Local Explorer is already installed and working. It exposes local resource inspection and observability, including traces and events. It can inspect SQLite Durable Objects and R2 objects once bindings exist. It is not a PostgreSQL browser. Use its existing UI and supported API for debugging. See [Local Explorer](https://developers.cloudflare.com/workers/local-development/local-explorer/).
 
@@ -58,13 +58,13 @@ The Vite plugin also has built-in tunnel support, including named tunnels. A sta
 
 ### Cloudflare R2 and Workers AI
 
-R2 has native local simulation through Worker bindings, plus optional remote bindings to a real bucket. However, Quieter reads and writes raw mail using the S3 HTTP API. Those requests do not become local merely because a local R2 binding exists. See [R2 Worker API development](https://developers.cloudflare.com/r2/get-started/workers-api/).
+R2 has native local simulation through Worker bindings, plus optional remote bindings to a real bucket. However, quieter reads and writes raw mail using the S3 HTTP API. Those requests do not become local merely because a local R2 binding exists. See [R2 Worker API development](https://developers.cloudflare.com/r2/get-started/workers-api/).
 
 The local raw-message adapter now uses native R2 bindings, with shared persistence under `.wrangler/state`. `vp run dev:fixtures <local-login-email>` creates a private mailbox and MIME attachment fixture in the app. Both Worker configs disable remote R2 bindings, and the local adapter rejects remote object references. Do not create a remote development bucket for this setup. Public `r2.dev` access is unsuitable for private mail.
 
 The fixture exposed a managed-mail attachment gap. Thread responses now include attachment metadata, and downloads authorize the selected mailbox and resolve the original MIME part server-side. A nullable `partIndex` column identifies attachments with duplicate filenames on new inbound messages. Apply its additive migration before deploying the reader; it has only been applied to `quieter_dev` here. Existing attachments use an exact metadata match and refuse ambiguous matches. New managed drafts and sends now retain their MIME objects and attachment positions. Historical messages whose original bytes were never retained still cannot supply those bytes. The additive send-storage migration must precede deployment; it has only been verified on a disposable loopback database. See [outbound recovery](outbound-mail-feedback.md).
 
-Workers AI executes models remotely even during local development. Quieter calls its REST API for the 1024-dimensional `@cf/qwen/qwen3-embedding-0.6b` model and stores embeddings in PostgreSQL. Local binding configuration alone will not intercept those REST calls. Supply a restricted development AI token for real embedding checks and deterministic embedding fixtures for offline tests. Vectorize is not required by the current implementation. See [Cloudflare local development](https://developers.cloudflare.com/workers/local-development/).
+Workers AI executes models remotely even during local development. quieter calls its REST API for the 1024-dimensional `@cf/qwen/qwen3-embedding-0.6b` model and stores embeddings in PostgreSQL. Local binding configuration alone will not intercept those REST calls. Supply a restricted development AI token for real embedding checks and deterministic embedding fixtures for offline tests. Vectorize is not required by the current implementation. See [Cloudflare local development](https://developers.cloudflare.com/workers/local-development/).
 
 ### PlanetScale, PostgreSQL, pgvector, and Drizzle
 
@@ -84,13 +84,13 @@ LocalStack is a third-party alternative for offline AWS API emulation, including
 
 ### Polar
 
-Polar provides a separate sandbox with sandbox credentials, products, customers, subscriptions, checkout, and webhooks. Payments are simulated. Quieter already has the sandbox and products. Local credentials and product IDs are configured; native CLI webhook delivery has been verified. Use the provider's tools to inspect and replay deliveries. See [Polar sandbox](https://polar.sh/docs/integrate/sandbox).
+Polar provides a separate sandbox with sandbox credentials, products, customers, subscriptions, checkout, and webhooks. Payments are simulated. quieter already has the sandbox and products. Local credentials and product IDs are configured; native CLI webhook delivery has been verified. Use the provider's tools to inspect and replay deliveries. See [Polar sandbox](https://polar.sh/docs/integrate/sandbox).
 
 Polar documents a local webhook forwarding CLI. Its documented installation targets macOS/Linux/WSL. On this machine use that supported path, or the Cloudflare development tunnel with the sandbox webhook endpoint. Confirm the CLI session is connected to the sandbox before forwarding. The application endpoint is `/api/auth/polar/webhooks`. See [local webhook forwarding](https://polar.sh/docs/integrate/webhooks/locally).
 
 The sandbox's existing endpoints point to an older Vercel staging address and a production-domain legacy billing route. Neither is a verified current local webhook. The sandbox UI also restricts customer emails to organization members and their sub-address aliases.
 
-Polar changes signing for newly generated secrets on September 8, 2026. Current Quieter code already verifies both Standard Webhooks and the legacy Polar scheme, with tests for both. This is a compatibility requirement already addressed in code, not a newly discovered signature bug. Test actual sandbox delivery as part of setup. See [delivery and signature documentation](https://polar.sh/docs/integrate/webhooks/delivery).
+Polar changes signing for newly generated secrets on September 8, 2026. Current quieter code already verifies both Standard Webhooks and the legacy Polar scheme, with tests for both. This is a compatibility requirement already addressed in code, not a newly discovered signature bug. Test actual sandbox delivery as part of setup. See [delivery and signature documentation](https://polar.sh/docs/integrate/webhooks/delivery).
 
 Disable `QUIETER_LOCAL_BILLING_BYPASS` during billing acceptance tests. Checkout, cancellation, renewal, plan changes, credits, usage reconciliation, failures, and duplicate/out-of-order webhook deliveries must affect real development entitlements.
 
@@ -102,19 +102,19 @@ Gmail's official integration path uses real test mailboxes. I found no official 
 
 Google Pub/Sub does have an official local emulator. It supports local message testing and HTTP push, but does not implement IAM or turn Gmail into a local service. It cannot prove Google's real OIDC push authentication. Use it only where its API behavior adds coverage; use signed fixtures for the ingress verifier and a real development subscription for end-to-end delivery. See [Pub/Sub emulator](https://docs.cloud.google.com/pubsub/docs/emulator?hl=en).
 
-Calendar's official local quickstart connects local code to real Google Calendar. I found no complete official local Calendar emulator. Quieter supports multiple accounts and subscribed calendars. Local writes require write mode, an allowed connected account, and owner or writer access. Every non-primary calendar also requires its calendar ID in the allowlist, including calendars where the account has manager access. Use dedicated test resources for provider writes. See [Calendar setup, cache, and limits](calendar.md) and the [Calendar quickstart](https://developers.google.com/workspace/calendar/api/quickstart/nodejs).
+Calendar's official local quickstart connects local code to real Google Calendar. I found no complete official local Calendar emulator. quieter supports multiple accounts and subscribed calendars. Local writes require write mode, an allowed connected account, and owner or writer access. Every non-primary calendar also requires its calendar ID in the allowlist, including calendars where the account has manager access. Use dedicated test resources for provider writes. See [Calendar setup, cache, and limits](calendar.md) and the [Calendar quickstart](https://developers.google.com/workspace/calendar/api/quickstart/nodejs).
 
 The Calendar workspace has sample events in preview persona mode. Preview edits do not write to Google or call AI models. Real Calendar OAuth consent and provider writes remain unverified for the October 23, 2026 workspace change.
 
 ### Linear
 
-Linear supports OAuth with localhost redirects and provides its real API/MCP server. I found no complete official local service emulator or Polar-style payment sandbox. Use a dedicated test workspace and OAuth app, with transport fixtures for deterministic tests. Quieter's local Linear client ID and secret currently match production. Separate these before automated issue creation/update tests. Exercise refresh, revocation, permission changes, and rotating refresh-token persistence. See [Linear OAuth](https://linear.app/developers/oauth-2-0-authentication).
+Linear supports OAuth with localhost redirects and provides its real API/MCP server. I found no complete official local service emulator or Polar-style payment sandbox. Use a dedicated test workspace and OAuth app, with transport fixtures for deterministic tests. quieter's local Linear client ID and secret currently match production. Separate these before automated issue creation/update tests. Exercise refresh, revocation, permission changes, and rotating refresh-token persistence. See [Linear OAuth](https://linear.app/developers/oauth-2-0-authentication).
 
 ### OpenRouter and the AI SDK
 
 OpenRouter is a hosted API. Use a development key with a spending limit for real model behavior. The existing local key is different from production and had approximately $0.998 remaining under a $1 limit when inspected. That is enough for a small probe, not an unrestricted regression suite. No budget was changed. See [OpenRouter key management](https://openrouter.ai/docs/guides/overview/auth/management-api-keys).
 
-The installed AI SDK already exports `MockLanguageModelV4`, embedding/transcription mocks, and stream simulation helpers. Use these native library tools for reproducible tool calls, streaming, cancellation, malformed output, provider errors, and credit calculations. Quieter has a custom OpenRouter transcription HTTP path, so test its request/response adapter too. A separate OpenAI key is not required by the current provider path. See the installed `ai/test` exports and [AI SDK testing](https://ai-sdk.dev/docs/ai-sdk-core/testing).
+The installed AI SDK already exports `MockLanguageModelV4`, embedding/transcription mocks, and stream simulation helpers. Use these native library tools for reproducible tool calls, streaming, cancellation, malformed output, provider errors, and credit calculations. quieter has a custom OpenRouter transcription HTTP path, so test its request/response adapter too. A separate OpenAI key is not required by the current provider path. See the installed `ai/test` exports and [AI SDK testing](https://ai-sdk.dev/docs/ai-sdk-core/testing).
 
 ### Better Auth
 
@@ -122,11 +122,11 @@ Better Auth runs in the application and has no separate hosted auth environment 
 
 ### Sentry, PostHog, c15t, logo.dev, and Domain Connect
 
-Sentry can receive events from local code in a separate development project/environment; official self-hosting also exists. Quieter explicitly disables key Sentry initialization paths during development, so adding a DSN will not be enough. The implementation now supplies explicit development-reporting opt-in; it remains off by default. Validate uploaded source maps with a production build in non-production. A whole local Sentry deployment is optional. See [Sentry self-hosting](https://github.com/getsentry/self-hosted).
+Sentry can receive events from local code in a separate development project/environment; official self-hosting also exists. quieter explicitly disables key Sentry initialization paths during development, so adding a DSN will not be enough. The implementation now supplies explicit development-reporting opt-in; it remains off by default. Validate uploaded source maps with a production build in non-production. A whole local Sentry deployment is optional. See [Sentry self-hosting](https://github.com/getsentry/self-hosted).
 
 PostHog's browser SDK supports local debugging and capture controls. Use a separate development project for real ingestion and network assertions for consent/privacy tests. A full local analytics backend is unnecessary to debug this application. See [PostHog configuration](https://posthog.com/docs/libraries/js/config).
 
-c15t already runs in offline mode in Quieter. Its official offline mode stores consent locally, so no additional consent service is needed. Test acceptance, rejection, revocation, persistence, and absence of analytics calls before measurement consent. See [c15t React setup](https://c15t.com/docs/frameworks/react/quickstart).
+c15t already runs in offline mode in quieter. Its official offline mode stores consent locally, so no additional consent service is needed. Test acceptance, rejection, revocation, persistence, and absence of analytics calls before measurement consent. See [c15t React setup](https://c15t.com/docs/frameworks/react/quickstart).
 
 logo.dev remains an external image API. The local publishable key exists. Use stable image fixtures and fallback tests for deterministic UI work; verify actual lookup with the development configuration. Its attribution rules distinguish local/staging environments, but that does not imply unlimited usage. See [logo.dev attribution](https://www.logo.dev/docs/platform/attribution).
 

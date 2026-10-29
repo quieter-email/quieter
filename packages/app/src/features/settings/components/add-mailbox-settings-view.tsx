@@ -217,7 +217,7 @@ export const AddMailboxSettingsView = ({
                   mailboxType: "shared",
                 }));
               }}
-              title="Quieter managed mailbox"
+              title="quieter managed mailbox"
             />
           </SettingsRows>
         ) : null}
