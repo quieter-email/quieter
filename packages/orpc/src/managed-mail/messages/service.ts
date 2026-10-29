@@ -624,8 +624,7 @@ const updateManagedMessageState = async (input: {
 }) => {
   await getAuthorizedManagedMailbox({
     mailboxId: input.mailboxId,
-    requiredRoles:
-      "mailboxState" in input.changes ? ["manager", "responder"] : undefined,
+    requiredRoles: ["manager", "responder"],
     userId: input.userId,
   });
   const { record, customLabels } = await db.transaction(async (tx) => {
@@ -848,8 +847,7 @@ const updateManagedThreadState = async (input: {
 }) => {
   await getAuthorizedManagedMailbox({
     mailboxId: input.mailboxId,
-    requiredRoles:
-      "mailboxState" in input.changes ? ["manager", "responder"] : undefined,
+    requiredRoles: ["manager", "responder"],
     userId: input.userId,
   });
   const stateCondition =
