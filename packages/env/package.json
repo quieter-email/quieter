@@ -4,6 +4,11 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./hosts": {
+      "types": "./src/hosts.ts",
+      "development": "./src/hosts.ts",
+      "default": "./dist/hosts.js"
+    },
     "./deployment": {
       "types": "./src/deployment.ts",
       "development": "./src/deployment.ts",

@@ -9,6 +9,7 @@ export default defineConfig({
     entry: [
       "src/client.ts",
       "src/deployment.ts",
+      "src/hosts.ts",
       "src/desktop.ts",
       "src/local-doctor.ts",
       "src/public.ts",
