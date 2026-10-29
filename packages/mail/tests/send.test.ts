@@ -5,6 +5,51 @@ import { sendMessageInputSchema } from "../src/send";
 import { buildSendMimeMessage } from "../src/send-mime";
 
 describe("send message input schema", () => {
+  test.each([
+    "victim@victim.example ( <sender@attacker.example>",
+    "Victim (comment) <sender@example.com>",
+    "Team: sender@example.com;",
+    "one@example.com, Two <two@example.com>",
+    "Name <sender@example.com> trailing",
+    '"Unclosed <sender@example.com>',
+    "Name\r\n <sender@example.com>",
+  ])("rejects ambiguous sender syntax %s", async (from) => {
+    const message = {
+      attachments: [],
+      from,
+      subject: "Hello",
+      tags: [],
+      text: "Hello",
+      to: ["to@example.com"],
+    };
+    expect(sendMessageInputSchema.safeParse(message).success).toBeFalsy();
+    await expect(buildSendMimeMessage(message)).rejects.toThrow(/sender/iu);
+  });
+
+  test.each([
+    "sender@example.com",
+    "Demo Team <Sender@Example.com>",
+    '"Doe, Jane (team): sales;" <sender@example.com>',
+    '"Jane \\"JJ\\" Doe" <sender@example.com>',
+    "日本語 <sender@example.com>",
+  ])(
+    "keeps serialized sender equal to the canonical identity %s",
+    async (from) => {
+      const message = sendMessageInputSchema.parse({
+        from,
+        subject: "Hello",
+        text: "Hello",
+        to: "to@example.com",
+      });
+      const built = await buildSendMimeMessage(message);
+      const parsed = await PostalMime.parse(built.raw);
+      expect(parsed.from).toMatchObject({ address: built.fromAddress });
+      expect(parsed.headers.filter(({ key }) => key === "from")).toHaveLength(
+        1
+      );
+    }
+  );
+
   test("accepts display-name senders and string recipients", () => {
     const result = sendMessageInputSchema.safeParse({
       from: "Demo <demo@example.com>",
