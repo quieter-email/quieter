@@ -7,7 +7,6 @@ import { broadcastGmailUpdate } from "./mail-updates";
 import realtimeWorker from "./worker";
 import {
   parseGmailNotification,
-  broadcastMailboxEvent,
   readBoundedJson,
   requestErrorResponse,
   signaturesMatch,
@@ -27,7 +26,7 @@ export default {
       return new Response(null, { status: 404 });
     }
     const url = new URL(request.url);
-    if (url.pathname === "/gmail/live" || url.pathname.startsWith("/mail/")) {
+    if (url.pathname.startsWith("/mail/")) {
       return await realtimeWorker.fetch(request, env);
     }
     const token = serverEnv.QUIETER_LOCAL_WORKER_TOKEN;
@@ -99,18 +98,11 @@ export default {
             })
         );
         if (!result.ignored) {
-          await Promise.allSettled([
-            broadcastMailboxEvent(
-              env,
-              notification.emailAddress,
-              "mailbox-dirty"
-            ),
-            broadcastGmailUpdate(
-              env,
-              notification.emailAddress,
-              "mailbox.changed"
-            ),
-          ]);
+          await broadcastGmailUpdate(
+            env,
+            notification.emailAddress,
+            "mailbox.changed"
+          );
         }
         if (
           !result.ignored &&
