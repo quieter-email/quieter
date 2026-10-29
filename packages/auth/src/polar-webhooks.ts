@@ -7,6 +7,9 @@ import { reportError } from "@quieter/observability";
 import { Webhook } from "standardwebhooks";
 import { z } from "zod";
 
+// Local safety policy, not a provider payload-size guarantee.
+const MAX_WEBHOOK_BODY_BYTES = 1024 * 1024;
+
 const subscriptionEvents = new Set([
   "subscription.active",
   "subscription.canceled",
@@ -35,7 +38,43 @@ export const handlePolarWebhookRequest = async (request: Request) => {
     });
   }
 
-  const body = await request.text();
+  const declaredLength = request.headers.get("content-length");
+  if (
+    declaredLength !== null &&
+    /^\d+$/u.test(declaredLength) &&
+    Number(declaredLength) > MAX_WEBHOOK_BODY_BYTES
+  ) {
+    return new Response("Request body too large", { status: 413 });
+  }
+
+  let body = "";
+  if (request.body !== null) {
+    const reader = request.body.getReader();
+    const decoder = new TextDecoder();
+    let totalBytes = 0;
+    try {
+      while (true) {
+        // Read serially so no further bytes are retained after overflow.
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        totalBytes += value.byteLength;
+        if (totalBytes > MAX_WEBHOOK_BODY_BYTES) {
+          try {
+            await reader.cancel();
+          } catch {
+            // A transport cancellation failure must not replace the rejection.
+          }
+          return new Response("Request body too large", { status: 413 });
+        }
+        body += decoder.decode(value, { stream: true });
+      }
+      body += decoder.decode();
+    } finally {
+      reader.releaseLock();
+    }
+  }
   const headers = Object.fromEntries(request.headers);
   let payload: unknown;
   try {
