@@ -292,6 +292,11 @@ export const auth = lazyAuth(() =>
     trustedOrigins,
     user: {
       additionalFields: {
+        defaultOrganizationProvisioned: {
+          input: false,
+          required: false,
+          type: "boolean",
+        },
         onboardingCompletedAt: {
           input: false,
           required: false,
