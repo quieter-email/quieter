@@ -129,7 +129,7 @@ export const createWeb = (
     ),
     QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
     QUIETER_GMAIL_AI_AUTOMATION_ENABLED: String(production),
-    QUIETER_MAIL_API_URL: `${appOrigin}/api/v1/send`,
+    QUIETER_MAIL_API_URL: `${appOrigin}/api/send`,
     QUIETER_PREVIEW_PERSONAS_ENABLED: getEnvironmentValue(
       "QUIETER_PREVIEW_PERSONAS_ENABLED",
       "false"

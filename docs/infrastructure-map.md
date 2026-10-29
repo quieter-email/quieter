@@ -15,7 +15,7 @@ flowchart TB
     subgraph CF["Cloudflare"]
         direction TB
         subgraph EDGE["Edge / HTTP"]
-            WEB["Web Worker<br/>sst: TanStack Start<br/>quieter.email + www<br/>SSR, oRPC, /api/chat,<br/>/api/v1/send, auth, Polar webhooks"]
+            WEB["Web Worker<br/>sst: TanStack Start<br/>quieter.email + www<br/>SSR, oRPC, /api/chat,<br/>/api/send, auth, Polar webhooks"]
             GWORKER["GmailRealtimeWorker<br/>/gmail/pubsub (POST)<br/>/gmail/live (WebSocket)"]
         end
 
@@ -235,7 +235,7 @@ sequenceDiagram
     participant L as Feedback Lambda
     participant DLQ as SQS DLQ
 
-    B->>W: compose send / POST /api/v1/send (org API key)
+    B->>W: compose send / POST /api/send (org API key, Quieter-Version)
     W->>DB: suppression check (bounced/complained)
     W->>SES: SendEmail with config set quieter-production-outbound
     SES-->>SN: SEND / DELIVERY / DELIVERY_DELAY / BOUNCE / COMPLAINT / REJECT

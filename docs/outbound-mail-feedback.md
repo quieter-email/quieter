@@ -48,7 +48,7 @@ Marker loads are verified by signature, resolved back to the outbound message, a
 - Opens are approximate. Privacy proxies pre-fetch images, caches can serve or swallow markers, some clients block images entirely, and automatic tools can trigger loads. An open never proves a person read a message.
 - Disabling tracking stops markers on future sends and leaves historical reporting untouched.
 
-The public API exposes recipient delivery history at `GET /api/v1/messages/{messageId}` and active suppressions at `GET /api/v1/suppressions`. The TypeScript SDK wraps these as `getMessage` and `listSuppressions`.
+The public API exposes recipient delivery history at `GET /api/messages/{messageId}` and active suppressions at `GET /api/suppressions`. Both require `Quieter-Version: 2026-10`. The TypeScript SDK wraps these as `getMessage` and `listSuppressions`. Open tracking loads `GET /api/o/{token}` without that header.
 
 ## Reporting and verification
 

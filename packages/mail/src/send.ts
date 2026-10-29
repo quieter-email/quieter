@@ -10,7 +10,7 @@ import {
 export { sendMessageResultSchema } from "./delivery";
 export type { SendMessageResult } from "./delivery";
 
-export const SEND_API_PATH = "/api/v1/send";
+export { SEND_API_PATH } from "./public-api";
 
 export const MAX_SEND_PAYLOAD_BYTES = 25 * 1024 * 1024;
 

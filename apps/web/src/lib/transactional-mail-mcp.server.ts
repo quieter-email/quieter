@@ -8,6 +8,13 @@ import type {
   McpRequestContext,
 } from "@modelcontextprotocol/server";
 import {
+  API_VERSION_HEADER,
+  MESSAGES_API_PATH,
+  rejectApiCompatibility,
+  SEND_API_PATH,
+  stampApiCompatibility,
+} from "@quieter/mail/public-api";
+import {
   MAX_SEND_PAYLOAD_BYTES,
   sendMessageInputSchema,
 } from "@quieter/mail/send";
@@ -23,7 +30,7 @@ const serverInfo = {
   version: "1.0.0",
 };
 
-const serverInstructions = `Send transactional email through Quieter. The send_email tool sends from a domain the team has verified. Recipients on the team suppression list are rejected. This server cannot read mailboxes, mail content, team settings, or delivery status: use the Quieter REST API at GET /api/v1/messages/{messageId} for delivery receipts.`;
+const serverInstructions = `Send transactional email through quieter. The send_email tool sends from a domain the team has verified. Recipients on the team suppression list are rejected. This server cannot read mailboxes, mail content, team settings, or delivery status. Use the quieter REST API at GET ${MESSAGES_API_PATH}/{messageId} for delivery receipts.`;
 
 const addressListSchema = z
   .union([z.string(), z.array(z.string())])
@@ -111,7 +118,7 @@ const sendEmailOutputSchema = z.object({
     .string()
     .nullable()
     .describe(
-      "Message identifier for GET /api/v1/messages/{messageId} delivery status."
+      `Message identifier for GET ${MESSAGES_API_PATH}/{messageId} delivery status.`
     ),
   sent: z.literal(true),
 });
@@ -127,7 +134,7 @@ const defaultSendTransactionalMail: SendTransactionalMail = async (input) => {
   return await sendOrganizationMailMessage(input);
 };
 
-const transactionMailMcpToolDescription = `Send transactional email from a verified team domain. Runs the same checks as POST /api/v1/send: the sender domain must be verified, suppressed recipients are rejected, the team's usage balance is charged, and an idempotency key makes retries safe. Returns the message identifier used to read delivery status.`;
+const transactionMailMcpToolDescription = `Send transactional email from a verified team domain. Runs the same checks as POST ${SEND_API_PATH}. The sender domain must be verified, suppressed recipients are rejected, the team's usage balance is charged, and an idempotency key makes retries safe. Returns the message identifier used to read delivery status.`;
 
 export const buildTransactionalMailMcpServer = (input: {
   organizationId: string;
@@ -262,11 +269,10 @@ const transactionalMailMcpHandler = createMcpHandler(
 );
 
 const corsHeaders = {
-  "access-control-allow-headers":
-    "authorization, content-type, mcp-protocol-version, mcp-session-id",
+  "access-control-allow-headers": `authorization, content-type, mcp-protocol-version, mcp-session-id, ${API_VERSION_HEADER}`,
   "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
   "access-control-allow-origin": "*",
-  "access-control-expose-headers": "mcp-protocol-version, mcp-session-id",
+  "access-control-expose-headers": `mcp-protocol-version, mcp-session-id, ${API_VERSION_HEADER}`,
   "access-control-max-age": "86400",
 };
 
@@ -282,11 +288,19 @@ const withCors = (response: Response) => {
   });
 };
 
+const withCompatibleCors = (response: Response) =>
+  withCors(stampApiCompatibility(response));
+
 export const handleTransactionalMailMcpRequest = async (
   request: Request
 ): Promise<Response> => {
   if (request.method === "OPTIONS") {
     return withCors(new Response(null, { status: 204 }));
+  }
+
+  const rejected = rejectApiCompatibility(request.headers);
+  if (rejected !== null) {
+    return withCors(rejected);
   }
 
   const declaredLength = request.headers.get("content-length");
@@ -295,14 +309,14 @@ export const handleTransactionalMailMcpRequest = async (
     /^\d+$/u.test(declaredLength) &&
     Number(declaredLength) > MAX_SEND_PAYLOAD_BYTES
   ) {
-    return withCors(
+    return withCompatibleCors(
       Response.json({ error: "Request body is too large." }, { status: 413 })
     );
   }
 
   const organizationId = await getOrganizationApiKeyOrganizationId(request);
   if (organizationId === null) {
-    return withCors(
+    return withCompatibleCors(
       Response.json(
         { error: "Unauthorized" },
         {
@@ -324,10 +338,10 @@ export const handleTransactionalMailMcpRequest = async (
         token: "organization-api-key",
       },
     });
-    return withCors(response);
+    return withCompatibleCors(response);
   } catch (error) {
     reportServerError(error, "transactional-mail-mcp");
-    return withCors(
+    return withCompatibleCors(
       Response.json(
         { error: "Could not process the MCP request." },
         { status: 500 }
