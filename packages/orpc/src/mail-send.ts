@@ -18,7 +18,7 @@ import {
 } from "@quieter/database/schema";
 import type { MailSendSnapshot } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
-import { extractMailAddress } from "@quieter/mail/compose/schema";
+import { assertRawMailSender } from "@quieter/mail/raw-message";
 import type { SendMessageResult } from "@quieter/mail/send";
 import { reportError } from "@quieter/observability";
 import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
@@ -282,6 +282,10 @@ export const sendPreparedMail = async (input: {
       s3Bucket: null,
       s3Key: null,
     });
+    const fromAddress = await assertRawMailSender(
+      raw,
+      operation.snapshot?.sender ?? ""
+    );
     const [claimed] = await db
       .update(organizationMailSendIdempotency)
       .set({
@@ -329,7 +333,7 @@ export const sendPreparedMail = async (input: {
               .map((tag) => ({ Name: tag.name, Value: tag.value })),
             { Name: "quieter_send_id", Value: claimed.id },
           ],
-          FromEmailAddress: extractMailAddress(snapshot.sender),
+          FromEmailAddress: fromAddress,
           ReplyToAddresses: snapshot.replyTo,
         }),
         { abortSignal: AbortSignal.timeout(60_000) }

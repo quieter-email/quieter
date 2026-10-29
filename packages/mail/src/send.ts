@@ -1,3 +1,4 @@
+import { addressParser } from "postal-mime";
 import { z } from "zod";
 
 import { extractMailAddress } from "./compose/schema";
@@ -33,6 +34,34 @@ const STRUCTURAL_HEADER_NAMES = new Set([
 ]);
 
 const hasHeaderInjection = (value: string) => /[\r\n]/u.test(value);
+
+export const parseSendSender = (
+  value: string
+): { address: string; name: string } | null => {
+  if (/\p{Cc}/u.test(value)) {
+    return null;
+  }
+  const normalized = value.trim();
+  const match =
+    /^(?:"(?:[^"\\]|\\.)*"|[^<>"(),:;\\]*)\s*<(?<address>[^<>]+)>$/u.exec(
+      normalized
+    );
+  const address = (match?.groups?.address ?? normalized).trim().toLowerCase();
+  if (!z.email().safeParse(address).success) {
+    return null;
+  }
+  const addresses = addressParser(normalized);
+  const [sender] = addresses;
+  if (
+    addresses.length !== 1 ||
+    sender === undefined ||
+    sender.group ||
+    sender.address.toLowerCase() !== address
+  ) {
+    return null;
+  }
+  return { address, name: sender.name };
+};
 
 const isSafeHeaderName = (name: string) => HEADER_NAME_PATTERN.test(name);
 
@@ -136,7 +165,14 @@ export const sendMessageInputSchema = z
     attachments: z.array(sendAttachmentSchema).default([]),
     bcc: addressListSchema.optional(),
     cc: addressListSchema.optional(),
-    from: z.string().trim().min(1),
+    from: z
+      .string()
+      .min(1)
+      .refine((value) => parseSendSender(value) !== null, {
+        message:
+          "Enter a single sender email address, optionally with a display name.",
+      })
+      .trim(),
     headers: headerSchema.optional(),
     html: z.string().min(1).optional(),
     idempotencyKey: z.string().trim().min(1).max(255).optional(),

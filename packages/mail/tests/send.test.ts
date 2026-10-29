@@ -1,6 +1,7 @@
 import PostalMime from "postal-mime";
 import { describe, expect, test } from "vite-plus/test";
 
+import { assertRawMailSender } from "../src/raw-message";
 import { sendMessageInputSchema } from "../src/send";
 import { buildSendMimeMessage } from "../src/send-mime";
 
@@ -13,6 +14,8 @@ describe("send message input schema", () => {
     "Name <sender@example.com> trailing",
     '"Unclosed <sender@example.com>',
     "Name\r\n <sender@example.com>",
+    "\r\nsender@example.com",
+    "sender@example.com\r\n",
   ])("rejects ambiguous sender syntax %s", async (from) => {
     const message = {
       attachments: [],
@@ -114,6 +117,21 @@ describe("send message input schema", () => {
 });
 
 describe("build send MIME message", () => {
+  test.each([
+    "From: victim@victim.example\r\n",
+    "From: sender@example.com\r\nFrom: victim@victim.example\r\n",
+    "From: Team: sender@example.com;\r\n",
+    "From: sender@example.com, victim@victim.example\r\n",
+    "Sender: sender@example.com\r\n",
+  ])(
+    "blocks inconsistent raw sender headers before delivery %s",
+    async (headers) => {
+      await expect(
+        assertRawMailSender(`${headers}\r\nHello`, "sender@example.com")
+      ).rejects.toThrow(/sender/iu);
+    }
+  );
+
   test("builds raw MIME with display sender, omitted bcc header, custom headers, and attachments", async () => {
     const built = await buildSendMimeMessage(
       {
