@@ -51,6 +51,11 @@ const linearWrite: AgentCatalogTool = {
 const specification = () =>
   actionSpecificationSchema.parse({
     connectors: [{ connectionId: "account-exact", referenceId: "selected" }],
+    eligibility: {
+      bodyIncludes: [],
+      sender: { addresses: ["sender@example.test"], kind: "addresses" },
+      subjectIncludes: [],
+    },
     instructions: "Save a task when a customer requests one.",
     mailboxId: "mailbox",
     permissions: [
@@ -75,6 +80,10 @@ const specification = () =>
         toolId: "mail.read_thread",
       },
       {
+        argumentTemplate: JSON.stringify({
+          team: "approved-team",
+          title: "{{message.subject}}",
+        }),
         confirmation: "none",
         permissionId: "tasks-write",
         toolId: "linear.save_issue",
