@@ -459,7 +459,7 @@ export const openApiDocument = {
   },
   servers: [
     {
-      url: "https://quieter.email/",
+      url: "https://app.quieter.email/",
     },
   ],
 };

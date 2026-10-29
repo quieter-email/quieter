@@ -75,7 +75,7 @@ export class Quieter {
       throw new Error("quieter requires an apiKey.");
     }
     this.#apiKey = options.apiKey;
-    const baseUrl = new URL(options.baseUrl ?? "https://quieter.email");
+    const baseUrl = new URL(options.baseUrl ?? "https://app.quieter.email");
     if (!baseUrl.pathname.endsWith("/")) {
       baseUrl.pathname += "/";
     }

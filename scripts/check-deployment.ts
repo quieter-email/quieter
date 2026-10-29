@@ -4,7 +4,8 @@ import { setTimeout } from "node:timers/promises";
 export const checkDeployment = async (
   origin: string,
   buildId: string,
-  mailUpdatesUrl?: string
+  mailUpdatesUrl?: string,
+  documentPath = "/about"
 ) => {
   const base = new URL(origin);
   const options = {
@@ -30,15 +31,16 @@ export const checkDeployment = async (
   if (!marker.ok || markerText.trim() !== buildId) {
     throw new Error("Server and static assets belong to different releases.");
   }
-  const page = await fetch(new URL("/about", base), {
+  const page = await fetch(new URL(documentPath, base), {
     ...options,
     headers: { accept: "text/html" },
   });
   const html = await page.text();
+  const requireHeading = documentPath === "/about";
   if (
     !page.ok ||
     page.headers.get("content-type")?.includes("text/html") !== true ||
-    !/<h1[\s>]/iu.test(html)
+    (requireHeading && !/<h1[\s>]/iu.test(html))
   ) {
     throw new Error("The public page did not render server-side.");
   }
@@ -89,15 +91,20 @@ export const checkDeployment = async (
 };
 
 if (import.meta.main) {
-  const [origin, buildId, mailUpdatesUrl] = process.argv.slice(2);
+  const [origin, buildId, mailUpdatesUrl, documentPath] = process.argv.slice(2);
   if (!origin || !buildId) {
     throw new Error(
-      "Usage: check-deployment.ts <origin> <expected-build-id> [mail-updates-url]"
+      "Usage: check-deployment.ts <origin> <expected-build-id> [mail-updates-url] [document-path]"
     );
   }
   for (let attempt = 0; ; attempt += 1) {
     try {
-      await checkDeployment(origin, buildId, mailUpdatesUrl);
+      await checkDeployment(
+        origin,
+        buildId,
+        mailUpdatesUrl === "" ? undefined : mailUpdatesUrl,
+        documentPath
+      );
       break;
     } catch (error) {
       if (attempt === 3) {

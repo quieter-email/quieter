@@ -40,7 +40,7 @@ vp run package:desktop
 vp run @quieter/desktop#dist
 ```
 
-`package:desktop` produces an unpacked application under `apps/desktop/release`; `dist` produces the host platform's installer (NSIS on Windows, DMG/ZIP on macOS, AppImage/DEB on Linux). All main and preload dependencies are bundled. Runtime backend configuration stays validated by `@quieter/env/desktop`. Packaged applications default to `https://quieter.email` and `wss://updates.quieter.email/mail/live`.
+`package:desktop` produces an unpacked application under `apps/desktop/release`; `dist` produces the host platform's installer (NSIS on Windows, DMG/ZIP on macOS, AppImage/DEB on Linux). All main and preload dependencies are bundled. Runtime backend configuration stays validated by `@quieter/env/desktop`. Packaged applications default to `https://app.quieter.email` and `wss://updates.quieter.email/mail/live`.
 
 The build generates the desktop's squircle icon from the shared brand artwork. Web icons keep their existing shape.
 

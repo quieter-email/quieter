@@ -49,7 +49,8 @@ export const findImportBoundaryViolations = (
           (name) => specifier === name || specifier.startsWith(`${name}/`)
         );
       const requestBootstrap =
-        file === "apps/web/src/start.ts" &&
+        (file === "apps/web/src/start.ts" ||
+          file === "apps/site/src/start.ts") &&
         specifier === "@quieter/database/client" &&
         bindings.length === 1 &&
         bindings[0] === "withRequestDatabaseClient";

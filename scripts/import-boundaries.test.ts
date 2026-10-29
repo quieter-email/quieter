@@ -31,6 +31,10 @@ describe("package import boundaries", () => {
       'import { db, withRequestDatabaseClient } from "@quieter/database/client";',
     ],
     ["apps/web/src/start.ts", 'await import("@quieter/database/client");'],
+    [
+      "apps/site/src/start.ts",
+      'import { db, withRequestDatabaseClient } from "@quieter/database/client";',
+    ],
   ])("rejects forbidden imports in %s: %s", (file, source) => {
     expect(
       findImportBoundaryViolations(file, source, applicationPackages)
@@ -41,6 +45,10 @@ describe("package import boundaries", () => {
     [
       "apps/web/src/start.ts",
       'import { withRequestDatabaseClient as withDatabase } from "@quieter/database/client";',
+    ],
+    [
+      "apps/site/src/start.ts",
+      'import { withRequestDatabaseClient } from "@quieter/database/client";',
     ],
     [
       "apps/web/src/page.ts",

@@ -7,6 +7,32 @@ import { parseArgs, parseEnv } from "node:util";
 
 import { deriveWebReleaseScope } from "../infra/web-release-scope.ts";
 
+const deploySurfaces = ["app", "site", "cutover"] as const;
+type DeploySurface = (typeof deploySurfaces)[number];
+
+export const applyDeploySurface = (input: {
+  args: string[];
+  excludedSlotNames: string[];
+  surface: DeploySurface;
+}) => {
+  const { args, excludedSlotNames, surface } = input;
+  const separator = args.indexOf("--");
+  const insertion = separator === -1 ? args.length : separator;
+  const head = args.slice(0, insertion);
+  const tail = args.slice(insertion);
+  if (surface === "site") {
+    return [...head, "--target", "Site", ...tail];
+  }
+  const excluded = [...excludedSlotNames];
+  if (surface === "app") {
+    excluded.push("Site");
+  }
+  if (excluded.length === 0) {
+    return args;
+  }
+  return [...head, "--exclude", excluded.join(","), ...tail];
+};
+
 export const prepareSstArguments = async (input: {
   args: string[];
   projectRoot: string;
@@ -80,6 +106,22 @@ export const prepareSstArguments = async (input: {
       "Production web retention owns --target and --exclude. Use the captured release plan."
     );
   }
+  const requestedSurface = runtimeEnv.QUIETER_DEPLOY_SURFACE || "app";
+  const surface = deploySurfaces.find((value) => value === requestedSurface);
+  if (surface === undefined) {
+    throw new Error("QUIETER_DEPLOY_SURFACE must be app, site, or cutover.");
+  }
+  if (surface === "app" || surface === "site") {
+    const { assertMarketingHost } = await import("./assert-marketing-host.ts");
+    await assertMarketingHost();
+  }
+  if (surface === "site") {
+    return applyDeploySurface({
+      args,
+      excludedSlotNames: [],
+      surface,
+    });
+  }
 
   const stageEnvFile = path.join(configDirectory, ".env.production");
   const deploymentEnv = createSstCommandEnv({
@@ -118,17 +160,13 @@ export const prepareSstArguments = async (input: {
     );
   }
   const scope = deriveWebReleaseScope(plan);
-  if (scope.excludedSlots.length === 0) {
-    return args;
-  }
-  const separator = args.indexOf("--");
-  const insertion = separator === -1 ? args.length : separator;
-  return [
-    ...args.slice(0, insertion),
-    "--exclude",
-    scope.excludedSlots.map(({ componentName }) => componentName).join(","),
-    ...args.slice(insertion),
-  ];
+  return applyDeploySurface({
+    args,
+    excludedSlotNames: scope.excludedSlots.map(
+      ({ componentName }) => componentName
+    ),
+    surface,
+  });
 };
 
 if (import.meta.main) {

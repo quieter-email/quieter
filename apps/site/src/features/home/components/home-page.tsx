@@ -1,7 +1,9 @@
 "use client";
 
+import { hrefForSurface } from "@quieter/env/hosts";
 import { Brand } from "@quieter/ui/brand";
-import { LinkButton } from "@quieter/ui/button";
+import { buttonVariants } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { Link } from "@tanstack/react-router";
 import { domAnimation, LazyMotion } from "motion/react";
 
@@ -12,6 +14,14 @@ import { Reveal, RevealChild } from "./reveal";
 import { WaitlistForm } from "./waitlist-form";
 
 import "../home.css";
+
+const accessHref = hrefForSurface(
+  "app",
+  "/site-password",
+  "?returnTo=%2Fauth",
+  "",
+  import.meta.env.DEV
+);
 
 const Hero = () => (
   <section className="home-hero">
@@ -50,15 +60,16 @@ export const HomePage = () => (
             </Link>
           </RevealChild>
           <RevealChild>
-            <LinkButton
+            <a
               // oxlint-disable-next-line shadcn/no-restyle -- home-access is the documented home.css exception.
-              className="home-access"
-              search={{ returnTo: "/auth" }}
-              to="/site-password"
-              variant="outline"
+              className={cn(
+                buttonVariants({ variant: "outline" }),
+                "home-access"
+              )}
+              href={accessHref}
             >
               Access
-            </LinkButton>
+            </a>
           </RevealChild>
         </Reveal>
         <main>

@@ -1,11 +1,10 @@
 /* oxlint-disable eslint/max-classes-per-file -- The deployment subclass captures release bindings during SST's build-plan hook. */
 import { readFileSync } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
 import { webReleasePlanSchema } from "@quieter/env/deployment";
-import { z } from "zod";
+import { appHostname } from "@quieter/env/hosts";
 
 import type { createAppDatabase } from "./database";
 import { cloudflareWorkerObservability } from "./runtime";
@@ -16,76 +15,14 @@ import {
   production,
   stage,
 } from "./stage";
+import { createQuieterTanStackStart } from "./tanstack-start";
 import type { SstLinkable } from "./types";
 import { deriveWebReleaseScope, WEB_RELEASE_SLOTS } from "./web-release-scope";
 
 const webSitePath = "apps/web";
+const WebTanStackStart = createQuieterTanStackStart(webSitePath);
 
-const webDomain: string | { name: string; redirects: string[] } | undefined =
-  production
-    ? { name: "quieter.email", redirects: ["www.quieter.email"] }
-    : undefined;
-
-/**
- * SST hardcodes the Worker `main` to TanStack's default server entry, which
- * skips `apps/web/src/server.ts` and therefore the `Sentry.withSentry` wrapper.
- */
-class WebTanStackStart extends sst.cloudflare.TanStackStart {
-  // eslint-disable-next-line class-methods-use-this -- overrides an SST instance hook
-  protected override buildPlan(outputPath: $util.Output<string>) {
-    return outputPath.apply(async (directory) => {
-      const workerDirectory = ".cloudflare/output/v0/workers/default";
-      const config = z
-        .object({ manifest: z.object({ mainModule: z.string().min(1) }) })
-        .parse(
-          JSON.parse(
-            await readFile(
-              path.join(directory, workerDirectory, "worker.config.json"),
-              "utf-8"
-            )
-          )
-        );
-      const bundleDirectory = path.resolve(
-        directory,
-        workerDirectory,
-        "bundle"
-      );
-      const serverPath = path.resolve(
-        bundleDirectory,
-        config.manifest.mainModule
-      );
-      const relativePath = path.relative(bundleDirectory, serverPath);
-      if (
-        relativePath === ".." ||
-        relativePath.startsWith(`..${path.sep}`) ||
-        path.isAbsolute(relativePath)
-      ) {
-        throw new Error(
-          "The Cloudflare Worker entry must be inside its bundle."
-        );
-      }
-      const assets = `${workerDirectory}/assets`;
-      const [serverStats, assetStats] = await Promise.all([
-        stat(serverPath),
-        stat(path.join(directory, assets)),
-      ]);
-      if (!serverStats.isFile() || !assetStats.isDirectory()) {
-        throw new Error("The Cloudflare web build is incomplete.");
-      }
-      return {
-        assets,
-        server: path.relative(directory, serverPath).replaceAll("\\", "/"),
-      };
-    });
-  }
-
-  // eslint-disable-next-line class-methods-use-this -- overrides an SST instance hook
-  protected override buildWrangler() {
-    return {
-      main: path.resolve(webSitePath, "src/server.ts"),
-    };
-  }
-}
+const webDomain = production ? { name: appHostname } : undefined;
 
 export const createWeb = (
   appDatabase: ReturnType<typeof createAppDatabase>,

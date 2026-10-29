@@ -6,6 +6,7 @@ import {
   DEPLOYMENT_STATUS_PATH,
   deploymentStatusSchema,
 } from "@quieter/env/deployment";
+import { surfaceHeader } from "@quieter/env/hosts";
 
 type WebRouterEnv = {
   QUIETER_WEB_DEPLOYMENT: string;
@@ -23,7 +24,11 @@ export default {
     if (url.pathname === DEPLOYMENT_STATUS_PATH) {
       if (request.method !== "GET" && request.method !== "HEAD") {
         return new Response(null, {
-          headers: { allow: "GET, HEAD", "cache-control": "no-store" },
+          headers: {
+            allow: "GET, HEAD",
+            "cache-control": "no-store",
+            [surfaceHeader]: "app",
+          },
           status: 405,
         });
       }
@@ -65,7 +70,7 @@ export default {
           }
         } catch {
           return new Response(null, {
-            headers: { "cache-control": "no-store" },
+            headers: { "cache-control": "no-store", [surfaceHeader]: "app" },
             status: 503,
           });
         }
@@ -82,6 +87,7 @@ export default {
           headers: {
             "cache-control": "no-store",
             "content-type": "application/json",
+            [surfaceHeader]: "app",
           },
         }
       );
@@ -93,6 +99,7 @@ export default {
           headers: {
             "cache-control": "no-store",
             "content-type": "text/plain; charset=utf-8",
+            [surfaceHeader]: "app",
           },
         }
       );
@@ -129,6 +136,7 @@ export default {
         headers: {
           "cache-control": "no-store",
           [DEPLOYMENT_RELOAD_HEADER]: "1",
+          [surfaceHeader]: "app",
         },
         status: 409,
       });
@@ -147,6 +155,19 @@ export default {
     }
     headers.set(DEPLOYMENT_BUILD_HEADER, release.buildId);
     const worker = release.slot === "a" ? env.WebReleaseA : env.WebReleaseB;
-    return await worker.fetch(url.href, new Request(request, { headers }));
+    const response = await worker.fetch(
+      url.href,
+      new Request(request, { headers })
+    );
+    if (response.headers.has(surfaceHeader)) {
+      return response;
+    }
+    const responseHeaders = new Headers(response.headers);
+    responseHeaders.set(surfaceHeader, "app");
+    return new Response(response.body, {
+      headers: responseHeaders,
+      status: response.status,
+      statusText: response.statusText,
+    });
   },
 } satisfies ExportedHandler<WebRouterEnv>;

@@ -5,6 +5,7 @@ import { createMailMaintenanceResources } from "./mail-maintenance";
 import { createMailUpdateResources } from "./mail-updates";
 import { createDeploymentContext } from "./runtime";
 import { requireSecretResource } from "./secrets";
+import { createSite } from "./site";
 import type { SecretBindings, SecretResources } from "./types";
 import { createWeb } from "./web";
 
@@ -38,6 +39,7 @@ export const createInfrastructure = async (input: {
     updates
   );
   const mail = await createMailResources(context, secretResources, updates.url);
+  const site = createSite(appDatabase);
   const web = createWeb(
     appDatabase,
     webSecretBindings,
@@ -79,6 +81,7 @@ export const createInfrastructure = async (input: {
     mailReceiptRoleArn: mail.mailReceiptRole.arn,
     mailReceiptRuleSetName,
     mailReceiptTopicArn: mail.mailReceiptTopic.arn,
+    siteUrl: site.url,
     stage: $app.stage,
     webUrl: web.url,
   };

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { LegalDocumentPage } from "#/features/legal/components/legal-document-page";
 
-export const Route = createFileRoute("/_public/imprint")({
+export const Route = createFileRoute("/imprint")({
   component: ImprintPage,
   head: () => ({
     links: [

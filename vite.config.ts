@@ -89,6 +89,7 @@ export default defineConfig({
       },
       {
         files: [
+          "apps/site/src/router.tsx",
           "apps/web/src/router.tsx",
           "apps/web/src/types/posthog.d.ts",
           "apps/desktop/src/renderer/*.d.ts",
@@ -192,6 +193,7 @@ export default defineConfig({
         // component and helper implementations they reference.
         files: [
           "apps/web/src/routes/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}",
+          "apps/site/src/routes/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}",
           "apps/desktop/src/renderer/router.tsx",
         ],
         rules: {
@@ -214,6 +216,7 @@ export default defineConfig({
           "packages/app/src/lib/mail/inbox-query/actions.ts",
           "apps/web/src/lib/mail/inbox-query/data.ts",
           "packages/app/src/lib/mail/inbox-query/data.ts",
+          "apps/site/src/start.ts",
           "apps/web/src/start.ts",
         ],
         rules: {
@@ -412,7 +415,7 @@ export default defineConfig({
         files: [
           "apps/web/src/components/telemetry-provider.tsx",
           "packages/app/src/components/telemetry-provider.tsx",
-          "apps/web/src/features/home/components/home-smooth-scroll.tsx",
+          "apps/site/src/features/home/components/home-smooth-scroll.tsx",
           "packages/app/src/features/home/components/home-smooth-scroll.tsx",
           "apps/web/src/features/message-thread/components/message-actions.tsx",
           "packages/app/src/features/message-thread/components/message-actions.tsx",

@@ -17,31 +17,6 @@ if (import.meta.env.DEV) {
   faviconVariant = "-dev";
 }
 
-const organizationJsonLd = {
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  address: {
-    "@type": "PostalAddress",
-    addressCountry: "DE",
-    addressLocality: "Berlin",
-    streetAddress: "Cosimaplatz 5",
-  },
-  contactPoint: [
-    {
-      "@type": "ContactPoint",
-      contactType: "customer support",
-      email: "support@quieter.email",
-      url: "https://quieter.email/home",
-    },
-  ],
-  description:
-    "quieter is an email client that combines your Gmail, shared team mailboxes on your own domain, and transactional sending over an API, with optional AI drafts.",
-  logo: "https://quieter.email/icon.svg",
-  name: "quieter",
-  sameAs: ["https://x.com/leanderriefel", "https://github.com/leanderriefel"],
-  url: "https://quieter.email/",
-};
-
 export const Route = createRootRoute({
   component: RootComponent,
   errorComponent: RootErrorComponent,
@@ -120,7 +95,7 @@ export const Route = createRootRoute({
         property: "og:description",
       },
       {
-        content: "https://quieter.email/og-image.png",
+        content: "/og-image.png",
         property: "og:image",
       },
       { content: "1200", property: "og:image:width" },
@@ -142,18 +117,12 @@ export const Route = createRootRoute({
         name: "twitter:description",
       },
       {
-        content: "https://quieter.email/og-image.png",
+        content: "/og-image.png",
         name: "twitter:image",
       },
       {
         content: "quieter. Email, without the noise.",
         name: "twitter:image:alt",
-      },
-    ],
-    scripts: [
-      {
-        children: JSON.stringify(organizationJsonLd),
-        type: "application/ld+json",
       },
     ],
   }),
