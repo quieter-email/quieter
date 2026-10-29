@@ -1,6 +1,6 @@
 # quieter
 
-TypeScript SDK for the Quieter send API.
+TypeScript SDK for the quieter send API.
 
 ```ts
 import { Quieter } from "quieter";

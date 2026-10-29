@@ -20,7 +20,7 @@ Requests received on October 25, 2026. This checklist records the full scope so 
 - [x] Load Google calendar and event colors correctly and support editing calendar colors.
 - [x] Remove the Google Calendar handoff action from event details.
 - [x] Display event details in the sidebar and allow direct editing without a separate edit mode or extra edit buttons.
-- [x] Find Notion Calendar references in Mobbin and use their useful interaction patterns within Quieter's design system.
+- [x] Find Notion Calendar references in Mobbin and use their useful interaction patterns within quieter's design system.
 - [x] Preserve mailbox ownership, legacy calendar references, consent boundaries, and local write protections.
 - [x] Verify, commit, push, and open a reviewable pull request with sample-data screenshots.
 

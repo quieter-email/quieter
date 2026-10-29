@@ -88,7 +88,7 @@ export const DomainDangerSection = ({
           value={
             data.managedMailboxCount > 0
               ? `Remove or migrate ${data.managedMailboxCount} shared ${data.managedMailboxCount === 1 ? "inbox" : "inboxes"} first.`
-              : "This stops Quieter from sending or receiving mail for the domain."
+              : "This stops quieter from sending or receiving mail for the domain."
           }
         />
       </SettingsCard>
@@ -99,7 +99,7 @@ export const DomainDangerSection = ({
         <DialogHeader>
           <DialogTitle>Remove {domain.domain}?</DialogTitle>
           <DialogDescription>
-            This action disconnects the domain from Quieter.
+            This action disconnects the domain from quieter.
           </DialogDescription>
         </DialogHeader>
         <DialogBody spacing="3">

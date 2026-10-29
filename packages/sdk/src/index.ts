@@ -65,7 +65,7 @@ export class Quieter {
 
   constructor(options: QuieterOptions) {
     if (!options.apiKey?.trim()) {
-      throw new Error("Quieter requires an apiKey.");
+      throw new Error("quieter requires an apiKey.");
     }
     this.#apiKey = options.apiKey;
     const baseUrl = new URL(options.baseUrl ?? "https://quieter.email");
@@ -75,7 +75,7 @@ export class Quieter {
     this.baseUrl = baseUrl.href;
     const fetchImpl = options.fetch ?? globalThis.fetch;
     if (fetchImpl === undefined) {
-      throw new Error("Quieter requires a fetch implementation.");
+      throw new Error("quieter requires a fetch implementation.");
     }
     this.#fetch = fetchImpl;
   }
@@ -103,7 +103,7 @@ export class Quieter {
         .safeParse(json).data;
       throw new QuieterApiError({
         issues: error?.issues,
-        message: error?.error ?? `Quieter API returned ${response.status}.`,
+        message: error?.error ?? `quieter API returned ${response.status}.`,
         response: json,
         status: response.status,
       });
@@ -111,7 +111,7 @@ export class Quieter {
     const parsed = schema.safeParse(json);
     if (!parsed.success) {
       throw new QuieterApiError({
-        message: "Quieter API returned an unexpected response.",
+        message: "quieter API returned an unexpected response.",
         response: json,
         status: response.status,
       });
@@ -125,7 +125,7 @@ export class Quieter {
   ): Promise<QuieterMessageDelivery> {
     const normalized = messageId.trim();
     if (!normalized) {
-      throw new Error("Quieter requires a messageId.");
+      throw new Error("quieter requires a messageId.");
     }
     return await this.#request(
       `api/v1/messages/${encodeURIComponent(normalized)}`,

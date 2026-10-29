@@ -961,7 +961,7 @@ const assertGmailOAuthMailboxAvailability = (input: {
   ) {
     throw new ORPCError("CONFLICT", {
       message:
-        "That Gmail mailbox is already connected to another Quieter user.",
+        "That Gmail mailbox is already connected to another quieter user.",
     });
   }
 };

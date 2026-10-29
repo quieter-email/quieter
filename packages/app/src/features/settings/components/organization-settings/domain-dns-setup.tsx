@@ -228,7 +228,7 @@ const DomainConnectCard = ({
         value={
           availability?.available === true ? (
             <>
-              Authorize the exact records, then Quieter verifies DNS when you
+              Authorize the exact records, then quieter verifies DNS when you
               return.
             </>
           ) : null

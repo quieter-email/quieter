@@ -85,7 +85,7 @@ export const MemoryEditor = ({
               onChange={(event) => {
                 setContent(event.target.value);
               }}
-              placeholder="What should Quieter remember?"
+              placeholder="What should quieter remember?"
               required
               rows={4}
               value={content}

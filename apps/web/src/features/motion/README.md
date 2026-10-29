@@ -1,11 +1,11 @@
 # Main app motion
 
-Quieter is a daily-use email client. Its motion is selective but clearly visible: it confirms input, preserves spatial continuity, and explains genuinely new content. Repeated keyboard triage, streaming text, and background refreshes stay still, while surface changes and pointer-led navigation receive enough time and easing to feel composed.
+quieter is a daily-use email client. Its motion is selective but clearly visible: it confirms input, preserves spatial continuity, and explains genuinely new content. Repeated keyboard triage, streaming text, and background refreshes stay still, while surface changes and pointer-led navigation receive enough time and easing to feel composed.
 
 ## Vocabulary
 
 - **Press / Tap feedback** — A subtle scale-down when an element is clicked, so it feels physical.
-- **App entrance** — A restrained composition of **Fade in / Fade out** — Element appears or disappears by changing opacity; **Translate** — Move an element along the X or Y axis; and **Blur** — A blur filter used to soften an element or mask tiny imperfections. Quieter reserves it for the first meaningful presentation of a surface or genuinely new semantic content.
+- **App entrance** — A restrained composition of **Fade in / Fade out** — Element appears or disappears by changing opacity; **Translate** — Move an element along the X or Y axis; and **Blur** — A blur filter used to soften an element or mask tiny imperfections. quieter reserves it for the first meaningful presentation of a surface or genuinely new semantic content.
 - **Stagger** — Animate several items one after another with a small delay between each, creating a cascade.
 - **Layout animation** — When an element's size or position changes, it animates to the new spot instead of snapping.
 - **Continuity transition** — A change that keeps the user oriented by visually connecting before and after. For example, making the same rectangle bigger and smaller.

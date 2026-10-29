@@ -23,7 +23,7 @@ export const createAuthStorage = (onWriteError: () => void) => {
           safeStorage.getSelectedStorageBackend() === "basic_text")
       ) {
         throw new Error(
-          "Your system's secure credential storage is unavailable. Enable the system keychain, then reopen Quieter."
+          "Your system's secure credential storage is unavailable. Enable the system keychain, then reopen quieter."
         );
       }
       const storageDirectory = path.join(app.getPath("userData"), "auth");
@@ -49,7 +49,7 @@ export const createAuthStorage = (onWriteError: () => void) => {
         Array.isArray(stored)
       ) {
         throw new Error(
-          "Quieter could not read its saved sign-in. Remove the saved credentials file and sign in again."
+          "quieter could not read its saved sign-in. Remove the saved credentials file and sign in again."
         );
       }
       for (const [key, value] of Object.entries(stored)) {

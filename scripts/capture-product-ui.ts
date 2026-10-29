@@ -350,7 +350,7 @@ try {
               "button",
               "click",
               "--name",
-              "Gmail Connect your Gmail inbox to Quieter.",
+              "Gmail Connect your Gmail inbox to quieter.",
               "--exact",
             ],
             ["wait", '[aria-label="Gmail mailbox team"]'],
@@ -367,7 +367,7 @@ try {
               "button",
               "click",
               "--name",
-              "Quieter managed mailbox Create a custom mailbox with your own domain.",
+              "quieter managed mailbox Create a custom mailbox with your own domain.",
               "--exact",
             ],
             [

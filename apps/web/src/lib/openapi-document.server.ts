@@ -226,7 +226,7 @@ export const openApiDocument = {
     },
     securitySchemes: {
       organizationApiKey: {
-        bearerFormat: "Quieter team API key",
+        bearerFormat: "quieter team API key",
         scheme: "bearer",
         type: "http",
       },
@@ -235,7 +235,7 @@ export const openApiDocument = {
   info: {
     description:
       "REST API for sending mail from verified sender domains and reading delivery state and suppressions. Authenticate every request with a bearer team API key.",
-    title: "Quieter API",
+    title: "quieter API",
     version: "0.1.0",
   },
   openapi: "3.1.0",

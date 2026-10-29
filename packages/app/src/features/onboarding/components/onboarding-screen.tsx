@@ -274,7 +274,7 @@ const GmailPlaybook = ({
         {googleEmail?.trim() ? (
           <p className="text-micro text-muted-fg">
             Signing in only proved who you are. Google asks separately before
-            Quieter can read this mailbox.
+            quieter can read this mailbox.
           </p>
         ) : null}
       </div>
@@ -771,7 +771,7 @@ export const OnboardingScreen = () => {
 
   return (
     <AuthLayout
-      title={step === 1 ? "Welcome to Quieter" : "Set up what you need"}
+      title={step === 1 ? "Welcome to quieter" : "Set up what you need"}
     >
       <div className="mt-4 flex items-center justify-center gap-3">
         <span className="text-caption text-muted-fg">

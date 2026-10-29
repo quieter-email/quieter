@@ -19,11 +19,11 @@ import { reportServerError } from "./server-error-reporting";
 
 const serverInfo = {
   name: "quieter-transactional-mail",
-  title: "Quieter Transactional Mail",
+  title: "quieter Transactional Mail",
   version: "1.0.0",
 };
 
-const serverInstructions = `Send transactional email through Quieter. The send_email tool sends from a domain the team has verified. Recipients on the team suppression list are rejected. This server cannot read mailboxes, mail content, team settings, or delivery status: use the Quieter REST API at GET /api/v1/messages/{messageId} for delivery receipts.`;
+const serverInstructions = `Send transactional email through quieter. The send_email tool sends from a domain the team has verified. Recipients on the team suppression list are rejected. This server cannot read mailboxes, mail content, team settings, or delivery status: use the quieter REST API at GET /api/v1/messages/{messageId} for delivery receipts.`;
 
 const addressListSchema = z
   .union([z.string(), z.array(z.string())])

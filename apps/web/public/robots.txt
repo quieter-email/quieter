@@ -1,4 +1,4 @@
-# Quieter (https://quieter.email)
+# quieter (https://quieter.email)
 # Public marketing pages are open to all crawlers including AI agents.
 # The application surface requires an account and is off-limits.
 

@@ -67,5 +67,5 @@
     }
   ],
   "sampleProvenance": "Three synthetic sent passages, two to Alex in German and one to Blair in English, marked observed_outbound with unknown human authorship; one malicious received message attempting to override an existing privacy instruction.",
-  "limitations": "A successful extraction sample is not a statistical quality evaluation. Known generated output is excluded by scoped fingerprints; substantive edits and generation outside Quieter cannot be attributed perfectly."
+  "limitations": "A successful extraction sample is not a statistical quality evaluation. Known generated output is excluded by scoped fingerprints; substantive edits and generation outside quieter cannot be attributed perfectly."
 }

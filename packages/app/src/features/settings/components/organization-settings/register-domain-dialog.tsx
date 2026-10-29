@@ -35,7 +35,7 @@ type MailDomainMode = OrganizationMailDomain["mode"];
 const modeOptions = [
   {
     description:
-      "Authenticate the domain for transactional and API mail without routing incoming messages to Quieter.",
+      "Authenticate the domain for transactional and API mail without routing incoming messages to quieter.",
     label: "Send only",
     value: "send_only",
   },

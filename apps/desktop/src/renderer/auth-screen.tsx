@@ -48,7 +48,7 @@ export const DesktopAuthScreen = () => {
   };
 
   return (
-    <AuthLayout title="Continue to Quieter">
+    <AuthLayout title="Continue to quieter">
       <Button
         className="mt-8"
         onClick={() => {

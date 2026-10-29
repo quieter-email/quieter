@@ -757,7 +757,7 @@ const MailboxWorkspaceContentInner = ({
               Reconnect Google
             </h1>
             <p className="text-body text-muted-fg">
-              This account needs to reconnect through Google before Quieter can
+              This account needs to reconnect through Google before quieter can
               load mail.
             </p>
             <div className="pt-1">

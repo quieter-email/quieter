@@ -1,4 +1,4 @@
-# Quieter model preferences
+# quieter model preferences
 
 These repository defaults apply on every machine. Read them through [the model policy](models.md). Explicit task choices and personal overrides take precedence.
 

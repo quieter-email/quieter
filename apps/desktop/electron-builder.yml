@@ -1,5 +1,5 @@
 appId: com.quieter.desktop
-productName: Quieter
+productName: quieter
 icon: resources/icon.png
 directories:
   buildResources: resources
@@ -10,12 +10,12 @@ files:
   - resources/icon.png
 asar: true
 protocols:
-  - name: Quieter sign in
+  - name: quieter sign in
     schemes:
       - com.quieter.desktop
 mac:
   extendInfo:
-    NSMicrophoneUsageDescription: Quieter uses your microphone to transcribe messages when you record audio.
+    NSMicrophoneUsageDescription: quieter uses your microphone to transcribe messages when you record audio.
   category: public.app-category.productivity
   target:
     - dmg
@@ -26,7 +26,7 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  shortcutName: Quieter
+  shortcutName: quieter
 linux:
   category: Office
   target:

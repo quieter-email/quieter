@@ -2,11 +2,11 @@
   "name": "@quieter/desktop",
   "version": "0.1.1",
   "private": true,
-  "description": "Quieter desktop email app",
+  "description": "quieter desktop email app",
   "homepage": "https://quieter.email",
   "license": "MIT",
   "author": {
-    "name": "Quieter",
+    "name": "quieter",
     "email": "support@quieter.email"
   },
   "type": "module",
