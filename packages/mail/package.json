@@ -18,6 +18,7 @@
     "./search": "./src/search.ts",
     "./search-expression": "./src/search-expression.ts",
     "./send-mime": "./src/send-mime.ts",
+    "./public-api": "./src/public-api.ts",
     "./send": "./src/send.ts",
     "./sender-avatar": "./src/sender-avatar.ts",
     "./tracking": "./src/tracking.ts",

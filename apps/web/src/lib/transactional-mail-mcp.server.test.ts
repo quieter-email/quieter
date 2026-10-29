@@ -1,5 +1,10 @@
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import type { McpHttpHandler } from "@modelcontextprotocol/server";
+import {
+  API_COMPATIBILITY_DATE,
+  API_VERSION_HEADER,
+  MCP_API_PATH,
+} from "@quieter/mail/public-api";
 import type { SendMessageInput, SendMessageResult } from "@quieter/mail/send";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
@@ -66,11 +71,12 @@ const createTestHandler = (
   );
 
 const mcpRequest = (body: Record<string, unknown>) =>
-  new Request("https://quieter.email/api/v1/mcp", {
+  new Request(`https://quieter.email${MCP_API_PATH}`, {
     body: JSON.stringify(body),
     headers: {
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
+      [API_VERSION_HEADER]: API_COMPATIBILITY_DATE,
     },
     method: "POST",
   });
@@ -305,7 +311,7 @@ describe("transactional mail MCP endpoint", () => {
 
   test("answers CORS preflight without credentials", async () => {
     const response = await handleTransactionalMailMcpRequest(
-      new Request("https://quieter.email/api/v1/mcp", { method: "OPTIONS" })
+      new Request(`https://quieter.email${MCP_API_PATH}`, { method: "OPTIONS" })
     );
 
     expect(response.status).toBe(204);
@@ -313,6 +319,31 @@ describe("transactional mail MCP endpoint", () => {
     expect(
       response.headers.get("access-control-allow-headers") ?? ""
     ).toContain("authorization");
+    expect(
+      response.headers.get("access-control-allow-headers") ?? ""
+    ).toContain(API_VERSION_HEADER);
+    expect(mocks.resolveOrganizationId).not.toHaveBeenCalled();
+  });
+
+  test("rejects a missing compatibility date before auth", async () => {
+    const response = await handleTransactionalMailMcpRequest(
+      new Request(`https://quieter.email${MCP_API_PATH}`, {
+        body: JSON.stringify({
+          id: 1,
+          jsonrpc: "2.0",
+          method: "tools/list",
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get(API_VERSION_HEADER)).toBe(
+      API_COMPATIBILITY_DATE
+    );
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(mocks.resolveOrganizationId).not.toHaveBeenCalled();
   });
 
   test("rejects requests without a team API key", async () => {
@@ -328,11 +359,12 @@ describe("transactional mail MCP endpoint", () => {
   test("rejects payloads above the send limit", async () => {
     mocks.resolveOrganizationId.mockResolvedValue("team-a");
     const response = await handleTransactionalMailMcpRequest(
-      new Request("https://quieter.email/api/v1/mcp", {
+      new Request(`https://quieter.email${MCP_API_PATH}`, {
         body: "{}",
         headers: {
           "content-length": String(26 * 1024 * 1024),
           "content-type": "application/json",
+          [API_VERSION_HEADER]: API_COMPATIBILITY_DATE,
         },
         method: "POST",
       })

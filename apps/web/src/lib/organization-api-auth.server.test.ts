@@ -35,7 +35,7 @@ describe("organization API access", () => {
     mocks.hasBillingAccess.mockResolvedValue(false);
     await expect(
       getOrganizationApiKeyOrganizationId(
-        new Request("https://quieter.email/api/v1/send", {
+        new Request("https://quieter.email/api/send", {
           headers: { authorization: "Bearer test-key" },
         })
       )
@@ -51,7 +51,7 @@ describe("organization API access", () => {
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(true);
     const request = new Request(
-      "https://quieter.email/api/v1/messages/message-a",
+      "https://quieter.email/api/messages/message-a",
       { headers: { authorization: "Bearer test-key" } }
     );
     await expect(
@@ -66,7 +66,7 @@ describe("organization API access", () => {
     mocks.verifyApiKey.mockResolvedValue({ key: null, valid: false });
     await expect(
       getOrganizationApiKeyOrganizationId(
-        new Request("https://quieter.email/api/v1/send", {
+        new Request("https://quieter.email/api/send", {
           headers: { authorization: "Bearer test-key" },
         })
       )
@@ -78,7 +78,7 @@ describe("organization API access", () => {
     mocks.hasBillingAccess.mockRejectedValue(new Error("Billing unavailable"));
     await expect(
       getOrganizationApiKeyOrganizationId(
-        new Request("https://quieter.email/api/v1/send", {
+        new Request("https://quieter.email/api/send", {
           headers: { authorization: "Bearer test-key" },
         })
       )

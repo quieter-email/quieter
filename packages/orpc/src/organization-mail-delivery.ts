@@ -25,6 +25,7 @@ import {
   extractMailAddress,
   splitMailAddressList,
 } from "@quieter/mail/compose/schema";
+import { OPEN_TRACKING_PATH_PREFIX } from "@quieter/mail/public-api";
 import {
   appendOpenTrackingPixel,
   buildOpenTrackingToken,
@@ -952,7 +953,10 @@ export const buildOpenTrackingHtmlTransform = (input: {
   });
   return {
     htmlTransform: (html: string) =>
-      appendOpenTrackingPixel(html, `${baseUrl}/api/v1/o/${token}`),
+      appendOpenTrackingPixel(
+        html,
+        `${baseUrl}${OPEN_TRACKING_PATH_PREFIX}/${token}`
+      ),
   };
 };
 

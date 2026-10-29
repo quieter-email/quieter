@@ -34,6 +34,7 @@ import { orpc } from "@quieter/app/lib/orpc";
 import { rethrowClassified } from "@quieter/app/lib/orpc-errors";
 import { getApiUrl, openExternalUrl } from "@quieter/app/runtime";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
+import { SEND_API_PATH } from "@quieter/mail/public-api";
 import { Button, buttonVariants } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
@@ -499,7 +500,7 @@ const FirstRunApiKeyStep = ({
         <h2 className="text-body font-medium text-fg">4. Create an API key</h2>
         <p className="mt-1 text-body text-muted-fg">
           Use an organization API key to send messages through{" "}
-          <span className="font-mono">/api/v1/send</span>.
+          <span className="font-mono">{SEND_API_PATH}</span>.
         </p>
       </div>
       {renderApiKeyBody()}

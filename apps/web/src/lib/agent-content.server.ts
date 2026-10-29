@@ -1,10 +1,20 @@
+import {
+  API_COMPATIBILITY_DATE,
+  API_VERSION_HEADER,
+  MCP_API_PATH,
+  MESSAGES_API_PATH,
+  OPEN_TRACKING_PATH_PREFIX,
+  SEND_API_PATH,
+  SUPPRESSIONS_API_PATH,
+} from "@quieter/mail/public-api";
+
 // Machine-readable descriptions of the public marketing surface. Copy mirrors
 // the landing page and legal documents so agents read the same story humans do.
 
 const siteUrl = "https://quieter.email";
 
 // Bump when public page copy or the machine surfaces change.
-const contentLastUpdated = "2026-09-11";
+const contentLastUpdated = "2026-10-29";
 
 const homeMarkdown = `# quieter
 
@@ -132,31 +142,37 @@ mail; suppressed recipients and domain verification are enforced.
 ## Surfaces
 
 - Landing page: ${siteUrl}/home
-- REST API v1: bearer-authenticated team API for sending mail and reading
-  delivery state and suppressions. OpenAPI specification:
-  ${siteUrl}/openapi.json (base URL ${siteUrl}, endpoints /api/v1/send,
-  /api/v1/messages/{messageId}, /api/v1/suppressions)
-- MCP server (transactional sending only): ${siteUrl}/api/v1/mcp over
+- REST API: bearer-authenticated team API for sending mail and reading
+  delivery state and suppressions. Send ${API_VERSION_HEADER} set to
+  ${API_COMPATIBILITY_DATE} on every request. OpenAPI specification:
+  ${siteUrl}/openapi.json (base URL ${siteUrl}, endpoints ${SEND_API_PATH},
+  ${MESSAGES_API_PATH}/{messageId}, ${SUPPRESSIONS_API_PATH})
+- MCP server (transactional sending only): ${siteUrl}${MCP_API_PATH} over
   Streamable HTTP, authenticated with a team API key as
-  "Authorization: Bearer YOUR_API_KEY". One tool, \`send_email\`, runs the same
+  "Authorization: Bearer YOUR_API_KEY" and ${API_VERSION_HEADER}
+  ${API_COMPATIBILITY_DATE}. One tool, \`send_email\`, runs the same
   checks as the REST send endpoint: verified sender domains only, suppressed
   recipients rejected, idempotency keys honored, team usage charged. Example
-  client entry: {"mcpServers":{"quieter":{"url":"${siteUrl}/api/v1/mcp","headers":{"Authorization":"Bearer YOUR_API_KEY"}}}}.
+  client entry: {"mcpServers":{"quieter":{"url":"${siteUrl}${MCP_API_PATH}","headers":{"Authorization":"Bearer YOUR_API_KEY","${API_VERSION_HEADER}":"${API_COMPATIBILITY_DATE}"}}}}.
   Example \`send_email\` arguments: {"from":"you@your-verified-domain.com","to":["customer@example.com"],"subject":"Your receipt","text":"Thanks for your order.","idempotencyKey":"order-1234"}.
   Limits: 25 MB request payload, 60 requests per minute per IP, verified sender
   domains, suppression enforcement. The server cannot read mailboxes, mail
   content, or team settings; delivery status stays on the REST API at
-  GET /api/v1/messages/{messageId}. A broader management and control MCP is not
+  GET ${MESSAGES_API_PATH}/{messageId}. A broader management and control MCP is not
   part of this endpoint.
 - Developer documentation: coming soon; will be linked here once released.
 - Sitemap of public pages: ${siteUrl}/sitemap.xml
 
 ## API versioning and deprecation policy
 
-The REST API is versioned by URL path prefix (/api/v1). Breaking changes ship
-under a new version prefix instead of altering v1. When an endpoint or field
-is deprecated, responses will include Sunset and Deprecation headers with the
-retirement date for at least 90 days before removal.
+quieter versions this API with a compatibility date. Send ${API_VERSION_HEADER}
+set to ${API_COMPATIBILITY_DATE}. The date changes only when a breaking change
+replaces the current behavior. Requests without that exact date are rejected.
+There is no path prefix and no older date to fall back to. Responses repeat
+the date in ${API_VERSION_HEADER}.
+
+Open tracking at ${OPEN_TRACKING_PATH_PREFIX}/{token} is not versioned. Mail
+clients that load the tracking pixel cannot send a custom header.
 
 The web application itself requires an account during private preview;
 public pages and the machine surfaces above stay available regardless.

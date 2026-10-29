@@ -1,5 +1,10 @@
 import { getSafeAuthReturnTo } from "@quieter/app/lib/return-to";
 import { withRequestDatabaseClient } from "@quieter/database/client";
+import {
+  MCP_API_PATH,
+  OPEN_TRACKING_PATH_PREFIX,
+  SEND_API_PATH,
+} from "@quieter/mail/public-api";
 import { checkDeploymentDatabase } from "@quieter/orpc/deployment-health";
 import {
   createCsrfMiddleware,
@@ -39,8 +44,8 @@ const sitePasswordPaths = new Set([
   "/api/internal/gmail-credentials/rotate",
   "/api/desktop/session",
   "/api/openapi",
-  "/api/v1/mcp",
-  "/api/v1/send",
+  MCP_API_PATH,
+  SEND_API_PATH,
   "/api/site-password",
   "/api/waitlist",
 ]);
@@ -56,7 +61,7 @@ const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
 const publicPathPrefixes = ["/_build/", "/assets/"];
 /** Open-tracking markers are fetched by mail clients without cookies. */
-const openTrackingPrefix = "/api/v1/o/";
+const openTrackingPrefix = `${OPEN_TRACKING_PATH_PREFIX}/`;
 const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === "serverFn",
 });

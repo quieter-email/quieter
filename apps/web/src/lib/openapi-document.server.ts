@@ -1,5 +1,27 @@
+import {
+  API_COMPATIBILITY_DATE,
+  API_VERSION_HEADER,
+  MESSAGES_API_PATH,
+  SEND_API_PATH,
+  SUPPRESSIONS_API_PATH,
+} from "@quieter/mail/public-api";
+
+const compatibilityDateParameter = {
+  description: `Required compatibility date. Send ${API_COMPATIBILITY_DATE}. A new date is published only when a breaking change replaces this one. Responses repeat the date in this header.`,
+  in: "header",
+  name: API_VERSION_HEADER,
+  required: true,
+  schema: {
+    const: API_COMPATIBILITY_DATE,
+    type: "string",
+  },
+};
+
 export const openApiDocument = {
   components: {
+    parameters: {
+      QuieterVersion: compatibilityDateParameter,
+    },
     schemas: {
       ErrorResponse: {
         additionalProperties: false,
@@ -233,19 +255,19 @@ export const openApiDocument = {
     },
   },
   info: {
-    description:
-      "REST API for sending mail from verified sender domains and reading delivery state and suppressions. Authenticate every request with a bearer team API key.",
+    description: `REST API for sending mail from verified sender domains and reading delivery state and suppressions. Authenticate every request with a bearer team API key. Send ${API_VERSION_HEADER} set to ${API_COMPATIBILITY_DATE}. Responses repeat that date. A new date is published only when a breaking change replaces this behavior.`,
     title: "quieter API",
-    version: "0.1.0",
+    version: API_COMPATIBILITY_DATE,
   },
   openapi: "3.1.0",
   paths: {
-    "/api/v1/messages/{messageId}": {
+    [`${MESSAGES_API_PATH}/{messageId}`]: {
       get: {
         description:
           "Returns recipient-level delivery state and event history for a sent message.",
         operationId: "getMessageDelivery",
         parameters: [
+          { $ref: "#/components/parameters/QuieterVersion" },
           {
             in: "path",
             name: "messageId",
@@ -263,6 +285,14 @@ export const openApiDocument = {
               },
             },
             description: "Current recipient delivery state and event history.",
+          },
+          "400": {
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+            description: "Missing or unsupported compatibility date.",
           },
           "401": {
             content: {
@@ -285,11 +315,12 @@ export const openApiDocument = {
         summary: "Get message delivery status",
       },
     },
-    "/api/v1/send": {
+    [SEND_API_PATH]: {
       post: {
         description:
           "Sends a message from a verified sender domain owned by the team API key.",
         operationId: "sendMessage",
+        parameters: [{ $ref: "#/components/parameters/QuieterVersion" }],
         requestBody: {
           content: {
             "application/json": {
@@ -322,7 +353,8 @@ export const openApiDocument = {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
-            description: "Invalid message payload.",
+            description:
+              "Invalid message payload, or a missing or unsupported compatibility date.",
           },
           "401": {
             content: {
@@ -378,12 +410,13 @@ export const openApiDocument = {
         summary: "Send a mail message",
       },
     },
-    "/api/v1/suppressions": {
+    [SUPPRESSIONS_API_PATH]: {
       get: {
         description:
           "Lists recipients suppressed after permanent bounces or complaints.",
         operationId: "listRecipientSuppressions",
         parameters: [
+          { $ref: "#/components/parameters/QuieterVersion" },
           {
             in: "query",
             name: "limit",
@@ -401,6 +434,14 @@ export const openApiDocument = {
               },
             },
             description: "Active team recipient suppressions.",
+          },
+          "400": {
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+            description: "Missing or unsupported compatibility date.",
           },
           "401": {
             content: {
@@ -421,4 +462,4 @@ export const openApiDocument = {
       url: "https://quieter.email/",
     },
   ],
-} as const;
+};

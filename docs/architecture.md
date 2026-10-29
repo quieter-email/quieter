@@ -162,8 +162,9 @@ Inbound:
 Outbound:
 
 - Managed compose and replies send through server-side mail logic.
-- `POST /api/v1/send` authenticates an organization API key and requires a verified sender domain.
-- `POST /api/v1/mcp` serves the transactional-mail MCP tool `send_email` over Streamable HTTP with the same organization API key, verified-domain, suppression, idempotency, and usage rules as the REST send endpoint. It exposes sending only: no mailbox, content, or settings access.
+- `POST /api/send` authenticates an organization API key, requires the `Quieter-Version: 2026-10` compatibility date, and requires a verified sender domain.
+- `POST /api/mcp` serves the transactional-mail MCP tool `send_email` over Streamable HTTP with the same organization API key, compatibility date, verified-domain, suppression, idempotency, and usage rules as the REST send endpoint. OPTIONS preflight does not require the date. It exposes sending only: no mailbox, content, or settings access.
+- `GET /api/messages/{messageId}` and `GET /api/suppressions` use the same date. `GET /api/o/{token}` is unversioned because mail clients cannot send the header.
 - Better Auth email hooks call the same endpoint.
 
 ## Chat

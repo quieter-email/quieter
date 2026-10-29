@@ -9,6 +9,13 @@ import type {
   MessageDelivery,
   RecipientSuppression,
 } from "@quieter/mail/delivery";
+import {
+  API_COMPATIBILITY_DATE,
+  API_VERSION_HEADER,
+  MESSAGES_API_PATH,
+  SEND_API_PATH,
+  SUPPRESSIONS_API_PATH,
+} from "@quieter/mail/public-api";
 import type {
   SendHeader,
   SendMessageRequest,
@@ -88,6 +95,7 @@ export class Quieter {
     const headers = new Headers(init.headers);
     headers.set("accept", "application/json");
     headers.set("authorization", `Bearer ${this.#apiKey}`);
+    headers.set(API_VERSION_HEADER, API_COMPATIBILITY_DATE);
     const response = await this.#fetch(new URL(path, this.baseUrl), {
       method: "GET",
       ...init,
@@ -128,7 +136,7 @@ export class Quieter {
       throw new Error("quieter requires a messageId.");
     }
     return await this.#request(
-      `api/v1/messages/${encodeURIComponent(normalized)}`,
+      `${MESSAGES_API_PATH}/${encodeURIComponent(normalized)}`,
       messageDeliverySchema,
       options
     );
@@ -137,7 +145,7 @@ export class Quieter {
   async listSuppressions(
     options: QuieterListSuppressionsOptions = {}
   ): Promise<QuieterRecipientSuppression[]> {
-    const path = new URL("api/v1/suppressions", this.baseUrl);
+    const path = new URL(SUPPRESSIONS_API_PATH, this.baseUrl);
     if (options.limit !== undefined) {
       path.searchParams.set("limit", String(options.limit));
     }
@@ -178,7 +186,7 @@ export class Quieter {
       )
     );
     const idempotencyKey = input.idempotencyKey ?? options.idempotencyKey;
-    return await this.#request("api/v1/send", sendMessageResultSchema, {
+    return await this.#request(SEND_API_PATH, sendMessageResultSchema, {
       body: JSON.stringify({ ...input, attachments, idempotencyKey }),
       headers: {
         "content-type": "application/json",

@@ -21,6 +21,7 @@
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
+    "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
     "@react-email/render": "^2.1.0",
     "react": "catalog:",
