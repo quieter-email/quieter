@@ -13,14 +13,41 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: sdk-publish-${{ github.event.release.tag_name || inputs.version }}
   cancel-in-progress: false
 
 jobs:
+  authorize:
+    name: Authorize SDK revision
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'release' && startsWith(github.ref, 'refs/tags/sdk-v'))
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.revision.outputs.sha }}
+    steps:
+      - name: Verify protected main ancestry
+        id: revision
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data } = await github.rest.repos.compareCommits({
+              ...context.repo,
+              base: context.sha,
+              head: 'main',
+            });
+            if (data.status !== 'ahead' && data.status !== 'identical') {
+              throw new Error('The SDK revision must be reachable from main.');
+            }
+            core.info(`Authorized SDK revision: ${context.sha}`);
+            core.setOutput('sha', context.sha);
+
   publish:
+    needs: authorize
+    permissions:
+      contents: read
+      id-token: write
     name: Publish quieter
     runs-on: ubuntu-latest
     environment: npm-publish
@@ -28,6 +55,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.authorize.outputs.sha }}
+          persist-credentials: false
 
       - name: Setup repository
         uses: ./.github/actions/setup
