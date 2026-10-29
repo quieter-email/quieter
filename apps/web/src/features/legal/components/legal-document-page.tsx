@@ -15,7 +15,7 @@ export const LegalDocumentPage = ({
       <header className="space-y-3 border-b border-border pb-8">
         <p className="text-body text-muted-fg">
           <Link
-            className="rounded-sm underline hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+            className="rounded-sm underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
             to="/home"
           >
             quieter

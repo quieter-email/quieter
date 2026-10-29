@@ -202,7 +202,7 @@ const UsageBreakdown = ({
 
   return (
     <div className="mt-3">
-      <div className="flex h-3 overflow-hidden rounded-full bg-muted shadow-inner ring-1 ring-border squircle">
+      <div className="flex h-3 overflow-hidden rounded-full border border-border bg-muted squircle">
         <div
           className="flex h-full min-w-1 overflow-hidden"
           // oxlint-disable-next-line shadcn/no-inline-styles -- Bar width is measured from cost data.

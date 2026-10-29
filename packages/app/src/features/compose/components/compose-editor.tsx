@@ -547,7 +547,7 @@ export const ComposeEditorBody = ({
       className={cn(
         "relative min-h-20 w-full overflow-hidden rounded-md border border-border bg-control text-body text-fg shadow-sm transition-colors duration-150 ease-out squircle",
         {
-          "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-2 has-[.ProseMirror:focus-visible]:ring-ring has-[.ProseMirror:focus-visible]:ring-offset-2 has-[.ProseMirror:focus-visible]:ring-offset-bg-raised has-[.ProseMirror:focus-visible]:outline-none aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive":
+          "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-2 has-[.ProseMirror:focus-visible]:ring-ring has-[.ProseMirror:focus-visible]:outline-hidden aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive":
             chrome === "default",
           "rounded-none border-0 bg-transparent shadow-none":
             chrome === "seamless",

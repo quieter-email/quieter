@@ -1052,7 +1052,7 @@ export const MailboxSwitcherDropdown = ({
           {isOpen &&
             createPortal(
               <DragOverlay<SwitcherDragData, Draggable<SwitcherDragData>>
-                className="pointer-events-none z-50 rounded-xs bg-popover shadow-md ring-1 ring-border"
+                className="pointer-events-none z-50 rounded-xs border border-border bg-popover shadow-md"
                 dropAnimation={null}
               >
                 {(source) => {

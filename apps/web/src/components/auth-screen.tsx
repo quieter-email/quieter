@@ -17,6 +17,7 @@ import { appFetch } from "@quieter/app/runtime";
 import { desktopAuthQuerySchema } from "@quieter/auth/desktop";
 import type { DesktopAuthQuery } from "@quieter/auth/desktop";
 import { Button } from "@quieter/ui/button";
+import { Separator } from "@quieter/ui/separator";
 import { FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
@@ -338,7 +339,7 @@ export const AuthCredentials = ({
         </form.Subscribe>
       </form>
 
-      <div className="mt-6 mb-3 h-px w-full bg-border" />
+      <Separator className="mt-6 mb-3" />
 
       <Button
         className="mt-3"

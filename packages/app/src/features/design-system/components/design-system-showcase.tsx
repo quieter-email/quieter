@@ -1311,7 +1311,7 @@ export const DesignSystemShowcase = () => {
             </ComposerActionBar>
           </Row>
           <Row label="Token field">
-            <div className="w-80 rounded-md border border-border bg-input px-3 py-2 shadow-sm squircle focus-within:border-ring focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-bg-raised">
+            <div className="w-80 rounded-md border border-border bg-input px-3 py-2 shadow-none squircle focus-within:border-ring focus-within:ring-2 focus-within:ring-ring focus-within:outline-hidden">
               <TokenField
                 aria-label="Token field"
                 onChange={setTokenFieldValue}

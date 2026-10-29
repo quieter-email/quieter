@@ -72,7 +72,7 @@ const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <div
           aria-hidden
-          className="flex size-8 shrink-0 items-center justify-center rounded-md bg-bg-raised text-muted-fg shadow-xs ring-1 ring-border"
+          className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-bg-raised text-muted-fg shadow-xs"
         >
           <Icon icon={Calendar03Icon} />
         </div>
@@ -367,7 +367,7 @@ const HtmlMessageBodyContent = ({
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <div
               aria-hidden
-              className="flex size-8 shrink-0 items-center justify-center rounded-md bg-bg-raised text-muted-fg shadow-xs ring-1 ring-border"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-bg-raised text-muted-fg shadow-xs"
             >
               <Icon icon={Image01Icon} />
             </div>
