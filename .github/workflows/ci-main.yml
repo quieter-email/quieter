@@ -96,6 +96,7 @@ jobs:
         run: vp run @quieter/cloudflare#check:bundles
 
   web-worker-build:
+    # Product worker only. The landing worker is ci-site.yml and is not a required check.
     name: Web worker build
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10

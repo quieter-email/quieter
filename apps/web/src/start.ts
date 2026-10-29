@@ -1,5 +1,6 @@
 import { getSafeAuthReturnTo } from "@quieter/app/lib/return-to";
 import { withRequestDatabaseClient } from "@quieter/database/client";
+import { productionAppOrigin, productionSiteOrigin } from "@quieter/env/hosts";
 import {
   MCP_API_PATH,
   OPEN_TRACKING_PATH_PREFIX,
@@ -13,13 +14,7 @@ import {
 } from "@tanstack/react-start";
 
 import { getRequestRateLimit } from "#/lib/abuse-protection.server";
-import { isAiCrawlerRequest, prefersMarkdown } from "#/lib/agent-access.server";
-import {
-  agentNotFoundMarkdown,
-  buildLlmsTxt,
-  buildSitemapXml,
-  getAgentMarkdown,
-} from "#/lib/agent-content.server";
+import { isAiCrawlerRequest } from "#/lib/agent-access.server";
 import { openApiDocument } from "#/lib/openapi-document.server";
 import { withApiRateLimitHeaders } from "#/lib/rate-limit-headers.server";
 import { withSecurityHeaders } from "#/lib/security-headers.server";
@@ -36,6 +31,14 @@ import {
   sitePasswordCookieName,
 } from "#/lib/site-password.server";
 import { deploymentFetch } from "#/lib/stale-deployment";
+
+const agentNotFoundMarkdown = `404 Not found
+
+This path does not exist on quieter.
+
+- Landing page: ${productionSiteOrigin}/home
+- API specification: ${productionAppOrigin}/openapi.json
+`;
 
 const sitePasswordPaths = new Set([
   "/api/auth/electron/token",
@@ -155,114 +158,20 @@ const securityHeadersMiddleware = createMiddleware().server(
   }
 );
 
-const agentDocumentPaths = new Set([
-  "/",
-  "/home",
-  "/cookies",
-  "/imprint",
-  "/privacy",
-  "/terms",
-]);
-
-const agentTextResponse = (
-  request: Request,
-  body: string,
-  contentType: string,
-  maxAgeSeconds: number,
-  status = 200
-) => {
-  const headers = new Headers({
-    "cache-control":
-      maxAgeSeconds > 0 ? `public, max-age=${maxAgeSeconds}` : "no-store",
-    "content-type": contentType,
-    vary: "Accept, Accept-Encoding",
-  });
-
-  return new Response(request.method.toUpperCase() === "HEAD" ? null : body, {
-    headers,
-    status,
-  });
-};
-
-// Public machine-readable surfaces stay reachable even while the site
-// password gate hides the application itself.
 const wellKnownAgentSurfaceMiddleware = createMiddleware().server(
   async ({ next, request }) => {
     if (!["GET", "HEAD"].includes(request.method.toUpperCase())) {
       return await next();
     }
-
-    const normalizedPath = normalizePathname(new URL(request.url).pathname);
-
-    switch (normalizedPath) {
-      case "/llms.txt": {
-        return agentTextResponse(
-          request,
-          buildLlmsTxt(),
-          "text/plain; charset=utf-8",
-          300
-        );
-      }
-      case "/openapi.json": {
-        return Response.json(openApiDocument, {
-          headers: {
-            "cache-control": "public, max-age=3600",
-            vary: "Accept-Encoding",
-          },
-        });
-      }
-      case "/sitemap.xml": {
-        return agentTextResponse(
-          request,
-          buildSitemapXml(),
-          "application/xml; charset=utf-8",
-          3600
-        );
-      }
-      default: {
-        return await next();
-      }
-    }
-  }
-);
-
-// Document paths negotiate markdown for agents and always declare Vary so
-// cached HTML variants are never served to a markdown request (or vice versa).
-const markdownNegotiationMiddleware = createMiddleware().server(
-  async ({ next, request }) => {
-    if (!["GET", "HEAD"].includes(request.method.toUpperCase())) {
+    if (normalizePathname(new URL(request.url).pathname) !== "/openapi.json") {
       return await next();
     }
-
-    const normalizedPath = normalizePathname(new URL(request.url).pathname);
-
-    if (!agentDocumentPaths.has(normalizedPath)) {
-      return await next();
-    }
-
-    const markdown = getAgentMarkdown(normalizedPath);
-
-    if (prefersMarkdown(request) && markdown !== undefined) {
-      return agentTextResponse(
-        request,
-        markdown,
-        "text/markdown; charset=utf-8",
-        300
-      );
-    }
-
-    const result = await next();
-    const headers = new Headers(result.response.headers);
-    headers.append("vary", "Accept");
-
-    return {
-      ...result,
-      response: new Response(result.response.body, {
-        headers,
-        status: result.response.status,
-        statusText: result.response.statusText,
-      }),
-    };
+    return Response.json(openApiDocument, {
+      headers: {
+        "cache-control": "public, max-age=3600",
+        vary: "Accept-Encoding",
+      },
+    });
   }
 );
 
@@ -362,7 +271,6 @@ export const startInstance = createStart(() => ({
     sentryRequestErrorMiddleware,
     securityHeadersMiddleware,
     wellKnownAgentSurfaceMiddleware,
-    markdownNegotiationMiddleware,
     databaseMiddleware,
     deploymentHealthMiddleware,
     abuseProtectionMiddleware,

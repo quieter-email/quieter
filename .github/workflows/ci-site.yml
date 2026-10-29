@@ -1,0 +1,50 @@
+name: Site worker build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - apps/site/**
+      - apps/web/public/**
+      - packages/env/src/hosts.ts
+      - infra/site.ts
+      - infra/tanstack-start.ts
+      - .github/workflows/ci-site.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  site-worker-build:
+    name: Site worker build
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Setup repository
+        uses: ./.github/actions/setup
+
+      - name: Build runtime dependencies
+        run: |
+          vp run @quieter/observability#build
+          vp run quieter#build
+
+      - name: Build site worker
+        env:
+          SST_WRANGLER_PATH: ${{ github.workspace }}/ci-build-site-worker.wrangler.jsonc
+        run: |
+          touch .env.local
+          node packages/cloudflare/scripts/write-build-wrangler.ts \
+            --name quieter-ci-site-artifact \
+            --main ./apps/site/src/server.ts \
+            --out ci-build-site-worker.wrangler.jsonc
+          vp run @quieter/site#build

@@ -47,7 +47,7 @@ export const createDesktopEnv = (runtimeEnv: object) => {
           );
         }, "Live updates must use WSS or a loopback development connection.")
         .default("wss://updates.quieter.email/mail/live"),
-      DESKTOP_SERVER_URL: serverOrigin.default("https://quieter.email"),
+      DESKTOP_SERVER_URL: serverOrigin.default("https://app.quieter.email"),
       ELECTRON_RENDERER_URL: serverOrigin
         .refine((value) => {
           const url = new URL(value);

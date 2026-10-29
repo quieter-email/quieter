@@ -14,6 +14,14 @@ on:
         options:
           - auto
           - always
+      surface:
+        description: app publishes the product host after cutover. cutover moves the landing host once.
+        required: false
+        default: app
+        type: choice
+        options:
+          - app
+          - cutover
 
 permissions:
   contents: read
@@ -129,6 +137,7 @@ jobs:
     env:
       SST_STAGE: production
       QUIETER_BUILD_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+      QUIETER_DEPLOY_SURFACE: ${{ github.event_name == 'workflow_dispatch' && inputs.surface || 'app' }}
       BETTER_AUTH_APP_NAME: ${{ vars.BETTER_AUTH_APP_NAME }}
       BETTER_AUTH_TRUSTED_ORIGINS: ${{ vars.BETTER_AUTH_TRUSTED_ORIGINS }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -181,8 +190,18 @@ jobs:
           vp run @quieter/observability#build
           vp run quieter#build
 
+      - name: Confirm the landing host stays attached
+        if: env.QUIETER_DEPLOY_SURFACE != 'cutover'
+        run: vp exec node scripts/assert-marketing-host.ts
+
       - name: Prepare web release routing
-        run: vp exec node scripts/web-release.ts prepare https://quieter.email "$QUIETER_BUILD_ID"
+        run: |
+          if [[ "$QUIETER_DEPLOY_SURFACE" == "cutover" ]]; then
+            origin="https://quieter.email"
+          else
+            origin="https://app.quieter.email"
+          fi
+          vp exec node scripts/web-release.ts prepare "$origin" "$QUIETER_BUILD_ID"
 
       # Emergency web recoveries change the live worker outside SST, so state
       # needs a refresh afterwards. Normal deploys only go through SST, in
@@ -230,7 +249,13 @@ jobs:
           overwrite: true
 
       - name: Record previous healthy web version
-        run: vp exec node scripts/web-recovery.ts record previous-web.json
+        run: |
+          if [[ "$QUIETER_DEPLOY_SURFACE" == "cutover" ]]; then
+            host="quieter.email"
+          else
+            host="app.quieter.email"
+          fi
+          vp exec node scripts/web-recovery.ts record previous-web.json "$host"
 
       - name: Retain web recovery record before deployment
         uses: actions/upload-artifact@v7
@@ -242,7 +267,13 @@ jobs:
           overwrite: true
 
       - name: Verify web release routing has not drifted
-        run: vp exec node scripts/web-release.ts verify https://quieter.email "$QUIETER_BUILD_ID"
+        run: |
+          if [[ "$QUIETER_DEPLOY_SURFACE" == "cutover" ]]; then
+            origin="https://quieter.email"
+          else
+            origin="https://app.quieter.email"
+          fi
+          vp exec node scripts/web-release.ts verify "$origin" "$QUIETER_BUILD_ID"
 
       - name: Apply production database migrations
         env:
@@ -255,4 +286,8 @@ jobs:
 
       - name: Verify production release
         timeout-minutes: 5
-        run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID" https://updates.quieter.email/mail/live
+        run: |
+          vp exec node scripts/check-deployment.ts https://app.quieter.email "$QUIETER_BUILD_ID" https://updates.quieter.email/mail/live /site-password
+          if [[ "$QUIETER_DEPLOY_SURFACE" == "cutover" ]]; then
+            vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID"
+          fi

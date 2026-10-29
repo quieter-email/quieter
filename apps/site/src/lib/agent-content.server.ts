@@ -1,3 +1,4 @@
+import { productionAppOrigin } from "@quieter/env/hosts";
 import {
   API_COMPATIBILITY_DATE,
   API_VERSION_HEADER,
@@ -12,6 +13,7 @@ import {
 // the landing page and legal documents so agents read the same story humans do.
 
 const siteUrl = "https://quieter.email";
+const appUrl = productionAppOrigin;
 
 // Bump when public page copy or the machine surfaces change.
 const contentLastUpdated = "2026-10-29";
@@ -145,15 +147,15 @@ mail; suppressed recipients and domain verification are enforced.
 - REST API: bearer-authenticated team API for sending mail and reading
   delivery state and suppressions. Send ${API_VERSION_HEADER} set to
   ${API_COMPATIBILITY_DATE} on every request. OpenAPI specification:
-  ${siteUrl}/openapi.json (base URL ${siteUrl}, endpoints ${SEND_API_PATH},
+  ${appUrl}/openapi.json (base URL ${appUrl}, endpoints ${SEND_API_PATH},
   ${MESSAGES_API_PATH}/{messageId}, ${SUPPRESSIONS_API_PATH})
-- MCP server (transactional sending only): ${siteUrl}${MCP_API_PATH} over
+- MCP server (transactional sending only): ${appUrl}${MCP_API_PATH} over
   Streamable HTTP, authenticated with a team API key as
   "Authorization: Bearer YOUR_API_KEY" and ${API_VERSION_HEADER}
   ${API_COMPATIBILITY_DATE}. One tool, \`send_email\`, runs the same
   checks as the REST send endpoint: verified sender domains only, suppressed
   recipients rejected, idempotency keys honored, team usage charged. Example
-  client entry: {"mcpServers":{"quieter":{"url":"${siteUrl}${MCP_API_PATH}","headers":{"Authorization":"Bearer YOUR_API_KEY","${API_VERSION_HEADER}":"${API_COMPATIBILITY_DATE}"}}}}.
+  client entry: {"mcpServers":{"quieter":{"url":"${appUrl}${MCP_API_PATH}","headers":{"Authorization":"Bearer YOUR_API_KEY","${API_VERSION_HEADER}":"${API_COMPATIBILITY_DATE}"}}}}.
   Example \`send_email\` arguments: {"from":"you@your-verified-domain.com","to":["customer@example.com"],"subject":"Your receipt","text":"Thanks for your order.","idempotencyKey":"order-1234"}.
   Limits: 25 MB request payload, 60 requests per minute per IP, verified sender
   domains, suppression enforcement. The server cannot read mailboxes, mail
@@ -224,6 +226,6 @@ This path does not exist on quieter.
 
 - Machine-readable index: ${siteUrl}/llms.txt
 - Public pages: ${siteUrl}/sitemap.xml
-- API specification: ${siteUrl}/openapi.json
+- API specification: ${appUrl}/openapi.json
 - Landing page: ${siteUrl}/home
 `;

@@ -24,11 +24,11 @@ Behavior-producing AI agents share the scoped dynamic knowledge boundary in [`do
 
 ## Workspace Boundaries
 
-### `apps/web`
+### `apps/web` and `apps/site`
 
-Public content lives under the pathless `_public` route layout: `/home`, `/about`, `/contact`, `/privacy`, `/cookies`, `/terms`, and `/imprint`. These pages share theme, consent, opt-in telemetry, and toast feedback, but do not mount the application session, query cache, mail subscriptions, or keyboard shortcuts. Their URLs are unchanged.
+`apps/site` serves the public marketing and legal pages at `quieter.email`: `/home`, `/about`, `/contact`, `/privacy`, `/cookies`, `/terms`, and `/imprint`, plus `/llms.txt`, `/sitemap.xml`, and the waitlist form. Those pages keep consent and opt-in telemetry. They do not mount the application session, query cache, mail subscriptions, or skew-protection dialog.
 
-The pathless `_app` layout loads application providers through its lazy route component. Inbox, settings, onboarding, authentication, the access gate, and the design system live under this layout. Its query client remains keyed by user identity, preserving cache isolation and cleanup across account changes without remounting public content when a session resolves.
+`apps/web` serves the product at `app.quieter.email`. The pathless `_app` layout loads application providers through its lazy route component. Inbox, settings, onboarding, authentication, the access gate, and the design system live under this layout. Its query client remains keyed by user identity, preserving cache isolation and cleanup across account changes. Client links to marketing paths redirect to the site origin. The site sends other product paths, including `/site-password`, to the app origin, and proxies `/api/*` requests that belong to the app so existing webhook URLs keep their method and body.
 
 TanStack Start application containing:
 

@@ -13,6 +13,6 @@ Disallow: /design-system
 
 # Machine-readable surfaces
 # llms.txt: https://quieter.email/llms.txt
-# OpenAPI specification: https://quieter.email/openapi.json
+# OpenAPI specification: https://app.quieter.email/openapi.json
 
 Sitemap: https://quieter.email/sitemap.xml

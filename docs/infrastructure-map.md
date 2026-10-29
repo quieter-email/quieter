@@ -15,7 +15,8 @@ flowchart TB
     subgraph CF["Cloudflare"]
         direction TB
         subgraph EDGE["Edge / HTTP"]
-            WEB["Web Worker<br/>sst: TanStack Start<br/>quieter.email + www<br/>SSR, oRPC, /api/chat,<br/>/api/send, auth, Polar webhooks"]
+            WEB["Web Worker<br/>sst: TanStack Start<br/>app.quieter.email<br/>SSR, oRPC, /api/chat,<br/>/api/send, auth, Polar webhooks"]
+            SITE["Site Worker<br/>sst: TanStack Start<br/>quieter.email + www<br/>landing, legal, waitlist"]
             GWORKER["GmailRealtimeWorker<br/>/gmail/pubsub (POST)<br/>/gmail/live (WebSocket)"]
         end
 
@@ -114,7 +115,8 @@ flowchart TB
 
 | Resource | SST type | Entry point | Triggered by | Talks to | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `Web` | `sst.cloudflare.TanStackStart` | `apps/web` | Browser HTTPS | Hyperdrive, SESv2, Gmail API, OpenRouter, Polar, Sentry, R2 | Production domain `quieter.email` (+ `www` redirect), logs + traces on, linked scoped AWS credentials via `WebAwsPermissions` for `ses:SendEmail`/`SendRawEmail`. |
+| `Web` | `sst.cloudflare.TanStackStart` | `apps/web` | Browser HTTPS | Hyperdrive, SESv2, Gmail API, OpenRouter, Polar, Sentry, R2 | Production domain `app.quieter.email`. Skew router and release slots stay on this host. Linked scoped AWS credentials via `WebAwsPermissions` for `ses:SendEmail`/`SendRawEmail`. |
+| `Site` | `sst.cloudflare.TanStackStart` | `apps/site` | Browser HTTPS | Hyperdrive for the waitlist and health check | Production domain `quieter.email` (+ `www` redirect). No release slots. App deploys exclude this component. |
 | `GmailRealtimeWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/worker.ts` | Google Pub/Sub push (POST `/gmail/pubsub`), browser WebSocket (`/gmail/live`) | Hyperdrive, processing secrets, `GmailLiveSyncMailboxV2` | Processes authenticated notifications before acknowledging. Verifies Google OIDC JWT against JWKS, checks subscription name, body limit 64 KiB. One DO per normalized email address. |
 | `GmailLiveSyncMailboxV2` | `sst.cloudflare.DurableObject` (SQLite, migration `v3`) | `packages/cloudflare/src/gmail-live-sync-mailbox.ts` | Worker fetch / WS upgrade | Browser sockets, workers via `/broadcast` | Hibernatable WebSockets, auto ping/pong, broadcasts `mailbox-dirty` and `mailbox-details-dirty`. |
 | `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | `*/15 * * * *` | Hyperdrive, Gmail API | Due mailboxes are processed directly with concurrency four, including pending code retries. |

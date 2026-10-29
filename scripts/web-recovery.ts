@@ -6,9 +6,17 @@ import {
   deploymentManifestSchema,
   deploymentStatusSchema,
 } from "@quieter/env/deployment";
+import {
+  appHostname,
+  productionAppOrigin,
+  productionSiteOrigin,
+  siteHostname,
+} from "@quieter/env/hosts";
 import { z } from "zod";
 
 import { checkDeployment } from "./check-deployment.ts";
+
+const appDocumentPath = "/site-password";
 
 const recordSchema = z.object({
   account: z.string().regex(/^[a-f0-9]{32}$/u),
@@ -25,9 +33,19 @@ export const recoverWeb = async (input: {
   account: string;
   token: string;
   expectedVersion?: string;
+  lookupHostname?: string;
   release?: string;
 }) => {
   const { mode, recordFile, account, token, expectedVersion, release } = input;
+  const servingHostname =
+    mode === "record" ? (input.lookupHostname ?? appHostname) : appHostname;
+  if (servingHostname !== appHostname && servingHostname !== siteHostname) {
+    throw new Error("Recovery can only address the app or landing host.");
+  }
+  const servingOrigin =
+    servingHostname === siteHostname
+      ? productionSiteOrigin
+      : productionAppOrigin;
   if (!/^[a-f0-9]{32}$/u.test(account) || token === "") {
     throw new Error("Invalid recovery credentials.");
   }
@@ -56,11 +74,11 @@ export const recoverWeb = async (input: {
     .array(z.object({ hostname: z.string(), service: z.string() }))
     .parse(await api("domains"));
   const script = domains.find(
-    (domain) => domain.hostname === "quieter.email"
+    (domain) => domain.hostname === servingHostname
   )?.service;
   if (script === undefined || script === "" || !/^[\w-]+$/u.test(script)) {
     throw new Error(
-      "Cannot identify the Worker currently serving quieter.email."
+      `Cannot identify the Worker currently serving ${servingHostname}.`
     );
   }
   const deploymentsSchema = z.object({
@@ -84,7 +102,7 @@ export const recoverWeb = async (input: {
   }
   const version = active.versions[0].version_id;
   if (mode === "record") {
-    const response = await fetch("https://quieter.email/assets/build-id.txt", {
+    const response = await fetch(`${servingOrigin}/assets/build-id.txt`, {
       cache: "no-store",
       redirect: "error",
       signal: AbortSignal.timeout(15_000),
@@ -105,9 +123,9 @@ export const recoverWeb = async (input: {
     } else {
       const markerText = await response.text();
       const buildId = markerText.trim();
-      await checkDeployment("https://quieter.email", buildId);
+      await checkDeployment(servingOrigin, buildId, undefined, appDocumentPath);
       const statusResponse = await fetch(
-        `https://quieter.email${DEPLOYMENT_STATUS_PATH}`,
+        `${servingOrigin}${DEPLOYMENT_STATUS_PATH}`,
         {
           cache: "no-store",
           redirect: "error",
@@ -176,7 +194,7 @@ export const recoverWeb = async (input: {
       );
     }
     const statusResponse = await fetch(
-      `https://quieter.email${DEPLOYMENT_STATUS_PATH}`,
+      `${servingOrigin}${DEPLOYMENT_STATUS_PATH}`,
       {
         cache: "no-store",
         redirect: "error",
@@ -219,7 +237,7 @@ export const recoverWeb = async (input: {
           "The recovery release expired or its slot was reused. Use a reviewed forward fix."
         );
       }
-      const healthResponse = await fetch("https://quieter.email/api/health", {
+      const healthResponse = await fetch(`${servingOrigin}/api/health`, {
         cache: "no-store",
         headers: { [DEPLOYMENT_BUILD_HEADER]: target.buildId },
         redirect: "error",
@@ -241,7 +259,12 @@ export const recoverWeb = async (input: {
       strategy: "percentage",
       versions: [{ percentage: 100, version_id: record.version }],
     });
-    await checkDeployment("https://quieter.email", record.buildId);
+    await checkDeployment(
+      servingOrigin,
+      record.buildId,
+      undefined,
+      appDocumentPath
+    );
     process.stdout.write(
       `Restored and verified ${record.version}. The next SST release must refresh state.\n`
     );
@@ -252,13 +275,14 @@ export const recoverWeb = async (input: {
   }
 };
 if (import.meta.main) {
-  const [mode, recordFile, expectedVersion] = process.argv.slice(2);
+  const [mode, recordFile, third] = process.argv.slice(2);
   if (!mode || !recordFile) {
     throw new Error("Supply a mode and recovery record path.");
   }
   await recoverWeb({
     account: process.env.CLOUDFLARE_DEFAULT_ACCOUNT_ID ?? "",
-    expectedVersion,
+    expectedVersion: mode === "restore" ? third : undefined,
+    lookupHostname: mode === "record" ? third : undefined,
     mode,
     recordFile,
     release: `${process.env.GITHUB_SHA ?? ""}-${process.env.GITHUB_RUN_ID ?? ""}`,

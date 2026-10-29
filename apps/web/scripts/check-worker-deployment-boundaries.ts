@@ -12,10 +12,8 @@ const boundaries: {
   marker: string;
 }[] = [
   {
-    marker: "src/features/home/components/home-page.tsx",
-  },
-  {
     forbiddenMarkers: [
+      "src/features/home/components/home-page.tsx",
       "src/features/settings/components/settings-layout.tsx",
       "src/features/settings/components/settings-overview-panel.tsx",
       "src/lib/mail-open-marker.server.ts",

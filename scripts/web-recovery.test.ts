@@ -51,7 +51,7 @@ describe("web recovery", () => {
         }
         return Response.json({
           result: input.endsWith("/domains")
-            ? [{ hostname: "quieter.email", service: "web" }]
+            ? [{ hostname: "app.quieter.email", service: "web" }]
             : {
                 deployments: [
                   {
@@ -88,8 +88,53 @@ describe("web recovery", () => {
     });
     expect(mutations).toHaveLength(0);
     expect(checkDeployment).toHaveBeenCalledWith(
+      "https://app.quieter.email",
+      "healthy-build",
+      undefined,
+      "/site-password"
+    );
+  });
+
+  test("records the router on the landing host during cutover", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) => {
+        if (input.endsWith("/assets/deployment.json")) {
+          return new Response(null, { status: 404 });
+        }
+        if (input.endsWith("/assets/build-id.txt")) {
+          return new Response("healthy-build", {
+            headers: { "content-type": "text/plain" },
+          });
+        }
+        return Response.json({
+          result: input.endsWith("/domains")
+            ? [{ hostname: "quieter.email", service: "web" }]
+            : {
+                deployments: [
+                  {
+                    created_on: "2026-09-06",
+                    versions: [{ percentage: 100, version_id: version }],
+                  },
+                ],
+              },
+          success: true,
+        });
+      })
+    );
+    await recoverWeb({
+      account,
+      lookupHostname: "quieter.email",
+      mode: "record",
+      recordFile,
+      release,
+      token: "test",
+    });
+    expect(checkDeployment).toHaveBeenCalledWith(
       "https://quieter.email",
-      "healthy-build"
+      "healthy-build",
+      undefined,
+      "/site-password"
     );
   });
 
@@ -139,8 +184,10 @@ describe("web recovery", () => {
         }),
       ]);
       expect(checkDeployment).toHaveBeenCalledWith(
-        "https://quieter.email",
-        "healthy-build"
+        "https://app.quieter.email",
+        "healthy-build",
+        undefined,
+        "/site-password"
       );
     } else {
       await expect(restore).rejects.toThrow("changed");
