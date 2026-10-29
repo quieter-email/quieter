@@ -19,6 +19,10 @@ import {
   vi,
 } from "vite-plus/test";
 
+import {
+  setManagedMailboxGrant,
+  removeManagedMailboxGrant,
+} from "../src/mailbox/managed-grants";
 import { getManagedMessageAttachment } from "../src/managed-mail/messages/attachments";
 import {
   deleteManagedDraft,
@@ -159,6 +163,51 @@ describe.skipIf(state.databaseUrl === undefined)(
       await db.delete(organization).where(eq(organization.id, organizationId));
       await db.delete(user).where(inArray(user.id, [userId, otherUserId]));
       await db.$client.end();
+    });
+
+    test("rejects private-context updates and identical retries after sharing without replacing the private draft", async () => {
+      const saved = await saveManagedDraft({ ...input, privateContext: true });
+      await setManagedMailboxGrant({
+        mailboxId,
+        role: "reader",
+        targetUserId: otherUserId,
+        userId,
+      });
+      try {
+        await expect(
+          saveManagedDraft({ ...input, privateContext: true })
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        await expect(
+          saveManagedDraft({
+            ...input,
+            draft: {
+              ...draft,
+              baseRevision: saved.baseRevision,
+              bodyText: "Private update",
+              draftId: saved.draftId,
+            },
+            privateContext: true,
+          })
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        const [record] = await db
+          .select()
+          .from(managedMailMessage)
+          .where(eq(managedMailMessage.id, saved.messageId));
+        expect(record?.bodyText).toBe(draft.bodyText);
+      } finally {
+        await removeManagedMailboxGrant({
+          mailboxId,
+          targetUserId: otherUserId,
+          userId,
+        });
+        await deleteManagedDraft({
+          baseRevision: saved.baseRevision,
+          draftId: saved.draftId,
+          mailboxId,
+          userId,
+        });
+        state.objects.clear();
+      }
     });
 
     test("saves and reopens identical attachment metadata using the correct MIME part", async () => {

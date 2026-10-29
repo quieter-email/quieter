@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
+import type { DatabaseTransaction } from "@quieter/database/client";
 import { db } from "@quieter/database/client";
 import {
   mailbox,
+  mailboxGrant,
+  mailboxDivisionGrant,
   managedMailAttachment,
   managedMailMessage,
   organizationMailSendIdempotency,
@@ -16,7 +19,7 @@ import {
   parseRawMailMessage,
 } from "@quieter/mail/raw-message";
 import { reportError } from "@quieter/observability";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
@@ -117,8 +120,52 @@ const toSavedManagedDraft = (
   subject: draft.subject,
 });
 
+const assertPrivateDraftContext = async (
+  tx: DatabaseTransaction,
+  input: { mailboxId: string; privateContext?: boolean; userId: string }
+) => {
+  if (input.privateContext !== true) {
+    return;
+  }
+  const [record] = await tx
+    .select({
+      accessMode: mailbox.accessMode,
+      ownerId: mailbox.managedOwnerUserId,
+    })
+    .from(mailbox)
+    .where(eq(mailbox.id, input.mailboxId))
+    .for("update");
+  const [otherGrant] = await tx
+    .select({ id: mailboxGrant.id })
+    .from(mailboxGrant)
+    .where(
+      and(
+        eq(mailboxGrant.mailboxId, input.mailboxId),
+        ne(mailboxGrant.userId, input.userId)
+      )
+    )
+    .limit(1);
+  const [divisionGrant] = await tx
+    .select({ id: mailboxDivisionGrant.id })
+    .from(mailboxDivisionGrant)
+    .where(eq(mailboxDivisionGrant.mailboxId, input.mailboxId))
+    .limit(1);
+  if (
+    record?.accessMode !== "private" ||
+    record.ownerId !== input.userId ||
+    otherGrant !== undefined ||
+    divisionGrant !== undefined
+  ) {
+    throw new ORPCError("FORBIDDEN", {
+      message:
+        "Personal context cannot be saved into a draft visible to other inbox members. Review this prompt again.",
+    });
+  }
+};
+
 export const saveManagedDraft = async (input: {
   draft: z.infer<typeof composeDraftInputSchema>;
+  privateContext?: boolean;
   mailboxId: string;
   userId: string;
 }) => {
@@ -237,6 +284,7 @@ export const saveManagedDraft = async (input: {
       );
       if (requestedHash === storedHash) {
         return await db.transaction(async (tx) => {
+          await assertPrivateDraftContext(tx, input);
           const [unchanged] = await tx
             .select({ id: managedMailMessage.id })
             .from(managedMailMessage)
@@ -328,6 +376,7 @@ export const saveManagedDraft = async (input: {
     updatedAt: now,
   };
   await db.transaction(async (tx) => {
+    await assertPrivateDraftContext(tx, input);
     if (existing === undefined) {
       await tx.insert(managedMailMessage).values({
         ...values,
