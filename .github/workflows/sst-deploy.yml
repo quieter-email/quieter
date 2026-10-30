@@ -268,7 +268,8 @@ jobs:
       - name: Verify signed mail updates
         if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
         timeout-minutes: 2
-        run: vp exec sst shell --stage "$SST_STAGE" --target MailUpdatesWorker -- node scripts/check-mail-updates.ts https://updates.quieter.email
+        # Cloudflare Worker shell targets do not export their linked secrets.
+        run: vp exec sst shell --stage "$SST_STAGE" -- node scripts/check-mail-updates.ts https://updates.quieter.email
 
       - name: Verify production release
         if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
