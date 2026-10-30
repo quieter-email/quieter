@@ -250,9 +250,27 @@ jobs:
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: vp run @quieter/database#db:deploy
 
+      - name: Inspect database connections before deployment
+        continue-on-error: true
+        timeout-minutes: 2
+        run: vp exec sst shell --stage "$SST_STAGE" -- node packages/database/scripts/inspect-connections.ts
+
       - name: Deploy prepared build with SST
+        id: deploy
         run: vp run sst deploy --config sst.config.ts --stage "$SST_STAGE"
 
+      - name: Inspect database connections after deployment
+        if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
+        continue-on-error: true
+        timeout-minutes: 2
+        run: vp exec sst shell --stage "$SST_STAGE" -- node packages/database/scripts/inspect-connections.ts
+
+      - name: Verify signed mail updates
+        if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
+        timeout-minutes: 2
+        run: vp exec sst shell --stage "$SST_STAGE" --target MailUpdatesWorker -- node scripts/check-mail-updates.ts https://updates.quieter.email
+
       - name: Verify production release
+        if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
         timeout-minutes: 5
         run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID" https://updates.quieter.email/mail/live

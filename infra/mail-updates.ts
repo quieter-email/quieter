@@ -3,7 +3,7 @@ import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
 import type { createAppDatabase } from "./database";
 import { cloudflareWorkerObservability } from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
-import { production, stage } from "./stage";
+import { deploymentEnvironment, production, stage } from "./stage";
 import type { SecretBindings, SecretResources } from "./types";
 
 export const createMailUpdateResources = (
@@ -20,6 +20,10 @@ export const createMailUpdateResources = (
   const worker = new sst.cloudflare.Worker("MailUpdatesWorker", {
     compatibility: { date: COMPATIBILITY_DATE, flags: ["nodejs_compat"] },
     domain,
+    environment: {
+      QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
+      SENTRY_ENVIRONMENT: stage,
+    },
     handler: "packages/cloudflare/src/mail-update-worker.ts",
     link: [
       user,
