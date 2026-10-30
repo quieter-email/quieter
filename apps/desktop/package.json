@@ -13,7 +13,7 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "vp run @quieter/env#build && electron-vite dev",
-    "build": "vp run generate:icon && vp run @quieter/env#build && electron-vite build",
+    "build": "vp run generate:icon && vp run @quieter/env#build && vp run @quieter/observability#build && electron-vite build",
     "generate:icon": "node ../../scripts/generate-desktop-icon.ts",
     "preview": "electron-vite preview",
     "package": "vp run build && electron-builder --dir",
