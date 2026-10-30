@@ -156,6 +156,15 @@ export const createMailCache = (
     async clear() {
       await changeUser(undefined, undefined, true);
     },
+    detach() {
+      initialized = true;
+      userId = undefined;
+      sessionId = undefined;
+      generation += 1;
+      userGeneration += 1;
+      protectedKeys.clear();
+      databaseEpoch = undefined;
+    },
     async entries(): Promise<[string, string][]> {
       const owner = userId;
       if (!owner) {

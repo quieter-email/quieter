@@ -4,6 +4,7 @@ import { pendingMailMutations } from "@quieter/app/lib/mail-mutation-state";
 import { runMailMutation } from "@quieter/app/lib/mail-mutations";
 import { persistQueryKeys } from "@quieter/app/lib/mail/inbox-query/query-cache";
 import {
+  clearQueryPersistence,
   queryPersister,
   setQueryPersistenceUser,
 } from "@quieter/app/lib/query-persister";
@@ -24,6 +25,55 @@ describe("mail content persistence", () => {
   afterEach(() => {
     setQueryPersistenceUser(undefined);
     vi.unstubAllGlobals();
+  });
+
+  test("a login after committed logout survives the sender completing", async () => {
+    const client = new QueryClient();
+    setQueryPersistenceUser("one", client, crypto.randomUUID());
+    const key = ["message-thread", 3, "mailbox", "thread"];
+    client.setQueryData(key, {
+      messages: [{ bodyText: "old private body", id: "message" }],
+    });
+    await queryPersister.persistQueryByKey(key, client);
+    const committed = Promise.withResolvers<null>();
+    const resume = Promise.withResolvers<null>();
+    const clear = mailCache.clear.bind(mailCache);
+    const cleanup = vi
+      .spyOn(mailCache, "clear")
+      .mockImplementation(async () => {
+        await clear();
+        committed.resolve(null);
+        await resume.promise;
+      });
+    try {
+      const logout = clearQueryPersistence();
+      await committed.promise;
+      const fresh = new QueryClient();
+      const session = crypto.randomUUID();
+      setQueryPersistenceUser("one", fresh, session);
+      fresh.setQueryData(key, {
+        messages: [{ bodyText: "fresh private body", id: "message" }],
+      });
+      await queryPersister.persistQueryByKey(key, fresh);
+      resume.resolve(null);
+      await logout;
+      await expect(
+        queryPersister.retrieveQuery(JSON.stringify(key))
+      ).resolves.toMatchObject({
+        messages: [{ bodyText: "fresh private body" }],
+      });
+      expect(client.getQueryData(key)).toBeUndefined();
+      const reload = new QueryClient();
+      setQueryPersistenceUser("one", reload, session);
+      await expect(
+        queryPersister.retrieveQuery(JSON.stringify(key))
+      ).resolves.toMatchObject({
+        messages: [{ bodyText: "fresh private body" }],
+      });
+    } finally {
+      resume.resolve(null);
+      cleanup.mockRestore();
+    }
   });
 
   test.each([false, true])(

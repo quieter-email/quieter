@@ -233,6 +233,33 @@ export const queryPersister: ReturnType<
 
 let logoutChannel: BroadcastChannel | undefined;
 
+const updatePersistenceOwner = (
+  userId: string | undefined,
+  client?: QueryClient,
+  sessionId?: string
+) => {
+  persistenceInitialized = true;
+  if (persistenceClient) {
+    mailMutationCoordinators.get(persistenceClient)?.dispose();
+    deferredMailPersistence.delete(persistenceClient);
+  }
+  persistenceUser = userId;
+  persistenceSession = sessionId;
+  persistenceClient = client;
+  persistenceGeneration += 1;
+  currentPersister = createPersister(persistenceGeneration);
+  try {
+    for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.localStorage.key(index);
+      if (key?.startsWith("quieter-cache:") === true) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    /* Browser storage access may be denied. */
+  }
+};
+
 export const setQueryPersistenceUser = (
   userId: string | null | undefined,
   client?: QueryClient,
@@ -258,7 +285,8 @@ export const setQueryPersistenceUser = (
             event.data === persistenceSession
           ) {
             const previousClient = persistenceClient;
-            setQueryPersistenceUser(undefined);
+            updatePersistenceOwner(undefined);
+            mailCache.detach();
             previousClient?.clear();
           }
         }
@@ -267,43 +295,24 @@ export const setQueryPersistenceUser = (
   } catch {
     /* The browser may deny cross-tab messaging. */
   }
-  persistenceInitialized = true;
-  if (persistenceClient) {
-    mailMutationCoordinators.get(persistenceClient)?.dispose();
-    deferredMailPersistence.delete(persistenceClient);
-  }
-  persistenceUser = userId ?? undefined;
-  persistenceSession = sessionId;
-  persistenceClient = client;
-  persistenceGeneration += 1;
+  updatePersistenceOwner(userId ?? undefined, client, sessionId);
   void mailCache.setUser(persistenceUser, sessionId);
-  currentPersister = createPersister(persistenceGeneration);
-  try {
-    for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
-      const key = window.localStorage.key(index);
-      if (key?.startsWith("quieter-cache:") === true) {
-        window.localStorage.removeItem(key);
-      }
-    }
-  } catch {
-    /* Remove obsolete metadata when browser storage is available. */
-  }
 };
 
 export const clearQueryPersistence = async () => {
   const previousSession = persistenceSession;
   const previousClient = persistenceClient;
-  setQueryPersistenceUser(undefined);
+  updatePersistenceOwner(undefined);
   previousClient?.clear();
+  await mailCache.clear();
   try {
     if (previousSession) {
       // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel messages are restricted to the same origin and accept no targetOrigin.
       logoutChannel?.postMessage(previousSession);
     }
   } catch {
-    /* Durable revocation must proceed when messaging is unavailable. */
+    /* The browser may deny cross-tab messaging. */
   }
-  await mailCache.clear();
 };
 
 export const shouldPersistQueryKey = (queryKey: readonly unknown[]) => {

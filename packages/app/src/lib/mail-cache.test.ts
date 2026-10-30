@@ -73,6 +73,54 @@ describe("bounded mail cache", () => {
     await expect(cache.getItem("message")).resolves.toBeNull();
   });
 
+  test.each(["one", "two"])(
+    "detaches a revoked tab without revoking the fresh %s login",
+    async (nextUser) => {
+      const name = crypto.randomUUID();
+      const stale = createMailCache({ name });
+      const sender = createMailCache({ name });
+      await stale.setUser("one", "old-session");
+      await sender.setUser("one", "old-session");
+      await stale.setItem("body-old", "old private body");
+      await sender.clear();
+      await sender.setUser(nextUser, "fresh-session");
+      await sender.setItem("body-fresh", "fresh private body");
+
+      stale.detach();
+      stale.detach();
+      await stale.setItem("body-fresh", "stale private body");
+      await expect(stale.getItem("body-fresh")).resolves.toBeNull();
+      await expect(sender.getItem("body-fresh")).resolves.toBe(
+        "fresh private body"
+      );
+      await sender.setItem("body-after", "fresh write");
+      const reload = createMailCache({ name });
+      await reload.setUser(nextUser, "fresh-session");
+      await expect(reload.getItem("body-after")).resolves.toBe("fresh write");
+      await stale.setUser("one", "old-session");
+      await stale.setItem("body-old", "revoked private body");
+      await expect(stale.getItem("body-old")).resolves.toBeNull();
+      await expect(reload.getItem("body-old")).resolves.toBeNull();
+    }
+  );
+
+  test("preserves pending initialization ordering across local detach", async () => {
+    const name = crypto.randomUUID();
+    const cache = createMailCache({ name });
+    const initializing = cache.setUser("one", "old-session");
+    const staleWrite = cache.setItem("body-old", "stale private body");
+    cache.detach();
+    const login = cache.setUser("one", "fresh-session");
+    await Promise.all([initializing, staleWrite, login]);
+    await expect(cache.getItem("body-old")).resolves.toBeNull();
+    await cache.setItem("body-fresh", "fresh private body");
+    const reload = createMailCache({ name });
+    await reload.setUser("one", "fresh-session");
+    await expect(reload.getItem("body-fresh")).resolves.toBe(
+      "fresh private body"
+    );
+  });
+
   test("concurrent account and calendar removals purge each scope and retain other calendars", async () => {
     const cache = createMailCache({ name: crypto.randomUUID() });
     void cache.setUser("one");
