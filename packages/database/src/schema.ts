@@ -323,6 +323,9 @@ export type AiMemoryChange = {
 export const user = pgTable("user", {
   createdAt: timestamp("createdAt").notNull(),
   defaultMailboxId: text("defaultMailboxId"),
+  defaultOrganizationProvisioned: boolean("defaultOrganizationProvisioned")
+    .notNull()
+    .default(false),
   email: text("email").notNull().unique(),
   emailVerified: boolean("emailVerified").notNull(),
   id: text("id").primaryKey(),

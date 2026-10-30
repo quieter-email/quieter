@@ -107,6 +107,10 @@ Repository checks cannot validate account-level state. After changing Worker inf
 
 Production migration history is never adopted or rewritten automatically. Automated production migrations reject destructive SQL unless the migration explicitly opts in with `-- quieter:contract`, which requires the same review as a manual procedure.
 
+Default-team provisioning uses the durable `user.defaultOrganizationProvisioned` field. Its migration adds the field with `true` for existing accounts, then changes the default to `false` for new accounts. The contract marker requires explicit review because the migration changes a column default. Apply this expansion through the protected migration workflow before deploying the auth change. Older application versions can still read and write their existing columns. No column removal is required. Do not roll the auth code back after revoking team membership, because the older provisioning logic can restore removed owners.
+
+Existing accounts without memberships remain without a team. Current data cannot distinguish an interrupted old bootstrap from an explicit removal. Those users must create a team or accept an invitation in team settings. Do not reset their provisioning field to repair membership. Existing preview fixtures without a team need explicit fixture repair.
+
 The historical migration chain includes vector columns, so a fresh database still needs the `vector` extension before that migration. The current memory runtime uses categorized plain text and SQL recall. It requires no embedding service or embedding credential. Retired vector columns stay inert until a separately reviewed contract migration can remove them after older workers have been replaced.
 
 ## Failure behavior
