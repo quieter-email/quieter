@@ -36,6 +36,7 @@ import {
   resolveRendererFile,
   sanitizeAuthResponse,
 } from "./security";
+import { SignOutCleanup } from "./sign-out-cleanup";
 
 // oxlint-disable-next-line node/no-process-env -- Electron's main entrypoint is the environment bootstrap.
 const env = createDesktopEnv(process.env);
@@ -167,15 +168,44 @@ ipcMain.handle("better-auth:authenticate", async (event, data: unknown) => {
     );
   }
 });
+const signOutCleanup = new SignOutCleanup();
+ipcMain.handle("quieter:sign-out-cleanup-ack", (event, input: unknown) => {
+  assertTrustedSender(event);
+  signOutCleanup.acknowledge(input);
+});
 ipcMain.handle("better-auth:signOut", async (event) => {
   assertTrustedSender(event);
-  const result = await authClient.signOut();
-  if (result.error) {
-    throw new Error(
-      result.error.message ?? "Sign-out could not be completed. Try again."
-    );
-  }
-  mainWindow?.webContents.send("better-auth:user-updated", null);
+  const frame = event.senderFrame;
+  await signOutCleanup.run({
+    onCompletionError: () => {
+      Sentry.captureException(
+        new Error("Desktop sign-out completion failed."),
+        {
+          tags: { boundary: "desktop-sign-out-cache" },
+        }
+      );
+    },
+    onSignedOut: () => {
+      if (!event.sender.isDestroyed() && event.sender.mainFrame === frame) {
+        event.sender.send("better-auth:user-updated", null);
+      }
+    },
+    send: (command) => {
+      assertTrustedSender(event);
+      if (event.sender.mainFrame !== frame) {
+        throw new Error("The sign-out window changed. Try again.");
+      }
+      event.sender.send("quieter:sign-out-cleanup", command);
+    },
+    signOut: async () => {
+      const result = await authClient.signOut();
+      if (result.error) {
+        throw new Error(
+          result.error.message ?? "Sign-out could not be completed. Try again."
+        );
+      }
+    },
+  });
 });
 ipcMain.handle("quieter:open-external", async (event, input: unknown) => {
   assertTrustedSender(event);
@@ -437,7 +467,19 @@ const createWindow = async (): Promise<void> => {
   window.once("ready-to-show", () => {
     window.show();
   });
+  window.webContents.on(
+    "did-start-navigation",
+    (_event, _url, _inPlace, isMainFrame) => {
+      if (isMainFrame) {
+        signOutCleanup.cancel();
+      }
+    }
+  );
+  window.webContents.on("render-process-gone", () => {
+    signOutCleanup.cancel();
+  });
   window.on("closed", () => {
+    signOutCleanup.cancel();
     if (mainWindow === window) {
       mainWindow = null;
     }

@@ -16,6 +16,8 @@ import {
 import { createAuthClient } from "better-auth/react";
 
 import { appFetch } from "../runtime";
+import { draftRecoveryJournal } from "./draft-recovery-journal";
+import { captureQueryPersistenceCleanup } from "./query-persister";
 
 const createAppAuthClient = (options: { baseURL?: string } = {}) => {
   const currentURL =
@@ -69,4 +71,26 @@ export let authClient = createAppAuthClient();
 
 export const configureAppAuthClient = (options: { baseURL: string }) => {
   authClient = createAppAuthClient(options);
+};
+
+export const signOut = async () => {
+  const clearQueries = captureQueryPersistenceCleanup();
+  const clearRecovery = draftRecoveryJournal.captureCleanup();
+  if (!(clearQueries && clearRecovery) || !(await clearQueries.isCurrent())) {
+    throw new Error("Your session is still loading. Please try again.");
+  }
+  const response = await authClient.signOut();
+  if (response.error) {
+    throw new Error(response.error.message ?? "Could not sign out.", {
+      cause: response.error,
+    });
+  }
+  const results = await Promise.allSettled([clearRecovery(), clearQueries()]);
+  const failures = results
+    .filter((result) => result.status === "rejected")
+    .map((result): unknown => result.reason);
+  if (failures.length > 0) {
+    throw new AggregateError(failures, "Local sign-out cleanup failed.");
+  }
+  return response;
 };

@@ -60,6 +60,7 @@ export type ComposeDraftState = {
   recoveryLocalId?: string;
   recoveryMissingFiles?: string[];
   recoveryUpdatedAt?: number;
+  recoveryRevision?: string;
   updatedAt: number;
 };
 

@@ -1,8 +1,11 @@
+import "fake-indexeddb/auto";
 import {
   findRecoverableComposeDraft,
   restoreComposeDraft,
 } from "@quieter/app/features/compose/domain/draft-recovery";
-import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
+import { createDraftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
+import { createMailCache } from "@quieter/app/lib/mail-cache";
+import { openDB } from "idb";
 import {
   afterEach,
   beforeEach,
@@ -77,9 +80,21 @@ describe("compose recovery", () => {
   });
 });
 
-describe("draft recovery selection", () => {
-  const unregisterEditors: (() => void)[] = [];
-  beforeEach(() => {
+describe("draft recovery ownership", () => {
+  let name: string;
+  let journal: ReturnType<typeof createDraftRecoveryJournal>;
+  let recovery: ReturnType<
+    ReturnType<typeof createDraftRecoveryJournal>["session"]
+  >;
+  const record = {
+    editorId: "editor",
+    localId: draft.localId,
+    mailboxId: "mailbox",
+    payload: JSON.stringify(draft),
+    updatedAt: 10,
+    userId: "user-a",
+  };
+  beforeEach(async () => {
     const values = new Map<string, string>();
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => values.get(key) ?? null,
@@ -90,348 +105,408 @@ describe("draft recovery selection", () => {
       removeItem: (key: string) => values.delete(key),
       setItem: (key: string, value: string) => values.set(key, value),
     });
-    draftRecoveryJournal.setUser("user-a");
+    name = crypto.randomUUID();
+    journal = createDraftRecoveryJournal(createMailCache({ name }));
+    await journal.setUser("user-a", "old");
+    recovery = journal.session("user-a", "old");
   });
   afterEach(() => {
-    for (const unregister of unregisterEditors.splice(0)) {
-      unregister();
-    }
     vi.unstubAllGlobals();
   });
 
-  it("isolates shared-mailbox drafts across accounts and preserves refresh recovery", () => {
-    const scope = { mailboxId: "shared", userId: "user-a" };
-    const record = {
-      ...scope,
-      editorId: "owner-editor",
-      localId: draft.localId,
-      payload: JSON.stringify(draft),
-      updatedAt: 10,
-    };
-    draftRecoveryJournal.save(record);
-    draftRecoveryJournal.setUser("user-a");
-    expect(draftRecoveryJournal.listRecoverable(scope)).toHaveLength(1);
-    const current = restoreComposeDraft(JSON.stringify(draft), "current");
-    expect(
-      findRecoverableComposeDraft({ ...scope, userId: "user-b" }, current)
-    ).toBeNull();
-    const unregister = draftRecoveryJournal.registerEditor(record);
-    unregisterEditors.push(unregister);
-    draftRecoveryJournal.setUser("user-b");
-    draftRecoveryJournal.save(record);
-    expect(draftRecoveryJournal.list(scope)).toHaveLength(0);
-    expect(
-      draftRecoveryJournal.listRecoverable({ ...scope, userId: "user-b" })
-    ).toHaveLength(0);
-    draftRecoveryJournal.setUser("user-a");
-    draftRecoveryJournal.save(record);
-    expect(draftRecoveryJournal.list(scope)).toHaveLength(0);
-  });
-
-  it("clears and revokes a confirmed native sign-out without a session refetch", () => {
-    const record = {
-      editorId: "native-editor",
-      localId: draft.localId,
-      mailboxId: "shared",
-      payload: JSON.stringify(draft),
-      updatedAt: 10,
-      userId: "user-a",
-    };
-    draftRecoveryJournal.save(record);
-    const unregister = draftRecoveryJournal.registerEditor(record);
-    unregisterEditors.push(unregister);
-    draftRecoveryJournal.setUser(undefined);
-    draftRecoveryJournal.save(record);
-    expect(draftRecoveryJournal.list(record)).toHaveLength(0);
-    unregister();
-    expect(draftRecoveryJournal.listRecoverable(record)).toHaveLength(0);
-    expect(
-      findRecoverableComposeDraft(
-        record,
-        restoreComposeDraft(JSON.stringify(draft), "current")
-      )
-    ).toBeNull();
-    draftRecoveryJournal.setUser("user-a");
-    draftRecoveryJournal.save(record);
-    expect(draftRecoveryJournal.list(record)).toHaveLength(0);
-    draftRecoveryJournal.save({ ...record, editorId: "native-fresh-editor" });
-    expect(draftRecoveryJournal.listRecoverable(record)).toHaveLength(1);
-  });
-
-  it("does not restore legacy or incorrectly attributed records", () => {
-    const scope = { mailboxId: "shared", userId: "user-a" };
-    const record = {
-      ...scope,
-      editorId: "mismatched-editor",
-      localId: draft.localId,
-      payload: JSON.stringify(draft),
-      updatedAt: 10,
-    };
-    draftRecoveryJournal.save(record);
-    const key = localStorage.key(0);
-    expect(key).not.toBeNull();
-    if (key === null) {
-      throw new Error("Recovery key missing");
+  it.each(["user-a", "user-b"])(
+    "preserves a fresh %s activation across delayed cleanup and rejects stale writers",
+    async (userId) => {
+      await recovery.save(record);
+      const clearOld = journal.captureCleanup();
+      const fresh = createDraftRecoveryJournal(createMailCache({ name }));
+      await fresh.setUser(userId, "fresh");
+      const active = fresh.session(userId, "fresh");
+      await active.save({
+        ...record,
+        editorId: "fresh-editor",
+        payload: "Fresh recovery",
+        userId,
+      });
+      await clearOld?.();
+      await recovery.save({ ...record, payload: "Forbidden stale edit" });
+      await expect(recovery.list(record)).resolves.toHaveLength(0);
+      const reload = createDraftRecoveryJournal(createMailCache({ name }));
+      await reload.setUser(userId, "fresh");
+      await expect(
+        reload.session(userId, "fresh").list({ ...record, userId })
+      ).resolves.toStrictEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ payload: "Fresh recovery" }),
+        ])
+      );
+      const staleReload = createDraftRecoveryJournal(createMailCache({ name }));
+      await staleReload.setUser("user-a", "old");
+      await staleReload.session("user-a", "old").save(record);
+      await expect(
+        staleReload.session("user-a", "old").list(record)
+      ).resolves.toHaveLength(0);
     }
+  );
+
+  it("keeps prior user-owned recovery through refresh, reload and a new same-user session", async () => {
+    await recovery.save(record);
+    await journal.setUser("user-a", "old");
+    const refresh = createDraftRecoveryJournal(createMailCache({ name }));
+    await refresh.setUser("user-a", "old");
+    await expect(
+      refresh.session("user-a", "old").list(record)
+    ).resolves.toMatchObject([{ payload: record.payload }]);
+    await refresh.setUser("user-a", "new");
+    await expect(
+      refresh.session("user-a", "new").list(record)
+    ).resolves.toMatchObject([{ payload: record.payload }]);
+    await expect(recovery.list(record)).resolves.toHaveLength(0);
+  });
+
+  it("physically clears recovery and rejects the expired identity after passive null", async () => {
+    await recovery.save(record);
+    await journal.setUser(undefined);
+    await recovery.save(record);
+    const db = await openDB(name);
+    await expect(db.getAll("recovery")).resolves.toHaveLength(0);
+    db.close();
+    const reload = createDraftRecoveryJournal(createMailCache({ name }));
+    await reload.setUser("user-a", "old");
+    await expect(reload.session("user-a", "old").ready()).resolves.toBeFalsy();
+  });
+
+  it("an unknown anonymous tab cannot purge another tab", async () => {
+    await recovery.save(record);
+    const anonymous = createDraftRecoveryJournal(createMailCache({ name }));
+    expect(anonymous.captureCleanup()).toBeUndefined();
+    await anonymous.setUser(undefined);
+    await expect(recovery.list(record)).resolves.toMatchObject([
+      { payload: record.payload },
+    ]);
+  });
+
+  it("a stale discard cannot remove a newer checkpoint with the same timestamp", async () => {
+    await recovery.save(record);
+    const [old] = await recovery.list(record);
+    if (old === undefined) {
+      throw new Error("Missing original recovery");
+    }
+    await recovery.save({ ...record, payload: "Newer same-time edit" });
+    await recovery.remove(old);
+    await expect(recovery.list(record)).resolves.toMatchObject([
+      { payload: "Newer same-time edit" },
+    ]);
+    const restored = restoreComposeDraft(
+      old.payload,
+      old.editorId,
+      old.updatedAt,
+      undefined,
+      old.revision
+    );
+    const [newer] = await recovery.list(record);
+    expect(newer?.revision).not.toBe(restored.recoveryRevision);
+    await recovery.remove({ ...old, revision: restored.recoveryRevision });
+    await expect(recovery.list(record)).resolves.toMatchObject([
+      { payload: "Newer same-time edit" },
+    ]);
+  });
+
+  it("serializes empty checkpoints with saves and leaves other editors intact", async () => {
+    await recovery.save({
+      ...record,
+      editorId: "other",
+      payload: "Other editor",
+    });
+    await Promise.all([recovery.save(record), recovery.remove(record)]);
+    await expect(recovery.list(record)).resolves.toMatchObject([
+      { editorId: "other", payload: "Other editor" },
+    ]);
+    await Promise.all([recovery.remove(record), recovery.save(record)]);
+    await expect(recovery.list(record)).resolves.toStrictEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ editorId: "editor" }),
+        expect.objectContaining({ editorId: "other" }),
+      ])
+    );
+  });
+
+  it("prunes concurrent editors while preserving the latest checkpoints after reload", async () => {
+    await Promise.all(
+      ["one", "two", "three", "four", "five"].map(async (editorId, index) => {
+        await recovery.save({
+          ...record,
+          editorId,
+          payload: editorId,
+          updatedAt: index,
+        });
+      })
+    );
+    const reload = createDraftRecoveryJournal(createMailCache({ name }));
+    await reload.setUser("user-a", "old");
+    const records = await reload.session("user-a", "old").list(record);
+    expect(records.map((value) => value.payload)).toContain("five");
+    expect(records.map((value) => value.payload)).not.toContain("one");
+    const db = await openDB(name);
+    await expect(db.getAll("recovery")).resolves.toHaveLength(records.length);
+    db.close();
+  });
+
+  it("hides recoverable copies during editing and keeps mailbox/user access scoped", async () => {
+    await recovery.save(record);
+    const unregister = recovery.registerEditor({
+      ...record,
+      editorId: "active-editor",
+    });
+    await expect(recovery.listRecoverable(record)).resolves.toHaveLength(0);
+    await expect(recovery.list(record)).resolves.toHaveLength(1);
+    unregister();
+    await expect(recovery.listRecoverable(record)).resolves.toHaveLength(1);
+    await expect(
+      recovery.list({ ...record, mailboxId: "other" })
+    ).resolves.toHaveLength(0);
+    await expect(
+      recovery.list({ ...record, userId: "other" })
+    ).resolves.toHaveLength(0);
+    await recovery.remove({ ...record, userId: "other" });
+    await expect(recovery.list(record)).resolves.toHaveLength(1);
+  });
+
+  it("migrates only correctly attributed legacy recovery and removes raw legacy data", async () => {
+    const migrationName = crypto.randomUUID();
+    const key = `quieter:draft-recovery-v2:${JSON.stringify(["user-a", "mailbox"])}`;
     localStorage.setItem(
       key,
       JSON.stringify([
-        { ...record, userId: "user-b" },
+        record,
+        { ...record, userId: "other" },
         { ...record, mailboxId: "other" },
       ])
     );
     localStorage.setItem(
-      "quieter:draft-recovery:shared",
+      "quieter:draft-recovery:mailbox",
       JSON.stringify([record])
     );
-    expect(draftRecoveryJournal.listRecoverable(scope)).toHaveLength(0);
-    expect(
-      findRecoverableComposeDraft(
-        scope,
-        restoreComposeDraft(JSON.stringify(draft), "current")
-      )
-    ).toBeNull();
-    expect(localStorage.getItem("quieter:draft-recovery:shared")).toBeNull();
+    const migrated = createDraftRecoveryJournal(
+      createMailCache({ name: migrationName })
+    );
+    await migrated.setUser("user-a", "migration");
+    await expect(
+      migrated.session("user-a", "migration").list(record)
+    ).resolves.toMatchObject([{ payload: record.payload }]);
+    expect(localStorage).toHaveLength(0);
   });
 
-  it("keeps mailbox and user cleanup independent", () => {
-    const record = {
-      editorId: "editor",
-      localId: draft.localId,
-      mailboxId: "one",
-      payload: JSON.stringify(draft),
-      updatedAt: 10,
-      userId: "user-a",
-    };
-    draftRecoveryJournal.save(record);
-    draftRecoveryJournal.save({ ...record, mailboxId: "two" });
-    expect(
-      draftRecoveryJournal.list({ mailboxId: "one", userId: "user-a" })
-    ).toHaveLength(1);
-    expect(
-      draftRecoveryJournal.list({ mailboxId: "two", userId: "user-a" })
-    ).toHaveLength(1);
-    draftRecoveryJournal.remove({ ...record, userId: "user-b" });
-    expect(draftRecoveryJournal.list(record)).toHaveLength(1);
-    draftRecoveryJournal.clearUser("user-b");
-    expect(draftRecoveryJournal.list(record)).toHaveLength(1);
-    draftRecoveryJournal.clearUser("user-a");
-    expect(draftRecoveryJournal.list(record)).toHaveLength(0);
-    expect(
-      draftRecoveryJournal.list({ ...record, mailboxId: "two" })
-    ).toHaveLength(0);
-  });
-
-  it("clears only the departing principal when another tab has its own copy", () => {
-    const other = {
-      editorId: "other-owner-editor",
-      localId: draft.localId,
-      mailboxId: "shared",
-      payload: JSON.stringify(draft),
-      updatedAt: 10,
-      userId: "user-b",
-    };
-    draftRecoveryJournal.setUser("user-b");
-    draftRecoveryJournal.save(other);
-    const key = localStorage.key(0);
-    if (key === null) {
-      throw new Error("Recovery key missing");
+  it("retains the legacy copy when migration persistence fails", async () => {
+    const key = `quieter:draft-recovery-v2:${JSON.stringify(["user-a", "mailbox"])}`;
+    localStorage.setItem(key, JSON.stringify([record]));
+    const migration = createDraftRecoveryJournal(
+      createMailCache({ name: crypto.randomUUID() })
+    );
+    // oxlint-disable-next-line typescript/unbound-method -- Invoked with its original object store below.
+    const original = IDBObjectStore.prototype.put;
+    const put = vi
+      .spyOn(IDBObjectStore.prototype, "put")
+      .mockImplementation(function put(
+        this: IDBObjectStore,
+        value: unknown,
+        storageKey?: IDBValidKey
+      ) {
+        if (this.name === "recovery") {
+          throw new DOMException("denied", "QuotaExceededError");
+        }
+        return original.call(this, value, storageKey);
+      });
+    try {
+      await expect(migration.setUser("user-a", "migration")).rejects.toThrow(
+        /denied/u
+      );
+    } finally {
+      put.mockRestore();
     }
-    const serialized = localStorage.getItem(key);
-    if (serialized === null) {
-      throw new Error("Recovery record missing");
+    expect(localStorage.getItem(key)).not.toBeNull();
+  });
+
+  it("retains the previous checkpoint when a payload or commit request throws", async () => {
+    await recovery.save(record);
+    // oxlint-disable-next-line typescript/unbound-method -- Invoked with its original object store below.
+    const originalPut = IDBObjectStore.prototype.put;
+    const put = vi
+      .spyOn(IDBObjectStore.prototype, "put")
+      .mockImplementation(function put(
+        this: IDBObjectStore,
+        value: unknown,
+        storageKey?: IDBValidKey
+      ) {
+        if (this.name === "recovery") {
+          throw new DOMException("quota denied", "QuotaExceededError");
+        }
+        return originalPut.call(this, value, storageKey);
+      });
+    try {
+      await expect(
+        recovery.save({ ...record, payload: "Uncommitted edit" })
+      ).rejects.toThrow(/denied/u);
+    } finally {
+      put.mockRestore();
     }
-    draftRecoveryJournal.setUser("user-a");
-    localStorage.setItem(key, serialized);
-    const own = { ...other, editorId: "own-editor", userId: "user-a" };
-    draftRecoveryJournal.save(own);
-    const unregister = draftRecoveryJournal.registerEditor(own);
-    unregisterEditors.push(unregister);
-    expect(draftRecoveryJournal.listRecoverable(other)).toHaveLength(0);
-    expect(localStorage.getItem(key)).toBe(serialized);
-    draftRecoveryJournal.clearUser("user-a");
-    expect(draftRecoveryJournal.list(own)).toHaveLength(0);
-    draftRecoveryJournal.setUser("user-b");
-    expect(draftRecoveryJournal.listRecoverable(other)).toHaveLength(1);
+    await expect(recovery.list(record)).resolves.toMatchObject([
+      { payload: record.payload },
+    ]);
+    const commit = vi
+      .spyOn(IDBTransaction.prototype, "commit")
+      .mockImplementationOnce(() => {
+        throw new DOMException("commit denied", "UnknownError");
+      });
+    try {
+      await expect(
+        recovery.save({ ...record, payload: "Uncommitted edit" })
+      ).rejects.toThrow(/denied/u);
+    } finally {
+      commit.mockRestore();
+    }
+    await expect(recovery.list(record)).resolves.toMatchObject([
+      { payload: record.payload },
+    ]);
   });
 
-  it("hides recovery while composing and retains copies when the editor closes", () => {
-    draftRecoveryJournal.save({
-      editorId: "old-editor",
-      localId: draft.localId,
-      mailboxId: "mailbox",
-      payload: JSON.stringify(draft),
-      updatedAt: 10,
-      userId: "user-a",
-    });
-    const unregister = draftRecoveryJournal.registerEditor({
-      editorId: "active-editor",
-      mailboxId: "mailbox",
-      userId: "user-a",
-    });
-    unregisterEditors.push(unregister);
-    expect(
-      draftRecoveryJournal.listRecoverable({
-        mailboxId: "mailbox",
-        userId: "user-a",
-      })
-    ).toHaveLength(0);
-    expect(
-      draftRecoveryJournal.list({ mailboxId: "mailbox", userId: "user-a" })
-    ).toHaveLength(1);
-    unregister();
-    expect(
-      draftRecoveryJournal.listRecoverable({
-        mailboxId: "mailbox",
-        userId: "user-a",
-      })
-    ).toHaveLength(1);
+  it.each([1, 2])(
+    "upgrades an existing v%s cache and preserves recovery through reload",
+    async (version) => {
+      const upgradeName = crypto.randomUUID();
+      const old = await openDB(upgradeName, version, {
+        upgrade(db) {
+          const entries = db.createObjectStore("entries", { keyPath: "key" });
+          entries.createIndex("accessedAt", "accessedAt");
+          entries.createIndex("userId", "userId");
+          db.createObjectStore("values");
+          if (version === 2) {
+            db.createObjectStore("epochs");
+          }
+        },
+      });
+      old.close();
+      const upgraded = createDraftRecoveryJournal(
+        createMailCache({ name: upgradeName })
+      );
+      await upgraded.setUser("user-a", "upgraded");
+      await upgraded.session("user-a", "upgraded").save(record);
+      const reload = createDraftRecoveryJournal(
+        createMailCache({ name: upgradeName })
+      );
+      await reload.setUser("user-a", "upgraded");
+      await expect(
+        reload.session("user-a", "upgraded").list(record)
+      ).resolves.toMatchObject([{ payload: record.payload }]);
+      await reload.captureCleanup()?.();
+      await expect(
+        upgraded.session("user-a", "upgraded").list(record)
+      ).resolves.toHaveLength(0);
+    }
+  );
+
+  it("consumes legacy import when cleanup precedes the first journal activation", async () => {
+    const emptyName = crypto.randomUUID();
+    const cache = createMailCache({ name: emptyName });
+    await cache.setUser("user-a", "before-import");
+    const key = `quieter:draft-recovery-v2:${JSON.stringify(["user-a", "mailbox"])}`;
+    localStorage.setItem(key, JSON.stringify([record]));
+    const remove = vi
+      .spyOn(localStorage, "removeItem")
+      .mockImplementationOnce(() => {
+        throw new Error("legacy removal denied");
+      });
+    try {
+      await expect(cache.captureCleanup()?.()).rejects.toThrow(/denied/u);
+    } finally {
+      remove.mockRestore();
+    }
+    expect(localStorage.getItem(key)).not.toBeNull();
+    const fresh = createDraftRecoveryJournal(
+      createMailCache({ name: emptyName })
+    );
+    await fresh.setUser("user-a", "after-clear");
+    await expect(
+      fresh.session("user-a", "after-clear").list(record)
+    ).resolves.toHaveLength(0);
+    await fresh
+      .session("user-a", "after-clear")
+      .save({ ...record, payload: "Legitimate new recovery" });
+    await expect(
+      fresh.session("user-a", "after-clear").list(record)
+    ).resolves.toMatchObject([{ payload: "Legitimate new recovery" }]);
   });
 
-  it("does not discard a copy updated in another tab after the notice loaded", () => {
-    const record = {
-      editorId: "other-tab",
-      localId: draft.localId,
-      mailboxId: "mailbox",
-      payload: JSON.stringify(draft),
-      updatedAt: 10,
-      userId: "user-a",
-    };
-    draftRecoveryJournal.save(record);
-    draftRecoveryJournal.save({
-      ...record,
-      payload: JSON.stringify({ ...draft, bodyText: "Newer unsaved text" }),
-      updatedAt: 20,
-    });
-    draftRecoveryJournal.remove(record);
-    expect(
-      draftRecoveryJournal.list({ mailboxId: "mailbox", userId: "user-a" })
-    ).toHaveLength(1);
-    expect(
-      draftRecoveryJournal.list({ mailboxId: "mailbox", userId: "user-a" })[0]
-        ?.payload
-    ).toContain("Newer unsaved text");
+  it("keeps local fences closed after cleanup storage denial", async () => {
+    await recovery.save(record);
+    const clear = vi
+      .spyOn(IDBObjectStore.prototype, "clear")
+      .mockImplementationOnce(() => {
+        throw new Error("storage denied");
+      });
+    try {
+      await expect(journal.setUser(undefined)).rejects.toThrow(/denied/u);
+    } finally {
+      clear.mockRestore();
+    }
+    await recovery.save({ ...record, payload: "Forbidden after denial" });
+    await expect(recovery.list(record)).resolves.toHaveLength(0);
+    const retry = journal.captureCleanup();
+    expect(retry).toBeTypeOf("function");
+    await retry?.();
+    const db = await openDB(name);
+    await expect(db.getAll("recovery")).resolves.toHaveLength(0);
+    db.close();
   });
 
-  it("prefers the matching saved draft over a newer unsaved thread copy", () => {
+  it("prefers matching saved-draft recovery and preserves newer server state", async () => {
     const current = restoreComposeDraft(
       JSON.stringify({
         ...draft,
-        draftId: "saved-draft",
+        draftId: "saved",
         localId: "current",
         replyContext: { references: [], threadId: "thread" },
       }),
-      "current-editor"
+      "current"
     );
-    draftRecoveryJournal.save({
-      editorId: "old-editor",
-      localId: "exact-copy",
-      mailboxId: "mailbox",
+    await recovery.save({
+      ...record,
+      editorId: "exact",
+      localId: "exact",
       payload: JSON.stringify({
         ...current,
         bodyText: "Recovered edit",
-        localId: "exact-copy",
+        localId: "exact",
       }),
-      updatedAt: 10,
-      userId: "user-a",
     });
-    draftRecoveryJournal.save({
-      editorId: "other-editor",
-      localId: "thread-copy",
-      mailboxId: "mailbox",
+    await recovery.save({
+      ...record,
+      editorId: "thread",
+      localId: "thread",
       payload: JSON.stringify({
         ...current,
-        bodyText: "Different edit",
+        bodyText: "Unrelated thread edit",
         draftId: undefined,
-        localId: "thread-copy",
+        localId: "thread",
       }),
       updatedAt: 20,
-      userId: "user-a",
     });
-    expect(
+    await expect(
+      findRecoverableComposeDraft(record, current, recovery)
+    ).resolves.toMatchObject({ bodyText: "Recovered edit", draftId: "saved" });
+    await expect(
       findRecoverableComposeDraft(
-        { mailboxId: "mailbox", userId: "user-a" },
-        current
+        record,
+        { ...current, lastSavedAt: 30 },
+        recovery
       )
-    ).toMatchObject({
-      bodyText: "Recovered edit",
-      draftId: "saved-draft",
-    });
-    expect(
+    ).resolves.toBeNull();
+    await expect(
       findRecoverableComposeDraft(
-        { mailboxId: "other-mailbox", userId: "user-a" },
-        current
+        { ...record, mailboxId: "other" },
+        current,
+        recovery
       )
-    ).toBeNull();
-  });
-
-  it("keeps newer server drafts and separate saved drafts intact", () => {
-    const current = restoreComposeDraft(JSON.stringify(draft), "current");
-    draftRecoveryJournal.save({
-      editorId: "old-editor",
-      localId: draft.localId,
-      mailboxId: "mailbox",
-      payload: JSON.stringify({ ...draft, draftId: "other-draft" }),
-      updatedAt: 10,
-      userId: "user-a",
-    });
-    expect(
-      findRecoverableComposeDraft(
-        { mailboxId: "mailbox", userId: "user-a" },
-        {
-          ...current,
-          lastSavedAt: 20,
-        }
-      )
-    ).toBeNull();
-    expect(
-      findRecoverableComposeDraft(
-        { mailboxId: "mailbox", userId: "user-a" },
-        {
-          ...current,
-          draftId: "current-draft",
-          localId: "separate-local",
-        }
-      )
-    ).toBeNull();
-    expect(
-      draftRecoveryJournal.list({ mailboxId: "mailbox", userId: "user-a" })
-    ).toHaveLength(1);
-  });
-
-  it("does not attach an unrelated ID-less thread copy to a saved draft", () => {
-    const current = restoreComposeDraft(
-      JSON.stringify({
-        ...draft,
-        draftId: "saved-draft",
-        localId: "saved-local",
-        replyContext: { references: [], threadId: "shared-thread" },
-      }),
-      "saved-editor"
-    );
-    draftRecoveryJournal.save({
-      editorId: "other-editor",
-      localId: "other-local",
-      mailboxId: "mailbox",
-      payload: JSON.stringify({
-        ...draft,
-        localId: "other-local",
-        replyContext: { references: [], threadId: "shared-thread" },
-      }),
-      updatedAt: 20,
-      userId: "user-a",
-    });
-    expect(
-      findRecoverableComposeDraft(
-        { mailboxId: "mailbox", userId: "user-a" },
-        current
-      )
-    ).toBeNull();
-    expect(
-      findRecoverableComposeDraft(
-        { mailboxId: "mailbox", userId: "user-a" },
-        { ...current, draftId: undefined }
-      )
-    ).toMatchObject({ localId: "other-local" });
+    ).resolves.toBeNull();
   });
 });

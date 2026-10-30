@@ -19,9 +19,17 @@ export const useDraftRecovery = ({
   queryClient: QueryClient;
   subscribe: (onChange: () => void) => { unsubscribe: () => void };
 }) => {
-  const sessionUserId = authClient.useSession().data?.user.id;
+  const session = authClient.useSession().data;
   // oxlint-disable-next-line react/hook-use-state -- Ownership is fixed until the session-keyed provider remounts.
-  const [userId] = useState(sessionUserId);
+  const [owner] = useState(() => ({
+    sessionId: session?.session.id,
+    userId: session?.user.id,
+  }));
+  const { userId } = owner;
+  // oxlint-disable-next-line react/hook-use-state -- The session capability stays fixed for this editor lifetime.
+  const [recovery] = useState(() =>
+    draftRecoveryJournal.session(userId ?? "", owner.sessionId)
+  );
   const editorId = useRef(crypto.randomUUID());
   const completed = useRef(false);
   const warned = useRef(false);
@@ -30,7 +38,7 @@ export const useDraftRecovery = ({
     if (!enabled || mailboxId === null || userId === undefined) {
       return undefined;
     }
-    const unregister = draftRecoveryJournal.registerEditor({
+    const unregister = recovery.registerEditor({
       editorId: editorId.current,
       mailboxId,
       userId,
@@ -44,7 +52,18 @@ export const useDraftRecovery = ({
         queryKey: ["local-draft-recovery", userId, mailboxId],
       });
     };
-  }, [enabled, mailboxId, queryClient, userId]);
+  }, [enabled, mailboxId, queryClient, recovery, userId]);
+
+  const reportCheckpointError = (error: unknown) => {
+    if (!warned.current) {
+      warned.current = true;
+      toastError(error, {
+        boundary: "compose-recovery",
+        fallback:
+          "This browser could not keep a recovery copy. Keep this draft open until it is saved.",
+      });
+    }
+  };
 
   const checkpoint = () => {
     if (
@@ -56,34 +75,29 @@ export const useDraftRecovery = ({
       return;
     }
     const draft = getDraft();
-    try {
-      if (hasComposeDraftContent(draft) || !!draft.draftId) {
-        draftRecoveryJournal.save({
-          editorId: editorId.current,
-          localId: draft.localId,
-          mailboxId,
-          payload: JSON.stringify(draft),
-          updatedAt: Date.now(),
-          userId,
-        });
-      } else {
-        draftRecoveryJournal.remove({
-          editorId: editorId.current,
-          localId: draft.localId,
-          mailboxId,
-          userId,
-        });
+    void (async () => {
+      try {
+        if (hasComposeDraftContent(draft) || !!draft.draftId) {
+          await recovery.save({
+            editorId: editorId.current,
+            localId: draft.localId,
+            mailboxId,
+            payload: JSON.stringify(draft),
+            updatedAt: Date.now(),
+            userId,
+          });
+        } else {
+          await recovery.remove({
+            editorId: editorId.current,
+            localId: draft.localId,
+            mailboxId,
+            userId,
+          });
+        }
+      } catch (error) {
+        reportCheckpointError(error);
       }
-    } catch (error) {
-      if (!warned.current) {
-        warned.current = true;
-        toastError(error, {
-          boundary: "compose-recovery",
-          fallback:
-            "This browser could not keep a recovery copy. Keep this draft open until it is saved.",
-        });
-      }
-    }
+    })();
   };
   const persist = useEffectEvent(() => {
     checkpoint();
@@ -122,15 +136,15 @@ export const useDraftRecovery = ({
         return;
       }
       try {
-        for (const record of draftRecoveryJournal.list({ mailboxId, userId })) {
+        for (const record of await recovery.list({ mailboxId, userId })) {
           if (
             (record.localId === draft.localId &&
               record.editorId === editorId.current) ||
             (record.localId === (draft.recoveryLocalId ?? draft.localId) &&
               record.editorId === draft.recoveryEditorId &&
-              record.updatedAt <= (draft.recoveryUpdatedAt ?? 0))
+              record.revision === draft.recoveryRevision)
           ) {
-            draftRecoveryJournal.remove(record);
+            await recovery.remove(record);
           }
         }
         await queryClient.invalidateQueries({

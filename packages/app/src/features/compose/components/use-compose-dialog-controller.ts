@@ -34,8 +34,6 @@ import {
   textToComposeBodyHtml,
 } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
-import { findRecoverableComposeDraft } from "@quieter/app/features/compose/domain/draft-recovery";
-import { authClient } from "@quieter/app/lib/auth";
 import { toastError } from "@quieter/app/lib/error-toast";
 import {
   deleteDemoDraft,
@@ -126,7 +124,6 @@ export const useComposeDialogController = ({
   persistDrafts?: boolean;
   signature?: { html: string | null; text: string | null };
 }) => {
-  const userId = authClient.useSession().data?.user.id;
   const queryClient = useQueryClient();
   const agentWorkspace = useAgentWorkspace();
   const [state, setState] = useState<{
@@ -137,18 +134,7 @@ export const useComposeDialogController = ({
     showCc: boolean;
   }>(() => {
     const seed = initialDraft ?? createEmptyComposeDraft();
-    const draft = cloneComposeDraft(
-      persistDrafts &&
-        !demoMode &&
-        !managedDemoMode &&
-        mailboxId &&
-        userId &&
-        seed.recoveryEditorId === undefined &&
-        !seed.draftId &&
-        !seed.inlineImages.some((image) => !!image.gmailAttachmentId)
-        ? (findRecoverableComposeDraft({ mailboxId, userId }, seed) ?? seed)
-        : seed
-    );
+    const draft = cloneComposeDraft(seed);
     let resolved = draft;
     draft.senderName =
       defaultSenderName === undefined
@@ -255,6 +241,7 @@ export const useComposeDialogController = ({
       recoveryEditorId: draft.recoveryEditorId,
       recoveryLocalId: draft.recoveryLocalId,
       recoveryMissingFiles: draft.recoveryMissingFiles,
+      recoveryRevision: draft.recoveryRevision,
       recoveryUpdatedAt: draft.recoveryUpdatedAt,
       replyContext: draft.replyContext,
       saveStatus: "idle",

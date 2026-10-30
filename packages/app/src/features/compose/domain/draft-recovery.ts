@@ -1,6 +1,8 @@
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
-import type { DraftRecoveryScope } from "@quieter/app/lib/draft-recovery-journal";
-import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
+import type {
+  DraftRecoveryScope,
+  draftRecoveryJournal,
+} from "@quieter/app/lib/draft-recovery-journal";
 import {
   composeDraftAnchorSchema,
   composeSenderNameSchema,
@@ -54,7 +56,8 @@ export const restoreComposeDraft = (
   payload: string,
   editorId: string,
   updatedAt = 0,
-  savedDraft?: ComposeDraftState
+  savedDraft?: ComposeDraftState,
+  revision?: string
 ): ComposeDraftState => {
   const draft = recoverableDraftSchema.parse(JSON.parse(payload));
   if (
@@ -143,6 +146,7 @@ export const restoreComposeDraft = (
     ),
     recoveryEditorId: editorId,
     recoveryMissingFiles,
+    recoveryRevision: revision,
     recoveryUpdatedAt: updatedAt,
     saveStatus: errorMessage === null ? "idle" : "error",
     sendUncertain:
@@ -150,15 +154,16 @@ export const restoreComposeDraft = (
   };
 };
 
-export const findRecoverableComposeDraft = (
+export const findRecoverableComposeDraft = async (
   scope: DraftRecoveryScope,
-  draft: ComposeDraftState
-): ComposeDraftState | null => {
+  draft: ComposeDraftState,
+  recovery: ReturnType<typeof draftRecoveryJournal.session>
+): Promise<ComposeDraftState | null> => {
   const draftId = draft.draftId?.trim() ?? "";
   const threadId =
     draft.draftAnchor?.sourceThreadId ?? draft.replyContext?.threadId;
   let threadRecovery: ComposeDraftState | null = null;
-  for (const record of draftRecoveryJournal.listRecoverable(scope)) {
+  for (const record of await recovery.listRecoverable(scope)) {
     if (record.updatedAt <= (draft.lastSavedAt ?? 0)) {
       continue;
     }
@@ -168,7 +173,8 @@ export const findRecoverableComposeDraft = (
         record.payload,
         record.editorId,
         record.updatedAt,
-        draft
+        draft,
+        record.revision
       );
     } catch {
       continue;

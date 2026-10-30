@@ -9,14 +9,14 @@ import {
 } from "@hugeicons/core-free-icons";
 import { setDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import { setManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
-import { authClient } from "@quieter/app/lib/auth";
+import { authClient, signOut } from "@quieter/app/lib/auth";
 import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import { toastError } from "@quieter/app/lib/error-toast";
 import {
   clearPreviewPersonaCookie,
   setPreviewPersona,
 } from "@quieter/app/lib/preview-personas";
-import { queryPersister } from "@quieter/app/lib/query-persister";
+import { captureQueryPersistenceCleanup } from "@quieter/app/lib/query-persister";
 import { appRuntime, openExternalUrl } from "@quieter/app/runtime";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -585,6 +585,14 @@ const DeleteAccountDialog = () => {
   const navigate = useNavigate();
   const deleteAccountMutation = useMutation({
     mutationFn: async () => {
+      const clearQueries = captureQueryPersistenceCleanup();
+      const clearRecovery = draftRecoveryJournal.captureCleanup();
+      if (
+        !(clearQueries && clearRecovery) ||
+        !(await clearQueries.isCurrent())
+      ) {
+        throw new Error("Your session is still loading. Please try again.");
+      }
       const response = await authClient.deleteUser({
         callbackURL: "/home",
       });
@@ -593,18 +601,16 @@ const DeleteAccountDialog = () => {
           response.error.message ?? "Could not delete the account."
         );
       }
-      return response;
+      return { clearQueries, clearRecovery, response };
     },
     mutationKey: ["auth", "delete-user"],
-    onSuccess: async () => {
+    onSuccess: async ({ clearQueries, clearRecovery }) => {
       try {
         const results = await Promise.allSettled([
-          Promise.resolve().then(() => {
-            draftRecoveryJournal.setUser(undefined);
-          }),
+          clearRecovery(),
           Promise.resolve().then(async () => {
             queryClient.clear();
-            await queryPersister.removeQueries();
+            await clearQueries();
           }),
         ]);
         const failures = results
@@ -776,13 +782,7 @@ export const AccountSettingsPanel = ({
   };
   const passkeys = passkeysState.data ?? [];
   const signOutMutation = useMutation({
-    mutationFn: async () => {
-      const response = await authClient.signOut();
-      if (response.error) {
-        throw new Error(response.error.message ?? "Could not sign out.");
-      }
-      return response;
-    },
+    mutationFn: signOut,
     mutationKey: ["auth", "sign-out"],
     onSuccess: async () => {
       setPreviewPersona(null);
@@ -794,7 +794,6 @@ export const AccountSettingsPanel = ({
         // Best-effort cleanup; sign-out teardown must continue.
       }
       queryClient.clear();
-      await queryPersister.removeQueries();
       await navigate({
         to: "/home",
       });
@@ -806,6 +805,7 @@ export const AccountSettingsPanel = ({
     try {
       await signOutMutation.mutateAsync();
     } catch (mutationError) {
+      toastError(mutationError, { boundary: "account-sign-out" });
       setSessionError(
         getMutationErrorMessage(mutationError, "Could not sign out.")
       );

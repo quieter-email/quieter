@@ -10,7 +10,10 @@ import { bindMailCache } from "@quieter/app/lib/mail-cache-lifecycle";
 import { disposeMailMutations } from "@quieter/app/lib/mail-mutations";
 import { useMailUpdates } from "@quieter/app/lib/mail-updates";
 import { shouldRetryOrpcError } from "@quieter/app/lib/orpc-errors";
-import { setQueryPersistenceUser } from "@quieter/app/lib/query-persister";
+import {
+  clearQueryPersistence,
+  setQueryPersistenceUser,
+} from "@quieter/app/lib/query-persister";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useLayoutEffect, useState } from "react";
@@ -21,7 +24,13 @@ import { AccountDateTimeProvider } from "../features/settings/components/account
 const SessionQueryProvider = ({
   children,
   userId,
-}: PropsWithChildren<{ userId: string | undefined }>) => {
+  sessionUnresolved,
+  sessionId,
+}: PropsWithChildren<{
+  userId: string | undefined;
+  sessionId: string | undefined;
+  sessionUnresolved: boolean;
+}>) => {
   // The client is owned for this provider lifetime and is never replaced by a setter.
   // oxlint-disable-next-line react/hook-use-state
   const [queryClient] = useState(
@@ -40,7 +49,19 @@ const SessionQueryProvider = ({
   useMailUpdates(queryClient, userId);
 
   useLayoutEffect(() => {
-    setQueryPersistenceUser(userId, queryClient);
+    if (!sessionUnresolved) {
+      if (userId) {
+        setQueryPersistenceUser(userId, queryClient, sessionId);
+      } else {
+        void (async () => {
+          try {
+            await clearQueryPersistence();
+          } catch (error) {
+            toastError(error, { boundary: "session-cache-cleanup" });
+          }
+        })();
+      }
+    }
     const unbind = bindMailCache(queryClient);
     const unbindCalendar = bindCalendarCache(queryClient, userId);
     return () => {
@@ -49,7 +70,7 @@ const SessionQueryProvider = ({
       disposeMailMutations(queryClient);
       queryClient.clear();
     };
-  }, [queryClient, userId]);
+  }, [queryClient, sessionId, sessionUnresolved, userId]);
 
   return (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -59,16 +80,19 @@ const SessionQueryProvider = ({
 export const AppProviders = ({ children }: PropsWithChildren) => {
   const session = authClient.useSession();
   const userId = session.data?.user.id;
+  const sessionId = session.data?.session.id;
 
   useLayoutEffect(() => {
     if (!session.isPending) {
-      try {
-        draftRecoveryJournal.setUser(userId);
-      } catch (error) {
-        toastError(error, { boundary: "compose-recovery-identity-cleanup" });
-      }
+      void (async () => {
+        try {
+          await draftRecoveryJournal.setUser(userId, sessionId);
+        } catch (error) {
+          toastError(error, { boundary: "compose-recovery-identity-cleanup" });
+        }
+      })();
     }
-  }, [session.isPending, userId]);
+  }, [session.isPending, sessionId, userId]);
 
   return (
     <HotkeysProvider
@@ -83,7 +107,16 @@ export const AppProviders = ({ children }: PropsWithChildren) => {
         },
       }}
     >
-      <SessionQueryProvider key={userId ?? "anonymous"} userId={userId}>
+      <SessionQueryProvider
+        key={session.data?.session.id ?? "anonymous"}
+        sessionUnresolved={
+          !userId &&
+          (session.isPending ||
+            (session.error !== null && session.error.status !== 401))
+        }
+        sessionId={session.data?.session.id}
+        userId={userId}
+      >
         <AccountDateTimeProvider userId={userId}>
           <KeyboardShortcutsProvider>
             <MailtoProtocolHandler />

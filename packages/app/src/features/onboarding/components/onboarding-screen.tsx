@@ -27,7 +27,7 @@ import {
   USER_BILLING_QUERY_KEY,
   userBillingQueryOptions,
 } from "@quieter/app/features/settings/domain/billing";
-import { authClient } from "@quieter/app/lib/auth";
+import { signOut } from "@quieter/app/lib/auth";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { openGoogleAccountLink } from "@quieter/app/lib/google-account-link";
 import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
@@ -511,13 +511,7 @@ export const OnboardingScreen = () => {
   const [teamName, setTeamName] = useState("");
   const reducedMotion = useReducedMotion();
   const signOutMutation = useMutation({
-    mutationFn: async () => {
-      const response = await authClient.signOut();
-      if (response.error) {
-        throw new Error(response.error.message ?? "Could not sign out.");
-      }
-      return response;
-    },
+    mutationFn: signOut,
     mutationKey: ["auth", "sign-out"],
     onSuccess: async () => {
       queryClient.clear();
