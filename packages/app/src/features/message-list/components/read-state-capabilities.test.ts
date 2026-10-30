@@ -22,6 +22,7 @@ const createActions = (canMarkRead: boolean) => ({
     await Promise.resolve();
   }),
   canMarkRead,
+  canSetImportance: canMarkRead,
   markThreadAsRead: vi.fn<MailboxActions["markThreadAsRead"]>(async () => {
     await Promise.resolve();
   }),
@@ -196,14 +197,62 @@ describe("read-state capability compatibility", () => {
         },
       ],
     ]);
-    const { mailboxActions } = createUnifiedInboxActions({
-      contextsByThreadId: contexts,
-      originalMessageById: new Map(),
-      originalThreadById: new Map([
-        [thread.threadId, thread],
-        [readerThread.threadId, readerThread],
-      ]),
-    });
+    const { mailboxActions, mailboxContextsByThreadId } =
+      createUnifiedInboxActions({
+        contextsByThreadId: contexts,
+        originalMessageById: new Map(),
+        originalThreadById: new Map([
+          [thread.threadId, thread],
+          [readerThread.threadId, readerThread],
+        ]),
+      });
+    for (const selected of [thread, readerThread]) {
+      const actions = mailboxContextsByThreadId.get(
+        selected.threadId
+      )?.mailboxActions;
+      if (!actions) {
+        throw new Error("Missing projected mailbox context");
+      }
+      const open = vi.fn<() => void>();
+      createMessageRowHandlers({
+        isActionPending: false,
+        isActive: false,
+        mailboxActions: actions,
+        onThreadFocus: vi.fn<() => void>(),
+        onThreadIntent: vi.fn<() => void>(),
+        onThreadPress: open,
+        onThreadSelectionPress: vi.fn<() => void>(),
+        showSelectionControl: false,
+        thread: selected,
+        unread: true,
+      }).handleRowClick({
+        ctrlKey: false,
+        detail: 1,
+        metaKey: false,
+        shiftKey: false,
+      });
+      expect(open).toHaveBeenCalledWith(selected, {
+        additive: false,
+        range: false,
+      });
+    }
+    expect(
+      mailboxContextsByThreadId.get(readerThread.threadId)?.mailboxActions
+        .canSetImportance
+    ).toBeFalsy();
+    expect(
+      mailboxContextsByThreadId.get(thread.threadId)?.mailboxActions
+        .canSetImportance
+    ).toBeTruthy();
+    expect(reader.markThreadAsRead).not.toHaveBeenCalled();
+    expect(writer.markThreadAsRead).toHaveBeenCalledWith(thread.threadId);
+    expect(
+      [thread, readerThread].every(
+        (selected) =>
+          mailboxContextsByThreadId.get(selected.threadId)?.mailboxActions
+            .canMarkRead === true
+      )
+    ).toBeFalsy();
     await expect(
       mailboxActions.markThreadsAsRead([thread, readerThread])
     ).rejects.toThrow(/read status/u);

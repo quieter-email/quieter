@@ -493,17 +493,7 @@ export const UnifiedInboxPanel = ({
     originalMessageById,
     originalThreadById,
   });
-  const mailboxContextsByThreadId = new Map<
-    string,
-    MessageListMailboxContext
-  >();
-  for (const [id, context] of realContexts) {
-    mailboxContextsByThreadId.set(id, {
-      ...context,
-      mailboxActions: adapter.mailboxActions,
-      pendingActions: adapter.pendingActions,
-    });
-  }
+  const { mailboxContextsByThreadId } = adapter;
   const searchMailbox =
     connectedMailboxes.find((mailbox) => mailbox.id === activeMailboxId) ??
     connectedMailboxes[0] ??

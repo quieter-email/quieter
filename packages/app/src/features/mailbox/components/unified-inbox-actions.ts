@@ -45,6 +45,7 @@ export const createUnifiedInboxActions = ({
   originalMessageById: ReadonlyMap<string, MessageListItem>;
 }): {
   mailboxActions: MailboxActions;
+  mailboxContextsByThreadId: ReadonlyMap<string, MessageListMailboxContext>;
   pendingActions: MailboxPendingActions;
 } => {
   const contextsByMessageId = new Map<string, MessageListMailboxContext>();
@@ -303,27 +304,44 @@ export const createUnifiedInboxActions = ({
       }
     },
   };
-  return {
-    mailboxActions,
-    pendingActions: {
-      isMessageActionPending: (id) => {
-        const context = id ? contextsByMessageId.get(id) : undefined;
-        const original = id ? originalMessageById.get(id) : undefined;
-        return (
-          context !== undefined &&
-          original !== undefined &&
-          context.pendingActions.isMessageActionPending(original.id)
-        );
-      },
-      isThreadActionPending: (id) => {
-        const context = id ? contextsByThreadId.get(id) : undefined;
-        const original = id ? originalThreadById.get(id) : undefined;
-        return (
-          context !== undefined &&
-          original !== undefined &&
-          context.pendingActions.isThreadActionPending(original.threadId)
-        );
-      },
+  const pendingActions: MailboxPendingActions = {
+    isMessageActionPending: (id) => {
+      const context = id ? contextsByMessageId.get(id) : undefined;
+      const original = id ? originalMessageById.get(id) : undefined;
+      return (
+        context !== undefined &&
+        original !== undefined &&
+        context.pendingActions.isMessageActionPending(original.id)
+      );
+    },
+    isThreadActionPending: (id) => {
+      const context = id ? contextsByThreadId.get(id) : undefined;
+      const original = id ? originalThreadById.get(id) : undefined;
+      return (
+        context !== undefined &&
+        original !== undefined &&
+        context.pendingActions.isThreadActionPending(original.threadId)
+      );
     },
   };
+  const mailboxContextsByThreadId = new Map<
+    string,
+    MessageListMailboxContext
+  >();
+  for (const [id, context] of contextsByThreadId) {
+    mailboxContextsByThreadId.set(id, {
+      ...context,
+      mailboxActions: {
+        ...mailboxActions,
+        get canMarkRead() {
+          return context.mailboxActions.canMarkRead;
+        },
+        get canSetImportance() {
+          return context.mailboxActions.canSetImportance;
+        },
+      },
+      pendingActions,
+    });
+  }
+  return { mailboxActions, mailboxContextsByThreadId, pendingActions };
 };
