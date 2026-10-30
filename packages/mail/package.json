@@ -11,6 +11,7 @@
     "./compose/mime": "./src/compose/mime.ts",
     "./compose/schema": "./src/compose/schema.ts",
     "./compose/sender": "./src/compose/sender.ts",
+    "./source-set": "./src/source-set.ts",
     "./message-content": "./src/message-content.ts",
     "./mailbox-organization": "./src/mailbox-organization.ts",
     "./natural-language-search": "./src/natural-language-search.ts",

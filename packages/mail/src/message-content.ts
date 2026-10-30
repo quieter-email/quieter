@@ -5,6 +5,7 @@ import walk from "css-tree/walker";
 import { Parser } from "htmlparser2";
 
 import type { MessagePart, MessageAttachment } from "./messages";
+import { parseImageSourceSet } from "./source-set";
 
 type ExtractedMessageContent = {
   html?: string;
@@ -361,37 +362,8 @@ const extractReferencedInlineContentIds = (
     });
   };
   const addSourceSetContentIds = (sourceSet: string) => {
-    const sources: string[] = [];
-    let remaining = sourceSet;
-    while (remaining !== "") {
-      remaining = remaining.replace(/^[\s,]+/u, "");
-      if (remaining === "") {
-        break;
-      }
-      const urlMatch = /^\S+/u.exec(remaining);
-      if (urlMatch === null) {
-        return;
-      }
-      const [rawUrl] = urlMatch;
-      remaining = remaining.slice(rawUrl.length);
-      const source = rawUrl.replace(/,+$/u, "");
-      if (source === rawUrl) {
-        const comma = remaining.indexOf(",");
-        const descriptor = (
-          comma === -1 ? remaining : remaining.slice(0, comma)
-        ).trim();
-        remaining = comma === -1 ? "" : remaining.slice(comma + 1);
-        if (
-          descriptor !== "" &&
-          !/^(?:\d+w|(?:\d*\.)?\d+x)$/u.test(descriptor)
-        ) {
-          return;
-        }
-      }
-      sources.push(source);
-    }
-    for (const source of sources) {
-      addContentId(source);
+    for (const candidate of parseImageSourceSet(sourceSet)) {
+      addContentId(candidate.source);
     }
   };
   let style: string | undefined;
