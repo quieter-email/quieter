@@ -1,7 +1,11 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 /* oxlint-disable vitest/no-conditional-expect -- Each parameterized delivery failure has a different recovery sequence. */
-import { SESv2Client, SESv2ServiceException } from "@aws-sdk/client-sesv2";
+import {
+  SESv2Client,
+  SESv2ServiceException,
+  SendEmailCommand,
+} from "@aws-sdk/client-sesv2";
 import { reserveOrganizationMailSend } from "@quieter/billing/mail-send-reservation";
 import type { ingestPolarEvents } from "@quieter/billing/polar";
 import { db } from "@quieter/database/client";
@@ -26,7 +30,10 @@ import type {
 } from "@quieter/database/schema";
 import { composeMessageInputSchema } from "@quieter/mail/compose/schema";
 import { managedMailboxRuleDefinitionSchema } from "@quieter/mail/mailbox-organization";
-import { parseRawMailAttachments } from "@quieter/mail/raw-message";
+import {
+  parseRawMailAttachments,
+  assertRawMailSender,
+} from "@quieter/mail/raw-message";
 import { sendMessageInputSchema } from "@quieter/mail/send";
 import { and, eq, inArray } from "drizzle-orm";
 import postgres from "postgres";
@@ -76,7 +83,7 @@ const state = vi.hoisted(() => ({
   failMemoryCapture: false,
   failProjection: false,
   objects: new Map<string, Uint8Array<ArrayBuffer>>(),
-  send: vi.fn<() => Promise<{ MessageId: string }>>(),
+  send: vi.fn<(...args: unknown[]) => Promise<{ MessageId: string }>>(),
 }));
 vi.mock(import("@quieter/env/server"), async (original) => {
   const actual = await original();
@@ -245,7 +252,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         idempotencyKey: id,
         messageHeaderId: `<${id}@example.com>`,
         organizationId,
-        raw: "Hello",
+        raw: `From: ${snapshot.sender}\r\nSubject: Hello\r\n\r\nHello`,
         requestHash: hashRequest(snapshot),
         snapshot,
       };
@@ -264,6 +271,26 @@ describe.skipIf(state.databaseUrl === undefined)(
           .where(inArray(mailObjectCleanup.key, [...state.objects.keys()]));
       }
       await db.$client.end();
+    });
+
+    test("does not submit stored MIME with a different sender identity", async () => {
+      request.raw = "From: victim@victim.example\r\n\r\nHello";
+      await expect(sendPreparedMail(request)).rejects.toThrow(/sender/iu);
+      expect(state.send).not.toHaveBeenCalled();
+    });
+
+    test("submits raw MIME and provider identity for the same sender", async () => {
+      await sendPreparedMail(request);
+      const command = state.send.mock.calls[0]?.[0];
+      if (!(command instanceof SendEmailCommand)) {
+        throw new Error("No delivery command was submitted.");
+      }
+      const raw = command.input.Content?.Raw?.Data;
+      expect(command?.input.FromEmailAddress).toBe(request.snapshot.sender);
+      expect(raw).toBeDefined();
+      await expect(
+        assertRawMailSender(raw ?? new Uint8Array(), request.snapshot.sender)
+      ).resolves.toBe(command?.input.FromEmailAddress);
     });
 
     const createMailboxActor = async ({
