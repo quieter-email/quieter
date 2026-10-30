@@ -14,7 +14,7 @@ export const Fieldset = ({
 }) => (
   <FieldsetPrimitive.Root
     className={cn(
-      "grid gap-3 rounded-lg border bg-card/60 p-4",
+      "grid gap-3 rounded-lg border bg-card p-4",
       { "gap-0 rounded-none border-0 bg-transparent p-0": bare },
       className
     )}
@@ -27,7 +27,7 @@ export const FieldsetLegend = ({
   ...props
 }: ComponentPropsWithoutRef<typeof FieldsetPrimitive.Legend>) => (
   <FieldsetPrimitive.Legend
-    className={cn("px-1 text-body font-semibold text-fg", className)}
+    className={cn("px-1 text-body font-medium text-fg", className)}
     {...props}
   />
 );

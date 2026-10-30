@@ -753,7 +753,7 @@ const MailboxWorkspaceContentInner = ({
             className="max-w-md space-y-3 text-center"
             {...workspaceContentMotion}
           >
-            <h1 className="text-body-lg font-semibold tracking-tight text-fg">
+            <h1 className="text-body-lg font-medium text-fg">
               Reconnect Google
             </h1>
             <p className="text-body text-muted-fg">

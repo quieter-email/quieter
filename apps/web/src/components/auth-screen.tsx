@@ -19,6 +19,7 @@ import type { DesktopAuthQuery } from "@quieter/auth/desktop";
 import { Button } from "@quieter/ui/button";
 import { FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
+import { Separator } from "@quieter/ui/separator";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -74,7 +75,7 @@ const AuthLastUsedHint = () => (
       />
       <span
         // oxlint-disable-next-line shadcn/no-arbitrary-values -- Inherits the parent badge radius by design.
-        className="relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium tracking-wide text-muted-fg squircle"
+        className="relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium text-muted-fg squircle"
       >
         Last used
       </span>
@@ -338,7 +339,7 @@ export const AuthCredentials = ({
         </form.Subscribe>
       </form>
 
-      <div className="mt-6 mb-3 h-px w-full bg-border" />
+      <Separator className="mt-6 mb-3" />
 
       <Button
         className="mt-3"

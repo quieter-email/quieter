@@ -63,7 +63,7 @@ export const MessageInspectorPanel = ({
     inspectorBody = (
       <>
         <section className="space-y-2">
-          <h3 className="text-body font-semibold text-fg">Summary</h3>
+          <h3 className="text-body font-medium text-fg">Summary</h3>
           {[
             { label: "Reference", value: inspector.messageHeaderId },
             { label: "Subject", value: inspector.subject },
@@ -74,7 +74,7 @@ export const MessageInspectorPanel = ({
               ? []
               : [
                   <p className="text-body text-fg" key={row.label}>
-                    <span className="font-semibold text-fg">{row.label}: </span>
+                    <span className="font-medium text-fg">{row.label}: </span>
                     <span className="wrap-break-word">{row.value}</span>
                   </p>,
                 ]
@@ -82,13 +82,13 @@ export const MessageInspectorPanel = ({
         </section>
 
         <section className="space-y-2">
-          <h3 className="text-body font-semibold text-fg">Message headers</h3>
+          <h3 className="text-body font-medium text-fg">Message headers</h3>
           {inspector.headers.map((header) => (
             <p
               className="text-body text-fg"
               key={`${inspector.messageHeaderId}-${header.name}-${header.value}`}
             >
-              <span className="font-semibold text-fg">{header.name}: </span>
+              <span className="font-medium text-fg">{header.name}: </span>
               <span className="wrap-break-word">{header.value}</span>
             </p>
           ))}
@@ -96,9 +96,7 @@ export const MessageInspectorPanel = ({
 
         {(inspector.rawText?.trim() ?? "") !== "" && (
           <section className="space-y-2">
-            <h3 className="text-body font-semibold text-fg">
-              Original message
-            </h3>
+            <h3 className="text-body font-medium text-fg">Original message</h3>
             <pre className="overflow-x-auto text-body whitespace-pre-wrap text-fg">
               {inspector.rawText}
             </pre>
@@ -107,7 +105,7 @@ export const MessageInspectorPanel = ({
 
         {(inspector.raw?.trim() ?? "") !== "" && (
           <section className="space-y-2">
-            <h3 className="text-body font-semibold text-fg">Gmail record</h3>
+            <h3 className="text-body font-medium text-fg">Gmail record</h3>
             <pre className="overflow-x-auto text-body break-all whitespace-pre-wrap text-fg">
               {inspector.raw}
             </pre>
@@ -116,9 +114,7 @@ export const MessageInspectorPanel = ({
 
         {payloadText !== "" && (
           <section className="space-y-2">
-            <h3 className="text-body font-semibold text-fg">
-              Message structure
-            </h3>
+            <h3 className="text-body font-medium text-fg">Message structure</h3>
             <pre className="overflow-x-auto text-body whitespace-pre-wrap text-fg">
               {payloadText}
             </pre>

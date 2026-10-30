@@ -19,7 +19,6 @@ const iconVariants = cva(
         default: "text-fg",
         destructive: "text-destructive",
         muted: "text-muted-fg",
-        subtle: "text-fg/60",
         success: "text-success",
       },
     },

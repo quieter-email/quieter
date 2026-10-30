@@ -1508,7 +1508,7 @@ const CalendarWorkspaceContent = ({
           {wide ? (
             <aside
               aria-label="Event details"
-              className="ml-auto flex w-88 shrink-0 flex-col border-l border-border/50"
+              className="ml-auto flex w-88 shrink-0 flex-col border-l border-border"
             >
               {details && activeEditor?.kind === "create" ? (
                 <div

@@ -123,7 +123,10 @@ const MessageHeaderContent = ({
     <div className="w-full min-w-0 flex-1 select-text">
       <div className="flex w-full min-w-0 flex-wrap items-baseline justify-start gap-x-2 gap-y-1">
         {isMessageUnread(message) && (
-          <span aria-hidden className="size-2 shrink-0 rounded-full bg-fg/75" />
+          <span
+            aria-hidden
+            className="size-2 shrink-0 rounded-full bg-primary"
+          />
         )}
 
         <span

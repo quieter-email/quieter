@@ -95,17 +95,17 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
           {item.title !== null &&
           item.title !== undefined &&
           item.title !== "" ? (
-            <Toast.Title className="text-body font-semibold text-current" />
+            <Toast.Title className="text-body font-medium text-current" />
           ) : null}
           {item.description !== null &&
           item.description !== undefined &&
           item.description !== "" ? (
-            <Toast.Description className="text-body text-current/75" />
+            <Toast.Description className="text-body text-muted-fg" />
           ) : null}
         </div>
         <Toast.Close
           aria-label="Dismiss"
-          className="absolute top-3 right-3 flex size-7 items-center justify-center rounded-md text-muted-fg transition-transform duration-100 ease-out squircle hover:text-fg focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
+          className="absolute top-3 right-3 flex size-7 items-center justify-center rounded-md text-muted-fg transition-transform duration-100 ease-out squircle hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] active:bg-control-active motion-reduce:transition-none motion-reduce:active:scale-100"
         >
           <Icon aria-hidden size={14} icon={Cancel01Icon} />
         </Toast.Close>

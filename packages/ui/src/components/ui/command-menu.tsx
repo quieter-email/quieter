@@ -27,7 +27,7 @@ export const CommandMenu = ({
   onSelect: (index: number) => void;
   status?: string;
 }) => (
-  <div className="z-50 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-lg">
+  <div className="z-50 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-md">
     <div
       aria-label="Insert or format"
       className="max-h-64 overflow-y-auto p-1"

@@ -100,7 +100,7 @@ export const MailDeliveryMetrics = ({
                   <TooltipContent>{stat.hint}</TooltipContent>
                 </Tooltip>
               </dt>
-              <dd className="text-title-lg leading-none tracking-tight text-fg tabular-nums">
+              <dd className="text-title-lg text-fg tabular-nums">
                 {stat.value.toLocaleString()}
               </dd>
             </div>

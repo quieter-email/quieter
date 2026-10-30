@@ -22,7 +22,7 @@ const toggleGroupVariants = cva(
       variant: {
         default: "",
         plain: "border-0 bg-transparent shadow-none",
-        subtle: "border-0 bg-muted/40 shadow-none",
+        subtle: "border-0 bg-muted shadow-none",
       },
     },
   }

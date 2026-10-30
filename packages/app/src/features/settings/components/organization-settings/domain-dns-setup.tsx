@@ -65,12 +65,12 @@ const DnsCopyCell = ({ value }: { value: string }) => (
 
 const getStatusSectionClass = (tone: DomainStatusTone) => {
   if (tone === "success") {
-    return "border-success/30 bg-success/8";
+    return "border-border bg-success/15";
   }
   if (tone === "error") {
-    return "border-destructive/25 bg-destructive/6";
+    return "border-border bg-destructive/10";
   }
-  return "border-border bg-bg-raised/58";
+  return "border-border bg-bg-raised";
 };
 
 const getStatusIconTone = (tone: DomainStatusTone) => {
@@ -245,7 +245,7 @@ const DomainDnsRecordsTable = ({
   dnsChecks: DomainDnsCheck[];
   records: DomainDnsRecord[];
 }) => (
-  <div className="overflow-x-auto rounded-lg border border-border bg-bg-raised/58 squircle">
+  <div className="overflow-x-auto rounded-lg border border-border bg-bg-raised squircle">
     <table
       aria-label="DNS records"
       className="w-full min-w-160 border-collapse p-2"
@@ -254,7 +254,7 @@ const DomainDnsRecordsTable = ({
         <tr
           className={cn(
             dnsTableColumns,
-            "rounded-md bg-muted/35 px-3 py-1.5 text-caption font-medium text-muted-fg"
+            "rounded-md bg-muted px-3 py-1.5 text-caption font-medium text-muted-fg"
           )}
         >
           <th scope="col">Type</th>

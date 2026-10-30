@@ -491,10 +491,10 @@ export const ComposeEditorBody = ({
           "min-h-48": density === "comfortable",
         })}
       >
-        <div className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-muted/35 px-4">
+        <div className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-muted px-4">
           {audioWaveBars.map((bar, index) => (
             <span
-              className={cn("h-6 w-1 animate-pulse rounded-full bg-fg/75", {
+              className={cn("h-6 w-1 animate-pulse rounded-full", {
                 "bg-muted-fg": transcribing,
                 "bg-primary": recording,
               })}
@@ -537,7 +537,7 @@ export const ComposeEditorBody = ({
       className={cn(
         "relative min-h-20 w-full overflow-hidden rounded-md border border-border bg-control text-body text-fg shadow-sm transition-colors duration-150 ease-out squircle",
         {
-          "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-2 has-[.ProseMirror:focus-visible]:ring-ring has-[.ProseMirror:focus-visible]:ring-offset-2 has-[.ProseMirror:focus-visible]:ring-offset-bg-raised has-[.ProseMirror:focus-visible]:outline-none aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive":
+          "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-2 has-[.ProseMirror:focus-visible]:ring-ring has-[.ProseMirror:focus-visible]:outline-hidden aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive":
             chrome === "default",
           "rounded-none border-0 bg-transparent shadow-none":
             chrome === "seamless",

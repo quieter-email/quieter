@@ -71,7 +71,7 @@ export const BarChart = ({
           >
             {[0, 1, 2].map((line) => (
               <div
-                className="border-t border-dashed border-border/70"
+                className="border-t border-dashed border-border"
                 key={line}
               />
             ))}

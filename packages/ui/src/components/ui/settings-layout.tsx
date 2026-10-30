@@ -12,11 +12,11 @@ export const settingsSurfaceVariants = cva("", {
   variants: {
     variant: {
       body: "space-y-3 px-4 py-(--settings-row-padding) @md:px-6",
-      divide: "divide-y divide-border/70",
+      divide: "divide-y divide-border",
       divider:
-        "relative after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:after:inset-x-6",
+        "relative after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:content-[''] last:after:hidden @md:after:inset-x-6",
       fieldRowShell:
-        "relative flex w-full flex-col items-start justify-between gap-4 px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:flex-row @md:items-center @md:px-6 @md:after:inset-x-6",
+        "relative flex w-full flex-col items-start justify-between gap-4 px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:content-[''] last:after:hidden @md:flex-row @md:items-center @md:px-6 @md:after:inset-x-6",
       footer:
         "flex flex-wrap items-center justify-between gap-3 px-4 py-(--settings-row-padding) @md:px-6",
       form: "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2",
@@ -25,13 +25,13 @@ export const settingsSurfaceVariants = cva("", {
       insetRow:
         "flex w-full items-center gap-4 px-4 py-(--settings-row-padding) @md:px-6",
       insetSection:
-        "relative px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
+        "relative px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
       insetStackedRow:
         "flex w-full flex-col gap-3 px-4 py-(--settings-row-padding) @md:flex-row @md:items-center @md:px-6",
       padding: "px-4 py-(--settings-row-padding) @md:px-6",
       page: "@container space-y-8",
       rowShell:
-        "squircle relative flex w-full items-center gap-4 px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border/60 after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
+        "squircle relative flex w-full items-center gap-4 px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
       title: "truncate text-body-sm font-medium text-fg",
       value: "text-body-sm/5 text-muted-fg",
     },
@@ -246,7 +246,7 @@ export const SettingsRowLayout = ({
     })}
   >
     {icon !== undefined && icon !== null ? (
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-muted-fg squircle [&_svg]:size-4">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-fg squircle [&_svg]:size-4">
         {icon}
       </div>
     ) : null}
@@ -279,7 +279,7 @@ export const SettingsNavigationRow = ({
   <button
     className={cn(
       settingsSurfaceVariants({ variant: "rowShell" }),
-      "group border border-transparent text-left transition-colors squircle first:rounded-t-lg last:rounded-b-lg hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
+      "group border border-transparent text-left transition-colors squircle first:rounded-t-lg last:rounded-b-lg hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
       { "pointer-events-none": disabled }
     )}
     disabled={disabled}
@@ -338,7 +338,7 @@ export const SettingsInlineLoading = ({ label }: { label: string }) => (
   >
     <span
       aria-hidden
-      className="h-2 w-10 animate-pulse rounded-full bg-muted/65 motion-reduce:animate-none"
+      className="h-2 w-10 animate-pulse rounded-full bg-muted motion-reduce:animate-none"
     />
     <span className="sr-only">{label}</span>
   </output>

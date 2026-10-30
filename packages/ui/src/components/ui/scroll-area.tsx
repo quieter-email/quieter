@@ -56,7 +56,7 @@ export const ScrollAreaThumb = ({
 }: ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Thumb>) => (
   <ScrollAreaPrimitive.Thumb
     className={cn(
-      "relative flex-1 rounded-full bg-border/80 hover:bg-border",
+      "relative flex-1 rounded-full bg-border hover:bg-border-strong",
       className
     )}
     {...props}

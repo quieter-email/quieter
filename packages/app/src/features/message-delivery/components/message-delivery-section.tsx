@@ -59,7 +59,7 @@ const DiagnosticRow = ({
 };
 
 const DeliveryEventRow = ({ event }: { event: MessageDeliveryEvent }) => (
-  <li className="space-y-1 border-t border-border/60 pt-2 first:border-t-0 first:pt-0">
+  <li className="space-y-1 border-t border-border pt-2 first:border-t-0 first:pt-0">
     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
       <span className="text-body text-fg">
         {getDeliveryStatusLabel(event.eventType)}
@@ -73,7 +73,7 @@ const DeliveryEventRow = ({ event }: { event: MessageDeliveryEvent }) => (
       <Collapsible>
         <CollapsibleTrigger
           // oxlint-disable-next-line shadcn/no-restyle -- Technical details keeps its caption-link treatment.
-          className="text-caption text-muted-fg underline underline-offset-2 hover:text-fg"
+          className="rounded-sm text-caption text-muted-fg underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
         >
           Technical details
         </CollapsibleTrigger>
@@ -206,7 +206,7 @@ export const MessageDeliverySection = ({
 
   return (
     <section className="space-y-3">
-      <h3 className="text-body font-semibold text-fg">Delivery</h3>
+      <h3 className="text-body font-medium text-fg">Delivery</h3>
 
       {isDeliveryPending ? (
         <p className="text-body text-muted-fg">Loading delivery status…</p>

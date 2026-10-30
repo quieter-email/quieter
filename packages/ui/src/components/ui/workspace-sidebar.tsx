@@ -67,12 +67,12 @@ export const WorkspaceSidebar = ({
         onOpenChange={onMobileOpenChange}
       >
         <DialogPrimitive.Portal>
-          <DialogPrimitive.Backdrop className="fixed inset-0 z-40 bg-bg/50 backdrop-blur-[2px] transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
+          <DialogPrimitive.Backdrop className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
           <DialogPrimitive.Popup
             aria-label={label}
             initialFocus
             finalFocus
-            className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] origin-left flex-col overflow-hidden bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-fg shadow-2xl transition-[opacity,scale,translate] duration-250 ease-(--app-motion-ease-out) outline-none data-ending-style:opacity-0 data-ending-style:duration-200 data-starting-style:opacity-0 motion-safe:data-ending-style:-translate-x-full motion-safe:data-ending-style:scale-[0.97] motion-safe:data-starting-style:-translate-x-full motion-safe:data-starting-style:scale-[0.97] motion-reduce:transition-opacity"
+            className="fixed inset-y-0 left-0 isolate z-50 flex w-[min(20rem,calc(100vw-2.5rem))] origin-left flex-col overflow-hidden bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-fg shadow-lg transition-[opacity,scale,translate] duration-250 ease-(--app-motion-ease-out) outline-none data-ending-style:opacity-0 data-ending-style:duration-200 data-starting-style:opacity-0 motion-safe:data-ending-style:-translate-x-full motion-safe:data-ending-style:scale-[0.97] motion-safe:data-starting-style:-translate-x-full motion-safe:data-starting-style:scale-[0.97] motion-reduce:transition-opacity"
           >
             {children(() => {
               onMobileOpenChange(false);
