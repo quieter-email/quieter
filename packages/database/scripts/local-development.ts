@@ -39,7 +39,12 @@ export const isExplicitLocalPlanetScaleUrl = (
     isPlanetScaleHostname(configuredHost) &&
     getHostname(url).toLowerCase() === configuredHost &&
     url.pathname.slice(1) === LOCAL_PLANETSCALE_DATABASE &&
-    url.searchParams.get("sslmode") === "verify-full"
+    !url.searchParams.has("database") &&
+    [...url.searchParams].every(
+      ([key, value]) => !key.includes("\0") && !value.includes("\0")
+    ) &&
+    url.searchParams.get("sslmode") === "verify-full" &&
+    url.searchParams.getAll("sslmode").every((value) => value === "verify-full")
   );
 };
 
@@ -78,6 +83,32 @@ export const assertLocalDatabaseUrl = (
   }
 };
 
+export const assertLocalDevelopmentDatabaseUrl = (
+  name: "DATABASE_MIGRATION_URL" | "DATABASE_URL",
+  value: string,
+  environment: Record<string, string | undefined>
+) => {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${name} is not a valid URL.`);
+  }
+
+  if (isExplicitLocalPlanetScaleUrl(url, environment)) {
+    assertPlanetScaleConnectionType(name, url);
+    return;
+  }
+
+  try {
+    assertLocalDatabaseUrl(value);
+  } catch {
+    throw new Error(
+      `${name} must target loopback PostgreSQL or the explicitly allowlisted PlanetScale quieter_dev database.`
+    );
+  }
+};
+
 export const assertLocalDevelopmentDatabaseUrls = (
   environment: Record<string, string | undefined> = process.env
 ) => {
@@ -96,24 +127,6 @@ export const assertLocalDevelopmentDatabaseUrls = (
       continue;
     }
 
-    let url: URL;
-    try {
-      url = new URL(value);
-    } catch {
-      throw new Error(`${name} is not a valid URL.`);
-    }
-
-    if (isExplicitLocalPlanetScaleUrl(url, environment)) {
-      assertPlanetScaleConnectionType(name, url);
-      continue;
-    }
-
-    try {
-      assertLocalDatabaseUrl(value);
-    } catch {
-      throw new Error(
-        `${name} must target loopback PostgreSQL or the explicitly allowlisted PlanetScale quieter_dev database.`
-      );
-    }
+    assertLocalDevelopmentDatabaseUrl(name, value, environment);
   }
 };

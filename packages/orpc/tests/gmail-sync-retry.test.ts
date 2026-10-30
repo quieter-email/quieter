@@ -1,4 +1,5 @@
 import type { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
+import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import type { getMessageWithDetails, mutateGmailMessage } from "@quieter/gmail";
 import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 /* oxlint-disable eslint/require-await -- Async mock contracts resolve without network or database I/O. */
@@ -523,3 +524,16 @@ describe("Gmail automation retry recovery", () => {
     expect(jobs.some((job) => job.mailboxId === input.mailboxId)).toBeTruthy();
   });
 });
+
+vi.mock(import("@quieter/billing/ai-reservation"), () => ({
+  createMailboxAiBillingContext: vi
+    .fn<typeof createMailboxAiBillingContext>()
+    .mockResolvedValue({
+      account: null,
+      admittedAt: new Date(),
+      groupId: "fixture",
+      kind: "team",
+      organizationId: "test-team",
+      usageKind: "aiChat",
+    }),
+}));

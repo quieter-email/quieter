@@ -5,6 +5,7 @@ import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import { suggestReply } from "@quieter/ai/suggest-reply";
 import type { ReplySuggestion } from "@quieter/ai/suggest-reply";
 import { reportAiUsage } from "@quieter/billing";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import { compile } from "html-to-text";
@@ -118,6 +119,12 @@ export const requestReplySuggestion = async ({
     const requestId = randomUUID();
     const suggestion = await suggestReply({
       abortSignal: context.signal,
+      billing: await createMailboxAiBillingContext({
+        externalId: `reply-suggestion:${requestId}`,
+        mailboxId: input.mailboxId,
+        usageKind: "aiChat",
+        userId: context.userId,
+      }),
       memoryContext: serializeAiAgentContext(memory),
       messages,
       model,

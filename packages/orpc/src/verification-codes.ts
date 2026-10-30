@@ -7,9 +7,11 @@ import {
   AUTO_LABEL_MODEL,
   detectMailVerificationCode,
 } from "@quieter/ai/classify-gmail-message";
+import { isAiCreditAdmissionBusy } from "@quieter/ai/errors";
 import { extractMailVerificationCode } from "@quieter/ai/extract-verification-code";
 import { VERIFICATION_CODE_MODEL } from "@quieter/ai/model-config";
 import { reportAiUsage } from "@quieter/billing";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import { mailboxVerificationCode } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
@@ -464,12 +466,21 @@ export const processMailVerificationCode = async ({
       let probability: number | undefined;
       try {
         probability = await detectMailVerificationCode({
+          billing: await createMailboxAiBillingContext({
+            externalId: claimed.id,
+            mailboxId,
+            usageKind: "verificationCode",
+            userId,
+          }),
           message,
           onUsage: (reported) => {
             screenUsage = reported;
           },
         });
       } catch (error) {
+        if (isAiCreditAdmissionBusy(error)) {
+          throw error;
+        }
         reportError(error, {
           operation: "verification-code:screen",
         });
@@ -483,6 +494,12 @@ export const processMailVerificationCode = async ({
           : AUTO_LABEL_MODEL;
       const candidate = extractCode
         ? await extractMailVerificationCode({
+            billing: await createMailboxAiBillingContext({
+              externalId: claimed.id,
+              mailboxId,
+              usageKind: "verificationCode",
+              userId,
+            }),
             message,
             model: VERIFICATION_CODE_MODEL,
             onUsage: (reported) => {
@@ -553,9 +570,11 @@ export const processMailVerificationCode = async ({
       }
     }
   } catch (error) {
-    reportError(error, {
-      operation: "verification-code:extract",
-    });
+    if (!isAiCreditAdmissionBusy(error)) {
+      reportError(error, {
+        operation: "verification-code:extract",
+      });
+    }
     const usage = accumulateVerificationCodeUsage(
       claimed,
       screenUsage,

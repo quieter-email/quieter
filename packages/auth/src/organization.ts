@@ -57,91 +57,74 @@ export const createDefaultOrganizationName = (currentUser: UserIdentity) => {
 
 export const ensureUserOrganizationState = async (
   currentUser: UserIdentity
-): Promise<EnsureUserOrganizationStateResult> => {
-  const existingOrganizationIds = await getUserOrganizationIds(
-    db,
-    currentUser.id
-  );
+): Promise<EnsureUserOrganizationStateResult> =>
+  await db.transaction(async (transaction) => {
+    const [persistedUser] = await transaction
+      .select()
+      .from(user)
+      .where(eq(user.id, currentUser.id))
+      .for("update");
+    if (persistedUser === undefined) {
+      throw new Error("Team provisioning requires an existing account.");
+    }
 
-  if (existingOrganizationIds.length > 0) {
-    await db
-      .update(mailbox)
-      .set({
-        organizationId: existingOrganizationIds[0],
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(mailbox.ownerUserId, currentUser.id),
-          eq(mailbox.provider, "gmail"),
-          isNull(mailbox.organizationId)
-        )
-      );
-
-    return { organizationIds: existingOrganizationIds };
-  }
-
-  return await db.transaction(async (transaction) => {
     let organizationIds = await getUserOrganizationIds(
       transaction,
-      currentUser.id
+      persistedUser.id
     );
-    if (organizationIds.length === 0) {
-      const now = new Date();
-      const name = createDefaultOrganizationName(currentUser);
-      const stableId = createHash("sha256")
-        .update(currentUser.id)
-        .digest("hex");
-      const organizationId = `default-organization-${stableId}`;
-
-      await transaction
-        .insert(organization)
-        .values({
-          billingOwnerUserId: currentUser.id,
+    if (!persistedUser.defaultOrganizationProvisioned) {
+      if (organizationIds.length === 0) {
+        const now = new Date();
+        const name = createDefaultOrganizationName(persistedUser);
+        const organizationId = crypto.randomUUID();
+        const values = {
+          billingOwnerUserId: persistedUser.id,
           createdAt: now,
           id: organizationId,
           name,
           slug: name,
           updatedAt: now,
-        })
-        .onConflictDoNothing();
-      const [defaultOrganization] = await transaction
-        .select({ id: organization.id })
-        .from(organization)
-        .where(eq(organization.slug, name))
-        .limit(1);
-
-      if (defaultOrganization === null || defaultOrganization === undefined) {
-        throw new Error("Default team provisioning failed.");
-      }
-
-      await transaction
-        .insert(member)
-        .values({
+        };
+        const [createdOrganization] = await transaction
+          .insert(organization)
+          .values(values)
+          .onConflictDoNothing({ target: organization.slug })
+          .returning({ id: organization.id });
+        if (createdOrganization === undefined) {
+          await transaction.insert(organization).values({
+            ...values,
+            slug: `${name}-${crypto.randomUUID()}`,
+          });
+        }
+        await transaction.insert(member).values({
           createdAt: now,
-          id: `default-member-${stableId}`,
-          organizationId: defaultOrganization.id,
+          id: crypto.randomUUID(),
+          organizationId,
           role: "owner",
-          userId: currentUser.id,
-        })
-        .onConflictDoNothing();
-      organizationIds = [defaultOrganization.id];
+          userId: persistedUser.id,
+        });
+        organizationIds = [organizationId];
+      }
+      await transaction
+        .update(user)
+        .set({ defaultOrganizationProvisioned: true })
+        .where(eq(user.id, persistedUser.id));
     }
 
-    await transaction
-      .update(mailbox)
-      .set({ organizationId: organizationIds[0], updatedAt: new Date() })
-      .where(
-        and(
-          eq(mailbox.ownerUserId, currentUser.id),
-          eq(mailbox.provider, "gmail"),
-          isNull(mailbox.organizationId)
-        )
-      );
-
+    if (organizationIds[0] !== undefined) {
+      await transaction
+        .update(mailbox)
+        .set({ organizationId: organizationIds[0], updatedAt: new Date() })
+        .where(
+          and(
+            eq(mailbox.ownerUserId, persistedUser.id),
+            eq(mailbox.provider, "gmail"),
+            isNull(mailbox.organizationId)
+          )
+        );
+    }
     return { organizationIds };
   });
-};
 
 export const cleanupOrganizationsForDeletedUser = async (userId: string) => {
   await db.transaction(async (tx) => {

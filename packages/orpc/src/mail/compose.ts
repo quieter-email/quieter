@@ -178,8 +178,10 @@ export const composeMailOperations = {
   saveDraft: async ({
     context,
     input,
+    privateContext = false,
   }: {
     context: MailRequestContext;
+    privateContext?: boolean;
     input: MailInputs["saveDraft"];
   }) => {
     const selectedMailbox = await assertAccessibleMailbox({
@@ -189,6 +191,7 @@ export const composeMailOperations = {
     if (selectedMailbox.provider === "managed") {
       const saved = await saveManagedDraft({
         ...input,
+        privateContext,
         userId: context.userId,
       });
       await captureMailboxDraftMemory({

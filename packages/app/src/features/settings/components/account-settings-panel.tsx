@@ -11,7 +11,6 @@ import { setDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-m
 import { setManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
 import { authClient } from "@quieter/app/lib/auth";
 import { toastError } from "@quieter/app/lib/error-toast";
-import { orpc } from "@quieter/app/lib/orpc";
 import {
   clearPreviewPersonaCookie,
   setPreviewPersona,
@@ -267,17 +266,6 @@ const AccountEmailSettings = ({ currentEmail }: { currentEmail: string }) => {
   const queryClient = useQueryClient();
   const changeEmailMutation = useMutation({
     mutationFn: async (input: { callbackURL: string; newEmail: string }) => {
-      const status = await queryClient.query(
-        orpc.auth.getUserStatus.queryOptions({
-          input: { email: input.newEmail },
-          staleTime: 0,
-        })
-      );
-
-      if (status.exists) {
-        throw new Error("That email already has an account.");
-      }
-
       const response = await authClient.changeEmail(input);
       if (response.error) {
         throw new Error(

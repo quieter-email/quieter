@@ -18,6 +18,7 @@ import {
 } from "@quieter/database/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
+import { assertDomainBillingAccess } from "../mail-domain/billing";
 import { assertOrganizationManager } from "../organization/divisions";
 import {
   getAuthorizedManagedMailbox,
@@ -108,6 +109,9 @@ export const createManagedMailbox = async (input: {
     organizationId: input.organizationId,
     userId: input.userId,
   });
+  if (input.receiveWholeDomain === true) {
+    await assertDomainBillingAccess(input.organizationId);
+  }
   const accessMode = input.accessMode ?? "shared";
   if (accessMode === "private") {
     if (!input.ownerUserId) {

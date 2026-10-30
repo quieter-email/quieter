@@ -14,6 +14,7 @@ import {
 } from "@quieter/ai/parse-mail-search";
 import type { ParsedMailSearch } from "@quieter/ai/parse-mail-search";
 import { reportAiUsage } from "@quieter/billing";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import { user, userAiContextEvent } from "@quieter/database/schema";
 import {
@@ -214,6 +215,12 @@ export const aiRouter = {
               ? undefined
               : ["archived", "read", "unread"],
           availableLabels: input.availableLabels ?? [],
+          billing: await createMailboxAiBillingContext({
+            externalId: `search-interpret:${requestId}`,
+            mailboxId: input.mailboxId,
+            usageKind: "aiChat",
+            userId: context.userId,
+          }),
           memoryContext: serializeAiAgentContext(
             await loadAiAgentContext({
               agent: "search",
@@ -247,6 +254,13 @@ export const aiRouter = {
           query: input.query,
         });
       } catch (error) {
+        if (
+          error instanceof ORPCError &&
+          error.status >= 400 &&
+          error.status < 500
+        ) {
+          throw error;
+        }
         reportError(error, { operation: "ai:interpret-search-query" });
         throw new ORPCError("INTERNAL_SERVER_ERROR", {
           message: "Could not interpret that search right now.",

@@ -14,6 +14,7 @@ const createReadOnlyMailboxActions = (): MailboxActions =>
     archiveMessage: noopMailboxAction,
     archiveThread: noopMailboxAction,
     archiveThreads: noopMailboxAction,
+    canMarkRead: false,
     canSetImportance: false,
     deleteDraft: noopMailboxAction,
     deleteDrafts: noopMailboxAction,

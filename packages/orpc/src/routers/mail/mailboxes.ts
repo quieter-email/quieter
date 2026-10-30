@@ -4,7 +4,6 @@ import { user } from "@quieter/database/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { createGmailLiveSyncConnection } from "../../gmail-live-sync";
 import { createMailUpdateConnection } from "../../mail-updates";
 import { deleteManagedMailbox } from "../../mailbox/deletion";
 import {
@@ -45,15 +44,6 @@ import {
 } from "../base";
 
 export const mailboxProcedures = {
-  createLiveSyncConnection: protectedProcedure
-    .input(z.object({ mailboxId: mailboxIdSchema }))
-    .handler(
-      async ({ context, input }) =>
-        await createGmailLiveSyncConnection({
-          ...input,
-          userId: context.userId,
-        })
-    ),
   createManagedMailbox: protectedProcedure
     .input(
       z.object({

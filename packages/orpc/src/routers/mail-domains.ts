@@ -1,16 +1,23 @@
 import { ORPCError } from "@orpc/server";
-import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
-import type { DatabaseExecutor } from "@quieter/database/client";
+import type {
+  DatabaseExecutor,
+  DatabaseTransaction,
+} from "@quieter/database/client";
 import { mailbox, mailDomain } from "@quieter/database/schema";
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { assertDomainBillingAccess } from "../mail-domain/billing";
 import { setMailDomainCatchAll } from "../mail-domain/catch-all";
 import {
   getDomainConnectAvailability,
   startDomainConnect,
 } from "../mail-domain/domain-connect-service";
+import {
+  assertMailDomainOwnerAvailable,
+  withMailDomainLock,
+} from "../mail-domain/ownership";
 import {
   createMailDomainDnsRecords,
   createMailDomainOwnershipToken,
@@ -33,18 +40,6 @@ import { verifyMailDomainSetup } from "../mail-domain/verification";
 import { protectedProcedure } from "./base";
 
 const mailDomainModeSchema = z.enum(["send_only", "send_and_receive"]);
-
-const assertDomainBillingAccess = async (organizationId: string) => {
-  const entitlement = await getOrganizationBillingEntitlement({
-    feature: "organizationDomains",
-    organizationId,
-  });
-  if (!entitlement.hasAccess) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "Custom team domains require Team billing.",
-    });
-  }
-};
 
 const countManagedMailboxesForDomain = async (input: {
   database?: DatabaseExecutor;
@@ -83,10 +78,12 @@ const buildMailDomainCatchAll = (row: {
 };
 
 const updateExistingMailDomainSetup = async (input: {
+  database: DatabaseTransaction;
   domain: string;
   existingDomain: {
     id: string;
     mode: (typeof mailDomain.$inferSelect)["mode"];
+    ownershipVerifiedAt: Date | null;
     requiredDnsRecords: (typeof mailDomain.$inferSelect)["requiredDnsRecords"];
     status: (typeof mailDomain.$inferSelect)["status"];
     verifiedAt: (typeof mailDomain.$inferSelect)["verifiedAt"];
@@ -104,10 +101,13 @@ const updateExistingMailDomainSetup = async (input: {
     ? input.existingDomain.status
     : "pending_dns";
   const now = new Date();
-  const [updatedDomain] = await db
+  const [updatedDomain] = await input.database
     .update(mailDomain)
     .set({
       mailFromDomain: input.mailFromDomain,
+      ownershipVerifiedAt:
+        input.existingDomain.ownershipVerifiedAt ??
+        (input.existingDomain.status === "verified" ? now : null),
       requiredDnsRecords: input.records,
       status,
       updatedAt: now,
@@ -129,6 +129,7 @@ const updateExistingMailDomainSetup = async (input: {
 };
 
 const createNewMailDomainSetup = async (input: {
+  database: DatabaseTransaction;
   contextUserId: string;
   domain: string;
   mailFromDomain: string;
@@ -138,7 +139,7 @@ const createNewMailDomainSetup = async (input: {
 }) => {
   const now = new Date();
   const id = crypto.randomUUID();
-  const [createdDomain] = await db
+  const [createdDomain] = await input.database
     .insert(mailDomain)
     .values({
       createdAt: now,
@@ -202,65 +203,71 @@ export const mailDomainsRouter = {
       await assertDomainBillingAccess(input.organizationId);
 
       const domain = normalizeMailDomain(input.domain);
-      const [existingDomain] = await db
-        .select({
-          id: mailDomain.id,
-          mode: mailDomain.mode,
-          organizationId: mailDomain.organizationId,
-          requiredDnsRecords: mailDomain.requiredDnsRecords,
-          status: mailDomain.status,
-          verifiedAt: mailDomain.verifiedAt,
-        })
-        .from(mailDomain)
-        .where(eq(mailDomain.domain, domain))
-        .limit(1);
-
-      if (
-        existingDomain !== undefined &&
-        existingDomain.organizationId !== input.organizationId
-      ) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: "This domain is already registered to another team.",
-        });
-      }
-
-      const mode = existingDomain?.mode ?? input.mode;
-      const region = getAwsRegion();
-      const mailFromDomain = `bounce.${domain}`;
-      const createdIdentity = await createOrLoadEmailIdentity(domain);
-      await ensureMailFromDomain({ domain, mailFromDomain });
-
-      const identity =
-        (createdIdentity.DkimAttributes?.Tokens?.length ?? 0) === 0
-          ? await getEmailIdentity(domain)
-          : createdIdentity;
-      const records = createMailDomainDnsRecords({
-        dkimTokens: getDkimTokens(identity),
-        domain,
-        mode,
-        ownershipToken:
-          getMailDomainOwnershipToken(
-            existingDomain?.requiredDnsRecords ?? []
-          ) ?? createMailDomainOwnershipToken(),
-        region,
-      });
-      if (existingDomain !== undefined) {
-        return await updateExistingMailDomainSetup({
+      return await withMailDomainLock(domain, async (database) => {
+        await assertMailDomainOwnerAvailable({
+          database,
           domain,
-          existingDomain,
+          organizationId: input.organizationId,
+        });
+        const [existingDomain] = await database
+          .select({
+            id: mailDomain.id,
+            mode: mailDomain.mode,
+            organizationId: mailDomain.organizationId,
+            ownershipVerifiedAt: mailDomain.ownershipVerifiedAt,
+            requiredDnsRecords: mailDomain.requiredDnsRecords,
+            status: mailDomain.status,
+            verifiedAt: mailDomain.verifiedAt,
+          })
+          .from(mailDomain)
+          .where(
+            and(
+              eq(mailDomain.domain, domain),
+              eq(mailDomain.organizationId, input.organizationId)
+            )
+          )
+          .limit(1);
+
+        const mode = existingDomain?.mode ?? input.mode;
+        const region = getAwsRegion();
+        const mailFromDomain = `bounce.${domain}`;
+        const createdIdentity = await createOrLoadEmailIdentity(domain);
+        await ensureMailFromDomain({ domain, mailFromDomain });
+
+        const identity =
+          (createdIdentity.DkimAttributes?.Tokens?.length ?? 0) === 0
+            ? await getEmailIdentity(domain)
+            : createdIdentity;
+        const records = createMailDomainDnsRecords({
+          dkimTokens: getDkimTokens(identity),
+          domain,
+          mode,
+          ownershipToken:
+            getMailDomainOwnershipToken(
+              existingDomain?.requiredDnsRecords ?? []
+            ) ?? createMailDomainOwnershipToken(),
+          region,
+        });
+        if (existingDomain !== undefined) {
+          return await updateExistingMailDomainSetup({
+            database,
+            domain,
+            existingDomain,
+            mailFromDomain,
+            mode,
+            records,
+          });
+        }
+
+        return await createNewMailDomainSetup({
+          contextUserId: context.userId,
+          database,
+          domain,
           mailFromDomain,
           mode,
+          organizationId: input.organizationId,
           records,
         });
-      }
-
-      return await createNewMailDomainSetup({
-        contextUserId: context.userId,
-        domain,
-        mailFromDomain,
-        mode,
-        organizationId: input.organizationId,
-        records,
       });
     }),
 
@@ -429,32 +436,73 @@ export const mailDomainsRouter = {
         });
       }
 
-      const managedMailboxCount = await countManagedMailboxesForDomain({
-        domain: storedDomain.domain,
-        organizationId: input.organizationId,
+      return await withMailDomainLock(storedDomain.domain, async (database) => {
+        const [lockedDomain] = await database
+          .select()
+          .from(mailDomain)
+          .where(
+            and(
+              eq(mailDomain.id, storedDomain.id),
+              eq(mailDomain.organizationId, input.organizationId)
+            )
+          )
+          .limit(1)
+          .for("update");
+        if (lockedDomain === undefined) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Mail domain was not found in the active team.",
+          });
+        }
+        const managedMailboxCount = await countManagedMailboxesForDomain({
+          database,
+          domain: storedDomain.domain,
+          organizationId: input.organizationId,
+        });
+        if (managedMailboxCount > 0) {
+          throw new ORPCError("CONFLICT", {
+            message: `Remove or migrate the ${managedMailboxCount} shared ${managedMailboxCount === 1 ? "inbox" : "inboxes"} on this domain first.`,
+          });
+        }
+
+        const [otherClaim] = await database
+          .select({ id: mailDomain.id })
+          .from(mailDomain)
+          .where(
+            and(
+              eq(mailDomain.domain, storedDomain.domain),
+              ne(mailDomain.id, storedDomain.id)
+            )
+          )
+          .limit(1);
+        let awsCleanupCompleted = true;
+        if (otherClaim === undefined) {
+          awsCleanupCompleted = await deleteMailDomainAwsResources(
+            storedDomain.domain
+          );
+        } else if (
+          lockedDomain.ownershipVerifiedAt !== null ||
+          lockedDomain.status === "verified"
+        ) {
+          awsCleanupCompleted = await deleteMailDomainReceiptRule(
+            storedDomain.domain
+          );
+        }
+        if (!awsCleanupCompleted) {
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: "The domain could not be removed completely. Try again.",
+          });
+        }
+        await database
+          .delete(mailDomain)
+          .where(eq(mailDomain.id, storedDomain.id));
+
+        return {
+          awsCleanupCompleted,
+          domain: storedDomain.domain,
+          domainId: storedDomain.id,
+          removed: true,
+        };
       });
-      if (managedMailboxCount > 0) {
-        throw new ORPCError("CONFLICT", {
-          message: `Remove or migrate the ${managedMailboxCount} shared ${managedMailboxCount === 1 ? "inbox" : "inboxes"} on this domain first.`,
-        });
-      }
-
-      const awsCleanupCompleted = await deleteMailDomainAwsResources(
-        storedDomain.domain
-      );
-      if (!awsCleanupCompleted) {
-        throw new ORPCError("INTERNAL_SERVER_ERROR", {
-          message: "The domain could not be removed completely. Try again.",
-        });
-      }
-      await db.delete(mailDomain).where(eq(mailDomain.id, storedDomain.id));
-
-      return {
-        awsCleanupCompleted,
-        domain: storedDomain.domain,
-        domainId: storedDomain.id,
-        removed: true,
-      };
     }),
 
   setCatchAll: protectedProcedure
@@ -470,7 +518,6 @@ export const mailDomainsRouter = {
         organizationId: input.organizationId,
         userId: context.userId,
       });
-      await assertDomainBillingAccess(input.organizationId);
       return await setMailDomainCatchAll(input);
     }),
 
@@ -521,53 +568,59 @@ export const mailDomainsRouter = {
           message: "Mail domain was not found in the active team.",
         });
       }
-      if (storedDomain.mode === input.mode) {
-        return await verifyMailDomainSetup(input);
-      }
-
-      const identity = await getEmailIdentity(storedDomain.domain);
-      const records = createMailDomainDnsRecords({
-        dkimTokens: getDkimTokens(identity),
-        domain: storedDomain.domain,
-        mode: input.mode,
-        ownershipToken:
-          getMailDomainOwnershipToken(storedDomain.requiredDnsRecords) ??
-          createMailDomainOwnershipToken(),
-        region: getAwsRegion(),
-      });
-      const now = new Date();
-      const updateValues = {
-        lastCheckResult: null,
-        mode: input.mode,
-        modeUpdatedAt: now,
-        modeUpdatedByUserId: context.userId,
-        requiredDnsRecords: records,
-        status: "pending_dns" as const,
-        updatedAt: now,
-        verifiedAt: null,
-      };
-      if (input.mode === "send_only") {
-        await db.transaction(async (tx) => {
-          const [lockedDomain] = await tx
-            .select({ id: mailDomain.id })
-            .from(mailDomain)
-            .where(
-              and(
-                eq(mailDomain.id, storedDomain.id),
-                eq(mailDomain.organizationId, input.organizationId)
-              )
+      await withMailDomainLock(storedDomain.domain, async (database) => {
+        await assertMailDomainOwnerAvailable({
+          database,
+          domain: storedDomain.domain,
+          organizationId: input.organizationId,
+        });
+        const [currentDomain] = await database
+          .select()
+          .from(mailDomain)
+          .where(
+            and(
+              eq(mailDomain.id, storedDomain.id),
+              eq(mailDomain.organizationId, input.organizationId)
             )
-            .limit(1)
-            .for("update");
-          if (lockedDomain === undefined) {
-            throw new ORPCError("NOT_FOUND", {
-              message: "Mail domain was not found in the active team.",
-            });
-          }
-
+          )
+          .limit(1)
+          .for("update");
+        if (currentDomain === undefined) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Mail domain was not found in the active team.",
+          });
+        }
+        if (currentDomain.mode === input.mode) {
+          return;
+        }
+        const identity = await getEmailIdentity(currentDomain.domain);
+        const records = createMailDomainDnsRecords({
+          dkimTokens: getDkimTokens(identity),
+          domain: currentDomain.domain,
+          mode: input.mode,
+          ownershipToken:
+            getMailDomainOwnershipToken(currentDomain.requiredDnsRecords) ??
+            createMailDomainOwnershipToken(),
+          region: getAwsRegion(),
+        });
+        const now = new Date();
+        const updateValues = {
+          lastCheckResult: null,
+          mode: input.mode,
+          modeUpdatedAt: now,
+          modeUpdatedByUserId: context.userId,
+          ownershipVerifiedAt:
+            currentDomain.ownershipVerifiedAt ??
+            (currentDomain.status === "verified" ? now : null),
+          requiredDnsRecords: records,
+          status: "pending_dns" as const,
+          updatedAt: now,
+          verifiedAt: null,
+        };
+        if (input.mode === "send_only") {
           const managedMailboxCount = await countManagedMailboxesForDomain({
-            database: tx,
-            domain: storedDomain.domain,
+            database,
+            domain: currentDomain.domain,
             organizationId: input.organizationId,
           });
           if (managedMailboxCount > 0) {
@@ -575,22 +628,17 @@ export const mailDomainsRouter = {
               message: `${managedMailboxCount} shared ${managedMailboxCount === 1 ? "inbox uses" : "inboxes use"} incoming mail on this domain. Remove or migrate them before switching to send only.`,
             });
           }
-          if (!(await deleteMailDomainReceiptRule(storedDomain.domain))) {
+          if (!(await deleteMailDomainReceiptRule(currentDomain.domain))) {
             throw new ORPCError("INTERNAL_SERVER_ERROR", {
               message: "Incoming mail could not be disabled. Try again.",
             });
           }
-          await tx
-            .update(mailDomain)
-            .set(updateValues)
-            .where(eq(mailDomain.id, lockedDomain.id));
-        });
-      } else {
-        await db
+        }
+        await database
           .update(mailDomain)
           .set(updateValues)
-          .where(eq(mailDomain.id, storedDomain.id));
-      }
+          .where(eq(mailDomain.id, currentDomain.id));
+      });
 
       return await verifyMailDomainSetup(input);
     }),

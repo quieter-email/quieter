@@ -4,6 +4,7 @@ import { mailbox, mailDomain } from "@quieter/database/schema";
 import { and, eq, isNull, or } from "drizzle-orm";
 
 import { MAILBOX_PROVIDER_MANAGED } from "../mailbox/access";
+import { assertDomainBillingAccess } from "./billing";
 
 export type MailDomainCatchAll = {
   emailAddress: string;
@@ -15,8 +16,9 @@ export const setMailDomainCatchAll = async (input: {
   domainId: string;
   mailboxId: string | null;
   organizationId: string;
-}): Promise<{ catchAll: MailDomainCatchAll | null }> =>
-  await db.transaction(async (tx) => {
+}): Promise<{ catchAll: MailDomainCatchAll | null }> => {
+  await assertDomainBillingAccess(input.organizationId);
+  return await db.transaction(async (tx) => {
     const [storedDomain] = await tx
       .select({
         domain: mailDomain.domain,
@@ -116,3 +118,4 @@ export const setMailDomainCatchAll = async (input: {
       },
     };
   });
+};

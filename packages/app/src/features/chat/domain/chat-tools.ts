@@ -1,4 +1,7 @@
-import type { CalendarWriteReview } from "@quieter/ai/chat-tools";
+import type {
+  CalendarWriteReview,
+  LinearWriteReview,
+} from "@quieter/ai/chat-tools";
 import type { UIMessage } from "ai";
 
 export type ChatToolPart = Extract<
@@ -21,6 +24,7 @@ export const getToolName = (partType: string) =>
 
 export type ChatToolApproval = {
   calendarReview?: CalendarWriteReview;
+  linearReview?: LinearWriteReview;
   approve: () => void;
   deny: () => void;
   id: string;
