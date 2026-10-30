@@ -27,6 +27,9 @@ const twMerge = extendTailwindMerge({
     classGroups: {
       "font-size": [{ text: fontSizes }],
     },
+    theme: {
+      radius: ["panel"],
+    },
   },
 });
 

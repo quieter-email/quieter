@@ -8,7 +8,7 @@ export const workspaceGutterClassName =
   "[--workspace-gutter:0px] lg:[--workspace-gutter:var(--workspace-gap-wide)]";
 
 export const workspaceSectionVariants = cva(
-  `${workspaceGutterClassName} overflow-hidden rounded-none border-0 bg-bg-raised shadow-none [background-image:var(--panel-gradient)] lg:rounded-xl lg:border lg:border-border lg:shadow-surface`,
+  `${workspaceGutterClassName} overflow-hidden rounded-none border-0 bg-bg-raised shadow-none [background-image:var(--panel-gradient)] lg:rounded-panel lg:border lg:border-border lg:shadow-surface`,
   {
     defaultVariants: {
       centered: false,
