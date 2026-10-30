@@ -16,7 +16,7 @@ import {
   clearPreviewPersonaCookie,
   setPreviewPersona,
 } from "@quieter/app/lib/preview-personas";
-import { queryPersister } from "@quieter/app/lib/query-persister";
+import { clearQueryPersistence } from "@quieter/app/lib/query-persister";
 import { appRuntime, openExternalUrl } from "@quieter/app/runtime";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -608,11 +608,19 @@ const DeleteAccountDialog = () => {
     },
     mutationKey: ["auth", "delete-user"],
     onSuccess: async () => {
-      queryClient.clear();
-      await queryPersister.removeQueries();
-      await navigate({
-        to: "/home",
-      });
+      try {
+        queryClient.clear();
+        await clearQueryPersistence();
+        await navigate({
+          to: "/home",
+        });
+      } catch (error) {
+        toastError(error, { boundary: "account-deletion-cleanup" });
+        throw new Error(
+          "Could not finish clearing local account data. Please try again.",
+          { cause: error }
+        );
+      }
     },
   });
   const form = useForm({
