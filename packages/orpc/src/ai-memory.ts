@@ -1052,14 +1052,7 @@ const createUsageCollector = () => {
     collect: (usage: AiUsageReport) => {
       collected = usage;
     },
-    usage: (): AiUsageReport =>
-      collected ?? {
-        cacheWriteTokens: 0,
-        cachedTokens: 0,
-        completionTokens: 0,
-        costUsd: undefined,
-        promptTokens: 0,
-      },
+    usage: () => collected,
   };
 };
 
@@ -1071,9 +1064,12 @@ const reportMemoryUsage = async ({
 }: {
   externalId: string;
   mailboxId?: string | null;
-  usage: AiUsageReport;
+  usage: AiUsageReport | undefined;
   userId: string;
 }) => {
+  if (usage === undefined) {
+    return;
+  }
   try {
     await reportAiUsage({
       completionTokens: usage.completionTokens,
@@ -1545,7 +1541,7 @@ const learnPersonalAiMemoryFromChatMessage = async (input: {
   bodyText: string;
   mailboxId: string;
   messageId: string;
-  scheduleBackgroundTask?: (task: Promise<unknown>) => void;
+  deferBackgroundTask?: (task: () => Promise<unknown>) => void;
   userId: string;
 }) => {
   const text = input.bodyText.trim();
@@ -1566,20 +1562,18 @@ const learnPersonalAiMemoryFromChatMessage = async (input: {
     });
     if (
       result.status === "recorded" &&
-      input.scheduleBackgroundTask !== undefined
+      input.deferBackgroundTask !== undefined
     ) {
-      input.scheduleBackgroundTask(
-        (async () => {
-          try {
-            // oxlint-disable-next-line eslint/no-use-before-define
-            await refreshAiMemoryFromEvent({ eventId: result.eventId });
-          } catch (error) {
-            if (!(error instanceof ORPCError) || error.status >= 500) {
-              reportError(error, { operation: "chat:learn-personal-context" });
-            }
+      input.deferBackgroundTask(async () => {
+        try {
+          // oxlint-disable-next-line eslint/no-use-before-define
+          await refreshAiMemoryFromEvent({ eventId: result.eventId });
+        } catch (error) {
+          if (!(error instanceof ORPCError) || error.status >= 500) {
+            reportError(error, { operation: "chat:learn-personal-context" });
           }
-        })()
-      );
+        }
+      });
     }
     return { status: result.status };
   }
@@ -2074,7 +2068,7 @@ export const refreshAiMemoryFromEvent = async ({
     });
     return { status: "refreshed" as const };
   } catch (error) {
-    if (!(error instanceof ORPCError) || error.code !== "CONFLICT") {
+    if (!(error instanceof ORPCError) || error.status >= 500) {
       reportError(new Error("Memory observation consolidation failed."), {
         operation: "ai-memory:consolidate-observations",
       });

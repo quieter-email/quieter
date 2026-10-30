@@ -30,6 +30,7 @@
     "./organization-mail-policy": "./src/organization-mail-policy.ts",
     "./router": "./src/routers/index.ts",
     "./chat": "./src/chat/service.ts",
+    "./chat-errors": "./src/chat-errors.ts",
     "./connectors": "./src/connectors/service.ts",
     "./domain-connect": "./src/mail-domain/domain-connect-service.ts",
     "./domain-connect-template": "./src/mail-domain/domain-connect.ts",
