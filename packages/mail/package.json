@@ -5,7 +5,6 @@
   "type": "module",
   "exports": {
     "./delivery": "./src/delivery.ts",
-    "./live-sync": "./src/live-sync.ts",
     "./data-plane": "./src/data-plane.ts",
     "./compose/draft-anchor": "./src/compose/draft-anchor.ts",
     "./compose/mime": "./src/compose/mime.ts",

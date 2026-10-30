@@ -1,11 +1,9 @@
-import { once } from "node:events";
-import { setTimeout as sleep } from "node:timers/promises";
-
 import { signMailPayload } from "@quieter/mail/updates";
 import type { maintainGmailPubSubMailbox } from "@quieter/orpc/gmail-pubsub";
-import type { findGmailUpdateMailboxIds } from "@quieter/orpc/mail-updates";
-import { listMailUpdateRecipients } from "@quieter/orpc/mail-updates";
-import { evictDurableObject } from "cloudflare:test";
+import {
+  findGmailUpdateMailboxIds,
+  listMailUpdateRecipients,
+} from "@quieter/orpc/mail-updates";
 import { env } from "cloudflare:workers";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import type { JWK } from "jose";
@@ -242,28 +240,6 @@ const envelope = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const isMessageEventTuple = (events: unknown): events is [MessageEvent] =>
-  Array.isArray(events) &&
-  events.length > 0 &&
-  events[0] instanceof MessageEvent;
-
-const messageFrom = async (socket: WebSocket) => {
-  const events = await once(socket, "message");
-  if (!isMessageEventTuple(events)) {
-    throw new Error("Expected message event.");
-  }
-  const [event] = events;
-  return event;
-};
-
-const within = async <T>(promise: Promise<T>, label: string) =>
-  await Promise.race([
-    promise,
-    sleep(1000).then(() => {
-      throw new Error(`Timed out waiting for ${label}.`);
-    }),
-  ]);
-
 const toRequest = (input: RequestInfo | URL, init?: RequestInit) => {
   if (input instanceof Request) {
     return input;
@@ -312,6 +288,7 @@ describe("Cloudflare worker runtime", () => {
     });
 
     test.each([
+      ["valid", async () => await liveSyncToken()],
       ["tampered", async () => `${await liveSyncToken()}x`],
       [
         "expired",
@@ -329,7 +306,7 @@ describe("Cloudflare worker runtime", () => {
         ),
         env
       );
-      expect(response.status).toBe(401);
+      expect(response.status).toBe(404);
     });
   });
 
@@ -366,20 +343,33 @@ describe("Cloudflare worker runtime", () => {
 
     test("enqueues notifications and recovers a transient broadcast failure", async () => {
       installFetchMock();
-      const token = await liveSyncToken();
-      const stub = env.GmailLiveSyncMailboxV2.get(
-        env.GmailLiveSyncMailboxV2.idFromName(emailAddress)
+      const userId = crypto.randomUUID();
+      vi.mocked(findGmailUpdateMailboxIds).mockResolvedValueOnce([
+        { id: mailboxId },
+      ]);
+      vi.mocked(listMailUpdateRecipients).mockResolvedValueOnce([userId]);
+      const ticket = JSON.stringify({
+        expiresAt: Date.now() + 60_000,
+        purpose: "mail-connection",
+        userId,
+      });
+      const url = new URL("https://worker.invalid/mail/live");
+      url.searchParams.set("ticket", ticket);
+      url.searchParams.set(
+        "signature",
+        await signMailPayload(ticket, "live-sync-secret")
       );
-      const socketResponse = await stub.fetch(
-        new Request(`https://worker.invalid/gmail/live?token=${token}`, {
+      const socketResponse = await worker.fetch(
+        new Request(url, {
           headers: { upgrade: "websocket" },
-        })
+        }),
+        env
       );
       const socket = socketResponse.webSocket;
       if (socket === null) {
         throw new Error("Expected WebSocket upgrade.");
       }
-      vi.spyOn(env.GmailLiveSyncMailboxV2, "get").mockImplementationOnce(() => {
+      vi.spyOn(env.MailLiveUser, "get").mockImplementationOnce(() => {
         throw Object.assign(new Error("internal error"), { retryable: true });
       });
       socket.accept();
@@ -422,7 +412,9 @@ describe("Cloudflare worker runtime", () => {
         expect(events).toHaveLength(1);
       });
       expect(events).toStrictEqual(
-        expect.arrayContaining([{ mailboxId, type: "mailbox-dirty" }])
+        expect.arrayContaining([
+          expect.objectContaining({ mailboxId, type: "mailbox.changed" }),
+        ])
       );
       socket.close(1000, "done");
     });
@@ -465,50 +457,6 @@ describe("Cloudflare worker runtime", () => {
         )
       ).rejects.toThrow("subscription");
       expect(processNotification).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("Durable Object WebSockets", () => {
-    test("upgrades, broadcasts attachments, auto-responds to exact pings, and closes", async () => {
-      const token = await liveSyncToken();
-      const stub = env.GmailLiveSyncMailboxV2.get(
-        env.GmailLiveSyncMailboxV2.idFromName(emailAddress.trim().toLowerCase())
-      );
-      const response = await stub.fetch(
-        new Request(`https://worker.invalid/gmail/live?token=${token}`, {
-          headers: { upgrade: "websocket" },
-        })
-      );
-      expect(response.status).toBe(101);
-      const socket = response.webSocket;
-      if (socket === null) {
-        throw new Error("Expected WebSocket upgrade.");
-      }
-      socket.accept();
-
-      const pong = messageFrom(socket);
-      socket.send('{"action":"ping"}');
-      const pongEvent = await within(pong, "automatic pong");
-      expect(pongEvent.data).toBe('{"type":"pong"}');
-
-      await evictDurableObject(stub);
-      const broadcast = messageFrom(socket);
-      const broadcastResponse = await stub.fetch(
-        "https://internal.quieter/broadcast",
-        {
-          body: JSON.stringify({ type: "mailbox-dirty" }),
-          method: "POST",
-        }
-      );
-      expect(broadcastResponse.status).toBe(204);
-      const broadcastEvent = await within(broadcast, "broadcast");
-      expect(JSON.parse(String(broadcastEvent.data))).toStrictEqual({
-        mailboxId,
-        type: "mailbox-dirty",
-      });
-
-      socket.close(1000, "done");
-      expect(socket.readyState).not.toBe(WebSocket.OPEN);
     });
   });
 
