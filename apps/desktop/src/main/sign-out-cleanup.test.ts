@@ -205,8 +205,8 @@ describe("native sign-out cleanup authority", () => {
     }
   );
 
-  it.each(["reject", "missing-ack", "missing-renderer"] as const)(
-    "releases and reports late completion failure for %s",
+  it.each(["reject", "missing-ack", "missing-renderer", "notify"] as const)(
+    "releases late completion and reports only post-sign-out failure for %s",
     async (failure) => {
       vi.useFakeTimers();
       try {
@@ -223,6 +223,9 @@ describe("native sign-out cleanup authority", () => {
           },
           onSignedOut: () => {
             notified = true;
+            if (failure === "notify") {
+              throw new Error("notification failed");
+            }
           },
           send: (command) => {
             if (command.phase === "capture") {
@@ -231,6 +234,9 @@ describe("native sign-out cleanup authority", () => {
               cleanupRequested = true;
               if (failure === "missing-renderer") {
                 throw new Error("window destroyed");
+              }
+              if (failure === "notify") {
+                coordinator.acknowledge({ ...command, success: true });
               }
             } else {
               released.resolve(null);
@@ -254,7 +260,7 @@ describe("native sign-out cleanup authority", () => {
         }
         await vi.advanceTimersByTimeAsync(30_000);
         await released.promise;
-        expect(reported).toBeTruthy();
+        expect(reported).toBe(failure !== "reject");
         expect(notified).toBe(failure !== "reject");
         expect(cleanupRequested).toBe(failure !== "reject");
         await expect(

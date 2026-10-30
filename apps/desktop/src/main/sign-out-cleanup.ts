@@ -89,13 +89,11 @@ export class SignOutCleanup {
       send({ phase, requestId: active.requestId });
       return await promise;
     };
-    let providerStarted = false;
     const completion = (async () => {
       let signedOut = false;
       try {
         try {
           await Promise.race([request("capture"), cancelled]);
-          providerStarted = true;
           await signOut();
           signedOut = true;
           const { promise: cleanupExpired, reject } =
@@ -121,7 +119,7 @@ export class SignOutCleanup {
           }
         }
       } catch (error) {
-        if (interrupted && providerStarted) {
+        if (interrupted && signedOut) {
           onCompletionError?.();
         }
         throw error;
