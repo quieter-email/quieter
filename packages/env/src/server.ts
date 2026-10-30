@@ -80,6 +80,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS:
         runtimeEnv.QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS,
       QUIETER_LOCAL_LINEAR_WRITES: runtimeEnv.QUIETER_LOCAL_LINEAR_WRITES,
+      QUIETER_LOCAL_PLANETSCALE_HOST: runtimeEnv.QUIETER_LOCAL_PLANETSCALE_HOST,
       QUIETER_LOCAL_PROVIDER_MODE: runtimeEnv.QUIETER_LOCAL_PROVIDER_MODE,
       QUIETER_LOCAL_WORKER_TOKEN: runtimeEnv.QUIETER_LOCAL_WORKER_TOKEN,
       QUIETER_MAIL_API_KEY: runtimeEnv.QUIETER_MAIL_API_KEY,
@@ -166,6 +167,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
         .default("production"),
       QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS: optionalString,
       QUIETER_LOCAL_LINEAR_WRITES: optionalBooleanString,
+      QUIETER_LOCAL_PLANETSCALE_HOST: optionalString,
       QUIETER_LOCAL_PROVIDER_MODE: z
         .enum(["observe", "write"])
         .default("observe"),
