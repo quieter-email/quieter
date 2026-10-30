@@ -15,6 +15,8 @@ import {
   stampApiCompatibility,
 } from "@quieter/mail/public-api";
 import {
+  MAX_SEND_ATTACHMENT_METADATA_LENGTH,
+  MAX_SEND_ATTACHMENTS,
   MAX_SEND_PAYLOAD_BYTES,
   sendMessageInputSchema,
 } from "@quieter/mail/send";
@@ -43,21 +45,27 @@ const sendEmailInputSchema = z.object({
         content: z.string().describe("Base64-encoded file content."),
         contentId: z
           .string()
+          .max(MAX_SEND_ATTACHMENT_METADATA_LENGTH)
           .optional()
           .describe(
             "Content ID used to reference inline attachments from HTML."
           ),
         contentType: z
           .string()
+          .max(MAX_SEND_ATTACHMENT_METADATA_LENGTH)
           .optional()
           .describe("MIME type. Defaults to application/octet-stream."),
         disposition: z
           .enum(["attachment", "inline"])
           .optional()
           .describe("Defaults to attachment."),
-        filename: z.string().describe("File name shown to the recipient."),
+        filename: z
+          .string()
+          .max(MAX_SEND_ATTACHMENT_METADATA_LENGTH)
+          .describe("File name shown to the recipient."),
       })
     )
+    .max(MAX_SEND_ATTACHMENTS)
     .optional()
     .describe("Optional attachments. Keep the total request body under 25 MB."),
   bcc: addressListSchema.optional().describe("Blind carbon copy recipients."),

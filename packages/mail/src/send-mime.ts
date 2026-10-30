@@ -6,6 +6,7 @@ import {
   getSendEnvelopeAddressList,
   normalizeSendHeaders,
   parseSendSender,
+  sendAttachmentListResourcesSchema,
 } from "./send";
 import type { SendHeader, SendMessageInput } from "./send";
 
@@ -37,6 +38,7 @@ export const buildSendMimeMessage = async (
     sentAt?: Date;
   }
 ): Promise<BuiltSendMimeMessage> => {
+  sendAttachmentListResourcesSchema.parse(message.attachments);
   const sender = parseSendSender(message.from);
   if (sender === null) {
     throw new Error("Enter a single sender email address.");
