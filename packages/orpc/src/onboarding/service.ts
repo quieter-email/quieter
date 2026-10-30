@@ -12,6 +12,7 @@ import {
 import { reportError } from "@quieter/observability";
 import { and, asc, eq, exists, or } from "drizzle-orm";
 
+import { assertUserCanManageOrganizationSettings } from "../mail-domain/service";
 import {
   MAILBOX_PROVIDER_GMAIL,
   MAILBOX_PROVIDER_MANAGED,
@@ -220,7 +221,14 @@ export const completeOnboarding = async (input: {
       );
       const [defaultOrganization] = organizations;
 
-      if (defaultOrganization !== undefined) {
+      if (
+        defaultOrganization !== undefined &&
+        defaultOrganization.name !== trimmedTeamName
+      ) {
+        await assertUserCanManageOrganizationSettings(
+          { organizationId: defaultOrganization.id, userId: input.userId },
+          transaction
+        );
         // Only the display name changes; the slug stays stable because default
         // team provisioning looks organizations up by it.
         await transaction
