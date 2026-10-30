@@ -233,17 +233,37 @@ export const reconcileAiCreditReservations = async (
 ) => {
   const apiKey = serverEnv.OPENROUTER_API_KEY;
   if (apiKey && input.reservationId === undefined) {
-    const unknown = await db
-      .select()
-      .from(aiCreditReservation)
-      .where(
-        and(
-          eq(aiCreditReservation.status, "reserved"),
-          isNull(aiCreditReservation.actualCostMicroCents),
-          isNotNull(aiCreditReservation.providerGenerationId)
+    const unknown = await db.transaction(async (transaction) => {
+      const rows = await transaction
+        .select()
+        .from(aiCreditReservation)
+        .where(
+          and(
+            eq(aiCreditReservation.status, "reserved"),
+            isNull(aiCreditReservation.actualCostMicroCents),
+            isNotNull(aiCreditReservation.providerGenerationId)
+          )
         )
-      )
-      .limit(input.limit ?? 100);
+        .orderBy(
+          sql`${aiCreditReservation.lastReconciledAt} asc nulls first`,
+          aiCreditReservation.id
+        )
+        .limit(input.limit ?? 100)
+        .for("update", { skipLocked: true });
+      if (rows.length > 0) {
+        // Commit retry order before provider I/O, including unavailable outcomes.
+        await transaction
+          .update(aiCreditReservation)
+          .set({ lastReconciledAt: sql`clock_timestamp()` })
+          .where(
+            inArray(
+              aiCreditReservation.id,
+              rows.map((row) => row.id)
+            )
+          );
+      }
+      return rows;
+    });
     for (const row of unknown) {
       if (row.providerGenerationId === null) {
         continue;

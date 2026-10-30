@@ -675,6 +675,150 @@ describe.skipIf(state.databaseUrl === undefined)(
       );
     });
 
+    test.each(["unavailable", "throws", "malformed", "missing-cost"])(
+      "reconciliation advances past %s generations without releasing unknown holds",
+      async (outcome) => {
+        const reservationId = await reserveAiCreditUsage(context);
+        const laterAccount = {
+          ...account,
+          externalCustomerId: "organization:g04-destination",
+          organizationId: "g04-destination",
+        };
+        const laterReservationId = await reserveAiCreditUsage({
+          ...context,
+          account: laterAccount,
+          organizationId: laterAccount.organizationId,
+        });
+        await recordAiCreditProviderGeneration({
+          generationId: "gen-unresolved",
+          reservationId,
+        });
+        await recordAiCreditProviderGeneration({
+          generationId: "gen-recoverable",
+          reservationId: laterReservationId,
+        });
+        vi.stubGlobal(
+          "fetch",
+          vi.fn<typeof fetch>().mockImplementation(async (input) => {
+            const url = new URL(input instanceof Request ? input.url : input);
+            if (url.searchParams.get("id") === "gen-recoverable") {
+              return await Promise.resolve(
+                Response.json({
+                  data: {
+                    finish_reason: "stop",
+                    id: "gen-recoverable",
+                    total_cost: 0.01,
+                  },
+                })
+              );
+            }
+            if (outcome === "throws") {
+              throw new Error("Synthetic unavailable generation");
+            }
+            if (outcome === "malformed") {
+              return new Response("invalid json");
+            }
+            if (outcome === "missing-cost") {
+              return Response.json({
+                data: { finish_reason: "stop", id: "gen-unresolved" },
+              });
+            }
+            return new Response(null, { status: 404 });
+          })
+        );
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          await reconcileAiCreditReservations({ limit: 1 });
+        }
+        const events = await db
+          .select()
+          .from(billingCreditUsageEvent)
+          .where(
+            inArray(billingCreditUsageEvent.organizationId, organizationIds)
+          );
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({
+          organizationId: laterAccount.organizationId,
+        });
+        await expect(
+          getOutstandingAiCreditReservations(laterAccount)
+        ).resolves.toBe(0);
+        await expect(
+          getOutstandingAiCreditReservations(account)
+        ).resolves.toBeGreaterThan(0);
+        await expect(reserveAiCreditUsage(context)).rejects.toMatchObject({
+          code: "FORBIDDEN",
+        });
+      }
+    );
+
+    test("concurrent reconciliation recovers another organization while a provider read waits", async () => {
+      const reservationId = await reserveAiCreditUsage(context);
+      const laterAccount = {
+        ...account,
+        externalCustomerId: "organization:g04-destination",
+        organizationId: "g04-destination",
+      };
+      const laterReservationId = await reserveAiCreditUsage({
+        ...context,
+        account: laterAccount,
+        organizationId: laterAccount.organizationId,
+      });
+      await recordAiCreditProviderGeneration({
+        generationId: "gen-waiting",
+        reservationId,
+      });
+      await recordAiCreditProviderGeneration({
+        generationId: "gen-ready",
+        reservationId: laterReservationId,
+      });
+      if (laterReservationId === null) {
+        throw new Error("Expected a paid reservation.");
+      }
+      await db
+        .update(aiCreditReservation)
+        .set({ lastReconciledAt: new Date(0) })
+        .where(eq(aiCreditReservation.id, laterReservationId));
+      const waiting = Promise.withResolvers<Response>();
+      const started = Promise.withResolvers<boolean>();
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>().mockImplementation(async (input) => {
+          const url = new URL(input instanceof Request ? input.url : input);
+          if (url.searchParams.get("id") === "gen-waiting") {
+            started.resolve(true);
+            return await waiting.promise;
+          }
+          return Response.json({
+            data: { finish_reason: "stop", id: "gen-ready", total_cost: 0.01 },
+          });
+        })
+      );
+      const first = reconcileAiCreditReservations({ limit: 1 });
+      try {
+        await started.promise;
+        await reconcileAiCreditReservations({ limit: 1 });
+        await expect(
+          getOutstandingAiCreditReservations(laterAccount)
+        ).resolves.toBe(0);
+        await expect(
+          getOutstandingAiCreditReservations(account)
+        ).resolves.toBeGreaterThan(0);
+      } finally {
+        waiting.resolve(new Response(null, { status: 404 }));
+        await first;
+      }
+      const events = await db
+        .select()
+        .from(billingCreditUsageEvent)
+        .where(
+          inArray(billingCreditUsageEvent.organizationId, organizationIds)
+        );
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        organizationId: laterAccount.organizationId,
+      });
+    });
+
     test("recovers a persisted completion after a crash without reopening its funds", async () => {
       const reservationId = await reserveAiCreditUsage(context);
       if (reservationId === null) {

@@ -3007,6 +3007,7 @@ export const aiCreditReservation = pgTable(
     createdAt: timestamp("createdAt").notNull(),
     groupId: text("groupId").notNull(),
     id: text("id").primaryKey(),
+    lastReconciledAt: timestamp("lastReconciledAt"),
     organizationId: text("organizationId")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
