@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./snippet": "./src/snippet.ts",
     "./delivery": "./src/delivery.ts",
     "./data-plane": "./src/data-plane.ts",
     "./compose/draft-anchor": "./src/compose/draft-anchor.ts",
