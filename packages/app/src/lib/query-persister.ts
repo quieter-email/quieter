@@ -299,26 +299,35 @@ export const setQueryPersistenceUser = (
   void mailCache.setUser(persistenceUser, sessionId);
 };
 
-export const clearQueryPersistence = async (
-  scope: "all" | "session" = "all"
-) => {
+export const captureQueryPersistenceCleanup = () => {
   const previousSession = persistenceSession;
+  const previousUser = persistenceUser;
   const previousClient = persistenceClient;
-  updatePersistenceOwner(undefined);
-  previousClient?.clear();
-  if (scope === "session") {
-    await mailCache.clearSession();
-  } else {
-    await mailCache.clear();
-  }
-  try {
-    if (previousSession) {
-      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel messages are restricted to the same origin and accept no targetOrigin.
-      logoutChannel?.postMessage(previousSession);
+  const clear = mailCache.captureCleanup();
+  return async () => {
+    if (
+      persistenceSession === previousSession &&
+      persistenceUser === previousUser
+    ) {
+      const currentClient = persistenceClient;
+      updatePersistenceOwner(undefined);
+      currentClient?.clear();
     }
-  } catch {
-    /* The browser may deny cross-tab messaging. */
-  }
+    previousClient?.clear();
+    await clear();
+    try {
+      if (previousSession) {
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel messages are restricted to the same origin and accept no targetOrigin.
+        logoutChannel?.postMessage(previousSession);
+      }
+    } catch {
+      /* The browser may deny cross-tab messaging. */
+    }
+  };
+};
+
+export const clearQueryPersistence = async () => {
+  await captureQueryPersistenceCleanup()();
 };
 
 export const shouldPersistQueryKey = (queryKey: readonly unknown[]) => {

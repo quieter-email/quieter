@@ -32,6 +32,7 @@ import {
   prepareLoadedComposeDraft,
   clearComposeDraftRuntimeFiles,
   createRecoveredComposeCopy,
+  createEmptyComposeDraft,
   textToComposeBodyHtml,
 } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
@@ -45,6 +46,7 @@ import { USER_BILLING_QUERY_KEY } from "@quieter/app/features/settings/domain/bi
 import { useAudioRecorder } from "@quieter/app/lib/audio-recorder";
 import { prepareTranscriptionRecording } from "@quieter/app/lib/audio-transcription";
 import { authClient } from "@quieter/app/lib/auth";
+import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { deleteDemoDraft } from "@quieter/app/lib/gmail/demo-mail";
 import { refreshCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-query/index";
@@ -1274,9 +1276,12 @@ const ReadyComposeSurface = ({
 };
 
 export const ComposeSurface = (props: ComposeSurfaceProps) => {
-  const userId = authClient.useSession().data?.user.id;
+  const session = authClient.useSession().data;
+  const userId = session?.user.id;
+  const sessionId = session?.session.id;
+  const recovery = draftRecoveryJournal.session(userId ?? "", sessionId);
   const { initialDraft, mailboxId, demoMode, managedDemoMode } = props;
-  const needsLoading =
+  const needsRemoteLoading =
     !!mailboxId &&
     !!initialDraft &&
     demoMode !== true &&
@@ -1286,7 +1291,16 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
       [...initialDraft.attachments, ...initialDraft.inlineImages].some(
         (asset) => !!asset.gmailAttachmentId
       ));
-  const seedRef = useRef(initialDraft);
+  const needsRecoveryLoading =
+    !!mailboxId &&
+    !!userId &&
+    !!sessionId &&
+    props.persistDrafts !== false &&
+    demoMode !== true &&
+    managedDemoMode !== true &&
+    initialDraft?.recoveryEditorId === undefined;
+  const needsLoading = needsRemoteLoading || needsRecoveryLoading;
+  const seedRef = useRef(initialDraft ?? createEmptyComposeDraft());
   const [recoverableSeed, setRecoverableSeed] =
     useState<ComposeDraftState | null>(null);
   const [recoveredCopy, setRecoveredCopy] = useState<ComposeDraftState | null>(
@@ -1311,14 +1325,39 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
     gcTime: 0,
     queryFn: async ({ signal }) => {
       const seed = seedRef.current;
-      if (!seed || !mailboxId) {
+      if (!mailboxId) {
         throw new Error("Select a draft to open.");
       }
-      const recovered = userId
-        ? findRecoverableComposeDraft({ mailboxId, userId }, seed)
-        : null;
+      let recoveryFailed = false;
+      const findRecovery = async (candidate: ComposeDraftState) => {
+        if (!userId || !sessionId || recoveryFailed) {
+          return null;
+        }
+        try {
+          if (!(await recovery.ready())) {
+            return null;
+          }
+          return await findRecoverableComposeDraft(
+            { mailboxId, userId },
+            candidate,
+            recovery
+          );
+        } catch (recoveryError) {
+          recoveryFailed = true;
+          toastError(recoveryError, {
+            boundary: "compose-recovery",
+            fallback:
+              "This browser could not keep a recovery copy. Keep this draft open until it is saved.",
+          });
+          return null;
+        }
+      };
+      const recovered = await findRecovery(seed);
       setRecoverableSeed(recovered);
       let draft = recovered ?? seed;
+      if (!needsRemoteLoading) {
+        return draft;
+      }
       if (draft.sendUncertain === true) {
         return draft;
       }
@@ -1352,10 +1391,7 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
           };
         }
       }
-      draft =
-        (userId
-          ? findRecoverableComposeDraft({ mailboxId, userId }, draft)
-          : null) ?? draft;
+      draft = (await findRecovery(draft)) ?? draft;
       if (draft.sendUncertain === true) {
         return draft;
       }

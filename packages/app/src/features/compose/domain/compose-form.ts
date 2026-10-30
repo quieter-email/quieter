@@ -35,6 +35,7 @@ type ComposeDraftFormMeta = Pick<
   | "recoveryLocalId"
   | "recoveryMissingFiles"
   | "recoveryUpdatedAt"
+  | "recoveryRevision"
   | "updatedAt"
 >;
 

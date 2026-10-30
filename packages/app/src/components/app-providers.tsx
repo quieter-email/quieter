@@ -55,7 +55,7 @@ const SessionQueryProvider = ({
       } else {
         void (async () => {
           try {
-            await clearQueryPersistence("session");
+            await clearQueryPersistence();
           } catch (error) {
             toastError(error, { boundary: "session-cache-cleanup" });
           }
@@ -80,16 +80,19 @@ const SessionQueryProvider = ({
 export const AppProviders = ({ children }: PropsWithChildren) => {
   const session = authClient.useSession();
   const userId = session.data?.user.id;
+  const sessionId = session.data?.session.id;
 
   useLayoutEffect(() => {
     if (!session.isPending) {
-      try {
-        draftRecoveryJournal.setUser(userId);
-      } catch (error) {
-        toastError(error, { boundary: "compose-recovery-identity-cleanup" });
-      }
+      void (async () => {
+        try {
+          await draftRecoveryJournal.setUser(userId, sessionId);
+        } catch (error) {
+          toastError(error, { boundary: "compose-recovery-identity-cleanup" });
+        }
+      })();
     }
-  }, [session.isPending, userId]);
+  }, [session.isPending, sessionId, userId]);
 
   return (
     <HotkeysProvider

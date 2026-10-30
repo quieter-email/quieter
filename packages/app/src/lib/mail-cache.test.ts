@@ -7,6 +7,92 @@ import { openDB } from "idb";
 import { describe, expect, test, vi } from "vite-plus/test";
 
 describe("bounded mail cache", () => {
+  test("a rejected authority replacement leaves the occupied guard intact", async () => {
+    const name = crypto.randomUUID();
+    const cache = createMailCache({ name });
+    await cache.setUser("one", "current");
+    await cache.setItem("body-message", "Private body");
+    const sibling = createMailCache({ name });
+    await sibling.setUser("one", "current");
+    // oxlint-disable-next-line typescript/unbound-method -- Invoked with its original object store below.
+    const original = IDBObjectStore.prototype.put;
+    const put = vi
+      .spyOn(IDBObjectStore.prototype, "put")
+      .mockImplementation(function put(
+        this: IDBObjectStore,
+        value: unknown,
+        key?: IDBValidKey
+      ) {
+        if (this.name === "recoveryAuthority") {
+          throw new Error("authority storage denied");
+        }
+        return original.call(this, value, key);
+      });
+    try {
+      await expect(cache.captureCleanup()()).rejects.toThrow(/denied/u);
+    } finally {
+      put.mockRestore();
+    }
+    const db = await openDB(name);
+    await expect(db.getAll("recoveryAuthority")).resolves.toMatchObject([
+      { sessionId: "current" },
+    ]);
+    await expect(db.getAll("values")).resolves.toContain("Private body");
+    await expect(sibling.getItem("body-message")).resolves.toBe("Private body");
+    await cache.setItem("body-message", "Forbidden local write");
+    await expect(cache.getItem("body-message")).resolves.toBeNull();
+    db.close();
+  });
+
+  test.each(["one", "two"])(
+    "drops unindexed private values on %s activation and retains valid same-user bodies",
+    async (nextUser) => {
+      const name = crypto.randomUUID();
+      const cache = createMailCache({ name });
+      await cache.setUser("one", "old");
+      await cache.setItem("body-message", "Valid private body");
+      const db = await openDB(name);
+      await db.put("values", "Orphan private body", "orphan");
+      const fresh = createMailCache({ name });
+      await fresh.setUser(nextUser, "fresh");
+      await expect(db.getAll("values")).resolves.not.toContain(
+        "Orphan private body"
+      );
+      await expect(fresh.getItem("body-message")).resolves.toBe(
+        nextUser === "one" ? "Valid private body" : null
+      );
+      const reload = createMailCache({ name });
+      await reload.setUser(nextUser, "fresh");
+      await expect(reload.getItem("body-message")).resolves.toBe(
+        nextUser === "one" ? "Valid private body" : null
+      );
+      db.close();
+    }
+  );
+
+  test.each(["same", "fresh"])(
+    "captured cleanup fences a %s local rebind without revoking a fresh activation",
+    async (binding) => {
+      const name = crypto.randomUUID();
+      const cache = createMailCache({ name });
+      await cache.setUser("one", "same");
+      const cleanup = cache.captureCleanup();
+      cache.detach();
+      await cache.setUser("one", binding);
+      await cache.setItem("body-message", "bound private body");
+      await cleanup();
+      await cache.setItem("body-message", "late write");
+      await expect(cache.getItem("body-message")).resolves.toBe(
+        binding === "same" ? null : "late write"
+      );
+      const reload = createMailCache({ name });
+      await reload.setUser("one", binding);
+      await expect(reload.getItem("body-message")).resolves.toBe(
+        binding === "same" ? null : "late write"
+      );
+    }
+  );
+
   test.each([
     ["one", false],
     ["one", true],
@@ -92,7 +178,7 @@ describe("bounded mail cache", () => {
     void cache.setUser("one", "expired");
     await cache.setItem("quieter-cache-query", "metadata");
     await cache.setItem("body-current", "private body");
-    const db = await openDB(name, 2);
+    const db = await openDB(name);
     await db.put("values", "orphan private body", "orphan");
     await cache.clearSession();
     await expect(db.getAll("entries")).resolves.toHaveLength(0);
@@ -178,7 +264,7 @@ describe("bounded mail cache", () => {
       await stale.setUser("one", "old-session");
       await sender.setUser("one", "old-session");
       await stale.setItem("body-old", "old private body");
-      await sender.clear();
+      await sender.clearSession();
       await sender.setUser(nextUser, "fresh-session");
       await sender.setItem("body-fresh", "fresh private body");
 
@@ -302,7 +388,7 @@ describe("durable cache revocation", () => {
     const original = createMailCache({ name });
     await original.setUser("one", "old-session");
     await original.setItem("body-message", "private");
-    await original.clear();
+    await original.clearSession();
     const stale = createMailCache({ name });
     await stale.setUser("one", "old-session");
     await stale.setItem("body-message", "stale private body");
@@ -326,7 +412,7 @@ describe("durable cache revocation", () => {
     await cache.setItem("quieter-cache-query", "private metadata");
     const db = await openDB(name);
     await db.put("values", "unindexed private body", "orphan");
-    await cache.clear();
+    await cache.clearSession();
     for (const store of ["values", "entries"]) {
       const values = await db.getAll(store);
       expect(values).toHaveLength(0);

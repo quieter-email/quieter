@@ -37,13 +37,16 @@ describe("mail content persistence", () => {
     await queryPersister.persistQueryByKey(key, client);
     const committed = Promise.withResolvers<null>();
     const resume = Promise.withResolvers<null>();
-    const clear = mailCache.clear.bind(mailCache);
+    const capture = mailCache.captureCleanup.bind(mailCache);
     const cleanup = vi
-      .spyOn(mailCache, "clear")
-      .mockImplementation(async () => {
-        await clear();
-        committed.resolve(null);
-        await resume.promise;
+      .spyOn(mailCache, "captureCleanup")
+      .mockImplementation(() => {
+        const clear = capture();
+        return async () => {
+          await clear();
+          committed.resolve(null);
+          await resume.promise;
+        };
       });
     try {
       const logout = clearQueryPersistence();

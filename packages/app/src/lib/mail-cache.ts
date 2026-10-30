@@ -1,5 +1,11 @@
 import { openDB } from "idb";
 import type { DBSchema } from "idb";
+import { z } from "zod";
+
+import type {
+  DraftRecoveryScope,
+  LocalDraftRecord,
+} from "./draft-recovery-journal";
 
 export const MAIL_CACHE_BUDGET = 100_000_000;
 export const MAIL_CACHE_MAX_AGE = 30 * 24 * 60 * 60_000;
@@ -12,7 +18,46 @@ type CacheEntry = {
   userId: string;
 };
 type CacheOwner = { readonly sessionId: string; readonly epoch: string };
+type RecoveryAuthority = { sessionId: string; epoch: string; slot: "current" };
+const legacyRecoverySchema = z.object({
+  editorId: z.string(),
+  localId: z.string(),
+  mailboxId: z.string(),
+  payload: z.string(),
+  updatedAt: z.number(),
+  userId: z.string(),
+});
+const completeRecoveryMutation = async (
+  guard: Promise<unknown>,
+  pending: Promise<unknown>[]
+) => {
+  try {
+    await Promise.all(pending);
+  } catch (error) {
+    try {
+      await guard;
+    } catch (guardError) {
+      if (
+        guardError instanceof DOMException &&
+        guardError.name === "ConstraintError"
+      ) {
+        return;
+      }
+    }
+    throw error;
+  }
+};
 type MailCacheDatabase = {
+  recoveryAuthority: {
+    key: [string, string];
+    value: RecoveryAuthority;
+    indexes: { slot: string };
+  };
+  recovery: {
+    key: [string, string, string, string, string];
+    value: LocalDraftRecord;
+    indexes: { userId: string; mailbox: [string, string] };
+  };
   epochs: { key: string; value: string };
   values: { key: string; value: string };
   entries: {
@@ -40,7 +85,7 @@ export const createMailCache = (
   const open = async () => {
     database ??= openDB<MailCacheDatabase>(
       options.name ?? "quieter-mail-cache-v1",
-      2,
+      3,
       {
         blocking() {
           connection?.close();
@@ -49,8 +94,25 @@ export const createMailCache = (
         terminated() {
           database = undefined;
         },
-        upgrade(db, oldVersion) {
-          db.createObjectStore("epochs");
+        upgrade(db, oldVersion, _version, tx) {
+          if (oldVersion < 2) {
+            db.createObjectStore("epochs");
+          }
+          const authority = db.createObjectStore("recoveryAuthority", {
+            keyPath: ["sessionId", "epoch"],
+          });
+          // Stale primary keys conflict with the occupied slot and abort committed checkpoints.
+          authority.createIndex("slot", "slot", { unique: true });
+          void tx.objectStore("recoveryAuthority").put({
+            epoch: crypto.randomUUID(),
+            sessionId: "",
+            slot: "current",
+          });
+          const recovery = db.createObjectStore("recovery", {
+            keyPath: ["userId", "mailboxId", "editorId", "localId", "revision"],
+          });
+          recovery.createIndex("userId", "userId");
+          recovery.createIndex("mailbox", ["userId", "mailboxId"]);
           if (oldVersion !== 0) {
             return;
           }
@@ -71,26 +133,31 @@ export const createMailCache = (
   };
   let initialization = Promise.resolve();
   let databaseEpoch: string | undefined;
-  let authenticatedOwner: Promise<CacheOwner | null> | undefined;
+  let authenticatedOwner:
+    | Readonly<{ sessionId: string; value: Promise<CacheOwner | null> }>
+    | undefined;
 
   const changeUser = async (
     next: string | undefined,
     identity = next,
     force = false,
-    cleanupOwner?: Promise<CacheOwner | null>
+    cleanupOwner?: Promise<CacheOwner | null>,
+    cleanupSession?: string
   ) => {
     if (!force && initialized && next === userId && identity === sessionId) {
       await initialization;
       return;
     }
-    initialized = true;
     const previousUser = userId;
     const previousSession = sessionId;
-    userId = next;
-    sessionId = identity;
-    generation += 1;
-    userGeneration += 1;
-    protectedKeys.clear();
+    if (!cleanupOwner || cleanupSession === sessionId || userId === undefined) {
+      initialized = true;
+      userId = next;
+      sessionId = identity;
+      generation += 1;
+      userGeneration += 1;
+      protectedKeys.clear();
+    }
     const previous = initialization;
     const transition = (async () => {
       await previous;
@@ -99,7 +166,10 @@ export const createMailCache = (
         return null;
       }
       const db = await open();
-      const tx = db.transaction(["entries", "values", "epochs"], "readwrite");
+      const tx = db.transaction(
+        ["entries", "values", "epochs", "recovery", "recoveryAuthority"],
+        "readwrite"
+      );
       void (async () => {
         try {
           await tx.done;
@@ -107,62 +177,128 @@ export const createMailCache = (
           /* Request failures below still propagate through transition. */
         }
       })();
-      if (
-        owner &&
-        ((await tx.objectStore("epochs").get("session")) !== owner.epoch ||
+      try {
+        if (
+          owner &&
+          ((await tx.objectStore("epochs").get("session")) !== owner.epoch ||
+            (await tx
+              .objectStore("epochs")
+              .get(`identity:${owner.sessionId}`)) !== "active")
+        ) {
+          await tx.done;
+          return null;
+        }
+        const identityState = identity
+          ? await tx.objectStore("epochs").get(`identity:${identity}`)
+          : undefined;
+        if (identity && identityState === "revoked") {
+          databaseEpoch = undefined;
+          await tx.done;
+          return null;
+        }
+        const recoveryRevoked =
+          identity !== undefined &&
           (await tx
             .objectStore("epochs")
-            .get(`identity:${owner.sessionId}`)) !== "active")
-      ) {
-        await tx.done;
-        return null;
-      }
-      const identityState = identity
-        ? await tx.objectStore("epochs").get(`identity:${identity}`)
-        : undefined;
-      if (identity && identityState === "revoked") {
-        databaseEpoch = undefined;
-        await tx.done;
-        return null;
-      }
-      // Logout must commit even if another login has already changed local state.
-      let revoked =
-        next === undefined ||
-        (identity !== undefined && identityState !== "active") ||
-        (previousUser !== undefined &&
-          (previousUser !== next || previousSession !== identity));
-      let cursor = await tx.objectStore("entries").openCursor();
-      while (cursor !== null) {
-        if (cursor.value.userId !== next) {
-          revoked = true;
-          await tx.objectStore("values").delete(cursor.key);
-          await cursor.delete();
+            .get(`recovery-identity:${identity}`)) === "revoked";
+        // Logout must commit even if another login has already changed local state.
+        let revoked =
+          next === undefined ||
+          (identity !== undefined && identityState !== "active") ||
+          (previousUser !== undefined &&
+            (previousUser !== next || previousSession !== identity));
+        let cursor = await tx.objectStore("entries").openCursor();
+        while (cursor !== null) {
+          if (cursor.value.userId !== next) {
+            revoked = true;
+            await tx.objectStore("values").delete(cursor.key);
+            await cursor.delete();
+          }
+          cursor = await cursor.continue();
         }
-        cursor = await cursor.continue();
-      }
-      if (next === undefined) {
-        await tx.objectStore("values").clear();
-      }
-      if (revoked) {
-        for (const key of await tx.objectStore("epochs").getAllKeys()) {
-          if (key.startsWith("identity:") && key !== `identity:${identity}`) {
-            await tx.objectStore("epochs").put("revoked", key);
+        let valueCursor = await tx.objectStore("values").openKeyCursor();
+        while (valueCursor !== null) {
+          if ((await tx.objectStore("entries").count(valueCursor.key)) === 0) {
+            await tx.objectStore("values").delete(valueCursor.key);
+          }
+          valueCursor = await valueCursor.continue();
+        }
+        if (next === undefined) {
+          await tx.objectStore("values").clear();
+          await tx
+            .objectStore("epochs")
+            .put("consumed", "legacy-recovery-import");
+        }
+        let recoveryCursor = await tx.objectStore("recovery").openCursor();
+        while (recoveryCursor) {
+          if (recoveryCursor.value.userId !== next) {
+            await recoveryCursor.delete();
+          }
+          recoveryCursor = await recoveryCursor.continue();
+        }
+        if (revoked) {
+          for (const key of await tx.objectStore("epochs").getAllKeys()) {
+            if (key.startsWith("identity:") && key !== `identity:${identity}`) {
+              await tx.objectStore("epochs").put("revoked", key);
+            }
+            if (
+              key.startsWith("recovery-identity:") &&
+              key !== `recovery-identity:${identity}`
+            ) {
+              await tx.objectStore("epochs").put("revoked", key);
+            }
           }
         }
+        if (identity) {
+          await tx.objectStore("epochs").put("active", `identity:${identity}`);
+        }
+        const epoch = revoked
+          ? crypto.randomUUID()
+          : ((await tx.objectStore("epochs").get("session")) ?? "");
+        databaseEpoch = epoch;
+        await tx.objectStore("epochs").put(epoch, "session");
+        if (!recoveryRevoked) {
+          await tx.objectStore("recoveryAuthority").clear();
+          await tx.objectStore("recoveryAuthority").put({
+            epoch,
+            sessionId: identity ?? "",
+            slot: "current",
+          });
+          if (identity) {
+            await tx
+              .objectStore("epochs")
+              .put("active", `recovery-identity:${identity}`);
+          }
+        }
+        await tx.done;
+        if (next === undefined && typeof localStorage !== "undefined") {
+          for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+            const key = localStorage.key(index);
+            if (
+              key?.startsWith("quieter:draft-recovery:") === true ||
+              key?.startsWith("quieter:draft-recovery-v2:") === true
+            ) {
+              localStorage.removeItem(key);
+            }
+          }
+        }
+        return identity ? { epoch, sessionId: identity } : null;
+      } catch (error) {
+        try {
+          tx.abort();
+        } catch {
+          /* Legacy removal can fail after the transaction commits. */
+        }
+        try {
+          await tx.done;
+        } catch {
+          /* Preserve the original storage failure below. */
+        }
+        throw error;
       }
-      if (identity) {
-        await tx.objectStore("epochs").put("active", `identity:${identity}`);
-      }
-      const epoch = revoked
-        ? crypto.randomUUID()
-        : ((await tx.objectStore("epochs").get("session")) ?? "");
-      databaseEpoch = epoch;
-      await tx.objectStore("epochs").put(epoch, "session");
-      await tx.done;
-      return identity ? { epoch, sessionId: identity } : null;
     })();
     if (next && identity) {
-      authenticatedOwner = transition;
+      authenticatedOwner = { sessionId: identity, value: transition };
     }
     initialization = (async () => {
       try {
@@ -174,20 +310,24 @@ export const createMailCache = (
     await transition;
   };
 
-  const clearSession = async () => {
+  const captureCleanup = () => {
     const owner = authenticatedOwner;
-    await changeUser(
-      undefined,
-      undefined,
-      true,
-      owner ?? Promise.resolve(null)
-    );
+    return async () => {
+      await changeUser(
+        undefined,
+        undefined,
+        true,
+        owner?.value ?? Promise.resolve(null),
+        owner?.sessionId
+      );
+    };
+  };
+  const clearSession = async () => {
+    await captureCleanup()();
   };
 
   return {
-    async clear() {
-      await changeUser(undefined, undefined, true);
-    },
+    captureCleanup,
     clearSession,
     detach() {
       initialized = true;
@@ -277,6 +417,431 @@ export const createMailCache = (
       } else {
         protectedKeys.delete(key);
       }
+    },
+    recoverySession(nextUser: string, nextSession: string) {
+      const activation = changeUser(nextUser, nextSession);
+      const activationOwner = authenticatedOwner?.value;
+      const localGeneration = userGeneration;
+      let owner: CacheOwner | undefined;
+      let detached = false;
+      const ready = (async () => {
+        await activation;
+        const captured = await activationOwner;
+        if (!captured || localGeneration !== userGeneration) {
+          return false;
+        }
+        const db = await open();
+        if (
+          (await db.get("epochs", `recovery-identity:${nextSession}`)) !==
+          "active"
+        ) {
+          return false;
+        }
+        owner = captured;
+        return true;
+      })();
+      const list = async (
+        scope: DraftRecoveryScope
+      ): Promise<LocalDraftRecord[]> => {
+        if (!owner) {
+          await ready;
+        }
+        if (detached || scope.userId !== nextUser || !owner || !connection) {
+          return [];
+        }
+        const tx = connection.transaction(
+          ["recovery", "recoveryAuthority"],
+          "readwrite"
+        );
+        const guard = tx
+          .objectStore("recoveryAuthority")
+          .put({ ...owner, slot: "current" });
+        const completion = tx.done;
+        void (async () => {
+          try {
+            await completion;
+          } catch {
+            /* The operation below reports transaction failure. */
+          }
+        })();
+        try {
+          await guard;
+          const stored = await tx
+            .objectStore("recovery")
+            .index("mailbox")
+            .getAll([scope.userId, scope.mailboxId]);
+          const records = stored.toSorted(
+            (left, right) => right.updatedAt - left.updatedAt
+          );
+          for (const record of records.slice(3)) {
+            await tx
+              .objectStore("recovery")
+              .delete([
+                record.userId,
+                record.mailboxId,
+                record.editorId,
+                record.localId,
+                record.revision,
+              ]);
+          }
+          await completion;
+          return detached || localGeneration !== userGeneration
+            ? []
+            : records.slice(0, 3);
+        } catch (error) {
+          let guardError: unknown;
+          try {
+            await guard;
+          } catch (requestError) {
+            guardError = requestError;
+          }
+          if (
+            guardError instanceof DOMException &&
+            guardError.name === "ConstraintError"
+          ) {
+            return [];
+          }
+          throw error;
+        }
+      };
+      return {
+        async clear() {
+          detached = true;
+          await (async () => {
+            await ready;
+            if (!owner || !connection) {
+              return;
+            }
+            const tx = connection.transaction(
+              ["recovery", "recoveryAuthority", "epochs"],
+              "readwrite"
+            );
+            const guard = tx
+              .objectStore("recoveryAuthority")
+              .put({ ...owner, slot: "current" });
+            void (async () => {
+              try {
+                await tx.done;
+              } catch {
+                /* The operation below reports transaction failure. */
+              }
+            })();
+            try {
+              await guard;
+              await tx
+                .objectStore("epochs")
+                .put("consumed", "legacy-recovery-import");
+              await tx
+                .objectStore("epochs")
+                .put("revoked", `recovery-identity:${owner.sessionId}`);
+              await tx.objectStore("recovery").clear();
+              await tx.objectStore("recoveryAuthority").clear();
+              await tx.objectStore("recoveryAuthority").put({
+                epoch: crypto.randomUUID(),
+                sessionId: "",
+                slot: "current",
+              });
+              await tx.done;
+              for (
+                let index = localStorage.length - 1;
+                index >= 0;
+                index -= 1
+              ) {
+                const key = localStorage.key(index);
+                if (
+                  key?.startsWith("quieter:draft-recovery:") === true ||
+                  key?.startsWith("quieter:draft-recovery-v2:") === true
+                ) {
+                  localStorage.removeItem(key);
+                }
+              }
+            } catch (error) {
+              try {
+                tx.abort();
+              } catch {
+                /* The failing transaction may already be aborted. */
+              }
+              let guardError: unknown;
+              try {
+                await guard;
+              } catch (requestError) {
+                guardError = requestError;
+              }
+              if (
+                guardError instanceof DOMException &&
+                guardError.name === "ConstraintError"
+              ) {
+                return;
+              }
+              throw error;
+            }
+          })();
+        },
+        detach() {
+          detached = true;
+        },
+        list,
+        async migrateLegacy() {
+          await ready;
+          if (!owner || !connection || detached) {
+            return;
+          }
+          const tx = connection.transaction(
+            ["recovery", "recoveryAuthority", "epochs"],
+            "readwrite"
+          );
+          const guard = tx
+            .objectStore("recoveryAuthority")
+            .put({ ...owner, slot: "current" });
+          void (async () => {
+            try {
+              await tx.done;
+            } catch {
+              /* The operation below reports transaction failure. */
+            }
+          })();
+          try {
+            await guard;
+            const importing =
+              (await tx.objectStore("epochs").get("legacy-recovery-import")) !==
+              "consumed";
+            const migratedKeys: string[] = [];
+            for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+              const key = localStorage.key(index);
+              if (key?.startsWith("quieter:draft-recovery:") === true) {
+                migratedKeys.push(key);
+              } else if (
+                key?.startsWith("quieter:draft-recovery-v2:") === true
+              ) {
+                let records: unknown = null;
+                let legacyScope: unknown = null;
+                try {
+                  if (importing) {
+                    records = JSON.parse(localStorage.getItem(key) ?? "null");
+                    legacyScope = JSON.parse(
+                      key.slice("quieter:draft-recovery-v2:".length)
+                    );
+                  }
+                } catch {
+                  records = null;
+                }
+                if (Array.isArray(records) && Array.isArray(legacyScope)) {
+                  for (const value of records) {
+                    const parsed = legacyRecoverySchema.safeParse(value);
+                    if (
+                      parsed.success &&
+                      parsed.data.userId === nextUser &&
+                      legacyScope[0] === nextUser &&
+                      legacyScope[1] === parsed.data.mailboxId
+                    ) {
+                      const record = parsed.data;
+                      const existing = await tx
+                        .objectStore("recovery")
+                        .getAllKeys(
+                          IDBKeyRange.bound(
+                            [
+                              record.userId,
+                              record.mailboxId,
+                              record.editorId,
+                              record.localId,
+                              "",
+                            ],
+                            [
+                              record.userId,
+                              record.mailboxId,
+                              record.editorId,
+                              record.localId,
+                              "\uFFFF",
+                            ]
+                          )
+                        );
+                      if (existing.length === 0) {
+                        await tx
+                          .objectStore("recovery")
+                          .put({ ...record, revision: crypto.randomUUID() });
+                      }
+                    }
+                  }
+                }
+                migratedKeys.push(key);
+              }
+            }
+            await tx
+              .objectStore("epochs")
+              .put("consumed", "legacy-recovery-import");
+            const byMailbox = new Map<string, LocalDraftRecord[]>();
+            for (const record of await tx.objectStore("recovery").getAll()) {
+              const records = byMailbox.get(record.mailboxId) ?? [];
+              records.push(record);
+              byMailbox.set(record.mailboxId, records);
+            }
+            for (const records of byMailbox.values()) {
+              for (const record of records
+                .toSorted((left, right) => right.updatedAt - left.updatedAt)
+                .slice(3)) {
+                await tx
+                  .objectStore("recovery")
+                  .delete([
+                    record.userId,
+                    record.mailboxId,
+                    record.editorId,
+                    record.localId,
+                    record.revision,
+                  ]);
+              }
+            }
+            await tx.done;
+            for (const key of migratedKeys) {
+              localStorage.removeItem(key);
+            }
+          } catch (error) {
+            try {
+              tx.abort();
+            } catch {
+              /* The failing transaction may already be aborted. */
+            }
+            let guardError: unknown;
+            try {
+              await guard;
+            } catch (requestError) {
+              guardError = requestError;
+            }
+            if (
+              guardError instanceof DOMException &&
+              guardError.name === "ConstraintError"
+            ) {
+              return;
+            }
+            throw error;
+          }
+        },
+        ready,
+        async remove(
+          record: Pick<
+            LocalDraftRecord,
+            "userId" | "mailboxId" | "editorId" | "localId"
+          > & { revision?: string }
+        ) {
+          if (
+            detached ||
+            localGeneration !== userGeneration ||
+            record.userId !== nextUser ||
+            !owner ||
+            !connection
+          ) {
+            return;
+          }
+          const tx = connection.transaction(
+            ["recovery", "recoveryAuthority"],
+            "readwrite"
+          );
+          const pending: Promise<unknown>[] = [tx.done];
+          try {
+            const guard = tx
+              .objectStore("recoveryAuthority")
+              .put({ ...owner, slot: "current" });
+            pending.push(guard);
+            const removed = tx
+              .objectStore("recovery")
+              .delete(
+                record.revision === undefined
+                  ? IDBKeyRange.bound(
+                      [
+                        record.userId,
+                        record.mailboxId,
+                        record.editorId,
+                        record.localId,
+                        "",
+                      ],
+                      [
+                        record.userId,
+                        record.mailboxId,
+                        record.editorId,
+                        record.localId,
+                        "\uFFFF",
+                      ]
+                    )
+                  : [
+                      record.userId,
+                      record.mailboxId,
+                      record.editorId,
+                      record.localId,
+                      record.revision,
+                    ]
+              );
+            pending.push(removed);
+            tx.commit();
+            await completeRecoveryMutation(guard, pending);
+          } catch (error) {
+            try {
+              tx.abort();
+            } catch {
+              /* The transaction may already be finished. */
+            }
+            await Promise.allSettled(pending);
+            throw error;
+          }
+        },
+        async save(record: Omit<LocalDraftRecord, "revision">) {
+          if (
+            detached ||
+            localGeneration !== userGeneration ||
+            record.userId !== nextUser ||
+            !owner ||
+            !connection
+          ) {
+            return;
+          }
+          const saved = { ...record, revision: crypto.randomUUID() };
+          const tx = connection.transaction(
+            ["recovery", "recoveryAuthority"],
+            "readwrite"
+          );
+          const pending: Promise<unknown>[] = [tx.done];
+          try {
+            const guard = tx
+              .objectStore("recoveryAuthority")
+              .put({ ...owner, slot: "current" });
+            pending.push(guard);
+            const removed = tx
+              .objectStore("recovery")
+              .delete(
+                IDBKeyRange.bound(
+                  [
+                    record.userId,
+                    record.mailboxId,
+                    record.editorId,
+                    record.localId,
+                    "",
+                  ],
+                  [
+                    record.userId,
+                    record.mailboxId,
+                    record.editorId,
+                    record.localId,
+                    "\uFFFF",
+                  ]
+                )
+              );
+            pending.push(removed);
+            const written = tx.objectStore("recovery").put(saved);
+            pending.push(written);
+            // Queue the complete checkpoint before pagehide can terminate this context.
+            tx.commit();
+            const pruning = list(record);
+            pending.push(pruning);
+            await completeRecoveryMutation(guard, pending);
+          } catch (error) {
+            try {
+              tx.abort();
+            } catch {
+              /* The transaction may already be finished. */
+            }
+            await Promise.allSettled(pending);
+            throw error;
+          }
+        },
+      };
     },
     async removeCalendarScope(connectionId: string, calendarId?: string) {
       const owner = userId;

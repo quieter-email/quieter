@@ -16,7 +16,7 @@ import {
   clearPreviewPersonaCookie,
   setPreviewPersona,
 } from "@quieter/app/lib/preview-personas";
-import { clearQueryPersistence } from "@quieter/app/lib/query-persister";
+import { captureQueryPersistenceCleanup } from "@quieter/app/lib/query-persister";
 import { appRuntime, openExternalUrl } from "@quieter/app/runtime";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -585,6 +585,8 @@ const DeleteAccountDialog = () => {
   const navigate = useNavigate();
   const deleteAccountMutation = useMutation({
     mutationFn: async () => {
+      const clearQueries = captureQueryPersistenceCleanup();
+      const clearRecovery = draftRecoveryJournal.captureCleanup();
       const response = await authClient.deleteUser({
         callbackURL: "/home",
       });
@@ -593,18 +595,16 @@ const DeleteAccountDialog = () => {
           response.error.message ?? "Could not delete the account."
         );
       }
-      return response;
+      return { clearQueries, clearRecovery, response };
     },
     mutationKey: ["auth", "delete-user"],
-    onSuccess: async () => {
+    onSuccess: async ({ clearQueries, clearRecovery }) => {
       try {
         const results = await Promise.allSettled([
-          Promise.resolve().then(() => {
-            draftRecoveryJournal.setUser(undefined);
-          }),
+          clearRecovery(),
           Promise.resolve().then(async () => {
             queryClient.clear();
-            await clearQueryPersistence();
+            await clearQueries();
           }),
         ]);
         const failures = results

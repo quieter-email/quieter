@@ -192,7 +192,7 @@ describe("authenticated sign-out cache boundary", () => {
       .mockImplementation(() => {
         throw new DOMException("denied", "UnknownError");
       });
-    await expect(signOut()).rejects.toThrow(/denied/u);
+    await expect(signOut()).rejects.toBeInstanceOf(AggregateError);
     clear.mockRestore();
     await expect(mailCache.getItem("body-message")).resolves.toBeNull();
   });
