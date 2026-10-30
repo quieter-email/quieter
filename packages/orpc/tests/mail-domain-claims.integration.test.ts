@@ -155,323 +155,378 @@ describe.skipIf(mocks.databaseUrl === undefined)(
       await db.$client.end();
     });
 
-    test("a pending squatter cannot block the DNS owner or reuse its proof", async () => {
+    test("expansion retains exclusivity while same-team setup remains available", async () => {
       const domain = `${crypto.randomUUID()}.example.com`;
-      const attacker = await call(
+      const claim = await call(
         mailDomainsRouter.createSetup,
-        { domain, mode: "send_and_receive", organizationId: hostile },
+        { domain, mode: "send_only", organizationId: hostile },
         { context }
       );
-      const owner = await call(
-        mailDomainsRouter.createSetup,
-        {
-          domain: `https://${domain.toUpperCase()}.`,
-          mode: "send_and_receive",
-          organizationId: rightful,
-        },
-        { context }
-      );
-      const token = getMailDomainOwnershipToken(owner.records);
-      expect(token).not.toBe(getMailDomainOwnershipToken(attacker.records));
-      if (token === null) {
-        throw new Error("Missing ownership challenge");
-      }
-      mocks.dnsTokens.add(token);
       await expect(
-        verifyMailDomainSetup({
-          domainId: attacker.domainId,
-          organizationId: hostile,
-        })
-      ).resolves.toMatchObject({ status: "failed" });
+        call(
+          mailDomainsRouter.createSetup,
+          { domain, mode: "send_only", organizationId: rightful },
+          { context }
+        )
+      ).rejects.toMatchObject({
+        cause: { code: "23505", constraint_name: "mail_domain_domain_unique" },
+      });
       await expect(
-        verifyMailDomainSetup({
-          domainId: owner.domainId,
-          organizationId: rightful,
-        })
-      ).resolves.toMatchObject({ status: "verified" });
-      await expect(
-        verifyMailDomainSetup({
-          domainId: attacker.domainId,
-          organizationId: hostile,
-        })
-      ).rejects.toMatchObject({ code: "CONFLICT" });
-      await call(
-        mailDomainsRouter.remove,
-        { domainId: attacker.domainId, organizationId: hostile },
-        { context }
-      );
-      expect(mocks.cleanup).not.toHaveBeenCalled();
-      expect(mocks.disableReceipt).not.toHaveBeenCalled();
-      await expect(
-        verifyMailDomainSetup({
-          domainId: owner.domainId,
-          organizationId: rightful,
-        })
-      ).resolves.toMatchObject({ status: "verified" });
+        call(
+          mailDomainsRouter.createSetup,
+          { domain, mode: "send_only", organizationId: hostile },
+          { context }
+        )
+      ).resolves.toMatchObject({ domainId: claim.domainId });
     });
 
-    test("concurrent valid proofs have one owner and failed rechecks never release it", async () => {
-      const domain = `${crypto.randomUUID()}.example.com`;
-      const claims = await Promise.all(
-        [hostile, rightful].map(
-          async (organizationId) =>
-            await call(
-              mailDomainsRouter.createSetup,
-              { domain, mode: "send_and_receive", organizationId },
-              { context }
-            )
-        )
-      );
-      for (const claim of claims) {
-        const token = getMailDomainOwnershipToken(claim.records);
+    describe("after the separately reviewed contraction", () => {
+      beforeAll(async () => {
+        await db.execute(
+          sql`ALTER TABLE "mailDomain" DROP CONSTRAINT IF EXISTS "mail_domain_domain_unique"`
+        );
+      });
+
+      afterAll(async () => {
+        await db
+          .delete(mailDomain)
+          .where(inArray(mailDomain.organizationId, organizations));
+        await db.execute(
+          sql`ALTER TABLE "mailDomain" ADD CONSTRAINT "mail_domain_domain_unique" UNIQUE ("domain")`
+        );
+      });
+
+      test("a pending squatter cannot block the DNS owner or reuse its proof", async () => {
+        const domain = `${crypto.randomUUID()}.example.com`;
+        const attacker = await call(
+          mailDomainsRouter.createSetup,
+          { domain, mode: "send_and_receive", organizationId: hostile },
+          { context }
+        );
+        const owner = await call(
+          mailDomainsRouter.createSetup,
+          {
+            domain: `https://${domain.toUpperCase()}.`,
+            mode: "send_and_receive",
+            organizationId: rightful,
+          },
+          { context }
+        );
+        const token = getMailDomainOwnershipToken(owner.records);
+        expect(token).not.toBe(getMailDomainOwnershipToken(attacker.records));
         if (token === null) {
           throw new Error("Missing ownership challenge");
         }
         mocks.dnsTokens.add(token);
-      }
-      const results = await Promise.allSettled(
-        claims.map(
-          async (claim, index) =>
-            await verifyMailDomainSetup({
-              domainId: claim.domainId,
-              organizationId: organizations[index] ?? "",
-            })
-        )
-      );
-      expect(
-        results.filter((result) => result.status === "fulfilled")
-      ).toHaveLength(1);
-      expect(
-        results.filter((result) => result.status === "rejected")
-      ).toHaveLength(1);
-      expect(mocks.receipt).toHaveBeenCalledOnce();
-      const winnerIndex = results.findIndex(
-        (result) => result.status === "fulfilled"
-      );
-      const winner = claims[winnerIndex];
-      if (winner === undefined) {
-        throw new Error("Missing winner");
-      }
-      const organizationId = organizations[winnerIndex] ?? "";
-      mocks.dnsTokens.clear();
-      await expect(
-        verifyMailDomainSetup({ domainId: winner.domainId, organizationId })
-      ).resolves.toMatchObject({ status: "failed" });
-      await expect(
-        call(
-          mailDomainsRouter.createSetup,
-          { domain, mode: "send_only", organizationId: other },
-          { context }
-        )
-      ).rejects.toMatchObject({ code: "CONFLICT" });
-      await call(
-        mailDomainsRouter.updateMode,
-        { domainId: winner.domainId, mode: "send_only", organizationId },
-        { context }
-      );
-      await expect(
-        verifyMailDomainSetup({
-          domainId: claims[1 - winnerIndex]?.domainId ?? "",
-          organizationId: organizations[1 - winnerIndex] ?? "",
-        })
-      ).rejects.toMatchObject({ code: "CONFLICT" });
-      await call(
-        mailDomainsRouter.remove,
-        { domainId: winner.domainId, organizationId },
-        { context }
-      );
-      await expect(
-        call(
-          mailDomainsRouter.createSetup,
-          { domain, mode: "send_only", organizationId: other },
-          { context }
-        )
-      ).resolves.toMatchObject({ domain });
-    });
-
-    test("pending removal waits for verification and cannot delete the new owner's resources", async () => {
-      const domain = `${crypto.randomUUID()}.example.com`;
-      const attacker = await call(
-        mailDomainsRouter.createSetup,
-        { domain, mode: "send_and_receive", organizationId: hostile },
-        { context }
-      );
-      const owner = await call(
-        mailDomainsRouter.createSetup,
-        { domain, mode: "send_and_receive", organizationId: rightful },
-        { context }
-      );
-      const token = getMailDomainOwnershipToken(owner.records);
-      if (token === null) {
-        throw new Error("Missing ownership challenge");
-      }
-      mocks.dnsTokens.add(token);
-      const entered = Promise.withResolvers<boolean>();
-      const release = Promise.withResolvers<boolean>();
-      vi.mocked(getEmailIdentity).mockImplementationOnce(async () => {
-        entered.resolve(true);
-        await release.promise;
-        return mocks.identity;
-      });
-      const verification = verifyMailDomainSetup({
-        domainId: owner.domainId,
-        organizationId: rightful,
-      });
-      await entered.promise;
-      const removal = call(
-        mailDomainsRouter.remove,
-        { domainId: attacker.domainId, organizationId: hostile },
-        { context }
-      );
-      release.resolve(true);
-      await expect(verification).resolves.toMatchObject({ status: "verified" });
-      await expect(removal).resolves.toMatchObject({ removed: true });
-      expect(mocks.cleanup).not.toHaveBeenCalled();
-      expect(mocks.disableReceipt).not.toHaveBeenCalled();
-    });
-
-    test("the expand migration protects legacy owners against old-release state resets", async () => {
-      await db.transaction(async (database) => {
-        await database.execute(
-          sql`CREATE TEMP TABLE "mailDomain" ("id" text, "domain" text, "organizationId" text, "status" text, "verifiedAt" timestamp, "updatedAt" timestamp) ON COMMIT DROP`
-        );
-        await database.execute(
-          sql`CREATE TEMP TABLE "mailbox" ("organizationId" text, "provider" text, "emailAddress" text) ON COMMIT DROP`
-        );
-        await database.execute(
-          sql`INSERT INTO "mailDomain" VALUES ('legacy', 'legacy.example.com', ${rightful}, 'verified', now(), now()), ('pending', 'pending.example.com', ${hostile}, 'pending_dns', null, now()), ('managed', 'managed.example.com', ${rightful}, 'failed', null, now())`
-        );
-        await database.execute(
-          sql`INSERT INTO "mailbox" VALUES (${rightful}, 'managed', 'inbox@managed.example.com')`
-        );
-        const migration = readFileSync(
-          new URL(
-            "../../database/drizzle/20261029234109_puzzling_the_call/migration.sql",
-            import.meta.url
-          ),
-          "utf8"
-        );
-        for (const statement of migration.split("--> statement-breakpoint")) {
-          // oxlint-disable-next-line no-await-in-loop -- Migration statements must retain their transaction order.
-          await database.execute(sql.raw(statement));
-        }
-        await database.execute(
-          sql`UPDATE "mailDomain" SET "status" = 'failed', "verifiedAt" = null WHERE "id" = 'legacy'`
-        );
         await expect(
-          assertMailDomainOwnerAvailable({
-            database,
-            domain: "legacy.example.com",
+          verifyMailDomainSetup({
+            domainId: attacker.domainId,
             organizationId: hostile,
           })
-        ).rejects.toMatchObject({ code: "CONFLICT" });
+        ).resolves.toMatchObject({ status: "failed" });
         await expect(
-          assertMailDomainOwnerAvailable({
-            database,
-            domain: "managed.example.com",
-            organizationId: hostile,
-          })
-        ).rejects.toMatchObject({ code: "CONFLICT" });
-        await expect(
-          assertMailDomainOwnerAvailable({
-            database,
-            domain: "pending.example.com",
+          verifyMailDomainSetup({
+            domainId: owner.domainId,
             organizationId: rightful,
           })
-        ).resolves.toBeUndefined();
+        ).resolves.toMatchObject({ status: "verified" });
+        await expect(
+          verifyMailDomainSetup({
+            domainId: attacker.domainId,
+            organizationId: hostile,
+          })
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        await call(
+          mailDomainsRouter.remove,
+          { domainId: attacker.domainId, organizationId: hostile },
+          { context }
+        );
+        expect(mocks.cleanup).not.toHaveBeenCalled();
+        expect(mocks.disableReceipt).not.toHaveBeenCalled();
+        await expect(
+          verifyMailDomainSetup({
+            domainId: owner.domainId,
+            organizationId: rightful,
+          })
+        ).resolves.toMatchObject({ status: "verified" });
       });
-    });
 
-    test("legacy verified domains stay owned through mode changes and failed DNS checks", async () => {
-      const domain = `${crypto.randomUUID()}.example.com`;
-      const owner = await call(
-        mailDomainsRouter.createSetup,
-        { domain, mode: "send_and_receive", organizationId: rightful },
-        { context }
-      );
-      await db
-        .update(mailDomain)
-        .set({ ownershipVerifiedAt: null, status: "verified" })
-        .where(eq(mailDomain.id, owner.domainId));
-      await call(
-        mailDomainsRouter.updateMode,
-        {
+      test("concurrent valid proofs have one owner and failed rechecks never release it", async () => {
+        const domain = `${crypto.randomUUID()}.example.com`;
+        const claims = await Promise.all(
+          [hostile, rightful].map(
+            async (organizationId) =>
+              await call(
+                mailDomainsRouter.createSetup,
+                { domain, mode: "send_and_receive", organizationId },
+                { context }
+              )
+          )
+        );
+        for (const claim of claims) {
+          const token = getMailDomainOwnershipToken(claim.records);
+          if (token === null) {
+            throw new Error("Missing ownership challenge");
+          }
+          mocks.dnsTokens.add(token);
+        }
+        const results = await Promise.allSettled(
+          claims.map(
+            async (claim, index) =>
+              await verifyMailDomainSetup({
+                domainId: claim.domainId,
+                organizationId: organizations[index] ?? "",
+              })
+          )
+        );
+        expect(
+          results.filter((result) => result.status === "fulfilled")
+        ).toHaveLength(1);
+        expect(
+          results.filter((result) => result.status === "rejected")
+        ).toHaveLength(1);
+        expect(mocks.receipt).toHaveBeenCalledOnce();
+        const winnerIndex = results.findIndex(
+          (result) => result.status === "fulfilled"
+        );
+        const winner = claims[winnerIndex];
+        if (winner === undefined) {
+          throw new Error("Missing winner");
+        }
+        const organizationId = organizations[winnerIndex] ?? "";
+        mocks.dnsTokens.clear();
+        await expect(
+          verifyMailDomainSetup({ domainId: winner.domainId, organizationId })
+        ).resolves.toMatchObject({ status: "failed" });
+        await expect(
+          call(
+            mailDomainsRouter.createSetup,
+            { domain, mode: "send_only", organizationId: other },
+            { context }
+          )
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        await call(
+          mailDomainsRouter.updateMode,
+          { domainId: winner.domainId, mode: "send_only", organizationId },
+          { context }
+        );
+        await expect(
+          verifyMailDomainSetup({
+            domainId: claims[1 - winnerIndex]?.domainId ?? "",
+            organizationId: organizations[1 - winnerIndex] ?? "",
+          })
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        await call(
+          mailDomainsRouter.remove,
+          { domainId: winner.domainId, organizationId },
+          { context }
+        );
+        await expect(
+          call(
+            mailDomainsRouter.createSetup,
+            { domain, mode: "send_only", organizationId: other },
+            { context }
+          )
+        ).resolves.toMatchObject({ domain });
+      });
+
+      test("pending removal waits for verification and cannot delete the new owner's resources", async () => {
+        const domain = `${crypto.randomUUID()}.example.com`;
+        const attacker = await call(
+          mailDomainsRouter.createSetup,
+          { domain, mode: "send_and_receive", organizationId: hostile },
+          { context }
+        );
+        const owner = await call(
+          mailDomainsRouter.createSetup,
+          { domain, mode: "send_and_receive", organizationId: rightful },
+          { context }
+        );
+        const token = getMailDomainOwnershipToken(owner.records);
+        if (token === null) {
+          throw new Error("Missing ownership challenge");
+        }
+        mocks.dnsTokens.add(token);
+        const entered = Promise.withResolvers<boolean>();
+        const release = Promise.withResolvers<boolean>();
+        vi.mocked(getEmailIdentity).mockImplementationOnce(async () => {
+          entered.resolve(true);
+          await release.promise;
+          return mocks.identity;
+        });
+        const verification = verifyMailDomainSetup({
           domainId: owner.domainId,
-          mode: "send_only",
           organizationId: rightful,
-        },
-        { context }
-      );
-      await expect(
-        call(
+        });
+        await entered.promise;
+        const removal = call(
+          mailDomainsRouter.remove,
+          { domainId: attacker.domainId, organizationId: hostile },
+          { context }
+        );
+        release.resolve(true);
+        await expect(verification).resolves.toMatchObject({
+          status: "verified",
+        });
+        await expect(removal).resolves.toMatchObject({ removed: true });
+        expect(mocks.cleanup).not.toHaveBeenCalled();
+        expect(mocks.disableReceipt).not.toHaveBeenCalled();
+      });
+
+      test("the expand migration protects legacy owners against old-release state resets", async () => {
+        await db.transaction(async (database) => {
+          await database.execute(sql`SET LOCAL search_path TO pg_temp, public`);
+          await database.execute(
+            sql`CREATE TEMP TABLE "mailDomain" ("id" text, "domain" text, "organizationId" text, "status" text, "verifiedAt" timestamp, "updatedAt" timestamp) ON COMMIT DROP`
+          );
+          await database.execute(
+            sql`CREATE TEMP TABLE "mailbox" ("organizationId" text, "provider" text, "emailAddress" text) ON COMMIT DROP`
+          );
+          await database.execute(
+            sql`INSERT INTO "mailDomain" VALUES ('legacy', 'legacy.example.com', ${rightful}, 'verified', now(), now()), ('pending', 'pending.example.com', ${hostile}, 'pending_dns', null, now()), ('managed', 'managed.example.com', ${rightful}, 'failed', null, now())`
+          );
+          await database.execute(
+            sql`INSERT INTO "mailbox" VALUES (${rightful}, 'managed', 'inbox@managed.example.com')`
+          );
+          const migration = readFileSync(
+            new URL(
+              "../../database/drizzle/20261029234109_puzzling_the_call/migration.sql",
+              import.meta.url
+            ),
+            "utf8"
+          );
+          for (const statement of migration.split("--> statement-breakpoint")) {
+            // oxlint-disable-next-line no-await-in-loop -- Migration statements must retain their transaction order.
+            await database.execute(
+              sql.raw(
+                statement.replaceAll(
+                  '"preserveMailDomainOwnership"',
+                  'pg_temp."preserveMailDomainOwnership"'
+                )
+              )
+            );
+          }
+          await database.execute(
+            sql`UPDATE "mailDomain" SET "status" = 'verified', "verifiedAt" = now() WHERE "id" = 'pending'`
+          );
+          await database.execute(
+            sql`UPDATE "mailDomain" SET "status" = 'failed', "verifiedAt" = null WHERE "id" IN ('legacy', 'pending')`
+          );
+          await expect(
+            assertMailDomainOwnerAvailable({
+              database,
+              domain: "legacy.example.com",
+              organizationId: hostile,
+            })
+          ).rejects.toMatchObject({ code: "CONFLICT" });
+          await expect(
+            assertMailDomainOwnerAvailable({
+              database,
+              domain: "managed.example.com",
+              organizationId: hostile,
+            })
+          ).rejects.toMatchObject({ code: "CONFLICT" });
+          await expect(
+            assertMailDomainOwnerAvailable({
+              database,
+              domain: "pending.example.com",
+              organizationId: rightful,
+            })
+          ).rejects.toMatchObject({ code: "CONFLICT" });
+        });
+      });
+
+      test("legacy verified domains stay owned through mode changes and failed DNS checks", async () => {
+        const domain = `${crypto.randomUUID()}.example.com`;
+        const owner = await call(
+          mailDomainsRouter.createSetup,
+          { domain, mode: "send_and_receive", organizationId: rightful },
+          { context }
+        );
+        await db
+          .update(mailDomain)
+          .set({ ownershipVerifiedAt: null, status: "verified" })
+          .where(eq(mailDomain.id, owner.domainId));
+        await call(
+          mailDomainsRouter.updateMode,
+          {
+            domainId: owner.domainId,
+            mode: "send_only",
+            organizationId: rightful,
+          },
+          { context }
+        );
+        await expect(
+          call(
+            mailDomainsRouter.createSetup,
+            { domain, mode: "send_only", organizationId: hostile },
+            { context }
+          )
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+        await expect(
+          verifyMailDomainSetup({
+            domainId: owner.domainId,
+            organizationId: rightful,
+          })
+        ).resolves.toMatchObject({ status: "failed" });
+        await expect(
+          call(
+            mailDomainsRouter.createSetup,
+            { domain, mode: "send_only", organizationId: hostile },
+            { context }
+          )
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+      });
+
+      test("same-team retries keep the challenge and independent removal never deletes shared identity", async () => {
+        const domain = `${crypto.randomUUID()}.example.com`;
+        const claims = await Promise.all(
+          [hostile, rightful].map(
+            async (organizationId) =>
+              await call(
+                mailDomainsRouter.createSetup,
+                { domain, mode: "send_only", organizationId },
+                { context }
+              )
+          )
+        );
+        const retry = await call(
           mailDomainsRouter.createSetup,
           { domain, mode: "send_only", organizationId: hostile },
           { context }
-        )
-      ).rejects.toMatchObject({ code: "CONFLICT" });
-      await expect(
-        verifyMailDomainSetup({
-          domainId: owner.domainId,
-          organizationId: rightful,
-        })
-      ).resolves.toMatchObject({ status: "failed" });
-      await expect(
-        call(
+        );
+        expect(retry.domainId).toBe(claims[0]?.domainId);
+        expect(getMailDomainOwnershipToken(retry.records)).toBe(
+          getMailDomainOwnershipToken(claims[0]?.records ?? [])
+        );
+        await call(
+          mailDomainsRouter.remove,
+          { domainId: retry.domainId, organizationId: hostile },
+          { context }
+        );
+        expect(mocks.cleanup).not.toHaveBeenCalled();
+        await call(
+          mailDomainsRouter.remove,
+          { domainId: claims[1]?.domainId ?? "", organizationId: rightful },
+          { context }
+        );
+        expect(mocks.cleanup).toHaveBeenCalledOnce();
+        const renewed = await call(
           mailDomainsRouter.createSetup,
           { domain, mode: "send_only", organizationId: hostile },
           { context }
-        )
-      ).rejects.toMatchObject({ code: "CONFLICT" });
-    });
-
-    test("same-team retries keep the challenge and independent removal never deletes shared identity", async () => {
-      const domain = `${crypto.randomUUID()}.example.com`;
-      const claims = await Promise.all(
-        [hostile, rightful].map(
-          async (organizationId) =>
-            await call(
-              mailDomainsRouter.createSetup,
-              { domain, mode: "send_only", organizationId },
-              { context }
-            )
-        )
-      );
-      const retry = await call(
-        mailDomainsRouter.createSetup,
-        { domain, mode: "send_only", organizationId: hostile },
-        { context }
-      );
-      expect(retry.domainId).toBe(claims[0]?.domainId);
-      expect(getMailDomainOwnershipToken(retry.records)).toBe(
-        getMailDomainOwnershipToken(claims[0]?.records ?? [])
-      );
-      await call(
-        mailDomainsRouter.remove,
-        { domainId: retry.domainId, organizationId: hostile },
-        { context }
-      );
-      expect(mocks.cleanup).not.toHaveBeenCalled();
-      await call(
-        mailDomainsRouter.remove,
-        { domainId: claims[1]?.domainId ?? "", organizationId: rightful },
-        { context }
-      );
-      expect(mocks.cleanup).toHaveBeenCalledOnce();
-      const renewed = await call(
-        mailDomainsRouter.createSetup,
-        { domain, mode: "send_only", organizationId: hostile },
-        { context }
-      );
-      expect(renewed.domainId).not.toBe(retry.domainId);
-      expect(getMailDomainOwnershipToken(renewed.records)).not.toBe(
-        getMailDomainOwnershipToken(retry.records)
-      );
-      await expect(
-        verifyMailDomainSetup({
-          domainId: retry.domainId,
-          organizationId: hostile,
-        })
-      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        );
+        expect(renewed.domainId).not.toBe(retry.domainId);
+        expect(getMailDomainOwnershipToken(renewed.records)).not.toBe(
+          getMailDomainOwnershipToken(retry.records)
+        );
+        await expect(
+          verifyMailDomainSetup({
+            domainId: retry.domainId,
+            organizationId: hostile,
+          })
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      });
     });
   }
 );

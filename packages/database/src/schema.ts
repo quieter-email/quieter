@@ -2859,6 +2859,7 @@ export const mailDomain = pgTable(
     index("mail_domain_organization_id_idx").on(table.organizationId),
     index("mail_domain_catch_all_mailbox_idx").on(table.catchAllMailboxId),
     unique("mail_domain_catch_all_mailbox_unique").on(table.catchAllMailboxId),
+    unique("mail_domain_domain_unique").on(table.domain),
     unique("mail_domain_organization_domain_unique").on(
       table.organizationId,
       table.domain
