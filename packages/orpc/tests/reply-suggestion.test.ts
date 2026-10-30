@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import type { suggestReply } from "@quieter/ai/suggest-reply";
 import type { reportAiUsage } from "@quieter/billing";
+import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import type { MessageListItem } from "@quieter/mail/messages";
 import type { reportError } from "@quieter/observability";
@@ -344,3 +345,16 @@ describe("reply suggestion authorization and draft preparation", () => {
     );
   });
 });
+
+vi.mock(import("@quieter/billing/ai-reservation"), () => ({
+  createMailboxAiBillingContext: vi
+    .fn<typeof createMailboxAiBillingContext>()
+    .mockResolvedValue({
+      account: null,
+      admittedAt: new Date(),
+      groupId: "fixture",
+      kind: "team",
+      organizationId: "test-team",
+      usageKind: "aiChat",
+    }),
+}));

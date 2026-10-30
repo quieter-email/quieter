@@ -16,11 +16,11 @@ flowchart TB
         direction TB
         subgraph EDGE["Edge / HTTP"]
             WEB["Web Worker<br/>sst: TanStack Start<br/>quieter.email + www<br/>SSR, oRPC, /api/chat,<br/>/api/send, auth, Polar webhooks"]
-            GWORKER["GmailRealtimeWorker<br/>/gmail/pubsub (POST)<br/>/gmail/live (WebSocket)"]
+            GWORKER["GmailRealtimeWorker<br/>/gmail/pubsub (POST)<br/>/mail/live (WebSocket)"]
         end
 
         subgraph DO["Durable Objects"]
-            LSDO["GmailLiveSyncMailboxV2<br/>one per email address<br/>hibernatable WebSockets + /broadcast"]
+            LSDO["MailLiveUser<br/>one per user<br/>hibernatable WebSockets + /mail/events"]
         end
 
         subgraph CONSUMERS["Scheduled Workers"]
@@ -115,8 +115,8 @@ flowchart TB
 | Resource | SST type | Entry point | Triggered by | Talks to | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `Web` | `sst.cloudflare.TanStackStart` | `apps/web` | Browser HTTPS | Hyperdrive, SESv2, Gmail API, OpenRouter, Polar, Sentry, R2 | Production domain `quieter.email` (+ `www` redirect), logs + traces on, linked scoped AWS credentials via `WebAwsPermissions` for `ses:SendEmail`/`SendRawEmail`. |
-| `GmailRealtimeWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/worker.ts` | Google Pub/Sub push (POST `/gmail/pubsub`), browser WebSocket (`/gmail/live`) | Hyperdrive, processing secrets, `GmailLiveSyncMailboxV2` | Processes authenticated notifications before acknowledging. Verifies Google OIDC JWT against JWKS, checks subscription name, body limit 64 KiB. One DO per normalized email address. |
-| `GmailLiveSyncMailboxV2` | `sst.cloudflare.DurableObject` (SQLite, migration `v3`) | `packages/cloudflare/src/gmail-live-sync-mailbox.ts` | Worker fetch / WS upgrade | Browser sockets, workers via `/broadcast` | Hibernatable WebSockets, auto ping/pong, broadcasts `mailbox-dirty` and `mailbox-details-dirty`. |
+| `GmailRealtimeWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/worker.ts` | Google Pub/Sub push (POST `/gmail/pubsub`), browser WebSocket (`/mail/live`) | Hyperdrive, processing secrets, `MailLiveUser` | Processes authenticated notifications before acknowledging. Verifies Google OIDC JWT against JWKS, checks subscription name, body limit 64 KiB. Mail updates resolve current mailbox recipients before delivery. |
+| `GmailLiveSyncMailboxV2` | `sst.cloudflare.DurableObject` (SQLite, migration `v3`) | `packages/cloudflare/src/gmail-live-sync-mailbox.ts` | Retired transport | Existing legacy sockets only | Fail-closed tombstone closes retained sockets and rejects every request. Current subscriptions use `MailLiveUser`. |
 | `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | `*/15 * * * *` | Hyperdrive, Gmail API | Due mailboxes are processed directly with concurrency four, including pending code retries. |
 | `MailMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/mail-maintenance-worker.ts` | every minute | Hyperdrive, R2, Polar, Sentry | Send recovery, storage cleanup, expired rate-limit cleanup, managed rule backfills, code retries, and cleanup of old processing records without a code. |
 | `AppDatabaseV2` | `sst.cloudflare.Hyperdrive` | — | Worker DB access | PostgreSQL origin from `DatabaseUrl` secret | Caching disabled; production uses fixed Hyperdrive id. Workers use `withRequestDatabaseClient` per invocation. |
@@ -144,7 +144,7 @@ flowchart TB
 | PostgreSQL | external, via `DatabaseUrl` secret | Everything: users, orgs, mailboxes, messages metadata, chats, retained legacy action records, credentials (encrypted), watch state, entitlements, delivery feedback, suppressions | Permanent; migrations via `packages/database` |
 | R2 | Cloudflare, referenced not provisioned | Canonical raw `.eml` objects for managed mail | Indefinite; deleted only when untracked by the ingestion transaction |
 | S3 `MailBucket` | AWS | SES landing copies only | 1-day lifecycle + eager delete after processing |
-| Durable Object storage | `GmailLiveSyncMailboxV2` | Live socket tags only | Ephemeral |
+| Durable Object storage | `MailLiveUser` | Live socket expiry attachments | Ephemeral |
 
 ## Key Flows
 
@@ -156,7 +156,7 @@ sequenceDiagram
     participant G as Gmail
     participant P as Google Pub/Sub
     participant W as GmailRealtimeWorker
-    participant D as GmailLiveSyncMailboxV2 DO
+    participant D as MailLiveUser DO
     participant DB as PostgreSQL
     participant A as Gmail API
     participant B as Browser
@@ -168,7 +168,8 @@ sequenceDiagram
     W->>DB: billing entitlement check
     W->>A: history.list / messages.get / labels (up to 5 pages)
     W->>DB: persist auto-label and verification-code results
-    W->>D: broadcast mailbox-dirty and mailbox.changed
+    W->>DB: resolve connected mailboxes and their current recipients
+    W->>D: broadcast mailbox.changed to each recipient
     D-->>B: refresh messages, labels, unread counts, and codes
     W-->>P: 204 after processing, 5xx on failure, busy lease, or remaining pages
 ```

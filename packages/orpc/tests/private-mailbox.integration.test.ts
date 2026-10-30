@@ -14,6 +14,7 @@ import {
   organizationDivisionMember,
   user,
   managedMailRule,
+  managedMailMessage,
 } from "@quieter/database/schema";
 import { managedMailboxRuleDefinitionSchema } from "@quieter/mail/mailbox-organization";
 import { and, eq, inArray } from "drizzle-orm";
@@ -26,6 +27,9 @@ import {
   vi,
 } from "vite-plus/test";
 
+import type { queueMailboxMessageMemory } from "../src/ai-memory-capture";
+import type { learnAiMemoryFromMailAction } from "../src/mail/feedback";
+import { mutationsMailOperations } from "../src/mail/mutations";
 import { getAuthorizedManagedMailbox } from "../src/mailbox/access";
 import {
   createManagedMailbox,
@@ -39,6 +43,11 @@ import {
   deleteManagedLabel,
   updateManagedLabel,
 } from "../src/managed-mail/labels/service";
+import {
+  getManagedThread,
+  setManagedMessageReadState,
+  setManagedThreadReadState,
+} from "../src/managed-mail/messages/service";
 import {
   createManagedRule,
   updateManagedRule,
@@ -55,6 +64,19 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => {
     serverEnv: { ...original.serverEnv, DATABASE_URL: databaseUrl },
   };
 });
+
+vi.mock(import("../src/mail/feedback"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  learnAiMemoryFromMailAction: vi
+    .fn<typeof learnAiMemoryFromMailAction>()
+    .mockResolvedValue({ status: "skipped" }),
+}));
+vi.mock(import("../src/ai-memory-capture"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  queueMailboxMessageMemory: vi
+    .fn<typeof queueMailboxMessageMemory>()
+    .mockResolvedValue(),
+}));
 
 describe.skipIf(databaseUrl === undefined)(
   "private mailbox persistence on migrated PostgreSQL",
@@ -172,6 +194,200 @@ describe.skipIf(databaseUrl === undefined)(
       await db
         .delete(user)
         .where(inArray(user.id, [admin, owner, other, outsider]));
+    });
+
+    test("read state requires mutation authority through service and legacy operations", async () => {
+      const mailboxId = await create("shared");
+      const threadId = randomUUID();
+      const messageIds = [randomUUID(), randomUUID()];
+      await db.insert(managedMailMessage).values(
+        messageIds.map((id) => ({
+          bodyText: "Synthetic authorization fixture",
+          createdAt: now,
+          direction: "inbound" as const,
+          from: "sender@example.com",
+          id,
+          mailboxId,
+          providerMessageId: id,
+          sentAt: now,
+          threadId,
+          updatedAt: now,
+        }))
+      );
+      const [messageId] = messageIds;
+      if (messageId === undefined) {
+        throw new Error("Missing message fixture.");
+      }
+      for (const grantKind of ["direct", "division"] as const) {
+        if (grantKind === "direct") {
+          await setManagedMailboxGrant({
+            mailboxId,
+            role: "reader",
+            targetUserId: other,
+            userId: admin,
+          });
+        } else {
+          await removeManagedMailboxGrant({
+            mailboxId,
+            targetUserId: other,
+            userId: admin,
+          });
+          await setManagedMailboxDivisionGrant({
+            divisionId,
+            mailboxId,
+            role: "reader",
+            userId: admin,
+          });
+        }
+        await expect(
+          getManagedThread({ mailboxId, threadId, userId: other })
+        ).resolves.toMatchObject({ threadId });
+        for (const read of [true, false]) {
+          await db
+            .update(managedMailMessage)
+            .set({ isRead: !read })
+            .where(eq(managedMailMessage.mailboxId, mailboxId));
+          const before = await db
+            .select({ contentRevision: mailbox.contentRevision })
+            .from(mailbox)
+            .where(eq(mailbox.id, mailboxId));
+          const context = { userId: other };
+          for (const attempt of [
+            async () =>
+              await setManagedMessageReadState({
+                mailboxId,
+                messageId,
+                read,
+                userId: other,
+              }),
+            async () =>
+              await setManagedThreadReadState({
+                mailboxId,
+                read,
+                threadId,
+                userId: other,
+              }),
+            async () =>
+              read
+                ? await mutationsMailOperations.markMessageAsRead({
+                    context,
+                    input: { mailboxId, messageId },
+                  })
+                : await mutationsMailOperations.markMessageAsUnread({
+                    context,
+                    input: { mailboxId, messageId },
+                  }),
+            async () =>
+              read
+                ? await mutationsMailOperations.markThreadAsRead({
+                    context,
+                    input: { mailboxId, threadId },
+                  })
+                : await mutationsMailOperations.markThreadAsUnread({
+                    context,
+                    input: { mailboxId, threadId },
+                  }),
+          ]) {
+            await expect(attempt()).rejects.toMatchObject({
+              code: "NOT_FOUND",
+            });
+            await expect(
+              db
+                .select({ isRead: managedMailMessage.isRead })
+                .from(managedMailMessage)
+                .where(eq(managedMailMessage.mailboxId, mailboxId))
+            ).resolves.toMatchObject(messageIds.map(() => ({ isRead: !read })));
+            await expect(
+              db
+                .select({ contentRevision: mailbox.contentRevision })
+                .from(mailbox)
+                .where(eq(mailbox.id, mailboxId))
+            ).resolves.toStrictEqual(before);
+          }
+        }
+      }
+      for (const role of ["responder", "manager"] as const) {
+        await setManagedMailboxGrant({
+          mailboxId,
+          role,
+          targetUserId: other,
+          userId: admin,
+        });
+        for (const read of [true, false]) {
+          const context = { userId: other };
+          if (read) {
+            await mutationsMailOperations.markMessageAsRead({
+              context,
+              input: { mailboxId, messageId },
+            });
+            await mutationsMailOperations.markThreadAsRead({
+              context,
+              input: { mailboxId, threadId },
+            });
+          } else {
+            await mutationsMailOperations.markMessageAsUnread({
+              context,
+              input: { mailboxId, messageId },
+            });
+            await mutationsMailOperations.markThreadAsUnread({
+              context,
+              input: { mailboxId, threadId },
+            });
+          }
+          await setManagedMessageReadState({
+            mailboxId,
+            messageId,
+            read,
+            userId: other,
+          });
+          await setManagedThreadReadState({
+            mailboxId,
+            read,
+            threadId,
+            userId: other,
+          });
+          await expect(
+            db
+              .select({ isRead: managedMailMessage.isRead })
+              .from(managedMailMessage)
+              .where(eq(managedMailMessage.mailboxId, mailboxId))
+          ).resolves.toMatchObject(messageIds.map(() => ({ isRead: read })));
+        }
+      }
+      await setManagedMailboxGrant({
+        mailboxId,
+        role: "reader",
+        targetUserId: other,
+        userId: admin,
+      });
+      await setManagedMailboxDivisionGrant({
+        divisionId,
+        mailboxId,
+        role: "responder",
+        userId: admin,
+      });
+      await expect(
+        setManagedThreadReadState({
+          mailboxId,
+          read: true,
+          threadId,
+          userId: other,
+        })
+      ).resolves.toMatchObject({ threadId });
+      await setManagedMailboxAccessMode({
+        accessMode: "private",
+        mailboxId,
+        ownerUserId: owner,
+        userId: admin,
+      });
+      await expect(
+        setManagedMessageReadState({
+          mailboxId,
+          messageId,
+          read: false,
+          userId: owner,
+        })
+      ).resolves.toMatchObject({ id: messageId, isUnread: true });
     });
 
     test("create and rename conflicts use domain errors for labels and rules", async () => {

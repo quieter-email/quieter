@@ -1,4 +1,5 @@
 import type { reportAiUsage } from "@quieter/billing";
+import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import {
   chat,
@@ -27,7 +28,14 @@ import type { assertCanUseAi } from "../src/ai-access";
 import { isAiGeneratedMailBody } from "../src/ai-mail-authorship";
 import type * as AiMemoryModule from "../src/ai-memory";
 import { createAiChatResponse } from "../src/chat/service";
-import type { hasConnectedConnector } from "../src/connectors/runtime";
+import type {
+  listLinearMcpToolsForUser,
+  runLinearMcpToolCallsForUser,
+} from "../src/connectors/linear-mcp";
+import type {
+  getLinearConnectionForUser,
+  hasConnectedConnector,
+} from "../src/connectors/runtime";
 import type { modifyMailForUser } from "../src/gmail-chat-search";
 import type { composeMailOperations } from "../src/mail/compose";
 import type { assertAccessibleMailbox } from "../src/mailbox/service";
@@ -36,6 +44,8 @@ const state = vi.hoisted(() => ({
   context: vi.fn<typeof AiMemoryModule.loadAiAgentContext>(),
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
   learn: vi.fn<typeof AiMemoryModule.learnAiMemoryFromChatMessage>(),
+  linear: vi.fn<typeof runLinearMcpToolCallsForUser>(),
+  linearList: vi.fn<typeof listLinearMcpToolsForUser>(),
   mailboxId: crypto.randomUUID(),
   model: vi.fn<() => MockLanguageModelV4>(),
   modify: vi.fn<typeof modifyMailForUser>(),
@@ -86,9 +96,21 @@ vi.mock(import("../src/mailbox/service"), () => ({
 }));
 vi.mock(import("../src/connectors/runtime"), async (original) => ({
   ...(await original()),
+  getLinearConnectionForUser: vi
+    .fn<typeof getLinearConnectionForUser>()
+    .mockResolvedValue({
+      account: "user@example.test",
+      connectionId: "connection-1",
+      workspace: "Test workspace",
+    }),
   hasConnectedConnector: vi
     .fn<typeof hasConnectedConnector>()
     .mockResolvedValue(false),
+}));
+vi.mock(import("../src/connectors/linear-mcp"), async (original) => ({
+  ...(await original()),
+  listLinearMcpToolsForUser: state.linearList,
+  runLinearMcpToolCallsForUser: state.linear,
 }));
 vi.mock(import("../src/gmail-chat-search"), async (original) => ({
   ...(await original()),
@@ -194,7 +216,10 @@ describe.skipIf(state.databaseUrl === undefined)(
           chatId: threadId,
           createdAt: now,
           id: userMessageId,
-          parts: [{ text: "Archive this email", type: "text" }],
+          parts: [
+            { text: "Archive this email", type: "text" },
+            { foreground, type: "data-foreground" },
+          ],
           position: 0,
           role: "user",
           userId,
@@ -216,6 +241,17 @@ describe.skipIf(state.databaseUrl === undefined)(
           position: 1,
           role: "assistant",
           userId,
+        },
+      ]);
+      state.linearList
+        .mockReset()
+        .mockResolvedValue([{ name: "create_issue" }]);
+      state.linear.mockReset().mockResolvedValue([
+        {
+          durationMs: 1,
+          output: { id: "issue-1" },
+          status: "success",
+          toolName: "create_issue",
         },
       ]);
       state.modify.mockReset().mockResolvedValue({
@@ -258,7 +294,9 @@ describe.skipIf(state.databaseUrl === undefined)(
 
     const continueAnswer = async (
       requestForeground: typeof foreground = foreground,
-      toolName: "modify_mail" | "send_mail" = "modify_mail"
+      toolName: "modify_mail" | "send_mail" | "linear_write" = "modify_mail",
+      approvalId = "approval",
+      approved = true
     ) =>
       await createAiChatResponse({
         body: {
@@ -269,7 +307,7 @@ describe.skipIf(state.databaseUrl === undefined)(
             id: assistantId,
             parts: [
               {
-                approval: { approved: true, id: "approval" },
+                approval: { approved, id: approvalId },
                 state: "approval-responded",
                 toolCallId: "action",
                 type: `tool-${toolName}`,
@@ -592,7 +630,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       ).rejects.toMatchObject({ status: 409 });
     });
 
-    test("executes a new mailbox change immediately and keeps its outcome after generation fails", async () => {
+    test("requests exact approval before a model-selected mailbox change", async () => {
       await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
       state.model.mockReturnValue(
         new MockLanguageModelV4({
@@ -654,8 +692,8 @@ describe.skipIf(state.databaseUrl === undefined)(
         userId,
       });
       const stream = await response.text();
-      expect(stream).not.toContain("tool-approval-request");
-      expect(state.modify).toHaveBeenCalledOnce();
+      expect(stream).toContain("tool-approval-request");
+      expect(state.modify).not.toHaveBeenCalled();
       expect(state.learn).toHaveBeenCalledExactlyOnceWith({
         bodyText: "Archive this email",
         mailboxId: state.mailboxId,
@@ -669,9 +707,227 @@ describe.skipIf(state.databaseUrl === undefined)(
       expect(
         stored?.parts.find((part) => part.toolCallId === "automatic-action")
       ).toMatchObject({
-        output: { status: "success" },
-        state: "output-available",
+        input: { action: "archive", id: "email", target: "message" },
+        state: "approval-requested",
       });
+    });
+
+    test("requires approval for an induced Linear write during a read-only request", async () => {
+      await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
+      state.model.mockReturnValue(
+        new MockLanguageModelV4({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: "stream-start", warnings: [] },
+              {
+                input: JSON.stringify({
+                  arguments: {
+                    teamId: "team-1",
+                    title: "Untrusted requested change",
+                  },
+                  connectionId: "connection-1",
+                  toolName: "create_issue",
+                }),
+                toolCallId: "induced-write",
+                toolName: "linear_write",
+                type: "tool-call",
+              },
+              {
+                finishReason: { raw: undefined, unified: "tool-calls" },
+                type: "finish",
+                usage: {
+                  inputTokens: {
+                    cacheRead: 0,
+                    cacheWrite: 0,
+                    noCache: 1,
+                    total: 1,
+                  },
+                  outputTokens: { reasoning: 0, text: 1, total: 1 },
+                },
+              },
+            ]),
+          },
+        })
+      );
+      const response = await createAiChatResponse({
+        body: {
+          category: "inbox",
+          foreground,
+          mailboxId: state.mailboxId,
+          message: {
+            id: userMessageId,
+            parts: [{ text: "Use @Linear to find my teams.", type: "text" }],
+            role: "user",
+          },
+          threadId,
+          trigger: "submit-message",
+        },
+        request: new Request("https://example.test/api/chat"),
+        userId,
+      });
+      await expect(response.text()).resolves.toContain("tool-approval-request");
+      expect(state.linear).not.toHaveBeenCalled();
+    });
+
+    test("preserves discovery through streamed approval and executes the reviewed Linear action", async () => {
+      await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
+      const finish = {
+        finishReason: { raw: undefined, unified: "tool-calls" as const },
+        type: "finish" as const,
+        usage: {
+          inputTokens: { cacheRead: 0, cacheWrite: 0, noCache: 1, total: 1 },
+          outputTokens: { reasoning: 0, text: 1, total: 1 },
+        },
+      };
+      state.model.mockReturnValue(
+        new MockLanguageModelV4({
+          doStream: [
+            {
+              stream: convertArrayToReadableStream([
+                { type: "stream-start", warnings: [] },
+                {
+                  input: "{}",
+                  toolCallId: "discovery",
+                  toolName: "linear_list_tools",
+                  type: "tool-call",
+                },
+                finish,
+              ]),
+            },
+            {
+              stream: convertArrayToReadableStream([
+                { type: "stream-start", warnings: [] },
+                {
+                  input: JSON.stringify({
+                    arguments: { teamId: "team-1", title: "Reviewed issue" },
+                    connectionId: "connection-1",
+                    toolName: "create_issue",
+                  }),
+                  toolCallId: "action",
+                  toolName: "linear_write",
+                  type: "tool-call",
+                },
+                finish,
+              ]),
+            },
+            {
+              stream: convertArrayToReadableStream([
+                { type: "stream-start", warnings: [] },
+                {
+                  error: new Error("Model stopped after the approved tool"),
+                  type: "error",
+                },
+              ]),
+            },
+          ],
+        })
+      );
+      const response = await createAiChatResponse({
+        body: {
+          category: "inbox",
+          foreground,
+          mailboxId: state.mailboxId,
+          message: {
+            id: userMessageId,
+            parts: [{ text: "Use @Linear to create an issue.", type: "text" }],
+            role: "user",
+          },
+          threadId,
+          trigger: "submit-message",
+        },
+        request: new Request("https://example.test/api/chat"),
+        userId,
+      });
+      await expect(response.text()).resolves.toContain("tool-approval-request");
+      expect(state.linear).not.toHaveBeenCalled();
+      const [stored] = await db
+        .select()
+        .from(chatMessage)
+        .where(eq(chatMessage.id, assistantId));
+      const decision = stored?.parts.find(
+        (part) => part.toolCallId === "action"
+      )?.approval;
+      if (
+        typeof decision !== "object" ||
+        decision === null ||
+        !("id" in decision) ||
+        typeof decision.id !== "string"
+      ) {
+        throw new Error("Missing stored approval");
+      }
+      const continued = await continueAnswer(
+        foreground,
+        "linear_write",
+        decision.id
+      );
+      await continued.text();
+      expect(state.linear).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          connectionId: "connection-1",
+          userId,
+        })
+      );
+    });
+
+    test("executes only the approved Linear operation against the reviewed connection once", async () => {
+      const action = {
+        arguments: { teamId: "team-1", title: "Reviewed issue" },
+        connectionId: "connection-1",
+        toolName: "create_issue",
+      };
+      await db
+        .update(chatMessage)
+        .set({
+          parts: [
+            { text: "Use @Linear to find my teams.", type: "text" },
+            { foreground, type: "data-foreground" },
+          ],
+        })
+        .where(eq(chatMessage.id, userMessageId));
+      await db
+        .update(chatMessage)
+        .set({
+          parts: [
+            {
+              foreground,
+              input: {},
+              output: {
+                connection: {
+                  account: "user@example.test",
+                  connectionId: "connection-1",
+                  workspace: "Test workspace",
+                },
+                status: "success",
+                tools: [{ name: "create_issue" }],
+              },
+              state: "output-available",
+              toolCallId: "discovery",
+              type: "tool-linear_list_tools",
+            },
+            {
+              approval: { id: "approval" },
+              foreground,
+              input: action,
+              state: "approval-requested",
+              toolCallId: "action",
+              type: "tool-linear_write",
+            },
+          ],
+        })
+        .where(eq(chatMessage.id, assistantId));
+      const response = await continueAnswer(foreground, "linear_write");
+      await response.text();
+      expect(state.linear).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          calls: [{ arguments: action.arguments, toolName: "create_issue" }],
+          connectionId: "connection-1",
+          userId,
+        })
+      );
+      await expect(
+        continueAnswer(foreground, "linear_write")
+      ).rejects.toMatchObject({ status: 409 });
+      expect(state.linear).toHaveBeenCalledOnce();
     });
 
     test.each(["open_compose", "edit_compose"] as const)(
@@ -733,6 +989,51 @@ describe.skipIf(state.databaseUrl === undefined)(
         await expect(
           isAiGeneratedMailBody({ bodyText, mailboxId: state.mailboxId })
         ).resolves.toBeTruthy();
+      }
+    );
+
+    test.each(["modify_mail", "linear_write"] as const)(
+      "declining %s never calls its provider",
+      async (toolName) => {
+        if (toolName === "linear_write") {
+          await db
+            .update(chatMessage)
+            .set({
+              parts: [
+                { text: "Use @Linear to find my teams.", type: "text" },
+                { foreground, type: "data-foreground" },
+              ],
+            })
+            .where(eq(chatMessage.id, userMessageId));
+          await db
+            .update(chatMessage)
+            .set({
+              parts: [
+                {
+                  approval: { id: "approval" },
+                  foreground,
+                  input: {
+                    arguments: { teamId: "team-1", title: "Unapproved" },
+                    connectionId: "connection-1",
+                    toolName: "create_issue",
+                  },
+                  state: "approval-requested",
+                  toolCallId: "action",
+                  type: "tool-linear_write",
+                },
+              ],
+            })
+            .where(eq(chatMessage.id, assistantId));
+        }
+        const response = await continueAnswer(
+          foreground,
+          toolName,
+          "approval",
+          false
+        );
+        await response.text();
+        expect(state.linear).not.toHaveBeenCalled();
+        expect(state.modify).not.toHaveBeenCalled();
       }
     );
 
@@ -1089,3 +1390,16 @@ describe.skipIf(state.databaseUrl === undefined)(
     });
   }
 );
+
+vi.mock(import("@quieter/billing/ai-reservation"), () => ({
+  createMailboxAiBillingContext: vi
+    .fn<typeof createMailboxAiBillingContext>()
+    .mockResolvedValue({
+      account: null,
+      admittedAt: new Date(),
+      groupId: "fixture",
+      kind: "team",
+      organizationId: "test-team",
+      usageKind: "aiChat",
+    }),
+}));

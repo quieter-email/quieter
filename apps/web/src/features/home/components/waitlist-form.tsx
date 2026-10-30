@@ -13,7 +13,7 @@ import type { WaitlistIconState } from "./waitlist-submit-icon";
 
 type WaitlistResponse = {
   email: string;
-  status: "created" | "existing";
+  status: "accepted";
 };
 
 const parseWaitlistResponse = (value: unknown): WaitlistResponse => {
@@ -22,7 +22,7 @@ const parseWaitlistResponse = (value: unknown): WaitlistResponse => {
     !("email" in value) ||
     !("status" in value) ||
     typeof value.email !== "string" ||
-    (value.status !== "created" && value.status !== "existing")
+    value.status !== "accepted"
   ) {
     throw new Error("Invalid waitlist response.");
   }
@@ -68,10 +68,7 @@ export const WaitlistForm = ({
     void toast.promise(request, {
       error: "Something went wrong. Try again.",
       loading: "Adding you to the waitlist…",
-      success: (response) =>
-        response.status === "existing"
-          ? "You're already on the waitlist."
-          : `Added ${response.email} to the waitlist.`,
+      success: (response) => `Added ${response.email} to the waitlist.`,
     });
 
     const updateIconState = async () => {

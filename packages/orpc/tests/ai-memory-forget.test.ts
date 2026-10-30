@@ -1,5 +1,6 @@
 import type { planAiMemoryDeletion } from "@quieter/ai/ai-memory";
 import type { reportAiUsage } from "@quieter/billing";
+import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import type { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { aiMemory, aiMemoryChangeSet, user } from "@quieter/database/schema";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
@@ -195,3 +196,16 @@ describe("sensitive chat memory erasure", () => {
     expect(mocks.inserted).not.toHaveBeenCalled();
   });
 });
+
+vi.mock(import("@quieter/billing/ai-reservation"), () => ({
+  createMailboxAiBillingContext: vi
+    .fn<typeof createMailboxAiBillingContext>()
+    .mockResolvedValue({
+      account: null,
+      admittedAt: new Date(),
+      groupId: "fixture",
+      kind: "team",
+      organizationId: "test-team",
+      usageKind: "aiChat",
+    }),
+}));

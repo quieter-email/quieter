@@ -1,6 +1,9 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { serverEnv } from "@quieter/env/server";
+import { APICallError } from "ai";
 import { z } from "zod";
 
+import { providerUsageResponseSchema, runBilledAiRequest } from "./billing";
 import { OPENROUTER_TRANSCRIPTION_MODEL } from "./transcription-format";
 import type { OpenRouterAudioFormat } from "./transcription-format";
 
@@ -30,6 +33,7 @@ const getTranscriptionRequestError = (status: number) => {
 };
 
 const openRouterTranscriptionResponseSchema = z.object({
+  id: z.string().optional(),
   text: z.string(),
   usage: z
     .object({
@@ -52,6 +56,7 @@ const isTranscriptionTimeoutError = (error: unknown) =>
  * the text plus usage for billing.
  */
 export const generateOpenRouterTranscription = async (input: {
+  billing: AiBillingContext;
   audioBase64: string;
   format: OpenRouterAudioFormat;
 }): Promise<{ text: string; usage: OpenRouterTranscriptionUsage }> => {
@@ -62,42 +67,56 @@ export const generateOpenRouterTranscription = async (input: {
   }
 
   try {
-    // The browser transport may send a data URL; only the payload after the
-    // comma is valid base64 audio data.
-    const { audioBase64 } = input;
-    const response = await fetch(
-      "https://openrouter.ai/api/v1/audio/transcriptions",
-      {
-        body: JSON.stringify({
-          input_audio: {
-            data: audioBase64.includes(",")
-              ? audioBase64.slice(audioBase64.indexOf(",") + 1)
-              : audioBase64,
-            format: input.format,
-          },
-          model: OPENROUTER_TRANSCRIPTION_MODEL,
-        }),
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://quieter.email",
-          "X-Title": "quieter",
-        },
-        method: "POST",
-        signal: AbortSignal.timeout(OPENROUTER_TRANSCRIPTION_TIMEOUT_MS),
-      }
-    );
+    const payload = await runBilledAiRequest({
+      billing: input.billing,
+      run: async () => {
+        // The browser transport may send a data URL; only the payload after the
+        // comma is valid base64 audio data.
+        const { audioBase64 } = input;
+        const response = await fetch(
+          "https://openrouter.ai/api/v1/audio/transcriptions",
+          {
+            body: JSON.stringify({
+              input_audio: {
+                data: audioBase64.includes(",")
+                  ? audioBase64.slice(audioBase64.indexOf(",") + 1)
+                  : audioBase64,
+                format: input.format,
+              },
+              model: OPENROUTER_TRANSCRIPTION_MODEL,
+            }),
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+              "HTTP-Referer": "https://quieter.email",
+              "X-Title": "quieter",
+            },
+            method: "POST",
+            signal: AbortSignal.timeout(OPENROUTER_TRANSCRIPTION_TIMEOUT_MS),
+          }
+        );
 
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(getTranscriptionRequestError(response.status), {
-        cause: { detail, status: response.status },
-      });
-    }
+        if (!response.ok) {
+          const detail = await response.text().catch(() => "");
+          throw new APICallError({
+            message: getTranscriptionRequestError(response.status),
+            requestBodyValues: {},
+            responseBody: detail,
+            statusCode: response.status,
+            url: "https://openrouter.ai/api/v1/audio/transcriptions",
+          });
+        }
 
-    const result = openRouterTranscriptionResponseSchema.parse(
-      await response.json()
-    );
+        const responseBody: unknown = await response.json();
+        const usage = providerUsageResponseSchema.safeParse(responseBody).data;
+        return {
+          costUsd: usage?.usage?.cost,
+          generationId: usage?.id,
+          result: responseBody,
+        };
+      },
+    });
+    const result = openRouterTranscriptionResponseSchema.parse(payload);
     return {
       text: result.text,
       usage: {

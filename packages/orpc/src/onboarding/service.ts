@@ -229,8 +229,6 @@ export const completeOnboarding = async (input: {
           { organizationId: defaultOrganization.id, userId: input.userId },
           transaction
         );
-        // Only the display name changes; the slug stays stable because default
-        // team provisioning looks organizations up by it.
         await transaction
           .update(organization)
           .set({ name: trimmedTeamName, updatedAt: now })

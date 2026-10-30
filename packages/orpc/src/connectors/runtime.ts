@@ -113,6 +113,30 @@ export const hasConnectedConnector = async (input: {
   return Boolean(credential);
 };
 
+export const getLinearConnectionForUser = async (userId: string) => {
+  const [connection] = await db
+    .select({
+      account: connectorCredential.accountEmail,
+      connectionId: connectorCredential.id,
+      workspace: connectorCredential.providerWorkspaceName,
+    })
+    .from(connectorCredential)
+    .where(
+      and(
+        eq(connectorCredential.userId, userId),
+        eq(connectorCredential.provider, LINEAR_CONNECTOR_PROVIDER),
+        eq(connectorCredential.status, "connected")
+      )
+    )
+    .limit(1);
+  if (connection === undefined) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Connect Linear before using this action.",
+    });
+  }
+  return connection;
+};
+
 const getConnectorRepairRequiredError = (provider: ConnectorProvider) =>
   new ORPCError("BAD_REQUEST", {
     message: `Reconnect ${connectorDefinitions[provider].displayName} before using this action.`,
