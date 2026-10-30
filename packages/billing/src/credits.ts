@@ -1,5 +1,6 @@
 import { db } from "@quieter/database/client";
 import {
+  aiCreditReservation,
   billingCreditUsageEvent,
   billingSubscription,
   organization,
@@ -218,6 +219,7 @@ export const getBillingCreditUsage = async (
 
 export const recordBillingCreditUsage = async (input: {
   account: BillingAccount;
+  aiReservationId?: string;
   category: BillingUsageCategory;
   costMicroCents: number;
   createdAt?: Date;
@@ -230,6 +232,25 @@ export const recordBillingCreditUsage = async (input: {
       .from(organization)
       .where(eq(organization.id, input.account.organizationId))
       .for("update");
+    if (input.aiReservationId !== undefined) {
+      const [reservation] = await transaction
+        .select({ status: aiCreditReservation.status })
+        .from(aiCreditReservation)
+        .where(
+          and(
+            eq(aiCreditReservation.id, input.aiReservationId),
+            eq(aiCreditReservation.organizationId, input.account.organizationId)
+          )
+        )
+        .for("update");
+      if (reservation === undefined || reservation.status === "released") {
+        throw new Error("The AI billing reservation is unavailable.");
+      }
+      await transaction
+        .update(aiCreditReservation)
+        .set({ status: "settled" })
+        .where(eq(aiCreditReservation.id, input.aiReservationId));
+    }
     const [existingEvent] = await transaction
       .select({
         billableCostMicroCents: billingCreditUsageEvent.billableCostMicroCents,

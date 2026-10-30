@@ -1,6 +1,7 @@
 import type { generateChatTitle } from "@quieter/ai/generate-chat-title";
 import type { suggestReply } from "@quieter/ai/suggest-reply";
 import type { reportAiUsage } from "@quieter/billing";
+import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import {
   aiGeneratedMailBody,
@@ -459,3 +460,16 @@ describe.skipIf(state.databaseUrl === undefined)(
     });
   }
 );
+
+vi.mock(import("@quieter/billing/ai-reservation"), () => ({
+  createMailboxAiBillingContext: vi
+    .fn<typeof createMailboxAiBillingContext>()
+    .mockResolvedValue({
+      account: null,
+      admittedAt: new Date(),
+      groupId: "fixture",
+      kind: "team",
+      organizationId: "test-team",
+      usageKind: "aiChat",
+    }),
+}));

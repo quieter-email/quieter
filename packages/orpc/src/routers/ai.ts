@@ -14,6 +14,7 @@ import {
 } from "@quieter/ai/parse-mail-search";
 import type { ParsedMailSearch } from "@quieter/ai/parse-mail-search";
 import { reportAiUsage } from "@quieter/billing";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import { user, userAiContextEvent } from "@quieter/database/schema";
 import {
@@ -214,6 +215,12 @@ export const aiRouter = {
               ? undefined
               : ["archived", "read", "unread"],
           availableLabels: input.availableLabels ?? [],
+          billing: await createMailboxAiBillingContext({
+            externalId: `search-interpret:${requestId}`,
+            mailboxId: input.mailboxId,
+            usageKind: "aiChat",
+            userId: context.userId,
+          }),
           memoryContext: serializeAiAgentContext(
             await loadAiAgentContext({
               agent: "search",

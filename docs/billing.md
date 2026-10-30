@@ -70,6 +70,18 @@ After that repair, reconcile the local ledger against Polar events by external I
 
 For webhook rotation, keep the endpoint disabled while resetting its secret. Transfer the new value to the production GitHub environment secret `POLAR_WEBHOOK_SECRET`. The protected SST deployment copies it into the linked `PolarWebhookSecret` resource. Verify the deployed signature check before enabling delivery, then verify a real subscription event. Never print the secret or reuse an exposed value.
 
+## AI admission and interrupted requests
+
+Every paid provider call creates an `aiCreditReservation` before sending the request. The operation stores the authorizing account, organization, billing period, usage kind, and admission timestamp. Mailbox moves, deletion, membership changes, and later subscription changes do not change that charge. SDK retries and tool-loop turns each reserve separately, and a completed turn settles before the next turn or nested tool work starts.
+
+The provider endpoints do not all support a monetary request cap. AI reserves all currently available included credit under the same organization lock used by outbound mail. Concurrent AI calls wait for the active call to settle by rejecting admission, and outbound team-mail admission also rejects while an AI hold exists. Existing outbound-mail holds reduce the funds available to AI. This prevents concurrent reuse of the balance. One admitted call can still cost more than the remaining balance because the provider supplies its actual cost afterward. This change does not promise a provider spending cap.
+
+Known provider rejection releases its hold. Known zero-cost completion also restores admission. A timeout, cancellation without final usage, missing cost, or process crash retains its hold. Do not release those holds based on elapsed time. Confirm the provider outcome before using `releaseAiCreditUsage` for confirmed non-execution or `settleAiCreditUsage` with the confirmed actual cost. Those functions use the reservation ID and preserve the original account and period. Production resolution requires the protected operational workflow and explicit authorization.
+
+Actual cost is persisted before ledger reconciliation. `vp run billing:sync-credit-usage-polar` first calls `reconcileAiCreditReservations` for completed holds, then retries the existing usage-event reporting. Reconciliation and repeated settlements use the same ledger dedupe key. Unknown-outcome holds remain reserved for inspection. Inspect `aiCreditReservation` rows with `status = 'reserved'`; a null `actualCostMicroCents` distinguishes an unconfirmed outcome from a known cost awaiting reconciliation.
+
+Apply the additive reservation-table migration before deploying the application. Drain pre-release provider calls and pending usage-reporting jobs during a coordinated rollout. The legacy reporting path remains for historical operations without reservation groups; new groups are already accounted at the provider boundary. Retire that compatibility path only after historical reporting has drained.
+
 ## Domains and mail after access ends
 
 Sending, API requests, domain setup changes, and new keys require active billing. Domains and existing keys remain registered, and they work again after billing recovers. Authorized users can still view and remove them. Removing a domain can require removing or migrating its managed inboxes first.

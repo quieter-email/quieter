@@ -10,6 +10,7 @@ import {
 import { extractMailVerificationCode } from "@quieter/ai/extract-verification-code";
 import { VERIFICATION_CODE_MODEL } from "@quieter/ai/model-config";
 import { reportAiUsage } from "@quieter/billing";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import { mailboxVerificationCode } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
@@ -464,6 +465,12 @@ export const processMailVerificationCode = async ({
       let probability: number | undefined;
       try {
         probability = await detectMailVerificationCode({
+          billing: await createMailboxAiBillingContext({
+            externalId: claimed.id,
+            mailboxId,
+            usageKind: "verificationCode",
+            userId,
+          }),
           message,
           onUsage: (reported) => {
             screenUsage = reported;
@@ -483,6 +490,12 @@ export const processMailVerificationCode = async ({
           : AUTO_LABEL_MODEL;
       const candidate = extractCode
         ? await extractMailVerificationCode({
+            billing: await createMailboxAiBillingContext({
+              externalId: claimed.id,
+              mailboxId,
+              usageKind: "verificationCode",
+              userId,
+            }),
             message,
             model: VERIFICATION_CODE_MODEL,
             onUsage: (reported) => {

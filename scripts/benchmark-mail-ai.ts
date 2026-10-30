@@ -69,6 +69,7 @@ for (const [index, sample] of samples.entries()) {
     subject: "Account message",
   };
   const probability = await detectMailVerificationCode({
+    billing: { kind: "development" },
     message,
     onUsage: (usage) => {
       reportedCosts.push(usage.costUsd ?? 0);
@@ -77,6 +78,7 @@ for (const [index, sample] of samples.entries()) {
   const shouldExtract = probability >= 0.2;
   const result = shouldExtract
     ? await extractMailVerificationCode({
+        billing: { kind: "development" },
         message,
         model,
         onUsage: (usage) => {
@@ -94,6 +96,7 @@ for (const [index, sample] of samples.entries()) {
 }
 const start = performance.now();
 const labels = await classifyMailMessage({
+  billing: { kind: "development" },
   labels: [
     {
       description: "Repository, software build and code review activity",

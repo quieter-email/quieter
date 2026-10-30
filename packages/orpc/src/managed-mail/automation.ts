@@ -6,6 +6,7 @@ import type {
   AutomationMailMessage,
   MailAutoLabelCandidate,
 } from "@quieter/ai/classify-gmail-message";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
 import {
@@ -329,6 +330,12 @@ const processManagedAutoLabelMessage = async (input: {
         aiLabels.length === 0
           ? []
           : await classifyMailMessage({
+              billing: await createMailboxAiBillingContext({
+                externalId: event.id,
+                mailboxId: input.mailboxId,
+                usageKind: "autoLabel",
+                userId: input.userId,
+              }),
               labelHistory,
               labels: aiLabels,
               memoryContext:

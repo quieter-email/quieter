@@ -2998,6 +2998,40 @@ export const billingCreditUsageEvent = pgTable(
   ]
 );
 
+export const aiCreditReservation = pgTable(
+  "aiCreditReservation",
+  {
+    account:
+      jsonb("account").$type<NonNullable<MailSendSnapshot["billingAccount"]>>(),
+    actualCostMicroCents: bigint("actualCostMicroCents", { mode: "number" }),
+    createdAt: timestamp("createdAt").notNull(),
+    groupId: text("groupId").notNull(),
+    id: text("id").primaryKey(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    providerGenerationId: text("providerGenerationId"),
+    reservedCostMicroCents: bigint("reservedCostMicroCents", {
+      mode: "number",
+    }).notNull(),
+    status: text("status")
+      .$type<"reserved" | "settled" | "released">()
+      .notNull(),
+    usageKind: text("usageKind").notNull(),
+  },
+  (table) => [
+    index("ai_credit_reservation_group_idx").on(table.groupId),
+    index("ai_credit_reservation_organization_idx").on(
+      table.organizationId,
+      table.status
+    ),
+    check(
+      "ai_credit_reservation_cost_check",
+      sql`${table.reservedCostMicroCents} >= 0`
+    ),
+  ]
+);
+
 export const billingEntitlementOverride = pgTable(
   "billingEntitlementOverride",
   {

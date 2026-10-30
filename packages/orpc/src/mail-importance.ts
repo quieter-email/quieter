@@ -6,6 +6,7 @@ import type { AutomationMailMessage } from "@quieter/ai/classify-gmail-message";
 import { classifyMailImportance } from "@quieter/ai/mail-importance";
 import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import { reportAiUsage } from "@quieter/billing";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import type { DatabaseExecutor } from "@quieter/database/client";
 import {
@@ -784,6 +785,12 @@ export const processPendingMailImportance = async (
         userId: owner.userId,
       });
       const decision = await classifyMailImportance({
+        billing: await createMailboxAiBillingContext({
+          externalId: `importance:${attemptId}`,
+          mailboxId: job.mailboxId,
+          usageKind: "importance",
+          userId: owner.userId,
+        }),
         context: context === null ? null : serializeAiAgentContext(context),
         message: source.message,
         onUsage: (report) => {

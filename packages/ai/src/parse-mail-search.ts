@@ -1,3 +1,4 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { z } from "zod";
 
 import type { ChatModel } from "./chat-models";
@@ -86,6 +87,7 @@ export const parseMailSearchWithAi = async ({
   availableLabels,
   memoryContext,
   model = resolveBackgroundModel(),
+  billing,
   onUsage,
   query,
 }: {
@@ -93,12 +95,14 @@ export const parseMailSearchWithAi = async ({
   availableLabels: readonly string[];
   memoryContext?: string | null;
   model?: ChatModel;
+  billing: AiBillingContext;
   onUsage?: (usage: AiUsageReport) => void;
   query: string;
 }): Promise<ParsedMailSearch> => {
   const today = new Date();
   const todayValue = `${today.getFullYear()}/${today.getMonth() + 1}/${today.getDate()}`;
   const result = await runStructuredGeneration({
+    billing,
     maxOutputTokens: 800,
     model,
     ...(onUsage === undefined ? {} : { onUsage }),

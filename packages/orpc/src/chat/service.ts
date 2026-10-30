@@ -42,6 +42,7 @@ import {
 } from "@quieter/ai/model-config";
 import { createChatModel } from "@quieter/ai/openrouter";
 import { reportAiUsage } from "@quieter/billing";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import {
   chat as chatTable,
@@ -873,6 +874,12 @@ const generateChatTitleInRequest = async (input: {
   try {
     const titleModel = resolveBackgroundModel();
     const title = await generateChatTitle({
+      billing: await createMailboxAiBillingContext({
+        externalId: `chat-title:${input.chatId}`,
+        mailboxId: input.mailboxId,
+        usageKind: "aiChat",
+        userId: input.userId,
+      }),
       onUsage: (usage) => {
         void reportAiUsage({
           chatId: input.chatId,
@@ -1651,6 +1658,12 @@ export const createAiChatResponse = async (input: {
   const usageId = crypto.randomUUID();
   const model = createChatModel(validated.model, {
     allowFallbacks: false,
+    billing: await createMailboxAiBillingContext({
+      externalId: `${usageId}:${assistantMessageId}`,
+      mailboxId,
+      usageKind: "aiChat",
+      userId: input.userId,
+    }),
   });
   input.request.signal.throwIfAborted();
   if (validated.kind === "continue" && persistedAssistantParts !== null) {
