@@ -59,13 +59,29 @@ export const ensureUserOrganizationState = async (
   currentUser: UserIdentity
 ): Promise<EnsureUserOrganizationStateResult> =>
   await db.transaction(async (transaction) => {
-    const [persistedUser] = await transaction
-      .select()
+    const [provisioningState] = await transaction
+      .select({
+        defaultOrganizationProvisioned: user.defaultOrganizationProvisioned,
+        email: user.email,
+        id: user.id,
+        name: user.name,
+      })
       .from(user)
-      .where(eq(user.id, currentUser.id))
-      .for("update");
-    if (persistedUser === undefined) {
+      .where(eq(user.id, currentUser.id));
+    if (provisioningState === undefined) {
       throw new Error("Team provisioning requires an existing account.");
+    }
+    let persistedUser = provisioningState;
+    if (!persistedUser.defaultOrganizationProvisioned) {
+      const [lockedUser] = await transaction
+        .select()
+        .from(user)
+        .where(eq(user.id, currentUser.id))
+        .for("update");
+      if (lockedUser === undefined) {
+        throw new Error("Team provisioning requires an existing account.");
+      }
+      persistedUser = lockedUser;
     }
 
     let organizationIds = await getUserOrganizationIds(
