@@ -51,6 +51,7 @@ export const createChatModel = (
   model: ChatModel,
   options: {
     billing: AiBillingContext;
+    onProviderStart?: () => void;
     allowFallbacks?: boolean;
     prioritizeLatency?: boolean;
   }
@@ -61,7 +62,11 @@ export const createChatModel = (
   return wrapLanguageModel({
     middleware: [
       openRouterStreamMiddleware,
-      createAiBillingMiddleware(options.billing, readChatUsageCostUsd),
+      createAiBillingMiddleware(
+        options.billing,
+        readChatUsageCostUsd,
+        options.onProviderStart
+      ),
     ],
     model: getOpenRouterProvider().chat(parsedModel, {
       extraBody: {

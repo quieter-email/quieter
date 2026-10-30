@@ -22,6 +22,7 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 
+import { AiCreditAdmissionBusyError } from "./ai-credit-errors";
 import { getAiUsageCostMicroCents } from "./ai-pricing.ts";
 import {
   getBillingCreditUsage,
@@ -173,15 +174,17 @@ export const reserveAiCreditUsage = async (context: AiBillingContext) => {
     const available =
       usage.creditAmountMicroCents -
       usage.costMicroCents -
-      aiReserved -
       (mailReserved?.cost ?? 0);
     // These endpoints have no monetary cap. Holding the remaining balance
     // preserves single-call admission while preventing concurrent reuse.
-    if (available <= 0 || aiReserved > 0) {
+    if (available <= 0) {
       throw new ORPCError("FORBIDDEN", {
         message:
           "AI features require available usage balance. Try again after the current request finishes.",
       });
+    }
+    if (aiReserved > 0) {
+      throw new AiCreditAdmissionBusyError();
     }
     const id = crypto.randomUUID();
     await tx.insert(aiCreditReservation).values({

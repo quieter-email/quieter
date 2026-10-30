@@ -6,6 +6,7 @@ import type {
   AutomationMailMessage,
   MailAutoLabelCandidate,
 } from "@quieter/ai/classify-gmail-message";
+import { isAiCreditAdmissionBusy } from "@quieter/ai/errors";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
@@ -419,7 +420,9 @@ const processManagedAutoLabelMessage = async (input: {
         updatedAt: now,
       })
       .where(eq(gmailAutoLabelEvent.id, event.id));
-    reportError(error, { operation: "managed-mail:auto-label-message" });
+    if (!isAiCreditAdmissionBusy(error)) {
+      reportError(error, { operation: "managed-mail:auto-label-message" });
+    }
   }
 };
 

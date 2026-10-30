@@ -7,6 +7,7 @@ import {
   AUTO_LABEL_MODEL,
   detectMailVerificationCode,
 } from "@quieter/ai/classify-gmail-message";
+import { isAiCreditAdmissionBusy } from "@quieter/ai/errors";
 import { extractMailVerificationCode } from "@quieter/ai/extract-verification-code";
 import { VERIFICATION_CODE_MODEL } from "@quieter/ai/model-config";
 import { reportAiUsage } from "@quieter/billing";
@@ -477,6 +478,9 @@ export const processMailVerificationCode = async ({
           },
         });
       } catch (error) {
+        if (isAiCreditAdmissionBusy(error)) {
+          throw error;
+        }
         reportError(error, {
           operation: "verification-code:screen",
         });
@@ -566,9 +570,11 @@ export const processMailVerificationCode = async ({
       }
     }
   } catch (error) {
-    reportError(error, {
-      operation: "verification-code:extract",
-    });
+    if (!isAiCreditAdmissionBusy(error)) {
+      reportError(error, {
+        operation: "verification-code:extract",
+      });
+    }
     const usage = accumulateVerificationCodeUsage(
       claimed,
       screenUsage,

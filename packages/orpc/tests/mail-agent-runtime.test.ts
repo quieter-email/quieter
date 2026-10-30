@@ -60,6 +60,8 @@ vi.mock("drizzle-orm", async (original) => ({
   },
   inArray: (column: { name: string }, values: unknown[]) => (row: Row) =>
     values.includes(row[column.name]),
+  isNull: (column: { name: string }) => (row: Row) =>
+    row[column.name] === null || row[column.name] === undefined,
   lt: (column: { name: string }, value: Date) => (row: Row) => {
     const current = row[column.name];
     return current instanceof Date && current < value;

@@ -16,6 +16,7 @@ export const providerUsageResponseSchema = z.object({
 
 export const runBilledAiRequest = async <Result>(input: {
   billing: AiBillingContext;
+  onProviderStart?: () => void;
   run: () => Promise<{
     costUsd: number | undefined;
     generationId?: string;
@@ -24,6 +25,7 @@ export const runBilledAiRequest = async <Result>(input: {
 }): Promise<Result> => {
   const reservationId = await reserveAiCreditUsage(input.billing);
   try {
+    input.onProviderStart?.();
     const { costUsd, generationId, result } = await input.run();
     await recordAiCreditProviderGeneration({ generationId, reservationId });
     if (costUsd === undefined) {
@@ -44,13 +46,15 @@ export const runBilledAiRequest = async <Result>(input: {
 
 export const createAiBillingMiddleware = (
   billing: AiBillingContext,
-  readCost: (metadata: unknown) => number | undefined
+  readCost: (metadata: unknown) => number | undefined,
+  onProviderStart?: () => void
 ): LanguageModelMiddleware => ({
   specificationVersion: "v4",
   wrapGenerate: async ({ doGenerate, params }) => {
     params.abortSignal?.throwIfAborted();
     return await runBilledAiRequest({
       billing,
+      onProviderStart,
       run: async () => {
         const result = await doGenerate();
         return {
@@ -65,6 +69,7 @@ export const createAiBillingMiddleware = (
     params.abortSignal?.throwIfAborted();
     const reservationId = await reserveAiCreditUsage(billing);
     try {
+      onProviderStart?.();
       const result = await doStream();
       let providerStarted = false;
       return {

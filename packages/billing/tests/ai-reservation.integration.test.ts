@@ -23,6 +23,7 @@ import {
 } from "vite-plus/test";
 import { z } from "zod";
 
+import { AiCreditAdmissionBusyError } from "../src/ai-credit-errors";
 import { runAiCreditRecovery } from "../src/ai-credit-recovery";
 import {
   createMailboxAiBillingContext,
@@ -604,6 +605,22 @@ describe.skipIf(state.databaseUrl === undefined)(
       await expect(getOutstandingAiCreditReservations(account)).resolves.toBe(
         0
       );
+    });
+
+    test("distinguishes active holds from exhausted credit without releasing unknown liability", async () => {
+      await reserveAiCreditUsage(context);
+      await expect(reserveAiCreditUsage(context)).rejects.toBeInstanceOf(
+        AiCreditAdmissionBusyError
+      );
+      const exhausted = await reserveAiCreditUsage({
+        ...context,
+        account: { ...account, creditAmountCents: 0 },
+      }).catch((error: unknown) => error);
+      expect(exhausted).toMatchObject({ code: "FORBIDDEN" });
+      expect(exhausted).not.toBeInstanceOf(AiCreditAdmissionBusyError);
+      await expect(
+        getOutstandingAiCreditReservations(account)
+      ).resolves.toBeGreaterThan(0);
     });
 
     test("releases confirmed non-execution idempotently and prevents later settlement", async () => {

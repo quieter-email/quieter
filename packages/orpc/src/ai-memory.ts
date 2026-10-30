@@ -19,6 +19,7 @@ import type {
 } from "@quieter/ai/ai-memory";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import { AUTO_LABEL_MODEL } from "@quieter/ai/classify-gmail-message";
+import { isAiCreditAdmissionBusy } from "@quieter/ai/errors";
 import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import { reportAiUsage } from "@quieter/billing";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
@@ -2068,7 +2069,10 @@ export const refreshAiMemoryFromEvent = async ({
     });
     return { status: "refreshed" as const };
   } catch (error) {
-    if (!(error instanceof ORPCError) || error.status >= 500) {
+    if (
+      !isAiCreditAdmissionBusy(error) &&
+      (!(error instanceof ORPCError) || error.status >= 500)
+    ) {
       reportError(new Error("Memory observation consolidation failed."), {
         operation: "ai-memory:consolidate-observations",
       });
