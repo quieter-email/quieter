@@ -1025,6 +1025,7 @@ const MailboxWorkspaceContentInner = ({
                 !isManagedDemoMode &&
                 selectedMailboxId !== null ? (
                   <DraftRecoveryNotice
+                    userId={userId}
                     mailboxId={selectedMailboxId}
                     onResume={onComposeDraftRequested}
                   />

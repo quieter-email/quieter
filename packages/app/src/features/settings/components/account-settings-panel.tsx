@@ -10,6 +10,7 @@ import {
 import { setDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import { setManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
 import { authClient } from "@quieter/app/lib/auth";
+import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import { toastError } from "@quieter/app/lib/error-toast";
 import {
   clearPreviewPersonaCookie,
@@ -596,11 +597,32 @@ const DeleteAccountDialog = () => {
     },
     mutationKey: ["auth", "delete-user"],
     onSuccess: async () => {
-      queryClient.clear();
-      await queryPersister.removeQueries();
-      await navigate({
-        to: "/home",
-      });
+      try {
+        const results = await Promise.allSettled([
+          Promise.resolve().then(() => {
+            draftRecoveryJournal.setUser(undefined);
+          }),
+          Promise.resolve().then(async () => {
+            queryClient.clear();
+            await queryPersister.removeQueries();
+          }),
+        ]);
+        const failures = results
+          .filter((result) => result.status === "rejected")
+          .map((result): unknown => result.reason);
+        if (failures.length > 0) {
+          throw new AggregateError(failures, "Local account cleanup failed.");
+        }
+        await navigate({
+          to: "/home",
+        });
+      } catch (error) {
+        toastError(error, { boundary: "account-deletion-cleanup" });
+        throw new Error(
+          "Could not finish clearing local account data. Please try again.",
+          { cause: error }
+        );
+      }
     },
   });
   const form = useForm({
