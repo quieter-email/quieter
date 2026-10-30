@@ -2846,6 +2846,7 @@ export const mailDomain = pgTable(
     organizationId: text("organizationId")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    ownershipVerifiedAt: timestamp("ownershipVerifiedAt"),
     requiredDnsRecords: jsonb("requiredDnsRecords")
       .$type<MailDomainDnsRecord[]>()
       .notNull(),
@@ -2862,6 +2863,15 @@ export const mailDomain = pgTable(
     index("mail_domain_catch_all_mailbox_idx").on(table.catchAllMailboxId),
     unique("mail_domain_catch_all_mailbox_unique").on(table.catchAllMailboxId),
     unique("mail_domain_domain_unique").on(table.domain),
+    unique("mail_domain_organization_domain_unique").on(
+      table.organizationId,
+      table.domain
+    ),
+    uniqueIndex("mail_domain_owner_unique")
+      .on(table.domain)
+      .where(
+        sql`${table.ownershipVerifiedAt} is not null or ${table.status} = 'verified'`
+      ),
   ]
 );
 
