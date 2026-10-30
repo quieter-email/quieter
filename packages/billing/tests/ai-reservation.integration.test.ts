@@ -4,6 +4,7 @@ import { db } from "@quieter/database/client";
 import {
   aiCreditReservation,
   billingCreditUsageEvent,
+  billingSubscription,
   mailbox,
   organization,
   organizationMailSendIdempotency,
@@ -33,7 +34,10 @@ import {
   settleAiCreditUsage,
 } from "../src/ai-reservation";
 import type { AiBillingContext } from "../src/ai-reservation";
-import { getBillingCreditUsage } from "../src/credits";
+import {
+  getBillingCreditUsage,
+  syncUnreportedBillingCreditUsage,
+} from "../src/credits";
 import type * as EntitlementsModule from "../src/entitlements";
 import { reportAiUsage } from "../src/index";
 import { reserveOrganizationMailSend } from "../src/mail-send-reservation";
@@ -698,6 +702,95 @@ describe.skipIf(state.databaseUrl === undefined)(
         0
       );
     });
+
+    test.each([
+      "current",
+      "superseded",
+      "expired-renewing",
+      "expired-trialing",
+    ] as const)(
+      "recovered %s usage follows subscription reporting eligibility",
+      async (period) => {
+        const reservationId = await reserveAiCreditUsage(context);
+        if (reservationId === null) {
+          throw new Error("Expected a paid reservation.");
+        }
+        const historical = period !== "current";
+        const start = historical
+          ? new Date(Date.now() - 172_800_000)
+          : account.currentPeriodStart;
+        const end = historical
+          ? new Date(Date.now() - 86_400_000)
+          : account.currentPeriodEnd;
+        const admittedAt = new Date(start.getTime() + 1000);
+        await db
+          .update(aiCreditReservation)
+          .set({
+            account: {
+              ...account,
+              currentPeriodEnd: end.toISOString(),
+              currentPeriodStart: start.toISOString(),
+            },
+            actualCostMicroCents: 1000,
+            createdAt: admittedAt,
+          })
+          .where(eq(aiCreditReservation.id, reservationId));
+        await db.insert(billingSubscription).values({
+          createdAt: new Date(),
+          currentPeriodEnd: end,
+          currentPeriodStart: start,
+          id: "g04-subscription",
+          metadata: { quieterOrganizationId: account.organizationId },
+          organizationId: account.organizationId,
+          plan: "pro",
+          provider: "polar",
+          providerProductId: "fixture",
+          providerSubscriptionId: "g04-subscription",
+          status: period === "expired-trialing" ? "trialing" : "active",
+          updatedAt: new Date(),
+          userId: "g04-user",
+        });
+        if (period === "superseded") {
+          await db.insert(billingSubscription).values({
+            createdAt: new Date(),
+            currentPeriodEnd: account.currentPeriodEnd,
+            currentPeriodStart: account.currentPeriodStart,
+            id: "g04-later-subscription",
+            metadata: { quieterOrganizationId: account.organizationId },
+            organizationId: account.organizationId,
+            plan: "pro",
+            provider: "polar",
+            providerProductId: "fixture",
+            providerSubscriptionId: "g04-later-subscription",
+            status: "active",
+            updatedAt: new Date(),
+            userId: "g04-user",
+          });
+        }
+        await reconcileAiCreditReservations();
+        await reconcileAiCreditReservations();
+        expect(state.ingest).not.toHaveBeenCalled();
+        const events = await db
+          .select()
+          .from(billingCreditUsageEvent)
+          .where(
+            eq(billingCreditUsageEvent.organizationId, account.organizationId)
+          );
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({
+          costMicroCents: 1000,
+          createdAt: admittedAt,
+          polarEventReportedAt: null,
+        });
+        const result = await syncUnreportedBillingCreditUsage();
+        const eligible = period === "current" || period === "expired-renewing";
+        expect(result.synced).toBe(eligible ? 1 : 0);
+        expect(state.ingest).toHaveBeenCalledTimes(eligible ? 1 : 0);
+        await expect(getOutstandingAiCreditReservations(account)).resolves.toBe(
+          0
+        );
+      }
+    );
 
     test("settlement retains the admission period after a billing period change", async () => {
       const mutable = { ...context, account: { ...account } };

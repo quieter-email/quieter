@@ -254,6 +254,13 @@ export const aiRouter = {
           query: input.query,
         });
       } catch (error) {
+        if (
+          error instanceof ORPCError &&
+          error.status >= 400 &&
+          error.status < 500
+        ) {
+          throw error;
+        }
         reportError(error, { operation: "ai:interpret-search-query" });
         throw new ORPCError("INTERNAL_SERVER_ERROR", {
           message: "Could not interpret that search right now.",

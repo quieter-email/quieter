@@ -345,6 +345,13 @@ export const chatRouter = {
           format: input.format,
         });
       } catch (error: unknown) {
+        if (
+          error instanceof ORPCError &&
+          error.status >= 400 &&
+          error.status < 500
+        ) {
+          throw error;
+        }
         reportError(error, { operation: "chat:transcribe-audio" });
         const message =
           error instanceof Error &&
@@ -401,7 +408,14 @@ export const chatRouter = {
                   },
                   transcript: text,
                 });
-              } catch {
+              } catch (error) {
+                if (
+                  error instanceof ORPCError &&
+                  error.status >= 400 &&
+                  error.status < 500
+                ) {
+                  throw error;
+                }
                 reportError(new Error("Dictated email formatting failed."), {
                   operation: "chat:format-transcribed-email",
                 });

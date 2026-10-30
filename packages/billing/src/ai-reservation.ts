@@ -306,7 +306,7 @@ export const reconcileAiCreditReservations = async (
       currentPeriodEnd: new Date(row.account.currentPeriodEnd),
       currentPeriodStart: new Date(row.account.currentPeriodStart),
     };
-    await recordBillingCreditUsage({
+    const usage = {
       account,
       aiReservationId: row.id,
       category: "ai",
@@ -314,7 +314,16 @@ export const reconcileAiCreditReservations = async (
       createdAt: row.createdAt,
       dedupeKey: `ai:reservation:${row.id}`,
       metadata: { usageKind: row.usageKind },
-    });
+    } satisfies Parameters<typeof recordBillingCreditUsage>[0];
+    if (input.reservationId === undefined) {
+      // Recovered usage must pass subscription eligibility in the reporting sync.
+      await db.transaction(
+        async (transaction) =>
+          await recordBillingCreditUsage(usage, transaction)
+      );
+    } else {
+      await recordBillingCreditUsage(usage);
+    }
   }
   return rows.length;
 };
