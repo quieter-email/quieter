@@ -5,6 +5,7 @@ import {
   getSendEnvelopeAddress,
   getSendEnvelopeAddressList,
   normalizeSendHeaders,
+  sendAttachmentListResourcesSchema,
 } from "./send";
 import type { SendHeader, SendMessageInput } from "./send";
 
@@ -36,6 +37,7 @@ export const buildSendMimeMessage = async (
     sentAt?: Date;
   }
 ): Promise<BuiltSendMimeMessage> => {
+  sendAttachmentListResourcesSchema.parse(message.attachments);
   const fromAddress = getSendEnvelopeAddress(message.from);
   const domain = fromAddress.split("@").at(1) ?? "quieter.email";
   const messageHeaderId =

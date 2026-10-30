@@ -5,6 +5,10 @@ import {
   API_VERSION_HEADER,
   MCP_API_PATH,
 } from "@quieter/mail/public-api";
+import {
+  MAX_SEND_ATTACHMENTS,
+  MAX_SEND_ATTACHMENT_METADATA_LENGTH,
+} from "@quieter/mail/send";
 import type { SendMessageInput, SendMessageResult } from "@quieter/mail/send";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
@@ -117,6 +121,49 @@ describe("transactional mail MCP tools", () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
+
+  test.each([
+    {
+      attachments: Array.from({ length: MAX_SEND_ATTACHMENTS + 1 }, () => ({
+        content: "YQ==",
+        filename: "a.txt",
+      })),
+      kind: "count",
+    },
+    ...["filename", "contentType", "contentId"].map((kind) => ({
+      attachments: [
+        {
+          content: "YQ==",
+          filename: "a.txt",
+          [kind]: "x".repeat(MAX_SEND_ATTACHMENT_METADATA_LENGTH + 1),
+        },
+      ],
+      kind,
+    })),
+  ])(
+    "rejects excessive attachment $kind without sending",
+    async ({ attachments }) => {
+      const send = vi.fn<SendTransactionalMail>();
+      const response = await postMcp(createTestHandler(send), {
+        id: 1,
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          arguments: {
+            attachments,
+            from: "demo@example.com",
+            subject: "Hello",
+            text: "Hello",
+            to: "to@example.com",
+          },
+          name: "send_email",
+        },
+      });
+      const result = await readToolCallResult(response);
+      expect(result.isError).toBeTruthy();
+      expect(send).not.toHaveBeenCalled();
+    }
+  );
 
   test("advertises the send_email tool with its input schema", async () => {
     const handler = createTestHandler(
