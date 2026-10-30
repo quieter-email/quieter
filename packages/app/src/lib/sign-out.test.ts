@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 import { setImmediate as waitForImmediate } from "node:timers/promises";
 
 import { signOut } from "@quieter/app/lib/auth";
+import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import { mailCache } from "@quieter/app/lib/mail-cache";
 import { runMailMutation } from "@quieter/app/lib/mail-mutations";
 import {
@@ -24,7 +25,9 @@ const request = vi.fn<typeof fetch>();
 
 describe("authenticated sign-out cache boundary", () => {
   beforeEach(() => {
+    request.mockReset();
     configureAppRuntime({ fetch: request });
+    vi.stubGlobal("localStorage", { length: 0 });
     vi.stubGlobal("window", {
       localStorage: { length: 0 },
       location: { href: "https://example.test" },
@@ -32,10 +35,41 @@ describe("authenticated sign-out cache boundary", () => {
   });
   afterEach(async () => {
     vi.restoreAllMocks();
+    await draftRecoveryJournal.setUser(undefined);
     await clearQueryPersistence();
     vi.unstubAllGlobals();
     configureAppRuntime({});
   });
+
+  test.each(["absent", "retired", "read-denied"])(
+    "does not contact the provider when query cleanup authority is %s",
+    async (authority) => {
+      const client = new QueryClient();
+      const userId = crypto.randomUUID();
+      setQueryPersistenceUser(userId, client);
+      await draftRecoveryJournal.setUser(userId);
+      await mailCache.setItem("body-message", "private");
+      if (authority === "absent") {
+        vi.spyOn(mailCache, "captureCleanup").mockImplementation(
+          vi.fn<typeof mailCache.captureCleanup>()
+        );
+      } else if (authority === "retired") {
+        await mailCache.clearSession();
+      } else {
+        vi.spyOn(IDBObjectStore.prototype, "get").mockImplementation(() => {
+          throw new DOMException("denied", "UnknownError");
+        });
+      }
+      const cleanup = vi.fn<() => Promise<void>>(
+        draftRecoveryJournal.captureCleanup()
+      );
+      vi.spyOn(draftRecoveryJournal, "captureCleanup").mockReturnValue(cleanup);
+      await expect(signOut()).rejects.toThrow(/loading|denied/u);
+      expect(request).not.toHaveBeenCalled();
+      expect(cleanup).not.toHaveBeenCalled();
+      client.clear();
+    }
+  );
 
   test.each(["rejected", "network"])(
     "retains usable same-user persistence when sign-out fails with %s",
@@ -43,6 +77,7 @@ describe("authenticated sign-out cache boundary", () => {
       const client = new QueryClient();
       const userId = crypto.randomUUID();
       setQueryPersistenceUser(userId, client);
+      await draftRecoveryJournal.setUser(userId);
       await mailCache.setItem("body-message", "private");
       if (failure === "network") {
         request.mockRejectedValueOnce(new Error("offline"));
@@ -69,7 +104,9 @@ describe("authenticated sign-out cache boundary", () => {
 
   test("removes bodies before success and rejects an old client's late persistence after another login", async () => {
     const oldClient = new QueryClient();
-    setQueryPersistenceUser(crypto.randomUUID(), oldClient);
+    const userId = crypto.randomUUID();
+    setQueryPersistenceUser(userId, oldClient);
+    await draftRecoveryJournal.setUser(userId);
     const key = ["message-thread", 3, "mailbox", "thread"];
     oldClient.setQueryData(key, {
       messages: [{ bodyText: "private", id: "message" }],
@@ -106,7 +143,9 @@ describe("authenticated sign-out cache boundary", () => {
 
   test("revokes serialization already waiting for a body when sign-out completes", async () => {
     const client = new QueryClient();
-    setQueryPersistenceUser(crypto.randomUUID(), client);
+    const userId = crypto.randomUUID();
+    setQueryPersistenceUser(userId, client);
+    await draftRecoveryJournal.setUser(userId);
     const key = ["message-thread", 3, "mailbox", "thread"];
     client.setQueryData(key, {
       messages: [{ bodyText: "pending private body", id: "message" }],
@@ -139,7 +178,9 @@ describe("authenticated sign-out cache boundary", () => {
 
   test("prevents a pending mutation from restoring private query data after sign-out", async () => {
     const client = new QueryClient();
-    setQueryPersistenceUser(crypto.randomUUID(), client);
+    const userId = crypto.randomUUID();
+    setQueryPersistenceUser(userId, client);
+    await draftRecoveryJournal.setUser(userId);
     const key = ["message-thread", 3, "mailbox", "thread"];
     client.setQueryData(key, {
       messages: [{ bodyText: "private body", id: "message" }],
@@ -177,7 +218,9 @@ describe("authenticated sign-out cache boundary", () => {
   });
 
   test("does not report successful sign-out when durable cleanup fails", async () => {
-    setQueryPersistenceUser(crypto.randomUUID(), new QueryClient());
+    const userId = crypto.randomUUID();
+    setQueryPersistenceUser(userId, new QueryClient());
+    await draftRecoveryJournal.setUser(userId);
     await mailCache.setItem("body-message", "private");
     request.mockResolvedValueOnce(
       Response.json(
