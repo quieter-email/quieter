@@ -28,7 +28,9 @@ nsis:
   allowToChangeInstallationDirectory: true
   shortcutName: quieter
 linux:
+  artifactName: ${productName}-${version}-${arch}.${ext}
   category: Office
+  executableName: quieter
   target:
     - AppImage
     - deb
