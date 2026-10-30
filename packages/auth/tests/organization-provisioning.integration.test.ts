@@ -9,7 +9,7 @@ import {
   organization,
   user,
 } from "@quieter/database/schema";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   afterAll,
   beforeAll,
@@ -169,6 +169,51 @@ describe.skipIf(databaseUrl === undefined)(
         )
       ).rejects.toMatchObject({ status: "BAD_REQUEST" });
     });
+
+    test.each([false, true])(
+      "provisioned account reads memberships while its user row is locked, revoked=%s",
+      async (revoked) => {
+        const identity = await createUser();
+        const initial = await ensureUserOrganizationState(identity);
+        organizationIds.push(...initial.organizationIds);
+        await db
+          .delete(member)
+          .where(and(eq(member.userId, identity.id), sql`${revoked}`));
+        const expectedOrganizationIds = initial.organizationIds.filter(
+          () => !revoked
+        );
+        let pending: ReturnType<typeof ensureUserOrganizationState> | undefined;
+        try {
+          await db.transaction(async (holder) => {
+            await holder
+              .select({ id: user.id })
+              .from(user)
+              .where(eq(user.id, identity.id))
+              .for("update");
+            pending = ensureUserOrganizationState(identity);
+            const deadline = Promise.withResolvers<never>();
+            const timer = setTimeout(() => {
+              deadline.reject(
+                new Error("Provisioned account waited for the user lock.")
+              );
+            }, 2000);
+            try {
+              const state = await Promise.race([pending, deadline.promise]);
+              expect(state.organizationIds).toStrictEqual(
+                expectedOrganizationIds
+              );
+            } finally {
+              clearTimeout(timer);
+            }
+          });
+        } finally {
+          await pending;
+        }
+        await expect(
+          db.select().from(member).where(eq(member.userId, identity.id))
+        ).resolves.toHaveLength(expectedOrganizationIds.length);
+      }
+    );
 
     test("supported owner removal survives active and fresh sessions, while an invitation can restore membership", async () => {
       const identity = await createUser();
