@@ -5,6 +5,7 @@ import type { ChatMailContext } from "@quieter/ai/chat-context";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import {
   approvalRequiredToolNames,
+  resolveLinearWriteReview,
   foregroundSnapshotSchema,
   isForegroundClientToolName,
   isCalendarWriteToolName,
@@ -35,6 +36,7 @@ import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appFetch, getApiUrl } from "@quieter/app/runtime";
 import { calendarMutationResultSchema } from "@quieter/calendar";
 import type { RouterOutputs } from "@quieter/orpc";
+import { decodeChatStreamError } from "@quieter/orpc/chat-errors";
 import { Button } from "@quieter/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport, isToolUIPart } from "ai";
@@ -167,7 +169,7 @@ const ChatSession = ({
     ),
     onError: (error) => {
       workspace.control.finish();
-      toastError(error, { boundary: "assistant-chat" });
+      toastError(decodeChatStreamError(error), { boundary: "assistant-chat" });
     },
     onFinish: ({ messages, isAbort, isError }) => {
       for (const message of messages) {
@@ -419,6 +421,29 @@ const ChatSession = ({
                 });
                 return;
               }
+              if (
+                toolName === "linear_write" &&
+                resolveLinearWriteReview({
+                  input: part.input,
+                  transcript: [message],
+                }) === undefined
+              ) {
+                void chat.addToolApprovalResponse({
+                  approved: false,
+                  id: part.approval.id,
+                });
+                return;
+              }
+              if (
+                toolName !== "send_mail" &&
+                toolName !== "save_compose_draft"
+              ) {
+                void chat.addToolApprovalResponse({
+                  approved: true,
+                  id: part.approval.id,
+                });
+                return;
+              }
               const proposed = saveComposeDraftInputSchema.safeParse(
                 part.input
               );
@@ -464,6 +489,13 @@ const ChatSession = ({
             }
           },
           id: part.approval.id,
+          linearReview:
+            toolName === "linear_write"
+              ? resolveLinearWriteReview({
+                  input: part.input,
+                  transcript: [message],
+                })
+              : undefined,
           toolCallId: part.toolCallId,
           toolName: part.type.replace("tool-", ""),
         },

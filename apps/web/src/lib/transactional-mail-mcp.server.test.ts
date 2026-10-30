@@ -123,6 +123,31 @@ describe("transactional mail MCP tools", () => {
   });
 
   test.each([
+    "victim@victim.example ( <sender@attacker.example>",
+    "one@example.com, Two <two@example.com>",
+    "Team: sender@example.com;",
+  ])("rejects ambiguous From before dispatch %s", async (from) => {
+    const sendTransactionalMail = vi.fn<SendTransactionalMail>();
+    const response = await postMcp(createTestHandler(sendTransactionalMail), {
+      id: 1,
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        arguments: {
+          from,
+          subject: "Hello",
+          text: "Hello",
+          to: "to@example.com",
+        },
+        name: "send_email",
+      },
+    });
+    const result = await readToolCallResult(response);
+    expect(result.isError).toBeTruthy();
+    expect(sendTransactionalMail).not.toHaveBeenCalled();
+  });
+
+  test.each([
     {
       attachments: Array.from({ length: MAX_SEND_ATTACHMENTS + 1 }, () => ({
         content: "YQ==",

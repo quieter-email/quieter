@@ -6,6 +6,52 @@ import {
 } from "../src/raw-message";
 
 describe(parseRawMailMessage, () => {
+  test.each(["8bit", "base64", "quoted-printable"])(
+    "handles malformed HTML in %s MIME without changing the stored body",
+    async (encoding) => {
+      const body = "<".repeat(32_000);
+      let encoded = body;
+      if (encoding === "base64") {
+        encoded = Buffer.from(body).toString("base64");
+      } else if (encoding === "quoted-printable") {
+        encoded = body.replaceAll("<", "=3C");
+      }
+      const message = await parseRawMailMessage(
+        [
+          "From: sender@example.com",
+          "Content-Type: text/html; charset=UTF-8",
+          `Content-Transfer-Encoding: ${encoding}`,
+          "",
+          encoded,
+        ].join("\r\n")
+      );
+      expect(message.snippet).toBe(body.slice(0, 240));
+      expect(message.bodyHtml).toBe(body);
+      expect(message.bodyText).toBeUndefined();
+    }
+  );
+
+  test("uses the text alternative rather than stripping HTML", async () => {
+    const message = await parseRawMailMessage(
+      [
+        "From: sender@example.com",
+        'Content-Type: multipart/alternative; boundary="alternative"',
+        "",
+        "--alternative",
+        "Content-Type: text/plain; charset=UTF-8",
+        "",
+        "Plain <text> 東京",
+        "--alternative",
+        "Content-Type: text/html; charset=UTF-8",
+        "",
+        "<p>Different HTML</p>",
+        "--alternative--",
+      ].join("\r\n")
+    );
+    expect(message.snippet).toBe("Plain <text> 東京");
+    expect(message.bodyHtml).toBe("<p>Different HTML</p>");
+  });
+
   test("parses envelope, thread, and body fields from RFC822 mail", async () => {
     const message = await parseRawMailMessage(
       [

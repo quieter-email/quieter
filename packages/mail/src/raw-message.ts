@@ -1,7 +1,31 @@
 import PostalMime, { addressParser } from "postal-mime";
-import type { Address, Email } from "postal-mime";
+import type { Address } from "postal-mime";
 
 import { formatMailSender } from "./compose/sender";
+import { parseSendSender } from "./send";
+import { createMailSnippet } from "./snippet";
+
+export const assertRawMailSender = async (
+  raw: string | Uint8Array,
+  expectedSender: string
+): Promise<string> => {
+  const expected = parseSendSender(expectedSender);
+  const parsed = await PostalMime.parse(raw);
+  const fromHeaders = parsed.headers.filter(({ key }) => key === "from");
+  const sender =
+    fromHeaders.length === 1
+      ? parseSendSender(fromHeaders[0]?.value ?? "")
+      : null;
+  if (
+    expected === null ||
+    sender === null ||
+    sender.address !== expected.address ||
+    parsed.from?.address?.toLowerCase() !== expected.address
+  ) {
+    throw new Error("The message sender does not match its sender identity.");
+  }
+  return expected.address;
+};
 
 export type ParsedRawMailMessage = {
   attachments: {
@@ -75,19 +99,6 @@ const formatAddress = (address: Address | undefined): string | undefined => {
 
 const normalizeBody = (value: string | undefined) => toOptionalTrimmed(value);
 
-const createSnippet = (email: Email) => {
-  const source =
-    email.text ??
-    email.html
-      ?.replaceAll(/<style\b[^>]*>[\s\S]*?<\/style>/giu, " ")
-      .replaceAll(/<script\b[^>]*>[\s\S]*?<\/script>/giu, " ")
-      .replaceAll(/<[^>]+>/gu, " ");
-  const normalized = source?.replaceAll(/\s+/gu, " ").trim();
-  return normalized !== undefined && normalized.length > 0
-    ? normalized.slice(0, 240)
-    : undefined;
-};
-
 export const parseRawMailMessage = async (
   rawMessage: string | ArrayBuffer | Uint8Array | Buffer
 ): Promise<ParsedRawMailMessage> => {
@@ -137,7 +148,7 @@ export const parseRawMailMessage = async (
     messageHeaderId: toOptionalTrimmed(email.messageId),
     references: toOptionalTrimmed(email.references),
     replyTo: formatAddresses(email.replyTo),
-    snippet: createSnippet(email),
+    snippet: createMailSnippet({ bodyHtml: email.html, bodyText: email.text }),
     subject: toOptionalTrimmed(email.subject),
     to: formatAddresses(email.to),
   };

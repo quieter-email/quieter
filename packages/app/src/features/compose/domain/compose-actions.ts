@@ -18,6 +18,7 @@ import {
   splitMailAddressList,
 } from "@quieter/mail/compose/schema";
 import type { ComposeDraftAnchor } from "@quieter/mail/compose/schema";
+import { extractMessageIds } from "@quieter/mail/message-id";
 
 type ComposeActionType = "reply" | "reply-all" | "forward";
 
@@ -177,7 +178,7 @@ const buildReplyContext = (
   )?.trim();
   const references = [
     ...new Set([
-      ...(message.references?.match(/<[^>]+>/gu) ?? []),
+      ...extractMessageIds(message.references),
       ...(messageHeaderId !== undefined && messageHeaderId !== ""
         ? [messageHeaderId]
         : []),

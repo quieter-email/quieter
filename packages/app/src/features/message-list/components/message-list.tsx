@@ -91,6 +91,7 @@ const threadActionSuccessMessage = {
 
 type MessageListHotkeyContext = {
   actionHotkeysEnabled: boolean;
+  canMarkRead: boolean;
   activeMailbox: MailboxCategory;
   activeMessageId: string | null | undefined;
   listNavigationHotkeysEnabled: boolean;
@@ -262,7 +263,7 @@ const buildMessageListHotkeys = (
       );
     },
     hotkey: "Shift+I",
-    options: { enabled: context.actionHotkeysEnabled },
+    options: { enabled: context.actionHotkeysEnabled && context.canMarkRead },
   },
   {
     callback: (event: KeyboardEvent) => {
@@ -275,7 +276,7 @@ const buildMessageListHotkeys = (
       );
     },
     hotkey: "Shift+U",
-    options: { enabled: context.actionHotkeysEnabled },
+    options: { enabled: context.actionHotkeysEnabled && context.canMarkRead },
   },
   {
     callback: (event: KeyboardEvent) => {
@@ -311,9 +312,11 @@ const buildMessageListBulkActions = ({
   runActionThreads,
   actionThreads,
   canSetImportance,
+  canMarkRead,
 }: {
   actionThreads: ThreadListEntry[];
   canSetImportance: boolean;
+  canMarkRead: boolean;
   activeMailbox: MailboxCategory;
   mailboxActions: MessageListProps["mailboxActions"];
   mailboxProvider: MessageListProps["mailboxProvider"];
@@ -400,32 +403,34 @@ const buildMessageListBulkActions = ({
     });
   }
 
-  actions.push(
-    {
-      icon: MailOpen02Icon,
-      id: "mark-threads-read",
-      label: "Mark as Read",
-      onSelect: async () => {
-        await runActionThreads(
-          mailboxActions.markThreadsAsRead,
-          threadActionSuccessMessage.markRead
-        );
+  if (canMarkRead) {
+    actions.push(
+      {
+        icon: MailOpen02Icon,
+        id: "mark-threads-read",
+        label: "Mark as Read",
+        onSelect: async () => {
+          await runActionThreads(
+            mailboxActions.markThreadsAsRead,
+            threadActionSuccessMessage.markRead
+          );
+        },
+        promoted: true,
       },
-      promoted: true,
-    },
-    {
-      icon: Mail01Icon,
-      id: "mark-threads-unread",
-      label: "Mark as Unread",
-      onSelect: async () => {
-        await runActionThreads(
-          mailboxActions.markThreadsAsUnread,
-          threadActionSuccessMessage.markUnread
-        );
-      },
-      promoted: true,
-    }
-  );
+      {
+        icon: Mail01Icon,
+        id: "mark-threads-unread",
+        label: "Mark as Unread",
+        onSelect: async () => {
+          await runActionThreads(
+            mailboxActions.markThreadsAsUnread,
+            threadActionSuccessMessage.markUnread
+          );
+        },
+        promoted: true,
+      }
+    );
+  }
 
   if (mailboxProvider === "gmail" && activeMailbox === "inbox") {
     actions.push({
@@ -570,7 +575,9 @@ const useMessageListInteractions = ({
       thread !== null &&
       selection.selectedThreadIds.size === 0 &&
       thread.unreadCount > 0 &&
-      (context?.mailboxProvider ?? props.mailboxProvider) !== "api" &&
+      (props.mailboxContextsByThreadId
+        ? context?.mailboxActions.canMarkRead === true
+        : props.mailboxActions.canMarkRead) &&
       !isPending
     ) {
       void (async () => {
@@ -589,6 +596,15 @@ const useMessageListInteractions = ({
     selection.openFocusedThread();
   };
 
+  const canMarkRead = getActionThreads(
+    selection.selectedThreads,
+    selection.focusedThread
+  ).every((thread) =>
+    props.mailboxContextsByThreadId
+      ? props.mailboxContextsByThreadId.get(thread.threadId)?.mailboxActions
+          .canMarkRead === true
+      : props.mailboxActions.canMarkRead
+  );
   const actionHotkeysEnabled =
     actionMailboxProvider !== "api" &&
     (props.activeMessageId?.trim() ?? "") === "" &&
@@ -602,6 +618,7 @@ const useMessageListInteractions = ({
         actionHotkeysEnabled,
         activeMailbox: props.activeMailbox,
         activeMessageId: props.activeMessageId,
+        canMarkRead,
         listNavigationHotkeysEnabled,
         mailboxActions: props.mailboxActions,
         mailboxProvider: actionMailboxProvider,
@@ -652,6 +669,7 @@ const useMessageListInteractions = ({
         selection.focusedThread
       ),
       activeMailbox: props.activeMailbox,
+      canMarkRead,
       canSetImportance:
         getActionThreads(
           selection.selectedThreads,

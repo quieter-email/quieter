@@ -1,3 +1,4 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 
@@ -6,6 +7,15 @@ import {
   parseMailSearchWithAi,
   parsedMailSearchSchema,
 } from "../src/parse-mail-search";
+
+const billing: AiBillingContext = {
+  account: null,
+  admittedAt: new Date(),
+  groupId: "test-operation",
+  kind: "team",
+  organizationId: "test-team",
+  usageKind: "aiChat",
+};
 
 const promptSchema = z.object({
   availableLabels: z.array(z.string()),
@@ -28,6 +38,7 @@ describe(parseMailSearchWithAi, () => {
     await parseMailSearchWithAi({
       allowedIsValues: ["archived", "read", "unread"],
       availableLabels: [],
+      billing,
       query: "sent newsletters",
     });
 
@@ -41,6 +52,7 @@ describe(parseMailSearchWithAi, () => {
   test("uses the full default list without restrictions", async () => {
     await parseMailSearchWithAi({
       availableLabels: ["Work Projects"],
+      billing,
       query: "work stuff",
     });
 
@@ -55,6 +67,7 @@ describe(parseMailSearchWithAi, () => {
   test("anchors prompt and system prompt to the same today value", async () => {
     await parseMailSearchWithAi({
       availableLabels: [],
+      billing,
       query: "last week",
     });
 

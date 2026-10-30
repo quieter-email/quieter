@@ -1,6 +1,6 @@
 import { db } from "@quieter/database/client";
 import { mailDomain } from "@quieter/database/schema";
-import { extractMailAddress } from "@quieter/mail/compose/schema";
+import { parseSendSender } from "@quieter/mail/send";
 import { and, eq } from "drizzle-orm";
 
 export class OrganizationMailSendError extends Error {
@@ -14,11 +14,7 @@ export class OrganizationMailSendError extends Error {
 }
 
 const getSenderDomain = (sender: string) => {
-  const domain = extractMailAddress(sender)
-    .trim()
-    .toLowerCase()
-    .split("@")
-    .at(1);
+  const domain = parseSendSender(sender)?.address.split("@").at(1);
 
   if (!domain) {
     throw new OrganizationMailSendError(

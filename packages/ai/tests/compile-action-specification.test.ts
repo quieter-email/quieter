@@ -1,8 +1,18 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { MockLanguageModelV4 } from "ai/test";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { defaultBackgroundModel } from "../src/chat-models";
 import { compileActionSpecification } from "../src/compile-action-specification";
+
+const billing: AiBillingContext = {
+  account: null,
+  admittedAt: new Date(),
+  groupId: "test-operation",
+  kind: "team",
+  organizationId: "test-team",
+  usageKind: "aiChat",
+};
 
 const state = vi.hoisted(() => ({ model: vi.fn<() => MockLanguageModelV4>() }));
 vi.mock(import("../src/openrouter"), async (original) => ({
@@ -58,6 +68,7 @@ describe("action model output boundary", () => {
     state.model.mockReturnValue(model);
     const input = {
       abortSignal: AbortSignal.timeout(5000),
+      billing,
       model: defaultBackgroundModel,
       onUsage: vi.fn<() => void>(),
       prompt: "User prompt",

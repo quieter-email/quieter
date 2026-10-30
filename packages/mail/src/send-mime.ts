@@ -1,10 +1,11 @@
 import MailComposer from "nodemailer/lib/mail-composer";
 
 import { serializeOtpToken } from "./otp-token";
+import { assertRawMailSender } from "./raw-message";
 import {
-  getSendEnvelopeAddress,
   getSendEnvelopeAddressList,
   normalizeSendHeaders,
+  parseSendSender,
   sendAttachmentListResourcesSchema,
 } from "./send";
 import type { SendHeader, SendMessageInput } from "./send";
@@ -38,7 +39,11 @@ export const buildSendMimeMessage = async (
   }
 ): Promise<BuiltSendMimeMessage> => {
   sendAttachmentListResourcesSchema.parse(message.attachments);
-  const fromAddress = getSendEnvelopeAddress(message.from);
+  const sender = parseSendSender(message.from);
+  if (sender === null) {
+    throw new Error("Enter a single sender email address.");
+  }
+  const fromAddress = sender.address;
   const domain = fromAddress.split("@").at(1) ?? "quieter.email";
   const messageHeaderId =
     options?.messageId ?? `<${crypto.randomUUID()}@${domain}>`;
@@ -68,7 +73,7 @@ export const buildSendMimeMessage = async (
     date: options?.sentAt ?? new Date(),
     disableFileAccess: true,
     disableUrlAccess: true,
-    from: message.from,
+    from: sender,
     headers: headers.map(({ name, value }) => ({
       key: name,
       value:
@@ -89,6 +94,7 @@ export const buildSendMimeMessage = async (
   })
     .compile()
     .build();
+  await assertRawMailSender(raw, fromAddress);
   return {
     attachmentSizeBytes: attachments.reduce(
       (total, attachment) => total + attachment.bytes.byteLength,

@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@openrouter/ai-sdk-provider": "catalog:",
+    "@quieter/billing": "workspace:*",
     "@quieter/calendar": "workspace:*",
     "@quieter/env": "workspace:*",
     "@quieter/mail": "workspace:*",
