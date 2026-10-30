@@ -97,7 +97,7 @@ const SearchDropdownRow = ({
   return (
     <button
       className={cn(
-        "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden",
+        "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
         className,
         {
           "bg-accent": active && !className && !customColor,
@@ -459,7 +459,7 @@ export const MessageListSearchDropdown = ({
                       aria-expanded={showLabelsSubmenu}
                       aria-haspopup="true"
                       className={cn(
-                        "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden",
+                        "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
                         {
                           "bg-accent": selectedUserLabelStates.size > 0,
                           "bg-muted": isLabelHighlighted,
