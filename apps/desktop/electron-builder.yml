@@ -29,6 +29,7 @@ nsis:
   shortcutName: quieter
 linux:
   category: Office
+  executableName: quieter
   target:
     - AppImage
     - deb
