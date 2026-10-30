@@ -1,6 +1,7 @@
 /* oxlint-disable eslint/require-await -- Persistence and provider doubles keep asynchronous contracts without network I/O. */
 import { ORPCError } from "@orpc/server";
 import { actionSpecificationSchema } from "@quieter/ai/action-specification";
+import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { MockLanguageModelV4 } from "ai/test";
 import type * as Drizzle from "drizzle-orm";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
@@ -59,6 +60,8 @@ vi.mock("drizzle-orm", async (original) => ({
   },
   inArray: (column: { name: string }, values: unknown[]) => (row: Row) =>
     values.includes(row[column.name]),
+  isNull: (column: { name: string }) => (row: Row) =>
+    row[column.name] === null || row[column.name] === undefined,
   lt: (column: { name: string }, value: Date) => (row: Row) => {
     const current = row[column.name];
     return current instanceof Date && current < value;
@@ -859,3 +862,16 @@ describe("durable background action execution", () => {
     }
   );
 });
+
+vi.mock(import("@quieter/billing/ai-reservation"), () => ({
+  createMailboxAiBillingContext: vi
+    .fn<typeof createMailboxAiBillingContext>()
+    .mockResolvedValue({
+      account: null,
+      admittedAt: new Date(),
+      groupId: "fixture",
+      kind: "team",
+      organizationId: "test-team",
+      usageKind: "aiChat",
+    }),
+}));

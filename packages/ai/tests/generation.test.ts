@@ -1,3 +1,4 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { NoObjectGeneratedError, NoOutputGeneratedError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
@@ -6,6 +7,15 @@ import { z } from "zod";
 import type { AiUsageReport } from "../src/chat-usage";
 import { runStructuredGeneration } from "../src/generation";
 import { classifyMailImportance } from "../src/mail-importance";
+
+const billing: AiBillingContext = {
+  account: null,
+  admittedAt: new Date(),
+  groupId: "test-operation",
+  kind: "team",
+  organizationId: "test-team",
+  usageKind: "aiChat",
+};
 
 const state = vi.hoisted(() => ({
   model: vi.fn<() => MockLanguageModelV4>(),
@@ -64,7 +74,11 @@ describe("structured generation recovery", () => {
     const onUsage = vi.fn<(usage: AiUsageReport) => void>();
 
     await expect(
-      runStructuredGeneration({ ...generationInput, onUsage })
+      runStructuredGeneration({
+        billing,
+        ...generationInput,
+        onUsage,
+      })
     ).resolves.toMatchObject({ value: 42 });
 
     expect(model.doGenerateCalls).toHaveLength(2);
@@ -87,7 +101,11 @@ describe("structured generation recovery", () => {
     const onUsage = vi.fn<(usage: AiUsageReport) => void>();
 
     await expect(
-      runStructuredGeneration({ ...generationInput, onUsage })
+      runStructuredGeneration({
+        billing,
+        ...generationInput,
+        onUsage,
+      })
     ).rejects.toThrow(NoOutputGeneratedError);
 
     expect(model.doGenerateCalls).toHaveLength(2);
@@ -111,7 +129,11 @@ describe("structured generation recovery", () => {
       state.model.mockReturnValue(model);
       const onUsage = vi.fn<(usage: AiUsageReport) => void>();
 
-      await runStructuredGeneration({ ...generationInput, onUsage });
+      await runStructuredGeneration({
+        billing,
+        ...generationInput,
+        onUsage,
+      });
 
       expect(onUsage).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ costUsd: undefined, promptTokens: 20 })
@@ -127,7 +149,11 @@ describe("structured generation recovery", () => {
     const onUsage = vi.fn<(usage: AiUsageReport) => void>();
 
     await expect(
-      runStructuredGeneration({ ...generationInput, onUsage })
+      runStructuredGeneration({
+        billing,
+        ...generationInput,
+        onUsage,
+      })
     ).rejects.toThrow(NoObjectGeneratedError);
 
     expect(model.doGenerateCalls).toHaveLength(1);
@@ -153,7 +179,11 @@ describe("structured generation recovery", () => {
       const onUsage = vi.fn<(usage: AiUsageReport) => void>();
 
       await expect(
-        runStructuredGeneration({ ...generationInput, onUsage })
+        runStructuredGeneration({
+          billing,
+          ...generationInput,
+          onUsage,
+        })
       ).resolves.toMatchObject({ value: 42 });
 
       expect(onUsage).toHaveBeenCalledExactlyOnceWith(
@@ -181,6 +211,7 @@ describe("structured generation recovery", () => {
 
     await expect(
       classifyMailImportance({
+        billing,
         context: null,
         message: { id: "synthetic-message", subject: "Routine update" },
         onUsage,
@@ -200,7 +231,11 @@ describe("structured generation recovery", () => {
     const onUsage = vi.fn<(usage: AiUsageReport) => void>();
 
     await expect(
-      runStructuredGeneration({ ...generationInput, onUsage })
+      runStructuredGeneration({
+        billing,
+        ...generationInput,
+        onUsage,
+      })
     ).rejects.toThrow(NoObjectGeneratedError);
 
     expect(model.doGenerateCalls).toHaveLength(2);
@@ -223,7 +258,11 @@ describe("structured generation recovery", () => {
       const onUsage = vi.fn<(usage: AiUsageReport) => void>();
 
       await expect(
-        runStructuredGeneration({ ...generationInput, onUsage })
+        runStructuredGeneration({
+          billing,
+          ...generationInput,
+          onUsage,
+        })
       ).rejects.toThrow(NoObjectGeneratedError);
 
       expect(model.doGenerateCalls).toHaveLength(1);
@@ -247,6 +286,7 @@ describe("structured generation recovery", () => {
 
       await expect(
         classifyMailImportance({
+          billing,
           context: null,
           message: { id: "synthetic-message" },
           onUsage,
@@ -273,7 +313,11 @@ describe("structured generation recovery", () => {
       const onUsage = vi.fn<(usage: AiUsageReport) => void>();
 
       await expect(
-        runStructuredGeneration({ ...generationInput, onUsage })
+        runStructuredGeneration({
+          billing,
+          ...generationInput,
+          onUsage,
+        })
       ).rejects.toBe(finalError);
 
       expect(model.doGenerateCalls).toHaveLength(2);
@@ -297,7 +341,11 @@ describe("structured generation recovery", () => {
       const onUsage = vi.fn<(usage: AiUsageReport) => void>();
 
       await expect(
-        runStructuredGeneration({ ...generationInput, onUsage })
+        runStructuredGeneration({
+          billing,
+          ...generationInput,
+          onUsage,
+        })
       ).rejects.toBe(error);
 
       expect(model.doGenerateCalls).toHaveLength(1);
@@ -324,6 +372,7 @@ describe("structured generation recovery", () => {
 
       await expect(
         runStructuredGeneration({
+          billing,
           ...generationInput,
           abortSignal: controller.signal,
           onUsage,

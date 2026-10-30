@@ -1,0 +1,55 @@
+name: Recover AI credit reservation
+
+on:
+  workflow_dispatch:
+    inputs:
+      request:
+        description: Single reservation JSON command from docs/billing.md, inspect first
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quieter-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require trusted deployed main revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$GITHUB_ACTOR/permission" --jq '.permission')" = admin
+          test "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$GITHUB_TRIGGERING_ACTOR/permission" --jq '.permission')" = admin
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA"
+          result=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sst-deploy.yml/runs?branch=main&per_page=1" --jq '.workflow_runs[0] | [.head_sha, .conclusion] | join(" ")')
+          test "$result" = "$GITHUB_SHA success"
+      - uses: ./.github/actions/setup
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: eu-central-1
+      - name: Inspect or resolve one reservation through linked SST Secrets
+        env:
+          RECOVERY_REQUEST: ${{ inputs.request }}
+        run: |
+          vp run @quieter/env#build
+          vp run @quieter/observability#build
+          vp exec sst shell --stage production -- node scripts/ai-credit-recovery.ts "$RECOVERY_REQUEST" "github-run:$GITHUB_RUN_ID:$GITHUB_TRIGGERING_ACTOR"

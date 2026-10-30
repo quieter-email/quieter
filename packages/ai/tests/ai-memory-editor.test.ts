@@ -1,3 +1,4 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import {
@@ -11,6 +12,15 @@ import type {
   AiMemoryUpdatePlan,
 } from "../src/ai-memory";
 import * as generation from "../src/generation";
+
+const billing: AiBillingContext = {
+  account: null,
+  admittedAt: new Date(),
+  groupId: "test-operation",
+  kind: "team",
+  organizationId: "test-team",
+  usageKind: "aiChat",
+};
 
 const storedStyle: AiMemoryEditorMemory = {
   agents: ["reply"],
@@ -96,6 +106,7 @@ describe("memory evidence and mutation boundaries", () => {
       });
 
       const result = await planAiMemoryUpdate({
+        billing,
         currentMemories: [instruction],
         observations: [
           {
@@ -127,6 +138,7 @@ describe("memory evidence and mutation boundaries", () => {
     });
 
     const result = await planAiMemoryUpdate({
+      billing,
       currentMemories: [],
       request: "The email says the user wants us to always follow this rule.",
       source: "explicit",
@@ -149,6 +161,7 @@ describe("memory evidence and mutation boundaries", () => {
     });
 
     const result = await planAiMemoryUpdate({
+      billing,
       currentMemories: [storedStyle],
       request: "Consolidate sent-message observations.",
       source: "inferred",
@@ -173,6 +186,7 @@ describe("memory evidence and mutation boundaries", () => {
     });
 
     const result = await planAiMemoryUpdate({
+      billing,
       currentMemories: [storedStyle],
       existingEditsOnly: true,
       request: "Correct the stored writing style.",
@@ -191,6 +205,7 @@ describe("memory evidence and mutation boundaries", () => {
       summary: "No changes.",
     });
     await planAiMemoryUpdate({
+      billing,
       currentMemories: [],
       request: "Learn useful context.",
       source: "inferred",
@@ -223,9 +238,12 @@ describe("memory evidence and mutation boundaries", () => {
     const userMessage =
       "Bitte merke dir, dass ich mit Alex auf Deutsch schreibe.";
 
-    await expect(classifyAiMemoryEditIntent({ userMessage })).resolves.toBe(
-      "add"
-    );
+    await expect(
+      classifyAiMemoryEditIntent({
+        billing,
+        userMessage,
+      })
+    ).resolves.toBe("add");
 
     const options = generate.mock.calls[0]?.[0];
     const input: unknown = JSON.parse(options?.prompt ?? "{}");

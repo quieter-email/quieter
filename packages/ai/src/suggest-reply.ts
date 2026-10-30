@@ -1,3 +1,4 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { z } from "zod";
 
 import type { ChatModel } from "./chat-models";
@@ -38,11 +39,13 @@ export const suggestReply = async (input: {
   memoryContext: string | null;
   messages: ReplyConversationMessage[];
   model: ChatModel;
+  billing: AiBillingContext;
   onUsage: (usage: AiUsageReport) => void;
   replyToMessageId: string;
 }): Promise<ReplySuggestion> => {
   const result = await runStructuredGeneration({
     abortSignal: input.abortSignal,
+    billing: input.billing,
     maxOutputTokens: 1200,
     model: input.model,
     onUsage: input.onUsage,

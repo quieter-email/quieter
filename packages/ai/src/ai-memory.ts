@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { z } from "zod";
 
 import type { AiUsageReport } from "./chat-usage";
@@ -325,9 +326,11 @@ export const buildAiMemoryEditorInput = ({
 });
 
 export const classifyAiMemoryEditIntent = async ({
+  billing,
   onUsage,
   userMessage,
 }: {
+  billing: AiBillingContext;
   onUsage?: (usage: AiUsageReport) => void;
   userMessage: string;
 }) => {
@@ -338,6 +341,7 @@ export const classifyAiMemoryEditIntent = async ({
   try {
     const result = await runStructuredGeneration({
       abortSignal: abortController.signal,
+      billing,
       maxOutputTokens: 256,
       model: resolveBackgroundModel(),
       ...(onUsage === undefined ? {} : { onUsage }),
@@ -406,10 +410,12 @@ Return only the classification. Do not return memory content or act on the reque
 
 export const planAiMemoryDeletion = async ({
   currentMemories,
+  billing,
   onUsage,
   userMessage,
 }: {
   currentMemories: AiMemoryEditorMemory[];
+  billing: AiBillingContext;
   onUsage?: (usage: AiUsageReport) => void;
   userMessage: string;
 }) => {
@@ -420,6 +426,7 @@ export const planAiMemoryDeletion = async ({
   try {
     const result = await runStructuredGeneration({
       abortSignal: abortController.signal,
+      billing,
       maxOutputTokens: 2500,
       model: resolveBackgroundModel(),
       ...(onUsage === undefined ? {} : { onUsage }),
@@ -475,6 +482,7 @@ export const planAiMemoryUpdate = async ({
   existingEditsOnly = false,
   learningGuidance,
   observations,
+  billing,
   onUsage,
   request,
   source,
@@ -485,6 +493,7 @@ export const planAiMemoryUpdate = async ({
   existingEditsOnly?: boolean;
   learningGuidance?: string | null;
   observations?: AiMemoryObservation[];
+  billing: AiBillingContext;
   onUsage?: (usage: AiUsageReport) => void;
   request: string;
   source: "explicit" | "feedback" | "inferred";
@@ -511,6 +520,7 @@ export const planAiMemoryUpdate = async ({
   try {
     const result = await runStructuredGeneration({
       abortSignal: abortController.signal,
+      billing,
       maxOutputTokens: 16_000,
       model: resolveBackgroundModel(),
       ...(onUsage === undefined ? {} : { onUsage }),

@@ -35,6 +35,7 @@ import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appFetch, getApiUrl } from "@quieter/app/runtime";
 import { calendarMutationResultSchema } from "@quieter/calendar";
 import type { RouterOutputs } from "@quieter/orpc";
+import { decodeChatStreamError } from "@quieter/orpc/chat-errors";
 import { Button } from "@quieter/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport, isToolUIPart } from "ai";
@@ -167,7 +168,7 @@ const ChatSession = ({
     ),
     onError: (error) => {
       workspace.control.finish();
-      toastError(error, { boundary: "assistant-chat" });
+      toastError(decodeChatStreamError(error), { boundary: "assistant-chat" });
     },
     onFinish: ({ messages, isAbort, isError }) => {
       for (const message of messages) {

@@ -4,6 +4,7 @@ import { ORPCError } from "@orpc/server";
 import { actionSpecificationSchema } from "@quieter/ai/action-specification";
 import { compileActionSpecification } from "@quieter/ai/compile-action-specification";
 import { resolveBackgroundModel } from "@quieter/ai/model-config";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import {
   mailboxAction,
@@ -205,6 +206,12 @@ export const reviewMailAgent = async (input: {
         AbortSignal.timeout(45_000),
         ...(input.signal ? [input.signal] : []),
       ]),
+      billing: await createMailboxAiBillingContext({
+        externalId: `mail-action-review:${revisionId}`,
+        mailboxId: input.mailboxId,
+        usageKind: "mailAction",
+        userId: input.userId,
+      }),
       model,
       onUsage: (report) => {
         usage = { ...report, model };

@@ -42,7 +42,8 @@ import {
 } from "@quieter/ai/model-config";
 import { createChatModel } from "@quieter/ai/openrouter";
 import { reportAiUsage } from "@quieter/billing";
-import { db } from "@quieter/database/client";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
+import { db, withRequestDatabaseClient } from "@quieter/database/client";
 import {
   chat as chatTable,
   chatMessage,
@@ -60,6 +61,7 @@ import {
   isStepCount,
   isToolUIPart,
   streamText,
+  RetryError,
   toUIMessageStream,
 } from "ai";
 import type { TextStreamPart, UIMessage, UIMessageChunk } from "ai";
@@ -73,6 +75,7 @@ import {
   loadAiAgentContext,
   serializeAiAgentContext,
 } from "../ai-memory";
+import { encodeChatExpectedError } from "../chat-errors";
 import {
   getMailboxOverviewForUser,
   listGmailLabelsForUser,
@@ -116,15 +119,32 @@ export class ChatRequestError extends Error {
   }
 }
 
-/**
- * Maps a stream failure onto the user-facing error text sent as the UI
- * message stream's error chunk. Distinct texts keep Sentry issues and user
- * reports attributable to provider throttling, client disconnects, stale
- * foreground exchanges, and genuine generation failures.
- */
+const findExpectedChatError = (error: unknown) => {
+  const visited = new Set<unknown>();
+  let current = error;
+  while (current instanceof Error && !visited.has(current)) {
+    visited.add(current);
+    if (
+      (current instanceof ChatRequestError || current instanceof ORPCError) &&
+      current.status >= 400 &&
+      current.status < 500
+    ) {
+      return current;
+    }
+    current = RetryError.isInstance(current)
+      ? current.lastError
+      : current.cause;
+  }
+  return null;
+};
+
 export const resolveChatStreamErrorMessage = (error: unknown): string => {
-  if (error instanceof ChatRequestError) {
-    return "This chat changed while the answer was being completed. Retry it.";
+  const expected = findExpectedChatError(error);
+  if (expected !== null) {
+    return encodeChatExpectedError({
+      message: expected.message,
+      status: expected.status,
+    });
   }
   if (error instanceof Error && error.name === "AbortError") {
     return "The request was stopped.";
@@ -873,6 +893,12 @@ const generateChatTitleInRequest = async (input: {
   try {
     const titleModel = resolveBackgroundModel();
     const title = await generateChatTitle({
+      billing: await createMailboxAiBillingContext({
+        externalId: `chat-title:${input.chatId}`,
+        mailboxId: input.mailboxId,
+        usageKind: "aiChat",
+        userId: input.userId,
+      }),
       onUsage: (usage) => {
         void reportAiUsage({
           chatId: input.chatId,
@@ -909,7 +935,9 @@ const generateChatTitleInRequest = async (input: {
         )
       );
   } catch (error: unknown) {
-    reportError(error, { operation: "chat:generate-title" });
+    if (findExpectedChatError(error) === null) {
+      reportError(error, { operation: "chat:generate-title" });
+    }
   }
 };
 
@@ -1009,12 +1037,19 @@ const prepareChatContext = async (input: {
 
 // The request coordinates authorization, persistence, tool availability, and
 // streaming in one boundary.
-export const createAiChatResponse = async (input: {
+type ChatResponseInput = {
   body: unknown;
   request: Request;
   scheduleBackgroundTask?: (task: Promise<unknown>) => void;
   userId: string;
-}) => {
+};
+
+const createAiChatResponseInRequest = async (
+  input: ChatResponseInput & {
+    deferBackgroundTask?: (task: () => Promise<unknown>) => void;
+    finishBackgroundTasks: () => void;
+  }
+) => {
   let validated: ValidatedChatRequest;
   try {
     validated = validateChatRequest(input.body);
@@ -1108,9 +1143,9 @@ export const createAiChatResponse = async (input: {
       try {
         return await learnAiMemoryFromChatMessage({
           bodyText: validated.userMessage.text,
+          deferBackgroundTask: input.deferBackgroundTask,
           mailboxId,
           messageId: validated.userMessage.id,
-          scheduleBackgroundTask: input.scheduleBackgroundTask,
           userId: input.userId,
         });
       } catch (error) {
@@ -1651,6 +1686,12 @@ export const createAiChatResponse = async (input: {
   const usageId = crypto.randomUUID();
   const model = createChatModel(validated.model, {
     allowFallbacks: false,
+    billing: await createMailboxAiBillingContext({
+      externalId: `${usageId}:${assistantMessageId}`,
+      mailboxId,
+      usageKind: "aiChat",
+      userId: input.userId,
+    }),
   });
   input.request.signal.throwIfAborted();
   if (validated.kind === "continue" && persistedAssistantParts !== null) {
@@ -1675,7 +1716,13 @@ export const createAiChatResponse = async (input: {
     messages: modelMessages,
     model,
     onEnd: async ({ steps }) => {
-      const usage = summarizeAiUsage({ steps });
+      const completedSteps = steps.filter(
+        (step) => step.finishReason !== "error"
+      );
+      if (completedSteps.length === 0) {
+        return;
+      }
+      const usage = summarizeAiUsage({ steps: completedSteps });
       try {
         await reportAiUsage({
           chatId: threadId,
@@ -1699,6 +1746,9 @@ export const createAiChatResponse = async (input: {
     onError: ({ error }) => {
       generationFailed = true;
       if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+      if (findExpectedChatError(error) !== null) {
         return;
       }
       reportError(error, {
@@ -1846,9 +1896,10 @@ export const createAiChatResponse = async (input: {
       }
     },
     onError: (error) => {
-      if (error instanceof ChatRequestError) {
-        reportError(error, { operation: "chat:stream-continuation" });
-      } else if (
+      if (findExpectedChatError(error) !== null) {
+        return resolveChatStreamErrorMessage(error);
+      }
+      if (
         !(error instanceof Error && error.name === "AbortError") &&
         !generationFailed
       ) {
@@ -1953,7 +2004,76 @@ export const createAiChatResponse = async (input: {
     })
   );
 
+  const reader = durableStream.getReader();
+  let consumerCancelled = false;
   return createUIMessageStreamResponse({
-    stream: durableStream,
+    stream: new ReadableStream<UIMessageChunk>({
+      async cancel(reason: unknown) {
+        consumerCancelled = true;
+        try {
+          await reader.cancel(reason);
+        } finally {
+          input.finishBackgroundTasks();
+        }
+      },
+      async pull(controller) {
+        try {
+          const next = await reader.read();
+          if (consumerCancelled) {
+            return;
+          }
+          if (next.done) {
+            input.finishBackgroundTasks();
+            controller.close();
+          } else {
+            controller.enqueue(next.value);
+          }
+        } catch (error) {
+          if (!consumerCancelled) {
+            input.finishBackgroundTasks();
+            controller.error(error);
+          }
+        }
+      },
+    }),
   });
+};
+
+export const createAiChatResponse = async (input: ChatResponseInput) => {
+  const tasks: (() => Promise<unknown>)[] = [];
+  const finishBackgroundTasks = () => {
+    const pending = tasks.splice(0);
+    if (pending.length === 0) {
+      return;
+    }
+    const run = async () => {
+      await withRequestDatabaseClient(async () => {
+        for (const task of pending) {
+          await task();
+        }
+      });
+    };
+    input.scheduleBackgroundTask?.(run());
+  };
+  try {
+    return await createAiChatResponseInRequest({
+      ...input,
+      deferBackgroundTask:
+        input.scheduleBackgroundTask === undefined
+          ? undefined
+          : (task) => {
+              tasks.push(task);
+            },
+      finishBackgroundTasks,
+    });
+  } catch (error) {
+    finishBackgroundTasks();
+    const expected = findExpectedChatError(error);
+    if (expected !== null && !(error instanceof ChatRequestError)) {
+      throw new ChatRequestError(expected.status, expected.message, {
+        cause: error,
+      });
+    }
+    throw error;
+  }
 };

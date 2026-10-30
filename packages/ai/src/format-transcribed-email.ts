@@ -1,17 +1,22 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
+
 import type { AiUsageReport } from "./chat-usage";
 import { runTextGeneration } from "./generation";
 import { resolveBackgroundModel } from "./model-config";
 
 export const formatTranscribedEmail = async ({
   memoryContext,
+  billing,
   onUsage,
   transcript,
 }: {
   memoryContext?: string | null;
+  billing: AiBillingContext;
   onUsage?: (usage: AiUsageReport) => void;
   transcript: string;
 }) => {
   const result = await runTextGeneration({
+    billing,
     maxOutputTokens: 700,
     model: resolveBackgroundModel(),
     ...(onUsage === undefined ? {} : { onUsage }),

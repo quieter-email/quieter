@@ -6,6 +6,8 @@ import type {
   AutomationMailMessage,
   MailAutoLabelCandidate,
 } from "@quieter/ai/classify-gmail-message";
+import { isAiCreditAdmissionBusy } from "@quieter/ai/errors";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
 import {
@@ -329,6 +331,12 @@ const processManagedAutoLabelMessage = async (input: {
         aiLabels.length === 0
           ? []
           : await classifyMailMessage({
+              billing: await createMailboxAiBillingContext({
+                externalId: event.id,
+                mailboxId: input.mailboxId,
+                usageKind: "autoLabel",
+                userId: input.userId,
+              }),
               labelHistory,
               labels: aiLabels,
               memoryContext:
@@ -412,7 +420,9 @@ const processManagedAutoLabelMessage = async (input: {
         updatedAt: now,
       })
       .where(eq(gmailAutoLabelEvent.id, event.id));
-    reportError(error, { operation: "managed-mail:auto-label-message" });
+    if (!isAiCreditAdmissionBusy(error)) {
+      reportError(error, { operation: "managed-mail:auto-label-message" });
+    }
   }
 };
 

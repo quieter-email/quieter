@@ -19,8 +19,10 @@ import type {
 } from "@quieter/ai/ai-memory";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import { AUTO_LABEL_MODEL } from "@quieter/ai/classify-gmail-message";
+import { isAiCreditAdmissionBusy } from "@quieter/ai/errors";
 import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import { reportAiUsage } from "@quieter/billing";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { getBillingCreditUsage } from "@quieter/billing/credits";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
@@ -1051,14 +1053,7 @@ const createUsageCollector = () => {
     collect: (usage: AiUsageReport) => {
       collected = usage;
     },
-    usage: (): AiUsageReport =>
-      collected ?? {
-        cacheWriteTokens: 0,
-        cachedTokens: 0,
-        completionTokens: 0,
-        costUsd: undefined,
-        promptTokens: 0,
-      },
+    usage: () => collected,
   };
 };
 
@@ -1070,9 +1065,12 @@ const reportMemoryUsage = async ({
 }: {
   externalId: string;
   mailboxId?: string | null;
-  usage: AiUsageReport;
+  usage: AiUsageReport | undefined;
   userId: string;
 }) => {
+  if (usage === undefined) {
+    return;
+  }
   try {
     await reportAiUsage({
       completionTokens: usage.completionTokens,
@@ -1151,6 +1149,12 @@ const planRequestedAiMemoryUpdate = async ({
     try {
       plans.push(
         await planAiMemoryUpdate({
+          billing: await createMailboxAiBillingContext({
+            externalId: `ai-memory-request:${requestId}:${offset}`,
+            mailboxId,
+            usageKind: "aiMemory",
+            userId,
+          }),
           currentMemories: current
             .slice(offset, offset + pageSize)
             .map(toEditorMemory),
@@ -1381,6 +1385,12 @@ const forgetSensitiveAiMemory = async (input: {
     try {
       targetIds.push(
         ...(await planAiMemoryDeletion({
+          billing: await createMailboxAiBillingContext({
+            externalId: `ai-memory-chat-forget:${input.messageId}:${offset}`,
+            mailboxId: input.mailboxId,
+            usageKind: "aiMemory",
+            userId: input.userId,
+          }),
           currentMemories: current
             .slice(offset, offset + 100)
             .map(toEditorMemory),
@@ -1488,6 +1498,12 @@ const planExistingAiMemoryFromChatMessage = async (input: {
     const usage = createUsageCollector();
     try {
       const plan = await planAiMemoryUpdate({
+        billing: await createMailboxAiBillingContext({
+          externalId: `ai-memory-chat-edit:${input.messageId}:${offset}`,
+          mailboxId: input.mailboxId,
+          usageKind: "aiMemory",
+          userId: input.userId,
+        }),
         currentMemories: batch.map(toEditorMemory),
         existingEditsOnly: true,
 
@@ -1526,7 +1542,7 @@ const learnPersonalAiMemoryFromChatMessage = async (input: {
   bodyText: string;
   mailboxId: string;
   messageId: string;
-  scheduleBackgroundTask?: (task: Promise<unknown>) => void;
+  deferBackgroundTask?: (task: () => Promise<unknown>) => void;
   userId: string;
 }) => {
   const text = input.bodyText.trim();
@@ -1547,20 +1563,18 @@ const learnPersonalAiMemoryFromChatMessage = async (input: {
     });
     if (
       result.status === "recorded" &&
-      input.scheduleBackgroundTask !== undefined
+      input.deferBackgroundTask !== undefined
     ) {
-      input.scheduleBackgroundTask(
-        (async () => {
-          try {
-            // oxlint-disable-next-line eslint/no-use-before-define
-            await refreshAiMemoryFromEvent({ eventId: result.eventId });
-          } catch (error) {
-            if (!(error instanceof ORPCError) || error.status >= 500) {
-              reportError(error, { operation: "chat:learn-personal-context" });
-            }
+      input.deferBackgroundTask(async () => {
+        try {
+          // oxlint-disable-next-line eslint/no-use-before-define
+          await refreshAiMemoryFromEvent({ eventId: result.eventId });
+        } catch (error) {
+          if (!(error instanceof ORPCError) || error.status >= 500) {
+            reportError(error, { operation: "chat:learn-personal-context" });
           }
-        })()
-      );
+        }
+      });
     }
     return { status: result.status };
   }
@@ -1590,6 +1604,12 @@ export const learnAiMemoryFromChatMessage = async (
     const usage = createUsageCollector();
     try {
       editIntent = await classifyAiMemoryEditIntent({
+        billing: await createMailboxAiBillingContext({
+          externalId: `ai-memory-chat-edit-intent:${input.messageId}`,
+          mailboxId: input.mailboxId,
+          usageKind: "aiMemory",
+          userId: input.userId,
+        }),
         onUsage: usage.collect,
         userMessage: text,
       });
@@ -2004,6 +2024,12 @@ export const refreshAiMemoryFromEvent = async ({
       scope,
     });
     const plan = await planAiMemoryUpdate({
+      billing: await createMailboxAiBillingContext({
+        externalId: `ai-memory-event:${event.id}`,
+        mailboxId: event.mailboxId,
+        usageKind: "aiMemory",
+        userId: event.userId,
+      }),
       currentMemories: current.map(toEditorMemory),
       learningGuidance: config.learningPrompt,
 
@@ -2043,7 +2069,10 @@ export const refreshAiMemoryFromEvent = async ({
     });
     return { status: "refreshed" as const };
   } catch (error) {
-    if (!(error instanceof ORPCError) || error.code !== "CONFLICT") {
+    if (
+      !isAiCreditAdmissionBusy(error) &&
+      (!(error instanceof ORPCError) || error.status >= 500)
+    ) {
       reportError(new Error("Memory observation consolidation failed."), {
         operation: "ai-memory:consolidate-observations",
       });

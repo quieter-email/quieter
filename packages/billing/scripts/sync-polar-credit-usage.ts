@@ -1,5 +1,6 @@
 import { serverEnv } from "@quieter/env/server";
 
+import { reconcileAiCreditReservations } from "../src/ai-reservation.ts";
 import { syncUnreportedBillingCreditUsage } from "../src/credits.ts";
 
 const limit = Number(serverEnv.POLAR_CREDIT_USAGE_SYNC_LIMIT ?? 100);
@@ -25,6 +26,7 @@ const syncAllCreditUsage = async (): Promise<void> => {
   await syncAllCreditUsage();
 };
 
+await reconcileAiCreditReservations({ limit });
 await syncAllCreditUsage();
 
 process.stdout.write(`Synced ${totalSynced} credit usage events to Polar.\n`);
