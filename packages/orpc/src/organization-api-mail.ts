@@ -18,6 +18,7 @@ import type {
 } from "@quieter/mail/messages";
 import type { SendHeader } from "@quieter/mail/send";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
+import { createMailSnippet } from "@quieter/mail/snippet";
 import {
   and,
   asc,
@@ -205,16 +206,6 @@ const getMessageMailboxState = async (input: {
   );
 };
 
-const createSnippet = (input: { bodyHtml?: string; bodyText?: string }) => {
-  const rawBody =
-    input.bodyText ?? input.bodyHtml?.replaceAll(/<[^>]+>/gu, " ");
-  if (!rawBody) {
-    return null;
-  }
-  const trimmed = rawBody.replaceAll(/\s+/gu, " ").trim().slice(0, 240);
-  return trimmed || null;
-};
-
 const toMessageListItem = async (
   record: typeof organizationApiMailMessage.$inferSelect,
   options: {
@@ -329,10 +320,12 @@ export const recordOrganizationApiMailMessage = async (input: {
     const senderAddress = normalizeEmailAddress(
       input.senderAddress ?? extractMailAddress(input.sender)
     );
-    const snippet = createSnippet({
-      bodyHtml: input.bodyHtml,
-      bodyText: input.bodyText,
-    });
+    const snippet =
+      createMailSnippet({
+        bodyHtml: input.bodyHtml,
+        bodyText: input.bodyText,
+        includeScriptAndStyleText: true,
+      }) ?? null;
     const bccJoined = input.bcc?.join(", ");
     const ccJoined = input.cc?.join(", ");
     const replyToJoined = input.replyTo?.join(", ");

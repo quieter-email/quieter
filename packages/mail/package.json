@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./snippet": "./src/snippet.ts",
     "./delivery": "./src/delivery.ts",
     "./live-sync": "./src/live-sync.ts",
     "./data-plane": "./src/data-plane.ts",

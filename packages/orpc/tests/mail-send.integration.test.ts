@@ -13,6 +13,7 @@ import {
   managedMailRuleRun,
   member,
   organization,
+  organizationApiMailMessage,
   organizationMailSendIdempotency,
   organizationMailUsageSettings,
   user,
@@ -39,6 +40,7 @@ import {
 
 import { recordAiGeneratedMailBody } from "../src/ai-mail-authorship";
 import { recoverMailSends, sendPreparedMail } from "../src/mail-send";
+import { recordOutboundManagedMessageForSender } from "../src/managed-mail/messages/outbound";
 import {
   cleanupMailObjects,
   storeRawMailObject,
@@ -56,6 +58,7 @@ import {
 import {
   getOrganizationApiMailboxId,
   listOrganizationApiMailMessages,
+  recordOrganizationApiMailMessage,
 } from "../src/organization-api-mail";
 import { sendOrganizationMailMessage } from "../src/organization-mail";
 import { recordOrganizationMailFeedback } from "../src/organization-mail-delivery";
@@ -995,6 +998,45 @@ describe.skipIf(state.databaseUrl === undefined)(
         expect(drafts).toHaveLength(edited ? 1 : 0);
       }
     );
+
+    test("HTML-only projections preserve snippets in both sent-mail records", async () => {
+      await createMailboxActor();
+      await db
+        .update(mailbox)
+        .set({ includeApiSentMessages: true })
+        .where(eq(mailbox.id, mailboxId));
+      const html = "<".repeat(32_000);
+      const projection = {
+        bodyHtml: html,
+        organizationId,
+        providerMessageId: crypto.randomUUID(),
+        sender: request.snapshot.sender,
+        subject: "Malformed HTML",
+        to: ["recipient@example.com"],
+      };
+      await recordOrganizationApiMailMessage(projection);
+      await recordOutboundManagedMessageForSender({
+        ...projection,
+        bodyText: "",
+        requireApiSentMessageInclusion: true,
+      });
+      const [managedMessage] = await db
+        .select()
+        .from(managedMailMessage)
+        .where(eq(managedMailMessage.mailboxId, mailboxId));
+      const [apiMessage] = await db
+        .select()
+        .from(organizationApiMailMessage)
+        .where(eq(organizationApiMailMessage.organizationId, organizationId));
+      expect(managedMessage).toMatchObject({
+        bodyHtml: html,
+        snippet: html.slice(0, 240),
+      });
+      expect(apiMessage).toMatchObject({
+        bodyHtml: html,
+        snippet: html.slice(0, 240),
+      });
+    });
 
     test("API sends retain file and inline bytes in the managed Sent mailbox", async () => {
       const userId = await createMailboxActor();
