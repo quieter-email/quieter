@@ -58,6 +58,9 @@ jobs:
             if (data.status !== 'ahead' && data.status !== 'identical') {
               throw new Error('The SDK revision must be reachable from main.');
             }
+            if (sha !== context.sha) {
+              throw new Error('The SDK revision must match the publishing workflow revision for provenance. Release the current main commit instead.');
+            }
             core.info(`Authorized SDK revision: ${sha}`);
             core.setOutput('sha', sha);
             core.setOutput('tag', tag);

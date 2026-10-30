@@ -67,7 +67,10 @@ describe("privileged workflow trust", () => {
       const compareCommits = vi
         .fn<() => Promise<{ data: { status: string } }>>()
         .mockResolvedValue({ data: { status } });
-      const setOutput = vi.fn<(key: string, value: string) => void>();
+      const outputs = new Map<string, string>();
+      const setOutput = (key: string, value: string) => {
+        outputs.set(key, value);
+      };
       const execution: unknown = runInNewContext(
         `(async () => { ${script} })()`,
         {
@@ -85,13 +88,8 @@ describe("privileged workflow trust", () => {
         () => "rejected"
       );
       expect(result).toBe(allowed ? "authorized" : "rejected");
-      expect(setOutput.mock.calls).toStrictEqual(
-        allowed
-          ? [
-              ["sha", "immutable-event-sha"],
-              ["tag", ""],
-            ]
-          : []
+      expect(Object.fromEntries(outputs)).toStrictEqual(
+        allowed ? { sha: "immutable-event-sha", tag: "" } : {}
       );
       expect(compareCommits).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -178,7 +176,10 @@ describe("privileged workflow trust", () => {
           path,
         },
       });
-      const setOutput = vi.fn<(key: string, value: string) => void>();
+      const outputs = new Map<string, string>();
+      const setOutput = (key: string, value: string) => {
+        outputs.set(key, value);
+      };
       const execution: unknown = runInNewContext(
         `(async () => { ${script} })()`,
         {
@@ -186,7 +187,7 @@ describe("privileged workflow trust", () => {
             eventName: "workflow_run",
             payload: { workflow_run: { id: 42 } },
             repo: { owner: "owner", repo: "repo" },
-            sha: "default-main-sha",
+            sha: "release-sha",
           },
           core: { info: vi.fn<(message: string) => void>(), setOutput },
           github: {
@@ -199,13 +200,8 @@ describe("privileged workflow trust", () => {
         () => "rejected"
       );
       expect(result).toBe(allowed ? "authorized" : "rejected");
-      expect(setOutput.mock.calls).toStrictEqual(
-        allowed
-          ? [
-              ["sha", "release-sha"],
-              ["tag", branch],
-            ]
-          : []
+      expect(Object.fromEntries(outputs)).toStrictEqual(
+        allowed ? { sha: "release-sha", tag: branch } : {}
       );
       expect(compareCommits).toHaveBeenCalledTimes(allowed ? 1 : 0);
       expect(getWorkflowRun).toHaveBeenCalledWith(
@@ -213,6 +209,63 @@ describe("privileged workflow trust", () => {
       );
     }
   );
+
+  test("rejects an older main ancestor before granting publishing outputs", async () => {
+    const script: unknown = sdk.getIn([
+      "jobs",
+      "authorize",
+      "steps",
+      0,
+      "with",
+      "script",
+    ]);
+    if (typeof script !== "string") {
+      throw new TypeError("Missing release authorization.");
+    }
+    const outputs = new Map<string, string>();
+    const execution: unknown = runInNewContext(
+      `(async () => { ${script} })()`,
+      {
+        context: {
+          eventName: "workflow_run",
+          payload: { workflow_run: { id: 42 } },
+          repo: { owner: "owner", repo: "repo" },
+          sha: "newer-main-sha",
+        },
+        core: {
+          info: vi.fn<(message: string) => void>(),
+          setOutput: (key: string, value: string) => {
+            outputs.set(key, value);
+          },
+        },
+        github: {
+          rest: {
+            actions: {
+              getWorkflowRun: vi
+                .fn<() => Promise<unknown>>()
+                .mockResolvedValue({
+                  data: {
+                    conclusion: "success",
+                    event: "release",
+                    head_branch: "sdk-v1.0.0",
+                    head_repository: { full_name: "owner/repo" },
+                    head_sha: "older-release-sha",
+                    path: ".github/workflows/sdk-release-request.yml",
+                  },
+                }),
+            },
+            repos: {
+              compareCommits: vi
+                .fn<() => Promise<unknown>>()
+                .mockResolvedValue({ data: { status: "ahead" } }),
+            },
+          },
+        },
+      }
+    );
+    await expect(Promise.resolve(execution)).rejects.toThrow(/provenance/u);
+    expect(outputs.size).toBe(0);
+  });
 
   test("keeps repository code behind authorization and pins privileged checkout", () => {
     expect(sdk.getIn(["permissions", "id-token"])).toBeUndefined();
