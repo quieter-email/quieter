@@ -1,3 +1,4 @@
+import { parseImageSourceSet } from "@quieter/mail/source-set";
 import DOMPurify from "dompurify";
 import type { Config } from "dompurify";
 
@@ -436,37 +437,8 @@ const createImagePolicy = ({
 const sanitizeImageSet = (
   source: string,
   resolveImage: MailImagePolicy["resolveImage"]
-): string => {
-  const candidates: { descriptor: string; source: string }[] = [];
-  let remaining = source;
-
-  while (remaining !== "") {
-    remaining = remaining.replace(/^[\s,]+/u, "");
-    if (remaining === "") {
-      break;
-    }
-    const urlMatch = /^\S+/u.exec(remaining);
-    if (urlMatch === null) {
-      return "";
-    }
-    const [rawUrl] = urlMatch;
-    remaining = remaining.slice(rawUrl.length);
-    const imageSource = rawUrl.replace(/,+$/u, "");
-    let descriptor = "";
-    if (imageSource === rawUrl) {
-      const comma = remaining.indexOf(",");
-      descriptor = (
-        comma === -1 ? remaining : remaining.slice(0, comma)
-      ).trim();
-      remaining = comma === -1 ? "" : remaining.slice(comma + 1);
-      if (descriptor !== "" && !/^(?:\d+w|(?:\d*\.)?\d+x)$/u.test(descriptor)) {
-        return "";
-      }
-    }
-    candidates.push({ descriptor, source: imageSource });
-  }
-
-  return candidates
+): string =>
+  parseImageSourceSet(source)
     .flatMap((candidate) => {
       const resolved = resolveImage(candidate.source);
       return resolved === null
@@ -476,7 +448,6 @@ const sanitizeImageSet = (
           ];
     })
     .join(", ");
-};
 
 const applyDocumentPolicy = (document: Document, policy: MailImagePolicy) => {
   // oxlint-disable-next-line unicorn/no-useless-spread -- Removing children mutates the live collection.
