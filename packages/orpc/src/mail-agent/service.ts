@@ -242,6 +242,7 @@ export const reviewMailAgent = async (input: {
         tools: catalog.map((tool) => ({
           connectionId: tool.connectionId,
           description: tool.description,
+          inputSchema: tool.inputSchema,
           operation: tool.operation,
           scope: tool.scope,
           toolId: tool.toolId,

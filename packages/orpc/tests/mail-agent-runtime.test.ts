@@ -4,6 +4,7 @@ import { actionSpecificationSchema } from "@quieter/ai/action-specification";
 import { MockLanguageModelV4 } from "ai/test";
 import type * as Drizzle from "drizzle-orm";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
+import { z } from "zod";
 
 import type { recordAiGeneratedMailBody } from "../src/ai-mail-authorship";
 import type { loadAiAgentContext } from "../src/ai-memory";
@@ -20,6 +21,7 @@ import {
   loadAgentCatalog,
 } from "../src/mail-agent/catalog";
 import { drainMailAgentRuns } from "../src/mail-agent/runtime";
+import { activateMailAgent, reviewMailAgent } from "../src/mail-agent/service";
 import type { composeMailOperations } from "../src/mail/compose";
 
 type Row = Record<string, unknown>;
@@ -85,11 +87,17 @@ vi.mock("@quieter/database/client", async () => {
     values?: Row
   ) => {
     let predicate: Predicate | undefined;
+    let ignoreConflict = false;
     let limit = Number.POSITIVE_INFINITY;
     const query = {
       for: () => query,
+      leftJoin: () => query,
       limit: (next: number) => {
         limit = next;
+        return query;
+      },
+      onConflictDoNothing: () => {
+        ignoreConflict = true;
         return query;
       },
       orderBy: () => query,
@@ -99,7 +107,14 @@ vi.mock("@quieter/database/client", async () => {
         const name = getTableName(table);
         const rows = state.tables.get(name) ?? [];
         state.tables.set(name, rows);
-        if (operation === "insert" && values !== undefined) {
+        if (
+          operation === "insert" &&
+          values !== undefined &&
+          !(
+            ignoreConflict &&
+            rows.some((row) => row.mailboxId === values.mailboxId)
+          )
+        ) {
           rows.push(values);
         }
         const selected = rows
@@ -629,7 +644,27 @@ describe("durable background action execution", () => {
     expect(runRow()).toMatchObject({ status: "succeeded" });
   });
 
-  test("executes an approved Calendar event without exposing its arguments to the model", async () => {
+  test("withholds discovered connector writes without their input contract", async () => {
+    await grantLinearWrites(["create_issue"]);
+    state.linearTools.mockResolvedValue([{ name: "create_issue" }]);
+    const catalog = await loadAgentCatalog({
+      connectionIds: ["linear-account"],
+      userId: "actor",
+    });
+    expect(
+      catalog.some((tool) => tool.toolId === "linear.create_issue")
+    ).toBeFalsy();
+    const revision = state.tables.get("mailboxAgentRevision")?.[0];
+    expect(() =>
+      compileAgentManifest(
+        actionSpecificationSchema.parse(revision?.specification),
+        catalog
+      )
+    ).toThrow(ORPCError);
+    expect(state.linear).not.toHaveBeenCalled();
+  });
+
+  test("reviews and executes a Calendar template using the published input contract", async () => {
     state.calendarAccount.mockResolvedValue({
       email: "owner@example.test",
       id: "calendar-account",
@@ -674,17 +709,65 @@ describe("durable background action execution", () => {
       permissionId: "calendar-write",
       toolId: "calendar.create_event",
     });
-    const compiled = compileAgentManifest(
-      specification,
-      await loadAgentCatalog({
-        connectionIds: ["calendar-account"],
-        userId: "actor",
+    const setting = state.tables.get("mailboxAgentSetting")?.[0];
+    Object.assign(setting ?? {}, { activeRevisionId: null, version: 0 });
+    state.model.mockReturnValueOnce(
+      new MockLanguageModelV4({
+        doGenerate: async ({ prompt }) => {
+          const text = prompt
+            .flatMap((message) =>
+              message.role === "user"
+                ? message.content.flatMap((part) =>
+                    part.type === "text" ? [part.text] : []
+                  )
+                : []
+            )
+            .join("");
+          const preview = z
+            .object({
+              tools: z.array(
+                z.object({
+                  inputSchema: z.record(z.string(), z.unknown()),
+                  toolId: z.string(),
+                })
+              ),
+            })
+            .parse(JSON.parse(text));
+          const createEvent = z
+            .object({ inputSchema: z.record(z.string(), z.unknown()) })
+            .parse(
+              preview.tools.find(
+                (tool) => tool.toolId === "calendar.create_event"
+              )
+            );
+          const grant = specification.toolGrants.find(
+            (tool) => tool.toolId === "calendar.create_event"
+          );
+          z.fromJSONSchema(createEvent.inputSchema).parse(
+            JSON.parse(z.string().parse(grant?.argumentTemplate))
+          );
+          return generation([
+            { text: JSON.stringify(specification), type: "text" },
+          ]);
+        },
       })
     );
-    Object.assign(revision ?? {}, {
-      manifestDigest: compiled.digest,
-      specification,
+    const reviewed = await reviewMailAgent({
+      mailboxId: "mailbox",
+      sourceText: specification.sourceText,
+      userId: "actor",
+      version: 0,
     });
+    expect(reviewed.draft?.canActivate).toBeTruthy();
+    const revisionId = z.string().parse(reviewed.draft?.id);
+    await activateMailAgent({
+      acknowledgeAssumptions: true,
+      mailboxId: "mailbox",
+      revisionId,
+      userId: "actor",
+      version: 1,
+    });
+    Object.assign(runRow(), { revisionId, settingVersion: 2 });
     state.model.mockReturnValue(modelWithConnectorCall(true));
     await drainMailAgentRuns({ limit: 1 });
     expect(state.calendar).toHaveBeenCalledOnce();
@@ -695,6 +778,11 @@ describe("durable background action execution", () => {
         addMeeting: false,
         attendees: [],
         description: "Please prepare a response.",
+        time: {
+          endDate: "2027-01-11",
+          kind: "all-day",
+          startDate: "2027-01-10",
+        },
         title: "Mail follow-up",
       },
     });

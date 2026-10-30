@@ -162,6 +162,22 @@ describe("approved connector argument mappings", () => {
     ).toThrow(/not supported/u);
   });
 
+  test.each([undefined, null, "object", { type: "unsupported" }])(
+    "rejects missing or malformed provider input schemas (%j)",
+    (inputSchema) => {
+      expect(() =>
+        resolveAgentEffectArguments({
+          message: { subject: "Request" },
+          template: JSON.stringify({
+            team: "approved-team",
+            title: "{{message.subject}}",
+          }),
+          tool: { ...tool, inputSchema },
+        })
+      ).toThrow(/./u);
+    }
+  );
+
   test("accepts a quoted display name containing commas without accepting mailbox lists", () => {
     const eligibility = {
       bodyIncludes: [],
