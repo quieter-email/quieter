@@ -44,6 +44,7 @@ import {
 import { USER_BILLING_QUERY_KEY } from "@quieter/app/features/settings/domain/billing";
 import { useAudioRecorder } from "@quieter/app/lib/audio-recorder";
 import { prepareTranscriptionRecording } from "@quieter/app/lib/audio-transcription";
+import { authClient } from "@quieter/app/lib/auth";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { deleteDemoDraft } from "@quieter/app/lib/gmail/demo-mail";
 import { refreshCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-query/index";
@@ -1273,6 +1274,7 @@ const ReadyComposeSurface = ({
 };
 
 export const ComposeSurface = (props: ComposeSurfaceProps) => {
+  const userId = authClient.useSession().data?.user.id;
   const { initialDraft, mailboxId, demoMode, managedDemoMode } = props;
   const needsLoading =
     !!mailboxId &&
@@ -1312,7 +1314,9 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
       if (!seed || !mailboxId) {
         throw new Error("Select a draft to open.");
       }
-      const recovered = findRecoverableComposeDraft(mailboxId, seed);
+      const recovered = userId
+        ? findRecoverableComposeDraft({ mailboxId, userId }, seed)
+        : null;
       setRecoverableSeed(recovered);
       let draft = recovered ?? seed;
       if (draft.sendUncertain === true) {
@@ -1348,7 +1352,10 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
           };
         }
       }
-      draft = findRecoverableComposeDraft(mailboxId, draft) ?? draft;
+      draft =
+        (userId
+          ? findRecoverableComposeDraft({ mailboxId, userId }, draft)
+          : null) ?? draft;
       if (draft.sendUncertain === true) {
         return draft;
       }
@@ -1365,7 +1372,7 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
         throw loadError;
       }
     },
-    queryKey: ["compose-draft", mailboxId, initialDraft?.localId],
+    queryKey: ["compose-draft", userId, mailboxId, initialDraft?.localId],
     retry: false,
     staleTime: Infinity,
   });

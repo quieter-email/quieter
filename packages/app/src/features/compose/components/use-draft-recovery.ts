@@ -1,9 +1,10 @@
 import { hasComposeDraftContent } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
+import { authClient } from "@quieter/app/lib/auth";
 import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import { toastError } from "@quieter/app/lib/error-toast";
 import type { QueryClient } from "@tanstack/react-query";
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 export const useDraftRecovery = ({
   mailboxId,
@@ -18,31 +19,40 @@ export const useDraftRecovery = ({
   queryClient: QueryClient;
   subscribe: (onChange: () => void) => { unsubscribe: () => void };
 }) => {
+  const sessionUserId = authClient.useSession().data?.user.id;
+  // oxlint-disable-next-line react/hook-use-state -- Ownership is fixed until the session-keyed provider remounts.
+  const [userId] = useState(sessionUserId);
   const editorId = useRef(crypto.randomUUID());
   const completed = useRef(false);
   const warned = useRef(false);
 
   useEffect((): (() => void) | undefined => {
-    if (!enabled || mailboxId === null) {
+    if (!enabled || mailboxId === null || userId === undefined) {
       return undefined;
     }
     const unregister = draftRecoveryJournal.registerEditor({
       editorId: editorId.current,
       mailboxId,
+      userId,
     });
     void queryClient.invalidateQueries({
-      queryKey: ["local-draft-recovery", mailboxId],
+      queryKey: ["local-draft-recovery", userId, mailboxId],
     });
     return () => {
       unregister();
       void queryClient.invalidateQueries({
-        queryKey: ["local-draft-recovery", mailboxId],
+        queryKey: ["local-draft-recovery", userId, mailboxId],
       });
     };
-  }, [enabled, mailboxId, queryClient]);
+  }, [enabled, mailboxId, queryClient, userId]);
 
   const checkpoint = () => {
-    if (!enabled || completed.current || mailboxId === null) {
+    if (
+      !enabled ||
+      completed.current ||
+      mailboxId === null ||
+      userId === undefined
+    ) {
       return;
     }
     const draft = getDraft();
@@ -54,12 +64,14 @@ export const useDraftRecovery = ({
           mailboxId,
           payload: JSON.stringify(draft),
           updatedAt: Date.now(),
+          userId,
         });
       } else {
         draftRecoveryJournal.remove({
           editorId: editorId.current,
           localId: draft.localId,
           mailboxId,
+          userId,
         });
       }
     } catch (error) {
@@ -106,11 +118,11 @@ export const useDraftRecovery = ({
     checkpoint,
     complete: async (draft: ComposeDraftState) => {
       completed.current = true;
-      if (mailboxId === null) {
+      if (mailboxId === null || userId === undefined) {
         return;
       }
       try {
-        for (const record of draftRecoveryJournal.list(mailboxId)) {
+        for (const record of draftRecoveryJournal.list({ mailboxId, userId })) {
           if (
             (record.localId === draft.localId &&
               record.editorId === editorId.current) ||
@@ -122,7 +134,7 @@ export const useDraftRecovery = ({
           }
         }
         await queryClient.invalidateQueries({
-          queryKey: ["local-draft-recovery", mailboxId],
+          queryKey: ["local-draft-recovery", userId, mailboxId],
         });
       } catch (error) {
         toastError(error, { boundary: "compose-recovery-cleanup" });
