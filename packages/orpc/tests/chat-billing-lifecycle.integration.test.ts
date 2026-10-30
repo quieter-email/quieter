@@ -99,6 +99,9 @@ describe.skipIf(state.databaseUrl === undefined)(
     };
     let threadId: string;
     let scheduled: Promise<unknown>[];
+    let backgroundTaskScheduled: ReturnType<
+      typeof Promise.withResolvers<{ task: Promise<unknown> }>
+    >;
     let foregroundStarted: ReturnType<typeof Promise.withResolvers<boolean>>;
     let terminal: ReturnType<
       typeof Promise.withResolvers<"success" | "failure" | "cancel">
@@ -156,6 +159,9 @@ describe.skipIf(state.databaseUrl === undefined)(
     beforeEach(async () => {
       vi.clearAllMocks();
       scheduled = [];
+      backgroundTaskScheduled = Promise.withResolvers<{
+        task: Promise<unknown>;
+      }>();
       foregroundStarted = Promise.withResolvers<boolean>();
       terminal = Promise.withResolvers<"success" | "failure" | "cancel">();
       ambientStarted = Promise.withResolvers<boolean>();
@@ -357,6 +363,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         request: new Request("https://example.test/api/chat"),
         scheduleBackgroundTask: (task) => {
           scheduled.push(task);
+          backgroundTaskScheduled.resolve({ task });
         },
         userId: actor.userId,
       });
@@ -498,10 +505,10 @@ describe.skipIf(state.databaseUrl === undefined)(
         }
         answer += decoder.decode(part.value);
       }
-      const cancelled = reader.cancel();
+      await reader.cancel();
       terminal.resolve("cancel");
-      await cancelled;
-      await Promise.all(scheduled);
+      const background = await backgroundTaskScheduled.promise;
+      await background.task;
       const reservations = await db
         .select()
         .from(aiCreditReservation)
