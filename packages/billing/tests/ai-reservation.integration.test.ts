@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+
 import { db } from "@quieter/database/client";
 import {
   aiCreditReservation,
@@ -18,7 +20,9 @@ import {
   test,
   vi,
 } from "vite-plus/test";
+import { z } from "zod";
 
+import { runAiCreditRecovery } from "../src/ai-credit-recovery";
 import {
   createMailboxAiBillingContext,
   getOutstandingAiCreditReservations,
@@ -145,6 +149,348 @@ describe.skipIf(state.databaseUrl === undefined)(
         .where(inArray(organization.id, organizationIds));
       await db.delete(user).where(eq(user.id, "g04-user"));
       await db.$client.end();
+    });
+
+    const recoveryDecision = async () => {
+      const reservationId = z
+        .string()
+        .parse(await reserveAiCreditUsage(context));
+      const inspected = z.object({ snapshot: z.string() }).parse(
+        await runAiCreditRecovery({
+          mode: "inspect",
+          organizationId: account.organizationId,
+          reservationId,
+        })
+      );
+      return {
+        confirmation: `resolve:${reservationId}:${inspected.snapshot}`,
+        evidence: "incident:G04-provider-record",
+        expectedSnapshot: inspected.snapshot,
+        mode: "resolve" as const,
+        operator: "github-run:synthetic",
+        organizationId: account.organizationId,
+        reason: "confirmed-provider-outcome",
+        reservationId,
+        resolution: { costUsd: 0.01, kind: "actual-cost" as const },
+      };
+    };
+
+    test("inspects and dry-runs without releasing admission or calling external services", async () => {
+      const input = await recoveryDecision();
+      const { confirmation, ...dryRun } = input;
+      expect(confirmation).toContain(input.reservationId);
+      const network = vi.fn<typeof fetch>();
+      vi.stubGlobal("fetch", network);
+      await expect(
+        runAiCreditRecovery({ ...dryRun, mode: "dry-run" })
+      ).resolves.toMatchObject({ outcome: "dry-run" });
+      await expect(reserveAiCreditUsage(context)).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+      await expect(
+        db
+          .select()
+          .from(billingCreditUsageEvent)
+          .where(
+            eq(billingCreditUsageEvent.organizationId, account.organizationId)
+          )
+      ).resolves.toHaveLength(0);
+      expect(network).not.toHaveBeenCalled();
+      expect(state.ingest).not.toHaveBeenCalled();
+    });
+
+    test("runs the local CLI against a disposable reservation without revealing the account", async () => {
+      const input = await recoveryDecision();
+      const result = spawnSync(
+        process.execPath,
+        [
+          "scripts/ai-credit-recovery.ts",
+          JSON.stringify({
+            mode: "inspect",
+            organizationId: input.organizationId,
+            reservationId: input.reservationId,
+          }),
+          "--local",
+        ],
+        {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            DATABASE_URL: state.databaseUrl,
+            QUIETER_DEPLOYMENT_ENV: "local",
+          },
+        }
+      );
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        reservationId: input.reservationId,
+        status: "reserved",
+      });
+      expect(result.stdout).not.toContain(account.externalCustomerId);
+      const linked = spawnSync(
+        process.execPath,
+        [
+          "scripts/ai-credit-recovery.ts",
+          JSON.stringify({
+            mode: "inspect",
+            organizationId: input.organizationId,
+            reservationId: input.reservationId,
+          }),
+          "github-run:123:synthetic-admin",
+        ],
+        {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            DATABASE_URL: "postgres://postgres@127.0.0.1:1/ignored",
+            SST_RESOURCE_App: JSON.stringify({
+              name: "synthetic",
+              stage: "production",
+            }),
+            SST_RESOURCE_DatabaseUrl: JSON.stringify({
+              value: state.databaseUrl,
+            }),
+          },
+        }
+      );
+      expect(linked.status).toBe(0);
+      expect(JSON.parse(linked.stdout)).toMatchObject({
+        reservationId: input.reservationId,
+        status: "reserved",
+      });
+      expect(linked.stdout).not.toContain(account.externalCustomerId);
+
+      await expect(
+        getOutstandingAiCreditReservations(account)
+      ).resolves.toBeGreaterThan(0);
+    });
+
+    test("refuses wrong identity, missing confirmation and changed snapshots", async () => {
+      const input = await recoveryDecision();
+      await expect(
+        runAiCreditRecovery({ ...input, organizationId: "g04-destination" })
+      ).rejects.toThrow(/identity|confirmation|changed/u);
+      await expect(
+        runAiCreditRecovery({ ...input, confirmation: "yes" })
+      ).rejects.toThrow(/identity|confirmation|changed/u);
+      await recordAiCreditProviderGeneration({
+        generationId: "gen-updated",
+        reservationId: input.reservationId,
+      });
+      await expect(runAiCreditRecovery(input)).rejects.toThrow(/changed/u);
+      await expect(
+        getOutstandingAiCreditReservations(account)
+      ).resolves.toBeGreaterThan(0);
+    });
+
+    test("settles actual cost exactly once against its original account after mailbox movement", async () => {
+      const input = await recoveryDecision();
+      await db
+        .update(mailbox)
+        .set({ organizationId: "g04-destination" })
+        .where(eq(mailbox.id, "g04-mailbox"));
+      const results = await Promise.all([
+        runAiCreditRecovery(input),
+        runAiCreditRecovery(input),
+      ]);
+      expect(results).toContainEqual(
+        expect.objectContaining({ outcome: "already-resolved" })
+      );
+      const events = await db
+        .select()
+        .from(billingCreditUsageEvent)
+        .where(
+          inArray(billingCreditUsageEvent.organizationId, organizationIds)
+        );
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        createdAt: context.admittedAt,
+        metadata: { recoveryEvidence: input.evidence },
+        organizationId: account.organizationId,
+      });
+      expect(events[0]?.costMicroCents).toBeGreaterThan(0);
+      expect(state.ingest).not.toHaveBeenCalled();
+      await expect(
+        runAiCreditRecovery({
+          ...input,
+          resolution: { costUsd: 0.02, kind: "actual-cost" },
+        })
+      ).rejects.toThrow(/identity|confirmation|changed/u);
+      await expect(
+        runAiCreditRecovery({ ...input, resolution: { kind: "non-execution" } })
+      ).rejects.toThrow(/identity|confirmation|changed/u);
+      await expect(reserveAiCreditUsage(context)).resolves.toStrictEqual(
+        expect.any(String)
+      );
+    });
+
+    test("confirmed non-execution creates a zero audit entry and restores AI admission", async () => {
+      const input = {
+        ...(await recoveryDecision()),
+        resolution: { kind: "non-execution" },
+      };
+      await expect(runAiCreditRecovery(input)).resolves.toMatchObject({
+        status: "released",
+      });
+      await expect(runAiCreditRecovery(input)).resolves.toMatchObject({
+        outcome: "already-resolved",
+      });
+      const events = await db
+        .select()
+        .from(billingCreditUsageEvent)
+        .where(
+          eq(billingCreditUsageEvent.organizationId, account.organizationId)
+        );
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        billableCostMicroCents: 0,
+        costMicroCents: 0,
+      });
+      await expect(reserveAiCreditUsage(context)).resolves.toStrictEqual(
+        expect.any(String)
+      );
+    });
+
+    test("refuses non-execution when provider identity or actual cost is known", async () => {
+      const input = await recoveryDecision();
+      await recordAiCreditProviderGeneration({
+        generationId: "gen-confirmed",
+        reservationId: input.reservationId,
+      });
+      const inspected = z.object({ snapshot: z.string() }).parse(
+        await runAiCreditRecovery({
+          mode: "inspect",
+          organizationId: input.organizationId,
+          reservationId: input.reservationId,
+        })
+      );
+      await expect(
+        runAiCreditRecovery({
+          ...input,
+          confirmation: `resolve:${input.reservationId}:${inspected.snapshot}`,
+          expectedSnapshot: inspected.snapshot,
+          resolution: { kind: "non-execution" },
+        })
+      ).rejects.toThrow(/provider identity/u);
+      await db
+        .update(aiCreditReservation)
+        .set({ actualCostMicroCents: 123 })
+        .where(eq(aiCreditReservation.id, input.reservationId));
+      const current = z.object({ snapshot: z.string() }).parse(
+        await runAiCreditRecovery({
+          mode: "inspect",
+          organizationId: input.organizationId,
+          reservationId: input.reservationId,
+        })
+      );
+      await expect(
+        runAiCreditRecovery({
+          ...input,
+          confirmation: `resolve:${input.reservationId}:${current.snapshot}`,
+          expectedSnapshot: current.snapshot,
+        })
+      ).rejects.toThrow(/conflicts/u);
+    });
+
+    test("rolls back audit and credit transitions together on persistence failure", async () => {
+      const input = {
+        ...(await recoveryDecision()),
+        resolution: { kind: "non-execution" },
+      };
+      await db.execute(
+        sql`alter table "aiCreditReservation" add constraint g04_recovery_rollback_check check (status <> 'released') not valid`
+      );
+      try {
+        await expect(runAiCreditRecovery(input)).rejects.toThrow(
+          /Failed query/u
+        );
+        await expect(
+          db
+            .select()
+            .from(billingCreditUsageEvent)
+            .where(
+              eq(billingCreditUsageEvent.organizationId, account.organizationId)
+            )
+        ).resolves.toHaveLength(0);
+        await expect(
+          getOutstandingAiCreditReservations(account)
+        ).resolves.toBeGreaterThan(0);
+      } finally {
+        await db.execute(
+          sql`alter table "aiCreditReservation" drop constraint g04_recovery_rollback_check`
+        );
+      }
+      await expect(runAiCreditRecovery(input)).resolves.toMatchObject({
+        status: "released",
+      });
+    });
+
+    test("serializes conflicting operational resolutions and refuses altered terminal identity", async () => {
+      const input = await recoveryDecision();
+      const results = await Promise.allSettled([
+        runAiCreditRecovery(input),
+        runAiCreditRecovery({
+          ...input,
+          resolution: { kind: "non-execution" },
+        }),
+      ]);
+      expect(
+        results.filter((result) => result.status === "fulfilled")
+      ).toHaveLength(1);
+      await expect(
+        db
+          .select()
+          .from(billingCreditUsageEvent)
+          .where(
+            eq(billingCreditUsageEvent.organizationId, account.organizationId)
+          )
+      ).resolves.toHaveLength(1);
+      const [terminal] = await db
+        .select({ status: aiCreditReservation.status })
+        .from(aiCreditReservation)
+        .where(eq(aiCreditReservation.id, input.reservationId));
+      const retry =
+        terminal?.status === "settled"
+          ? input
+          : { ...input, resolution: { kind: "non-execution" as const } };
+      await expect(runAiCreditRecovery(retry)).resolves.toMatchObject({
+        outcome: "already-resolved",
+      });
+      await db
+        .update(aiCreditReservation)
+        .set({ groupId: "changed-authorizing-group" })
+        .where(eq(aiCreditReservation.id, input.reservationId));
+      await expect(runAiCreditRecovery(retry)).rejects.toThrow(/changed/u);
+    });
+
+    test("rolls back a recorded charge and settled transition if final cost persistence fails", async () => {
+      const input = await recoveryDecision();
+      await db.execute(
+        sql`alter table "aiCreditReservation" add constraint g04_recovery_cost_rollback_check check ("actualCostMicroCents" is null) not valid`
+      );
+      try {
+        await expect(runAiCreditRecovery(input)).rejects.toThrow(
+          /Failed query/u
+        );
+        await expect(
+          db
+            .select()
+            .from(billingCreditUsageEvent)
+            .where(
+              eq(billingCreditUsageEvent.organizationId, account.organizationId)
+            )
+        ).resolves.toHaveLength(0);
+        await expect(
+          getOutstandingAiCreditReservations(account)
+        ).resolves.toBeGreaterThan(0);
+      } finally {
+        await db.execute(
+          sql`alter table "aiCreditReservation" drop constraint g04_recovery_cost_rollback_check`
+        );
+      }
+      await expect(runAiCreditRecovery(input)).resolves.toMatchObject({
+        status: "settled",
+      });
     });
 
     test("uses independent PostgreSQL transactions for the admission race", async () => {
@@ -403,7 +749,24 @@ describe.skipIf(state.databaseUrl === undefined)(
       await expect(reserveOrganizationMailSend(send)).rejects.toMatchObject({
         code: "FORBIDDEN",
       });
-      await releaseAiCreditUsage(first);
+      const inspected = z.object({ snapshot: z.string() }).parse(
+        await runAiCreditRecovery({
+          mode: "inspect",
+          organizationId: account.organizationId,
+          reservationId: first,
+        })
+      );
+      await runAiCreditRecovery({
+        confirmation: `resolve:${first}:${inspected.snapshot}`,
+        evidence: "incident:confirmed-not-executed",
+        expectedSnapshot: inspected.snapshot,
+        mode: "resolve",
+        operator: "github-run:synthetic",
+        organizationId: account.organizationId,
+        reason: "confirmed-non-execution",
+        reservationId: first,
+        resolution: { kind: "non-execution" },
+      });
       await reserveOrganizationMailSend(send);
       const second = await reserveAiCreditUsage(context);
       const [mailHold] = await db
