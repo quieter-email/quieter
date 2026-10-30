@@ -55,7 +55,7 @@ const SessionQueryProvider = ({
       } else {
         void (async () => {
           try {
-            await clearQueryPersistence();
+            await clearQueryPersistence("session");
           } catch (error) {
             toastError(error, { boundary: "session-cache-cleanup" });
           }

@@ -299,12 +299,18 @@ export const setQueryPersistenceUser = (
   void mailCache.setUser(persistenceUser, sessionId);
 };
 
-export const clearQueryPersistence = async () => {
+export const clearQueryPersistence = async (
+  scope: "all" | "session" = "all"
+) => {
   const previousSession = persistenceSession;
   const previousClient = persistenceClient;
   updatePersistenceOwner(undefined);
   previousClient?.clear();
-  await mailCache.clear();
+  if (scope === "session") {
+    await mailCache.clearSession();
+  } else {
+    await mailCache.clear();
+  }
   try {
     if (previousSession) {
       // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel messages are restricted to the same origin and accept no targetOrigin.

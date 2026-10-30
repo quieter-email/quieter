@@ -11,6 +11,7 @@ type CacheEntry = {
   expiresAt: number;
   userId: string;
 };
+type CacheOwner = { readonly sessionId: string; readonly epoch: string };
 type MailCacheDatabase = {
   epochs: { key: string; value: string };
   values: { key: string; value: string };
@@ -70,11 +71,13 @@ export const createMailCache = (
   };
   let initialization = Promise.resolve();
   let databaseEpoch: string | undefined;
+  let authenticatedOwner: Promise<CacheOwner | null> | undefined;
 
   const changeUser = async (
     next: string | undefined,
     identity = next,
-    force = false
+    force = false,
+    cleanupOwner?: Promise<CacheOwner | null>
   ) => {
     if (!force && initialized && next === userId && identity === sessionId) {
       await initialization;
@@ -91,6 +94,10 @@ export const createMailCache = (
     const previous = initialization;
     const transition = (async () => {
       await previous;
+      const owner = await cleanupOwner;
+      if (cleanupOwner && !owner) {
+        return null;
+      }
       const db = await open();
       const tx = db.transaction(["entries", "values", "epochs"], "readwrite");
       void (async () => {
@@ -101,17 +108,27 @@ export const createMailCache = (
         }
       })();
       if (
-        identity &&
-        (await tx.objectStore("epochs").get(`identity:${identity}`)) ===
-          "revoked"
+        owner &&
+        ((await tx.objectStore("epochs").get("session")) !== owner.epoch ||
+          (await tx
+            .objectStore("epochs")
+            .get(`identity:${owner.sessionId}`)) !== "active")
       ) {
+        await tx.done;
+        return null;
+      }
+      const identityState = identity
+        ? await tx.objectStore("epochs").get(`identity:${identity}`)
+        : undefined;
+      if (identity && identityState === "revoked") {
         databaseEpoch = undefined;
         await tx.done;
-        return;
+        return null;
       }
       // Logout must commit even if another login has already changed local state.
       let revoked =
         next === undefined ||
+        (identity !== undefined && identityState !== "active") ||
         (previousUser !== undefined &&
           (previousUser !== next || previousSession !== identity));
       let cursor = await tx.objectStore("entries").openCursor();
@@ -136,12 +153,17 @@ export const createMailCache = (
       if (identity) {
         await tx.objectStore("epochs").put("active", `identity:${identity}`);
       }
-      databaseEpoch = revoked
+      const epoch = revoked
         ? crypto.randomUUID()
         : ((await tx.objectStore("epochs").get("session")) ?? "");
-      await tx.objectStore("epochs").put(databaseEpoch, "session");
+      databaseEpoch = epoch;
+      await tx.objectStore("epochs").put(epoch, "session");
       await tx.done;
+      return identity ? { epoch, sessionId: identity } : null;
     })();
+    if (next && identity) {
+      authenticatedOwner = transition;
+    }
     initialization = (async () => {
       try {
         await transition;
@@ -152,10 +174,21 @@ export const createMailCache = (
     await transition;
   };
 
+  const clearSession = async () => {
+    const owner = authenticatedOwner;
+    await changeUser(
+      undefined,
+      undefined,
+      true,
+      owner ?? Promise.resolve(null)
+    );
+  };
+
   return {
     async clear() {
       await changeUser(undefined, undefined, true);
     },
+    clearSession,
     detach() {
       initialized = true;
       userId = undefined;
@@ -482,7 +515,11 @@ export const createMailCache = (
     },
     async setUser(next: string | undefined, identity = next) {
       try {
-        await changeUser(next, identity);
+        if (next === undefined) {
+          await clearSession();
+        } else {
+          await changeUser(next, identity);
+        }
       } catch {
         /* The browser may deny optional persistence. */
       }

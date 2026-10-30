@@ -7,6 +7,102 @@ import { openDB } from "idb";
 import { describe, expect, test, vi } from "vite-plus/test";
 
 describe("bounded mail cache", () => {
+  test.each([
+    ["one", false],
+    ["one", true],
+    ["two", false],
+    ["two", true],
+  ] as const)(
+    "passive cleanup preserves a newer %s identity after detach: %s",
+    async (nextUser, detached) => {
+      const name = crypto.randomUUID();
+      const old = createMailCache({ name });
+      const fresh = createMailCache({ name });
+      const pending = old.setUser("one", "old");
+      if (detached) {
+        old.detach();
+      }
+      await pending;
+      await fresh.setUser(nextUser, "fresh");
+      await fresh.setItem("body-current", "fresh private body");
+      await old.clearSession();
+      await old.setUser(undefined);
+      await old.setItem("body-current", "stale write");
+      await expect(old.getItem("body-current")).resolves.toBeNull();
+      await expect(fresh.getItem("body-current")).resolves.toBe(
+        "fresh private body"
+      );
+      const reload = createMailCache({ name });
+      await reload.setUser(nextUser, "fresh");
+      await expect(reload.getItem("body-current")).resolves.toBe(
+        "fresh private body"
+      );
+      await reload.setItem("body-next", "new write");
+      await expect(fresh.getItem("body-next")).resolves.toBe("new write");
+      await old.setUser("one", "old");
+      await expect(old.getItem("body-current")).resolves.toBeNull();
+    }
+  );
+
+  test("an anonymous tab cannot purge an authenticated tab", async () => {
+    const name = crypto.randomUUID();
+    const owner = createMailCache({ name });
+    await owner.setUser("one", "session");
+    await owner.setItem("body-current", "private body");
+    const anonymous = createMailCache({ name });
+    await anonymous.clearSession();
+    await anonymous.setUser(undefined);
+    await expect(owner.getItem("body-current")).resolves.toBe("private body");
+  });
+
+  test("passive cleanup captures an activation still initializing", async () => {
+    const name = crypto.randomUUID();
+    const cache = createMailCache({ name });
+    const initializing = cache.setUser("one", "expired");
+    const cleanup = cache.clearSession();
+    await initializing;
+    await cleanup;
+    const reload = createMailCache({ name });
+    await reload.setUser("one", "expired");
+    await reload.setItem("body-current", "stale write");
+    await expect(reload.getItem("body-current")).resolves.toBeNull();
+  });
+
+  test("passive cleanup reports a denied purge while fencing local writes", async () => {
+    const cache = createMailCache({ name: crypto.randomUUID() });
+    await cache.setUser("one", "expired");
+    await cache.setItem("body-current", "private body");
+    const clear = vi
+      .spyOn(IDBObjectStore.prototype, "clear")
+      .mockImplementationOnce(() => {
+        throw new Error("storage denied");
+      });
+    try {
+      await expect(cache.clearSession()).rejects.toThrow(/storage denied/u);
+      await cache.setItem("body-current", "stale write");
+      await expect(cache.getItem("body-current")).resolves.toBeNull();
+    } finally {
+      clear.mockRestore();
+    }
+  });
+
+  test("passive expiry purges raw orphan bodies and rejects the expired session", async () => {
+    const name = crypto.randomUUID();
+    const cache = createMailCache({ name });
+    void cache.setUser("one", "expired");
+    await cache.setItem("quieter-cache-query", "metadata");
+    await cache.setItem("body-current", "private body");
+    const db = await openDB(name, 2);
+    await db.put("values", "orphan private body", "orphan");
+    await cache.clearSession();
+    await expect(db.getAll("entries")).resolves.toHaveLength(0);
+    await expect(db.getAll("values")).resolves.toHaveLength(0);
+    await cache.setUser("one", "expired");
+    await cache.setItem("body-current", "stale write");
+    await expect(cache.getItem("body-current")).resolves.toBeNull();
+    db.close();
+  });
+
   test("enumerates query metadata without loading bodies", async () => {
     const cache = createMailCache({ name: crypto.randomUUID() });
     void cache.setUser("one");
