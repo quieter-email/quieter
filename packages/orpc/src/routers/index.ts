@@ -13,10 +13,6 @@ export const appRouter = {
     async () =>
       await import("./ai").then(({ aiRouter }) => ({ default: aiRouter }))
   ),
-  auth: lazy(
-    async () =>
-      await import("./auth").then(({ authRouter }) => ({ default: authRouter }))
-  ),
   billing: lazy(
     async () =>
       await import("./billing").then(({ billingRouter }) => ({

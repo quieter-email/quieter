@@ -11,8 +11,7 @@
     "./preview-personas": "./src/preview-personas.ts",
     "./regional-time": "./src/regional-time.ts",
     "./session": "./src/session.ts",
-    "./terms-acceptance": "./src/terms-acceptance.ts",
-    "./user-status": "./src/user-status.ts"
+    "./terms-acceptance": "./src/terms-acceptance.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",
