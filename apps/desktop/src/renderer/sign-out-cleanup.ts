@@ -14,10 +14,27 @@ export const registerSignOutCleanup = () => {
         if (captured.size > 0) {
           throw new Error("Sign-out is already in progress.");
         }
-        captured.set(command.requestId, [
-          draftRecoveryJournal.captureCleanup(),
-          captureQueryPersistenceCleanup(),
-        ]);
+        const clearRecovery = draftRecoveryJournal.captureCleanup();
+        const clearQueries = captureQueryPersistenceCleanup();
+        if (!(clearRecovery && clearQueries)) {
+          throw new Error("Your session is still loading. Please try again.");
+        }
+        const cleanups = [clearRecovery, clearQueries];
+        captured.set(command.requestId, cleanups);
+        try {
+          const current = await clearQueries.isCurrent();
+          if (captured.get(command.requestId) !== cleanups) {
+            throw new Error("This sign-out request is no longer active.");
+          }
+          if (!current) {
+            throw new Error("Your session has changed. Please try again.");
+          }
+        } catch (error) {
+          if (captured.get(command.requestId) === cleanups) {
+            captured.delete(command.requestId);
+          }
+          throw error;
+        }
         return;
       }
       const cleanups = captured.get(command.requestId);

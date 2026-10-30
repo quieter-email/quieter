@@ -128,7 +128,7 @@ describe("draft recovery ownership", () => {
         payload: "Fresh recovery",
         userId,
       });
-      await clearOld();
+      await clearOld?.();
       await recovery.save({ ...record, payload: "Forbidden stale edit" });
       await expect(recovery.list(record)).resolves.toHaveLength(0);
       const reload = createDraftRecoveryJournal(createMailCache({ name }));
@@ -179,6 +179,7 @@ describe("draft recovery ownership", () => {
   it("an unknown anonymous tab cannot purge another tab", async () => {
     await recovery.save(record);
     const anonymous = createDraftRecoveryJournal(createMailCache({ name }));
+    expect(anonymous.captureCleanup()).toBeUndefined();
     await anonymous.setUser(undefined);
     await expect(recovery.list(record)).resolves.toMatchObject([
       { payload: record.payload },
@@ -397,7 +398,7 @@ describe("draft recovery ownership", () => {
       await expect(
         reload.session("user-a", "upgraded").list(record)
       ).resolves.toMatchObject([{ payload: record.payload }]);
-      await reload.captureCleanup()();
+      await reload.captureCleanup()?.();
       await expect(
         upgraded.session("user-a", "upgraded").list(record)
       ).resolves.toHaveLength(0);
@@ -416,7 +417,7 @@ describe("draft recovery ownership", () => {
         throw new Error("legacy removal denied");
       });
     try {
-      await expect(cache.captureCleanup()()).rejects.toThrow(/denied/u);
+      await expect(cache.captureCleanup()?.()).rejects.toThrow(/denied/u);
     } finally {
       remove.mockRestore();
     }
@@ -450,6 +451,12 @@ describe("draft recovery ownership", () => {
     }
     await recovery.save({ ...record, payload: "Forbidden after denial" });
     await expect(recovery.list(record)).resolves.toHaveLength(0);
+    const retry = journal.captureCleanup();
+    expect(retry).toBeTypeOf("function");
+    await retry?.();
+    const db = await openDB(name);
+    await expect(db.getAll("recovery")).resolves.toHaveLength(0);
+    db.close();
   });
 
   it("prefers matching saved-draft recovery and preserves newer server state", async () => {

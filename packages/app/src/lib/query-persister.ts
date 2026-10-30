@@ -304,30 +304,36 @@ export const captureQueryPersistenceCleanup = () => {
   const previousUser = persistenceUser;
   const previousClient = persistenceClient;
   const clear = mailCache.captureCleanup();
-  return async () => {
-    if (
-      persistenceSession === previousSession &&
-      persistenceUser === previousUser
-    ) {
-      const currentClient = persistenceClient;
-      updatePersistenceOwner(undefined);
-      currentClient?.clear();
-    }
-    previousClient?.clear();
-    await clear();
-    try {
-      if (previousSession) {
-        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel messages are restricted to the same origin and accept no targetOrigin.
-        logoutChannel?.postMessage(previousSession);
+  if (!clear) {
+    return undefined;
+  }
+  return Object.assign(
+    async () => {
+      if (
+        persistenceSession === previousSession &&
+        persistenceUser === previousUser
+      ) {
+        const currentClient = persistenceClient;
+        updatePersistenceOwner(undefined);
+        currentClient?.clear();
       }
-    } catch {
-      /* The browser may deny cross-tab messaging. */
-    }
-  };
+      previousClient?.clear();
+      await clear();
+      try {
+        if (previousSession) {
+          // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel messages are restricted to the same origin and accept no targetOrigin.
+          logoutChannel?.postMessage(previousSession);
+        }
+      } catch {
+        /* The browser may deny cross-tab messaging. */
+      }
+    },
+    { isCurrent: clear.isCurrent }
+  );
 };
 
 export const clearQueryPersistence = async () => {
-  await captureQueryPersistenceCleanup()();
+  await captureQueryPersistenceCleanup()?.();
 };
 
 export const shouldPersistQueryKey = (queryKey: readonly unknown[]) => {

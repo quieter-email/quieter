@@ -42,11 +42,16 @@ describe("mail content persistence", () => {
       .spyOn(mailCache, "captureCleanup")
       .mockImplementation(() => {
         const clear = capture();
-        return async () => {
-          await clear();
-          committed.resolve(null);
-          await resume.promise;
-        };
+        return clear
+          ? Object.assign(
+              async () => {
+                await clear();
+                committed.resolve(null);
+                await resume.promise;
+              },
+              { isCurrent: clear.isCurrent }
+            )
+          : undefined;
       });
     try {
       const logout = clearQueryPersistence();

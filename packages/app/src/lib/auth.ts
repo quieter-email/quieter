@@ -76,6 +76,9 @@ export const configureAppAuthClient = (options: { baseURL: string }) => {
 export const signOut = async () => {
   const clearQueries = captureQueryPersistenceCleanup();
   const clearRecovery = draftRecoveryJournal.captureCleanup();
+  if (!(clearQueries && clearRecovery) || !(await clearQueries.isCurrent())) {
+    throw new Error("Your session is still loading. Please try again.");
+  }
   const response = await authClient.signOut();
   if (response.error) {
     throw new Error(response.error.message ?? "Could not sign out.", {

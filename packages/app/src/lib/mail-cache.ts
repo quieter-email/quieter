@@ -312,18 +312,38 @@ export const createMailCache = (
 
   const captureCleanup = () => {
     const owner = authenticatedOwner;
-    return async () => {
-      await changeUser(
-        undefined,
-        undefined,
-        true,
-        owner?.value ?? Promise.resolve(null),
-        owner?.sessionId
-      );
-    };
+    return owner
+      ? Object.assign(
+          async () => {
+            await changeUser(
+              undefined,
+              undefined,
+              true,
+              owner.value,
+              owner.sessionId
+            );
+          },
+          {
+            isCurrent: async () => {
+              const authority = await owner.value;
+              if (!authority) {
+                return false;
+              }
+              const db = await open();
+              const tx = db.transaction("epochs", "readonly");
+              const [epoch, state] = await Promise.all([
+                tx.store.get("session"),
+                tx.store.get(`identity:${authority.sessionId}`),
+                tx.done,
+              ]);
+              return epoch === authority.epoch && state === "active";
+            },
+          }
+        )
+      : undefined;
   };
   const clearSession = async () => {
-    await captureCleanup()();
+    await captureCleanup()?.();
   };
 
   return {

@@ -23,6 +23,7 @@ export const createDraftRecoveryJournal = (cache = mailCache) => {
         ready: Promise<void>;
       }
     | undefined;
+  let lastObservedActivation: typeof current;
   let channel: BroadcastChannel | undefined;
   const listeners = new Set<() => void>();
   const connectNotifications = () => {
@@ -51,24 +52,26 @@ export const createDraftRecoveryJournal = (cache = mailCache) => {
       /* The browser may deny cross-tab messaging. */
     }
   };
-  const captureCleanup = () => {
-    const activation = current;
-    return async () => {
-      if (
-        current?.sessionId === activation?.sessionId &&
-        current?.userId === activation?.userId
-      ) {
-        current?.storage.detach();
-        current = undefined;
-      }
-      for (const [editorId, scope] of activeEditors) {
-        if (scope.sessionId === activation?.sessionId) {
-          revokedEditors.add(editorId);
+  const captureCleanup = (): (() => Promise<void>) | undefined => {
+    const activation = lastObservedActivation;
+    return activation
+      ? async () => {
+          if (
+            current?.sessionId === activation.sessionId &&
+            current?.userId === activation.userId
+          ) {
+            current?.storage.detach();
+            current = undefined;
+          }
+          for (const [editorId, scope] of activeEditors) {
+            if (scope.sessionId === activation.sessionId) {
+              revokedEditors.add(editorId);
+            }
+          }
+          await activation.storage.clear();
+          notify();
         }
-      }
-      await activation?.storage.clear();
-      notify();
-    };
+      : undefined;
   };
   return {
     captureCleanup,
@@ -165,7 +168,7 @@ export const createDraftRecoveryJournal = (cache = mailCache) => {
     },
     async setUser(userId: string | undefined, sessionId = userId) {
       if (!userId || !sessionId) {
-        await captureCleanup()();
+        await captureCleanup()?.();
         return;
       }
       if (current?.userId === userId && current.sessionId === sessionId) {
@@ -179,6 +182,7 @@ export const createDraftRecoveryJournal = (cache = mailCache) => {
       const storage = cache.recoverySession(userId, sessionId);
       const ready = storage.migrateLegacy();
       current = { ready, sessionId, storage, userId };
+      lastObservedActivation = current;
       await ready;
     },
     subscribe(subscription: () => void) {

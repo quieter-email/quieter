@@ -7,6 +7,23 @@ import { openDB } from "idb";
 import { describe, expect, test, vi } from "vite-plus/test";
 
 describe("bounded mail cache", () => {
+  test("only issues cleanup authority after an observed activation", async () => {
+    const cache = createMailCache({ name: crypto.randomUUID() });
+    expect(cache.captureCleanup()).toBeUndefined();
+    const open = vi.spyOn(indexedDB, "open").mockImplementation(() => {
+      throw new Error("storage denied");
+    });
+    try {
+      await cache.setUser("one", "observed");
+      const cleanup = cache.captureCleanup();
+      expect(cleanup).toBeTypeOf("function");
+      await expect(cleanup?.isCurrent()).rejects.toThrow(/denied/u);
+      await expect(cleanup?.()).rejects.toThrow(/denied/u);
+    } finally {
+      open.mockRestore();
+    }
+  });
+
   test("a rejected authority replacement leaves the occupied guard intact", async () => {
     const name = crypto.randomUUID();
     const cache = createMailCache({ name });
@@ -29,7 +46,7 @@ describe("bounded mail cache", () => {
         return original.call(this, value, key);
       });
     try {
-      await expect(cache.captureCleanup()()).rejects.toThrow(/denied/u);
+      await expect(cache.captureCleanup()?.()).rejects.toThrow(/denied/u);
     } finally {
       put.mockRestore();
     }
@@ -80,7 +97,8 @@ describe("bounded mail cache", () => {
       cache.detach();
       await cache.setUser("one", binding);
       await cache.setItem("body-message", "bound private body");
-      await cleanup();
+      await expect(cleanup?.isCurrent()).resolves.toBe(binding === "same");
+      await cleanup?.();
       await cache.setItem("body-message", "late write");
       await expect(cache.getItem("body-message")).resolves.toBe(
         binding === "same" ? null : "late write"
