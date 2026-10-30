@@ -393,7 +393,7 @@ export const useMessageViewHotkeys = ({
         options: {
           enabled:
             !isActionPending &&
-            mailboxProvider !== "api" &&
+            mailboxActions.canMarkRead &&
             activeMailbox !== "drafts",
         },
       },
@@ -410,7 +410,7 @@ export const useMessageViewHotkeys = ({
         options: {
           enabled:
             !isActionPending &&
-            mailboxProvider !== "api" &&
+            mailboxActions.canMarkRead &&
             activeMailbox !== "drafts",
         },
       },

@@ -66,7 +66,7 @@ export const createMailboxThreadMessageActionHandlers = ({
         },
       }
     : {}),
-  ...(supportsReadState
+  ...(supportsReadState && mailboxActions.canMarkRead
     ? {
         onMarkAsRead: async (threadId: string) => {
           await mailboxActions.markThreadAsRead(threadId);
