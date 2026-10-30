@@ -1,8 +1,8 @@
 /* oxlint-disable eslint/require-await -- Provider doubles preserve asynchronous contracts without network calls. */
-/* oxlint-disable vitest/no-conditional-expect -- Scenario-specific controls exercise both accepted and rejected operations. */
 import { actionSpecificationSchema } from "@quieter/ai/action-specification";
 import { db } from "@quieter/database/client";
 import {
+  billingSubscription,
   connectorCredential,
   organizationDivision,
   mailboxDivisionGrant,
@@ -178,6 +178,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         }))
       );
       await db.insert(organization).values({
+        billingOwnerUserId: userId,
         createdAt: now,
         id: organizationId,
         name: "Sharing test",
@@ -192,6 +193,22 @@ describe.skipIf(state.databaseUrl === undefined)(
           userId: id,
         }))
       );
+      await db.insert(billingSubscription).values({
+        cancelAtPeriodEnd: true,
+        createdAt: now,
+        currentPeriodEnd: new Date(now.getTime() + 86_400_000),
+        currentPeriodStart: now,
+        id: crypto.randomUUID(),
+        metadata: { quieterOrganizationId: organizationId },
+        organizationId,
+        plan: "pro",
+        provider: "polar",
+        providerProductId: crypto.randomUUID(),
+        providerSubscriptionId: crypto.randomUUID(),
+        status: "active",
+        updatedAt: now,
+        userId,
+      });
       await db.insert(connectorCredential).values({
         createdAt: now,
         id: connectorId,
@@ -389,6 +406,7 @@ describe.skipIf(state.databaseUrl === undefined)(
             }
             if (step === (connected ? 2 : 1)) {
               if (connected || personal) {
+                // oxlint-disable-next-line vitest/no-conditional-expect -- Only private-context scenarios consume a connector or memory result.
                 expect(JSON.stringify(prompt)).toContain(bodyText);
               }
               return generation(
@@ -469,6 +487,7 @@ describe.skipIf(state.databaseUrl === undefined)(
                 const waiting = await db.execute(
                   sql`select pid from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and query like '%"managedOwnerUserId"%for update%'`
                 );
+                // oxlint-disable-next-line vitest/no-conditional-expect -- The uncommitted sharing scenario must observe the actual lock wait.
                 expect(waiting.length).toBeGreaterThan(0);
               });
             } finally {
@@ -550,8 +569,10 @@ describe.skipIf(state.databaseUrl === undefined)(
         (message) => message.mailboxState === "draft"
       );
       if (safe) {
+        // oxlint-disable-next-line vitest/no-conditional-expect -- Successful controls must persist their draft.
         expect(saved).toMatchObject([{ bodyText }]);
       } else {
+        // oxlint-disable-next-line vitest/no-conditional-expect -- Sharing races must leave no draft.
         expect(saved).toHaveLength(0);
         if (scenario.includes("direct")) {
           const visible = await getManagedThread({
@@ -559,6 +580,7 @@ describe.skipIf(state.databaseUrl === undefined)(
             threadId,
             userId: readerId,
           });
+          // oxlint-disable-next-line vitest/no-conditional-expect -- Direct-reader scenarios must also prove the draft is not visible.
           expect(
             visible.messages.some(
               (message) => message.bodyText?.includes(bodyText) === true
