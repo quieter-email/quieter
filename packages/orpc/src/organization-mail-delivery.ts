@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import type { DatabaseExecutor } from "@quieter/database/client";
 import { db } from "@quieter/database/client";
 import {
   mailbox,
@@ -222,16 +223,19 @@ export const getSuppressionReason = (
   return null;
 };
 
-export const assertOrganizationMailRecipientsNotSuppressed = async (input: {
-  organizationId: string;
-  recipients: string[];
-}) => {
+export const assertOrganizationMailRecipientsNotSuppressed = async (
+  input: {
+    organizationId: string;
+    recipients: string[];
+  },
+  executor: DatabaseExecutor = db
+) => {
   const recipients = normalizeRecipients(input.recipients);
   if (recipients.length === 0) {
     return;
   }
 
-  const [suppression] = await db
+  const [suppression] = await executor
     .select({ recipient: organizationMailRecipientSuppression.recipient })
     .from(organizationMailRecipientSuppression)
     .where(
@@ -543,17 +547,21 @@ export const suppressOrganizationMailRecipient = async (input: {
   if (recipient === "") {
     throw new OrganizationMailSendError("A valid address is required.", 422);
   }
-  const changed = await db.transaction(
-    async (transaction) =>
-      await applySuppressionChange(transaction, {
-        actorUserId: input.actorUserId,
-        createdAt: new Date(),
-        organizationId: input.organizationId,
-        recipient,
-        sourceProviderMessageId: null,
-        suppressionReason: "manual",
-      })
-  );
+  const changed = await db.transaction(async (transaction) => {
+    await transaction
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, input.organizationId))
+      .for("update");
+    return await applySuppressionChange(transaction, {
+      actorUserId: input.actorUserId,
+      createdAt: new Date(),
+      organizationId: input.organizationId,
+      recipient,
+      sourceProviderMessageId: null,
+      suppressionReason: "manual",
+    });
+  });
   return { changed };
 };
 
@@ -566,8 +574,13 @@ export const unsuppressOrganizationMailRecipient = async (input: {
   if (recipient === "") {
     throw new OrganizationMailSendError("A valid address is required.", 422);
   }
-  const now = new Date();
   return await db.transaction(async (transaction) => {
+    await transaction
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, input.organizationId))
+      .for("update");
+    const now = new Date();
     const revoked = await transaction
       .update(organizationMailRecipientSuppression)
       .set({ revokedAt: now, updatedAt: now })
