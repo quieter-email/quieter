@@ -34,7 +34,7 @@ export const runBilledAiRequest = async <Result>(input: {
   } catch (error) {
     if (
       APICallError.isInstance(error) &&
-      [400, 401, 403, 404, 422, 429].includes(error.statusCode ?? 0)
+      [400, 401, 402, 403, 404, 413, 422, 429].includes(error.statusCode ?? 0)
     ) {
       await releaseAiCreditUsage(reservationId);
     }
@@ -77,7 +77,9 @@ export const createAiBillingMiddleware = (
                   ? part.error.statusCode
                   : z.object({ code: z.number() }).safeParse(part.error).data
                       ?.code;
-                if ([400, 401, 403, 404, 422, 429].includes(code ?? 0)) {
+                if (
+                  [400, 401, 402, 403, 404, 413, 422, 429].includes(code ?? 0)
+                ) {
                   await releaseAiCreditUsage(reservationId);
                 }
               }
@@ -111,7 +113,7 @@ export const createAiBillingMiddleware = (
     } catch (error) {
       if (
         APICallError.isInstance(error) &&
-        [400, 401, 403, 404, 422, 429].includes(error.statusCode ?? 0)
+        [400, 401, 402, 403, 404, 413, 422, 429].includes(error.statusCode ?? 0)
       ) {
         await releaseAiCreditUsage(reservationId);
       }

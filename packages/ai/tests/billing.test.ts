@@ -112,6 +112,29 @@ describe("paid provider admission and settlement", () => {
     }
   );
 
+  test.each([402, 413])(
+    "provider rejection %i releases unused funds",
+    async (statusCode) => {
+      const refusal = new APICallError({
+        message: "Rejected",
+        requestBodyValues: {},
+        statusCode,
+        url: "https://example.invalid",
+      });
+      await expect(
+        runBilledAiRequest({
+          billing,
+          run: async () => {
+            await Promise.resolve();
+            throw refusal;
+          },
+        })
+      ).rejects.toBe(refusal);
+      expect(state.release).toHaveBeenCalledOnce();
+      expect(state.settle).not.toHaveBeenCalled();
+    }
+  );
+
   test("confirmed rejection releases funds while unknown failure, cancellation and missing usage retain the hold", async () => {
     const refusal = new APICallError({
       message: "Rejected",
