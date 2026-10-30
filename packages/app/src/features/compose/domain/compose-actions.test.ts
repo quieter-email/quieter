@@ -33,6 +33,19 @@ const sourceMessage = {
 } satisfies MessageListItem;
 
 describe(buildComposeDraftFromMessageAction, () => {
+  test("keeps the parent after ignoring malformed or excessive References", () => {
+    for (const references of ["<".repeat(60_000), "<x>".repeat(10_000)]) {
+      const draft = buildComposeDraftFromMessageAction({
+        action: "reply",
+        currentUserEmail: "me@example.com",
+        message: { ...sourceMessage, references },
+      });
+      expect(draft.replyContext?.references).toStrictEqual([
+        sourceMessage.messageHeaderId,
+      ]);
+    }
+  });
+
   test("refreshes reply headers when resuming a draft from an earlier message", () => {
     const draft = buildComposeDraftFromMessageAction({
       action: "reply",
