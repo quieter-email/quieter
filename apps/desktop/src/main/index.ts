@@ -176,36 +176,36 @@ ipcMain.handle("quieter:sign-out-cleanup-ack", (event, input: unknown) => {
 ipcMain.handle("better-auth:signOut", async (event) => {
   assertTrustedSender(event);
   const frame = event.senderFrame;
-  let signedOut = false;
-  try {
-    await signOutCleanup.run({
-      send: (command) => {
-        assertTrustedSender(event);
-        if (event.sender.mainFrame !== frame) {
-          throw new Error("The sign-out window changed. Try again.");
+  await signOutCleanup.run({
+    onCompletionError: () => {
+      Sentry.captureException(
+        new Error("Desktop sign-out completion failed."),
+        {
+          tags: { boundary: "desktop-sign-out-cache" },
         }
-        event.sender.send("quieter:sign-out-cleanup", command);
-      },
-      signOut: async () => {
-        const result = await authClient.signOut();
-        if (result.error) {
-          throw new Error(
-            result.error.message ??
-              "Sign-out could not be completed. Try again."
-          );
-        }
-        signedOut = true;
-      },
-    });
-  } finally {
-    if (
-      signedOut &&
-      !event.sender.isDestroyed() &&
-      event.sender.mainFrame === frame
-    ) {
-      event.sender.send("better-auth:user-updated", null);
-    }
-  }
+      );
+    },
+    onSignedOut: () => {
+      if (!event.sender.isDestroyed() && event.sender.mainFrame === frame) {
+        event.sender.send("better-auth:user-updated", null);
+      }
+    },
+    send: (command) => {
+      assertTrustedSender(event);
+      if (event.sender.mainFrame !== frame) {
+        throw new Error("The sign-out window changed. Try again.");
+      }
+      event.sender.send("quieter:sign-out-cleanup", command);
+    },
+    signOut: async () => {
+      const result = await authClient.signOut();
+      if (result.error) {
+        throw new Error(
+          result.error.message ?? "Sign-out could not be completed. Try again."
+        );
+      }
+    },
+  });
 });
 ipcMain.handle("quieter:open-external", async (event, input: unknown) => {
   assertTrustedSender(event);

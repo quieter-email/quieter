@@ -48,17 +48,26 @@ export class SignOutCleanup {
   async run({
     send,
     signOut,
+    onSignedOut,
+    onCompletionError,
     timeoutMs = 30_000,
   }: {
     send: (command: SignOutCleanupCommand) => void;
     signOut: () => Promise<void>;
+    onSignedOut?: () => void;
+    onCompletionError?: () => void;
     timeoutMs?: number;
   }): Promise<void> {
     if (this.active) {
       throw new Error("Sign-out is already in progress.");
     }
-    const { promise: cancelled, reject: cancel } =
+    const { promise: cancelled, reject: rejectCaller } =
       Promise.withResolvers<never>();
+    let interrupted = false;
+    const cancel = (error: Error) => {
+      interrupted = true;
+      rejectCaller(error);
+    };
     const active: NonNullable<SignOutCleanup["active"]> = {
       cancel,
       pending: undefined,
@@ -80,18 +89,44 @@ export class SignOutCleanup {
       send({ phase, requestId: active.requestId });
       return await promise;
     };
-    try {
-      await Promise.race([request("capture"), cancelled]);
-      await Promise.race([signOut(), cancelled]);
-      await Promise.race([request("cleanup"), cancelled]);
-    } finally {
-      clearTimeout(timeout);
-      this.active = undefined;
+    let providerStarted = false;
+    const completion = (async () => {
+      let signedOut = false;
       try {
-        send({ phase: "release", requestId: active.requestId });
-      } catch {
-        // The window can disappear before the release message is sent.
+        try {
+          await Promise.race([request("capture"), cancelled]);
+          providerStarted = true;
+          await signOut();
+          signedOut = true;
+          const { promise: cleanupExpired, reject } =
+            Promise.withResolvers<never>();
+          const cleanupTimeout = setTimeout(() => {
+            reject(new Error("Sign-out cleanup timed out. Try again."));
+          }, timeoutMs);
+          try {
+            await Promise.race([request("cleanup"), cleanupExpired]);
+          } finally {
+            clearTimeout(cleanupTimeout);
+          }
+        } finally {
+          clearTimeout(timeout);
+          this.active = undefined;
+          try {
+            send({ phase: "release", requestId: active.requestId });
+          } catch {
+            // The window can disappear before the release message is sent.
+          }
+          if (signedOut) {
+            onSignedOut?.();
+          }
+        }
+      } catch (error) {
+        if (interrupted && providerStarted) {
+          onCompletionError?.();
+        }
+        throw error;
       }
-    }
+    })();
+    await Promise.race([completion, cancelled]);
   }
 }
