@@ -355,6 +355,8 @@
   --radius-3xl: calc(var(--radius) + 10px);
   --radius-4xl: calc(var(--radius) + 12px);
   --radius-5xl: calc(var(--radius) + 14px);
+  /* xl (radius + 6px) plus the 16px inset around search and toolbar icon buttons. */
+  --radius-panel: calc(var(--radius) + 6px + 1rem);
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
