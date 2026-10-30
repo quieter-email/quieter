@@ -654,6 +654,8 @@ const executeRun = async (run: ClaimedRun) => {
               },
               mailboxId: run.mailboxId,
             },
+            privateContext:
+              specification.connectors.length > 0 || personalContextUsed,
           });
           draftRevision = {
             baseRevision: saved.baseRevision,
