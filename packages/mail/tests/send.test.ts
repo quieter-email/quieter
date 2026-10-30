@@ -9,7 +9,7 @@ import {
 } from "../src/send";
 import { buildSendMimeMessage } from "../src/send-mime";
 
-const message = {
+const baseMessage = {
   attachments: [],
   from: "demo@example.com",
   subject: "Hello",
@@ -39,10 +39,10 @@ describe("attachment resource limits", () => {
       })
     );
     expect(
-      sendMessageInputSchema.safeParse({ ...message, attachments }).success
+      sendMessageInputSchema.safeParse({ ...baseMessage, attachments }).success
     ).toBeFalsy();
     await expect(
-      buildSendMimeMessage({ ...message, attachments })
+      buildSendMimeMessage({ ...baseMessage, attachments })
     ).rejects.toThrow(ZodError);
     expect(reads).toBe(0);
   });
@@ -62,11 +62,12 @@ describe("attachment resource limits", () => {
         },
       ];
       expect(
-        sendMessageInputSchema.safeParse({ ...message, attachments }).success
+        sendMessageInputSchema.safeParse({ ...baseMessage, attachments })
+          .success
       ).toBeFalsy();
       reads = 0;
       await expect(
-        buildSendMimeMessage({ ...message, attachments })
+        buildSendMimeMessage({ ...baseMessage, attachments })
       ).rejects.toThrow(ZodError);
       expect(reads).toBe(0);
     }
@@ -74,7 +75,7 @@ describe("attachment resource limits", () => {
 
   test("keeps permitted attachment sets and decoded byte accounting", async () => {
     const parsed = sendMessageInputSchema.parse({
-      ...message,
+      ...baseMessage,
       attachments: [
         attachment,
         ...Array.from({ length: MAX_SEND_ATTACHMENTS - 1 }, (_, index) => ({
@@ -96,7 +97,7 @@ describe("attachment resource limits", () => {
     const empty = { ...attachment, content: "" };
     await expect(
       buildSendMimeMessage({
-        ...message,
+        ...baseMessage,
         attachments: Array.from(
           { length: MAX_SEND_ATTACHMENTS + 1 },
           () => empty
@@ -104,7 +105,7 @@ describe("attachment resource limits", () => {
       })
     ).rejects.toThrow(ZodError);
     const built = await buildSendMimeMessage({
-      ...message,
+      ...baseMessage,
       attachments: [empty],
     });
     expect(built.attachments).toHaveLength(1);
