@@ -67,12 +67,12 @@ const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
   return (
     <section
       aria-label="Calendar actions"
-      className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-muted/35 px-3 py-2"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-muted px-3 py-2"
     >
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <div
           aria-hidden
-          className="flex size-8 shrink-0 items-center justify-center rounded-md bg-bg-raised/90 text-muted-fg shadow-xs ring-1 ring-border/55"
+          className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-bg-raised text-muted-fg shadow-xs"
         >
           <Icon icon={Calendar03Icon} />
         </div>
@@ -361,13 +361,13 @@ const HtmlMessageBodyContent = ({
         <section
           aria-label="Remote images"
           className={cn(
-            "flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-muted/35 px-3 py-2"
+            "flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-muted px-3 py-2"
           )}
         >
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <div
               aria-hidden
-              className="flex size-8 shrink-0 items-center justify-center rounded-md bg-bg-raised/90 text-muted-fg shadow-xs ring-1 ring-border/55"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-bg-raised text-muted-fg shadow-xs"
             >
               <Icon icon={Image01Icon} />
             </div>
@@ -408,10 +408,10 @@ const HtmlMessageBodyContent = ({
 const MessageBodyLoadingSkeleton = () => (
   <output aria-label="Loading message content" className="block space-y-3 p-4">
     <div aria-hidden="true" className="animate-pulse space-y-3">
-      <div className="h-3.5 w-full rounded-md bg-muted/75" />
-      <div className="h-3.5 w-11/12 rounded-md bg-muted/70" />
-      <div className="h-3.5 w-4/5 rounded-md bg-muted/65" />
-      <div className="h-3.5 w-2/3 rounded-md bg-muted/60" />
+      <div className="h-3.5 w-full rounded-md bg-muted" />
+      <div className="h-3.5 w-11/12 rounded-md bg-muted" />
+      <div className="h-3.5 w-4/5 rounded-md bg-muted" />
+      <div className="h-3.5 w-2/3 rounded-md bg-muted" />
     </div>
   </output>
 );
@@ -437,7 +437,7 @@ const PlainTextMessageBody = ({ text }: { text: string }) => {
         {segments.map((segment) =>
           segment.kind === "link" ? (
             <a
-              className="rounded-sm text-primary underline decoration-border underline-offset-2 hover:decoration-current focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-primary"
+              className="rounded-sm text-primary underline decoration-border underline-offset-2 hover:decoration-current focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
               href={segment.href}
               key={`link:${segment.href}`}
               rel="noopener noreferrer"

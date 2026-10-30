@@ -37,7 +37,7 @@ export const OrganizationBillingView = ({
         billingPending={billingPending}
         organizationId={organizationId}
       />
-      <div className="@container border-t border-border/70 pt-4" ref={usageRef}>
+      <div className="@container border-t border-border pt-4" ref={usageRef}>
         <div className="-mx-4 @md:-mx-6">
           <OrganizationMailUsageSettings
             billingAccessUnknown={billingAccessUnknown}

@@ -42,7 +42,7 @@ export const SidebarNavItem = ({
     className={cn(
       "group relative flex w-full items-center rounded-md py-px squircle",
       {
-        "hover:bg-muted/60 dark:hover:bg-muted/40": active !== true,
+        "hover:bg-muted": active !== true,
       }
     )}
     onMouseEnter={onMouseEnter}

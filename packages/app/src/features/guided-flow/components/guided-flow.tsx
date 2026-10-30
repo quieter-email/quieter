@@ -69,18 +69,18 @@ export const GuidedFlow = ({
         aria-label={ariaLabel}
         className={cn("flex min-h-full flex-col", className)}
       >
-        <header className="sticky top-0 z-20 grid min-h-16 grid-cols-[1fr_auto_1fr] border-b border-border/70 bg-bg lg:grid-cols-[minmax(11rem,1fr)_minmax(0,42rem)_minmax(11rem,1fr)]">
-          <div className="flex min-w-0 items-center px-3 sm:px-5 lg:border-r lg:border-border/60 lg:px-6">
+        <header className="sticky top-0 z-20 grid min-h-16 grid-cols-[1fr_auto_1fr] border-b border-border bg-bg lg:grid-cols-[minmax(11rem,1fr)_minmax(0,42rem)_minmax(11rem,1fr)]">
+          <div className="flex min-w-0 items-center px-3 sm:px-5 lg:border-r lg:border-border lg:px-6">
             {headerStart}
           </div>
-          <div className="col-start-3 flex min-w-0 items-center justify-end px-3 sm:px-5 lg:border-l lg:border-border/60 lg:px-6">
+          <div className="col-start-3 flex min-w-0 items-center justify-end px-3 sm:px-5 lg:border-l lg:border-border lg:px-6">
             {headerEnd}
           </div>
         </header>
 
         <div className="relative isolate grid flex-1 lg:grid-cols-[minmax(11rem,1fr)_minmax(0,42rem)_minmax(11rem,1fr)]">
           {backdrop}
-          <aside className="hidden items-center justify-end border-r border-border/60 px-6 lg:flex">
+          <aside className="hidden items-center justify-end border-r border-border px-6 lg:flex">
             <AnimatePresence initial={false}>
               {previous === undefined || previous === null ? null : (
                 <m.div
@@ -132,20 +132,14 @@ export const GuidedFlow = ({
 
           <aside
             aria-hidden
-            className="hidden border-l border-border/60 lg:block"
+            className="hidden border-l border-border lg:block"
           />
         </div>
 
-        <div className="grid min-h-16 border-t border-border/70 bg-bg lg:grid-cols-[minmax(11rem,1fr)_minmax(0,42rem)_minmax(11rem,1fr)]">
-          <div
-            aria-hidden
-            className="hidden border-r border-border/60 lg:block"
-          />
+        <div className="grid min-h-16 border-t border-border bg-bg lg:grid-cols-[minmax(11rem,1fr)_minmax(0,42rem)_minmax(11rem,1fr)]">
+          <div aria-hidden className="hidden border-r border-border lg:block" />
           <div aria-hidden className="hidden lg:block" />
-          <div
-            aria-hidden
-            className="hidden border-l border-border/60 lg:block"
-          />
+          <div aria-hidden className="hidden border-l border-border lg:block" />
         </div>
       </section>
     </LazyMotion>

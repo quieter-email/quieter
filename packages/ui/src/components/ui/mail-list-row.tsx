@@ -52,7 +52,7 @@ export const MailListRowSelectionMark = ({
 }) => (
   <span
     className={cn(
-      "flex size-4.5 items-center justify-center rounded-[5px] border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
+      "flex size-4.5 items-center justify-center rounded-xs border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
       {
         "border-border": !selected,
         "border-primary bg-primary text-primary-fg": selected,

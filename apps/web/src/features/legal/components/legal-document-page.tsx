@@ -14,11 +14,14 @@ export const LegalDocumentPage = ({
     <div className="mx-auto max-w-3xl px-6 py-12">
       <header className="space-y-3 border-b border-border pb-8">
         <p className="text-body text-muted-fg">
-          <Link className="underline hover:text-fg" to="/home">
+          <Link
+            className="rounded-sm underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+            to="/home"
+          >
             quieter
           </Link>
         </p>
-        <h1 className="text-title-md font-medium tracking-tight">{title}</h1>
+        <h1 className="text-title-md font-medium">{title}</h1>
         <p className="text-body text-muted-fg">{description}</p>
         <p className="text-caption text-muted-fg">
           Last updated June 29, 2026.

@@ -44,7 +44,7 @@ const SidebarHelpMenu = ({
 
   return (
     <DropdownMenu onOpenChange={setIsOpen} open={isOpen}>
-      <div className="relative rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
+      <div className="relative rounded-md squircle hover:bg-muted">
         <IconButtonTooltip label="Help and legal">
           <DropdownMenuTrigger
             appearance="icon-transparent"
@@ -104,7 +104,7 @@ export const SidebarFooterLinks = ({
   const returnTo = useLocation({ select: (location) => location.href });
   return (
     <div className="flex items-center gap-1">
-      <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
+      <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted">
         <Button
           aria-label="Settings"
           // oxlint-disable-next-line shadcn/no-restyle -- Sidebar settings link keeps its row treatment.

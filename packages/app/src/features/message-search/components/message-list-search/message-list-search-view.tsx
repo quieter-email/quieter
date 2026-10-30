@@ -137,7 +137,7 @@ export const MessageListSearchView = ({
           onBlur={handleSearchFieldBlur}
           ref={fieldRef}
         >
-          <div className="flex min-h-8 min-w-0 items-center gap-1 rounded-xl border border-border bg-control p-0.5 shadow-xs transition-colors duration-150 ease-out squircle has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:ring-2 has-[input[data-slot=search-input]:focus-visible]:ring-ring has-[input[data-slot=search-input]:focus-visible]:ring-offset-2 has-[input[data-slot=search-input]:focus-visible]:ring-offset-bg-raised has-[input[data-slot=search-input]:focus-visible]:outline-none">
+          <div className="flex min-h-8 min-w-0 items-center gap-1 rounded-xl border border-border bg-control p-0.5 shadow-sm transition-colors duration-150 ease-out squircle has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:ring-2 has-[input[data-slot=search-input]:focus-visible]:ring-ring has-[input[data-slot=search-input]:focus-visible]:outline-hidden">
             <div
               className="flex min-w-0 flex-1 scroll-px-1 scrollbar-none items-center gap-1 overflow-x-auto overscroll-x-contain [&::-webkit-scrollbar]:hidden"
               onMouseDown={(event) => {
@@ -279,7 +279,7 @@ export const MessageListSearchView = ({
                 return (
                   <div
                     className={cn(messageListSearchChipClassName, "gap-1", {
-                      "bg-control-active ring-2 ring-ring/30":
+                      "bg-control-active ring-2 ring-ring":
                         activeDateFilterIndex === index,
                     })}
                     key={filterRenderKey}
@@ -300,7 +300,7 @@ export const MessageListSearchView = ({
                             )} filter`
                           : `Exclude ${getFilterLabel(filter.type)} filter`
                       }
-                      className="inline-flex shrink-0 items-center gap-1 rounded-sm text-muted-fg hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-sm text-muted-fg hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
                       onClick={(event) => {
                         event.stopPropagation();
                         cycleFilterFromPointer(index);
@@ -360,7 +360,7 @@ export const MessageListSearchView = ({
                       aria-label={`Remove ${getFilterLabel(
                         filter.type
                       )} filter`}
-                      className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-fg hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none"
+                      className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-fg hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
                       onClick={(event) => {
                         event.stopPropagation();
                         removeFilterFromPointer(index);
@@ -499,7 +499,7 @@ export const MessageListSearchView = ({
             (activeDateFilter.type === "after" ||
               activeDateFilter.type === "before") && (
               <div
-                className="absolute top-full z-40 mt-2 max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] overflow-auto overscroll-contain rounded-lg bg-popover p-2 shadow-lg"
+                className="absolute top-full z-40 mt-2 max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] overflow-auto overscroll-contain rounded-lg border bg-popover p-2 shadow-md"
                 // oxlint-disable-next-line shadcn/no-inline-styles -- Popover anchors to measured input position.
                 style={{ left: datePopoverLeft }}
               >

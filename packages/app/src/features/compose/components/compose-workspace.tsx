@@ -1144,7 +1144,7 @@ const ReadyComposeSurface = ({
                           {state.draft.sendUncertain === true
                             ? "Check delivery"
                             : "Send"}
-                          <span className="text-caption text-primary-fg/60">
+                          <span className="text-caption text-primary-fg">
                             {modKeyLabel}↵
                           </span>
                         </ToolbarButton>

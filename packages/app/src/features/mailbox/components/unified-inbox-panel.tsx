@@ -509,7 +509,7 @@ export const UnifiedInboxPanel = ({
     <>
       {hasUnsupportedSearch && (
         <div
-          className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-body-sm"
+          className="flex items-center justify-between gap-3 rounded-md bg-muted px-3 py-2 text-body-sm"
           role="alert"
         >
           <span>
@@ -528,13 +528,13 @@ export const UnifiedInboxPanel = ({
         </div>
       )}
       {selectedMailboxes.length === 0 && (
-        <p className="rounded-md bg-muted/40 px-3 py-3 text-body-sm text-muted-fg">
+        <p className="rounded-md bg-muted px-3 py-3 text-body-sm text-muted-fg">
           Choose an inbox to show its messages.
         </p>
       )}
       {reconnectMailboxes.map((mailbox) => (
         <div
-          className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-body-sm"
+          className="flex items-center justify-between gap-3 rounded-md bg-muted px-3 py-2 text-body-sm"
           key={mailbox.id}
         >
           <span>
@@ -556,7 +556,7 @@ export const UnifiedInboxPanel = ({
       ))}
       {failedSources.map(({ mailbox }) => (
         <div
-          className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-body-sm"
+          className="flex items-center justify-between gap-3 rounded-md bg-muted px-3 py-2 text-body-sm"
           key={mailbox.id}
         >
           <span>
@@ -576,7 +576,7 @@ export const UnifiedInboxPanel = ({
       ))}
       {failedUpdateSources.map(({ mailbox }) => (
         <div
-          className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-body-sm"
+          className="flex items-center justify-between gap-3 rounded-md bg-muted px-3 py-2 text-body-sm"
           key={mailbox.id}
         >
           <span>
@@ -647,7 +647,7 @@ export const UnifiedInboxPanel = ({
           <div className="max-h-80 space-y-1 overflow-y-auto">
             {accessibleMailboxes.map((mailbox) => (
               <div
-                className="rounded-md px-2 py-2 hover:bg-muted/40"
+                className="rounded-md px-2 py-2 hover:bg-muted"
                 key={mailbox.id}
               >
                 <label

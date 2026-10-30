@@ -97,15 +97,15 @@ const SearchDropdownRow = ({
   return (
     <button
       className={cn(
-        "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none",
+        "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
         className,
         {
           "bg-accent": active && !className && !customColor,
           "bg-muted": highlighted && !className && !customColor,
           "q-custom-color-surface": !!customColor,
-          "ring-1 ring-ring/45 ring-inset":
+          "ring-1 ring-ring ring-inset":
             active && !highlighted && !!(className || customColor),
-          "ring-2 ring-ring/60 ring-inset":
+          "ring-2 ring-ring ring-inset":
             highlighted && !!(className || customColor),
         }
       )}
@@ -353,7 +353,7 @@ export const MessageListSearchDropdown = ({
         </svg>
         <div
           aria-label="Labels"
-          className="pointer-events-auto absolute top-0 left-2 max-h-[calc(100dvh-1rem)] w-72 overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg bg-popover p-1 shadow-lg"
+          className="pointer-events-auto absolute top-0 left-2 max-h-[calc(100dvh-1rem)] w-72 overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 shadow-md"
           onPointerEnter={(event) => {
             if (event.pointerType === "mouse") {
               cancelCloseLabelsSubmenu();
@@ -392,7 +392,7 @@ export const MessageListSearchDropdown = ({
             }}
             transition={{ duration: 0.1, ease: "easeOut" }}
             aria-label="Search filters"
-            className="fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex max-h-56 flex-col overflow-hidden rounded-lg bg-popover p-2 shadow-lg lg:absolute lg:inset-x-0 lg:top-full lg:mt-2 lg:max-h-72"
+            className="fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex max-h-56 flex-col overflow-hidden rounded-lg border bg-popover p-2 shadow-md lg:absolute lg:inset-x-0 lg:top-full lg:mt-2 lg:max-h-72"
             data-search-dropdown-content
             onMouseDown={(event) => {
               event.preventDefault();
@@ -459,7 +459,7 @@ export const MessageListSearchDropdown = ({
                       aria-expanded={showLabelsSubmenu}
                       aria-haspopup="true"
                       className={cn(
-                        "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none",
+                        "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
                         {
                           "bg-accent": selectedUserLabelStates.size > 0,
                           "bg-muted": isLabelHighlighted,
@@ -502,7 +502,7 @@ export const MessageListSearchDropdown = ({
                           <div className="min-h-0 overflow-hidden">
                             <div
                               aria-label="Labels"
-                              className="mt-1 rounded-md bg-muted/35 p-1"
+                              className="mt-1 rounded-md bg-muted p-1"
                               ref={labelsInlineRef}
                             >
                               {labelsContent}

@@ -138,8 +138,8 @@ const FirstRunSetupNavigation = ({
           className={cn(
             "flex items-center gap-2 rounded-md px-3 py-2 text-body",
             {
-              "bg-muted/40 text-muted-fg": !stepStatus[step.id],
-              "bg-success/10 text-success": stepStatus[step.id],
+              "bg-muted text-muted-fg": !stepStatus[step.id],
+              "bg-success/15 text-success": stepStatus[step.id],
             }
           )}
           key={step.id}

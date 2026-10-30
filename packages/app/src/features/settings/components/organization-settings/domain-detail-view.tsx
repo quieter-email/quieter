@@ -86,12 +86,12 @@ const getManageReason = ({
 
 const getDomainConnectBannerClass = (domainConnect: string) => {
   if (domainConnect === "verified") {
-    return "border-success/30 bg-success/10 text-success";
+    return "border-border bg-success/15 text-success";
   }
   if (domainConnect === "needs_dns") {
-    return "border-border bg-muted/30 text-fg";
+    return "border-border bg-muted text-fg";
   }
-  return "border-destructive/25 bg-destructive/8 text-destructive";
+  return "border-border bg-destructive/10 text-destructive";
 };
 
 const getDomainConnectMessage = (domainConnect: string) => {

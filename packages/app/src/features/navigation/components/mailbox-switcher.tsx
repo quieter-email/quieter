@@ -309,7 +309,7 @@ const ReorderRow = ({
       <m.div
         aria-hidden={isDragSource ? true : undefined}
         className={cn("rounded-xs", {
-          "bg-muted/60 opacity-35 ring-1 ring-border": isDragSource,
+          "bg-muted opacity-35 ring-1 ring-border": isDragSource,
           "pointer-events-none": source !== null && source !== undefined,
         })}
         data-mailbox-switcher-ghost={isDragSource ? true : undefined}
@@ -337,9 +337,9 @@ const MailboxMenuItem = ({
 }) => (
   <div
     className={cn(
-      "group/item flex items-center rounded-xs squircle focus-within:bg-muted/60 hover:bg-muted/60 dark:hover:bg-muted/40",
+      "group/item flex items-center rounded-xs squircle focus-within:bg-muted hover:bg-muted",
       {
-        "bg-muted/60 dark:bg-muted/40": isActive,
+        "bg-muted": isActive,
       }
     )}
   >
@@ -457,7 +457,7 @@ const MailboxTeam = ({
         disabled={disabled}
       >
         {(handleRef) => (
-          <div className="group/header flex min-h-7 items-center rounded-xs squircle focus-within:bg-muted/60 hover:bg-muted/60 dark:hover:bg-muted/40">
+          <div className="group/header flex min-h-7 items-center rounded-xs squircle focus-within:bg-muted hover:bg-muted">
             <Button
               aria-describedby={disabled ? undefined : "mailbox-order-help"}
               aria-expanded={!closed}
@@ -475,7 +475,7 @@ const MailboxTeam = ({
             >
               <m.span
                 animate={{ rotate: closed ? 0 : 90 }}
-                className="flex size-3 shrink-0 items-center justify-center text-muted-fg/70"
+                className="flex size-3 shrink-0 items-center justify-center text-muted-fg"
                 initial={false}
                 transition={{
                   duration: reducedMotion === true ? 0 : 0.2,
@@ -811,7 +811,7 @@ export const MailboxSwitcherDropdown = ({
       }}
       open={isOpen}
     >
-      <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted/60 dark:hover:bg-muted/40">
+      <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted">
         <PopoverTrigger
           onKeyDownCapture={handleEscapeCapture}
           aria-label="Switch mailbox"
@@ -830,7 +830,7 @@ export const MailboxSwitcherDropdown = ({
                 ease: appEaseOut,
               }}
             >
-              <p className="truncate text-body-sm/5 font-medium tracking-tight text-fg">
+              <p className="truncate text-body-sm/5 font-medium text-fg">
                 {allInboxesActive ? "All inboxes" : primaryLabel}
               </p>
               <p className="mt-1 truncate text-caption text-muted-fg">
@@ -961,17 +961,16 @@ export const MailboxSwitcherDropdown = ({
                                     action={
                                       <div className="flex items-center gap-1">
                                         {needsReconnect && (
-                                          <button
+                                          <Button
                                             aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
-                                            // oxlint-disable-next-line shadcn/no-arbitrary-values -- Explicit transition properties for the reconnect affordance.
-                                            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-1.5 text-caption font-medium text-destructive transition-[color,scale] duration-100 hover:text-destructive/80 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-colors motion-reduce:active:scale-100"
                                             data-mailbox-switcher-navigation-action
                                             disabled={isReconnecting}
                                             onClick={(event) => {
                                               event.stopPropagation();
                                               onReconnectMailbox(mailbox);
                                             }}
-                                            type="button"
+                                            size="xs"
+                                            variant="destructive"
                                           >
                                             <Icon
                                               aria-hidden
@@ -988,7 +987,7 @@ export const MailboxSwitcherDropdown = ({
                                               }
                                             />
                                             Reconnect
-                                          </button>
+                                          </Button>
                                         )}
                                       </div>
                                     }
@@ -1053,7 +1052,7 @@ export const MailboxSwitcherDropdown = ({
           {isOpen &&
             createPortal(
               <DragOverlay<SwitcherDragData, Draggable<SwitcherDragData>>
-                className="pointer-events-none z-50 rounded-xs bg-popover shadow-md ring-1 ring-border"
+                className="pointer-events-none z-50 rounded-xs border border-border bg-popover shadow-md"
                 dropAnimation={null}
               >
                 {(source) => {

@@ -203,8 +203,8 @@ export const RegisterDomainDialog = ({
                               className={cn(
                                 "flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors squircle",
                                 {
-                                  "border-border hover:bg-muted/60": !selected,
-                                  "border-fg/30 bg-muted/40": selected,
+                                  "border-border hover:bg-muted": !selected,
+                                  "border-border-strong bg-muted": selected,
                                 }
                               )}
                               key={option.value}
