@@ -202,7 +202,10 @@ export const ToolActivity = ({
     {
       create_calendar_event: "Create event",
       delete_calendar_event: "Delete",
+      linear_write: "Apply change",
+      modify_mail: "Apply change",
       respond_to_calendar_event: "Send response",
+      save_compose_draft: "Save draft",
       send_mail: "Send",
       update_calendar_event: "Save changes",
     }[name] ?? "Approve";
@@ -306,6 +309,11 @@ export const ToolActivity = ({
               <CalendarApprovalDetails approval={approval} />
             </div>
           ) : null}
+          {awaitingApproval && approval?.linearReview ? (
+            <p className="mb-3 text-caption text-fg">
+              {approval.linearReview.account}, {approval.linearReview.workspace}
+            </p>
+          ) : null}
           <ToolDetails draft={draft} input={part.input} />
           {awaitingApproval && approval ? (
             <ActionFooter className="mt-3">
@@ -328,7 +336,22 @@ export const ToolActivity = ({
                 size="compact"
                 type="button"
                 variant={
-                  name === "delete_calendar_event" ? "destructive" : "default"
+                  name === "delete_calendar_event" ||
+                  (name === "linear_write" &&
+                    typeof part.input === "object" &&
+                    part.input !== null &&
+                    "toolName" in part.input &&
+                    typeof part.input.toolName === "string" &&
+                    /(?:^|[_:-])(?:delete|destroy|remove|reset)(?:[_:-]|$)/iu.test(
+                      part.input.toolName
+                    )) ||
+                  (name === "modify_mail" &&
+                    typeof part.input === "object" &&
+                    part.input !== null &&
+                    "action" in part.input &&
+                    part.input.action === "trash")
+                    ? "destructive"
+                    : "default"
                 }
               >
                 {approvalAction}
