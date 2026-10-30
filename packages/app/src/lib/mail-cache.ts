@@ -12,6 +12,7 @@ type CacheEntry = {
   userId: string;
 };
 type MailCacheDatabase = {
+  epochs: { key: string; value: string };
   values: { key: string; value: string };
   entries: {
     key: string;
@@ -26,6 +27,7 @@ export const createMailCache = (
   const budget = options.budget ?? MAIL_CACHE_BUDGET;
   const now = options.now ?? Date.now;
   let userId: string | undefined;
+  let sessionId: string | undefined;
   let generation = 0;
   let userGeneration = 0;
   let initialized = false;
@@ -37,7 +39,7 @@ export const createMailCache = (
   const open = async () => {
     database ??= openDB<MailCacheDatabase>(
       options.name ?? "quieter-mail-cache-v1",
-      1,
+      2,
       {
         blocking() {
           connection?.close();
@@ -46,7 +48,11 @@ export const createMailCache = (
         terminated() {
           database = undefined;
         },
-        upgrade(db) {
+        upgrade(db, oldVersion) {
+          db.createObjectStore("epochs");
+          if (oldVersion !== 0) {
+            return;
+          }
           db.createObjectStore("values");
           const entries = db.createObjectStore("entries", { keyPath: "key" });
           entries.createIndex("accessedAt", "accessedAt");
@@ -63,8 +69,93 @@ export const createMailCache = (
     }
   };
   let initialization = Promise.resolve();
+  let databaseEpoch: string | undefined;
+
+  const changeUser = async (
+    next: string | undefined,
+    identity = next,
+    force = false
+  ) => {
+    if (!force && initialized && next === userId && identity === sessionId) {
+      await initialization;
+      return;
+    }
+    initialized = true;
+    const previousUser = userId;
+    const previousSession = sessionId;
+    userId = next;
+    sessionId = identity;
+    generation += 1;
+    userGeneration += 1;
+    protectedKeys.clear();
+    const previous = initialization;
+    const transition = (async () => {
+      await previous;
+      const db = await open();
+      const tx = db.transaction(["entries", "values", "epochs"], "readwrite");
+      void (async () => {
+        try {
+          await tx.done;
+        } catch {
+          /* Request failures below still propagate through transition. */
+        }
+      })();
+      if (
+        identity &&
+        (await tx.objectStore("epochs").get(`identity:${identity}`)) ===
+          "revoked"
+      ) {
+        databaseEpoch = undefined;
+        await tx.done;
+        return;
+      }
+      // Logout must commit even if another login has already changed local state.
+      let revoked =
+        next === undefined ||
+        (previousUser !== undefined &&
+          (previousUser !== next || previousSession !== identity));
+      let cursor = await tx.objectStore("entries").openCursor();
+      while (cursor !== null) {
+        if (cursor.value.userId !== next) {
+          revoked = true;
+          await tx.objectStore("values").delete(cursor.key);
+          await cursor.delete();
+        }
+        cursor = await cursor.continue();
+      }
+      if (next === undefined) {
+        await tx.objectStore("values").clear();
+      }
+      if (revoked) {
+        for (const key of await tx.objectStore("epochs").getAllKeys()) {
+          if (key.startsWith("identity:") && key !== `identity:${identity}`) {
+            await tx.objectStore("epochs").put("revoked", key);
+          }
+        }
+      }
+      if (identity) {
+        await tx.objectStore("epochs").put("active", `identity:${identity}`);
+      }
+      databaseEpoch = revoked
+        ? crypto.randomUUID()
+        : ((await tx.objectStore("epochs").get("session")) ?? "");
+      await tx.objectStore("epochs").put(databaseEpoch, "session");
+      await tx.done;
+    })();
+    initialization = (async () => {
+      try {
+        await transition;
+      } catch {
+        /* Normal initialization is optional. Explicit cleanup awaits transition. */
+      }
+    })();
+    await transition;
+  };
 
   return {
+    async clear() {
+      await changeUser(undefined, undefined, true);
+    },
     async entries(): Promise<[string, string][]> {
       const owner = userId;
       if (!owner) {
@@ -73,15 +164,27 @@ export const createMailCache = (
       try {
         await initialization;
         const db = await open();
-        const entries = await db.getAllFromIndex("entries", "userId", owner);
+        const tx = db.transaction(["entries", "values", "epochs"]);
+        if (
+          ((await tx.objectStore("epochs").get("session")) ?? "") !==
+          databaseEpoch
+        ) {
+          await tx.done;
+          return [];
+        }
+        const entries = await tx
+          .objectStore("entries")
+          .index("userId")
+          .getAll(owner);
         const values = await Promise.all(
           entries
             .filter((entry) => entry.key.startsWith(`${owner}:quieter-cache-`))
             .map(async (entry): Promise<[string, string]> => [
               entry.key.slice(owner.length + 1),
-              (await db.get("values", entry.key)) ?? "",
+              (await tx.objectStore("values").get(entry.key)) ?? "",
             ])
         );
+        await tx.done;
         return owner === userId ? values : [];
       } catch {
         return [];
@@ -99,7 +202,14 @@ export const createMailCache = (
         if (epoch !== generation) {
           return null;
         }
-        const tx = db.transaction(["entries", "values"], "readwrite");
+        const tx = db.transaction(["entries", "values", "epochs"], "readwrite");
+        if (
+          ((await tx.objectStore("epochs").get("session")) ?? "") !==
+          databaseEpoch
+        ) {
+          await tx.done;
+          return null;
+        }
         const entry = await tx.objectStore("entries").get(`${owner}:${key}`);
         if (!entry) {
           await tx.done;
@@ -139,7 +249,14 @@ export const createMailCache = (
         if (ownerGeneration !== userGeneration) {
           return;
         }
-        const tx = db.transaction(["entries", "values"], "readwrite");
+        const tx = db.transaction(["entries", "values", "epochs"], "readwrite");
+        if (
+          ((await tx.objectStore("epochs").get("session")) ?? "") !==
+          databaseEpoch
+        ) {
+          await tx.done;
+          return;
+        }
         const completion = (async () => {
           try {
             await tx.done;
@@ -183,7 +300,14 @@ export const createMailCache = (
       try {
         await initialization;
         const db = await open();
-        const tx = db.transaction(["entries", "values"], "readwrite");
+        const tx = db.transaction(["entries", "values", "epochs"], "readwrite");
+        if (
+          ((await tx.objectStore("epochs").get("session")) ?? "") !==
+          databaseEpoch
+        ) {
+          await tx.done;
+          return;
+        }
         await tx.objectStore("entries").delete(`${owner}:${key}`);
         await tx.objectStore("values").delete(`${owner}:${key}`);
         await tx.done;
@@ -203,7 +327,14 @@ export const createMailCache = (
         if (epoch !== generation) {
           return;
         }
-        const tx = db.transaction(["entries", "values"], "readwrite");
+        const tx = db.transaction(["entries", "values", "epochs"], "readwrite");
+        if (
+          ((await tx.objectStore("epochs").get("session")) ?? "") !==
+          databaseEpoch
+        ) {
+          await tx.done;
+          return;
+        }
         const completion = (async () => {
           try {
             await tx.done;
@@ -261,7 +392,10 @@ export const createMailCache = (
           if (epoch !== generation) {
             return;
           }
-          const tx = db.transaction(["entries", "values"], "readwrite");
+          const tx = db.transaction(
+            ["entries", "values", "epochs"],
+            "readwrite"
+          );
           // Attach immediately: a quota abort rejects both the request and transaction.
           const completion = (async () => {
             try {
@@ -271,6 +405,13 @@ export const createMailCache = (
             }
           })();
           try {
+            if (
+              ((await tx.objectStore("epochs").get("session")) ?? "") !==
+              databaseEpoch
+            ) {
+              await tx.done;
+              return;
+            }
             const entries = await tx
               .objectStore("entries")
               .index("accessedAt")
@@ -330,34 +471,12 @@ export const createMailCache = (
         /* Fall back only after eviction/retry or unavailable storage. */
       }
     },
-    setUser(next: string | undefined) {
-      if (initialized && next === userId) {
-        return;
+    async setUser(next: string | undefined, identity = next) {
+      try {
+        await changeUser(next, identity);
+      } catch {
+        /* The browser may deny optional persistence. */
       }
-      initialized = true;
-      userId = next;
-      generation += 1;
-      userGeneration += 1;
-      protectedKeys.clear();
-      const previous = initialization;
-      initialization = (async () => {
-        try {
-          await previous;
-          const db = await open();
-          const tx = db.transaction(["entries", "values"], "readwrite");
-          let cursor = await tx.objectStore("entries").openCursor();
-          while (cursor !== null) {
-            if (cursor.value.userId !== userId) {
-              await tx.objectStore("values").delete(cursor.key);
-              await cursor.delete();
-            }
-            cursor = await cursor.continue();
-          }
-          await tx.done;
-        } catch {
-          /* The browser may deny storage. */
-        }
-      })();
     },
   };
 };

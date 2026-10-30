@@ -9,7 +9,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { setDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import { setManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
-import { authClient } from "@quieter/app/lib/auth";
+import { authClient, signOut } from "@quieter/app/lib/auth";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
 import {
@@ -766,13 +766,7 @@ export const AccountSettingsPanel = ({
   };
   const passkeys = passkeysState.data ?? [];
   const signOutMutation = useMutation({
-    mutationFn: async () => {
-      const response = await authClient.signOut();
-      if (response.error) {
-        throw new Error(response.error.message ?? "Could not sign out.");
-      }
-      return response;
-    },
+    mutationFn: signOut,
     mutationKey: ["auth", "sign-out"],
     onSuccess: async () => {
       setPreviewPersona(null);
@@ -784,7 +778,6 @@ export const AccountSettingsPanel = ({
         // Best-effort cleanup; sign-out teardown must continue.
       }
       queryClient.clear();
-      await queryPersister.removeQueries();
       await navigate({
         to: "/home",
       });
@@ -796,6 +789,7 @@ export const AccountSettingsPanel = ({
     try {
       await signOutMutation.mutateAsync();
     } catch (mutationError) {
+      toastError(mutationError, { boundary: "account-sign-out" });
       setSessionError(
         getMutationErrorMessage(mutationError, "Could not sign out.")
       );

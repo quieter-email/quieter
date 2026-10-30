@@ -1,3 +1,4 @@
+import "fake-indexeddb/auto";
 import type {
   MessageListItem,
   ThreadMessagesResult,
@@ -10,7 +11,11 @@ import {
   updateMessagesInCachedMailboxQueries,
 } from "@quieter/app/lib/mail/inbox-query/query-cache";
 import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query";
-import { queryPersister } from "@quieter/app/lib/query-persister";
+import {
+  clearQueryPersistence,
+  queryPersister,
+  setQueryPersistenceUser,
+} from "@quieter/app/lib/query-persister";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, test, vi } from "vite-plus/test";
 
@@ -38,22 +43,36 @@ describe(persistQueryKeys, () => {
       "from:alex"
     );
     const threadQueryKey = getThreadQueryKey("mailbox-a", "thread-a");
-    const persistSpy = vi
-      .spyOn(queryPersister, "persistQueryByKey")
-      .mockImplementation(async () => {});
-
+    vi.stubGlobal("window", { localStorage: { length: 0 } });
+    setQueryPersistenceUser(crypto.randomUUID(), queryClient);
+    queryClient.setQueryData(inboxQueryKey, messagesData([message("a")]));
+    queryClient.setQueryData(searchQueryKey, messagesData([message("search")]));
+    queryClient.setQueryData(threadQueryKey, {
+      messages: [{ bodyText: "Private body", id: "a" }],
+    });
     try {
       await persistQueryKeys(queryClient, [
         inboxQueryKey,
         searchQueryKey,
         threadQueryKey,
       ]);
-
-      expect(persistSpy.mock.calls.map(([queryKey]) => queryKey)).toStrictEqual(
-        [inboxQueryKey, threadQueryKey]
+      const list = await queryPersister.retrieveQuery<MessagesQueryData>(
+        JSON.stringify(inboxQueryKey)
       );
+      expect(list?.pages[0].messages.map((item) => item.id)).toContain("a");
+      const thread = await queryPersister.retrieveQuery<ThreadMessagesResult>(
+        JSON.stringify(threadQueryKey)
+      );
+      expect(thread?.messages).toContainEqual(
+        expect.objectContaining({ bodyText: "Private body", id: "a" })
+      );
+      await expect(
+        queryPersister.retrieveQuery(JSON.stringify(searchQueryKey))
+      ).resolves.toBeUndefined();
     } finally {
-      persistSpy.mockRestore();
+      await clearQueryPersistence();
+      vi.unstubAllGlobals();
+      queryClient.clear();
     }
   });
 });

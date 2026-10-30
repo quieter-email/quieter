@@ -2,6 +2,7 @@ import { clientEnv } from "@quieter/app/env";
 import { authClient, configureAppAuthClient } from "@quieter/app/lib/auth";
 import { shouldDiscardClientError } from "@quieter/app/lib/client-error-reporting";
 import { toastError } from "@quieter/app/lib/error-toast";
+import { clearQueryPersistence } from "@quieter/app/lib/query-persister";
 import { configureAppRuntime } from "@quieter/app/runtime";
 import { prepareReportedEvent } from "@quieter/observability";
 import { ColorModeProvider } from "@quieter/ui/color-mode";
@@ -57,7 +58,16 @@ const SessionEvents = () => {
       void refreshSession();
     };
     const stopAuthenticated = window.onAuthenticated(refresh);
-    const stopUserUpdated = window.onUserUpdated(refresh);
+    const stopUserUpdated = window.onUserUpdated(async (user) => {
+      if (user === null) {
+        try {
+          await clearQueryPersistence();
+        } catch (error) {
+          toastError(error, { boundary: "desktop-sign-out-cache" });
+        }
+      }
+      await refreshSession();
+    });
     window.addEventListener("focus", refresh);
     return () => {
       stopAuthenticated();

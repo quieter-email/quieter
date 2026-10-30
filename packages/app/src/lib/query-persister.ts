@@ -1,6 +1,7 @@
 import { mailCache, MAIL_CACHE_MAX_AGE } from "@quieter/app/lib/mail-cache";
 import {
   deferredMailPersistence,
+  mailMutationCoordinators,
   pendingMailMutations,
 } from "@quieter/app/lib/mail-mutation-state";
 import { experimental_createQueryPersister } from "@tanstack/query-persist-client-core";
@@ -49,6 +50,7 @@ const deserializePersistedQuery = (value: string): PersistedQuery => {
 
 let persistenceUser: string | undefined;
 let persistenceGeneration = 0;
+let persistenceSession: string | undefined;
 let persistenceInitialized = false;
 let persistenceClient: QueryClient | undefined;
 
@@ -72,10 +74,13 @@ const createPersister = (generation: number) => {
   const storage = {
     entries: async () =>
       generation === persistenceGeneration ? await mailCache.entries() : [],
-    getItem: async (key: string) =>
-      generation === persistenceGeneration
-        ? await mailCache.getItem(key)
-        : null,
+    getItem: async (key: string) => {
+      if (generation !== persistenceGeneration) {
+        return null;
+      }
+      const value = await mailCache.getItem(key);
+      return generation === persistenceGeneration ? value : null;
+    },
     removeItem: async (key: string) => {
       if (generation === persistenceGeneration) {
         await mailCache.removeItem(key);
@@ -194,13 +199,20 @@ let currentPersister = createPersister(persistenceGeneration);
 export const queryPersister: ReturnType<
   typeof experimental_createQueryPersister
 > = {
-  persistQuery: async (...args) => {
-    await currentPersister.persistQuery(...args);
+  persistQuery: async (query) => {
+    if (persistenceClient?.getQueryCache().get(query.queryHash) === query) {
+      await currentPersister.persistQuery(query);
+    }
   },
-  persistQueryByKey: async (...args) => {
-    await currentPersister.persistQueryByKey(...args);
+  persistQueryByKey: async (key, client) => {
+    if (persistenceClient === client) {
+      await currentPersister.persistQueryByKey(key, client);
+    }
   },
   persisterFn: async (queryFn, context, query) => {
+    if (context.client !== persistenceClient) {
+      return await queryFn(context);
+    }
     const delegate = currentPersister;
     return await delegate.persisterFn(queryFn, context, query);
   },
@@ -210,33 +222,61 @@ export const queryPersister: ReturnType<
   removeQueries: async (...args) => {
     await currentPersister.removeQueries(...args);
   },
-  restoreQueries: async (...args) => {
-    await currentPersister.restoreQueries(...args);
+  restoreQueries: async (client, ...args) => {
+    if (client === persistenceClient) {
+      await currentPersister.restoreQueries(client, ...args);
+    }
   },
   retrieveQuery: async (...args) =>
     await currentPersister.retrieveQuery(...args),
 };
 
+let logoutChannel: BroadcastChannel | undefined;
+
 export const setQueryPersistenceUser = (
   userId: string | null | undefined,
-  client?: QueryClient
+  client?: QueryClient,
+  sessionId = userId ?? undefined
 ) => {
   if (
     typeof window === "undefined" ||
     (persistenceInitialized &&
       persistenceUser === (userId ?? undefined) &&
-      persistenceClient === client)
+      persistenceClient === client &&
+      persistenceSession === sessionId)
   ) {
     return;
   }
+  try {
+    if (!logoutChannel && typeof window.BroadcastChannel === "function") {
+      logoutChannel = new window.BroadcastChannel("quieter-cache-logout");
+      logoutChannel.addEventListener(
+        "message",
+        (event: MessageEvent<unknown>) => {
+          if (
+            typeof event.data === "string" &&
+            event.data === persistenceSession
+          ) {
+            const previousClient = persistenceClient;
+            setQueryPersistenceUser(undefined);
+            previousClient?.clear();
+          }
+        }
+      );
+    }
+  } catch {
+    /* The browser may deny cross-tab messaging. */
+  }
   persistenceInitialized = true;
   if (persistenceClient) {
+    mailMutationCoordinators.get(persistenceClient)?.dispose();
     deferredMailPersistence.delete(persistenceClient);
   }
   persistenceUser = userId ?? undefined;
+  persistenceSession = sessionId;
   persistenceClient = client;
   persistenceGeneration += 1;
-  mailCache.setUser(persistenceUser);
+  void mailCache.setUser(persistenceUser, sessionId);
   currentPersister = createPersister(persistenceGeneration);
   try {
     for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
@@ -248,6 +288,22 @@ export const setQueryPersistenceUser = (
   } catch {
     /* Remove obsolete metadata when browser storage is available. */
   }
+};
+
+export const clearQueryPersistence = async () => {
+  const previousSession = persistenceSession;
+  const previousClient = persistenceClient;
+  setQueryPersistenceUser(undefined);
+  previousClient?.clear();
+  try {
+    if (previousSession) {
+      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel messages are restricted to the same origin and accept no targetOrigin.
+      logoutChannel?.postMessage(previousSession);
+    }
+  } catch {
+    /* Durable revocation must proceed when messaging is unavailable. */
+  }
+  await mailCache.clear();
 };
 
 export const shouldPersistQueryKey = (queryKey: readonly unknown[]) => {
@@ -369,7 +425,7 @@ export const persistQueryByKey = async (
   queryClient: Parameters<typeof queryPersister.persistQueryByKey>[1]
 ) => {
   if (
-    (persistenceClient && persistenceClient !== queryClient) ||
+    persistenceClient !== queryClient ||
     !queryKey ||
     !shouldPersistQueryKey(queryKey)
   ) {

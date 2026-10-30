@@ -16,6 +16,7 @@ import {
 import { createAuthClient } from "better-auth/react";
 
 import { appFetch } from "../runtime";
+import { clearQueryPersistence } from "./query-persister";
 
 const createAppAuthClient = (options: { baseURL?: string } = {}) => {
   const currentURL =
@@ -69,4 +70,15 @@ export let authClient = createAppAuthClient();
 
 export const configureAppAuthClient = (options: { baseURL: string }) => {
   authClient = createAppAuthClient(options);
+};
+
+export const signOut = async () => {
+  const response = await authClient.signOut();
+  if (response.error) {
+    throw new Error(response.error.message ?? "Could not sign out.", {
+      cause: response.error,
+    });
+  }
+  await clearQueryPersistence();
+  return response;
 };

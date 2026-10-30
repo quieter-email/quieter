@@ -1,5 +1,6 @@
 import {
   deferredMailPersistence,
+  mailMutationCoordinators,
   pendingMailMutations,
 } from "@quieter/app/lib/mail-mutation-state";
 import { flushMailPersistence } from "@quieter/app/lib/query-persister";
@@ -18,11 +19,6 @@ type Intent = {
   reject: (error: unknown) => void;
   promise: Promise<void>;
 };
-
-const coordinators = new WeakMap<
-  QueryClient,
-  ReturnType<typeof createCoordinator>
->();
 
 const createCoordinator = (client: QueryClient) => {
   const state = createStore<Intent[]>([]);
@@ -266,18 +262,20 @@ const createCoordinator = (client: QueryClient) => {
   };
 };
 
+export type MailMutationCoordinator = ReturnType<typeof createCoordinator>;
+
 export const disposeMailMutations = (client: QueryClient) => {
-  coordinators.get(client)?.dispose();
+  mailMutationCoordinators.get(client)?.dispose();
 };
 
 export const runMailMutation = async (
   client: QueryClient,
   input: Parameters<ReturnType<typeof createCoordinator>["run"]>[0]
 ) => {
-  let coordinator = coordinators.get(client);
+  let coordinator = mailMutationCoordinators.get(client);
   if (!coordinator) {
     coordinator = createCoordinator(client);
-    coordinators.set(client, coordinator);
+    mailMutationCoordinators.set(client, coordinator);
   }
   await coordinator.run(input);
 };
@@ -287,7 +285,7 @@ export const updateMailQueryFromServer = <T>(
   key: QueryKey,
   updater: (data: T | undefined) => T | undefined
 ) => {
-  const coordinator = coordinators.get(client);
+  const coordinator = mailMutationCoordinators.get(client);
   if (coordinator) {
     coordinator.updateFromServer(() => {
       client.setQueryData<T>(key, updater);
