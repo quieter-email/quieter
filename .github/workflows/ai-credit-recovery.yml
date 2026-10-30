@@ -51,4 +51,5 @@ jobs:
           RECOVERY_REQUEST: ${{ inputs.request }}
         run: |
           vp run @quieter/env#build
+          vp run @quieter/observability#build
           vp exec sst shell --stage production -- node scripts/ai-credit-recovery.ts "$RECOVERY_REQUEST" "github-run:$GITHUB_RUN_ID:$GITHUB_TRIGGERING_ACTOR"
