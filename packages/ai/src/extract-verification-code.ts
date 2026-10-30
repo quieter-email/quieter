@@ -1,3 +1,4 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { z } from "zod";
 
 import type { ChatModel } from "./chat-models";
@@ -17,14 +18,17 @@ export type VerificationCodeCandidate = z.infer<typeof verificationCodeSchema>;
 export const extractMailVerificationCode = async ({
   message,
   model = VERIFICATION_CODE_MODEL,
+  billing,
   onUsage,
 }: {
   message: AutomationMailMessage;
   model?: ChatModel;
+  billing: AiBillingContext;
   onUsage?: (usage: AiUsageReport) => void;
 }): Promise<VerificationCodeCandidate> =>
   await runStructuredGeneration({
     abortSignal: AbortSignal.timeout(10_000),
+    billing,
     maxOutputTokens: 100,
     maxRetries: 0,
     model,

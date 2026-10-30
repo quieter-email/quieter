@@ -1,3 +1,4 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { generateText, jsonSchema, Output, zodSchema } from "ai";
 
 import { actionSpecificationSchema } from "./action-specification";
@@ -41,6 +42,7 @@ export const actionGenerationSchema = jsonSchema<ActionSpecification>(
 export const compileActionSpecification = async (input: {
   abortSignal: AbortSignal;
   model: ChatModel;
+  billing: AiBillingContext;
   onUsage: (usage: AiUsageReport) => void;
   prompt: string;
   system: string;
@@ -50,7 +52,7 @@ export const compileActionSpecification = async (input: {
     instructions: input.system,
     maxOutputTokens: 6000,
     maxRetries: 0,
-    model: createChatModel(input.model),
+    model: createChatModel(input.model, { billing: input.billing }),
     onEnd: ({ steps }) => {
       input.onUsage(summarizeAiUsage({ steps }));
     },

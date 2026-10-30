@@ -1,6 +1,16 @@
+import { Chat } from "@ai-sdk/react";
 import { toastError } from "@quieter/app/lib/error-toast";
+import {
+  decodeChatStreamError,
+  encodeChatExpectedError,
+} from "@quieter/orpc/chat-errors";
 import type * as ToastModule from "@quieter/ui/toast";
 import type * as SentryModule from "@sentry/react";
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  DefaultChatTransport,
+} from "ai";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 const toastMocks = vi.hoisted(() => ({
@@ -112,4 +122,78 @@ describe(toastError, () => {
     );
     expect(sentryMocks.captureException).toHaveBeenCalledOnce();
   });
+});
+
+describe("chat stream error transport", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("preserves actionable errors through the real SDK stream without reporting", async () => {
+    const message = "Add credits before continuing.";
+    const chat = new Chat({
+      onError: (error) => {
+        toastError(decodeChatStreamError(error));
+      },
+      transport: new DefaultChatTransport({
+        fetch: async () =>
+          await Promise.resolve(
+            createUIMessageStreamResponse({
+              stream: createUIMessageStream({
+                execute: () => {
+                  throw new Error("server failure");
+                },
+                onError: () =>
+                  encodeChatExpectedError({ message, status: 402 }),
+              }),
+            })
+          ),
+      }),
+    });
+
+    await chat.sendMessage({ text: "Hello" });
+
+    expect(chat.status).toBe("error");
+    expect(toastMocks.error).toHaveBeenCalledWith(message);
+    expect(sentryMocks.captureException).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    "Unexpected server failure.",
+    '{"kind":"quieter.chat.expected-error","version":1,"status":500,"message":"private detail"}',
+    '{"kind":"quieter.chat.expected-error","version":1,"status":402,"message":"private detail","extra":true}',
+    '{"kind":"quieter.chat.expected-error","version":2,"status":402,"message":"private detail"}',
+    '{"kind":"quieter.chat.expected-error","version":1,"status":402,"message":" "}',
+    '{"status":402,"message":"private detail"}',
+  ])(
+    "reports unexpected or malformed stream errors and hides their text (%s)",
+    async (errorText) => {
+      const chat = new Chat({
+        onError: (error) => {
+          toastError(decodeChatStreamError(error), {
+            fallback: "Retry safely.",
+          });
+        },
+        transport: new DefaultChatTransport({
+          fetch: async () =>
+            await Promise.resolve(
+              createUIMessageStreamResponse({
+                stream: createUIMessageStream({
+                  execute: () => {
+                    throw new Error("server failure");
+                  },
+                  onError: () => errorText,
+                }),
+              })
+            ),
+        }),
+      });
+
+      await chat.sendMessage({ text: "Hello" });
+
+      expect(chat.status).toBe("error");
+      expect(toastMocks.error).toHaveBeenCalledWith("Retry safely.");
+      expect(sentryMocks.captureException).toHaveBeenCalledOnce();
+    }
+  );
 });

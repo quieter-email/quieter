@@ -17,7 +17,6 @@ import {
   getAppStaggerDelay,
 } from "@quieter/app/features/motion/app-motion";
 import { CopyVerificationCode } from "@quieter/app/features/verification-codes/components/copy-verification-code";
-import { toastError } from "@quieter/app/lib/error-toast";
 import {
   formatMessageListDate,
   parseSender,
@@ -38,8 +37,10 @@ import { Pill } from "@quieter/ui/pill";
 import { SenderAvatar } from "@quieter/ui/sender-avatar";
 import { Text } from "@quieter/ui/text";
 import { m, useReducedMotion } from "motion/react";
-import type { FocusEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useState } from "react";
+
+import { createMessageRowHandlers } from "./message-row-handlers";
 
 type MessageRowSelectionGesture = {
   additive: boolean;
@@ -359,115 +360,6 @@ const MessageRowDetails = ({
   />
 );
 
-const useMessageRowHandlers = ({
-  isActionPending,
-  isActive,
-  mailboxActions,
-  mailboxProvider,
-  onKeyboardOpen,
-  onThreadFocus,
-  onThreadIntent,
-  onThreadPress,
-  onThreadSelectionPress,
-  showSelectionControl,
-  thread,
-  unread,
-}: {
-  isActionPending: boolean;
-  isActive: boolean;
-  mailboxActions: MessageListProps["mailboxActions"];
-  mailboxProvider: MessageListProps["mailboxProvider"];
-  onKeyboardOpen?: () => void;
-  onThreadFocus: (threadId: string | null) => void;
-  onThreadIntent: (threadId: string | null) => void;
-  onThreadPress: MessageRowProps["onThreadPress"];
-  onThreadSelectionPress: MessageRowProps["onThreadSelectionPress"];
-  showSelectionControl: boolean;
-  thread: ThreadListEntry;
-  unread: boolean;
-}) => {
-  const handleRowMouseDown = (event: MouseEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) {
-      return;
-    }
-
-    event.preventDefault();
-    const gesture = getSelectionGesture(event);
-
-    if (gesture.additive || gesture.range) {
-      onThreadPress(thread, gesture);
-    }
-  };
-  const handleRowClick = (event: MouseEvent<HTMLButtonElement>) => {
-    const gesture = getSelectionGesture(event);
-
-    if (gesture.additive || gesture.range) {
-      return;
-    }
-
-    if (!isActive && event.detail === 0) {
-      onKeyboardOpen?.();
-    }
-
-    if (
-      !isActive &&
-      !showSelectionControl &&
-      unread &&
-      mailboxProvider !== "api" &&
-      !isActionPending
-    ) {
-      void (async () => {
-        try {
-          await mailboxActions.markThreadAsRead(thread.threadId);
-        } catch (error) {
-          toastError(error, { boundary: "message-read-state" });
-        }
-      })();
-    }
-
-    onThreadPress(thread, gesture);
-  };
-  const handleRowKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (
-      event.key !== " " ||
-      (!event.metaKey && !event.ctrlKey && !event.shiftKey)
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-    onThreadSelectionPress(thread, getSelectionGesture(event));
-  };
-  const handleRowFocusCapture = (event: FocusEvent<HTMLDivElement>) => {
-    if (!(event.target instanceof HTMLButtonElement)) {
-      return;
-    }
-    if (!Object.hasOwn(event.target.dataset, "messageRowTrigger")) {
-      return;
-    }
-
-    onThreadFocus(thread.threadId);
-    onThreadIntent(thread.threadId);
-  };
-  const handleRowBlurCapture = (event: FocusEvent<HTMLDivElement>) => {
-    const next = event.relatedTarget;
-    if (next instanceof Node && event.currentTarget.contains(next)) {
-      return;
-    }
-
-    onThreadFocus(null);
-    onThreadIntent(null);
-  };
-
-  return {
-    handleRowBlurCapture,
-    handleRowClick,
-    handleRowFocusCapture,
-    handleRowKeyDown,
-    handleRowMouseDown,
-  };
-};
-
 type MessageRowSurfaceProps = {
   wideCompactRows?: boolean;
   activeMailbox: MessageListProps["activeMailbox"];
@@ -553,11 +445,10 @@ const MessageRowSurface = ({
     handleRowFocusCapture,
     handleRowKeyDown,
     handleRowMouseDown,
-  } = useMessageRowHandlers({
+  } = createMessageRowHandlers({
     isActionPending,
     isActive,
     mailboxActions,
-    mailboxProvider,
     onKeyboardOpen,
     onThreadFocus,
     onThreadIntent,

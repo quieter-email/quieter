@@ -1,9 +1,19 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { MockLanguageModelV4 } from "ai/test";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { defaultBackgroundModel } from "../src/chat-models";
 import type { AiUsageReport } from "../src/chat-usage";
 import { suggestReply } from "../src/suggest-reply";
+
+const billing: AiBillingContext = {
+  account: null,
+  admittedAt: new Date(),
+  groupId: "test-operation",
+  kind: "team",
+  organizationId: "test-team",
+  usageKind: "aiChat",
+};
 
 const state = vi.hoisted(() => ({
   model: vi.fn<() => MockLanguageModelV4>(),
@@ -61,9 +71,13 @@ describe("reply suggestion structured output", () => {
     async (bodyText) => {
       useResponse({ bodyText, reason: null, status: "suggested" });
       const onUsage = vi.fn<(usage: AiUsageReport) => void>();
-      await expect(suggestReply({ ...input, onUsage })).rejects.toThrow(
-        /bodyText/u
-      );
+      await expect(
+        suggestReply({
+          billing,
+          ...input,
+          onUsage,
+        })
+      ).rejects.toThrow(/bodyText/u);
       expect(onUsage).toHaveBeenCalledWith(
         expect.objectContaining({ costUsd: 0.01 })
       );
@@ -77,6 +91,7 @@ describe("reply suggestion structured output", () => {
       status: "not_needed",
     });
     const result = await suggestReply({
+      billing,
       ...input,
       onUsage: vi.fn<(usage: AiUsageReport) => void>(),
     });

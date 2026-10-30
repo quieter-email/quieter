@@ -323,6 +323,9 @@ export type AiMemoryChange = {
 export const user = pgTable("user", {
   createdAt: timestamp("createdAt").notNull(),
   defaultMailboxId: text("defaultMailboxId"),
+  defaultOrganizationProvisioned: boolean("defaultOrganizationProvisioned")
+    .notNull()
+    .default(false),
   email: text("email").notNull().unique(),
   emailVerified: boolean("emailVerified").notNull(),
   id: text("id").primaryKey(),
@@ -2843,6 +2846,7 @@ export const mailDomain = pgTable(
     organizationId: text("organizationId")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    ownershipVerifiedAt: timestamp("ownershipVerifiedAt"),
     requiredDnsRecords: jsonb("requiredDnsRecords")
       .$type<MailDomainDnsRecord[]>()
       .notNull(),
@@ -2859,6 +2863,15 @@ export const mailDomain = pgTable(
     index("mail_domain_catch_all_mailbox_idx").on(table.catchAllMailboxId),
     unique("mail_domain_catch_all_mailbox_unique").on(table.catchAllMailboxId),
     unique("mail_domain_domain_unique").on(table.domain),
+    unique("mail_domain_organization_domain_unique").on(
+      table.organizationId,
+      table.domain
+    ),
+    uniqueIndex("mail_domain_owner_unique")
+      .on(table.domain)
+      .where(
+        sql`${table.ownershipVerifiedAt} is not null or ${table.status} = 'verified'`
+      ),
   ]
 );
 
@@ -2995,6 +3008,41 @@ export const billingCreditUsageEvent = pgTable(
       table.createdAt
     ),
     unique("billing_credit_usage_event_dedupe_key_unique").on(table.dedupeKey),
+  ]
+);
+
+export const aiCreditReservation = pgTable(
+  "aiCreditReservation",
+  {
+    account:
+      jsonb("account").$type<NonNullable<MailSendSnapshot["billingAccount"]>>(),
+    actualCostMicroCents: bigint("actualCostMicroCents", { mode: "number" }),
+    createdAt: timestamp("createdAt").notNull(),
+    groupId: text("groupId").notNull(),
+    id: text("id").primaryKey(),
+    lastReconciledAt: timestamp("lastReconciledAt"),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    providerGenerationId: text("providerGenerationId"),
+    reservedCostMicroCents: bigint("reservedCostMicroCents", {
+      mode: "number",
+    }).notNull(),
+    status: text("status")
+      .$type<"reserved" | "settled" | "released">()
+      .notNull(),
+    usageKind: text("usageKind").notNull(),
+  },
+  (table) => [
+    index("ai_credit_reservation_group_idx").on(table.groupId),
+    index("ai_credit_reservation_organization_idx").on(
+      table.organizationId,
+      table.status
+    ),
+    check(
+      "ai_credit_reservation_cost_check",
+      sql`${table.reservedCostMicroCents} >= 0`
+    ),
   ]
 );
 

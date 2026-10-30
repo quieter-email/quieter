@@ -1,3 +1,4 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import {
   generateText,
   JSONParseError,
@@ -34,6 +35,7 @@ const reasoningProviderOptions = (
  * usage report with OpenRouter cost accounting included.
  */
 export const runStructuredGeneration = async <TOutput>(input: {
+  billing: AiBillingContext;
   abortSignal?: AbortSignal;
   maxOutputTokens: number;
   maxRetries?: number;
@@ -60,6 +62,7 @@ export const runStructuredGeneration = async <TOutput>(input: {
             ? {}
             : { maxRetries: input.maxRetries }),
           model: createChatModel(input.model ?? defaultChatModel, {
+            billing: input.billing,
             prioritizeLatency: input.prioritizeLatency,
           }),
           onEnd: ({ steps: attemptSteps }) => {
@@ -97,6 +100,7 @@ export const runStructuredGeneration = async <TOutput>(input: {
 
 /** Plain-text generation variant for prompts that return prose. */
 export const runTextGeneration = async (input: {
+  billing: AiBillingContext;
   abortSignal?: AbortSignal;
   maxOutputTokens: number;
   model?: ChatModel;
@@ -111,7 +115,9 @@ export const runTextGeneration = async (input: {
       : { abortSignal: input.abortSignal }),
     instructions: input.system,
     maxOutputTokens: input.maxOutputTokens,
-    model: createChatModel(input.model ?? defaultChatModel),
+    model: createChatModel(input.model ?? defaultChatModel, {
+      billing: input.billing,
+    }),
     ...reasoningProviderOptions(input.reasoningEffort),
     prompt: input.prompt,
   });

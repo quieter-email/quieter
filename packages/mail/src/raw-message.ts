@@ -2,7 +2,30 @@ import PostalMime, { addressParser } from "postal-mime";
 import type { Address } from "postal-mime";
 
 import { formatMailSender } from "./compose/sender";
+import { parseSendSender } from "./send";
 import { createMailSnippet } from "./snippet";
+
+export const assertRawMailSender = async (
+  raw: string | Uint8Array,
+  expectedSender: string
+): Promise<string> => {
+  const expected = parseSendSender(expectedSender);
+  const parsed = await PostalMime.parse(raw);
+  const fromHeaders = parsed.headers.filter(({ key }) => key === "from");
+  const sender =
+    fromHeaders.length === 1
+      ? parseSendSender(fromHeaders[0]?.value ?? "")
+      : null;
+  if (
+    expected === null ||
+    sender === null ||
+    sender.address !== expected.address ||
+    parsed.from?.address?.toLowerCase() !== expected.address
+  ) {
+    throw new Error("The message sender does not match its sender identity.");
+  }
+  return expected.address;
+};
 
 export type ParsedRawMailMessage = {
   attachments: {

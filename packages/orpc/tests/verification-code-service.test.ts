@@ -1,4 +1,6 @@
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
+import { AiCreditAdmissionBusyError } from "@quieter/billing/ai-credit-errors";
+import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import type * as databaseClient from "@quieter/database/client";
 import {
   afterEach,
@@ -330,6 +332,44 @@ describe("verification code processing", () => {
     expect(loadMessage).toHaveBeenCalledTimes(2);
     expect(fixtures.extracted).toHaveBeenCalledOnce();
     expect(fixtures.rows.get("message-1")?.processed).toBeTruthy();
+  });
+
+  test("screen admission contention defers without a second paid request and later resumes", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    fixtures.screened.mockRejectedValueOnce(new AiCreditAdmissionBusyError());
+    fixtures.extracted.mockResolvedValue({
+      code: "482193",
+      expiresInSeconds: null,
+      service: null,
+    });
+    const input = {
+      loadMessage: async () => {
+        await Promise.resolve();
+        return {
+          bodyText: "Your sign-in code is 482193",
+          id: "message-1",
+          internalDate: String(Date.now()),
+          threadId: "thread-1",
+        };
+      },
+      mailboxId: "mailbox-1",
+      messageId: "message-1",
+      organizationId: "org-1",
+      userId: "user-1",
+    };
+    await processMailVerificationCode(input);
+    expect(fixtures.extracted).not.toHaveBeenCalled();
+    expect(fixtures.rows.get("message-1")?.processed).toBeFalsy();
+    const retryAt = fixtures.rows.get("message-1")?.nextAttemptAt;
+    if (!retryAt) {
+      throw new Error("Expected deferred verification work.");
+    }
+    await processMailVerificationCode(input);
+    expect(fixtures.screened).toHaveBeenCalledOnce();
+    vi.setSystemTime(new Date(retryAt.getTime() + 1));
+    await processMailVerificationCode(input);
+    expect(fixtures.rows.get("message-1")?.processed).toBeTruthy();
+    expect(fixtures.extracted).toHaveBeenCalledOnce();
   });
 
   test("a deleted message is closed instead of retried", async () => {
@@ -674,3 +714,16 @@ describe("OTP sending and extraction", () => {
     }
   );
 });
+
+vi.mock(import("@quieter/billing/ai-reservation"), () => ({
+  createMailboxAiBillingContext: vi
+    .fn<typeof createMailboxAiBillingContext>()
+    .mockResolvedValue({
+      account: null,
+      admittedAt: new Date(),
+      groupId: "fixture",
+      kind: "team",
+      organizationId: "test-team",
+      usageKind: "aiChat",
+    }),
+}));

@@ -62,7 +62,7 @@ export const sendOrganizationMailMessage = async (input: {
         kind: "api",
         rawSizeBytes: built.rawSizeBytes,
         replyTo: built.replyTo,
-        sender: message.from,
+        sender: parsed.from,
         sentAt: sentAt.toISOString(),
         subject: message.subject,
         tags: message.tags,

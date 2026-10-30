@@ -1,4 +1,20 @@
+import { AiCreditAdmissionBusyError } from "@quieter/billing/ai-credit-errors";
 import { NoOutputGeneratedError, RetryError } from "ai";
+
+export const isAiCreditAdmissionBusy = (error: unknown): boolean => {
+  const visited = new Set<unknown>();
+  let current = error;
+  while (current instanceof Error && !visited.has(current)) {
+    visited.add(current);
+    if (current instanceof AiCreditAdmissionBusyError) {
+      return true;
+    }
+    current = RetryError.isInstance(current)
+      ? current.lastError
+      : current.cause;
+  }
+  return false;
+};
 
 /**
  * Provider throttling and transient connectivity failures are handled by the
@@ -36,7 +52,7 @@ export const shouldReportAiTaskFailure = (
   error: unknown,
   attemptCount: number
 ): boolean => {
-  if (isTransientAiProviderError(error)) {
+  if (isAiCreditAdmissionBusy(error) || isTransientAiProviderError(error)) {
     return false;
   }
   return !(isAiEmptyOutputError(error) && attemptCount > 1);

@@ -94,6 +94,51 @@ export const MailboxActionsReview = ({
               Event actions are not available yet. This review stays inactive.
             </p>
           ) : null}
+          {specification.eligibility ? (
+            <SettingsRowText title="Required message conditions">
+              <p>
+                {specification.eligibility.sender.kind === "any"
+                  ? "Any sender"
+                  : `Sender must be ${specification.eligibility.sender.addresses.join(", ")}`}
+              </p>
+              {specification.eligibility.subjectIncludes.map((text) => (
+                <p key={text}>Subject must contain {text}</p>
+              ))}
+              {specification.eligibility.bodyIncludes.map((text) => (
+                <p key={text}>Body must contain {text}</p>
+              ))}
+              <p>Every condition must match the triggering message.</p>
+            </SettingsRowText>
+          ) : null}
+          {specification.toolGrants
+            .filter((grant) => grant.argumentTemplate)
+            .map((grant) => {
+              const capability = revision.capabilities.find(
+                (item) => item.toolId === grant.toolId
+              );
+              const permission = specification.permissions.find(
+                (item) => item.id === grant.permissionId
+              );
+              const accountLabel =
+                permission?.scope === "connector"
+                  ? referenceLabels.get(permission.connectorReferenceId)
+                  : null;
+              return (
+                <SettingsRowText
+                  key={`${grant.permissionId}:${grant.toolId}`}
+                  title={capability?.label ?? "Approved change"}
+                >
+                  {accountLabel ? <p>{accountLabel}</p> : null}
+                  <p>
+                    Runs once per matching message using these exact arguments.
+                    Message placeholders copy only the incoming subject or body.
+                  </p>
+                  <pre className="break-words whitespace-pre-wrap">
+                    {grant.argumentTemplate}
+                  </pre>
+                </SettingsRowText>
+              );
+            })}
           <SettingsRowText title="Instructions">
             <p className="whitespace-pre-wrap">{specification.instructions}</p>
           </SettingsRowText>
