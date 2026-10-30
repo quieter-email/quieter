@@ -7,7 +7,7 @@ const EXTERNAL_IMAGES_CHANGE_EVENT = "quieter:external-images-enabled-change";
 
 const DEFAULT_EXTERNAL_IMAGES_ENABLED = false;
 
-const readExternalImagesEnabled = () => {
+export const readExternalImagesEnabled = () => {
   if (typeof window === "undefined") {
     return DEFAULT_EXTERNAL_IMAGES_ENABLED;
   }
@@ -18,7 +18,7 @@ const readExternalImagesEnabled = () => {
   }
 };
 
-const subscribeToExternalImagesEnabled = (onStoreChange: () => void) => {
+export const subscribeToExternalImagesEnabled = (onStoreChange: () => void) => {
   const handleStorage = (event: StorageEvent) => {
     if (event.key === EXTERNAL_IMAGES_STORAGE_KEY) {
       onStoreChange();

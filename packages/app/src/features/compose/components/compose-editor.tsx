@@ -48,7 +48,6 @@ import {
 } from "@tiptap/core";
 import type { Editor, Range } from "@tiptap/core";
 import { FileHandler } from "@tiptap/extension-file-handler";
-import { Image } from "@tiptap/extension-image";
 import { Link } from "@tiptap/extension-link";
 import { Placeholder } from "@tiptap/extension-placeholder";
 import { Underline } from "@tiptap/extension-underline";
@@ -66,16 +65,7 @@ import {
 } from "react";
 import type { ReactNode, Ref } from "react";
 
-const ComposeImage = Image.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      "data-compose-inline-id": {
-        default: null,
-      },
-    };
-  },
-});
+import { ComposeImage } from "../domain/compose-image";
 
 const ComposeQuote = Extension.create({
   addGlobalAttributes() {
