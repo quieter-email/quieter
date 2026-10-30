@@ -42,11 +42,19 @@ export const parseSendSender = (
     return null;
   }
   const normalized = value.trim();
-  const match =
-    /^(?:"(?:[^"\\]|\\.)*"|[^<>"(),:;\\]*)\s*<(?<address>[^<>]+)>$/u.exec(
-      normalized
-    );
-  const address = (match?.groups?.address ?? normalized).trim().toLowerCase();
+  const angleStart = normalized.lastIndexOf("<");
+  let mailbox = normalized;
+  if (angleStart !== -1) {
+    const displayName = normalized.slice(0, angleStart).trimEnd();
+    if (
+      !normalized.endsWith(">") ||
+      !/^(?:"(?:[^"\\]|\\.)*"|[^<>"(),:;\\]*)$/u.test(displayName)
+    ) {
+      return null;
+    }
+    mailbox = normalized.slice(angleStart + 1, -1);
+  }
+  const address = mailbox.trim().toLowerCase();
   if (!z.email().safeParse(address).success) {
     return null;
   }

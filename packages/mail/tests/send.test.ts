@@ -2,7 +2,7 @@ import PostalMime from "postal-mime";
 import { describe, expect, test } from "vite-plus/test";
 
 import { assertRawMailSender } from "../src/raw-message";
-import { sendMessageInputSchema } from "../src/send";
+import { parseSendSender, sendMessageInputSchema } from "../src/send";
 import { buildSendMimeMessage } from "../src/send-mime";
 
 describe("send message input schema", () => {
@@ -16,7 +16,12 @@ describe("send message input schema", () => {
     "Name\r\n <sender@example.com>",
     "\r\nsender@example.com",
     "sender@example.com\r\n",
-  ])("rejects ambiguous sender syntax %s", async (from) => {
+    `Name${" ".repeat(4000)}<sender@example.com`,
+    `Name${" ".repeat(4000)}<sender@example.com> trailing`,
+    `Name${" ".repeat(4000)}<sender@example.com>>`,
+    `"Name${" ".repeat(4000)}\\" <sender@example.com>`,
+  ])("rejects ambiguous sender syntax %#", async (from) => {
+    expect(parseSendSender(from)).toBeNull();
     const message = {
       attachments: [],
       from,
@@ -35,8 +40,12 @@ describe("send message input schema", () => {
     '"Doe, Jane (team): sales;" <sender@example.com>',
     '"Jane \\"JJ\\" Doe" <sender@example.com>',
     "日本語 <sender@example.com>",
+    '"Team <sales>, \\"quoted\\" >" <sender@example.com>',
+    "<sender@example.com>",
+    `Team${" ".repeat(4000)}<sender@example.com>`,
+    `"${"日本語 ".repeat(50)}" <sender@example.com>`,
   ])(
-    "keeps serialized sender equal to the canonical identity %s",
+    "keeps serialized sender equal to the canonical identity %#",
     async (from) => {
       const message = sendMessageInputSchema.parse({
         from,
