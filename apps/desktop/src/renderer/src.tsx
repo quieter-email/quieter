@@ -1,6 +1,7 @@
 import { clientEnv } from "@quieter/app/env";
 import { authClient, configureAppAuthClient } from "@quieter/app/lib/auth";
 import { shouldDiscardClientError } from "@quieter/app/lib/client-error-reporting";
+import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { clearQueryPersistence } from "@quieter/app/lib/query-persister";
 import { configureAppRuntime } from "@quieter/app/runtime";
@@ -60,6 +61,11 @@ const SessionEvents = () => {
     const stopAuthenticated = window.onAuthenticated(refresh);
     const stopUserUpdated = window.onUserUpdated(async (user) => {
       if (user === null) {
+        try {
+          draftRecoveryJournal.setUser(undefined);
+        } catch (error) {
+          toastError(error, { boundary: "compose-recovery-identity-cleanup" });
+        }
         try {
           await clearQueryPersistence();
         } catch (error) {

@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
 import { parseRawMailMessage } from "@quieter/mail/raw-message";
-import { getSendEnvelopeAddress } from "@quieter/mail/send";
+import {
+  getSendEnvelopeAddress,
+  sendAttachmentListResourcesSchema,
+} from "@quieter/mail/send";
 import type { SendMessageInput, SendMessageResult } from "@quieter/mail/send";
 import { buildSendMimeMessage } from "@quieter/mail/send-mime";
 
@@ -28,6 +31,7 @@ export const sendOrganizationMailMessage = async (input: {
   organizationId: string;
 }): Promise<SendMessageResult> => {
   const { message, organizationId } = input;
+  sendAttachmentListResourcesSchema.parse(message.attachments);
   const id = randomUUID();
   const sentAt = new Date();
   const messageHeaderId = `<${id}@${getSendEnvelopeAddress(message.from).split("@").at(1)}>`;
@@ -62,7 +66,7 @@ export const sendOrganizationMailMessage = async (input: {
         kind: "api",
         rawSizeBytes: built.rawSizeBytes,
         replyTo: built.replyTo,
-        sender: message.from,
+        sender: parsed.from,
         sentAt: sentAt.toISOString(),
         subject: message.subject,
         tags: message.tags,

@@ -85,13 +85,20 @@ export const extractMailAddress = (value: string): string => {
     return "";
   }
 
-  const angleMatch =
-    /^(?:"(?:[^"\\]|\\.)*"|[^<>"\r\n]*)\s*<(?<address>[^<>]+)>$/u.exec(
-      normalized
-    );
-  const angleAddress = angleMatch?.groups?.address;
-  if (angleAddress !== undefined && angleAddress.length > 0) {
-    return normalizeMailAddressValue(angleAddress);
+  const angleStart = normalized.lastIndexOf("<");
+  if (angleStart === -1 || !normalized.endsWith(">")) {
+    return normalized;
+  }
+
+  const displayName = normalized.slice(0, angleStart).trimEnd();
+  const address = normalized.slice(angleStart + 1, -1);
+  if (
+    address.length > 0 &&
+    !/[<>]/u.test(address) &&
+    (/^"(?:[^"\\]|\\.)*"$/u.test(displayName) ||
+      /^[^<>"\r\n]*$/u.test(displayName))
+  ) {
+    return normalizeMailAddressValue(address);
   }
 
   return normalized;

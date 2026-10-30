@@ -270,6 +270,15 @@ export const createMailboxActionHandlers = ({
         kind: "move",
       });
     },
+    get canMarkRead() {
+      return (
+        queryClient
+          .getQueryData(mailboxesQueryOptions().queryKey)
+          ?.groups.flatMap((group) => group.mailboxes)
+          .find((mailbox) => mailbox.id === mailboxId)?.capabilities
+          .canMarkRead === true
+      );
+    },
     get canSetImportance() {
       return (
         queryClient

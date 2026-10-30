@@ -10,8 +10,8 @@ import {
 import { setDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import { setManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
 import { authClient, signOut } from "@quieter/app/lib/auth";
+import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import { toastError } from "@quieter/app/lib/error-toast";
-import { orpc } from "@quieter/app/lib/orpc";
 import {
   clearPreviewPersonaCookie,
   setPreviewPersona,
@@ -267,17 +267,6 @@ const AccountEmailSettings = ({ currentEmail }: { currentEmail: string }) => {
   const queryClient = useQueryClient();
   const changeEmailMutation = useMutation({
     mutationFn: async (input: { callbackURL: string; newEmail: string }) => {
-      const status = await queryClient.query(
-        orpc.auth.getUserStatus.queryOptions({
-          input: { email: input.newEmail },
-          staleTime: 0,
-        })
-      );
-
-      if (status.exists) {
-        throw new Error("That email already has an account.");
-      }
-
       const response = await authClient.changeEmail(input);
       if (response.error) {
         throw new Error(
@@ -609,8 +598,21 @@ const DeleteAccountDialog = () => {
     mutationKey: ["auth", "delete-user"],
     onSuccess: async () => {
       try {
-        queryClient.clear();
-        await clearQueryPersistence();
+        const results = await Promise.allSettled([
+          Promise.resolve().then(() => {
+            draftRecoveryJournal.setUser(undefined);
+          }),
+          Promise.resolve().then(async () => {
+            queryClient.clear();
+            await clearQueryPersistence();
+          }),
+        ]);
+        const failures = results
+          .filter((result) => result.status === "rejected")
+          .map((result): unknown => result.reason);
+        if (failures.length > 0) {
+          throw new AggregateError(failures, "Local account cleanup failed.");
+        }
         await navigate({
           to: "/home",
         });

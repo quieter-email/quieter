@@ -1,7 +1,10 @@
 import { fileURLToPath } from "node:url";
 
 import { cloudflare } from "@cloudflare/vite-plugin";
-import { assertLocalDevelopmentDatabaseUrls } from "@quieter/database/local-development";
+import {
+  assertLocalDevelopmentDatabaseUrl,
+  assertLocalDevelopmentDatabaseUrls,
+} from "@quieter/database/local-development";
 import babel from "@rolldown/plugin-babel";
 import { sentryTanstackStart } from "@sentry/tanstackstart-react/vite";
 import tailwindcss from "@tailwindcss/vite";
@@ -9,7 +12,7 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { wgslVitePlugin } from "vgpu/client";
 import type { Plugin, Environment } from "vite-plus";
-import { defineConfig, lazyPlugins } from "vite-plus";
+import { defineConfig, lazyPlugins, loadEnv } from "vite-plus";
 import { unstable_readConfig } from "wrangler";
 
 const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
@@ -82,13 +85,13 @@ const emitBuildId = (): Plugin => ({
 });
 
 const validateLocalDevelopment = (): Plugin => ({
-  config() {
-    assertLocalDevelopmentDatabaseUrls();
+  config(_config, { mode }) {
+    assertLocalDevelopmentDatabaseUrls(loadEnv(mode, workspaceRoot, ""));
   },
   name: "validate-local-development",
 });
 
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
   const configPath = process.env.SST_WRANGLER_PATH;
   const isDev = command === "serve";
   const isSentryEnabled = !isDev && !!process.env.SENTRY_AUTH_TOKEN;
@@ -140,6 +143,7 @@ export default defineConfig(({ command }) => {
     },
     define: {
       __QUIETER_BUILD_ID__: JSON.stringify(buildId),
+      __QUIETER_LOCAL_DEVELOPMENT__: JSON.stringify(isDev),
     },
     envDir: workspaceRoot,
     optimizeDeps: {
@@ -155,28 +159,45 @@ export default defineConfig(({ command }) => {
       wgslVitePlugin(),
       cloudflare({
         // SST checks this file for its generated config; cf loads the adapter separately.
-        config: configPath
-          ? (worker) => {
-              const config = unstable_readConfig({ config: configPath });
-              const bindingNames = [
-                ...Object.keys(config.vars),
-                ...config.hyperdrive.map((binding) => binding.binding),
-                ...config.durable_objects.bindings.map(
-                  (binding) => binding.name
-                ),
-                ...config.r2_buckets.map((binding) => binding.binding),
-                ...config.services.map((binding) => binding.binding),
-              ];
-              if (
-                worker.name !== config.name ||
-                bindingNames.some((name) => !(name in (worker.env ?? {})))
-              ) {
-                throw new Error(
-                  "The Cloudflare configuration did not load SST's generated bindings."
+        config: (worker) => {
+          if (isDev) {
+            const localValues = loadEnv(mode, workspaceRoot, "");
+            for (const [name, binding] of Object.entries(worker.env ?? {})) {
+              if (binding.type !== "hyperdrive") {
+                continue;
+              }
+              const value =
+                localValues[
+                  `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_${name}`
+                ] || binding.dev?.connectionString;
+              if (value) {
+                assertLocalDevelopmentDatabaseUrl(
+                  "DATABASE_URL",
+                  value,
+                  localValues
                 );
               }
             }
-          : undefined,
+          }
+          if (configPath) {
+            const config = unstable_readConfig({ config: configPath });
+            const bindingNames = [
+              ...Object.keys(config.vars),
+              ...config.hyperdrive.map((binding) => binding.binding),
+              ...config.durable_objects.bindings.map((binding) => binding.name),
+              ...config.r2_buckets.map((binding) => binding.binding),
+              ...config.services.map((binding) => binding.binding),
+            ];
+            if (
+              worker.name !== config.name ||
+              bindingNames.some((name) => !(name in (worker.env ?? {})))
+            ) {
+              throw new Error(
+                "The Cloudflare configuration did not load SST's generated bindings."
+              );
+            }
+          }
+        },
         persistState: { path: `${workspaceRoot}/.wrangler/state` },
         remoteBindings: false,
         viteEnvironment: { name: "ssr" },

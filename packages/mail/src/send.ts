@@ -1,3 +1,4 @@
+import { addressParser } from "postal-mime";
 import { z } from "zod";
 
 import { extractMailAddress } from "./compose/schema";
@@ -13,6 +14,8 @@ export type { SendMessageResult } from "./delivery";
 export { SEND_API_PATH } from "./public-api";
 
 export const MAX_SEND_PAYLOAD_BYTES = 25 * 1024 * 1024;
+export const MAX_SEND_ATTACHMENTS = 100;
+export const MAX_SEND_ATTACHMENT_METADATA_LENGTH = 998;
 
 const HEADER_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/u;
 const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/u;
@@ -34,6 +37,42 @@ const STRUCTURAL_HEADER_NAMES = new Set([
 
 const hasHeaderInjection = (value: string) => /[\r\n]/u.test(value);
 
+export const parseSendSender = (
+  value: string
+): { address: string; name: string } | null => {
+  if (/\p{Cc}/u.test(value)) {
+    return null;
+  }
+  const normalized = value.trim();
+  const angleStart = normalized.lastIndexOf("<");
+  let mailbox = normalized;
+  if (angleStart !== -1) {
+    const displayName = normalized.slice(0, angleStart).trimEnd();
+    if (
+      !normalized.endsWith(">") ||
+      !/^(?:"(?:[^"\\]|\\.)*"|[^<>"(),:;\\]*)$/u.test(displayName)
+    ) {
+      return null;
+    }
+    mailbox = normalized.slice(angleStart + 1, -1);
+  }
+  const address = mailbox.trim().toLowerCase();
+  if (!z.email().safeParse(address).success) {
+    return null;
+  }
+  const addresses = addressParser(normalized);
+  const [sender] = addresses;
+  if (
+    addresses.length !== 1 ||
+    sender === undefined ||
+    sender.group ||
+    sender.address.toLowerCase() !== address
+  ) {
+    return null;
+  }
+  return { address, name: sender.name };
+};
+
 const isSafeHeaderName = (name: string) => HEADER_NAME_PATTERN.test(name);
 
 export const isValidBase64 = (value: string): boolean => {
@@ -46,12 +85,7 @@ export const isValidBase64 = (value: string): boolean => {
     return false;
   }
 
-  try {
-    Buffer.from(normalized, "base64");
-    return true;
-  } catch {
-    return false;
-  }
+  return true;
 };
 
 const jsonMetadataValueSchema = z.union([
@@ -102,6 +136,7 @@ export const sendAttachmentSchema = z.object({
     .refine(isValidBase64, "Attachment content must be base64 encoded."),
   contentId: z
     .string()
+    .max(MAX_SEND_ATTACHMENT_METADATA_LENGTH)
     .trim()
     .min(1)
     .refine((value) => !hasHeaderInjection(value), {
@@ -110,6 +145,7 @@ export const sendAttachmentSchema = z.object({
     .optional(),
   contentType: z
     .string()
+    .max(MAX_SEND_ATTACHMENT_METADATA_LENGTH)
     .trim()
     .min(1)
     .refine((value) => !hasHeaderInjection(value), {
@@ -119,12 +155,23 @@ export const sendAttachmentSchema = z.object({
   disposition: z.enum(["attachment", "inline"]).default("attachment"),
   filename: z
     .string()
+    .max(MAX_SEND_ATTACHMENT_METADATA_LENGTH)
     .trim()
     .min(1)
     .refine((value) => !hasHeaderInjection(value), {
       message: "Attachment filenames cannot contain line breaks.",
     }),
 });
+
+export const sendAttachmentListResourcesSchema = z
+  .array(
+    sendAttachmentSchema.pick({
+      contentId: true,
+      contentType: true,
+      filename: true,
+    })
+  )
+  .max(MAX_SEND_ATTACHMENTS);
 
 export const sendTagSchema = z.object({
   name: z.string().trim().min(1),
@@ -133,10 +180,20 @@ export const sendTagSchema = z.object({
 
 export const sendMessageInputSchema = z
   .object({
-    attachments: z.array(sendAttachmentSchema).default([]),
+    attachments: z
+      .array(sendAttachmentSchema)
+      .max(MAX_SEND_ATTACHMENTS)
+      .default([]),
     bcc: addressListSchema.optional(),
     cc: addressListSchema.optional(),
-    from: z.string().trim().min(1),
+    from: z
+      .string()
+      .min(1)
+      .refine((value) => parseSendSender(value) !== null, {
+        message:
+          "Enter a single sender email address, optionally with a display name.",
+      })
+      .trim(),
     headers: headerSchema.optional(),
     html: z.string().min(1).optional(),
     idempotencyKey: z.string().trim().min(1).max(255).optional(),

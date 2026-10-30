@@ -3,6 +3,7 @@ import { setImmediate } from "node:timers/promises";
 
 import { classifyMailImportance } from "@quieter/ai/mail-importance";
 import { reportAiUsage } from "@quieter/billing";
+import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import {
   gmailCapturedMessage,
@@ -1132,3 +1133,16 @@ describe.skipIf(databaseUrl === undefined)(
     });
   }
 );
+
+vi.mock(import("@quieter/billing/ai-reservation"), () => ({
+  createMailboxAiBillingContext: vi
+    .fn<typeof createMailboxAiBillingContext>()
+    .mockResolvedValue({
+      account: null,
+      admittedAt: new Date(),
+      groupId: "fixture",
+      kind: "team",
+      organizationId: "test-team",
+      usageKind: "aiChat",
+    }),
+}));

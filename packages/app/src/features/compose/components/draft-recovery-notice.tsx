@@ -10,29 +10,31 @@ import { useEffect } from "react";
 
 export const DraftRecoveryNotice = ({
   mailboxId,
+  userId,
   onResume,
 }: {
   mailboxId: string;
+  userId: string;
   onResume: (draft: ComposeDraftState) => void;
 }) => {
   const queryClient = useQueryClient();
-  const queryKey = ["local-draft-recovery", mailboxId];
+  const queryKey = ["local-draft-recovery", userId, mailboxId];
   const { data = [] } = useQuery({
-    queryFn: () => draftRecoveryJournal.listRecoverable(mailboxId),
+    queryFn: () => draftRecoveryJournal.listRecoverable({ mailboxId, userId }),
     queryKey,
     staleTime: 0,
   });
   useEffect(() => {
     const refresh = () => {
       void queryClient.invalidateQueries({
-        queryKey: ["local-draft-recovery", mailboxId],
+        queryKey: ["local-draft-recovery", userId, mailboxId],
       });
     };
     window.addEventListener("storage", refresh);
     return () => {
       window.removeEventListener("storage", refresh);
     };
-  }, [mailboxId, queryClient]);
+  }, [mailboxId, queryClient, userId]);
   const discard = useMutation({
     mutationFn: async () => {
       const [record] = data;
@@ -63,11 +65,22 @@ export const DraftRecoveryNotice = ({
         size="sm"
         onClick={() => {
           try {
+            const currentRecord = draftRecoveryJournal
+              .listRecoverable({ mailboxId, userId })
+              .find(
+                (current) =>
+                  current.editorId === record.editorId &&
+                  current.localId === record.localId
+              );
+            if (currentRecord === undefined) {
+              void queryClient.invalidateQueries({ queryKey });
+              return;
+            }
             onResume(
               restoreComposeDraft(
-                record.payload,
-                record.editorId,
-                record.updatedAt
+                currentRecord.payload,
+                currentRecord.editorId,
+                currentRecord.updatedAt
               )
             );
           } catch (error) {

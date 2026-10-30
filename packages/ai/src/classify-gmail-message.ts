@@ -1,11 +1,14 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { serverEnv } from "@quieter/env/server";
 import type {
   AutoLabelSettings,
   MailAutoLabelHistory,
 } from "@quieter/mail/auto-label";
 import type { OtpToken } from "@quieter/mail/otp-token";
+import { APICallError } from "ai";
 import { z } from "zod";
 
+import { providerUsageResponseSchema, runBilledAiRequest } from "./billing";
 import type { AiUsageReport } from "./chat-usage";
 
 export const AUTO_LABEL_MODEL = "typesafe/jev-1.13";
@@ -96,6 +99,7 @@ const decisionResponseSchema = z.object({
       }),
     ])
   ),
+  id: z.string().optional(),
   usage: z.object({
     cost: z.number().nonnegative(),
     input_tokens: z.number().int().nonnegative(),
@@ -105,12 +109,14 @@ const decisionResponseSchema = z.object({
 
 const runMailDecisions = async ({
   model,
+  billing,
   onUsage,
   questions,
   state,
   timeoutMs,
 }: {
   model: string;
+  billing: AiBillingContext;
   onUsage?: (usage: AiUsageReport) => void;
   questions: Record<
     string,
@@ -128,25 +134,45 @@ const runMailDecisions = async ({
   if (!apiKey) {
     throw new Error("AI features are temporarily unavailable.");
   }
-  const response = await fetch("https://openrouter.ai/api/alpha/decisions", {
-    body: JSON.stringify({
-      model,
-      questions,
-      state,
-    }),
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://quieter.email",
-      "X-Title": "quieter",
+  const payload = await runBilledAiRequest({
+    billing,
+    run: async () => {
+      const response = await fetch(
+        "https://openrouter.ai/api/alpha/decisions",
+        {
+          body: JSON.stringify({
+            model,
+            questions,
+            state,
+          }),
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://quieter.email",
+            "X-Title": "quieter",
+          },
+          method: "POST",
+          signal: AbortSignal.timeout(timeoutMs),
+        }
+      );
+      if (!response.ok) {
+        throw new APICallError({
+          message: `Mail classification failed (${response.status}).`,
+          requestBodyValues: {},
+          statusCode: response.status,
+          url: "https://openrouter.ai/api/alpha/decisions",
+        });
+      }
+      const responseBody: unknown = await response.json();
+      const usage = providerUsageResponseSchema.safeParse(responseBody).data;
+      return {
+        costUsd: usage?.usage?.cost,
+        generationId: usage?.id,
+        result: responseBody,
+      };
     },
-    method: "POST",
-    signal: AbortSignal.timeout(timeoutMs),
   });
-  if (!response.ok) {
-    throw new Error(`Mail classification failed (${response.status}).`);
-  }
-  const result = decisionResponseSchema.parse(await response.json());
+  const result = decisionResponseSchema.parse(payload);
   onUsage?.({
     cacheWriteTokens: 0,
     cachedTokens: 0,
@@ -163,6 +189,7 @@ export const classifyMailMessage = async ({
   memoryContext,
   message,
   model = AUTO_LABEL_MODEL,
+  billing,
   onUsage,
 }: {
   labelHistory?: MailAutoLabelHistory | null;
@@ -170,6 +197,7 @@ export const classifyMailMessage = async ({
   memoryContext?: string | null;
   message: AutomationMailMessage;
   model?: string;
+  billing: AiBillingContext;
   onUsage?: (usage: AiUsageReport) => void;
 }) => {
   if (labels.length === 0) {
@@ -188,6 +216,7 @@ export const classifyMailMessage = async ({
     .map((label, index) => ({ index, label }))
     .filter(({ label }) => !label.autoLabel?.prompt);
   const answers = await runMailDecisions({
+    billing,
     model,
     ...(onUsage === undefined ? {} : { onUsage }),
     questions: {
@@ -263,12 +292,15 @@ export const classifyMailMessage = async ({
 
 export const detectMailVerificationCode = async ({
   message,
+  billing,
   onUsage,
 }: {
   message: AutomationMailMessage;
+  billing: AiBillingContext;
   onUsage?: (usage: AiUsageReport) => void;
 }) => {
   const answers = await runMailDecisions({
+    billing,
     model: AUTO_LABEL_MODEL,
     ...(onUsage === undefined ? {} : { onUsage }),
     questions: {

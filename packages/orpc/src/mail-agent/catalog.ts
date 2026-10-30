@@ -437,7 +437,18 @@ export const compileAgentManifest = (
     )
   );
   return {
-    digest: agentDigest(sortedManifest),
+    digest: agentDigest(
+      specification.eligibility ||
+        specification.toolGrants.some((grant) => grant.argumentTemplate)
+        ? {
+            effects: specification.toolGrants.filter(
+              (grant) => grant.argumentTemplate
+            ),
+            eligibility: specification.eligibility,
+            entries: sortedManifest,
+          }
+        : sortedManifest
+    ),
     manifest: sortedManifest,
     tools: selectedTools,
   };

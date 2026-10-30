@@ -1,5 +1,7 @@
 import { db } from "@quieter/database/client";
+import type { DatabaseTransaction } from "@quieter/database/client";
 import {
+  aiCreditReservation,
   billingCreditUsageEvent,
   billingSubscription,
   organization,
@@ -56,7 +58,9 @@ const sanitizePolarEventMetadata = (
   metadata: Record<string, string | number | boolean>
 ) =>
   Object.fromEntries(
-    Object.entries(metadata).filter(([, value]) => value !== "")
+    Object.entries(metadata).filter(
+      ([key, value]) => value !== "" && !key.startsWith("recovery")
+    )
   );
 
 export const createPolarCreditUsageEvent = (input: {
@@ -216,20 +220,43 @@ export const getBillingCreditUsage = async (
   };
 };
 
-export const recordBillingCreditUsage = async (input: {
-  account: BillingAccount;
-  category: BillingUsageCategory;
-  costMicroCents: number;
-  createdAt?: Date;
-  dedupeKey: string;
-  metadata?: Record<string, string | number | boolean>;
-}) => {
-  const result = await db.transaction(async (transaction) => {
+export const recordBillingCreditUsage = async (
+  input: {
+    account: BillingAccount;
+    aiReservationId?: string;
+    category: BillingUsageCategory;
+    costMicroCents: number;
+    createdAt?: Date;
+    dedupeKey: string;
+    metadata?: Record<string, string | number | boolean>;
+  },
+  outerTransaction?: DatabaseTransaction
+) => {
+  const persist = async (transaction: DatabaseTransaction) => {
     await transaction
       .select({ id: organization.id })
       .from(organization)
       .where(eq(organization.id, input.account.organizationId))
       .for("update");
+    if (input.aiReservationId !== undefined) {
+      const [reservation] = await transaction
+        .select({ status: aiCreditReservation.status })
+        .from(aiCreditReservation)
+        .where(
+          and(
+            eq(aiCreditReservation.id, input.aiReservationId),
+            eq(aiCreditReservation.organizationId, input.account.organizationId)
+          )
+        )
+        .for("update");
+      if (reservation === undefined || reservation.status === "released") {
+        throw new Error("The AI billing reservation is unavailable.");
+      }
+      await transaction
+        .update(aiCreditReservation)
+        .set({ status: "settled" })
+        .where(eq(aiCreditReservation.id, input.aiReservationId));
+    }
     const [existingEvent] = await transaction
       .select({
         billableCostMicroCents: billingCreditUsageEvent.billableCostMicroCents,
@@ -294,7 +321,16 @@ export const recordBillingCreditUsage = async (input: {
       metadata: input.metadata ?? {},
       polarEventReportedAt: null,
     };
-  });
+  };
+  const result =
+    outerTransaction === undefined
+      ? await db.transaction(persist)
+      : await persist(outerTransaction);
+
+  // Operational recovery defers reporting until its outer transaction commits.
+  if (outerTransaction !== undefined) {
+    return result;
+  }
 
   if (
     (result.eventId ?? "") !== "" &&

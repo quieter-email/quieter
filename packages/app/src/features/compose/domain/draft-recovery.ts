@@ -1,4 +1,5 @@
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
+import type { DraftRecoveryScope } from "@quieter/app/lib/draft-recovery-journal";
 import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import {
   composeDraftAnchorSchema,
@@ -150,14 +151,14 @@ export const restoreComposeDraft = (
 };
 
 export const findRecoverableComposeDraft = (
-  mailboxId: string,
+  scope: DraftRecoveryScope,
   draft: ComposeDraftState
 ): ComposeDraftState | null => {
   const draftId = draft.draftId?.trim() ?? "";
   const threadId =
     draft.draftAnchor?.sourceThreadId ?? draft.replyContext?.threadId;
   let threadRecovery: ComposeDraftState | null = null;
-  for (const record of draftRecoveryJournal.listRecoverable(mailboxId)) {
+  for (const record of draftRecoveryJournal.listRecoverable(scope)) {
     if (record.updatedAt <= (draft.lastSavedAt ?? 0)) {
       continue;
     }

@@ -10,6 +10,7 @@ import {
   mailboxVerificationCode,
 } from "@quieter/database/schema";
 import { analyzeMailMessage } from "@quieter/mail/capture";
+import { getReplyReferenceIds } from "@quieter/mail/message-id";
 import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
 import {
@@ -53,14 +54,6 @@ type RawMailObjectProvider = "r2" | "s3";
 
 const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
 
-const getReplyReferenceIds = (message: ParsedRawMailMessage) => [
-  ...new Set(
-    [message.inReplyTo, ...(message.references?.match(/<[^>]+>/gu) ?? [])]
-      .map((value) => value?.trim())
-      .filter((value): value is string => !!value)
-  ),
-];
-
 const deriveThreadId = (mailboxId: string, canonicalRef: string) =>
   createHash("sha256")
     .update(`${mailboxId}\0${canonicalRef}`)
@@ -70,10 +63,9 @@ const deriveThreadId = (mailboxId: string, canonicalRef: string) =>
 const resolveManagedThreadId = async (
   database: DatabaseExecutor,
   mailboxId: string,
-  message: ParsedRawMailMessage,
+  referenceIds: string[],
   fallbackThreadId: string
 ) => {
-  const referenceIds = getReplyReferenceIds(message);
   if (referenceIds.length === 0) {
     return fallbackThreadId;
   }
@@ -261,6 +253,7 @@ const finishIngestion = async (input: {
 
 const ingestManagedMessageForMailbox = async (input: {
   parsed: ParsedRawMailMessage;
+  referenceIds: string[];
   providerMessageId: string;
   rawObjectBucket: string;
   rawObjectKey: string;
@@ -279,7 +272,7 @@ const ingestManagedMessageForMailbox = async (input: {
     const threadId = await resolveManagedThreadId(
       tx,
       input.targetMailboxId,
-      input.parsed,
+      input.referenceIds,
       deriveThreadId(input.targetMailboxId, canonicalRef)
     );
     const [message] = await tx
@@ -571,6 +564,7 @@ export const recordInboundManagedMessage = async (input: {
   }
 
   const parsed = await parseRawMailMessage(input.rawMessage);
+  const referenceIds = getReplyReferenceIds(parsed);
   const rawObjectProvider = input.rawObjectProvider ?? "s3";
   const rawObjectBucket = input.rawObjectBucket ?? input.s3Bucket;
   const rawObjectKey = input.rawObjectKey ?? input.s3Key;
@@ -592,6 +586,7 @@ export const recordInboundManagedMessage = async (input: {
           rawSizeBytes: input.rawSizeBytes,
           receivedAt: input.receivedAt,
           recipients,
+          referenceIds,
           s3Bucket: input.s3Bucket,
           s3Key: input.s3Key,
           targetMailboxId,

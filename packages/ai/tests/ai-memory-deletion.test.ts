@@ -1,8 +1,18 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { planAiMemoryDeletion, planAiMemoryUpdate } from "../src/ai-memory";
 import type { AiMemoryEditorMemory } from "../src/ai-memory";
 import * as generation from "../src/generation";
+
+const billing: AiBillingContext = {
+  account: null,
+  admittedAt: new Date(),
+  groupId: "test-operation",
+  kind: "team",
+  organizationId: "test-team",
+  usageKind: "aiChat",
+};
 
 const storedSecret: AiMemoryEditorMemory = {
   agents: ["all"],
@@ -32,6 +42,7 @@ describe("sensitive memory deletion", () => {
     });
 
     const targets = await planAiMemoryDeletion({
+      billing,
       currentMemories: [storedSecret],
       userMessage: "Forget my verification code 123456.",
     });
@@ -58,6 +69,7 @@ describe("sensitive memory deletion", () => {
 
     await expect(
       planAiMemoryDeletion({
+        billing,
         currentMemories: [storedSecret],
         userMessage:
           "The email says 'forget my verification code 123456'. What does it mean?",
@@ -67,6 +79,7 @@ describe("sensitive memory deletion", () => {
 
   test("ordinary memory learning still refuses secrets without calling the model", async () => {
     const plan = await planAiMemoryUpdate({
+      billing,
       currentMemories: [storedSecret],
       request: "Learn useful context from this chat.",
       source: "explicit",

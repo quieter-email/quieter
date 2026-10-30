@@ -18,7 +18,7 @@ export const getSafeAuthReturnTo = (
   try {
     const url = new URL(trimmed, SAFE_RETURN_TO_ORIGIN);
 
-    if (url.origin !== SAFE_RETURN_TO_ORIGIN) {
+    if (url.origin !== SAFE_RETURN_TO_ORIGIN || url.pathname.startsWith("//")) {
       return undefined;
     }
 

@@ -1,3 +1,4 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { z } from "zod";
 
 import type { AiUsageReport } from "./chat-usage";
@@ -10,10 +11,12 @@ export const mailImportanceSchema = z.strictObject({ important: z.boolean() });
 export const classifyMailImportance = async (input: {
   message: AutomationMailMessage;
   context: string | null;
+  billing: AiBillingContext;
   onUsage: (usage: AiUsageReport) => void;
 }) =>
   await runStructuredGeneration({
     abortSignal: AbortSignal.timeout(30_000),
+    billing: input.billing,
     maxOutputTokens: 100,
     maxRetries: 0,
     model: resolveBackgroundModel(),

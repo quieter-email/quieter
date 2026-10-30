@@ -35,6 +35,7 @@ import {
 } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { findRecoverableComposeDraft } from "@quieter/app/features/compose/domain/draft-recovery";
+import { authClient } from "@quieter/app/lib/auth";
 import { toastError } from "@quieter/app/lib/error-toast";
 import {
   deleteDemoDraft,
@@ -125,6 +126,7 @@ export const useComposeDialogController = ({
   persistDrafts?: boolean;
   signature?: { html: string | null; text: string | null };
 }) => {
+  const userId = authClient.useSession().data?.user.id;
   const queryClient = useQueryClient();
   const agentWorkspace = useAgentWorkspace();
   const [state, setState] = useState<{
@@ -140,10 +142,11 @@ export const useComposeDialogController = ({
         !demoMode &&
         !managedDemoMode &&
         mailboxId &&
+        userId &&
         seed.recoveryEditorId === undefined &&
         !seed.draftId &&
         !seed.inlineImages.some((image) => !!image.gmailAttachmentId)
-        ? (findRecoverableComposeDraft(mailboxId, seed) ?? seed)
+        ? (findRecoverableComposeDraft({ mailboxId, userId }, seed) ?? seed)
         : seed
     );
     let resolved = draft;

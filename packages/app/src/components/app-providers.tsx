@@ -4,6 +4,7 @@ import { MailtoProtocolHandler } from "@quieter/app/components/mailto-protocol-h
 import { KeyboardShortcutsProvider } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
 import { authClient } from "@quieter/app/lib/auth";
 import { bindCalendarCache } from "@quieter/app/lib/calendar-cache-lifecycle";
+import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { bindMailCache } from "@quieter/app/lib/mail-cache-lifecycle";
 import { disposeMailMutations } from "@quieter/app/lib/mail-mutations";
@@ -79,6 +80,16 @@ const SessionQueryProvider = ({
 export const AppProviders = ({ children }: PropsWithChildren) => {
   const session = authClient.useSession();
   const userId = session.data?.user.id;
+
+  useLayoutEffect(() => {
+    if (!session.isPending) {
+      try {
+        draftRecoveryJournal.setUser(userId);
+      } catch (error) {
+        toastError(error, { boundary: "compose-recovery-identity-cleanup" });
+      }
+    }
+  }, [session.isPending, userId]);
 
   return (
     <HotkeysProvider

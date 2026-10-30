@@ -1,5 +1,11 @@
+import { setTimeout as delay } from "node:timers/promises";
+
 /* oxlint-disable vitest/no-conditional-expect -- Each parameterized delivery failure has a different recovery sequence. */
-import { SESv2Client, SESv2ServiceException } from "@aws-sdk/client-sesv2";
+import {
+  SESv2Client,
+  SESv2ServiceException,
+  SendEmailCommand,
+} from "@aws-sdk/client-sesv2";
 import { reserveOrganizationMailSend } from "@quieter/billing/mail-send-reservation";
 import type { ingestPolarEvents } from "@quieter/billing/polar";
 import { db } from "@quieter/database/client";
@@ -13,6 +19,7 @@ import {
   managedMailRuleRun,
   member,
   organization,
+  organizationApiMailMessage,
   organizationMailSendIdempotency,
   organizationMailUsageSettings,
   user,
@@ -24,9 +31,13 @@ import type {
 } from "@quieter/database/schema";
 import { composeMessageInputSchema } from "@quieter/mail/compose/schema";
 import { managedMailboxRuleDefinitionSchema } from "@quieter/mail/mailbox-organization";
-import { parseRawMailAttachments } from "@quieter/mail/raw-message";
+import {
+  parseRawMailAttachments,
+  assertRawMailSender,
+} from "@quieter/mail/raw-message";
 import { sendMessageInputSchema } from "@quieter/mail/send";
 import { and, eq, inArray } from "drizzle-orm";
+import postgres from "postgres";
 import {
   afterAll,
   beforeAll,
@@ -39,6 +50,7 @@ import {
 
 import { recordAiGeneratedMailBody } from "../src/ai-mail-authorship";
 import { recoverMailSends, sendPreparedMail } from "../src/mail-send";
+import { recordOutboundManagedMessageForSender } from "../src/managed-mail/messages/outbound";
 import {
   cleanupMailObjects,
   storeRawMailObject,
@@ -56,18 +68,25 @@ import {
 import {
   getOrganizationApiMailboxId,
   listOrganizationApiMailMessages,
+  recordOrganizationApiMailMessage,
 } from "../src/organization-api-mail";
 import { sendOrganizationMailMessage } from "../src/organization-mail";
-import { recordOrganizationMailFeedback } from "../src/organization-mail-delivery";
+import {
+  recordOrganizationMailFeedback,
+  suppressOrganizationMailRecipient,
+  unsuppressOrganizationMailRecipient,
+} from "../src/organization-mail-delivery";
+import { OrganizationMailSendError } from "../src/organization-mail-policy";
 import type { assertOrganizationOwnsVerifiedSenderDomain } from "../src/organization-mail-policy";
 import { hashRequest } from "../src/request-hash";
 
 const state = vi.hoisted(() => ({
+  beforeRead: undefined as (() => Promise<void>) | undefined,
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
   failMemoryCapture: false,
   failProjection: false,
   objects: new Map<string, Uint8Array<ArrayBuffer>>(),
-  send: vi.fn<() => Promise<{ MessageId: string }>>(),
+  send: vi.fn<(...args: unknown[]) => Promise<{ MessageId: string }>>(),
 }));
 vi.mock(import("@quieter/env/server"), async (original) => {
   const actual = await original();
@@ -145,8 +164,8 @@ vi.mock(
     deleteRawMailObject: async (object) => {
       state.objects.delete(object.key);
     },
-    // oxlint-disable-next-line eslint/require-await -- Match the storage contract.
     readRawMailObject: async (record) => {
+      await state.beforeRead?.();
       const raw = state.objects.get(record.rawObjectKey ?? "");
       if (raw === undefined) {
         throw new Error("Object not found");
@@ -188,6 +207,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       state.send
         .mockReset()
         .mockResolvedValue({ MessageId: crypto.randomUUID() });
+      state.beforeRead = undefined;
       state.failProjection = false;
       state.failMemoryCapture = false;
       const now = new Date();
@@ -235,7 +255,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         idempotencyKey: id,
         messageHeaderId: `<${id}@example.com>`,
         organizationId,
-        raw: "Hello",
+        raw: `From: ${snapshot.sender}\r\nSubject: Hello\r\n\r\nHello`,
         requestHash: hashRequest(snapshot),
         snapshot,
       };
@@ -254,6 +274,26 @@ describe.skipIf(state.databaseUrl === undefined)(
           .where(inArray(mailObjectCleanup.key, [...state.objects.keys()]));
       }
       await db.$client.end();
+    });
+
+    test("does not submit stored MIME with a different sender identity", async () => {
+      request.raw = "From: victim@victim.example\r\n\r\nHello";
+      await expect(sendPreparedMail(request)).rejects.toThrow(/sender/iu);
+      expect(state.send).not.toHaveBeenCalled();
+    });
+
+    test("submits raw MIME and provider identity for the same sender", async () => {
+      await sendPreparedMail(request);
+      const command = state.send.mock.calls[0]?.[0];
+      if (!(command instanceof SendEmailCommand)) {
+        throw new Error("No delivery command was submitted.");
+      }
+      const raw = command.input.Content?.Raw?.Data;
+      expect(command?.input.FromEmailAddress).toBe(request.snapshot.sender);
+      expect(raw).toBeDefined();
+      await expect(
+        assertRawMailSender(raw ?? new Uint8Array(), request.snapshot.sender)
+      ).resolves.toBe(command?.input.FromEmailAddress);
     });
 
     const createMailboxActor = async ({
@@ -287,6 +327,248 @@ describe.skipIf(state.databaseUrl === undefined)(
       });
       return userId;
     };
+
+    test.each(["to", "cc", "bcc"] as const)(
+      "a manual suppression committed during preparation blocks %s dispatch",
+      async (recipientField) => {
+        request.snapshot.to = [];
+        request.snapshot[recipientField] = [
+          "Recipient <Recipient@Example.com>",
+        ];
+        request.requestHash = hashRequest(request.snapshot);
+        const actorUserId = await createMailboxActor();
+        state.beforeRead = async () => {
+          await suppressOrganizationMailRecipient({
+            actorUserId,
+            organizationId,
+            recipient: "recipient@example.com",
+          });
+        };
+        await expect(sendPreparedMail(request)).rejects.toThrow(
+          /cannot receive mail/u
+        );
+        expect(state.send).not.toHaveBeenCalled();
+        const [operation] = await db
+          .select()
+          .from(organizationMailSendIdempotency)
+          .where(eq(organizationMailSendIdempotency.id, request.id));
+        expect(operation?.status).toBe("rejected");
+        state.beforeRead = undefined;
+        await unsuppressOrganizationMailRecipient({
+          actorUserId,
+          organizationId,
+          recipient: "recipient@example.com",
+        });
+        await sendPreparedMail(request);
+        await sendPreparedMail(request);
+        expect(state.send).toHaveBeenCalledOnce();
+      }
+    );
+
+    test.each(["complained", "unsubscribed", "bounced"] as const)(
+      "%s suppression commits on an independent connection before the send claim",
+      async (eventType) => {
+        const connection = postgres(state.databaseUrl ?? "", { max: 1 });
+        const { messageId: providerMessageId } =
+          await sendPreparedMail(request);
+        if (providerMessageId === null || providerMessageId === undefined) {
+          throw new Error("Missing accepted message ID");
+        }
+        request = {
+          ...request,
+          id: crypto.randomUUID(),
+          idempotencyKey: crypto.randomUUID(),
+        };
+        state.send.mockClear();
+        await db
+          .update(organizationMailUsageSettings)
+          .set({ monthlyOverageLimitMicroCents: 100_000 })
+          .where(
+            eq(organizationMailUsageSettings.organizationId, organizationId)
+          );
+        try {
+          state.beforeRead = async () => {
+            const { feedback: completedFeedback } = await connection.begin(
+              async (transaction) => {
+                await transaction`select id from organization where id = ${organizationId} for update`;
+                const feedback = recordOrganizationMailFeedback({
+                  eventType,
+                  occurredAt: new Date(),
+                  permanentFailure: eventType === "bounced",
+                  provider: "ses",
+                  providerMessageId,
+                  recipients: [{ emailAddress: "Recipient@Example.com" }],
+                  sourceEventId: crypto.randomUUID(),
+                });
+                for (let attempt = 0; attempt < 100; attempt += 1) {
+                  const waiting = await transaction`
+                select pid from pg_stat_activity
+                where datname = current_database() and wait_event_type = 'Lock'
+                  and pid <> pg_backend_pid()`;
+                  if (waiting.length > 0) {
+                    return { feedback };
+                  }
+                  await delay(10);
+                }
+                throw new Error(
+                  "Feedback did not wait for the independent policy lock"
+                );
+              }
+            );
+            await completedFeedback;
+          };
+          await expect(sendPreparedMail(request)).rejects.toThrow(
+            /cannot receive mail/u
+          );
+          expect(state.send).not.toHaveBeenCalled();
+        } finally {
+          await connection.end();
+        }
+      }
+    );
+
+    test("the claim waits for a suppression committing on an independent connection", async () => {
+      const connection = postgres(state.databaseUrl ?? "", { max: 1 });
+      const reading = Promise.withResolvers<unknown>();
+      const resume = Promise.withResolvers<unknown>();
+      state.beforeRead = async () => {
+        reading.resolve(null);
+        await resume.promise;
+      };
+      const sending = (async () => {
+        try {
+          await sendPreparedMail(request);
+          return null;
+        } catch (error) {
+          return error;
+        }
+      })();
+      try {
+        await reading.promise;
+        await connection.begin(async (transaction) => {
+          await transaction`select id from organization where id = ${organizationId} for update`;
+          resume.resolve(null);
+          let waiting = false;
+          for (let attempt = 0; attempt < 100; attempt += 1) {
+            const locks = await transaction`
+              select pid from pg_stat_activity
+              where datname = current_database() and wait_event_type = 'Lock'
+                and pid <> pg_backend_pid()`;
+            if (locks.length > 0) {
+              waiting = true;
+              break;
+            }
+            await delay(10);
+          }
+          expect(waiting).toBeTruthy();
+          await transaction`
+            insert into "organizationMailRecipientSuppression"
+              ("organizationId", recipient, reason, "createdAt", "updatedAt")
+            values (${organizationId}, 'recipient@example.com', 'manual', now(), now())`;
+        });
+        await expect(sending).resolves.toBeInstanceOf(
+          OrganizationMailSendError
+        );
+        expect(state.send).not.toHaveBeenCalled();
+      } finally {
+        resume.resolve(null);
+        await connection.end();
+      }
+    });
+
+    test("manual suppression waits for an independent policy lock", async () => {
+      const actorUserId = await createMailboxActor();
+      const connection = postgres(state.databaseUrl ?? "", { max: 1 });
+      let suppression: Promise<{ changed: boolean }> | undefined;
+      try {
+        await connection.begin(async (transaction) => {
+          await transaction`select id from organization where id = ${organizationId} for update`;
+          suppression = suppressOrganizationMailRecipient({
+            actorUserId,
+            organizationId,
+            recipient: "recipient@example.com",
+          });
+          let waiting = false;
+          for (let attempt = 0; attempt < 100; attempt += 1) {
+            const locks = await transaction`
+              select pid from pg_stat_activity
+              where datname = current_database() and wait_event_type = 'Lock'
+                and pid <> pg_backend_pid()`;
+            if (locks.length > 0) {
+              waiting = true;
+              break;
+            }
+            await delay(10);
+          }
+          expect(waiting).toBeTruthy();
+        });
+        await expect(suppression).resolves.toMatchObject({ changed: true });
+      } finally {
+        await suppression;
+        await connection.end();
+      }
+    });
+
+    test("a stale prepared replay preserves uncertainty after another request is authorized", async () => {
+      const actorUserId = await createMailboxActor();
+      const reading = Promise.withResolvers<unknown>();
+      const resume = Promise.withResolvers<unknown>();
+      let reads = 0;
+      state.beforeRead = async () => {
+        reads += 1;
+        if (reads === 1) {
+          reading.resolve(null);
+          await resume.promise;
+        }
+      };
+      state.send.mockImplementationOnce(async () => {
+        await suppressOrganizationMailRecipient({
+          actorUserId,
+          organizationId,
+          recipient: "recipient@example.com",
+        });
+        return { MessageId: crypto.randomUUID() };
+      });
+      const stale = (async () => {
+        try {
+          return await sendPreparedMail(request);
+        } catch (error) {
+          return error;
+        }
+      })();
+      try {
+        await reading.promise;
+        await sendPreparedMail(request);
+      } finally {
+        resume.resolve(null);
+      }
+      await expect(stale).resolves.toMatchObject({
+        code: "CONFLICT",
+        data: { deliveryUncertain: true },
+      });
+      expect(state.send).toHaveBeenCalledOnce();
+    });
+
+    test("suppression after authorization preserves accepted send and replay accounting", async () => {
+      const actorUserId = await createMailboxActor();
+      state.send.mockImplementationOnce(async () => {
+        await suppressOrganizationMailRecipient({
+          actorUserId,
+          organizationId,
+          recipient: "recipient@example.com",
+        });
+        return { MessageId: crypto.randomUUID() };
+      });
+      const sent = await sendPreparedMail(request);
+      const replay = await sendPreparedMail(request);
+      expect(replay).toMatchObject({ id: sent.id, messageId: sent.messageId });
+      expect(state.send).toHaveBeenCalledOnce();
+      const usage = await db
+        .select()
+        .from(billingCreditUsageEvent)
+        .where(eq(billingCreditUsageEvent.organizationId, organizationId));
+      expect(usage).toHaveLength(1);
+    });
 
     const createSendFixture = async ({ shared = false } = {}) => {
       const userId = await createMailboxActor();
@@ -995,6 +1277,45 @@ describe.skipIf(state.databaseUrl === undefined)(
         expect(drafts).toHaveLength(edited ? 1 : 0);
       }
     );
+
+    test("HTML-only projections preserve snippets in both sent-mail records", async () => {
+      await createMailboxActor();
+      await db
+        .update(mailbox)
+        .set({ includeApiSentMessages: true })
+        .where(eq(mailbox.id, mailboxId));
+      const html = "<".repeat(32_000);
+      const projection = {
+        bodyHtml: html,
+        organizationId,
+        providerMessageId: crypto.randomUUID(),
+        sender: request.snapshot.sender,
+        subject: "Malformed HTML",
+        to: ["recipient@example.com"],
+      };
+      await recordOrganizationApiMailMessage(projection);
+      await recordOutboundManagedMessageForSender({
+        ...projection,
+        bodyText: "",
+        requireApiSentMessageInclusion: true,
+      });
+      const [managedMessage] = await db
+        .select()
+        .from(managedMailMessage)
+        .where(eq(managedMailMessage.mailboxId, mailboxId));
+      const [apiMessage] = await db
+        .select()
+        .from(organizationApiMailMessage)
+        .where(eq(organizationApiMailMessage.organizationId, organizationId));
+      expect(managedMessage).toMatchObject({
+        bodyHtml: html,
+        snippet: html.slice(0, 240),
+      });
+      expect(apiMessage).toMatchObject({
+        bodyHtml: html,
+        snippet: html.slice(0, 240),
+      });
+    });
 
     test("API sends retain file and inline bytes in the managed Sent mailbox", async () => {
       const userId = await createMailboxActor();
