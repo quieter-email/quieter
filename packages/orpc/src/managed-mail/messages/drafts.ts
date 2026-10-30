@@ -134,7 +134,7 @@ const assertPrivateDraftContext = async (
     })
     .from(mailbox)
     .where(eq(mailbox.id, input.mailboxId))
-    .for("update");
+    .for("no key update");
   const [otherGrant] = await tx
     .select({ id: mailboxGrant.id })
     .from(mailboxGrant)
@@ -284,7 +284,6 @@ export const saveManagedDraft = async (input: {
       );
       if (requestedHash === storedHash) {
         return await db.transaction(async (tx) => {
-          await assertPrivateDraftContext(tx, input);
           const [unchanged] = await tx
             .select({ id: managedMailMessage.id })
             .from(managedMailMessage)
@@ -298,6 +297,7 @@ export const saveManagedDraft = async (input: {
             )
             .for("update");
           if (unchanged !== undefined) {
+            await assertPrivateDraftContext(tx, input);
             const assets = await tx
               .select()
               .from(managedMailAttachment)
@@ -376,7 +376,6 @@ export const saveManagedDraft = async (input: {
     updatedAt: now,
   };
   await db.transaction(async (tx) => {
-    await assertPrivateDraftContext(tx, input);
     if (existing === undefined) {
       await tx.insert(managedMailMessage).values({
         ...values,
@@ -407,6 +406,7 @@ export const saveManagedDraft = async (input: {
         });
       }
     }
+    await assertPrivateDraftContext(tx, input);
     await tx
       .delete(managedMailAttachment)
       .where(

@@ -485,7 +485,7 @@ describe.skipIf(state.databaseUrl === undefined)(
               resume.resolve(true);
               await vi.waitFor(async () => {
                 const waiting = await db.execute(
-                  sql`select pid from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and query like '%"managedOwnerUserId"%for update%'`
+                  sql`select pid from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and (query like '%"managedOwnerUserId"%for no key update%' or query like 'insert into "managedMailMessage"%')`
                 );
                 // oxlint-disable-next-line vitest/no-conditional-expect -- The uncommitted sharing scenario must observe the actual lock wait.
                 expect(waiting.length).toBeGreaterThan(0);
