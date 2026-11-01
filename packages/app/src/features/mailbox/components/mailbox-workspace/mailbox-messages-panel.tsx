@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import type { ComposeSenderMailbox } from "@quieter/app/features/compose/components/compose-workspace";
 import { buildComposeDraftFromSavedDraftMessage } from "@quieter/app/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
@@ -14,11 +15,14 @@ import { useRecordRecentConversation } from "@quieter/app/features/mailbox/compo
 import { MessageList } from "@quieter/app/features/message-list/components/message-list";
 import { MessageDetail } from "@quieter/app/features/message-thread/components/message-detail";
 import type { MailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
+import { toastError } from "@quieter/app/lib/error-toast";
 import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import { ActionFooter } from "@quieter/ui/action-footer";
+import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
-import { useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 
 type MailboxMessagesPanelProps = {
   detailOnly?: boolean;
@@ -74,15 +78,16 @@ export const MailboxMessagesPanel = ({
     activateListMessage,
     flattenedMessages,
     hasMessagePages,
-    isLoadingEmptyMessages,
     listState,
     loadMoreMessages,
     mailboxActions,
     messagesPending,
     pendingActions,
     refreshMessages,
+    refreshSelectedThread,
     resetListSelection,
     selectedMessage,
+    selectedThreadError,
   } = useMailboxListController({
     activeMailbox,
     isDemoMode,
@@ -94,12 +99,28 @@ export const MailboxMessagesPanel = ({
     threadId,
   });
 
+  const threads = useMemo(
+    () => buildThreadListEntries(flattenedMessages),
+    [flattenedMessages]
+  );
+  const threadLoadFailed =
+    selectedThreadError !== null && selectedMessage === null;
+  useEffect(() => {
+    if (isMessageRouteOpen && threadLoadFailed) {
+      toastError(selectedThreadError, {
+        boundary: "selected-conversation",
+        fallback: "Could not open conversation. Please try again.",
+      });
+    }
+  }, [isMessageRouteOpen, selectedThreadError, threadLoadFailed]);
+
   useLayoutEffect(() => {
     if (
       activeMailbox === "drafts" ||
       (messageId?.trim() ?? "") === "" ||
       messagesPending ||
       !hasMessagePages ||
+      selectedThreadError !== null ||
       selectedMessage
     ) {
       return;
@@ -112,6 +133,7 @@ export const MailboxMessagesPanel = ({
     messageId,
     messagesPending,
     selectedMessage,
+    selectedThreadError,
     setMailboxSearch,
   ]);
 
@@ -224,7 +246,27 @@ export const MailboxMessagesPanel = ({
         })}
         layout="cell"
       >
-        {isMessageRouteOpen ? (
+        {isMessageRouteOpen && threadLoadFailed ? (
+          <EmptyMessageState
+            title="Couldn't open conversation"
+            description="Try again, or choose another conversation."
+            action={
+              <ActionFooter>
+                <Button onClick={backToList} variant="secondary">
+                  Back
+                </Button>
+                <Button
+                  onClick={() => {
+                    void refreshSelectedThread();
+                  }}
+                >
+                  Try again
+                </Button>
+              </ActionFooter>
+            }
+          />
+        ) : null}
+        {isMessageRouteOpen && !threadLoadFailed ? (
           <MessageDetail
             onConversationOpened={recordOpened}
             showDesktopBack={onePanelDesktop}
@@ -242,7 +284,7 @@ export const MailboxMessagesPanel = ({
             mailboxActions={mailboxActions}
             onManageSnippets={onManageSnippets}
             pendingActions={pendingActions}
-            isPending={isLoadingEmptyMessages}
+            isPending={messagesPending}
             onBackToList={backToList}
             onAutoFocusComplete={() => {
               setShouldFocusMessageView(false);
@@ -257,7 +299,7 @@ export const MailboxMessagesPanel = ({
             onOpen={(entry) => {
               activateMessage(entry.message.id, entry.message.threadId);
             }}
-            threads={buildThreadListEntries(flattenedMessages)}
+            threads={threads}
             scope={{ activeMailbox, mailboxId, mailboxProvider }}
           />
         ) : null}

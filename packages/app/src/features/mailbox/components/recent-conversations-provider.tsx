@@ -16,6 +16,7 @@ import {
   useCallback,
   useContext,
   useLayoutEffect,
+  useMemo,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -113,14 +114,17 @@ export const useRecentConversations = () => {
   );
   const snapshot = useCallback(() => history?.state.get() ?? null, [history]);
   const state = useSyncExternalStore(subscribe, snapshot, snapshot);
-  const mailboxIds =
-    state?.phase === "active"
-      ? [...state.mailboxIds].filter((id) => !state.quarantined.has(id))
-      : [];
-  return {
-    entries:
-      state?.entries.filter((entry) => mailboxIds.includes(entry.mailboxId)) ??
-      [],
-    mailboxIds,
-  };
+  return useMemo(() => {
+    const mailboxIds =
+      state?.phase === "active"
+        ? [...state.mailboxIds].filter((id) => !state.quarantined.has(id))
+        : [];
+    return {
+      entries:
+        state?.entries.filter((entry) =>
+          mailboxIds.includes(entry.mailboxId)
+        ) ?? [],
+      mailboxIds,
+    };
+  }, [state]);
 };

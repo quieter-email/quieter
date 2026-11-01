@@ -110,6 +110,14 @@ import {
   SettingsPageHeader,
   SettingsSectionLayout,
 } from "@quieter/ui/settings-layout";
+import {
+  Slider,
+  SliderControl,
+  SliderIndicator,
+  SliderThumb,
+  SliderTrack,
+  SliderValue,
+} from "@quieter/ui/slider";
 import { SuccessPulse } from "@quieter/ui/success-pulse";
 import { Surface } from "@quieter/ui/surface";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
@@ -1497,7 +1505,7 @@ export const DesignSystemShowcase = () => {
           <Row label="Inset toolbar">
             <Surface className="flex flex-col" padding="none">
               <Toolbar aria-label="Example editor toolbar" chrome="inset">
-                <ToolbarButton>Format</ToolbarButton>
+                <ToolbarButton variant="selected">Format</ToolbarButton>
                 <ToolbarButton>Attach</ToolbarButton>
               </Toolbar>
             </Surface>
@@ -1511,6 +1519,17 @@ export const DesignSystemShowcase = () => {
           <Row label="Interactive keycaps">
             <Button variant="keycap">Ctrl</Button>
             <Button variant="keycap">K</Button>
+          </Row>
+          <Row label="Slider">
+            <Slider className="w-64 max-w-full" defaultValue={[35]}>
+              <SliderControl>
+                <SliderTrack>
+                  <SliderIndicator />
+                </SliderTrack>
+                <SliderThumb aria-label="Example range" />
+              </SliderControl>
+              <SliderValue />
+            </Slider>
           </Row>
           <Row label="Usage metric">
             <Text family="mono" size="metric" weight="medium">

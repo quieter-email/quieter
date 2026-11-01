@@ -261,6 +261,7 @@ export const useMailboxMessages = ({
     data: selectedThreadData,
     error: selectedThreadError,
     isPending: isSelectedThreadPending,
+    refetch: refreshSelectedThread,
   } = useQuery(
     getThreadWithDetailsOptions(
       selectedMailboxId ?? "",
@@ -381,7 +382,9 @@ export const useMailboxMessages = ({
     messagesPending: isPending || (shouldLoadThread && isSelectedThreadPending),
     refreshMessages,
     refreshSearchResultsIfNeeded,
+    refreshSelectedThread,
     selectedMessage,
+    selectedThreadError,
     selectedThreadMessages: selectedThreadData?.messages,
     syncError,
   };

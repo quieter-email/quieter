@@ -140,7 +140,7 @@ Use `shadow-surface` for the existing workspace treatment and `shadow-elevation`
 
 Inspect the changed component in `/design-system` and its real product context. For visual API changes, check light and dark, a narrow viewport, keyboard focus, disabled and error states, and long content where relevant. Shared changes should be checked against representative existing consumers. Use screenshots with sample data for review. Do not write tests that freeze visual constants or copy.
 
-Keep the landing page unchanged during this maintenance work. Its atmospheric visual treatment is intentional and has separate CSS. Global changes still need a check that they do not alter its existing controls.
+The landing page uses the shared color tokens, controls and surface ladder. Its dedicated CSS owns marketing layout, illustrations and atmospheric shader placement. Change that composition only when the task explicitly includes the landing page, and check its controls when shared defaults change.
 
 ## Audit on October 20, 2026
 
@@ -152,7 +152,7 @@ The audit also identified deliberate or unresolved specialized styling:
 
 | Area | Treatment |
 | --- | --- |
-| Landing page | User explicitly excluded changes. |
+| Landing page | Initially excluded from this audit, later ported from approved Paper boards. Shared tokens and controls own appearance; dedicated CSS owns its marketing composition and shaders. |
 | Structured search editor | Native content-sized token inputs and keyboard behavior stay local. |
 | Sidebar navigation | Active surfaces, hover actions, and motion remain coordinated in local components; any later extraction must preserve those interactions. |
 | Message rows and attachments | Selection overlays and mail actions retain domain-specific behavior. |

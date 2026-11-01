@@ -30,10 +30,13 @@ describe("mail cache error eviction", () => {
       otherClient,
       otherListener
     );
-    vi.spyOn(mailCache, "removeMailbox").mockImplementation(async () => {
-      expect(history.state.get().entries).toHaveLength(0);
-      await Promise.resolve();
-    });
+    let entriesAtEviction: number | undefined;
+    const removeMailbox = vi
+      .spyOn(mailCache, "removeMailbox")
+      .mockImplementation(async () => {
+        entriesAtEviction = history.state.get().entries.length;
+        await Promise.resolve();
+      });
     const dispose = bindMailCache(client);
     await expect(
       client.query({
@@ -46,6 +49,8 @@ describe("mail cache error eviction", () => {
         retry: false,
       })
     ).rejects.toThrow("revoked");
+    expect(removeMailbox).toHaveBeenCalledWith("mailbox");
+    expect(entriesAtEviction).toBe(0);
     history.recordOpened(visit);
     expect(history.state.get().entries).toHaveLength(0);
     expect(otherListener).not.toHaveBeenCalled();

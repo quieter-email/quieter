@@ -58,8 +58,8 @@ export const MailListRowSelectionMark = ({
     className={cn(
       "flex size-4.5 items-center justify-center rounded-xs border bg-section text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
       {
+        "border-border": !selected,
         "border-primary bg-primary text-primary-fg": selected,
-        "border-transparent": !selected,
       }
     )}
   >
