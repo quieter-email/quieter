@@ -86,7 +86,7 @@ export const BarChart = ({
               <Tooltip key={point.label}>
                 <TooltipTrigger
                   aria-label={`${point.label}, ${series.map((item) => `${item.label} ${point.values[item.key] ?? 0}`).join(", ")}`}
-                  className="flex h-full min-w-0 items-end justify-center gap-px rounded-sm px-0.5 hover:bg-fg/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="flex h-full min-w-0 items-end justify-center gap-px rounded-sm px-0.5 hover:bg-fg/5 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   {series.map((item) => {
                     const value = point.values[item.key] ?? 0;

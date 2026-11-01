@@ -9,18 +9,23 @@ import { cn } from "../../lib/cn";
 import { inputControlClassName } from "./input-chrome";
 
 export const Toolbar = ({
+  chrome = "default",
   className,
   size = "default",
   ...props
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Root> & {
+  chrome?: "default" | "attached";
   size?: "default" | "compact";
 }) => (
   <ToolbarPrimitive.Root
     className={cn(
-      "inline-flex items-center rounded-lg border border-border bg-bg shadow-sm squircle",
+      "inline-flex items-center rounded-section border border-transparent bg-section shadow-sm squircle",
       {
-        "min-h-10 gap-1 p-1": size === "default",
-        "min-h-8 gap-0.5 p-0.5": size === "compact",
+        "min-h-10 gap-1 p-1": chrome === "default" && size === "default",
+        "min-h-12 gap-1.5 rounded-none border-0 bg-transparent px-3 py-2 shadow-none":
+          chrome === "attached",
+        "min-h-8 gap-0.5 rounded-lg p-0.5":
+          chrome === "default" && size === "compact",
       },
       className
     )}
@@ -39,7 +44,7 @@ export const ToolbarGroup = ({
 );
 
 const toolbarButtonVariants = cva(
-  "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm font-medium whitespace-nowrap text-muted-fg transition-[background-color,color,scale] duration-150 ease-out select-none hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] active:bg-control-active active:text-fg disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+  "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm font-medium whitespace-nowrap text-muted-fg transition-[background-color,color,scale] duration-150 ease-out select-none hover:bg-muted hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] active:bg-control-active active:text-fg disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
   {
     defaultVariants: {
       size: "default",
@@ -55,7 +60,7 @@ const toolbarButtonVariants = cva(
         default: "",
         primary:
           "bg-primary text-primary-fg shadow-sm hover:bg-primary-hover hover:text-primary-fg active:bg-primary-active active:text-primary-fg",
-        selected: "bg-control-active text-fg shadow-sm",
+        selected: "bg-detail text-fg shadow-sm",
       },
     },
   }
@@ -95,7 +100,7 @@ export const ToolbarInput = ({
   <ToolbarPrimitive.Input
     className={cn(
       inputControlClassName,
-      "h-8 min-w-32 rounded-md border border-border bg-bg px-3 text-body-sm shadow-sm squircle read-only:cursor-default read-only:bg-bg",
+      "h-8 min-w-32 rounded-md border border-transparent bg-detail px-3 text-body-sm shadow-sm squircle read-only:cursor-default read-only:bg-detail",
       className
     )}
     {...props}

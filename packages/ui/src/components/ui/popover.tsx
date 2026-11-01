@@ -52,7 +52,7 @@ export const PopoverContent = ({
       <PopoverPrimitive.Popup
         className={cn(
           anchoredPopupMotionClassName,
-          "z-50 max-w-sm min-w-52 rounded-lg border bg-popover p-4 text-popover-fg shadow-md",
+          "z-50 max-w-sm min-w-52 rounded-xl border border-transparent bg-section p-4 text-popover-fg shadow-md",
           { "w-80 max-w-(--available-width)": size === "sm" },
           className
         )}
@@ -90,7 +90,7 @@ export const PopoverArrow = ({
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Arrow>) => (
   <PopoverPrimitive.Arrow
     className={cn(
-      "pointer-events-none absolute size-2.5 rotate-45 rounded-sm bg-popover data-[side=bottom]:-top-1.25 data-[side=bottom]:border-t data-[side=bottom]:border-l data-[side=left]:-right-1.25 data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:-left-1.25 data-[side=right]:border-b data-[side=right]:border-l data-[side=top]:-bottom-1.25 data-[side=top]:border-r data-[side=top]:border-b",
+      "pointer-events-none absolute size-2.5 rotate-45 rounded-sm border-transparent bg-section data-[side=bottom]:-top-1.25 data-[side=bottom]:border-t data-[side=bottom]:border-l data-[side=left]:-right-1.25 data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:-left-1.25 data-[side=right]:border-b data-[side=right]:border-l data-[side=top]:-bottom-1.25 data-[side=top]:border-r data-[side=top]:border-b",
       className
     )}
     {...props}

@@ -36,7 +36,7 @@ export const DialogContent = ({
   <DialogPortal>
     <DialogPrimitive.Backdrop className={overlayBackdropClassName} />
     <DialogPrimitive.Popup
-      className={cn(overlayPopupClassName, "bg-bg-surface text-fg", className)}
+      className={cn(overlayPopupClassName, "bg-panel text-fg", className)}
       {...props}
     >
       {children}

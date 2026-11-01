@@ -13,7 +13,10 @@ export const AccordionItem = ({
   ...props
 }: ComponentPropsWithoutRef<typeof AccordionPrimitive.Item>) => (
   <AccordionPrimitive.Item
-    className={cn("rounded-lg border bg-card text-card-fg", className)}
+    className={cn(
+      "rounded-section border border-transparent bg-card text-card-fg",
+      className
+    )}
     {...props}
   />
 );
@@ -35,7 +38,7 @@ export const AccordionTrigger = ({
 }) => (
   <AccordionPrimitive.Trigger
     className={cn(
-      "group/accordion-trigger flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-body font-medium text-fg transition-transform duration-100 ease-out squircle hover:bg-muted focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "group/accordion-trigger flex w-full items-center justify-between gap-3 rounded-section px-4 py-3 text-left text-body font-medium text-fg transition-transform duration-100 ease-out squircle hover:bg-muted focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
       className
     )}
     {...props}
@@ -55,7 +58,7 @@ export const AccordionPanel = ({
 }: ComponentPropsWithoutRef<typeof AccordionPrimitive.Panel>) => (
   <AccordionPrimitive.Panel
     className={cn(
-      "overflow-hidden border-t px-4 py-3 text-body text-muted-fg transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) data-ending-style:opacity-0 data-starting-style:opacity-0",
+      "overflow-hidden border-t border-transparent px-4 py-3 text-body text-muted-fg transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) data-ending-style:opacity-0 data-starting-style:opacity-0",
       className
     )}
     {...props}

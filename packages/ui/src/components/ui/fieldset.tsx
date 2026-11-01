@@ -14,7 +14,7 @@ export const Fieldset = ({
 }) => (
   <FieldsetPrimitive.Root
     className={cn(
-      "grid gap-3 rounded-lg border bg-card p-4",
+      "grid gap-3 rounded-section border border-transparent bg-card p-4",
       { "gap-0 rounded-none border-0 bg-transparent p-0": bare },
       className
     )}
