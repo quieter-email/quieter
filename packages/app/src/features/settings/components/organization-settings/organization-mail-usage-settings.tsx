@@ -205,8 +205,8 @@ const UsageBreakdown = ({
       : 0;
 
   return (
-    <div className="px-4">
-      <div className="flex h-4 overflow-hidden rounded-sm bg-detail squircle">
+    <div className="p-4">
+      <div className="flex h-8 overflow-hidden rounded-xl bg-detail squircle">
         <div
           className="flex h-full min-w-1 overflow-hidden"
           // oxlint-disable-next-line shadcn/no-inline-styles -- Bar width is measured from cost data.
@@ -296,9 +296,10 @@ export const ManagedUsageSummary = ({
   return (
     <Surface
       // oxlint-disable-next-line shadcn/no-restyle -- Flow and gap arrange the groups without changing the shared surface appearance.
-      className="flex flex-col gap-4"
+      className="flex flex-col gap-0.5"
+      padding="compact"
     >
-      <Surface variant="detail">
+      <Surface chrome="inset" variant="detail">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <Text family="mono" size="metric" weight="medium">
@@ -324,7 +325,7 @@ export const ManagedUsageSummary = ({
           <ProgressIndicator />
         </ProgressTrack>
       </Progress>
-      <Surface variant="detail">
+      <Surface chrome="inset" variant="detail">
         <div className="grid gap-4 @md:grid-cols-3">
           <Price
             label="Messages"

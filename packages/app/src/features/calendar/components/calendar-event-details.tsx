@@ -78,7 +78,7 @@ export const CalendarEventDetails = ({
           </IconButtonTooltip>
         </div>
       </WorkspaceHeader>
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-1 pt-1.5 pb-1">
+      <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-0.5 pb-0.5">
         <Surface variant="section">
           <div className="flex flex-col gap-4">
             <div className="space-y-2">
@@ -250,7 +250,7 @@ export const CalendarEventDetails = ({
         </Surface>
       </div>
       {event.permissions.delete ? (
-        <Surface className="mx-1 mb-1" variant="section">
+        <Surface className="mx-0.5 mb-0.5 shrink-0" variant="section">
           <ActionFooter>
             {event.permissions.delete ? (
               <Button

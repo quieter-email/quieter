@@ -155,7 +155,7 @@ export const ComposerEditorFrame = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "flex min-h-0 flex-1 flex-col overflow-hidden rounded-section border border-transparent bg-section shadow-sm squircle has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring",
+      "flex min-h-0 flex-1 flex-col overflow-hidden rounded-section bg-section squircle has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-inset",
       className
     )}
     {...props}

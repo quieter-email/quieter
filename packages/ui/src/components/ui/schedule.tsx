@@ -520,13 +520,22 @@ export const Schedule = ({
         <div
           aria-label="Month calendar"
           className={cn(
-            surfaceVariants({ padding: "none" }),
+            surfaceVariants({ padding: "compact" }),
             scheduleFrameClassName,
             "flex flex-col"
           )}
           ref={scrollRef}
         >
-          <div className="grid min-w-xl grid-cols-7 bg-detail">
+          <div
+            className={cn(
+              surfaceVariants({
+                chrome: "inset",
+                padding: "none",
+                variant: "detail",
+              }),
+              "mb-0.5 grid min-w-xl shrink-0 grid-cols-7 overflow-hidden"
+            )}
+          >
             {dates.slice(0, 7).map((date) => (
               <div className="px-3 py-3 text-caption text-muted-fg" key={date}>
                 {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
@@ -668,7 +677,7 @@ export const Schedule = ({
     <div
       aria-label={`${view === "day" ? "Day" : "Week"} calendar`}
       className={cn(
-        surfaceVariants({ padding: "none" }),
+        surfaceVariants({ padding: "compact" }),
         scheduleFrameClassName
       )}
       ref={scrollRef}
@@ -680,75 +689,86 @@ export const Schedule = ({
         date and time.
       </p>
       <div
-        className="sticky top-0 z-30 grid w-full min-w-[var(--schedule-min-width)] grid-cols-[var(--schedule-columns)] border-b border-border bg-detail"
+        className="sticky -top-0.5 z-30 -mt-0.5 w-full min-w-[var(--schedule-min-width)] bg-section pt-0.5 pb-0.5"
         style={columnStyle}
       >
-        <div className="border-r border-border" />
-        {dates.map((date, index) => (
-          <div
-            className={cn(
-              "flex min-h-8 items-center justify-center border-border px-2",
-              { "border-r": index < dates.length - 1 }
-            )}
-            data-selected-date={date === selectedDate || undefined}
-            key={date}
-          >
-            <span
-              aria-current={date === today ? "date" : undefined}
+        <div
+          className={cn(
+            surfaceVariants({
+              chrome: "inset",
+              padding: "none",
+              variant: "detail",
+            }),
+            "grid grid-cols-[var(--schedule-columns)] overflow-hidden border-b border-border"
+          )}
+        >
+          <div className="border-r border-border" />
+          {dates.map((date, index) => (
+            <div
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-sm px-2 py-1",
-                { "bg-primary text-primary-fg": date === today }
+                "flex min-h-8 items-center justify-center border-border px-2",
+                { "border-r": index < dates.length - 1 }
               )}
+              data-selected-date={date === selectedDate || undefined}
+              key={date}
             >
               <span
-                className={cn("text-caption", {
-                  "font-medium": date === today || date === selectedDate,
-                  "text-muted-fg": date !== today && date !== selectedDate,
-                })}
+                aria-current={date === today ? "date" : undefined}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-sm px-2 py-1",
+                  { "bg-primary text-primary-fg": date === today }
+                )}
               >
-                {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
+                <span
+                  className={cn("text-caption", {
+                    "font-medium": date === today || date === selectedDate,
+                    "text-muted-fg": date !== today && date !== selectedDate,
+                  })}
+                >
+                  {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
+                </span>
+                <span className="text-body-sm font-medium">
+                  {Number(date.slice(8))}
+                  {date === selectedDate ? (
+                    <span className="sr-only">, selected date</span>
+                  ) : null}
+                </span>
               </span>
-              <span className="text-body-sm font-medium">
-                {Number(date.slice(8))}
-                {date === selectedDate ? (
-                  <span className="sr-only">, selected date</span>
-                ) : null}
-              </span>
-            </span>
+            </div>
+          ))}
+          <div className="border-t border-r border-border px-1 py-2 text-right text-micro whitespace-nowrap text-muted-fg">
+            All day
           </div>
-        ))}
-        <div className="border-t border-r border-border px-1 py-2 text-right text-micro whitespace-nowrap text-muted-fg">
-          All day
-        </div>
-        {dates.map((date) => (
-          <div
-            className="relative min-h-8 space-y-1 border-t border-r border-border px-0.5 py-1 last:border-r-0 data-schedule-drop-active:bg-primary/5"
-            data-schedule-drop-date={date}
-            data-schedule-drop-kind="all-day"
-            data-selected-date={date === selectedDate || undefined}
-            key={date}
-          >
-            {/* Native hit areas fill each all-day cell without adding a separate control row. */}
-            <button
-              aria-label={`Create all-day event on ${date}`}
-              className="absolute inset-0 outline-none hover:bg-control-hover focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset"
-              onClick={(event) => {
-                if (event.detail === 0) {
+          {dates.map((date) => (
+            <div
+              className="relative min-h-8 space-y-1 border-t border-r border-border px-0.5 py-1 last:border-r-0 data-schedule-drop-active:bg-primary/5"
+              data-schedule-drop-date={date}
+              data-schedule-drop-kind="all-day"
+              data-selected-date={date === selectedDate || undefined}
+              key={date}
+            >
+              {/* Native hit areas fill each all-day cell without adding a separate control row. */}
+              <button
+                aria-label={`Create all-day event on ${date}`}
+                className="absolute inset-0 outline-none hover:bg-control-hover focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset"
+                onClick={(event) => {
+                  if (event.detail === 0) {
+                    onSlotCreate({ allDay: true, date, minute: 0 });
+                  } else if (event.detail === 1) {
+                    onEmptyClick?.();
+                  }
+                }}
+                onDoubleClick={() => {
                   onSlotCreate({ allDay: true, date, minute: 0 });
-                } else if (event.detail === 1) {
-                  onEmptyClick?.();
-                }
-              }}
-              onDoubleClick={() => {
-                onSlotCreate({ allDay: true, date, minute: 0 });
-              }}
-              type="button"
-            />
-            {(days.get(date) ?? [])
-              .filter((item) => item.allDay)
-              .map((item) => renderEvent(item, "compact"))}
-          </div>
-        ))}
+                }}
+                type="button"
+              />
+              {(days.get(date) ?? [])
+                .filter((item) => item.allDay)
+                .map((item) => renderEvent(item, "compact"))}
+            </div>
+          ))}
+        </div>
       </div>
       <div
         className="grid h-336 w-full min-w-[var(--schedule-min-width)] grid-cols-[var(--schedule-columns)]"

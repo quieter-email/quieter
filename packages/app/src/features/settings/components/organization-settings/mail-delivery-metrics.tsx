@@ -79,8 +79,8 @@ export const MailDeliveryMetrics = ({
   return (
     <div className="flex flex-col gap-4">
       <Surface padding="none">
-        <div className="p-4">
-          <Surface variant="detail">
+        <div className="p-0.5">
+          <Surface chrome="inset" variant="detail">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-5 @lg:grid-cols-4">
               {stats.map((stat) => (
                 <div className="flex min-w-0 flex-col gap-2" key={stat.label}>
@@ -110,16 +110,18 @@ export const MailDeliveryMetrics = ({
           </Surface>
         </div>
 
-        <div className="flex flex-col gap-4 px-4">
-          <Surface variant="detail">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-body-sm text-fg">Daily activity</h2>
-              <span className="text-micro text-muted-fg">
-                {data[0]?.shortLabel} to {data.at(-1)?.shortLabel}, UTC
-              </span>
-            </div>
-          </Surface>
-          <div className="px-2">
+        <div className="flex flex-col gap-4">
+          <div className="px-0.5">
+            <Surface chrome="inset" variant="detail">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-body-sm text-fg">Daily activity</h2>
+                <span className="text-micro text-muted-fg">
+                  {data[0]?.shortLabel} to {data.at(-1)?.shortLabel}, UTC
+                </span>
+              </div>
+            </Surface>
+          </div>
+          <div className="px-6">
             <BarChart
               data={data}
               label="Daily sent, delivered, and bounced mail"

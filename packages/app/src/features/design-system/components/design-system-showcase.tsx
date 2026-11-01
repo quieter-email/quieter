@@ -639,16 +639,16 @@ export const DesignSystemShowcase = () => {
                 </Button>
               </div>
             </WorkspaceHeader>
-            <div className="p-4">
-              <Surface>
-                <div className="space-y-4">
+            <div className="p-0.5">
+              <Surface padding="compact">
+                <div className="p-4">
                   <Text weight="medium">Section</Text>
-                  <Surface variant="detail">
-                    <Text size="sm">
-                      Details stay one shade above their group.
-                    </Text>
-                  </Surface>
                 </div>
+                <Surface chrome="inset" variant="detail">
+                  <Text size="sm">
+                    Details stay one shade above their group.
+                  </Text>
+                </Surface>
               </Surface>
             </div>
           </WorkspaceSection>
@@ -1462,9 +1462,9 @@ export const DesignSystemShowcase = () => {
               <ToolbarButton variant="selected">Archive</ToolbarButton>
             </Toolbar>
           </Row>
-          <Row label="Attached toolbar">
-            <Surface>
-              <Toolbar aria-label="Example editor toolbar" chrome="attached">
+          <Row label="Inset toolbar">
+            <Surface className="flex flex-col" padding="none">
+              <Toolbar aria-label="Example editor toolbar" chrome="inset">
                 <ToolbarButton>Format</ToolbarButton>
                 <ToolbarButton>Attach</ToolbarButton>
               </Toolbar>

@@ -730,13 +730,13 @@ export const ComposeEditorToolbar = ({
 
   return (
     <Toolbar
-      chrome={chrome === "footer" ? "attached" : "default"}
+      chrome={chrome === "footer" ? "inset" : "default"}
       size={chrome === "selection" ? "compact" : "default"}
       className={cn(
         "min-w-0 shrink-0",
         {
           "@max-2xl:flex-wrap": chrome === "footer",
-          "w-full": chrome !== "selection",
+          "w-full": chrome === "default",
         },
         className
       )}

@@ -7,6 +7,7 @@ import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
 import { inputControlClassName } from "./input-chrome";
+import { surfaceVariants } from "./surface";
 
 export const Toolbar = ({
   chrome = "default",
@@ -14,16 +15,20 @@ export const Toolbar = ({
   size = "default",
   ...props
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Root> & {
-  chrome?: "default" | "attached";
+  chrome?: "default" | "inset";
   size?: "default" | "compact";
 }) => (
   <ToolbarPrimitive.Root
     className={cn(
-      "inline-flex items-center rounded-section border border-transparent bg-section shadow-sm squircle",
+      surfaceVariants({
+        chrome: chrome === "inset" ? "inset" : "default",
+        padding: "none",
+        variant: chrome === "inset" ? "detail" : "section",
+      }),
+      "inline-flex items-center border border-transparent shadow-sm squircle",
       {
+        "m-0.5 min-h-12 gap-1.5 border-0 p-2 shadow-none": chrome === "inset",
         "min-h-10 gap-1 p-1": chrome === "default" && size === "default",
-        "min-h-12 gap-1.5 rounded-none border-0 bg-transparent px-3 py-2 shadow-none":
-          chrome === "attached",
         "min-h-8 gap-0.5 rounded-lg p-0.5":
           chrome === "default" && size === "compact",
       },

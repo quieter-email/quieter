@@ -25,7 +25,7 @@ import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
-import { Surface } from "@quieter/ui/surface";
+import { Surface, surfaceVariants } from "@quieter/ui/surface";
 import { toast } from "@quieter/ui/toast";
 
 const dnsTableColumns =
@@ -236,7 +236,7 @@ const DomainDnsRecordsTable = ({
   dnsChecks: DomainDnsCheck[];
   records: DomainDnsRecord[];
 }) => (
-  <Surface>
+  <Surface padding="compact">
     <div className="overflow-x-auto">
       <table
         aria-label="DNS records"
@@ -246,7 +246,8 @@ const DomainDnsRecordsTable = ({
           <tr
             className={cn(
               dnsTableColumns,
-              "rounded-md bg-detail px-4 py-3 text-caption font-medium text-muted-fg"
+              surfaceVariants({ chrome: "inset", variant: "detail" }),
+              "text-caption font-medium text-muted-fg [&_th]:font-medium"
             )}
           >
             <th scope="col">Type</th>

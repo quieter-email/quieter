@@ -962,7 +962,7 @@ const CalendarWorkspaceContent = ({
             </IconButtonTooltip>
           </div>
         </WorkspaceHeader>
-        <div aria-live="polite" className="flex-1 space-y-2 px-6 py-4">
+        <div aria-live="polite" className="flex-1 space-y-2 p-4">
           {selectedLoading ? (
             <Icon
               aria-hidden
@@ -978,7 +978,7 @@ const CalendarWorkspaceContent = ({
             {selectedDescription}
           </Text>
         </div>
-        <Surface className="mx-1 mb-1" variant="section">
+        <Surface className="mx-0.5 mb-0.5 shrink-0" variant="section">
           <ActionFooter>
             <Button
               onClick={closeEvent}
@@ -1136,25 +1136,8 @@ const CalendarWorkspaceContent = ({
         />
         <WorkspaceHeader>
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Text
-                as="h2"
-                className="mr-2 min-w-0"
-                size="lg"
-                truncate
-                weight="medium"
-              >
-                <LazyMotion features={domAnimation}>
-                  <m.span
-                    {...getAppPresenceMotion({ distance: 4, reducedMotion })}
-                    className="block truncate"
-                    key={rangeHeading}
-                  >
-                    {rangeHeading}
-                  </m.span>
-                </LazyMotion>
-              </Text>
-              <div className="flex items-center gap-1">
+            <div className="flex max-w-full min-w-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1">
                 <IconButtonTooltip label="Previous date range">
                   <Button
                     chrome="toolbar"
@@ -1208,8 +1191,26 @@ const CalendarWorkspaceContent = ({
                   </Button>
                 </IconButtonTooltip>
               </div>
+              <Text
+                as="h2"
+                className="min-w-0"
+                size="lg"
+                truncate
+                weight="medium"
+              >
+                <LazyMotion features={domAnimation}>
+                  <m.span
+                    {...getAppPresenceMotion({ distance: 4, reducedMotion })}
+                    className="block truncate"
+                    key={rangeHeading}
+                  >
+                    {rangeHeading}
+                  </m.span>
+                </LazyMotion>
+              </Text>
               <Button
                 chrome="toolbar"
+                className="shrink-0"
                 onClick={() => {
                   void setMailboxSearch({ calendarDate: now.date });
                 }}

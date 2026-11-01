@@ -7,9 +7,23 @@ import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
 
 export const surfaceVariants = cva("", {
-  defaultVariants: { padding: "default", variant: "section" },
+  compoundVariants: [
+    {
+      chrome: "inset",
+      className: "rounded-[calc(var(--radius-section)_-_var(--spacing)*0.5)]",
+    },
+  ],
+  defaultVariants: {
+    chrome: "default",
+    padding: "default",
+    variant: "section",
+  },
   variants: {
-    padding: { default: "p-4", none: "p-0" },
+    chrome: {
+      default: null,
+      inset: null,
+    },
+    padding: { compact: "p-0.5", default: "p-4", none: "p-0" },
     variant: {
       detail: "rounded-md bg-detail",
       section: "rounded-section bg-section",
@@ -19,12 +33,13 @@ export const surfaceVariants = cva("", {
 
 export const Surface = ({
   className,
+  chrome,
   padding,
   variant,
   ...props
 }: ComponentPropsWithoutRef<"div"> & VariantProps<typeof surfaceVariants>) => (
   <div
-    className={cn(surfaceVariants({ padding, variant }), className)}
+    className={cn(surfaceVariants({ chrome, padding, variant }), className)}
     {...props}
   />
 );

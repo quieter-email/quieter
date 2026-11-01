@@ -302,7 +302,7 @@ export const CalendarEventEditor = ({
       </WorkspaceHeader>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <fieldset
-          className="min-w-0 space-y-2 px-1 pt-1.5 pb-1"
+          className="min-w-0 space-y-0.5 px-0.5 pb-0.5"
           disabled={pending}
         >
           {state.problem ? (
@@ -948,7 +948,7 @@ export const CalendarEventEditor = ({
         </fieldset>
       </div>
       {dirty || editor.kind === "create" || onDelete ? (
-        <Surface className="mx-1 mb-1 shrink-0" variant="section">
+        <Surface className="mx-0.5 mb-0.5 shrink-0" variant="section">
           <ActionFooter>
             {dirty || editor.kind === "create" ? (
               <Button

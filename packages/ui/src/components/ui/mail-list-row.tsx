@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 import { Icon } from "./icon";
 import { Pill } from "./pill";
+import { surfaceVariants } from "./surface";
 
 export const mailListRowFrameVariants = cva(
   "group/row relative flex h-17 items-stretch rounded-section border-b border-transparent",
@@ -21,7 +22,7 @@ export const mailListRowFrameVariants = cva(
     variants: {
       accent: {
         yellow:
-          "after:pointer-events-none after:absolute after:inset-y-0.5 after:right-0.5 after:z-0 after:w-1/3 after:rounded-r-section after:bg-linear-to-l after:from-q-yellow/8 after:via-q-yellow/4 after:to-transparent after:content-['']",
+          "after:pointer-events-none after:absolute after:inset-y-0.5 after:right-0.5 after:z-0 after:w-1/3 after:rounded-r-[calc(var(--radius-section)_-_var(--spacing)*0.5)] after:bg-linear-to-l after:from-q-yellow/8 after:via-q-yellow/4 after:to-transparent after:content-['']",
       },
       layout: {
         adaptive: "@3xl:h-12",
@@ -32,8 +33,10 @@ export const mailListRowFrameVariants = cva(
 );
 
 export const mailListRowParts = {
-  overlay:
-    "pointer-events-none absolute inset-0.5 z-0 rounded-section bg-detail",
+  overlay: cn(
+    "pointer-events-none absolute inset-0.5 z-0",
+    surfaceVariants({ chrome: "inset", padding: "none", variant: "detail" })
+  ),
   selectionButton:
     "relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none",
   selectionCell:
