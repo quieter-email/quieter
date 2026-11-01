@@ -41,9 +41,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Surface } from "@quieter/ui/surface";
 import { Text } from "@quieter/ui/text";
 import { Textarea } from "@quieter/ui/textarea";
 import { TimePicker } from "@quieter/ui/time-picker";
+import { WorkspaceHeader } from "@quieter/ui/workspace-section";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "@tanstack/react-store";
 import { useEffect } from "react";
@@ -274,30 +276,32 @@ export const CalendarEventEditor = ({
         void submit();
       }}
     >
-      <div className="flex shrink-0 items-center gap-2 px-5 py-4">
-        <Text as="h2" className="flex-1" size="sm" weight="medium">
-          {editor.kind === "create" ? "New event" : "Event details"}
-        </Text>
-        {dirty ? (
-          <Text size="caption" tone="muted">
-            Unsaved
+      <WorkspaceHeader className="shrink-0">
+        <div className="flex items-center gap-2">
+          <Text as="h2" className="flex-1" size="sm" weight="medium">
+            {editor.kind === "create" ? "New event" : "Event details"}
           </Text>
-        ) : null}
-        <IconButtonTooltip label="Close event details">
-          <Button
-            aria-label="Close event details"
-            disabled={pending}
-            onClick={onClose}
-            size="icon-sm"
-            variant="ghost"
-          >
-            <Icon aria-hidden icon={Cancel01Icon} />
-          </Button>
-        </IconButtonTooltip>
-      </div>
+          {dirty ? (
+            <Text size="caption" tone="muted">
+              Unsaved
+            </Text>
+          ) : null}
+          <IconButtonTooltip label="Close event details">
+            <Button
+              aria-label="Close event details"
+              disabled={pending}
+              onClick={onClose}
+              size="icon-sm"
+              variant="ghost"
+            >
+              <Icon aria-hidden icon={Cancel01Icon} />
+            </Button>
+          </IconButtonTooltip>
+        </div>
+      </WorkspaceHeader>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <fieldset
-          className="@container min-w-0 space-y-4 px-5 pt-2 pb-5"
+          className="min-w-0 space-y-2 px-1 pt-1.5 pb-1"
           disabled={pending}
         >
           {state.problem ? (
@@ -349,176 +353,115 @@ export const CalendarEventEditor = ({
               ) : null}
             </div>
           ) : null}
-          <Field className="ml-6 w-auto">
-            <FieldLabel className="sr-only" htmlFor="calendar-event-title">
-              Title
-            </FieldLabel>
-            <Input
-              aria-label="Event title"
-              chrome="ghost"
-              id="calendar-event-title"
-              maxLength={1000}
-              onChange={(changeEvent) => {
-                store.setState((current) => ({
-                  ...current,
-                  values: {
-                    ...current.values,
-                    title: changeEvent.target.value,
-                  },
-                }));
-              }}
-              placeholder="Untitled event"
-              required
-              value={form.title}
-            />
-            {preview ||
-            isOccurrence ||
-            (editor.kind === "edit" && editor.scope === "series") ? (
-              <FieldDescription className="ml-2.5">
-                {description}
-              </FieldDescription>
-            ) : null}
-          </Field>
-          {onScopeChange && editor.kind === "edit" ? (
-            <Field className="ml-6 w-auto">
-              <FieldLabel className="ml-2.5" htmlFor="calendar-event-scope">
-                Apply changes to
-              </FieldLabel>
-              <Select
-                disabled={dirty || pending}
-                items={[
-                  { label: "This event", value: "occurrence" },
-                  { label: "Entire series", value: "series" },
-                ]}
-                onValueChange={(value) => {
-                  if (value === "occurrence" || value === "series") {
-                    void onScopeChange(value);
-                  }
-                }}
-                value={editor.scope}
-              >
-                <SelectTrigger id="calendar-event-scope" variant="ghost">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="occurrence">This event</SelectItem>
-                  <SelectItem value="series">Entire series</SelectItem>
-                </SelectContent>
-              </Select>
-              {dirty ? (
-                <FieldDescription className="ml-2.5">
-                  Save or cancel your changes before switching.
-                </FieldDescription>
-              ) : null}
-            </Field>
-          ) : null}
-          <div className="space-y-1">
-            <label
-              className="flex cursor-pointer items-center gap-2 py-1 text-body-sm"
-              htmlFor="calendar-event-all-day"
-            >
-              <Checkbox
-                disabled={pending}
-                id="calendar-event-all-day"
-                checked={form.allDay}
-                onCheckedChange={(checked) => {
-                  store.setState((current) => ({
-                    ...current,
-                    values: { ...current.values, allDay: checked },
-                  }));
-                }}
-              >
-                <CheckboxIndicator />
-              </Checkbox>
-              <span className="ml-2.5">All day</span>
-            </label>
-            <div className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-2 gap-y-1 @min-[18rem]:grid-cols-[1rem_minmax(0,1fr)_auto_minmax(0,1fr)]">
-              <Icon className="mt-2" icon={Calendar03Icon} tone="muted" />
-              <Field className="min-w-0">
-                <FieldLabel
-                  className="sr-only"
-                  htmlFor="calendar-event-start-date"
-                >
-                  Starts
+          <Surface className="@container" variant="section">
+            <div className="flex flex-col gap-4">
+              <Field className="ml-6 w-auto">
+                <FieldLabel className="sr-only" htmlFor="calendar-event-title">
+                  Title
                 </FieldLabel>
-                <DatePicker
+                <Input
+                  aria-label="Event title"
                   chrome="ghost"
-                  id="calendar-event-start-date"
-                  onValueChange={(value) => {
+                  id="calendar-event-title"
+                  maxLength={1000}
+                  onChange={(changeEvent) => {
                     store.setState((current) => ({
                       ...current,
                       values: {
                         ...current.values,
-                        startDate: value,
+                        title: changeEvent.target.value,
                       },
                     }));
                   }}
+                  placeholder="Untitled event"
                   required
-                  disabled={pending}
-                  value={form.startDate}
+                  value={form.title}
                 />
-              </Field>
-              <Icon
-                className="mt-2.5"
-                icon={ArrowRight01Icon}
-                size={12}
-                tone="muted"
-              />
-              <Field className="min-w-0">
-                <FieldLabel
-                  className="sr-only"
-                  htmlFor="calendar-event-end-date"
-                >
-                  Ends
-                </FieldLabel>
-                <DatePicker
-                  chrome="ghost"
-                  id="calendar-event-end-date"
-                  min={form.startDate}
-                  onValueChange={(value) => {
-                    store.setState((current) => ({
-                      ...current,
-                      values: {
-                        ...current.values,
-                        endDate: value,
-                      },
-                    }));
-                  }}
-                  required
-                  disabled={pending}
-                  value={form.endDate}
-                />
-                {form.allDay ? (
+                {preview ||
+                isOccurrence ||
+                (editor.kind === "edit" && editor.scope === "series") ? (
                   <FieldDescription className="ml-2.5">
-                    Includes this date.
+                    {description}
                   </FieldDescription>
                 ) : null}
               </Field>
-              {form.allDay ? null : (
-                <>
-                  <Icon className="mt-2" icon={Clock01Icon} tone="muted" />
+              {onScopeChange && editor.kind === "edit" ? (
+                <Field className="ml-6 w-auto">
+                  <FieldLabel className="ml-2.5" htmlFor="calendar-event-scope">
+                    Apply changes to
+                  </FieldLabel>
+                  <Select
+                    disabled={dirty || pending}
+                    items={[
+                      { label: "This event", value: "occurrence" },
+                      { label: "Entire series", value: "series" },
+                    ]}
+                    onValueChange={(value) => {
+                      if (value === "occurrence" || value === "series") {
+                        void onScopeChange(value);
+                      }
+                    }}
+                    value={editor.scope}
+                  >
+                    <SelectTrigger id="calendar-event-scope" variant="ghost">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="occurrence">This event</SelectItem>
+                      <SelectItem value="series">Entire series</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {dirty ? (
+                    <FieldDescription className="ml-2.5">
+                      Save or cancel your changes before switching.
+                    </FieldDescription>
+                  ) : null}
+                </Field>
+              ) : null}
+              <div className="space-y-1">
+                <label
+                  className="flex cursor-pointer items-center gap-2 py-1 text-body-sm"
+                  htmlFor="calendar-event-all-day"
+                >
+                  <Checkbox
+                    disabled={pending}
+                    id="calendar-event-all-day"
+                    checked={form.allDay}
+                    onCheckedChange={(checked) => {
+                      store.setState((current) => ({
+                        ...current,
+                        values: { ...current.values, allDay: checked },
+                      }));
+                    }}
+                  >
+                    <CheckboxIndicator />
+                  </Checkbox>
+                  <span className="ml-2.5">All day</span>
+                </label>
+                <div className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-2 gap-y-1 @min-[18rem]:grid-cols-[1rem_minmax(0,1fr)_auto_minmax(0,1fr)]">
+                  <Icon className="mt-2" icon={Calendar03Icon} tone="muted" />
                   <Field className="min-w-0">
                     <FieldLabel
                       className="sr-only"
-                      htmlFor="calendar-event-start-time"
+                      htmlFor="calendar-event-start-date"
                     >
-                      Start time
+                      Starts
                     </FieldLabel>
-                    <TimePicker
+                    <DatePicker
                       chrome="ghost"
-                      id="calendar-event-start-time"
+                      id="calendar-event-start-date"
                       onValueChange={(value) => {
                         store.setState((current) => ({
                           ...current,
                           values: {
                             ...current.values,
-                            startTime: value,
+                            startDate: value,
                           },
                         }));
                       }}
                       required
                       disabled={pending}
-                      value={form.startTime}
+                      value={form.startDate}
                     />
                   </Field>
                   <Icon
@@ -530,409 +473,481 @@ export const CalendarEventEditor = ({
                   <Field className="min-w-0">
                     <FieldLabel
                       className="sr-only"
-                      htmlFor="calendar-event-end-time"
+                      htmlFor="calendar-event-end-date"
                     >
-                      End time
+                      Ends
                     </FieldLabel>
-                    <TimePicker
+                    <DatePicker
                       chrome="ghost"
-                      id="calendar-event-end-time"
+                      id="calendar-event-end-date"
+                      min={form.startDate}
                       onValueChange={(value) => {
                         store.setState((current) => ({
                           ...current,
                           values: {
                             ...current.values,
-                            endTime: value,
+                            endDate: value,
                           },
                         }));
                       }}
                       required
                       disabled={pending}
-                      value={form.endTime}
+                      value={form.endDate}
                     />
+                    {form.allDay ? (
+                      <FieldDescription className="ml-2.5">
+                        Includes this date.
+                      </FieldDescription>
+                    ) : null}
                   </Field>
-                </>
-              )}
-            </div>
-            {form.allDay ? null : (
-              <Field>
-                <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
-                  <Icon icon={Globe02Icon} tone="muted" />
-                  <FieldLabel
-                    className="sr-only"
-                    htmlFor="calendar-event-time-zone"
-                  >
-                    Time zone
-                  </FieldLabel>
-                  <CalendarTimeZonePicker
-                    aria-label="Event time zone"
+                  {form.allDay ? null : (
+                    <>
+                      <Icon className="mt-2" icon={Clock01Icon} tone="muted" />
+                      <Field className="min-w-0">
+                        <FieldLabel
+                          className="sr-only"
+                          htmlFor="calendar-event-start-time"
+                        >
+                          Start time
+                        </FieldLabel>
+                        <TimePicker
+                          chrome="ghost"
+                          id="calendar-event-start-time"
+                          onValueChange={(value) => {
+                            store.setState((current) => ({
+                              ...current,
+                              values: {
+                                ...current.values,
+                                startTime: value,
+                              },
+                            }));
+                          }}
+                          required
+                          disabled={pending}
+                          value={form.startTime}
+                        />
+                      </Field>
+                      <Icon
+                        className="mt-2.5"
+                        icon={ArrowRight01Icon}
+                        size={12}
+                        tone="muted"
+                      />
+                      <Field className="min-w-0">
+                        <FieldLabel
+                          className="sr-only"
+                          htmlFor="calendar-event-end-time"
+                        >
+                          End time
+                        </FieldLabel>
+                        <TimePicker
+                          chrome="ghost"
+                          id="calendar-event-end-time"
+                          onValueChange={(value) => {
+                            store.setState((current) => ({
+                              ...current,
+                              values: {
+                                ...current.values,
+                                endTime: value,
+                              },
+                            }));
+                          }}
+                          required
+                          disabled={pending}
+                          value={form.endTime}
+                        />
+                      </Field>
+                    </>
+                  )}
+                </div>
+                {form.allDay ? null : (
+                  <Field>
+                    <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
+                      <Icon icon={Globe02Icon} tone="muted" />
+                      <FieldLabel
+                        className="sr-only"
+                        htmlFor="calendar-event-time-zone"
+                      >
+                        Time zone
+                      </FieldLabel>
+                      <CalendarTimeZonePicker
+                        aria-label="Event time zone"
+                        disabled={pending}
+                        id="calendar-event-time-zone"
+                        onValueChange={(value) => {
+                          store.setState((current) => ({
+                            ...current,
+                            values: { ...current.values, timeZone: value },
+                          }));
+                        }}
+                        value={form.timeZone}
+                        variant="ghost"
+                      />
+                    </div>
+                  </Field>
+                )}
+                {isOccurrence ? null : (
+                  <CalendarEventRecurrence
+                    allDay={form.allDay}
                     disabled={pending}
-                    id="calendar-event-time-zone"
-                    onValueChange={(value) => {
+                    onChange={(recurrence) => {
                       store.setState((current) => ({
                         ...current,
-                        values: { ...current.values, timeZone: value },
+                        values: { ...current.values, recurrence },
                       }));
                     }}
-                    value={form.timeZone}
-                    variant="ghost"
+                    startDate={form.startDate}
+                    timeZone={form.timeZone}
+                    value={form.recurrence}
                   />
-                </div>
-              </Field>
-            )}
-            {isOccurrence ? null : (
-              <CalendarEventRecurrence
-                allDay={form.allDay}
+                )}
+                {previewIssue ? (
+                  <Text
+                    aria-live="polite"
+                    className="ml-8.5"
+                    size="caption"
+                    tone="muted"
+                  >
+                    {previewIssue}
+                  </Text>
+                ) : null}
+              </div>
+            </div>
+          </Surface>
+          <Surface variant="section">
+            <div className="flex flex-col gap-1">
+              <CalendarEventGuests
+                attendees={baseEvent?.attendees}
                 disabled={pending}
-                onChange={(recurrence) => {
+                onChange={(attendees) => {
                   store.setState((current) => ({
                     ...current,
-                    values: { ...current.values, recurrence },
+                    values: { ...current.values, attendees },
                   }));
                 }}
-                startDate={form.startDate}
-                timeZone={form.timeZone}
-                value={form.recurrence}
+                onOptionalGuestEmailsChange={(optionalGuestEmails) => {
+                  store.setState((current) => ({
+                    ...current,
+                    values: { ...current.values, optionalGuestEmails },
+                  }));
+                }}
+                optionalGuestEmails={form.optionalGuestEmails}
+                preview={preview}
+                value={form.attendees}
               />
-            )}
-            {previewIssue ? (
-              <Text
-                aria-live="polite"
-                className="ml-8.5"
-                size="caption"
-                tone="muted"
-              >
-                {previewIssue}
-              </Text>
-            ) : null}
-          </div>
-          <div className="space-y-1 border-t border-border pt-3">
-            <CalendarEventGuests
-              attendees={baseEvent?.attendees}
-              disabled={pending}
-              onChange={(attendees) => {
-                store.setState((current) => ({
-                  ...current,
-                  values: { ...current.values, attendees },
-                }));
-              }}
-              onOptionalGuestEmailsChange={(optionalGuestEmails) => {
-                store.setState((current) => ({
-                  ...current,
-                  values: { ...current.values, optionalGuestEmails },
-                }));
-              }}
-              optionalGuestEmails={form.optionalGuestEmails}
-              preview={preview}
-              value={form.attendees}
-            />
-            {baseEvent?.organizer &&
-            !baseEvent.attendees.some((guest) => guest.organizer) ? (
-              <div className="ml-6 space-y-1 pl-2.5">
-                <Text size="caption" tone="muted">
-                  Organizer
-                </Text>
-                <Text as="p" size="sm">
-                  {baseEvent.organizer.name ??
-                    baseEvent.organizer.email ??
-                    (baseEvent.organizer.self ? "You" : "Event organizer")}
-                </Text>
+              {baseEvent?.organizer &&
+              !baseEvent.attendees.some((guest) => guest.organizer) ? (
+                <div className="ml-6 space-y-1 pl-2.5">
+                  <Text size="caption" tone="muted">
+                    Organizer
+                  </Text>
+                  <Text as="p" size="sm">
+                    {baseEvent.organizer.name ??
+                      baseEvent.organizer.email ??
+                      (baseEvent.organizer.self ? "You" : "Event organizer")}
+                  </Text>
+                </div>
+              ) : null}
+              {baseEvent?.permissions.respond === true && self && onRespond ? (
+                <Field className="ml-8.5 w-auto">
+                  <FieldLabel>Your response</FieldLabel>
+                  <div className="flex gap-2">
+                    {(
+                      [
+                        { label: "No", value: "declined" },
+                        { label: "Maybe", value: "tentative" },
+                        { label: "Yes", value: "accepted" },
+                      ] as const
+                    ).map((response) => (
+                      <Button
+                        aria-pressed={self.response === response.value}
+                        disabled={pending || dirty}
+                        key={response.value}
+                        onClick={() => {
+                          void respond(response.value);
+                        }}
+                        size="sm"
+                        variant="chip"
+                      >
+                        {response.label}
+                      </Button>
+                    ))}
+                  </div>
+                </Field>
+              ) : null}
+              <CalendarEventLocation
+                disabled={pending}
+                onValueChange={(location) => {
+                  store.setState((current) => ({
+                    ...current,
+                    values: { ...current.values, location },
+                  }));
+                }}
+                suggestions={locationSuggestions}
+                value={form.location}
+              />
+              <div className="flex items-start gap-2">
+                <span className="flex h-9 items-center">
+                  <Icon icon={TextAlignLeftIcon} tone="muted" />
+                </span>
+                <Field className="ml-1.5">
+                  <FieldLabel
+                    className="sr-only"
+                    htmlFor="calendar-event-description"
+                  >
+                    Description
+                  </FieldLabel>
+                  <Textarea
+                    variant="compact-prompt"
+                    rows={1}
+                    id="calendar-event-description"
+                    maxLength={50_000}
+                    onChange={(event) => {
+                      store.setState((current) => ({
+                        ...current,
+                        values: {
+                          ...current.values,
+                          description: event.target.value,
+                        },
+                      }));
+                    }}
+                    placeholder="Add description"
+                    value={form.description}
+                  />
+                </Field>
               </div>
-            ) : null}
-            {baseEvent?.permissions.respond === true && self && onRespond ? (
-              <Field className="ml-8.5 w-auto">
-                <FieldLabel>Your response</FieldLabel>
-                <div className="flex gap-2">
-                  {(
-                    [
-                      { label: "No", value: "declined" },
-                      { label: "Maybe", value: "tentative" },
-                      { label: "Yes", value: "accepted" },
-                    ] as const
-                  ).map((response) => (
-                    <Button
-                      aria-pressed={self.response === response.value}
-                      disabled={pending || dirty}
-                      key={response.value}
-                      onClick={() => {
-                        void respond(response.value);
+            </div>
+          </Surface>
+          <Surface variant="section">
+            <div className="flex flex-col gap-1">
+              <Field>
+                <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
+                  <Icon icon={Calendar03Icon} tone="muted" />
+                  <FieldLabel
+                    className="sr-only"
+                    htmlFor="calendar-event-calendar"
+                  >
+                    Calendar
+                  </FieldLabel>
+                  {editor.kind === "edit" ? (
+                    <Text className="ml-2.5" size="sm">
+                      {selectedCalendar?.name ?? "Calendar"}
+                    </Text>
+                  ) : (
+                    <Select
+                      disabled={pending}
+                      items={calendarOptions}
+                      onValueChange={(value) => {
+                        if (value) {
+                          store.setState((current) => ({
+                            ...current,
+                            values: { ...current.values, calendarKey: value },
+                          }));
+                        }
                       }}
-                      size="sm"
-                      variant="chip"
+                      value={form.calendarKey}
                     >
-                      {response.label}
-                    </Button>
-                  ))}
+                      <SelectTrigger
+                        id="calendar-event-calendar"
+                        variant="ghost"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {calendarOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </Field>
-            ) : null}
-            <CalendarEventLocation
-              disabled={pending}
-              onValueChange={(location) => {
-                store.setState((current) => ({
-                  ...current,
-                  values: { ...current.values, location },
-                }));
-              }}
-              suggestions={locationSuggestions}
-              value={form.location}
-            />
-            <div className="flex items-start gap-2">
-              <span className="flex h-9 items-center">
-                <Icon icon={TextAlignLeftIcon} tone="muted" />
-              </span>
-              <Field className="ml-1.5">
-                <FieldLabel
-                  className="sr-only"
-                  htmlFor="calendar-event-description"
-                >
-                  Description
-                </FieldLabel>
-                <Textarea
-                  variant="compact-prompt"
-                  rows={1}
-                  id="calendar-event-description"
-                  maxLength={50_000}
-                  onChange={(event) => {
-                    store.setState((current) => ({
-                      ...current,
-                      values: {
-                        ...current.values,
-                        description: event.target.value,
-                      },
-                    }));
-                  }}
-                  placeholder="Add description"
-                  value={form.description}
-                />
-              </Field>
-            </div>
-          </div>
-          <div className="space-y-1 border-t border-border pt-3">
-            <Field>
-              <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
-                <Icon icon={Calendar03Icon} tone="muted" />
-                <FieldLabel
-                  className="sr-only"
-                  htmlFor="calendar-event-calendar"
-                >
-                  Calendar
-                </FieldLabel>
-                {editor.kind === "edit" ? (
-                  <Text className="ml-2.5" size="sm">
-                    {selectedCalendar?.name ?? "Calendar"}
-                  </Text>
-                ) : (
-                  <Select
-                    disabled={pending}
-                    items={calendarOptions}
-                    onValueChange={(value) => {
-                      if (value) {
-                        store.setState((current) => ({
-                          ...current,
-                          values: { ...current.values, calendarKey: value },
-                        }));
-                      }
-                    }}
-                    value={form.calendarKey}
-                  >
-                    <SelectTrigger id="calendar-event-calendar" variant="ghost">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {calendarOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            </Field>
-            <Field>
-              <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
-                <Icon icon={PaintBoardIcon} tone="muted" />
-                <FieldLabel className="sr-only">Event color</FieldLabel>
-                <Popover>
-                  <PopoverTrigger
-                    aria-label="Event color"
-                    className="justify-self-start"
-                    disabled={pending}
-                    render={<Button size="sm" variant="ghost" />}
-                  >
-                    <ColorSwatch
-                      color={
-                        form.color ??
-                        selectedCalendar?.color ??
-                        "var(--color-q-blue)"
-                      }
-                    />
-                    {form.color ? "Custom color" : "Calendar default"}
-                  </PopoverTrigger>
-                  <PopoverContent align="start">
-                    <PopoverTitle>Event color</PopoverTitle>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {[...colors].map((color) => (
-                        <IconButtonTooltip key={color} label={`Use ${color}`}>
+              <Field>
+                <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
+                  <Icon icon={PaintBoardIcon} tone="muted" />
+                  <FieldLabel className="sr-only">Event color</FieldLabel>
+                  <Popover>
+                    <PopoverTrigger
+                      aria-label="Event color"
+                      className="justify-self-start"
+                      disabled={pending}
+                      render={<Button size="sm" variant="ghost" />}
+                    >
+                      <ColorSwatch
+                        color={
+                          form.color ??
+                          selectedCalendar?.color ??
+                          "var(--color-q-blue)"
+                        }
+                      />
+                      {form.color ? "Custom color" : "Calendar default"}
+                    </PopoverTrigger>
+                    <PopoverContent align="start">
+                      <PopoverTitle>Event color</PopoverTitle>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {[...colors].map((color) => (
+                          <IconButtonTooltip key={color} label={`Use ${color}`}>
+                            <Button
+                              aria-label={`Use ${color}`}
+                              aria-pressed={form.color?.toLowerCase() === color}
+                              onClick={() => {
+                                store.setState((current) => ({
+                                  ...current,
+                                  values: { ...current.values, color },
+                                }));
+                              }}
+                              size="icon-sm"
+                              variant="chip"
+                            >
+                              <ColorSwatch
+                                color={color}
+                                shape="square"
+                                size="lg"
+                              />
+                            </Button>
+                          </IconButtonTooltip>
+                        ))}
+                      </div>
+                      {colorsQuery.isError ? (
+                        <p className="mt-3 text-caption text-muted-fg">
+                          Colors could not load.
+                        </p>
+                      ) : null}
+                      <div className="mt-3">
+                        <ActionFooter>
                           <Button
-                            aria-label={`Use ${color}`}
-                            aria-pressed={form.color?.toLowerCase() === color}
                             onClick={() => {
                               store.setState((current) => ({
                                 ...current,
-                                values: { ...current.values, color },
+                                values: { ...current.values, color: null },
                               }));
                             }}
-                            size="icon-sm"
-                            variant="chip"
+                            size="sm"
+                            variant="secondary"
                           >
                             <ColorSwatch
-                              color={color}
-                              shape="square"
-                              size="lg"
+                              color={
+                                selectedCalendar?.color ?? "var(--color-q-blue)"
+                              }
                             />
+                            Calendar default
                           </Button>
-                        </IconButtonTooltip>
-                      ))}
-                    </div>
-                    {colorsQuery.isError ? (
-                      <p className="mt-3 text-caption text-muted-fg">
-                        Colors could not load.
-                      </p>
-                    ) : null}
-                    <div className="mt-3">
-                      <ActionFooter>
-                        <Button
-                          onClick={() => {
-                            store.setState((current) => ({
-                              ...current,
-                              values: { ...current.values, color: null },
-                            }));
-                          }}
-                          size="sm"
-                          variant="secondary"
-                        >
-                          <ColorSwatch
-                            color={
-                              selectedCalendar?.color ?? "var(--color-q-blue)"
-                            }
-                          />
-                          Calendar default
-                        </Button>
-                      </ActionFooter>
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                        </ActionFooter>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </Field>
+              <CalendarEventReminders
+                disabled={pending}
+                items={form.reminderItems}
+                kind={form.reminderKind}
+                onItemsChange={(reminderItems) => {
+                  store.setState((current) => ({
+                    ...current,
+                    values: { ...current.values, reminderItems },
+                  }));
+                }}
+                onKindChange={(reminderKind) => {
+                  store.setState((current) => ({
+                    ...current,
+                    values: { ...current.values, reminderKind },
+                  }));
+                }}
+              />
+              <div className="space-y-1">
+                <Field>
+                  <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
+                    <Icon icon={Clock01Icon} tone="muted" />
+                    <FieldLabel
+                      className="sr-only"
+                      htmlFor="calendar-event-availability"
+                    >
+                      Show as
+                    </FieldLabel>
+                    <Select
+                      items={[
+                        { label: "Busy", value: "busy" },
+                        { label: "Free", value: "free" },
+                      ]}
+                      onValueChange={(value) => {
+                        if (value === "busy" || value === "free") {
+                          store.setState((current) => ({
+                            ...current,
+                            values: { ...current.values, availability: value },
+                          }));
+                        }
+                      }}
+                      value={form.availability}
+                    >
+                      <SelectTrigger
+                        id="calendar-event-availability"
+                        variant="ghost"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="busy">Busy</SelectItem>
+                        <SelectItem value="free">Free</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </Field>
+                <Field>
+                  <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
+                    <Icon icon={SquareLock01Icon} tone="muted" />
+                    <FieldLabel
+                      className="sr-only"
+                      htmlFor="calendar-event-visibility"
+                    >
+                      Visibility
+                    </FieldLabel>
+                    <Select
+                      disabled={pending || isOccurrence}
+                      items={[
+                        { label: "Default visibility", value: "default" },
+                        { label: "Private", value: "private" },
+                        { label: "Public", value: "public" },
+                      ]}
+                      onValueChange={(value) => {
+                        if (
+                          value === "default" ||
+                          value === "private" ||
+                          value === "public"
+                        ) {
+                          store.setState((current) => ({
+                            ...current,
+                            values: { ...current.values, visibility: value },
+                          }));
+                        }
+                      }}
+                      value={form.visibility}
+                    >
+                      <SelectTrigger
+                        id="calendar-event-visibility"
+                        variant="ghost"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">
+                          Default visibility
+                        </SelectItem>
+                        <SelectItem value="private">Private</SelectItem>
+                        <SelectItem value="public">Public</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </Field>
               </div>
-            </Field>
-            <CalendarEventReminders
-              disabled={pending}
-              items={form.reminderItems}
-              kind={form.reminderKind}
-              onItemsChange={(reminderItems) => {
-                store.setState((current) => ({
-                  ...current,
-                  values: { ...current.values, reminderItems },
-                }));
-              }}
-              onKindChange={(reminderKind) => {
-                store.setState((current) => ({
-                  ...current,
-                  values: { ...current.values, reminderKind },
-                }));
-              }}
-            />
-            <div className="space-y-1">
-              <Field>
-                <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
-                  <Icon icon={Clock01Icon} tone="muted" />
-                  <FieldLabel
-                    className="sr-only"
-                    htmlFor="calendar-event-availability"
-                  >
-                    Show as
-                  </FieldLabel>
-                  <Select
-                    items={[
-                      { label: "Busy", value: "busy" },
-                      { label: "Free", value: "free" },
-                    ]}
-                    onValueChange={(value) => {
-                      if (value === "busy" || value === "free") {
-                        store.setState((current) => ({
-                          ...current,
-                          values: { ...current.values, availability: value },
-                        }));
-                      }
-                    }}
-                    value={form.availability}
-                  >
-                    <SelectTrigger
-                      id="calendar-event-availability"
-                      variant="ghost"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="busy">Busy</SelectItem>
-                      <SelectItem value="free">Free</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </Field>
-              <Field>
-                <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
-                  <Icon icon={SquareLock01Icon} tone="muted" />
-                  <FieldLabel
-                    className="sr-only"
-                    htmlFor="calendar-event-visibility"
-                  >
-                    Visibility
-                  </FieldLabel>
-                  <Select
-                    disabled={pending || isOccurrence}
-                    items={[
-                      { label: "Default visibility", value: "default" },
-                      { label: "Private", value: "private" },
-                      { label: "Public", value: "public" },
-                    ]}
-                    onValueChange={(value) => {
-                      if (
-                        value === "default" ||
-                        value === "private" ||
-                        value === "public"
-                      ) {
-                        store.setState((current) => ({
-                          ...current,
-                          values: { ...current.values, visibility: value },
-                        }));
-                      }
-                    }}
-                    value={form.visibility}
-                  >
-                    <SelectTrigger
-                      id="calendar-event-visibility"
-                      variant="ghost"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">
-                        Default visibility
-                      </SelectItem>
-                      <SelectItem value="private">Private</SelectItem>
-                      <SelectItem value="public">Public</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </Field>
             </div>
-          </div>
+          </Surface>
         </fieldset>
       </div>
       {dirty || editor.kind === "create" || onDelete ? (
-        <div className="shrink-0 p-5">
+        <Surface className="mx-1 mb-1 shrink-0" variant="section">
           <ActionFooter>
             {dirty || editor.kind === "create" ? (
               <Button
@@ -984,7 +999,7 @@ export const CalendarEventEditor = ({
               </Button>
             ) : null}
           </ActionFooter>
-        </div>
+        </Surface>
       ) : null}
     </form>
   );

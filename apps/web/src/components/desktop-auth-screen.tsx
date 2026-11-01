@@ -122,7 +122,7 @@ export const DesktopAuthScreen = () => {
             }}
             fullWidth
             type="button"
-            variant="outline"
+            variant="secondary"
           >
             {copied ? "Copied" : "Copy sign-in code"}
           </Button>
