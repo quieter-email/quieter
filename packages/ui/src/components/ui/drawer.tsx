@@ -98,7 +98,7 @@ export const DrawerFooter = ({
   ...props
 }: ComponentPropsWithoutRef<"div">) => (
   <ActionFooter
-    className={cn("border-t border-transparent p-4", className)}
+    className={cn("mt-auto border-t border-transparent p-4", className)}
     {...props}
   />
 );

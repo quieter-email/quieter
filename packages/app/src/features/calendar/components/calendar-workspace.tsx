@@ -76,6 +76,7 @@ import { Text } from "@quieter/ui/text";
 import {
   WorkspaceHeader,
   WorkspaceSection,
+  workspaceGutterClassName,
 } from "@quieter/ui/workspace-section";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCreateStore, useSelector } from "@tanstack/react-store";
@@ -950,6 +951,7 @@ const CalendarWorkspaceContent = ({
             </Text>
             <IconButtonTooltip label="Close event details">
               <Button
+                chrome="toolbar"
                 aria-label="Close event details"
                 onClick={closeEvent}
                 size="icon-sm"
@@ -1059,7 +1061,12 @@ const CalendarWorkspaceContent = ({
     new Date(calendarWallTimeToInstant({ date, time: "12:00", timeZone }))
   );
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-1">
+    <div
+      className={cn(
+        workspaceGutterClassName,
+        "flex h-full min-h-0 min-w-0 flex-1 gap-(--workspace-gutter)"
+      )}
+    >
       <CalendarSidebar
         accounts={data.accounts}
         calendars={data.calendars}
@@ -1150,6 +1157,7 @@ const CalendarWorkspaceContent = ({
               <div className="flex items-center gap-1">
                 <IconButtonTooltip label="Previous date range">
                   <Button
+                    chrome="toolbar"
                     aria-label="Previous date range"
                     onClick={() => {
                       const offset = -{ agenda: 30, day: 1, month: 1, week: 7 }[
@@ -1175,6 +1183,7 @@ const CalendarWorkspaceContent = ({
                 </IconButtonTooltip>
                 <IconButtonTooltip label="Next date range">
                   <Button
+                    chrome="toolbar"
                     aria-label="Next date range"
                     onClick={() => {
                       const offset = { agenda: 30, day: 1, month: 1, week: 7 }[
@@ -1200,6 +1209,7 @@ const CalendarWorkspaceContent = ({
                 </IconButtonTooltip>
               </div>
               <Button
+                chrome="toolbar"
                 onClick={() => {
                   void setMailboxSearch({ calendarDate: now.date });
                 }}
@@ -1225,6 +1235,7 @@ const CalendarWorkspaceContent = ({
                 value={view}
               >
                 <SelectTrigger
+                  chrome="toolbar"
                   aria-label="Calendar view"
                   className="w-24"
                   size="sm"
@@ -1241,6 +1252,7 @@ const CalendarWorkspaceContent = ({
                 </SelectContent>
               </Select>
               <CalendarTimeZonePicker
+                chrome="toolbar"
                 aria-label="Display time zone"
                 className="max-w-40"
                 onValueChange={(zone) => {
@@ -1259,6 +1271,7 @@ const CalendarWorkspaceContent = ({
                   <PopoverTrigger
                     render={
                       <Button
+                        chrome="toolbar"
                         aria-label="Find events"
                         size="icon-sm"
                         variant={ui.search ? "secondary" : "ghost"}
@@ -1286,6 +1299,7 @@ const CalendarWorkspaceContent = ({
               </Popover>
               <IconButtonTooltip label="Refresh calendars">
                 <Button
+                  chrome="toolbar"
                   aria-label="Refresh calendars"
                   disabled={preview !== null || data.isRefreshing}
                   onClick={() => {
@@ -1300,6 +1314,7 @@ const CalendarWorkspaceContent = ({
               {assistant && !assistant.open ? (
                 <IconButtonTooltip label="Open assistant">
                   <Button
+                    chrome="toolbar"
                     aria-controls={assistant.panelId}
                     aria-expanded={assistant.open}
                     aria-label="Open assistant"

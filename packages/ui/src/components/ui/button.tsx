@@ -62,6 +62,7 @@ export const buttonVariants = cva(
         className: "active:bg-secondary-active",
         variant: "secondary",
       },
+      { chrome: "toolbar", className: "rounded-xl" },
     ],
     defaultVariants: {
       auxiliaryPress: false,
@@ -73,7 +74,7 @@ export const buttonVariants = cva(
       auxiliaryPress: { false: null, true: null },
       chrome: {
         default: null,
-        toolbar: "rounded-xl",
+        toolbar: null,
       },
       fullWidth: {
         true: "group relative w-full gap-3",

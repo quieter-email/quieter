@@ -169,10 +169,11 @@ export const SnippetWorkspace = ({
   return (
     <>
       <WorkspaceSection>
-        <WorkspaceHeader className="@container" size="lg">
+        <WorkspaceHeader className="@container">
           <div className="flex items-center gap-2">
             <IconButtonTooltip label="Open sidebar">
               <Button
+                chrome="toolbar"
                 aria-label="Open sidebar"
                 className="lg:hidden"
                 onClick={onOpenSidebar}
@@ -193,6 +194,7 @@ export const SnippetWorkspace = ({
               Snippets
             </Text>
             <Button
+              chrome="toolbar"
               onClick={() => {
                 setEditingId(null);
                 setName("");
@@ -213,7 +215,7 @@ export const SnippetWorkspace = ({
             <span className="sr-only" id="snippet-workspace-search-label">
               Search snippets
             </span>
-            <InputGroup>
+            <InputGroup chrome="toolbar">
               <InputAddon
                 aria-hidden
                 className="ml-3 flex shrink-0 items-center"

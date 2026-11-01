@@ -22,6 +22,7 @@ const SelectDensityContext = createContext<SelectDensity>("default");
 export const selectTriggerVariants = cva(
   "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap select-none focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
+    compoundVariants: [{ chrome: "toolbar", className: "rounded-xl" }],
     defaultVariants: {
       chrome: "default",
       size: "default",
@@ -30,7 +31,7 @@ export const selectTriggerVariants = cva(
     variants: {
       chrome: {
         default: null,
-        toolbar: "rounded-xl",
+        toolbar: null,
       },
       size: {
         default: "h-8 px-2.5 text-body-sm [&_svg]:size-4",

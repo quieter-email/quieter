@@ -627,8 +627,16 @@ export const DesignSystemShowcase = () => {
           <WorkspaceSection layout="surface">
             <WorkspaceHeader>
               <div className="flex items-center gap-3">
-                <Input aria-label="Sample panel search" placeholder="Search" />
-                <Button variant="secondary">Refresh</Button>
+                <InputGroup chrome="toolbar" className="flex-1">
+                  <Input
+                    aria-label="Sample panel search"
+                    chrome="attached"
+                    placeholder="Search"
+                  />
+                </InputGroup>
+                <Button chrome="toolbar" variant="secondary">
+                  Refresh
+                </Button>
               </div>
             </WorkspaceHeader>
             <div className="p-4">

@@ -249,12 +249,13 @@ const MessageViewContent = (props: MessageViewContentProps) => {
 
   return (
     <article ref={viewRef} tabIndex={-1} className="@container w-full">
-      <WorkspaceHeader size="lg">
+      <WorkspaceHeader>
         <div className="flex min-w-0 items-center gap-3">
           {onBackToList ? (
             <div className={cn("shrink-0", { "lg:hidden": !showDesktopBack })}>
               <IconButtonTooltip label="Back to list">
                 <Button
+                  chrome="toolbar"
                   aria-label="Back to list"
                   onClick={onBackToList}
                   size="icon-sm"
@@ -290,6 +291,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           {canSetThreadImportance && (
             <IconButtonTooltip label={importanceLabel}>
               <Button
+                chrome="toolbar"
                 aria-label={importanceLabel}
                 aria-pressed={threadIsImportant}
                 disabled={isActionPending}

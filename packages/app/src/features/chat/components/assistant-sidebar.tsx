@@ -150,6 +150,7 @@ export const AssistantSidebar = ({
             <div className="flex items-center gap-2">
               <DropdownMenu key={open ? "visible" : "hidden"}>
                 <DropdownMenuTrigger
+                  chrome="toolbar"
                   appearance="row-strong"
                   aria-label="Open conversation history"
                   type="button"
@@ -257,6 +258,7 @@ export const AssistantSidebar = ({
               </DropdownMenu>
               <IconButtonTooltip label="New conversation">
                 <Button
+                  chrome="toolbar"
                   aria-label="New conversation"
                   onClick={onNewChat}
                   size="icon-sm"
@@ -269,6 +271,7 @@ export const AssistantSidebar = ({
               <div className="ml-auto flex items-center gap-1">
                 <IconButtonTooltip label="Collapse assistant sidebar">
                   <Button
+                    chrome="toolbar"
                     aria-controls={id}
                     aria-expanded={open}
                     aria-label="Collapse assistant sidebar"
