@@ -392,7 +392,7 @@ const ScheduleShowcase = () => {
           Reset example
         </Button>
       </div>
-      <div className="flex h-112 flex-col overflow-hidden rounded-md border border-border bg-card">
+      <WorkspaceSection className="h-112" layout="surface">
         <Schedule
           currentMinute={640}
           dates={scheduleDates[view]}
@@ -447,7 +447,7 @@ const ScheduleShowcase = () => {
           today="2026-10-23"
           view={view}
         />
-      </div>
+      </WorkspaceSection>
       <p className="text-caption text-muted-fg">
         {selectedId
           ? `Selected ${items.find((item) => item.id === selectedId)?.title ?? "event"}.`
