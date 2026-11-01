@@ -21,6 +21,7 @@ import { openExternalUrl } from "@quieter/app/runtime";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
+import { Surface } from "@quieter/ui/surface";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export const OrganizationBillingSettings = ({
@@ -105,7 +106,7 @@ export const OrganizationBillingSettings = ({
   const statusMessage = getBillingStatusMessage(billing);
 
   return (
-    <section className="@container">
+    <section className="@container space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <SettingsRowText title="Plan & balance">
           <BillingCreditSummary
@@ -145,31 +146,33 @@ export const OrganizationBillingSettings = ({
         </p>
       )}
 
-      <div className="mt-3 divide-y divide-border border-t border-border">
-        {(["managed", "pro"] as const).map((product) => (
-          <BillingProductCard
-            compact
-            canChoose={
-              billing.canManageBilling &&
-              (billing.hasAccess ||
-                billing.subscription === null ||
-                billing.subscription.status === "canceled" ||
-                billing.subscription.status === "expired")
-            }
-            currentProduct={currentProduct}
-            isAnyCheckoutPending={checkoutMutation.isPending}
-            isStartingCheckout={
-              checkoutMutation.isPending &&
-              checkoutMutation.variables?.product === product
-            }
-            key={product}
-            onCheckout={() => {
-              checkoutMutation.mutate({ organizationId, product });
-            }}
-            productId={product}
-          />
-        ))}
-      </div>
+      <Surface padding="none">
+        <div className="px-4">
+          {(["managed", "pro"] as const).map((product) => (
+            <BillingProductCard
+              compact
+              canChoose={
+                billing.canManageBilling &&
+                (billing.hasAccess ||
+                  billing.subscription === null ||
+                  billing.subscription.status === "canceled" ||
+                  billing.subscription.status === "expired")
+              }
+              currentProduct={currentProduct}
+              isAnyCheckoutPending={checkoutMutation.isPending}
+              isStartingCheckout={
+                checkoutMutation.isPending &&
+                checkoutMutation.variables?.product === product
+              }
+              key={product}
+              onCheckout={() => {
+                checkoutMutation.mutate({ organizationId, product });
+              }}
+              productId={product}
+            />
+          ))}
+        </div>
+      </Surface>
     </section>
   );
 };

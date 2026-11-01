@@ -25,10 +25,11 @@ import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
+import { Surface } from "@quieter/ui/surface";
 import { toast } from "@quieter/ui/toast";
 
 const dnsTableColumns =
-  "grid grid-cols-[3.25rem_minmax(7rem,0.85fr)_minmax(10rem,1.6fr)_4rem_3.25rem_5.25rem] items-center gap-3";
+  "grid grid-cols-[2.5rem_minmax(5.5rem,1fr)_minmax(9rem,2fr)_3rem_2rem_5.25rem] items-center gap-2";
 
 const copyDnsValue = async (value: string) => {
   try {
@@ -54,7 +55,7 @@ const DnsCopyCell = ({ value }: { value: string }) => (
     onClick={() => {
       void copyDnsValue(value);
     }}
-    size="auto"
+    size="xs"
     title={`Copy ${value}`}
     type="button"
     variant="ghost"
@@ -62,16 +63,6 @@ const DnsCopyCell = ({ value }: { value: string }) => (
     <code className="block truncate font-mono text-caption">{value}</code>
   </Button>
 );
-
-const getStatusSectionClass = (tone: DomainStatusTone) => {
-  if (tone === "success") {
-    return "border-border bg-success/15";
-  }
-  if (tone === "error") {
-    return "border-border bg-destructive/10";
-  }
-  return "border-border bg-bg-raised";
-};
 
 const getStatusIconTone = (tone: DomainStatusTone) => {
   if (tone === "success") {
@@ -137,7 +128,7 @@ export const DomainStatusSummary = ({
   status: ReturnType<typeof getDomainVerificationStatus>;
   totalRecords: number;
 }) => (
-  <SettingsCard className={getStatusSectionClass(status.tone)}>
+  <SettingsCard>
     <div
       className={cn(
         settingsSurfaceVariants({ variant: "padding" }),
@@ -163,7 +154,7 @@ export const DomainStatusSummary = ({
         ["Sending", sendingReady ? "Ready" : "Checking"],
         ["Incoming mail", domain.mode === "send_only" ? "Off" : "Enabled"],
       ].map(([label, value]) => (
-        <div className="border-l border-border pl-4" key={label}>
+        <div key={label}>
           <p className={settingsSurfaceVariants({ variant: "value" })}>
             {label}
           </p>
@@ -245,76 +236,75 @@ const DomainDnsRecordsTable = ({
   dnsChecks: DomainDnsCheck[];
   records: DomainDnsRecord[];
 }) => (
-  <div className="overflow-x-auto rounded-lg border border-border bg-bg-raised squircle">
-    <table
-      aria-label="DNS records"
-      className="w-full min-w-160 border-collapse p-2"
-    >
-      <thead>
-        <tr
-          className={cn(
-            dnsTableColumns,
-            "rounded-md bg-muted px-3 py-1.5 text-caption font-medium text-muted-fg"
-          )}
-        >
-          <th scope="col">Type</th>
-          <th scope="col">Host</th>
-          <th scope="col">Value</th>
-          <th scope="col">Priority</th>
-          <th scope="col">TTL</th>
-          <th scope="col">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {records.map((record) => {
-          const check = dnsChecks.find(
-            (candidate) =>
-              candidate.recordName === record.name &&
-              candidate.purpose === record.purpose
-          );
-          const priority =
-            record.priority === null || record.priority === undefined
-              ? null
-              : String(record.priority);
-          return (
-            <tr
-              className={cn(
-                dnsTableColumns,
-                "border-b border-border px-3 py-1.5 last:border-b-0"
-              )}
-              key={`${record.type}:${record.name}:${record.value}`}
-            >
-              <td className="min-w-0">
-                <DnsCopyCell value={record.type} />
-              </td>
-              <td className="min-w-0">
-                <DnsCopyCell value={record.name} />
-              </td>
-              <td className="min-w-0">
-                <DnsCopyCell value={record.value} />
-              </td>
-              <td className="min-w-0">
-                {priority === null ? (
-                  <span className="px-1.5 font-mono text-caption text-muted-fg">
-                    -
-                  </span>
-                ) : (
-                  <DnsCopyCell value={priority} />
-                )}
-              </td>
-              <td className="min-w-0 px-1.5 text-caption text-fg">Auto</td>
-              <td>
-                <RecordState
-                  message={getDnsRecordStatusMessage(check, record.required)}
-                  ok={getDnsRecordStatusOk(check, record.required)}
-                />
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  </div>
+  <Surface>
+    <div className="overflow-x-auto">
+      <table
+        aria-label="DNS records"
+        className="block w-full min-w-152 text-left"
+      >
+        <thead className="block">
+          <tr
+            className={cn(
+              dnsTableColumns,
+              "rounded-md bg-detail px-4 py-3 text-caption font-medium text-muted-fg"
+            )}
+          >
+            <th scope="col">Type</th>
+            <th scope="col">Host</th>
+            <th scope="col">Value</th>
+            <th scope="col">Priority</th>
+            <th scope="col">TTL</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody className="block">
+          {records.map((record) => {
+            const check = dnsChecks.find(
+              (candidate) =>
+                candidate.recordName === record.name &&
+                candidate.purpose === record.purpose
+            );
+            const priority =
+              record.priority === null || record.priority === undefined
+                ? null
+                : String(record.priority);
+            return (
+              <tr
+                className={cn(dnsTableColumns, "px-4 py-3")}
+                key={`${record.type}:${record.name}:${record.value}`}
+              >
+                <td className="min-w-0">
+                  <DnsCopyCell value={record.type} />
+                </td>
+                <td className="min-w-0">
+                  <DnsCopyCell value={record.name} />
+                </td>
+                <td className="min-w-0">
+                  <DnsCopyCell value={record.value} />
+                </td>
+                <td className="min-w-0">
+                  {priority === null ? (
+                    <span className="px-1.5 font-mono text-caption text-muted-fg">
+                      -
+                    </span>
+                  ) : (
+                    <DnsCopyCell value={priority} />
+                  )}
+                </td>
+                <td className="min-w-0 px-1.5 text-caption text-fg">Auto</td>
+                <td>
+                  <RecordState
+                    message={getDnsRecordStatusMessage(check, record.required)}
+                    ok={getDnsRecordStatusOk(check, record.required)}
+                  />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </Surface>
 );
 
 export const DomainDnsSetupSection = ({

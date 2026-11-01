@@ -2,12 +2,11 @@
 
 import { InformationCircleIcon } from "@hugeicons/core-free-icons";
 import type { MailDeliveryMetricsRange } from "@quieter/app/features/settings/components/organization-settings/mail-delivery";
-import { SettingsCard } from "@quieter/app/features/settings/components/settings-layout";
 import type { rpc } from "@quieter/app/lib/orpc";
 import { BarChart } from "@quieter/ui/bar-chart";
 import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
-import { Separator } from "@quieter/ui/separator";
+import { Surface } from "@quieter/ui/surface";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@quieter/ui/tooltip";
 
 const deliverySeries = [
@@ -79,49 +78,54 @@ export const MailDeliveryMetrics = ({
 
   return (
     <div className="flex flex-col gap-4">
-      <SettingsCard>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-5 px-4 py-4 @md:px-6 @lg:grid-cols-4">
-          {stats.map((stat) => (
-            <div className="flex min-w-0 flex-col gap-2" key={stat.label}>
-              <dt className="flex items-center gap-1 text-caption text-muted-fg">
-                {stat.label}
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        aria-label={`About ${stat.label.toLowerCase()}`}
-                        size="icon-xs"
-                        variant="ghost"
-                      />
-                    }
-                  >
-                    <Icon icon={InformationCircleIcon} />
-                  </TooltipTrigger>
-                  <TooltipContent>{stat.hint}</TooltipContent>
-                </Tooltip>
-              </dt>
-              <dd className="text-title-lg text-fg tabular-nums">
-                {stat.value.toLocaleString()}
-              </dd>
-            </div>
-          ))}
-        </dl>
+      <Surface
+        // oxlint-disable-next-line shadcn/no-restyle -- Flow and gap arrange the groups without changing the shared surface appearance.
+        className="flex flex-col gap-4"
+      >
+        <Surface variant="detail">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-5 @lg:grid-cols-4">
+            {stats.map((stat) => (
+              <div className="flex min-w-0 flex-col gap-2" key={stat.label}>
+                <dt className="flex items-center gap-1 text-caption text-muted-fg">
+                  {stat.label}
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          aria-label={`About ${stat.label.toLowerCase()}`}
+                          size="icon-xs"
+                          variant="ghost"
+                        />
+                      }
+                    >
+                      <Icon icon={InformationCircleIcon} />
+                    </TooltipTrigger>
+                    <TooltipContent>{stat.hint}</TooltipContent>
+                  </Tooltip>
+                </dt>
+                <dd className="text-title-lg text-fg tabular-nums">
+                  {stat.value.toLocaleString()}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Surface>
 
-        <Separator />
-        <div className="flex flex-col gap-6 px-4 py-4 @md:px-6">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-body-sm text-fg">Daily activity</h2>
-            <span className="text-micro text-muted-fg">
-              {data[0]?.shortLabel} to {data.at(-1)?.shortLabel}, UTC
-            </span>
-          </div>
+        <div className="flex flex-col gap-6">
+          <Surface variant="detail">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-body-sm text-fg">Daily activity</h2>
+              <span className="text-micro text-muted-fg">
+                {data[0]?.shortLabel} to {data.at(-1)?.shortLabel}, UTC
+              </span>
+            </div>
+          </Surface>
           <BarChart
             data={data}
             label="Daily sent, delivered, and bounced mail"
             series={deliverySeries}
           />
         </div>
-        <Separator />
         <dl className="grid grid-cols-2">
           {[
             {
@@ -136,7 +140,7 @@ export const MailDeliveryMetrics = ({
             },
           ].map((stat) => (
             <div
-              className="flex items-center gap-2 px-4 py-3 @md:px-6"
+              className="flex flex-wrap items-center gap-2 px-4 py-3"
               key={stat.label}
             >
               <dt className="flex items-center gap-1 text-caption text-muted-fg">
@@ -162,7 +166,7 @@ export const MailDeliveryMetrics = ({
             </div>
           ))}
         </dl>
-      </SettingsCard>
+      </Surface>
       <p className="text-micro text-muted-fg">
         Counts are per recipient, by event date. Opens are estimates per
         message.

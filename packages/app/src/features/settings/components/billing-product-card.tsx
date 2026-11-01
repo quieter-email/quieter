@@ -68,12 +68,14 @@ export const BillingProductCard = ({
 
   if (compact) {
     return (
-      <article className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
+      <article className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-4">
         <div className="min-w-0 flex-1 basis-48">
           <div className="flex items-center gap-2">
             <h3 className="text-body-sm font-medium text-fg">{product.name}</h3>
             {isCurrent && (
-              <span className="text-caption text-muted-fg">Current</span>
+              <Pill size="xs" tone="neutral">
+                Current
+              </Pill>
             )}
           </div>
           <p className="mt-0.5 text-caption text-muted-fg">
@@ -92,11 +94,7 @@ export const BillingProductCard = ({
   }
 
   return (
-    <SettingsCard
-      className={cn(settingsSurfaceVariants({ variant: "body" }), {
-        "border-primary bg-primary/5": isCurrent,
-      })}
-    >
+    <SettingsCard className={settingsSurfaceVariants({ variant: "body" })}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -162,15 +160,20 @@ export const BillingCreditSummary = ({
     <span>{formatBillingProduct(product)}</span>
     {creditAmountCents !== null && creditAmountCents !== undefined && (
       <span>
-        {moneyFormatter.format(
-          (usage?.remainingCreditCents ?? creditAmountCents) / 100
-        )}{" "}
+        <span className="font-mono font-medium text-fg">
+          {moneyFormatter.format(
+            (usage?.remainingCreditCents ?? creditAmountCents) / 100
+          )}
+        </span>{" "}
         usage balance remaining
       </span>
     )}
     {(usage?.billableCostCents ?? 0) > 0 && (
       <span>
-        {moneyFormatter.format((usage?.billableCostCents ?? 0) / 100)} overage
+        <span className="font-mono font-medium text-fg">
+          {moneyFormatter.format((usage?.billableCostCents ?? 0) / 100)}
+        </span>{" "}
+        overage
       </span>
     )}
   </div>

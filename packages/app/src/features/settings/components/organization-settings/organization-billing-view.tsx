@@ -37,16 +37,14 @@ export const OrganizationBillingView = ({
         billingPending={billingPending}
         organizationId={organizationId}
       />
-      <div className="@container border-t border-border pt-4" ref={usageRef}>
-        <div className="-mx-4 @md:-mx-6">
-          <OrganizationMailUsageSettings
-            billingAccessUnknown={billingAccessUnknown}
-            billingPending={billingPending}
-            canManageOrganizationMailUsage={canManageOrganizationMailUsage}
-            canUseOrganizationMail={canUseOrganizationMail}
-            organizationId={organizationId}
-          />
-        </div>
+      <div className="@container" ref={usageRef}>
+        <OrganizationMailUsageSettings
+          billingAccessUnknown={billingAccessUnknown}
+          billingPending={billingPending}
+          canManageOrganizationMailUsage={canManageOrganizationMailUsage}
+          canUseOrganizationMail={canUseOrganizationMail}
+          organizationId={organizationId}
+        />
       </div>
     </section>
   );

@@ -3,6 +3,7 @@
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { KEYBOARD_SHORTCUTS } from "@quieter/app/features/hotkeys/domain/keyboard-shortcuts";
 import type { KeyboardShortcut } from "@quieter/app/features/hotkeys/domain/keyboard-shortcuts";
+import { SettingsCard } from "@quieter/app/features/settings/components/settings-layout";
 import { cn } from "@quieter/ui/cn";
 import {
   FullPageDialog,
@@ -14,6 +15,7 @@ import {
 } from "@quieter/ui/full-page-dialog";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Kbd } from "@quieter/ui/kbd";
 import { formatForDisplay } from "@tanstack/react-hotkeys";
 import type { Hotkey, RegisterableHotkey } from "@tanstack/react-hotkeys";
 
@@ -115,12 +117,6 @@ const getShortcutDisplay = (shortcut: KeyboardShortcut): string[][] => {
   return shortcut.keys.map((hotkey) => [formatSingleHotkey(hotkey)]);
 };
 
-const KeyBadge = ({ value }: { value: string }) => (
-  <kbd className="inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border bg-bg-surface px-1.5 font-mono text-micro font-medium text-fg shadow-xs squircle">
-    {value}
-  </kbd>
-);
-
 const ShortcutKeys = ({ shortcut }: { shortcut: KeyboardShortcut }) => (
   <div className="flex flex-wrap justify-end gap-1.5">
     {getShortcutDisplay(shortcut).map((binding, bindingIndex, bindings) => {
@@ -139,7 +135,7 @@ const ShortcutKeys = ({ shortcut }: { shortcut: KeyboardShortcut }) => (
               {keyIndex > 0 && (
                 <span className="text-micro text-muted-fg">then</span>
               )}
-              <KeyBadge value={key} />
+              <Kbd>{key}</Kbd>
             </span>
           ))}
           {bindingIndex < bindings.length - 1 && (
@@ -157,7 +153,7 @@ const ShortcutRow = ({ item }: { item: ShortcutViewItem }) => {
     item.context ?? (shortcut.status === "coming-soon" ? "Later" : null);
 
   return (
-    <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border px-3 py-2 last:border-b-0">
+    <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 sm:px-6">
       <div className="min-w-0">
         <p
           className={cn("truncate text-body-sm font-normal text-fg", {
@@ -207,14 +203,14 @@ export const KeyboardShortcutsDialog = ({
               <h2 className="px-1 text-body font-normal text-fg">
                 {section.title}
               </h2>
-              <div className="overflow-hidden rounded-lg border border-border bg-bg-raised squircle">
+              <SettingsCard>
                 {section.items.map((item) => (
                   <ShortcutRow
                     item={item}
                     key={`${section.title}-${item.id}`}
                   />
                 ))}
-              </div>
+              </SettingsCard>
             </section>
           ))}
         </div>
