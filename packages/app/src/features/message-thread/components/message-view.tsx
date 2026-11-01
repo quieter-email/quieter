@@ -626,6 +626,7 @@ export const MessageView = (props: MessageViewProps) => {
     mailboxId: props.mailboxId,
     mailboxProvider: props.mailboxProvider,
     message: props.message,
+    onConversationOpened: props.onConversationOpened,
     pendingActions: props.pendingActions,
   });
   const viewRef = useMessageViewFocus({

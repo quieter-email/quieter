@@ -7,14 +7,13 @@ import { supportsMessageDelivery } from "@quieter/app/features/message-delivery/
 import type { MessageListProps } from "@quieter/app/features/message-list/components/message-list-types";
 import { MessageRow } from "@quieter/app/features/message-list/components/message-row";
 import type { useMessageListSelection } from "@quieter/app/features/message-list/components/use-message-list-selection";
+import { useThreadVerificationCodes } from "@quieter/app/features/verification-codes/use-thread-verification-codes";
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
 import {
   getThreadQueryKey,
   getThreadWithDetailsOptions,
 } from "@quieter/app/lib/mail/thread-query";
-import { verificationCodesQueryOptions } from "@quieter/app/lib/mail/verification-codes-query";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
-import type { RouterOutputs } from "@quieter/orpc";
 import { Icon } from "@quieter/ui/icon";
 import { mailListRowParts } from "@quieter/ui/mail-list-row";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
@@ -458,97 +457,10 @@ export const MessageListScrollPane = ({
   }, [messageVirtualizer, selection.scrollRef, updateRowMeasurements]);
 
   const virtualItems = messageVirtualizer.getVirtualItems();
-  const codeThreadIdBuckets = useMemo(() => {
-    if (list.activeMailbox === "drafts") {
-      return [];
-    }
-    const sources = new Map<
-      string,
-      { threadIds: string[]; uiIdByOriginalId: Map<string, string> }
-    >();
-    for (const thread of threadedMessages) {
-      const context = list.mailboxContextsByThreadId?.get(thread.threadId);
-      if (
-        (list.mailboxContextsByThreadId && !context) ||
-        (context?.mailboxProvider ?? list.mailboxProvider) === "api"
-      ) {
-        continue;
-      }
-      const mailboxId = context?.mailboxId ?? list.mailboxId;
-      const originalThreadId = context?.originalThreadId ?? thread.threadId;
-      const source = sources.get(mailboxId) ?? {
-        threadIds: [],
-        uiIdByOriginalId: new Map<string, string>(),
-      };
-      if (!source.uiIdByOriginalId.has(originalThreadId)) {
-        source.threadIds.push(originalThreadId);
-      }
-      source.uiIdByOriginalId.set(originalThreadId, thread.threadId);
-      sources.set(mailboxId, source);
-    }
-    const buckets: {
-      mailboxId: string;
-      threadIds: string[];
-      uiIdByOriginalId: Map<string, string>;
-    }[] = [];
-    for (const [mailboxId, source] of sources) {
-      for (let offset = 0; offset < source.threadIds.length; offset += 100) {
-        buckets.push({
-          mailboxId,
-          threadIds: source.threadIds.slice(offset, offset + 100),
-          uiIdByOriginalId: source.uiIdByOriginalId,
-        });
-      }
-    }
-    return buckets;
-  }, [
+  const latestCodeByThreadId = useThreadVerificationCodes(
     threadedMessages,
-    list.activeMailbox,
-    list.mailboxContextsByThreadId,
-    list.mailboxId,
-    list.mailboxProvider,
-  ]);
-  const codeQueries = useQueries({
-    queries: codeThreadIdBuckets.map(({ mailboxId, threadIds }) => ({
-      ...verificationCodesQueryOptions(
-        mailboxId,
-        { mode: "threads", threadIds },
-        true
-      ),
-      placeholderData: () => {
-        const requestedThreadIds = new Set(threadIds);
-        return {
-          items: queryClient
-            .getQueriesData<RouterOutputs["mail"]["listVerificationCodes"]>({
-              queryKey: ["verification-codes", mailboxId, "threads"],
-            })
-            .toSorted(
-              ([leftKey], [rightKey]) =>
-                (queryClient.getQueryState(rightKey)?.dataUpdatedAt ?? 0) -
-                (queryClient.getQueryState(leftKey)?.dataUpdatedAt ?? 0)
-            )
-            .flatMap(([, data]) => data?.items ?? [])
-            .filter((item) => requestedThreadIds.has(item.threadId)),
-        };
-      },
-    })),
-  });
-  const latestCodeByThreadId = new Map<
-    string,
-    RouterOutputs["mail"]["listVerificationCodes"]["items"][number]
-  >();
-  for (const [index, query] of codeQueries.entries()) {
-    const bucket = codeThreadIdBuckets[index];
-    if (bucket === undefined) {
-      continue;
-    }
-    for (const code of query.data?.items ?? []) {
-      const uiThreadId = bucket.uiIdByOriginalId.get(code.threadId);
-      if (uiThreadId && !latestCodeByThreadId.has(uiThreadId)) {
-        latestCodeByThreadId.set(uiThreadId, code);
-      }
-    }
-  }
+    list
+  );
   const hasMountedPrefetchRef = useRef(false);
 
   useLayoutEffect((): (() => void) | undefined => {

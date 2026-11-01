@@ -5,6 +5,7 @@ import { toastError } from "@quieter/app/lib/error-toast";
 import { getDemoMailboxes } from "@quieter/app/lib/gmail/demo-mail";
 import {
   getMailboxesQueryKey,
+  getMailboxSelectionQueryKey,
   gmailUnreadCountsQueryOptions,
   mailboxesQueryOptions,
 } from "@quieter/app/lib/mailboxes-query";
@@ -25,19 +26,6 @@ type SandboxMailboxesData =
   | ReturnType<typeof getDemoMailboxes>
   | ReturnType<typeof getManagedDemoMailboxes>
   | typeof emptyPreviewMailboxes;
-
-const getSandboxMode = (
-  isEmptyPreviewPersona: boolean,
-  isManagedDemoMode: boolean
-): "empty" | "gmail" | "managed" => {
-  if (isEmptyPreviewPersona) {
-    return "empty";
-  }
-  if (isManagedDemoMode) {
-    return "managed";
-  }
-  return "gmail";
-};
 
 const getSandboxMailboxes = (
   isEmptyPreviewPersona: boolean,
@@ -168,7 +156,11 @@ export const useMailboxSelection = ({
   );
   const { data: queriedMailboxesData, isPending: isMailboxesPending } =
     useQuery(mailboxesQueryOptions(!isSandboxMode));
-  const sandboxMode = getSandboxMode(isEmptyPreviewPersona, isManagedDemoMode);
+  const selectionQueryKey = getMailboxSelectionQueryKey({
+    isDemoMode,
+    isEmptyPreviewPersona,
+    isManagedDemoMode,
+  });
   const initialSandboxMailboxesData = getSandboxMailboxes(
     isEmptyPreviewPersona,
     isManagedDemoMode
@@ -179,7 +171,9 @@ export const useMailboxSelection = ({
       initialData: initialSandboxMailboxesData,
       queryFn: () =>
         getSandboxMailboxes(isEmptyPreviewPersona, isManagedDemoMode),
-      queryKey: [...getMailboxesQueryKey(), "sandbox", sandboxMode],
+      queryKey: isSandboxMode
+        ? selectionQueryKey
+        : [...getMailboxesQueryKey(), "sandbox", "gmail"],
       refetchOnMount: "always",
       staleTime: Number.POSITIVE_INFINITY,
     });

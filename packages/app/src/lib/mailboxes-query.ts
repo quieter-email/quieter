@@ -2,6 +2,26 @@ import { rpc } from "@quieter/app/lib/orpc";
 import { queryOptions } from "@tanstack/react-query";
 
 export const getMailboxesQueryKey = () => ["mailboxes"] as const;
+export const getMailboxSelectionQueryKey = ({
+  isDemoMode,
+  isEmptyPreviewPersona,
+  isManagedDemoMode,
+}: {
+  isDemoMode: boolean;
+  isEmptyPreviewPersona: boolean;
+  isManagedDemoMode: boolean;
+}) => {
+  if (isEmptyPreviewPersona) {
+    return [...getMailboxesQueryKey(), "sandbox", "empty"] as const;
+  }
+  if (isManagedDemoMode) {
+    return [...getMailboxesQueryKey(), "sandbox", "managed"] as const;
+  }
+  if (isDemoMode) {
+    return [...getMailboxesQueryKey(), "sandbox", "gmail"] as const;
+  }
+  return getMailboxesQueryKey();
+};
 export const getGmailUnreadCountsQueryKey = () =>
   ["gmail-unread-counts"] as const;
 

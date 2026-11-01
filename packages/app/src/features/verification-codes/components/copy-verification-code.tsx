@@ -40,9 +40,9 @@ export const CopyVerificationCode = ({
       }}
       size={size}
       type="button"
-      variant="outline"
+      variant="secondary"
     >
-      {code}
+      <code className="font-mono">{code}</code>
       <Icon aria-hidden size={12} icon={Copy01Icon} />
     </Button>
   );

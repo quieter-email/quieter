@@ -24,6 +24,7 @@ import {
   MAILBOX_LABELS,
 } from "@quieter/app/lib/mail";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import { mergeMessagePreservingLoadedDetails } from "@quieter/app/lib/mail/inbox-query/data";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
 import { verificationCodesQueryOptions } from "@quieter/app/lib/mail/verification-codes-query";
@@ -91,11 +92,13 @@ const runHotkeyThreadAction = async (
 };
 
 export const useMessageViewData = ({
+  onConversationOpened,
   mailboxId,
   mailboxProvider,
   message,
   pendingActions,
 }: {
+  onConversationOpened?: MessageViewProps["onConversationOpened"];
   mailboxId: string;
   mailboxProvider: MessageViewProps["mailboxProvider"];
   message: MessageListItem;
@@ -107,6 +110,8 @@ export const useMessageViewData = ({
   );
   const {
     data: threadData,
+    isSuccess: isThreadSuccess,
+    isPlaceholderData: isThreadPlaceholder,
     isFetching: isThreadFetching,
     isPending: isThreadPending,
   } = useQuery({
@@ -185,6 +190,46 @@ export const useMessageViewData = ({
     threadData?.subject,
     message.subject
   );
+  const lastRecordedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const selected = threadData?.messages.find(
+      (entry) =>
+        entry.id === message.id &&
+        entry.threadId === message.threadId &&
+        !isDraftMessage(entry)
+    );
+    const selectionKey = JSON.stringify([
+      mailboxId,
+      message.threadId,
+      message.id,
+    ]);
+    if (
+      !onConversationOpened ||
+      !isThreadSuccess ||
+      isThreadPlaceholder ||
+      threadData?.threadId !== message.threadId ||
+      !selected ||
+      lastRecordedRef.current === selectionKey
+    ) {
+      return;
+    }
+    lastRecordedRef.current = selectionKey;
+    onConversationOpened({
+      mailboxId,
+      message: {
+        ...mergeMessagePreservingLoadedDetails(message, selected),
+        subject,
+      },
+    });
+  }, [
+    isThreadPlaceholder,
+    isThreadSuccess,
+    mailboxId,
+    message,
+    onConversationOpened,
+    subject,
+    threadData,
+  ]);
   const threadIsUnread = visibleMessages.some((entry) =>
     isMessageUnread(entry)
   );

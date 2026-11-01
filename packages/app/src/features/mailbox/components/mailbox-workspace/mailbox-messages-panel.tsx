@@ -3,15 +3,18 @@
 import type { ComposeSenderMailbox } from "@quieter/app/features/compose/components/compose-workspace";
 import { buildComposeDraftFromSavedDraftMessage } from "@quieter/app/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
+import { MailboxIdleState } from "@quieter/app/features/mailbox/components/mailbox-idle-state";
 import { useMailboxListController } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-list-controller";
 import {
   useMailboxMessageId,
   useMailboxSearchActions,
   useMailboxThreadId,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
+import { useRecordRecentConversation } from "@quieter/app/features/mailbox/components/recent-conversations-provider";
 import { MessageList } from "@quieter/app/features/message-list/components/message-list";
 import { MessageDetail } from "@quieter/app/features/message-thread/components/message-detail";
 import type { MailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
+import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
 import { cn } from "@quieter/ui/cn";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
@@ -58,6 +61,7 @@ export const MailboxMessagesPanel = ({
   senderMailbox,
   signature,
 }: MailboxMessagesPanelProps) => {
+  const recordOpened = useRecordRecentConversation();
   const onePanelDesktop = mailLayout === "one-panel";
   const messageId = useMailboxMessageId() ?? null;
   const threadId = useMailboxThreadId() ?? null;
@@ -222,6 +226,7 @@ export const MailboxMessagesPanel = ({
       >
         {isMessageRouteOpen ? (
           <MessageDetail
+            onConversationOpened={recordOpened}
             showDesktopBack={onePanelDesktop}
             activeMailbox={activeMailbox}
             detailOnly={detailOnly}
@@ -244,6 +249,16 @@ export const MailboxMessagesPanel = ({
               onFocusRequestComplete?.();
             }}
             selectedMessage={selectedMessage}
+          />
+        ) : null}
+        {!isMessageRouteOpen && activeMailbox !== "drafts" ? (
+          <MailboxIdleState
+            mailboxIds={[mailboxId]}
+            onOpen={(entry) => {
+              activateMessage(entry.message.id, entry.message.threadId);
+            }}
+            threads={buildThreadListEntries(flattenedMessages)}
+            scope={{ activeMailbox, mailboxId, mailboxProvider }}
           />
         ) : null}
       </WorkspaceSection>

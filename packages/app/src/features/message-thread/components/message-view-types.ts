@@ -22,6 +22,10 @@ export type MessageViewProps = {
   mailboxProvider: "api" | "gmail" | "managed";
   mailboxActions: MailboxActions;
   message: MessageListItem;
+  onConversationOpened?: (visit: {
+    mailboxId: string;
+    message: MessageListItem;
+  }) => void;
   onBackToList?: () => void;
   onAutoFocusComplete?: () => void;
   onManageSnippets?: () => void;

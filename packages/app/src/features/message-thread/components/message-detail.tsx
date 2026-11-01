@@ -34,6 +34,7 @@ type MessageDetailProps = {
   mailboxActions: MailboxActions;
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";
+  onConversationOpened?: MessageViewProps["onConversationOpened"];
   onBackToList?: () => void;
   onAutoFocusComplete?: () => void;
   onManageSnippets?: () => void;
@@ -54,6 +55,7 @@ export const MessageDetail = ({
   currentUserEmail,
   isPending,
   mailboxActions,
+  onConversationOpened,
   onBackToList,
   onAutoFocusComplete,
   onManageSnippets,
@@ -108,6 +110,7 @@ export const MessageDetail = ({
           mailboxId={mailboxId}
           mailboxProvider={mailboxProvider}
           message={selectedMessage}
+          onConversationOpened={onConversationOpened}
           onBackToList={onBackToList}
           onAutoFocusComplete={onAutoFocusComplete}
           onManageSnippets={onManageSnippets}
