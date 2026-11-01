@@ -1,12 +1,2 @@
 @import "@quieter/app/styles.css";
 @source "./**/*.{ts,tsx}";
-
-/* Preserve the marketing palette independently of product theme refinements. */
-.home-page.dark,
-.home-footer.dark {
-  --control-hover: oklch(0.24 0.003 264);
-  --control-active: oklch(0.29 0.003 264);
-  --q-blue: oklch(0.72 0.145 250);
-  --q-cyan: oklch(0.73 0.125 210);
-  --q-yellow: oklch(0.78 0.14 90);
-}

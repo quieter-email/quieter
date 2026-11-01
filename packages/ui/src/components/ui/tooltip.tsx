@@ -35,7 +35,7 @@ export const TooltipContent = ({
       <TooltipPrimitive.Popup
         className={cn(
           anchoredPopupMotionClassName,
-          "z-50 max-w-xs rounded-md border bg-popover px-3 py-1.5 text-caption text-popover-fg shadow-md",
+          "z-50 max-w-xs rounded-md border border-transparent bg-detail px-3 py-1.5 text-caption text-popover-fg shadow-md",
           className
         )}
         {...props}

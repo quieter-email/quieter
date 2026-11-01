@@ -2,13 +2,14 @@
 
 import { BILLING_PRODUCTS, GMAIL_MAILBOX_LIMITS } from "@quieter/billing/plans";
 import { getManagedUsageRates } from "@quieter/billing/ses-pricing";
+import { Surface } from "@quieter/ui/surface";
 
 import { AiSection } from "./ai-section";
 import { ConnectSection } from "./connect-section";
 import { HomeAtmosphericBackground } from "./lazy-webgl-backgrounds";
-import { WorkflowPreview } from "./product-previews";
 import { Reveal, RevealChild } from "./reveal";
 import { WaitlistForm } from "./waitlist-form";
+import { WorkflowPreview } from "./workflow-previews";
 
 const rates = getManagedUsageRates();
 const tiers = [
@@ -38,52 +39,59 @@ const Pricing = () => (
     className="home-feature home-pricing"
     id="pricing"
   >
-    <Reveal className="home-feature-heading" stagger={0.18}>
+    <Reveal className="home-pricing-heading" stagger={0.18}>
       <RevealChild as="h2" className="home-heading" id="home-pricing-title">
         Pricing.
       </RevealChild>
       <RevealChild as="p" className="home-description">
-        Start with Gmail. <br className="home-desktop-break" />
-        Add managed email or AI when you need it.
+        Start with Gmail. Add managed email or AI when you need it.
       </RevealChild>
     </Reveal>
     <div>
-      <Reveal className="home-pricing-rows" delay={0.24} stagger={0.18}>
+      <Reveal className="home-pricing-plans" delay={0.24} stagger={0.18}>
         {tiers.map((tier) => (
-          <RevealChild className="home-pricing-row" key={tier.name}>
-            <h3>{tier.name}</h3>
-            <div className="home-plan-description">
-              <p>{tier.summary}</p>
-              {tier.credits === null ? null : (
-                <p className="home-plan-credits">
-                  ${tier.credits} in credits included.
+          <RevealChild className="h-full" key={tier.name}>
+            <Surface className="h-full" padding="comfortable">
+              <div className="flex h-full flex-col gap-5">
+                <h3>{tier.name}</h3>
+                <p className="home-plan-price">
+                  <span>${tier.price}</span>
+                  <span className="home-plan-period">/ month</span>
                 </p>
-              )}
-            </div>
-            <p className="home-plan-price">
-              <span>${tier.price}</span>
-              <span className="home-plan-period">/ month</span>
-            </p>
+                <div className="home-plan-description">
+                  <p>{tier.summary}</p>
+                  {tier.credits === null ? null : (
+                    <p className="home-plan-credits">
+                      ${tier.credits} in credits included.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </Surface>
           </RevealChild>
         ))}
       </Reveal>
       <Reveal className="home-pricing-notes" stagger={0.14}>
-        <RevealChild as="p">
-          Managed mail starts at ${rates.messagesPerThousandUsd.toFixed(2)} per
-          1k messages.
-        </RevealChild>
-        <RevealChild as="p">
-          Outbound: ${rates.messagesPerThousandUsd.toFixed(2)} per 1k recipient
-          deliveries, plus ${rates.attachmentDataPerGbUsd.toFixed(2)} per GB of
-          attachments.
-          <br />
-          Inbound: ${rates.messagesPerThousandUsd.toFixed(2)} per 1k messages,
-          plus ${rates.inboundProcessingPerThousandUsd.toFixed(2)} per 1k 256 KB
-          units of data, including attachments.
-        </RevealChild>
-        <RevealChild as="p">
-          Usage beyond your included credits is billed separately.
-        </RevealChild>
+        <Surface padding="comfortable" variant="panel">
+          <div className="flex flex-col gap-3">
+            <RevealChild as="p">
+              Managed mail starts at ${rates.messagesPerThousandUsd.toFixed(2)}{" "}
+              per 1k messages.
+            </RevealChild>
+            <RevealChild as="p">
+              Outbound: ${rates.messagesPerThousandUsd.toFixed(2)} per 1k
+              recipient deliveries, plus $
+              {rates.attachmentDataPerGbUsd.toFixed(2)} per GB of attachments.
+              <br />
+              Inbound: ${rates.messagesPerThousandUsd.toFixed(2)} per 1k
+              messages, plus ${rates.inboundProcessingPerThousandUsd.toFixed(2)}{" "}
+              per 1k 256 KB units of data, including attachments.
+            </RevealChild>
+            <RevealChild as="p">
+              Usage beyond your included credits is billed separately.
+            </RevealChild>
+          </div>
+        </Surface>
       </Reveal>
     </div>
   </section>
@@ -92,6 +100,7 @@ const Pricing = () => (
 const Closing = () => (
   <section className="home-closing">
     <HomeAtmosphericBackground
+      className="home-atmosphere home-atmosphere-closing"
       fadeBottom="black"
       fadeTop="black"
       variant="closing"

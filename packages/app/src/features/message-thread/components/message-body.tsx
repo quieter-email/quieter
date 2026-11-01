@@ -21,6 +21,7 @@ import { loadMessageAttachment } from "@quieter/app/lib/mail/attachments";
 import { Button, buttonVariants } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
+import { surfaceVariants } from "@quieter/ui/surface";
 import * as Sentry from "@sentry/react";
 import { useQueries } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -65,38 +66,39 @@ const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
   }
 
   return (
-    <section
-      aria-label="Calendar actions"
-      className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-muted px-3 py-2"
-    >
-      <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        <div
-          aria-hidden
-          className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-bg-raised text-muted-fg shadow-xs"
-        >
-          <Icon icon={Calendar03Icon} />
-        </div>
-        <p className="min-w-0 text-body/snug text-muted-fg">
-          {links.length === 1
-            ? "This message includes a calendar event."
-            : "This message includes calendar events."}
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-        {links.map((link) => (
-          <a
-            aria-label={link.label}
-            className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
-            href={link.href}
-            key={link.href}
-            rel="noopener noreferrer"
-            target="_blank"
+    <section aria-label="Calendar actions" className={surfaceVariants()}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <div
+            aria-hidden
+            className="flex size-8 shrink-0 items-center justify-center rounded-md bg-control text-muted-fg"
           >
-            {link.label}
-            <Icon aria-hidden size={14} icon={ArrowUpRight01Icon} />
-          </a>
-        ))}
+            <Icon icon={Calendar03Icon} />
+          </div>
+          <p className="min-w-0 text-body/snug text-muted-fg">
+            {links.length === 1
+              ? "This message includes a calendar event."
+              : "This message includes calendar events."}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+          {links.map((link) => (
+            <a
+              aria-label={link.label}
+              className={cn(
+                buttonVariants({ size: "sm", variant: "secondary" })
+              )}
+              href={link.href}
+              key={link.href}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              {link.label}
+              <Icon aria-hidden size={14} icon={ArrowUpRight01Icon} />
+            </a>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -355,37 +357,34 @@ const HtmlMessageBodyContent = ({
   }, []);
 
   return (
-    <>
+    <div className="space-y-4">
       <CalendarLinkActions links={processedMail.calendarLinks} />
       {!shouldLoadImages && (remoteImagesPresent || cspViolation) && (
-        <section
-          aria-label="Remote images"
-          className={cn(
-            "flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-muted px-3 py-2"
-          )}
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            <div
-              aria-hidden
-              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-bg-raised text-muted-fg shadow-xs"
-            >
-              <Icon icon={Image01Icon} />
+        <section aria-label="Remote images" className={surfaceVariants()}>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <div
+                aria-hidden
+                className="flex size-8 shrink-0 items-center justify-center rounded-md bg-control text-muted-fg"
+              >
+                <Icon icon={Image01Icon} />
+              </div>
+              <p className="min-w-0 text-body/snug text-muted-fg">
+                Remote images are hidden for security reasons.
+              </p>
             </div>
-            <p className="min-w-0 text-body/snug text-muted-fg">
-              Remote images are hidden for security reasons.
-            </p>
+            <Button
+              className="w-fit shrink-0 sm:ml-auto"
+              onClick={() => {
+                setTemporaryImagesEnabled(true);
+              }}
+              size="sm"
+              type="button"
+              variant="default"
+            >
+              Show images
+            </Button>
           </div>
-          <Button
-            className="w-fit shrink-0 sm:ml-auto"
-            onClick={() => {
-              setTemporaryImagesEnabled(true);
-            }}
-            size="sm"
-            type="button"
-            variant="default"
-          >
-            Show images
-          </Button>
         </section>
       )}
       <div className="relative isolate w-full max-w-full min-w-0 overflow-x-auto contain-content">
@@ -401,7 +400,7 @@ const HtmlMessageBodyContent = ({
           }}
         />
       </div>
-    </>
+    </div>
   );
 };
 
@@ -437,7 +436,7 @@ const PlainTextMessageBody = ({ text }: { text: string }) => {
         {segments.map((segment) =>
           segment.kind === "link" ? (
             <a
-              className="rounded-sm text-primary underline decoration-border underline-offset-2 hover:decoration-current focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+              className="rounded-sm text-primary underline decoration-border underline-offset-2 hover:decoration-current focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden"
               href={segment.href}
               key={`link:${segment.href}`}
               rel="noopener noreferrer"

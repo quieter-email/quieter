@@ -20,13 +20,19 @@ type SelectDensity = "default" | "compact";
 const SelectDensityContext = createContext<SelectDensity>("default");
 
 export const selectTriggerVariants = cva(
-  "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap select-none focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap select-none focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
+    compoundVariants: [{ chrome: "toolbar", className: "rounded-xl" }],
     defaultVariants: {
+      chrome: "default",
       size: "default",
       variant: "default",
     },
     variants: {
+      chrome: {
+        default: null,
+        toolbar: null,
+      },
       size: {
         default: "h-8 px-2.5 text-body-sm [&_svg]:size-4",
         sm: "h-7 px-2 text-body-sm [&_svg]:size-3.5",
@@ -35,7 +41,7 @@ export const selectTriggerVariants = cva(
         attached:
           "h-full w-auto rounded-l-none bg-transparent pr-2.5 pl-1.5 text-muted-fg shadow-none hover:bg-muted hover:text-fg active:bg-control-active active:text-fg",
         default:
-          "w-full border border-border bg-control text-fg hover:bg-control-hover active:bg-control-active",
+          "w-full border border-transparent bg-control text-fg hover:bg-control-hover active:bg-control-active",
         ghost:
           "w-auto bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-control-active active:text-fg",
       },
@@ -78,6 +84,7 @@ export type SelectTriggerProps = ComponentPropsWithoutRef<
 
 export const SelectTrigger = ({
   children,
+  chrome = "default",
   className,
   pending = false,
   size = "default",
@@ -87,7 +94,7 @@ export const SelectTrigger = ({
   <SelectPrimitive.Trigger
     {...props}
     aria-busy={pending || undefined}
-    className={cn(selectTriggerVariants({ size, variant }), className)}
+    className={cn(selectTriggerVariants({ chrome, size, variant }), className)}
     disabled={pending || props.disabled}
   >
     {children}
@@ -133,7 +140,7 @@ export const SelectContent = ({
         <SelectPrimitive.Popup
           className={cn(
             anchoredPopupMotionClassName,
-            "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 text-popover-fg shadow-md data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
+            "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 overflow-y-auto overscroll-contain rounded-xl border border-transparent bg-section p-1 text-popover-fg shadow-md data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
             { "min-w-40 p-0.5 text-caption": size === "compact" },
             className
           )}
@@ -199,7 +206,7 @@ export const SelectItem = ({
   return (
     <SelectPrimitive.Item
       className={cn(
-        "relative flex min-h-7 cursor-default scroll-my-1 items-center gap-2 rounded-md py-1 pr-8 pl-2.5 text-body text-fg transition-transform duration-100 ease-(--app-motion-ease-out) select-none squircle focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        "relative flex min-h-7 cursor-default scroll-my-1 items-center gap-2 rounded-md py-1 pr-8 pl-2.5 text-body text-fg transition-transform duration-100 ease-(--app-motion-ease-out) select-none squircle focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
         { "min-h-7 gap-1.5 py-1 pr-7 pl-2 text-caption": size === "compact" },
         className
       )}

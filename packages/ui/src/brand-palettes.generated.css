@@ -10,10 +10,10 @@
   --theme-primary-fg: #ffffff;
   --theme-glow: none;
   --theme-panel-gradient: none;
-  --theme-radius: 10px;
+  --theme-radius: 8px;
   --theme-gutter: 6px;
   --theme-gutter-wide: 8px;
-  --theme-row-padding: 12px;
+  --theme-row-padding: 16px;
 }
 
 :root[data-color-theme="08-lilac"],
@@ -27,10 +27,10 @@
   --theme-primary-fg: #fffaff;
   --theme-glow: radial-gradient(ellipse at 6% 110%, color-mix(in srgb, var(--theme-accent) 28%, transparent), transparent 70%);
   --theme-panel-gradient: none;
-  --theme-radius: 10px;
+  --theme-radius: 8px;
   --theme-gutter: 6px;
   --theme-gutter-wide: 8px;
-  --theme-row-padding: 12px;
+  --theme-row-padding: 16px;
 }
 
 :root[data-color-theme="10-sand"],
@@ -61,10 +61,10 @@
   --theme-primary-fg: #1b1824;
   --theme-glow: radial-gradient(ellipse at 6% 110%, color-mix(in srgb, var(--theme-accent) 28%, transparent), transparent 70%);
   --theme-panel-gradient: none;
-  --theme-radius: 10px;
+  --theme-radius: 8px;
   --theme-gutter: 6px;
   --theme-gutter-wide: 8px;
-  --theme-row-padding: 12px;
+  --theme-row-padding: 16px;
 }
 
 :root[data-color-theme="graphite"],

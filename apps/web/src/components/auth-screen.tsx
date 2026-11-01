@@ -349,7 +349,7 @@ export const AuthCredentials = ({
         }}
         fullWidth
         type="button"
-        variant="outline"
+        variant="secondary"
       >
         {authClient.isLastUsedLoginMethod("google") && <AuthLastUsedHint />}
         {googleMutation.isPending ? (
@@ -370,7 +370,7 @@ export const AuthCredentials = ({
         }}
         fullWidth
         type="button"
-        variant="outline"
+        variant="secondary"
       >
         {authClient.isLastUsedLoginMethod("passkey") && <AuthLastUsedHint />}
         <Icon icon={Key02Icon} />
@@ -458,7 +458,7 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
             key={option.persona}
             onClick={() => void startPreviewPersona(option.persona)}
             type="button"
-            variant="outline"
+            variant="secondary"
           >
             {pendingPersona === option.persona ? "Opening…" : option.label}
           </Button>

@@ -50,6 +50,7 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
+import { WorkspaceHeader } from "@quieter/ui/workspace-section";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domMax, m } from "motion/react";
 import { lazy, Suspense, useRef, useState } from "react";
@@ -248,12 +249,13 @@ const MessageViewContent = (props: MessageViewContentProps) => {
 
   return (
     <article ref={viewRef} tabIndex={-1} className="@container w-full">
-      <header className="w-full border-b p-3 @sm:px-5 @sm:py-4">
+      <WorkspaceHeader>
         <div className="flex min-w-0 items-center gap-3">
           {onBackToList ? (
             <div className={cn("shrink-0", { "lg:hidden": !showDesktopBack })}>
               <IconButtonTooltip label="Back to list">
                 <Button
+                  chrome="toolbar"
                   aria-label="Back to list"
                   onClick={onBackToList}
                   size="icon-sm"
@@ -289,6 +291,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           {canSetThreadImportance && (
             <IconButtonTooltip label={importanceLabel}>
               <Button
+                chrome="toolbar"
                 aria-label={importanceLabel}
                 aria-pressed={threadIsImportant}
                 disabled={isActionPending}
@@ -345,7 +348,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           className="mt-3"
           mailboxId={mailboxId}
         />
-      </header>
+      </WorkspaceHeader>
 
       {mailboxProvider !== "api" &&
       composeDemoMode !== true &&
@@ -416,7 +419,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
       )}
 
       {showInlineCompose ? (
-        <div className="border-t px-4 py-4 @sm:px-5 @sm:py-5">
+        <div className="px-4 py-4 @sm:px-5 @sm:py-5">
           <LazyMotion features={domMax}>
             <AnimatePresence initial={false} mode="popLayout">
               {inlineDraft ? (
@@ -623,6 +626,7 @@ export const MessageView = (props: MessageViewProps) => {
     mailboxId: props.mailboxId,
     mailboxProvider: props.mailboxProvider,
     message: props.message,
+    onConversationOpened: props.onConversationOpened,
     pendingActions: props.pendingActions,
   });
   const viewRef = useMessageViewFocus({

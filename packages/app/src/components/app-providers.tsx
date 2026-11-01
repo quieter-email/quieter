@@ -2,6 +2,7 @@
 
 import { MailtoProtocolHandler } from "@quieter/app/components/mailto-protocol-handler";
 import { KeyboardShortcutsProvider } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
+import { RecentConversationsProvider } from "@quieter/app/features/mailbox/components/recent-conversations-provider";
 import { authClient } from "@quieter/app/lib/auth";
 import { bindCalendarCache } from "@quieter/app/lib/calendar-cache-lifecycle";
 import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
@@ -73,7 +74,14 @@ const SessionQueryProvider = ({
   }, [queryClient, sessionId, sessionUnresolved, userId]);
 
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <RecentConversationsProvider
+        client={queryClient}
+        authenticated={!!userId && !!sessionId && !sessionUnresolved}
+      >
+        {children}
+      </RecentConversationsProvider>
+    </QueryClientProvider>
   );
 };
 
@@ -108,7 +116,7 @@ export const AppProviders = ({ children }: PropsWithChildren) => {
       }}
     >
       <SessionQueryProvider
-        key={session.data?.session.id ?? "anonymous"}
+        key={`${userId ?? "anonymous"}:${sessionId ?? "anonymous"}`}
         sessionUnresolved={
           !userId &&
           (session.isPending ||

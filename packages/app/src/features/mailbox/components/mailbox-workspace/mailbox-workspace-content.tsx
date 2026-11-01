@@ -627,68 +627,59 @@ const MailboxWorkspaceContentInner = ({
           "lg:grid-cols-1": onePanelDesktop,
         })}
       >
-        <WorkspaceSection
-          className={cn({
-            flex: !messageId,
-            hidden: !!messageId,
-            "lg:hidden": onePanelDesktop && !!messageId,
-          })}
-          layout="cell"
-        >
-          <UnifiedInboxPanel
-            wideCompactRows={onePanelDesktop}
-            activeMailbox={activeMailbox}
-            activeMailboxId={selectedMailboxId}
-            activeMessageId={messageId}
-            activeThreadId={chatContext?.threadId ?? null}
-            mailboxes={mailboxes}
-            onOpenSidebar={onOpenSidebar}
-            onReconnectMailbox={onReconnectMailbox}
-            onSearch={onSearch}
-            onDeactivateActiveMessage={() => {
+        <UnifiedInboxPanel
+          wideCompactRows={onePanelDesktop}
+          activeMailbox={activeMailbox}
+          activeMailboxId={selectedMailboxId}
+          activeMessageId={messageId}
+          activeThreadId={chatContext?.threadId ?? null}
+          mailboxes={mailboxes}
+          onOpenSidebar={onOpenSidebar}
+          onReconnectMailbox={onReconnectMailbox}
+          onSearch={onSearch}
+          onDeactivateActiveMessage={() => {
+            pendingKeyboardOpenRef.current = false;
+            setCombinedFocusTarget(null);
+            void setMailboxSearch({ messageId: null, threadId: null });
+          }}
+          onKeyboardOpenMessage={() => {
+            pendingKeyboardOpenRef.current = true;
+            queueMicrotask(() => {
               pendingKeyboardOpenRef.current = false;
-              setCombinedFocusTarget(null);
-              void setMailboxSearch({ messageId: null, threadId: null });
-            }}
-            onKeyboardOpenMessage={() => {
-              pendingKeyboardOpenRef.current = true;
-              queueMicrotask(() => {
-                pendingKeyboardOpenRef.current = false;
-              });
-            }}
-            onOpenDraft={(sourceMailboxId, message) => {
-              onComposeDraftRequested(
-                buildComposeDraftFromSavedDraftMessage(message),
-                sourceMailboxId
-              );
-            }}
-            onSelectMessage={(sourceMailboxId, nextMessageId, threadId) => {
-              setCombinedFocusTarget(
-                pendingKeyboardOpenRef.current
-                  ? { mailboxId: sourceMailboxId, messageId: nextMessageId }
-                  : null
-              );
-              pendingKeyboardOpenRef.current = false;
-              void setMailboxSearch(
-                {
-                  chatId:
-                    sourceMailboxId === selectedMailboxId ? undefined : null,
-                  mailboxId: sourceMailboxId,
-                  messageId: nextMessageId,
-                  threadId,
-                },
-                {
-                  replace:
-                    !!messageId ||
-                    (!onePanelDesktop &&
-                      !window.matchMedia("(max-width: 1023.98px)").matches),
-                }
-              );
-            }}
-            searchQuery={searchQuery}
-            userId={userId}
-          />
-        </WorkspaceSection>
+            });
+          }}
+          onOpenDraft={(sourceMailboxId, message) => {
+            onComposeDraftRequested(
+              buildComposeDraftFromSavedDraftMessage(message),
+              sourceMailboxId
+            );
+          }}
+          onSelectMessage={(sourceMailboxId, nextMessageId, threadId) => {
+            setCombinedFocusTarget(
+              pendingKeyboardOpenRef.current
+                ? { mailboxId: sourceMailboxId, messageId: nextMessageId }
+                : null
+            );
+            pendingKeyboardOpenRef.current = false;
+            void setMailboxSearch(
+              {
+                chatId:
+                  sourceMailboxId === selectedMailboxId ? undefined : null,
+                mailboxId: sourceMailboxId,
+                messageId: nextMessageId,
+                threadId,
+              },
+              {
+                replace:
+                  !!messageId ||
+                  (!onePanelDesktop &&
+                    !window.matchMedia("(max-width: 1023.98px)").matches),
+              }
+            );
+          }}
+          searchQuery={searchQuery}
+          userId={userId}
+        />
         {messageId ? (
           <MailboxMessagesPanel
             mailLayout={mailLayout}
@@ -716,22 +707,7 @@ const MailboxWorkspaceContentInner = ({
             searchQuery={searchQuery}
             signature={signature}
           />
-        ) : (
-          <WorkspaceSection
-            centered
-            className={cn("hidden", { "lg:hidden": onePanelDesktop })}
-            layout="cell"
-          >
-            <Icon
-              aria-hidden
-              size={20}
-              tone="muted"
-              className="mb-3"
-              icon={Mail01Icon}
-            />
-            <p className="text-body text-muted-fg">Select a conversation</p>
-          </WorkspaceSection>
-        )}
+        ) : null}
       </div>
     );
   } else if (selectedMailboxNeedsReconnect) {

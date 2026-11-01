@@ -21,6 +21,7 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import {
+  WorkspaceHeader,
   workspaceSectionVariants,
   workspaceGutterClassName,
 } from "@quieter/ui/workspace-section";
@@ -145,141 +146,146 @@ export const AssistantSidebar = ({
           ref={panelRef}
           tabIndex={-1}
         >
-          <header className="flex shrink-0 items-center gap-2 p-4">
-            <DropdownMenu key={open ? "visible" : "hidden"}>
-              <DropdownMenuTrigger
-                appearance="row-strong"
-                aria-label="Open conversation history"
-                type="button"
-              >
-                <span className="max-w-40 truncate">
-                  {activeChat
-                    ? activeChat.title?.trim() || "New chat"
-                    : "New chat"}
-                </span>
-                <Icon
-                  aria-hidden
-                  size={14}
-                  tone="muted"
-                  icon={ArrowDown01Icon}
-                />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                className="w-72"
-                sideOffset={8}
-                data-assistant-panel
-              >
-                <p className="px-2 py-1.5 text-caption text-muted-fg">
-                  Conversations
-                </p>
-                <div className="max-h-56 overflow-y-auto">
-                  {chats.length === 0 ? (
-                    <p className="px-2 py-3 text-caption text-muted-fg">
-                      No conversations yet
-                    </p>
-                  ) : (
-                    chats.map((chat) => (
-                      <DropdownMenuItem
-                        // oxlint-disable-next-line shadcn/no-restyle -- Active conversation keeps its highlight.
-                        className={cn("w-full", {
-                          // oxlint-disable-next-line shadcn/no-restyle -- Active conversation keeps its highlight.
-                          "bg-muted": chat.id === activeChatId,
-                        })}
-                        key={chat.id}
-                        onSelect={() => {
-                          onChatSelect(chat.id);
-                        }}
-                      >
-                        <span className="truncate">
-                          {chat.title?.trim() || "New chat"}
-                        </span>
-                      </DropdownMenuItem>
-                    ))
-                  )}
-                </div>
-                {activeChat === undefined ? null : (
-                  <>
-                    <DropdownMenuSeparator />
-                    {renamingChat?.id === activeChat.id ? (
-                      <form
-                        className="flex items-center gap-1 px-1 py-1"
-                        onSubmit={submitRename}
-                      >
-                        <Input
-                          aria-label="Conversation title"
-                          onChange={(event) => {
-                            setRenameTitle(event.target.value);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Escape") {
-                              event.preventDefault();
-                              setRenamingChat(null);
-                            }
-                          }}
-                          value={renameTitle}
-                        />
-                        <IconButtonTooltip label="Confirm rename">
-                          <Button
-                            aria-label="Confirm rename"
-                            disabled={renameTitle.trim() === ""}
-                            size="icon-sm"
-                            type="submit"
-                            variant="ghost"
-                          >
-                            <Icon aria-hidden size={14} icon={Tick01Icon} />
-                          </Button>
-                        </IconButtonTooltip>
-                      </form>
+          <WorkspaceHeader>
+            <div className="flex items-center gap-2">
+              <DropdownMenu key={open ? "visible" : "hidden"}>
+                <DropdownMenuTrigger
+                  chrome="toolbar"
+                  appearance="row-strong"
+                  aria-label="Open conversation history"
+                  type="button"
+                >
+                  <span className="max-w-40 truncate">
+                    {activeChat
+                      ? activeChat.title?.trim() || "New chat"
+                      : "New chat"}
+                  </span>
+                  <Icon
+                    aria-hidden
+                    size={14}
+                    tone="muted"
+                    icon={ArrowDown01Icon}
+                  />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
+                  className="w-72"
+                  sideOffset={8}
+                  data-assistant-panel
+                >
+                  <p className="px-2 py-1.5 text-caption text-muted-fg">
+                    Conversations
+                  </p>
+                  <div className="max-h-56 overflow-y-auto">
+                    {chats.length === 0 ? (
+                      <p className="px-2 py-3 text-caption text-muted-fg">
+                        No conversations yet
+                      </p>
                     ) : (
-                      <DropdownMenuItem
-                        closeOnSelect={false}
-                        onSelect={startRename}
-                      >
-                        <Icon aria-hidden size={14} icon={Edit01Icon} />
-                        Rename conversation
-                      </DropdownMenuItem>
+                      chats.map((chat) => (
+                        <DropdownMenuItem
+                          // oxlint-disable-next-line shadcn/no-restyle -- Active conversation keeps its highlight.
+                          className={cn("w-full", {
+                            // oxlint-disable-next-line shadcn/no-restyle -- Active conversation keeps its highlight.
+                            "bg-muted": chat.id === activeChatId,
+                          })}
+                          key={chat.id}
+                          onSelect={() => {
+                            onChatSelect(chat.id);
+                          }}
+                        >
+                          <span className="truncate">
+                            {chat.title?.trim() || "New chat"}
+                          </span>
+                        </DropdownMenuItem>
+                      ))
                     )}
-                    <DropdownMenuItem
-                      onSelect={() => {
-                        onDeleteChat(activeChat.id);
-                      }}
-                      tone="destructive"
-                    >
-                      <Icon aria-hidden size={14} icon={Delete02Icon} />
-                      Delete conversation
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <IconButtonTooltip label="New conversation">
-              <Button
-                aria-label="New conversation"
-                onClick={onNewChat}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <Icon aria-hidden icon={Add01Icon} />
-              </Button>
-            </IconButtonTooltip>
-            <div className="ml-auto flex items-center gap-1">
-              <IconButtonTooltip label="Collapse assistant sidebar">
+                  </div>
+                  {activeChat === undefined ? null : (
+                    <>
+                      <DropdownMenuSeparator />
+                      {renamingChat?.id === activeChat.id ? (
+                        <form
+                          className="flex items-center gap-1 px-1 py-1"
+                          onSubmit={submitRename}
+                        >
+                          <Input
+                            aria-label="Conversation title"
+                            onChange={(event) => {
+                              setRenameTitle(event.target.value);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                setRenamingChat(null);
+                              }
+                            }}
+                            value={renameTitle}
+                          />
+                          <IconButtonTooltip label="Confirm rename">
+                            <Button
+                              aria-label="Confirm rename"
+                              disabled={renameTitle.trim() === ""}
+                              size="icon-sm"
+                              type="submit"
+                              variant="ghost"
+                            >
+                              <Icon aria-hidden size={14} icon={Tick01Icon} />
+                            </Button>
+                          </IconButtonTooltip>
+                        </form>
+                      ) : (
+                        <DropdownMenuItem
+                          closeOnSelect={false}
+                          onSelect={startRename}
+                        >
+                          <Icon aria-hidden size={14} icon={Edit01Icon} />
+                          Rename conversation
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          onDeleteChat(activeChat.id);
+                        }}
+                        tone="destructive"
+                      >
+                        <Icon aria-hidden size={14} icon={Delete02Icon} />
+                        Delete conversation
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <IconButtonTooltip label="New conversation">
                 <Button
-                  aria-controls={id}
-                  aria-expanded={open}
-                  aria-label="Collapse assistant sidebar"
-                  onClick={onMinimize}
+                  chrome="toolbar"
+                  aria-label="New conversation"
+                  onClick={onNewChat}
                   size="icon-sm"
                   type="button"
                   variant="ghost"
                 >
-                  <Icon aria-hidden icon={LayoutRightIcon} />
+                  <Icon aria-hidden icon={Add01Icon} />
                 </Button>
               </IconButtonTooltip>
+              <div className="ml-auto flex items-center gap-1">
+                <IconButtonTooltip label="Collapse assistant sidebar">
+                  <Button
+                    chrome="toolbar"
+                    aria-controls={id}
+                    aria-expanded={open}
+                    aria-label="Collapse assistant sidebar"
+                    onClick={onMinimize}
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <Icon aria-hidden icon={LayoutRightIcon} />
+                  </Button>
+                </IconButtonTooltip>
+              </div>
             </div>
-          </header>
+          </WorkspaceHeader>
           <div className="flex min-h-0 flex-1 flex-col">{children}</div>
         </dialog>
       </div>

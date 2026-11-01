@@ -154,9 +154,9 @@ export const SettingsScreen = ({
                 </IconButtonTooltip>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className="mx-auto w-full max-w-180 space-y-8 px-5 py-8 md:px-8 md:py-14">
+                <div className="mx-auto w-full max-w-180 space-y-6 px-5 py-8 md:px-8 md:py-14">
                   {!isMobileOpen && results}
-                  <div hidden={searching} className="space-y-8">
+                  <div hidden={searching} className="space-y-6">
                     <SettingsBreadcrumbs />
                     {tab !== "organization" && tab !== "mailboxes" && (
                       <SettingsPageHeader title={title} />

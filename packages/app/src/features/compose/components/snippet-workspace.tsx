@@ -36,7 +36,10 @@ import { Input } from "@quieter/ui/input";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
-import { WorkspaceSection } from "@quieter/ui/workspace-section";
+import {
+  WorkspaceHeader,
+  WorkspaceSection,
+} from "@quieter/ui/workspace-section";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -165,10 +168,11 @@ export const SnippetWorkspace = ({
   return (
     <>
       <WorkspaceSection>
-        <header className="@container border-b border-border p-3 sm:px-4">
+        <WorkspaceHeader className="@container">
           <div className="flex items-center gap-2">
             <IconButtonTooltip label="Open sidebar">
               <Button
+                chrome="toolbar"
                 aria-label="Open sidebar"
                 className="lg:hidden"
                 onClick={onOpenSidebar}
@@ -189,6 +193,7 @@ export const SnippetWorkspace = ({
               Snippets
             </Text>
             <Button
+              chrome="toolbar"
               onClick={() => {
                 setEditingId(null);
                 setName("");
@@ -209,7 +214,7 @@ export const SnippetWorkspace = ({
             <span className="sr-only" id="snippet-workspace-search-label">
               Search snippets
             </span>
-            <InputGroup>
+            <InputGroup chrome="toolbar">
               <InputAddon
                 aria-hidden
                 className="ml-3 flex shrink-0 items-center"
@@ -228,35 +233,37 @@ export const SnippetWorkspace = ({
               />
             </InputGroup>
           </label>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
-          {filteredSnippets.map((snippet) => (
-            <Button
-              aria-label={`Edit snippet ${snippet.name}`}
-              aria-current={editingId === snippet.id ? "true" : undefined}
-              fullWidth
-              key={snippet.id}
-              onClick={() => {
-                setEditingId(snippet.id);
-                setName(snippet.name);
-                setBodyText(snippet.bodyText);
-                setEditorOpen(true);
-              }}
-              size="auto"
-              type="button"
-              variant="ghost"
-            >
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-4">
-                <span className="block shrink-0 truncate text-body-sm font-medium sm:w-44">
-                  {snippet.name}
+        </WorkspaceHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto p-0.5">
+          <div className="flex flex-col gap-0.5">
+            {filteredSnippets.map((snippet) => (
+              <Button
+                aria-label={`Edit snippet ${snippet.name}`}
+                aria-current={editingId === snippet.id ? "true" : undefined}
+                fullWidth
+                key={snippet.id}
+                onClick={() => {
+                  setEditingId(snippet.id);
+                  setName(snippet.name);
+                  setBodyText(snippet.bodyText);
+                  setEditorOpen(true);
+                }}
+                size="auto"
+                type="button"
+                variant="ghost"
+              >
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-4">
+                  <span className="block shrink-0 truncate text-body-sm font-medium sm:w-44">
+                    {snippet.name}
+                  </span>
+                  <span className="block min-w-0 flex-1 truncate text-caption text-muted-fg">
+                    {snippet.bodyText}
+                  </span>
                 </span>
-                <span className="block min-w-0 flex-1 truncate text-caption text-muted-fg">
-                  {snippet.bodyText}
-                </span>
-              </span>
-            </Button>
-          ))}
-          {snippetQueryState}
+              </Button>
+            ))}
+            {snippetQueryState}
+          </div>
         </div>
       </WorkspaceSection>
 

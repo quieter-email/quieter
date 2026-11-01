@@ -40,6 +40,7 @@ import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
+import { Surface } from "@quieter/ui/surface";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -86,12 +87,12 @@ const getManageReason = ({
 
 const getDomainConnectBannerClass = (domainConnect: string) => {
   if (domainConnect === "verified") {
-    return "border-border bg-success/15 text-success";
+    return "text-success";
   }
   if (domainConnect === "needs_dns") {
-    return "border-border bg-muted text-fg";
+    return "text-fg";
   }
-  return "border-border bg-destructive/10 text-destructive";
+  return "text-destructive";
 };
 
 const getDomainConnectMessage = (domainConnect: string) => {
@@ -153,22 +154,24 @@ const DomainHeader = ({
     </SettingsPageHeader>
 
     {domainConnect === undefined ? null : (
-      <div
-        className={cn(
-          "@container flex flex-col gap-3 rounded-lg border px-4 py-3 text-body squircle @sm:flex-row @sm:items-center @sm:justify-between",
-          getDomainConnectBannerClass(domainConnect)
-        )}
-      >
-        <span>{getDomainConnectMessage(domainConnect)}</span>
-        <Button
-          className="self-start @sm:self-auto"
-          onClick={onDismissDomainConnect}
-          size="sm"
-          variant="ghost"
+      <Surface>
+        <div
+          className={cn(
+            "@container flex flex-col gap-3 text-body @sm:flex-row @sm:items-center @sm:justify-between",
+            getDomainConnectBannerClass(domainConnect)
+          )}
         >
-          Dismiss
-        </Button>
-      </div>
+          <span>{getDomainConnectMessage(domainConnect)}</span>
+          <Button
+            className="self-start @sm:self-auto"
+            onClick={onDismissDomainConnect}
+            size="sm"
+            variant="secondary"
+          >
+            Dismiss
+          </Button>
+        </div>
+      </Surface>
     )}
   </>
 );

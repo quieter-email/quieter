@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "./dialog";
 import { IconButtonTooltip } from "./icon-button-tooltip";
+import { surfaceVariants } from "./surface";
 import { useScheduleEventDrag } from "./use-schedule-event-drag";
 
 export type ScheduleItem = {
@@ -75,6 +76,8 @@ export type ScheduleProps = {
 };
 
 const hourHeight = 56;
+const scheduleFrameClassName =
+  "relative m-0.5 min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain";
 type ScheduleStyle = CSSProperties & {
   "--schedule-columns"?: string;
   "--schedule-event-color"?: string;
@@ -238,7 +241,7 @@ export const Schedule = ({
                 aria-describedby={slotHelpId}
                 aria-label={`Create event on ${dateLabel} at ${formatTimeMinute(minute, timeFormat)}`}
                 className={cn(
-                  "absolute inset-x-0 top-[var(--schedule-top)] h-3.5 cursor-crosshair text-left outline-none hover:bg-control-hover focus-visible:z-10 focus-visible:bg-control-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
+                  "absolute inset-x-0 top-[var(--schedule-top)] h-3.5 cursor-crosshair text-left outline-none hover:bg-control-hover focus-visible:z-10 focus-visible:bg-control-hover focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
                   {
                     "before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:border-t before:border-border":
                       minute % 60 === 0,
@@ -362,7 +365,7 @@ export const Schedule = ({
         aria-label={`${item.title}, ${item.allDay ? "all day" : `${formatTimeMinute(item.startMinute, timeFormat)} to ${formatTimeMinute(item.endMinute, timeFormat)}`}. ${item.preview ? "Unsaved event preview." : "Open event to edit."}`}
         aria-pressed={item.preview ? undefined : selectedId === item.id}
         className={cn(
-          "group/event @container/event-card relative z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm bg-[color-mix(in_srgb,var(--schedule-event-color)_30%,var(--card))] px-2 py-1 text-left text-body-sm leading-4 text-fg transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset enabled:hover:brightness-95 data-dragging:opacity-35 data-selected:ring-2 data-selected:ring-primary motion-reduce:transition-none",
+          "group/event @container/event-card relative z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm bg-[color-mix(in_srgb,var(--schedule-event-color)_30%,var(--card))] px-2 py-1 text-left text-body-sm leading-4 text-fg transition-colors duration-150 ease-out focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset enabled:hover:brightness-95 data-dragging:opacity-35 data-selected:ring-2 data-selected:ring-primary motion-reduce:transition-none",
           !externalColor && toneClasses[item.tone ?? "primary"],
           {
             "cursor-grab active:cursor-grabbing":
@@ -435,15 +438,13 @@ export const Schedule = ({
 
   const renderAgendaDay = (date: string, dayItems: ScheduleItem[]) => (
     <section
-      className={cn("border-b border-border last:border-b-0", {
-        "py-6": view === "agenda",
-      })}
+      className="space-y-4"
       data-selected-date={date === selectedDate || undefined}
       key={date}
     >
       {view === "agenda" ? (
         <h3
-          className={cn("mb-4 text-body-sm font-medium", {
+          className={cn("text-body-sm font-medium", {
             "text-primary": date === today,
           })}
         >
@@ -484,7 +485,7 @@ export const Schedule = ({
     return (
       <div
         aria-label="Calendar agenda"
-        className="min-h-0 flex-1 overflow-y-auto px-5"
+        className={cn(surfaceVariants(), scheduleFrameClassName, "space-y-4")}
       >
         {occupied.length === 0 ? (
           <div className="flex min-h-64 flex-col items-center justify-center gap-3 text-center">
@@ -518,10 +519,23 @@ export const Schedule = ({
       <>
         <div
           aria-label="Month calendar"
-          className="flex min-h-0 flex-1 flex-col overflow-auto"
+          className={cn(
+            surfaceVariants({ padding: "compact" }),
+            scheduleFrameClassName,
+            "flex flex-col"
+          )}
           ref={scrollRef}
         >
-          <div className="grid min-w-xl grid-cols-7">
+          <div
+            className={cn(
+              surfaceVariants({
+                chrome: "inset",
+                padding: "none",
+                variant: "detail",
+              }),
+              "mb-0.5 grid min-w-xl shrink-0 grid-cols-7 overflow-hidden"
+            )}
+          >
             {dates.slice(0, 7).map((date) => (
               <div className="px-3 py-3 text-caption text-muted-fg" key={date}>
                 {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
@@ -662,7 +676,10 @@ export const Schedule = ({
   return (
     <div
       aria-label={`${view === "day" ? "Day" : "Week"} calendar`}
-      className="relative min-h-0 flex-1 overflow-auto overscroll-contain bg-bg-raised"
+      className={cn(
+        surfaceVariants({ padding: "compact" }),
+        scheduleFrameClassName
+      )}
       ref={scrollRef}
     >
       <p className="sr-only" id={slotHelpId}>
@@ -672,75 +689,86 @@ export const Schedule = ({
         date and time.
       </p>
       <div
-        className="sticky top-0 z-30 grid w-full min-w-[var(--schedule-min-width)] grid-cols-[var(--schedule-columns)] border-b border-border bg-bg-raised"
+        className="sticky -top-0.5 z-30 -mt-0.5 w-full min-w-[var(--schedule-min-width)] bg-section pt-0.5 pb-0.5"
         style={columnStyle}
       >
-        <div className="border-r border-border" />
-        {dates.map((date, index) => (
-          <div
-            className={cn(
-              "flex min-h-8 items-center justify-center border-border px-2",
-              { "border-r": index < dates.length - 1 }
-            )}
-            data-selected-date={date === selectedDate || undefined}
-            key={date}
-          >
-            <span
-              aria-current={date === today ? "date" : undefined}
+        <div
+          className={cn(
+            surfaceVariants({
+              chrome: "inset",
+              padding: "none",
+              variant: "detail",
+            }),
+            "grid grid-cols-[var(--schedule-columns)] overflow-hidden border-b border-border"
+          )}
+        >
+          <div className="border-r border-border" />
+          {dates.map((date, index) => (
+            <div
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-sm px-2 py-1",
-                { "bg-primary text-primary-fg": date === today }
+                "flex min-h-8 items-center justify-center border-border px-2",
+                { "border-r": index < dates.length - 1 }
               )}
+              data-selected-date={date === selectedDate || undefined}
+              key={date}
             >
               <span
-                className={cn("text-caption", {
-                  "font-medium": date === today || date === selectedDate,
-                  "text-muted-fg": date !== today && date !== selectedDate,
-                })}
+                aria-current={date === today ? "date" : undefined}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-sm px-2 py-1",
+                  { "bg-primary text-primary-fg": date === today }
+                )}
               >
-                {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
+                <span
+                  className={cn("text-caption", {
+                    "font-medium": date === today || date === selectedDate,
+                    "text-muted-fg": date !== today && date !== selectedDate,
+                  })}
+                >
+                  {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
+                </span>
+                <span className="text-body-sm font-medium">
+                  {Number(date.slice(8))}
+                  {date === selectedDate ? (
+                    <span className="sr-only">, selected date</span>
+                  ) : null}
+                </span>
               </span>
-              <span className="text-body-sm font-medium">
-                {Number(date.slice(8))}
-                {date === selectedDate ? (
-                  <span className="sr-only">, selected date</span>
-                ) : null}
-              </span>
-            </span>
+            </div>
+          ))}
+          <div className="border-t border-r border-border px-1 py-2 text-right text-micro whitespace-nowrap text-muted-fg">
+            All day
           </div>
-        ))}
-        <div className="border-t border-r border-border px-1 py-2 text-right text-micro whitespace-nowrap text-muted-fg">
-          All day
-        </div>
-        {dates.map((date) => (
-          <div
-            className="relative min-h-8 space-y-1 border-t border-r border-border px-0.5 py-1 last:border-r-0 data-schedule-drop-active:bg-primary/5"
-            data-schedule-drop-date={date}
-            data-schedule-drop-kind="all-day"
-            data-selected-date={date === selectedDate || undefined}
-            key={date}
-          >
-            {/* Native hit areas fill each all-day cell without adding a separate control row. */}
-            <button
-              aria-label={`Create all-day event on ${date}`}
-              className="absolute inset-0 outline-none hover:bg-control-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset"
-              onClick={(event) => {
-                if (event.detail === 0) {
+          {dates.map((date) => (
+            <div
+              className="relative min-h-8 space-y-1 border-t border-r border-border px-0.5 py-1 last:border-r-0 data-schedule-drop-active:bg-primary/5"
+              data-schedule-drop-date={date}
+              data-schedule-drop-kind="all-day"
+              data-selected-date={date === selectedDate || undefined}
+              key={date}
+            >
+              {/* Native hit areas fill each all-day cell without adding a separate control row. */}
+              <button
+                aria-label={`Create all-day event on ${date}`}
+                className="absolute inset-0 outline-none hover:bg-control-hover focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset"
+                onClick={(event) => {
+                  if (event.detail === 0) {
+                    onSlotCreate({ allDay: true, date, minute: 0 });
+                  } else if (event.detail === 1) {
+                    onEmptyClick?.();
+                  }
+                }}
+                onDoubleClick={() => {
                   onSlotCreate({ allDay: true, date, minute: 0 });
-                } else if (event.detail === 1) {
-                  onEmptyClick?.();
-                }
-              }}
-              onDoubleClick={() => {
-                onSlotCreate({ allDay: true, date, minute: 0 });
-              }}
-              type="button"
-            />
-            {(days.get(date) ?? [])
-              .filter((item) => item.allDay)
-              .map((item) => renderEvent(item, "compact"))}
-          </div>
-        ))}
+                }}
+                type="button"
+              />
+              {(days.get(date) ?? [])
+                .filter((item) => item.allDay)
+                .map((item) => renderEvent(item, "compact"))}
+            </div>
+          ))}
+        </div>
       </div>
       <div
         className="grid h-336 w-full min-w-[var(--schedule-min-width)] grid-cols-[var(--schedule-columns)]"
@@ -982,7 +1010,7 @@ export const Schedule = ({
                       <IconButtonTooltip label="Resize event, or use arrow keys">
                         <button
                           aria-label={`Resize ${item.title}. Use up or down arrows to adjust by 15 minutes.`}
-                          className="absolute inset-x-1 bottom-0.5 z-20 h-2 cursor-ns-resize touch-none rounded-b-sm opacity-0 outline-none group-hover/event-slot:opacity-100 after:mx-auto after:mt-1 after:block after:h-0.5 after:w-6 after:rounded-full after:bg-muted-fg focus-visible:bg-primary focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+                          className="absolute inset-x-1 bottom-0.5 z-20 h-2 cursor-ns-resize touch-none rounded-b-sm opacity-0 outline-none group-hover/event-slot:opacity-100 after:mx-auto after:mt-1 after:block after:h-0.5 after:w-6 after:rounded-full after:bg-muted-fg after:not-squircle focus-visible:bg-primary focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden"
                           onClick={(event) => {
                             event.stopPropagation();
                           }}
@@ -1098,7 +1126,7 @@ export const Schedule = ({
             {date === today && currentMinute !== undefined ? (
               <div
                 aria-label={`Current time ${formatTimeMinute(currentMinute, timeFormat)}`}
-                className="pointer-events-none absolute inset-x-0 top-[var(--schedule-top)] z-20 border-t border-primary before:absolute before:-top-1 before:-left-1 before:size-2 before:rounded-full before:bg-primary"
+                className="pointer-events-none absolute inset-x-0 top-[var(--schedule-top)] z-20 border-t border-primary before:absolute before:-top-1 before:-left-1 before:size-2 before:rounded-full before:bg-primary before:not-squircle"
                 style={currentTimeStyle}
               />
             ) : null}

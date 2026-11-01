@@ -32,7 +32,7 @@ export const inputVariants = cva(inputControlClassName, {
       attached:
         "border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0",
       default:
-        "squircle rounded-md border border-border bg-input shadow-none read-only:cursor-default read-only:bg-input",
+        "squircle rounded-md border border-border bg-input shadow-none read-only:cursor-default read-only:bg-input dark:border-transparent",
       ghost: ghostInputClassName,
       inline:
         "rounded-none border-0 bg-transparent shadow-none read-only:bg-transparent",

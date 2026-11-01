@@ -59,6 +59,7 @@ const DropdownMenuDensityContext =
   createContext<DropdownMenuDensity>("default");
 
 const dropdownMenuTriggerVariants = cva(overlayTriggerClassName, {
+  defaultVariants: { chrome: "default" },
   variants: {
     appearance: {
       // Muted square icon button, e.g. row overflow menus.
@@ -73,6 +74,10 @@ const dropdownMenuTriggerVariants = cva(overlayTriggerClassName, {
       "row-strong":
         "flex min-w-0 items-center gap-2 rounded-md text-left text-body-sm font-medium text-fg",
     },
+    chrome: {
+      default: null,
+      toolbar: "rounded-xl",
+    },
   },
 });
 
@@ -83,11 +88,15 @@ type DropdownMenuTriggerProps = ComponentPropsWithoutRef<
 
 export const DropdownMenuTrigger = ({
   appearance,
+  chrome = "default",
   className,
   ...props
 }: DropdownMenuTriggerProps) => (
   <MenuPrimitive.Trigger
-    className={cn(dropdownMenuTriggerVariants({ appearance }), className)}
+    className={cn(
+      dropdownMenuTriggerVariants({ appearance, chrome }),
+      className
+    )}
     {...props}
   />
 );
@@ -222,7 +231,7 @@ export const DropdownMenuCheckboxItem = ({
   return (
     <MenuPrimitive.CheckboxItem
       className={cn(
-        "relative flex min-h-7 cursor-default items-center gap-2 rounded-md py-1 pr-2.5 pl-8 text-body-sm text-fg transition-transform duration-100 ease-out select-none squircle focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted data-pointer-highlighted:focus-visible:ring-0 data-pointer-highlighted:focus-visible:outline-none motion-reduce:transition-none motion-reduce:active:scale-100",
+        "relative flex min-h-7 cursor-default items-center gap-2 rounded-md py-1 pr-2.5 pl-8 text-body-sm text-fg transition-transform duration-100 ease-out select-none squircle focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted data-pointer-highlighted:focus-visible:ring-0 data-pointer-highlighted:focus-visible:outline-none motion-reduce:transition-none motion-reduce:active:scale-100",
         { "min-h-7 gap-1.5 py-1 pr-2 pl-7 text-caption": size === "compact" },
         className
       )}

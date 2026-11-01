@@ -5,6 +5,7 @@ import { getAppPresenceMotion } from "@quieter/app/features/motion/app-motion";
 import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { WorkspaceHeader } from "@quieter/ui/workspace-section";
 import {
   AnimatePresence,
   LazyMotion,
@@ -37,12 +38,13 @@ export const MessageListHeader = ({
   };
 
   return (
-    <div className="relative z-20 border-b border-border bg-transparent p-2 @sm:p-4">
+    <WorkspaceHeader className="relative z-20">
       <div className="flex min-w-0 items-stretch gap-2">
         {onOpenSidebar && (
           <div className="flex self-stretch lg:hidden">
             <IconButtonTooltip label="Open sidebar">
               <Button
+                chrome="toolbar"
                 aria-label="Open sidebar"
                 onClick={onOpenSidebar}
                 size="icon"
@@ -82,6 +84,6 @@ export const MessageListHeader = ({
           </LazyMotion>
         </div>
       </div>
-    </div>
+    </WorkspaceHeader>
   );
 };

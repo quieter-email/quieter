@@ -22,6 +22,7 @@ import {
 } from "@quieter/ui/dialog";
 import { Icon } from "@quieter/ui/icon";
 import { Radio, RadioGroup, RadioIndicator } from "@quieter/ui/radio-group";
+import { surfaceVariants } from "@quieter/ui/surface";
 import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
@@ -195,42 +196,36 @@ export const RegisterDomainDialog = ({
                           }
                         }}
                       >
-                        {modeOptions.map((option) => {
-                          const selected = field.state.value === option.value;
-                          return (
-                            <label
-                              htmlFor={`domain-mode-${option.value}`}
-                              className={cn(
-                                "flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors squircle",
-                                {
-                                  "border-border hover:bg-muted": !selected,
-                                  "border-border-strong bg-muted": selected,
-                                }
-                              )}
-                              key={option.value}
+                        {modeOptions.map((option) => (
+                          <label
+                            htmlFor={`domain-mode-${option.value}`}
+                            className={cn(
+                              surfaceVariants({ variant: "detail" }),
+                              "flex cursor-pointer gap-3"
+                            )}
+                            key={option.value}
+                          >
+                            <Radio
+                              aria-describedby={`domain-mode-description-${option.value}`}
+                              className="mt-1"
+                              id={`domain-mode-${option.value}`}
+                              value={option.value}
                             >
-                              <Radio
-                                aria-describedby={`domain-mode-description-${option.value}`}
-                                className="mt-1"
-                                id={`domain-mode-${option.value}`}
-                                value={option.value}
-                              >
-                                <RadioIndicator />
-                              </Radio>
-                              <span>
-                                <span className="block text-body font-medium text-fg">
-                                  {option.label}
-                                </span>
-                                <span
-                                  id={`domain-mode-description-${option.value}`}
-                                  className="mt-1 block text-caption/5 text-muted-fg"
-                                >
-                                  {option.description}
-                                </span>
+                              <RadioIndicator />
+                            </Radio>
+                            <span>
+                              <span className="block text-body font-medium text-fg">
+                                {option.label}
                               </span>
-                            </label>
-                          );
-                        })}
+                              <span
+                                id={`domain-mode-description-${option.value}`}
+                                className="mt-1 block text-caption/5 text-muted-fg"
+                              >
+                                {option.description}
+                              </span>
+                            </span>
+                          </label>
+                        ))}
                       </RadioGroup>
                     </fieldset>
                   )}

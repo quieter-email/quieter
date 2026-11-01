@@ -22,7 +22,7 @@ export type SearchableSelectOption = {
 
 export type SearchableSelectProps = Pick<
   SelectTriggerProps,
-  "aria-label" | "className" | "disabled" | "id" | "size" | "variant"
+  "aria-label" | "chrome" | "className" | "disabled" | "id" | "size" | "variant"
 > & {
   emptyMessage?: string;
   onValueChange: (value: string) => void;
@@ -33,6 +33,7 @@ export type SearchableSelectProps = Pick<
 
 export const SearchableSelect = ({
   "aria-label": ariaLabel,
+  chrome = "default",
   className,
   disabled,
   emptyMessage = "No matches found.",
@@ -86,7 +87,10 @@ export const SearchableSelect = ({
     >
       <ComboboxPrimitive.Trigger
         aria-label={ariaLabel}
-        className={cn(selectTriggerVariants({ size, variant }), className)}
+        className={cn(
+          selectTriggerVariants({ chrome, size, variant }),
+          className
+        )}
         id={id}
       >
         <span className="min-w-0 flex-1 truncate">
@@ -105,7 +109,7 @@ export const SearchableSelect = ({
             aria-label={ariaLabel}
             className={cn(
               anchoredPopupMotionClassName,
-              "flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-md"
+              "flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-xl border border-transparent bg-section text-popover-fg shadow-md"
             )}
           >
             <div className="shrink-0 border-b border-border p-2">

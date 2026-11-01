@@ -21,6 +21,7 @@ import { openExternalUrl } from "@quieter/app/runtime";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
+import { Surface } from "@quieter/ui/surface";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export const OrganizationBillingSettings = ({
@@ -105,7 +106,7 @@ export const OrganizationBillingSettings = ({
   const statusMessage = getBillingStatusMessage(billing);
 
   return (
-    <section className="@container">
+    <section className="@container space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <SettingsRowText title="Plan & balance">
           <BillingCreditSummary
@@ -122,7 +123,7 @@ export const OrganizationBillingSettings = ({
                 portalMutation.mutate({ organizationId });
               }}
               size="sm"
-              variant="outline"
+              variant="secondary"
             >
               {portalMutation.isPending && (
                 <Icon aria-hidden animation="spin" icon={Loading03Icon} />
@@ -145,7 +146,7 @@ export const OrganizationBillingSettings = ({
         </p>
       )}
 
-      <div className="mt-3 divide-y divide-border border-t border-border">
+      <Surface padding="none">
         {(["managed", "pro"] as const).map((product) => (
           <BillingProductCard
             compact
@@ -169,7 +170,7 @@ export const OrganizationBillingSettings = ({
             productId={product}
           />
         ))}
-      </div>
+      </Surface>
     </section>
   );
 };

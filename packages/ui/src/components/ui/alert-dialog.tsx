@@ -43,7 +43,7 @@ export const AlertDialogContent = ({
     <AlertDialogPrimitive.Popup
       className={cn(
         overlayPopupClassName,
-        "bg-popover text-popover-fg",
+        "bg-panel text-popover-fg",
         className
       )}
       {...props}

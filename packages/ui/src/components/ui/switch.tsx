@@ -1,7 +1,6 @@
 "use client";
 
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
-import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { domMax, LazyMotion, m, useReducedMotion } from "motion/react";
@@ -9,10 +8,9 @@ import { createContext, use } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
-import { Icon } from "./icon";
 
 const switchVariants = cva(
-  "squircle inline-flex shrink-0 items-center overflow-hidden rounded-full border border-border bg-switch-track transition-colors duration-150 ease-out focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden data-checked:border-primary data-checked:bg-primary data-disabled:cursor-not-allowed data-disabled:opacity-50",
+  "inline-flex shrink-0 items-center overflow-hidden rounded-full not-squircle border border-transparent bg-switch-track transition-colors duration-150 ease-out focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden data-checked:border-primary data-checked:bg-primary data-disabled:cursor-not-allowed data-disabled:opacity-50",
   {
     defaultVariants: { size: "default" },
     variants: {
@@ -22,7 +20,7 @@ const switchVariants = cva(
 );
 
 const switchThumbVariants = cva(
-  "squircle block shrink-0 rounded-full bg-switch-thumb shadow-sm data-checked:ml-auto data-checked:bg-primary-fg",
+  "block shrink-0 rounded-full not-squircle bg-switch-thumb shadow-sm data-checked:ml-auto data-checked:bg-primary-fg",
   {
     defaultVariants: { size: "default" },
     variants: {
@@ -61,18 +59,7 @@ export const Switch = ({
         className={cn(switchVariants({ size }), className)}
         disabled={pending || props.disabled}
       >
-        {pending ? (
-          <Icon
-            aria-hidden
-            size={14}
-            animation="spin"
-            tone="muted"
-            className="mx-auto"
-            icon={Loading03Icon}
-          />
-        ) : (
-          children
-        )}
+        {children}
       </SwitchPrimitive.Root>
     </SwitchSizeContext>
   </LazyMotion>

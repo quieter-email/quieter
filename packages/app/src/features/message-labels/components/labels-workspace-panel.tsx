@@ -51,6 +51,7 @@ import {
   AlertDialogTitle,
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   Dialog,
   DialogBody,
@@ -70,6 +71,11 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
+import {
+  SettingsCard,
+  SettingsInsetRows,
+  settingsSurfaceVariants,
+} from "@quieter/ui/settings-layout";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
@@ -465,19 +471,40 @@ export const LabelsWorkspacePanel = ({
   let labelsContent: React.ReactNode;
   if (areLabelsPending) {
     labelsContent = (
-      <p className="py-3 text-body text-muted-fg">Loading labels…</p>
+      <p
+        className={cn(
+          "text-body text-muted-fg",
+          settingsSurfaceVariants({ variant: "padding" })
+        )}
+      >
+        Loading labels…
+      </p>
     );
   } else if (labelsUnavailable) {
     labelsContent = (
-      <p className="py-3 text-body text-destructive">Could not load labels.</p>
+      <p
+        className={cn(
+          "text-body text-destructive",
+          settingsSurfaceVariants({ variant: "padding" })
+        )}
+      >
+        Could not load labels.
+      </p>
     );
   } else if (userLabels.length === 0) {
     labelsContent = (
-      <p className="py-3 text-body text-muted-fg">No labels yet.</p>
+      <p
+        className={cn(
+          "text-body text-muted-fg",
+          settingsSurfaceVariants({ variant: "padding" })
+        )}
+      >
+        No labels yet.
+      </p>
     );
   } else {
     labelsContent = (
-      <ul className="-mx-3 space-y-1">
+      <ul>
         {userLabels.map((label) => {
           const isShown = !effectiveHiddenLabelIds.has(label.id);
           const nameEdit =
@@ -491,7 +518,10 @@ export const LabelsWorkspacePanel = ({
           const prompt = getAutoLabelPrompt(label);
 
           return (
-            <li className="flex items-center gap-3 px-3 py-2.5" key={label.id}>
+            <li
+              className={settingsSurfaceVariants({ variant: "insetRow" })}
+              key={label.id}
+            >
               <MailboxColorPicker
                 className="flex shrink-0"
                 disabled={
@@ -698,16 +728,18 @@ export const LabelsWorkspacePanel = ({
           </Button>
         </div>
 
-        <div className="space-y-6">
-          {isNonemptyMailboxId(mailboxId) ? (
-            <AutoLabelSwitch
-              canManage={canManage}
-              key={mailboxId}
-              mailboxId={mailboxId}
-            />
-          ) : null}
-          {labelsContent}
-        </div>
+        <SettingsCard>
+          <SettingsInsetRows>
+            {isNonemptyMailboxId(mailboxId) ? (
+              <AutoLabelSwitch
+                canManage={canManage}
+                key={mailboxId}
+                mailboxId={mailboxId}
+              />
+            ) : null}
+            {labelsContent}
+          </SettingsInsetRows>
+        </SettingsCard>
       </div>
 
       <Dialog open={isCreatingLabel} onOpenChange={setIsCreatingLabel}>

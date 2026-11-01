@@ -7,6 +7,23 @@ import { z } from "zod";
 const threadSchema = z.object({
   messages: z.array(z.object({ id: z.string() })),
 });
+type MailAccessLoss = { mailboxId: string; threadId?: string };
+const accessLossListeners = new WeakMap<
+  QueryClient,
+  Set<(loss: MailAccessLoss) => void>
+>();
+
+export const subscribeMailboxAccessLoss = (
+  client: QueryClient,
+  listener: (loss: MailAccessLoss) => void
+) => {
+  const listeners = accessLossListeners.get(client) ?? new Set();
+  listeners.add(listener);
+  accessLossListeners.set(client, listeners);
+  return () => {
+    listeners.delete(listener);
+  };
+};
 const listSchema = z.object({
   pages: z.array(
     z.object({
@@ -70,6 +87,7 @@ export const bindMailCache = (client: QueryClient) => {
       event.action.type === "error" &&
       (key[0] === "message-thread" ||
         key[0] === "messages" ||
+        key[0] === "verification-codes" ||
         key[0] === "gmail-labels") &&
       typeof mailboxId === "string"
     ) {
@@ -83,6 +101,9 @@ export const bindMailCache = (client: QueryClient) => {
             z.object({ resource: z.literal("mailbox") }).safeParse(error.data)
               .success))
       ) {
+        for (const listener of accessLossListeners.get(client) ?? []) {
+          listener({ mailboxId });
+        }
         void mailCache.removeMailbox(mailboxId);
       } else if (
         typeof error === "object" &&
@@ -92,6 +113,11 @@ export const bindMailCache = (client: QueryClient) => {
       ) {
         void mailCache.removeItem(`quieter-cache-${event.query.queryHash}`);
         if (key[0] === "message-thread") {
+          if (typeof key[3] === "string") {
+            for (const listener of accessLossListeners.get(client) ?? []) {
+              listener({ mailboxId, threadId: key[3] });
+            }
+          }
           const thread = threadSchema.safeParse(event.query.state.data);
           if (thread.success) {
             for (const message of thread.data.messages) {

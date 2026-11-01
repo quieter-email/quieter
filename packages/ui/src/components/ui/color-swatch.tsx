@@ -9,7 +9,7 @@ import { cn } from "../../lib/cn";
 const colorSwatchVariants = cva("inline-flex shrink-0 bg-(--swatch-color)", {
   defaultVariants: { shape: "circle", size: "md" },
   variants: {
-    shape: { circle: "rounded-full", square: "rounded-xs" },
+    shape: { circle: "rounded-full not-squircle", square: "rounded-xs" },
     size: { lg: "size-6", md: "size-3", sm: "size-2.5" },
   },
 });

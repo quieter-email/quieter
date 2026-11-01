@@ -14,7 +14,7 @@ export const AuthLayout = ({
   children: ReactNode;
   title: string;
 }) => (
-  <main className="dark relative isolate min-h-dvh w-full overflow-hidden bg-bg">
+  <main className="dark relative isolate min-h-dvh w-full overflow-hidden bg-canvas">
     <AtmosphericBackground variant="closing" />
     <div
       aria-hidden
@@ -36,13 +36,13 @@ export const AuthLayout = ({
           className="mt-10 flex justify-center gap-5 text-caption text-muted-fg"
         >
           <Link
-            className="rounded-sm underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+            className="rounded-sm underline underline-offset-2 hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden"
             to="/terms"
           >
             Terms
           </Link>
           <Link
-            className="rounded-sm underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+            className="rounded-sm underline underline-offset-2 hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden"
             to="/privacy"
           >
             Privacy

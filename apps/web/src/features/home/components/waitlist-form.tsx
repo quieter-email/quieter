@@ -4,6 +4,7 @@ import { cn } from "@quieter/ui/cn";
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { InputGroup } from "@quieter/ui/input-group";
 import { toast } from "@quieter/ui/toast";
 import { useState } from "react";
 import type { SubmitEvent } from "react";
@@ -98,13 +99,13 @@ export const WaitlistForm = ({
     >
       <Field>
         <FieldLabel htmlFor={fieldId}>Join the waitlist</FieldLabel>
-        <div className="relative">
+        <InputGroup size="lg" surface="panel">
           <Input
             autoCapitalize="none"
             autoComplete="email"
             autoCorrect="off"
-            // oxlint-disable-next-line shadcn/no-restyle -- Email input leaves room for its trailing status icon.
-            className="bg-bg pr-11"
+            chrome="attached"
+            size="lg"
             disabled={iconState === "loading"}
             id={fieldId}
             inputMode="email"
@@ -116,16 +117,15 @@ export const WaitlistForm = ({
           <IconButtonTooltip label="Join waitlist">
             <Button
               aria-label="Join waitlist"
-              className="absolute top-1/2 right-1 -translate-y-1/2"
+              className="mr-0.5"
               disabled={iconState === "loading"}
-              size="icon-sm"
+              size="icon"
               type="submit"
-              variant="ghost"
             >
               <WaitlistSubmitIcon state={iconState} />
             </Button>
           </IconButtonTooltip>
-        </div>
+        </InputGroup>
       </Field>
     </form>
   );

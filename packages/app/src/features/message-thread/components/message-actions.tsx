@@ -425,6 +425,7 @@ export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
     <DropdownMenu>
       <IconButtonTooltip label="Message actions">
         <DropdownMenuTrigger
+          chrome="toolbar"
           appearance="icon"
           aria-label="Open message actions"
           aria-busy={isBusy || undefined}

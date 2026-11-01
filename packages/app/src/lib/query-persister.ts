@@ -232,6 +232,30 @@ export const queryPersister: ReturnType<
 };
 
 let logoutChannel: BroadcastChannel | undefined;
+const sessionInvalidationListeners = new WeakMap<
+  QueryClient,
+  Set<() => void>
+>();
+
+export const subscribeQuerySessionInvalidation = (
+  client: QueryClient,
+  listener: () => void
+) => {
+  const listeners = sessionInvalidationListeners.get(client) ?? new Set();
+  listeners.add(listener);
+  sessionInvalidationListeners.set(client, listeners);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+const invalidateQuerySession = (client: QueryClient | undefined) => {
+  if (client) {
+    for (const listener of sessionInvalidationListeners.get(client) ?? []) {
+      listener();
+    }
+  }
+};
 
 const updatePersistenceOwner = (
   userId: string | undefined,
@@ -285,6 +309,7 @@ export const setQueryPersistenceUser = (
             event.data === persistenceSession
           ) {
             const previousClient = persistenceClient;
+            invalidateQuerySession(previousClient);
             updatePersistenceOwner(undefined);
             mailCache.detach();
             previousClient?.clear();
@@ -309,9 +334,11 @@ export const captureQueryPersistenceCleanup = () => {
   }
   return Object.assign(
     async () => {
+      invalidateQuerySession(previousClient);
       if (
         persistenceSession === previousSession &&
-        persistenceUser === previousUser
+        persistenceUser === previousUser &&
+        persistenceClient === previousClient
       ) {
         const currentClient = persistenceClient;
         updatePersistenceOwner(undefined);

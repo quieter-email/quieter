@@ -12,10 +12,15 @@ const textVariants = cva("", {
     tone: "default",
   },
   variants: {
+    family: {
+      mono: "font-mono",
+      sans: "",
+    },
     size: {
       body: "text-body",
       caption: "text-caption",
       lg: "text-body-lg",
+      metric: "text-metric",
       micro: "text-micro",
       sm: "text-body-sm",
       title: "text-title-sm",
@@ -30,6 +35,7 @@ const textVariants = cva("", {
     },
     weight: {
       medium: "font-medium",
+      normal: "font-normal",
     },
   },
 });
@@ -37,6 +43,7 @@ const textVariants = cva("", {
 export const Text = ({
   as: Tag = "p",
   className,
+  family,
   size,
   tone,
   truncate,
@@ -47,7 +54,10 @@ export const Text = ({
     as?: "div" | "h1" | "h2" | "h3" | "p" | "span";
   }) => (
   <Tag
-    className={cn(textVariants({ size, tone, truncate, weight }), className)}
+    className={cn(
+      textVariants({ family, size, tone, truncate, weight }),
+      className
+    )}
     {...props}
   />
 );

@@ -155,7 +155,7 @@ export const ConnectorsSettingsPanel = () => {
               }}
               size="sm"
               type="button"
-              variant="destructive"
+              variant="secondary"
             >
               {isDisconnecting ? (
                 <Icon aria-hidden animation="spin" icon={Loading03Icon} />

@@ -11,9 +11,10 @@ import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 import { Icon } from "./icon";
 import { Pill } from "./pill";
+import { surfaceVariants } from "./surface";
 
 export const mailListRowFrameVariants = cva(
-  "group/row relative flex h-17 items-stretch border-b border-border",
+  "group/row relative flex h-17 items-stretch rounded-section border-b border-transparent",
   {
     defaultVariants: {
       layout: "stacked",
@@ -21,7 +22,7 @@ export const mailListRowFrameVariants = cva(
     variants: {
       accent: {
         yellow:
-          "after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:z-0 after:w-1/3 after:bg-linear-to-l after:from-q-yellow/8 after:via-q-yellow/4 after:to-transparent after:content-['']",
+          "after:pointer-events-none after:absolute after:inset-y-0.5 after:right-0.5 after:z-0 after:w-1/3 after:rounded-r-[calc(var(--radius-section)_-_var(--spacing)*0.5)] after:bg-linear-to-l after:from-q-yellow/8 after:via-q-yellow/4 after:to-transparent after:content-['']",
       },
       layout: {
         adaptive: "@3xl:h-12",
@@ -32,13 +33,16 @@ export const mailListRowFrameVariants = cva(
 );
 
 export const mailListRowParts = {
-  overlay: "pointer-events-none absolute inset-0 z-0 bg-muted",
+  overlay: cn(
+    "pointer-events-none absolute inset-0.5 z-0",
+    surfaceVariants({ chrome: "inset", padding: "none", variant: "detail" })
+  ),
   selectionButton:
-    "relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none",
+    "relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none",
   selectionCell:
     "relative z-10 ml-2 flex h-full shrink-0 items-center justify-center @sm:ml-3",
   trigger:
-    "absolute inset-0 z-10 border border-transparent text-left focus-visible:z-20 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden",
+    "absolute inset-0 z-10 rounded-section border border-transparent text-left focus-visible:z-20 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden",
   unreadIndicator:
     "pointer-events-none absolute top-1/2 left-0 z-20 h-8 w-0.75 -translate-y-1/2 rounded-r-full bg-primary",
   viewport:
@@ -52,7 +56,7 @@ export const MailListRowSelectionMark = ({
 }) => (
   <span
     className={cn(
-      "flex size-4.5 items-center justify-center rounded-xs border bg-bg-raised text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
+      "flex size-4.5 items-center justify-center rounded-xs border bg-section text-transparent shadow-xs transition-[background-color,border-color,color] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
       {
         "border-border": !selected,
         "border-primary bg-primary text-primary-fg": selected,

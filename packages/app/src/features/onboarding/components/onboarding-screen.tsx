@@ -100,9 +100,8 @@ const PlaybookCard = ({
   title: string;
 }) => (
   <section
-    className={cn("rounded-lg border p-4", {
-      "border-border": state !== "done",
-      "border-border bg-success/15": state === "done",
+    className={cn("rounded-lg p-4", {
+      "bg-success/15": state === "done",
     })}
   >
     <div className="flex items-center gap-2">
@@ -185,7 +184,7 @@ const PlaybookBillingAction = ({
         pendingLabel="Opening checkout…"
         size="sm"
         type="button"
-        variant="outline"
+        variant="secondary"
       >
         Upgrade to {BILLING_FEATURES.organizationDomains.requirementLabel}
       </Button>
@@ -211,7 +210,7 @@ const DomainStatusNote = ({ count }: { count: number }) => (
     />
     DNS setup in progress for {count} {count === 1 ? "domain" : "domains"}.
     <Link
-      className="rounded-sm text-fg underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+      className="rounded-sm text-fg underline underline-offset-2 hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden"
       search={{ organizationView: "domains", tab: "organization" }}
       to="/settings"
     >
@@ -244,7 +243,7 @@ const GmailPlaybook = ({
             onClick={onConnect}
             size="sm"
             type="button"
-            variant="outline"
+            variant="secondary"
           >
             <GoogleLogo className="size-4" />
             Add another Gmail mailbox
@@ -264,7 +263,7 @@ const GmailPlaybook = ({
           onClick={onConnect}
           size="sm"
           type="button"
-          variant="outline"
+          variant="secondary"
         >
           <GoogleLogo className="size-4" />
           <span className="min-w-0 truncate">
@@ -325,7 +324,7 @@ const SendingPlaybook = ({
           <ul className="space-y-1 text-body-sm">
             <li>
               <Link
-                className="rounded-sm text-fg underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+                className="rounded-sm text-fg underline underline-offset-2 hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden"
                 search={{ organizationView: "api-keys", tab: "organization" }}
                 to="/settings"
               >
@@ -334,7 +333,7 @@ const SendingPlaybook = ({
             </li>
             <li>
               <a
-                className="rounded-sm text-fg underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+                className="rounded-sm text-fg underline underline-offset-2 hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden"
                 href={getApiUrl("/api/openapi")}
                 rel="noreferrer"
                 target="_blank"

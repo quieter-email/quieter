@@ -71,8 +71,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Surface } from "@quieter/ui/surface";
 import { Text } from "@quieter/ui/text";
-import { WorkspaceSection } from "@quieter/ui/workspace-section";
+import {
+  WorkspaceHeader,
+  WorkspaceSection,
+  workspaceGutterClassName,
+} from "@quieter/ui/workspace-section";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
@@ -939,22 +944,25 @@ const CalendarWorkspaceContent = ({
   } else if (requestedEventRef) {
     details = (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 px-5 py-4">
-          <Text as="h2" className="flex-1" size="lg" truncate weight="medium">
-            Event details
-          </Text>
-          <IconButtonTooltip label="Close event details">
-            <Button
-              aria-label="Close event details"
-              onClick={closeEvent}
-              size="icon-sm"
-              variant="ghost"
-            >
-              <Icon aria-hidden icon={Cancel01Icon} />
-            </Button>
-          </IconButtonTooltip>
-        </div>
-        <div aria-live="polite" className="flex-1 space-y-2 p-5">
+        <WorkspaceHeader>
+          <div className="flex items-center gap-2">
+            <Text as="h2" className="flex-1" size="lg" truncate weight="medium">
+              Event details
+            </Text>
+            <IconButtonTooltip label="Close event details">
+              <Button
+                chrome="toolbar"
+                aria-label="Close event details"
+                onClick={closeEvent}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <Icon aria-hidden icon={Cancel01Icon} />
+              </Button>
+            </IconButtonTooltip>
+          </div>
+        </WorkspaceHeader>
+        <div aria-live="polite" className="flex-1 space-y-2 p-4">
           {selectedLoading ? (
             <Icon
               aria-hidden
@@ -970,7 +978,7 @@ const CalendarWorkspaceContent = ({
             {selectedDescription}
           </Text>
         </div>
-        <div className="p-5">
+        <Surface className="mx-0.5 mb-0.5 shrink-0" variant="section">
           <ActionFooter>
             <Button
               onClick={closeEvent}
@@ -1000,7 +1008,7 @@ const CalendarWorkspaceContent = ({
               </Button>
             ) : null}
           </ActionFooter>
-        </div>
+        </Surface>
       </div>
     );
   }
@@ -1053,7 +1061,12 @@ const CalendarWorkspaceContent = ({
     new Date(calendarWallTimeToInstant({ date, time: "12:00", timeZone }))
   );
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-1">
+    <div
+      className={cn(
+        workspaceGutterClassName,
+        "flex h-full min-h-0 min-w-0 flex-1 gap-(--workspace-gutter)"
+      )}
+    >
       <CalendarSidebar
         accounts={data.accounts}
         calendars={data.calendars}
@@ -1121,200 +1134,213 @@ const CalendarWorkspaceContent = ({
           }}
           title="Calendar"
         />
-        <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-4">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Text
-              as="h2"
-              className="mr-2 min-w-0"
-              size="lg"
-              truncate
-              weight="medium"
-            >
-              <LazyMotion features={domAnimation}>
-                <m.span
-                  {...getAppPresenceMotion({ distance: 4, reducedMotion })}
-                  className="block truncate"
-                  key={rangeHeading}
-                >
-                  {rangeHeading}
-                </m.span>
-              </LazyMotion>
-            </Text>
-            <div className="flex items-center gap-1">
-              <IconButtonTooltip label="Previous date range">
-                <Button
-                  aria-label="Previous date range"
-                  onClick={() => {
-                    const offset = -{ agenda: 30, day: 1, month: 1, week: 7 }[
-                      view
-                    ];
-                    const shifted = new Date(`${date}T12:00:00Z`);
-                    if (view === "month") {
-                      shifted.setUTCDate(1);
-                      shifted.setUTCMonth(shifted.getUTCMonth() - 1);
-                    }
-                    void setMailboxSearch({
-                      calendarDate:
-                        view === "month"
-                          ? shifted.toISOString().slice(0, 10)
-                          : addCalendarDays(date, offset),
-                    });
-                  }}
-                  size="icon-sm"
-                  variant="ghost"
-                >
-                  <Icon aria-hidden icon={ArrowLeft01Icon} />
-                </Button>
-              </IconButtonTooltip>
-              <IconButtonTooltip label="Next date range">
-                <Button
-                  aria-label="Next date range"
-                  onClick={() => {
-                    const offset = { agenda: 30, day: 1, month: 1, week: 7 }[
-                      view
-                    ];
-                    const shifted = new Date(`${date}T12:00:00Z`);
-                    if (view === "month") {
-                      shifted.setUTCDate(1);
-                      shifted.setUTCMonth(shifted.getUTCMonth() + 1);
-                    }
-                    void setMailboxSearch({
-                      calendarDate:
-                        view === "month"
-                          ? shifted.toISOString().slice(0, 10)
-                          : addCalendarDays(date, offset),
-                    });
-                  }}
-                  size="icon-sm"
-                  variant="ghost"
-                >
-                  <Icon aria-hidden icon={ArrowRight01Icon} />
-                </Button>
-              </IconButtonTooltip>
-            </div>
-            <Button
-              onClick={() => {
-                void setMailboxSearch({ calendarDate: now.date });
-              }}
-              size="sm"
-              variant="secondary"
-            >
-              Today
-            </Button>
-          </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Select
-              items={viewOptions}
-              onValueChange={(value) => {
-                if (
-                  value === "day" ||
-                  value === "week" ||
-                  value === "month" ||
-                  value === "agenda"
-                ) {
-                  void setMailboxSearch({ calendarView: value });
-                }
-              }}
-              value={view}
-            >
-              <SelectTrigger
-                aria-label="Calendar view"
-                className="w-24"
+        <WorkspaceHeader>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div className="flex max-w-full min-w-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1">
+                <IconButtonTooltip label="Previous date range">
+                  <Button
+                    chrome="toolbar"
+                    aria-label="Previous date range"
+                    onClick={() => {
+                      const offset = -{ agenda: 30, day: 1, month: 1, week: 7 }[
+                        view
+                      ];
+                      const shifted = new Date(`${date}T12:00:00Z`);
+                      if (view === "month") {
+                        shifted.setUTCDate(1);
+                        shifted.setUTCMonth(shifted.getUTCMonth() - 1);
+                      }
+                      void setMailboxSearch({
+                        calendarDate:
+                          view === "month"
+                            ? shifted.toISOString().slice(0, 10)
+                            : addCalendarDays(date, offset),
+                      });
+                    }}
+                    size="icon-sm"
+                    variant="ghost"
+                  >
+                    <Icon aria-hidden icon={ArrowLeft01Icon} />
+                  </Button>
+                </IconButtonTooltip>
+                <IconButtonTooltip label="Next date range">
+                  <Button
+                    chrome="toolbar"
+                    aria-label="Next date range"
+                    onClick={() => {
+                      const offset = { agenda: 30, day: 1, month: 1, week: 7 }[
+                        view
+                      ];
+                      const shifted = new Date(`${date}T12:00:00Z`);
+                      if (view === "month") {
+                        shifted.setUTCDate(1);
+                        shifted.setUTCMonth(shifted.getUTCMonth() + 1);
+                      }
+                      void setMailboxSearch({
+                        calendarDate:
+                          view === "month"
+                            ? shifted.toISOString().slice(0, 10)
+                            : addCalendarDays(date, offset),
+                      });
+                    }}
+                    size="icon-sm"
+                    variant="ghost"
+                  >
+                    <Icon aria-hidden icon={ArrowRight01Icon} />
+                  </Button>
+                </IconButtonTooltip>
+              </div>
+              <Text
+                as="h2"
+                className="min-w-0"
+                size="lg"
+                truncate
+                weight="medium"
+              >
+                <LazyMotion features={domAnimation}>
+                  <m.span
+                    {...getAppPresenceMotion({ distance: 4, reducedMotion })}
+                    className="block truncate"
+                    key={rangeHeading}
+                  >
+                    {rangeHeading}
+                  </m.span>
+                </LazyMotion>
+              </Text>
+              <Button
+                chrome="toolbar"
+                className="shrink-0"
+                onClick={() => {
+                  void setMailboxSearch({ calendarDate: now.date });
+                }}
                 size="sm"
+                variant="secondary"
+              >
+                Today
+              </Button>
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Select
+                items={viewOptions}
+                onValueChange={(value) => {
+                  if (
+                    value === "day" ||
+                    value === "week" ||
+                    value === "month" ||
+                    value === "agenda"
+                  ) {
+                    void setMailboxSearch({ calendarView: value });
+                  }
+                }}
+                value={view}
+              >
+                <SelectTrigger
+                  chrome="toolbar"
+                  aria-label="Calendar view"
+                  className="w-24"
+                  size="sm"
+                  variant="ghost"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {viewOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <CalendarTimeZonePicker
+                chrome="toolbar"
+                aria-label="Display time zone"
+                className="max-w-40"
+                onValueChange={(zone) => {
+                  void setMailboxSearch({ calendarTimeZone: zone });
+                }}
+                size="sm"
+                value={timeZone}
                 variant="ghost"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {viewOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <CalendarTimeZonePicker
-              aria-label="Display time zone"
-              className="max-w-40"
-              onValueChange={(zone) => {
-                void setMailboxSearch({ calendarTimeZone: zone });
-              }}
-              size="sm"
-              value={timeZone}
-              variant="ghost"
-            />
-            <Popover>
-              <IconButtonTooltip
-                label={ui.search ? `Find events: ${ui.search}` : "Find events"}
-              >
-                <PopoverTrigger
-                  render={
-                    <Button
-                      aria-label="Find events"
-                      size="icon-sm"
-                      variant={ui.search ? "secondary" : "ghost"}
-                    />
+              />
+              <Popover>
+                <IconButtonTooltip
+                  label={
+                    ui.search ? `Find events: ${ui.search}` : "Find events"
                   }
                 >
-                  <Icon aria-hidden icon={Search01Icon} />
-                </PopoverTrigger>
-              </IconButtonTooltip>
-              <PopoverContent align="end">
-                <Input
-                  aria-label="Find events in this view"
-                  onChange={(event) => {
-                    store.setState((current) => ({
-                      ...current,
-                      search: event.target.value,
-                    }));
-                  }}
-                  placeholder="Find in this view"
-                  size="sm"
-                  type="search"
-                  value={ui.search}
-                />
-              </PopoverContent>
-            </Popover>
-            <IconButtonTooltip label="Refresh calendars">
-              <Button
-                aria-label="Refresh calendars"
-                disabled={preview !== null || data.isRefreshing}
-                onClick={() => {
-                  void data.refresh();
-                }}
-                size="icon-sm"
-                variant="ghost"
-              >
-                <Icon aria-hidden icon={RefreshIcon} />
-              </Button>
-            </IconButtonTooltip>
-            {assistant && !assistant.open ? (
-              <IconButtonTooltip label="Open assistant">
+                  <PopoverTrigger
+                    render={
+                      <Button
+                        chrome="toolbar"
+                        aria-label="Find events"
+                        size="icon-sm"
+                        variant={ui.search ? "secondary" : "ghost"}
+                      />
+                    }
+                  >
+                    <Icon aria-hidden icon={Search01Icon} />
+                  </PopoverTrigger>
+                </IconButtonTooltip>
+                <PopoverContent align="end">
+                  <Input
+                    aria-label="Find events in this view"
+                    onChange={(event) => {
+                      store.setState((current) => ({
+                        ...current,
+                        search: event.target.value,
+                      }));
+                    }}
+                    placeholder="Find in this view"
+                    size="sm"
+                    type="search"
+                    value={ui.search}
+                  />
+                </PopoverContent>
+              </Popover>
+              <IconButtonTooltip label="Refresh calendars">
                 <Button
-                  aria-controls={assistant.panelId}
-                  aria-expanded={assistant.open}
-                  aria-label="Open assistant"
-                  data-assistant-launcher
-                  onClick={(event) => {
-                    assistant.onOpen(event.currentTarget);
+                  chrome="toolbar"
+                  aria-label="Refresh calendars"
+                  disabled={preview !== null || data.isRefreshing}
+                  onClick={() => {
+                    void data.refresh();
                   }}
                   size="icon-sm"
                   variant="ghost"
                 >
-                  <Icon aria-hidden icon={LayoutRightIcon} />
+                  <Icon aria-hidden icon={RefreshIcon} />
                 </Button>
               </IconButtonTooltip>
-            ) : null}
-            {!preview && !online ? (
-              <Pill size="xs" tone="orange">
-                Offline
-              </Pill>
-            ) : null}
+              {assistant && !assistant.open ? (
+                <IconButtonTooltip label="Open assistant">
+                  <Button
+                    chrome="toolbar"
+                    aria-controls={assistant.panelId}
+                    aria-expanded={assistant.open}
+                    aria-label="Open assistant"
+                    data-assistant-launcher
+                    onClick={(event) => {
+                      assistant.onOpen(event.currentTarget);
+                    }}
+                    size="icon-sm"
+                    variant="ghost"
+                  >
+                    <Icon aria-hidden icon={LayoutRightIcon} />
+                  </Button>
+                </IconButtonTooltip>
+              ) : null}
+              {!preview && !online ? (
+                <Pill size="xs" tone="orange">
+                  Offline
+                </Pill>
+              ) : null}
+            </div>
+            <p aria-live="polite" className="sr-only">
+              {syncStatus}
+            </p>
           </div>
-          <p aria-live="polite" className="sr-only">
-            {syncStatus}
-          </p>
-        </header>
+        </WorkspaceHeader>
         {data.failures.length > 0 ? (
           <output className="flex items-center gap-3 border-b border-border px-5 py-2">
             <p className="flex-1 text-caption text-muted-fg">
@@ -1508,7 +1534,7 @@ const CalendarWorkspaceContent = ({
           {wide ? (
             <aside
               aria-label="Event details"
-              className="ml-auto flex w-88 shrink-0 flex-col border-l border-border"
+              className="ml-auto flex w-88 shrink-0 flex-col"
             >
               {details && activeEditor?.kind === "create" ? (
                 <div
@@ -1522,12 +1548,18 @@ const CalendarWorkspaceContent = ({
                 </div>
               ) : (
                 (details ?? (
-                  <LazyMotion features={domAnimation}>
-                    <EmptyMessageState
-                      title="No event selected"
-                      description="Select an event to view its details. Double-click an empty time or drag across the calendar to create one."
-                    />
-                  </LazyMotion>
+                  <Surface
+                    className="m-0.5 flex min-h-0 flex-1 flex-col"
+                    padding="none"
+                    variant="section"
+                  >
+                    <LazyMotion features={domAnimation}>
+                      <EmptyMessageState
+                        title="No event selected"
+                        description="Select an event to view its details. Double-click an empty time or drag across the calendar to create one."
+                      />
+                    </LazyMotion>
+                  </Surface>
                 ))
               )}
             </aside>

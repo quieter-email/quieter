@@ -120,7 +120,7 @@ export const TimePicker = ({
             aria-label={ariaLabel ?? "Choose time"}
             className={cn(
               anchoredPopupMotionClassName,
-              "flex max-h-[min(18rem,var(--available-height))] w-52 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-fg shadow-md"
+              "flex max-h-[min(18rem,var(--available-height))] w-52 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-xl border border-transparent bg-section text-popover-fg shadow-md"
             )}
           >
             <div className="shrink-0 border-b border-border p-2">

@@ -14,7 +14,7 @@ import { cn } from "../../lib/cn";
 import { Icon } from "./icon";
 
 export const buttonVariants = cva(
-  "inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-body font-medium whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "inline-flex border border-transparent shrink-0 items-center justify-center gap-2 rounded-md text-body font-medium whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     compoundVariants: [
       {
@@ -25,6 +25,7 @@ export const buttonVariants = cva(
           "default",
           "destructive",
           "ghost",
+          "keycap",
           "outline",
           "overlay",
           "result",
@@ -62,14 +63,20 @@ export const buttonVariants = cva(
         className: "active:bg-secondary-active",
         variant: "secondary",
       },
+      { chrome: "toolbar", className: "rounded-xl" },
     ],
     defaultVariants: {
       auxiliaryPress: false,
+      chrome: "default",
       size: "default",
       variant: "default",
     },
     variants: {
       auxiliaryPress: { false: null, true: null },
+      chrome: {
+        default: null,
+        toolbar: null,
+      },
       fullWidth: {
         true: "group relative w-full gap-3",
       },
@@ -88,10 +95,10 @@ export const buttonVariants = cva(
       },
       variant: {
         // Large selectable card, e.g. the mailbox-type options.
-        card: "group h-auto min-h-32 w-full flex-col items-start justify-start rounded-lg border-border bg-bg-raised p-5 text-left text-fg whitespace-normal hover:border-border-strong hover:bg-control-hover",
+        card: "group h-auto min-h-32 w-full flex-col items-start justify-start rounded-section bg-section p-4 text-left text-fg whitespace-normal hover:bg-control-hover",
         // Compact toggle chip, e.g. the Cc/Bcc switches. The pressed look
         // follows aria-pressed so callers only pass the state.
-        chip: "h-7 px-1.5 text-caption text-muted-fg active:scale-100 aria-pressed:bg-control-active aria-pressed:text-fg",
+        chip: "h-7 px-1.5 text-caption text-muted-fg active:scale-100 aria-pressed:bg-detail aria-pressed:text-fg",
         default: "bg-primary text-primary-fg shadow-sm hover:bg-primary-hover",
         destructive:
           "bg-destructive text-destructive-fg shadow-sm hover:bg-destructive-hover",
@@ -99,10 +106,12 @@ export const buttonVariants = cva(
           "bg-transparent text-muted-fg hover:bg-muted hover:text-fg aria-[current=page]:bg-muted aria-[current=page]:text-fg aria-[current=true]:bg-muted aria-[current=true]:text-fg",
         "inline-edit":
           "h-5 min-w-0 shrink justify-start rounded-none border-0 bg-transparent p-0 text-left text-body font-normal text-fg active:scale-100",
+        keycap:
+          "h-16 min-w-16 rounded-lg bg-detail px-5 font-normal text-title-sm text-fg hover:bg-control-hover active:bg-control-active",
         // Segmented option, e.g. the rule-builder choices. The selected look
         // follows aria-pressed so callers only pass the state.
         option:
-          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:scale-100 aria-pressed:bg-bg-surface aria-pressed:text-fg aria-pressed:shadow-sm",
+          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:scale-100 aria-pressed:bg-detail aria-pressed:text-fg aria-pressed:shadow-sm",
         outline: "border-border bg-control text-fg hover:bg-control-hover",
         // Outline treatment for dark backdrops, e.g. the status screens.
         overlay: "border-fg/20 bg-transparent text-fg hover:bg-fg/10",
@@ -114,7 +123,7 @@ export const buttonVariants = cva(
         secondary:
           "bg-secondary text-secondary-fg shadow-sm hover:bg-secondary-hover",
         toolbar:
-          "rounded-xl border-border bg-control text-muted-fg hover:bg-control-hover hover:text-fg [&_svg]:size-3.5",
+          "rounded-xl bg-control text-muted-fg hover:bg-control-hover hover:text-fg [&_svg]:size-3.5",
       },
     },
   }
@@ -131,6 +140,7 @@ export type ButtonProps = BaseUIButtonProps &
   };
 
 export const Button = ({
+  chrome = "default",
   className,
   fullWidth = false,
   onKeyDown,
@@ -174,6 +184,7 @@ export const Button = ({
               cn(
                 buttonVariants({
                   auxiliaryPress: isAuxiliaryPress,
+                  chrome,
                   fullWidth,
                   size,
                   variant,
@@ -183,6 +194,7 @@ export const Button = ({
           : cn(
               buttonVariants({
                 auxiliaryPress: isAuxiliaryPress,
+                chrome,
                 fullWidth,
                 size,
                 variant,

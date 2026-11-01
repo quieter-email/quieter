@@ -15,7 +15,7 @@ export const PromptComposerFrame = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-control p-2 shadow-sm",
+      "flex min-w-0 flex-col gap-1 rounded-section border border-transparent bg-section p-2 shadow-sm has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring",
       className
     )}
     {...props}
@@ -28,7 +28,7 @@ export const ComposerActionBar = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-border bg-control p-1.5 squircle",
+      "flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-transparent bg-detail p-1.5 squircle",
       className
     )}
     {...props}
@@ -46,7 +46,7 @@ export const ComposerContextChip = ({
   label: string;
   onRemove: () => void;
 }) => (
-  <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-sm border border-border bg-bg-surface pl-2 text-caption text-muted-fg">
+  <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-sm border border-transparent bg-detail pl-2 text-caption text-muted-fg">
     {icon}
     <span className="min-w-0 truncate" title={label}>
       {label}
@@ -69,11 +69,15 @@ export const ComposerContextChip = ({
 export const ComposerFrame = ({
   children,
   className,
+  layout = "default",
   ...props
-}: ComponentPropsWithoutRef<"div">) => (
+}: ComponentPropsWithoutRef<"div"> & {
+  layout?: "default" | "inline";
+}) => (
   <div
     className={cn(
-      "mx-auto my-auto flex min-h-0 w-full max-w-[58rem] flex-1 flex-col gap-2 md:max-h-[28rem]",
+      "mx-auto my-auto flex min-h-0 w-full max-w-[58rem] flex-1 flex-col gap-2 p-4 sm:p-6 md:max-h-[28rem]",
+      { "my-0 max-w-none flex-none p-0 sm:p-0": layout === "inline" },
       className
     )}
     {...props}
@@ -93,7 +97,7 @@ export const ComposerFieldGroup = ({
 }) => (
   <div
     className={cn(
-      "w-full shrink-0 overflow-hidden rounded-lg border border-border bg-control",
+      "w-full shrink-0 overflow-hidden rounded-section border border-transparent bg-section",
       { "rounded-none border-0 bg-transparent shadow-none": bare },
       className
     )}
@@ -104,7 +108,7 @@ export const ComposerFieldGroup = ({
 );
 
 const composerFieldRowClassName =
-  "flex min-w-0 items-center gap-2.5 px-5 transition-colors duration-150 ease-out focus-within:bg-bg-surface";
+  "flex min-w-0 items-center gap-(--composer-field-gap) px-(--composer-field-inset) transition-colors duration-150 ease-out has-[:focus-visible]:bg-detail";
 
 export const ComposerFieldRow = ({
   children,
@@ -122,17 +126,21 @@ export const ComposerFieldRow = ({
   trailing?: ReactNode;
 }) => (
   <Field
-    className={cn("gap-0", { "border-b border-border": divided }, className)}
+    className={cn(
+      "gap-0 [--composer-field-gap:calc(var(--spacing)*2.5)] [--composer-field-inset:calc(var(--spacing)*4)] [--composer-field-label-width:calc(var(--spacing)*14)]",
+      { "border-b border-transparent": divided },
+      className
+    )}
   >
     <div className={composerFieldRowClassName}>
-      <FieldLabel className="w-14 shrink-0 text-body font-normal text-muted-fg">
+      <FieldLabel className="w-(--composer-field-label-width) shrink-0 text-body font-normal text-muted-fg">
         {label}
       </FieldLabel>
       {children}
       {trailing}
     </div>
     {error === undefined ? null : (
-      <FieldError className="px-3.5 pb-2 pl-[4.75rem] text-caption">
+      <FieldError className="px-(--composer-field-inset) pb-2 pl-[calc(var(--composer-field-inset)+var(--composer-field-label-width)+var(--composer-field-gap))] text-caption">
         {error}
       </FieldError>
     )}
@@ -147,7 +155,7 @@ export const ComposerEditorFrame = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-control shadow-sm transition-shadow duration-150 squircle focus-within:shadow-md",
+      "flex min-h-0 flex-1 flex-col overflow-hidden rounded-section bg-section squircle has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-inset",
       className
     )}
     {...props}

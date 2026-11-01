@@ -4,6 +4,7 @@ import type {
   MailboxActions,
   MailboxPendingActions,
 } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
+import { MailboxIdleState } from "@quieter/app/features/mailbox/components/mailbox-idle-state";
 import { useMailboxListController } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-list-controller";
 import { createUnifiedInboxActions } from "@quieter/app/features/mailbox/components/unified-inbox-actions";
 import {
@@ -34,10 +35,12 @@ import {
 } from "@quieter/mail/search";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
+import { cn } from "@quieter/ui/cn";
 import { ColorSwatch } from "@quieter/ui/color-swatch";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
 import { toast } from "@quieter/ui/toast";
+import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { useCallback, useEffect, useState } from "react";
 
 type SourceState = {
@@ -647,7 +650,7 @@ export const UnifiedInboxPanel = ({
           <div className="max-h-80 space-y-1 overflow-y-auto">
             {accessibleMailboxes.map((mailbox) => (
               <div
-                className="rounded-md px-2 py-2 hover:bg-muted"
+                className="rounded-md px-2 py-2 hover:bg-control-hover"
                 key={mailbox.id}
               >
                 <label
@@ -697,103 +700,138 @@ export const UnifiedInboxPanel = ({
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      {queryMailboxes.map((mailbox) => {
-        const sourceKey = JSON.stringify([
-          mailbox.id,
-          activeMailbox,
-          normalizedSearch,
-        ]);
-        return (
-          <UnifiedInboxSource
-            activeMailbox={activeMailbox}
-            activeMessageId={
-              mailbox.id === activeMailboxId ? activeMessageId : null
-            }
-            activeThreadId={
-              mailbox.id === activeMailboxId ? activeThreadId : null
-            }
-            key={mailbox.id}
-            mailbox={mailbox}
-            onChange={onSourceChange}
-            searchQuery={normalizedSearch}
-            sourceKey={sourceKey}
-            selectionScopeKey={selectionScopeKey}
-          />
-        );
-      })}
-      <MessageList
-        wideCompactRows={wideCompactRows}
-        activeMailbox={activeMailbox}
-        activeMessageId={
-          activeMailboxId !== null && activeMessageId !== null
-            ? JSON.stringify([activeMailboxId, activeMessageId])
-            : null
-        }
-        error={listError}
-        hasNextPage={hasNextPage}
-        headerAddon={headerAddon}
-        isError={listError !== null && listError !== undefined}
-        isFetchingNextPage={isFetchingMore}
-        isPending={pending}
-        isRefreshing={isRefreshing}
-        listNotices={listNotices}
-        mailboxActions={adapter.mailboxActions}
-        mailboxContextsByThreadId={mailboxContextsByThreadId}
-        mailboxId={searchMailbox?.id ?? ""}
-        mailboxProvider={searchMailbox?.provider ?? "managed"}
-        messages={[{ messages: syntheticMessages }]}
-        onActivateMessage={(uiMessageId) => {
-          const original = originalMessageById.get(uiMessageId);
-          const sourceId = sourceMailboxByMessageId.get(uiMessageId);
-          if (original !== undefined && sourceId !== undefined) {
-            if (activeMailbox === "drafts") {
-              onOpenDraft(sourceId, original);
-              return;
-            }
+    <>
+      <WorkspaceSection
+        className={cn({
+          flex: !activeMessageId,
+          hidden: !!activeMessageId,
+          "lg:hidden": wideCompactRows && !!activeMessageId,
+        })}
+        layout="cell"
+      >
+        <div className="flex h-full min-h-0 flex-col">
+          {queryMailboxes.map((mailbox) => {
             const sourceKey = JSON.stringify([
-              sourceId,
+              mailbox.id,
               activeMailbox,
               normalizedSearch,
             ]);
-            sourceStates[sourceKey]?.activateMessage(original.id);
-            onSelectMessage(sourceId, original.id, original.threadId);
-          }
-        }}
-        onDeactivateActiveMessage={onDeactivateActiveMessage}
-        onKeyboardOpenMessage={onKeyboardOpenMessage}
-        onLoadMore={() => {
-          void loadMore();
-        }}
-        onOpenDraft={(uiMessage) => {
-          const original = originalMessageById.get(uiMessage.id);
-          const sourceId = sourceMailboxByMessageId.get(uiMessage.id);
-          if (original !== undefined && sourceId !== undefined) {
-            onOpenDraft(sourceId, original);
-          }
-        }}
-        onOpenSidebar={onOpenSidebar}
-        onRefresh={() => {
-          void refresh();
-        }}
-        onSearch={(nextQuery) => {
-          const normalizedQuery = nextQuery.trim();
-          for (const { state } of connectedStates) {
-            state?.resetSelection();
-          }
-          onSearch(normalizedQuery);
-          if (normalizedQuery === normalizedSearch) {
-            void refresh();
-          }
-        }}
-        pendingActions={adapter.pendingActions}
-        searchQuery={normalizedSearch}
-        searchMailboxes={connectedMailboxes.map((mailbox) => ({
-          mailboxId: mailbox.id,
-          mailboxProvider: mailbox.provider,
-        }))}
-        selectionScopeKey={selectionScopeKey}
-      />
-    </div>
+            return (
+              <UnifiedInboxSource
+                activeMailbox={activeMailbox}
+                activeMessageId={
+                  mailbox.id === activeMailboxId ? activeMessageId : null
+                }
+                activeThreadId={
+                  mailbox.id === activeMailboxId ? activeThreadId : null
+                }
+                key={mailbox.id}
+                mailbox={mailbox}
+                onChange={onSourceChange}
+                searchQuery={normalizedSearch}
+                sourceKey={sourceKey}
+                selectionScopeKey={selectionScopeKey}
+              />
+            );
+          })}
+          <MessageList
+            wideCompactRows={wideCompactRows}
+            activeMailbox={activeMailbox}
+            activeMessageId={
+              activeMailboxId !== null && activeMessageId !== null
+                ? JSON.stringify([activeMailboxId, activeMessageId])
+                : null
+            }
+            error={listError}
+            hasNextPage={hasNextPage}
+            headerAddon={headerAddon}
+            isError={listError !== null && listError !== undefined}
+            isFetchingNextPage={isFetchingMore}
+            isPending={pending}
+            isRefreshing={isRefreshing}
+            listNotices={listNotices}
+            mailboxActions={adapter.mailboxActions}
+            mailboxContextsByThreadId={mailboxContextsByThreadId}
+            mailboxId={searchMailbox?.id ?? ""}
+            mailboxProvider={searchMailbox?.provider ?? "managed"}
+            messages={[{ messages: syntheticMessages }]}
+            onActivateMessage={(uiMessageId) => {
+              const original = originalMessageById.get(uiMessageId);
+              const sourceId = sourceMailboxByMessageId.get(uiMessageId);
+              if (original !== undefined && sourceId !== undefined) {
+                if (activeMailbox === "drafts") {
+                  onOpenDraft(sourceId, original);
+                  return;
+                }
+                const sourceKey = JSON.stringify([
+                  sourceId,
+                  activeMailbox,
+                  normalizedSearch,
+                ]);
+                sourceStates[sourceKey]?.activateMessage(original.id);
+                onSelectMessage(sourceId, original.id, original.threadId);
+              }
+            }}
+            onDeactivateActiveMessage={onDeactivateActiveMessage}
+            onKeyboardOpenMessage={onKeyboardOpenMessage}
+            onLoadMore={() => {
+              void loadMore();
+            }}
+            onOpenDraft={(uiMessage) => {
+              const original = originalMessageById.get(uiMessage.id);
+              const sourceId = sourceMailboxByMessageId.get(uiMessage.id);
+              if (original !== undefined && sourceId !== undefined) {
+                onOpenDraft(sourceId, original);
+              }
+            }}
+            onOpenSidebar={onOpenSidebar}
+            onRefresh={() => {
+              void refresh();
+            }}
+            onSearch={(nextQuery) => {
+              const normalizedQuery = nextQuery.trim();
+              for (const { state } of connectedStates) {
+                state?.resetSelection();
+              }
+              onSearch(normalizedQuery);
+              if (normalizedQuery === normalizedSearch) {
+                void refresh();
+              }
+            }}
+            pendingActions={adapter.pendingActions}
+            searchQuery={normalizedSearch}
+            searchMailboxes={connectedMailboxes.map((mailbox) => ({
+              mailboxId: mailbox.id,
+              mailboxProvider: mailbox.provider,
+            }))}
+            selectionScopeKey={selectionScopeKey}
+          />
+        </div>
+      </WorkspaceSection>
+      {activeMessageId ? null : (
+        <WorkspaceSection
+          className={cn("hidden", { "lg:hidden": wideCompactRows })}
+          layout="cell"
+        >
+          <MailboxIdleState
+            mailboxIds={connectedMailboxes.map((mailbox) => mailbox.id)}
+            onOpen={(entry) => {
+              onSelectMessage(
+                entry.mailboxId,
+                entry.message.id,
+                entry.message.threadId
+              );
+            }}
+            threads={buildThreadListEntries(syntheticMessages)}
+            scope={{
+              activeMailbox,
+              mailboxContextsByThreadId,
+              mailboxId: searchMailbox?.id ?? "",
+              mailboxProvider: searchMailbox?.provider ?? "managed",
+            }}
+          />
+        </WorkspaceSection>
+      )}
+    </>
   );
 };

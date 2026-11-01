@@ -96,7 +96,7 @@ const TokenFieldSuggestions = ({
   <div
     aria-label={label}
     className={cn(
-      "absolute right-0 left-0 z-50 max-h-56 overflow-y-auto overscroll-contain rounded-lg border border-border bg-popover p-1 text-popover-fg shadow-md squircle",
+      "absolute right-0 left-0 z-50 max-h-56 overflow-y-auto overscroll-contain rounded-xl border border-transparent bg-section p-1 text-popover-fg shadow-md squircle",
       { "bottom-full mb-1": side === "top", "top-full mt-1": !(side === "top") }
     )}
     id={listId}

@@ -14,8 +14,7 @@ const leadingIcons = {
 
 /**
  * The single narrow-viewport header for every product surface: Mail, message
- * detail, Compose, Chat, Snippets, and Settings. One height, one icon size,
- * one border, one tooltip treatment. Pass `className` only for panel-edge bleed.
+ * detail, Compose, Chat, Snippets, and Settings.
  */
 export const MobileHeader = ({
   children,
@@ -35,12 +34,13 @@ export const MobileHeader = ({
   return (
     <header
       className={cn(
-        "flex min-h-12 shrink-0 items-center gap-2 border-b border-border px-2 lg:hidden",
+        "flex min-h-12 shrink-0 items-center gap-2 px-2 lg:hidden",
         className
       )}
     >
       <IconButtonTooltip label={label}>
         <Button
+          chrome="toolbar"
           aria-label={label}
           onClick={onLeadingClick}
           size="icon-sm"
