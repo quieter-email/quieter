@@ -78,40 +78,39 @@ export const MailDeliveryMetrics = ({
 
   return (
     <div className="flex flex-col gap-4">
-      <Surface
-        // oxlint-disable-next-line shadcn/no-restyle -- Flow and gap arrange the groups without changing the shared surface appearance.
-        className="flex flex-col gap-4"
-      >
-        <Surface variant="detail">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-5 @lg:grid-cols-4">
-            {stats.map((stat) => (
-              <div className="flex min-w-0 flex-col gap-2" key={stat.label}>
-                <dt className="flex items-center gap-1 text-caption text-muted-fg">
-                  {stat.label}
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          aria-label={`About ${stat.label.toLowerCase()}`}
-                          size="icon-xs"
-                          variant="ghost"
-                        />
-                      }
-                    >
-                      <Icon icon={InformationCircleIcon} />
-                    </TooltipTrigger>
-                    <TooltipContent>{stat.hint}</TooltipContent>
-                  </Tooltip>
-                </dt>
-                <dd className="text-title-lg text-fg tabular-nums">
-                  {stat.value.toLocaleString()}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </Surface>
+      <Surface padding="none">
+        <div className="p-4">
+          <Surface variant="detail">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-5 @lg:grid-cols-4">
+              {stats.map((stat) => (
+                <div className="flex min-w-0 flex-col gap-2" key={stat.label}>
+                  <dt className="flex items-center gap-1 text-caption text-muted-fg">
+                    {stat.label}
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            aria-label={`About ${stat.label.toLowerCase()}`}
+                            size="icon-xs"
+                            variant="ghost"
+                          />
+                        }
+                      >
+                        <Icon icon={InformationCircleIcon} />
+                      </TooltipTrigger>
+                      <TooltipContent>{stat.hint}</TooltipContent>
+                    </Tooltip>
+                  </dt>
+                  <dd className="text-title-lg text-fg tabular-nums">
+                    {stat.value.toLocaleString()}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </Surface>
+        </div>
 
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-6 p-4">
           <Surface variant="detail">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-body-sm text-fg">Daily activity</h2>
@@ -120,11 +119,13 @@ export const MailDeliveryMetrics = ({
               </span>
             </div>
           </Surface>
-          <BarChart
-            data={data}
-            label="Daily sent, delivered, and bounced mail"
-            series={deliverySeries}
-          />
+          <div className="px-2">
+            <BarChart
+              data={data}
+              label="Daily sent, delivered, and bounced mail"
+              series={deliverySeries}
+            />
+          </div>
         </div>
         <dl className="grid grid-cols-2">
           {[
@@ -140,7 +141,7 @@ export const MailDeliveryMetrics = ({
             },
           ].map((stat) => (
             <div
-              className="flex flex-wrap items-center gap-2 px-4 py-3"
+              className="flex flex-wrap items-center gap-2 px-6 py-4"
               key={stat.label}
             >
               <dt className="flex items-center gap-1 text-caption text-muted-fg">

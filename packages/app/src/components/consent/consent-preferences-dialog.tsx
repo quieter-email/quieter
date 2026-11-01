@@ -39,7 +39,7 @@ const ConsentPreferencesDialogContent = () => {
 
           return (
             <div
-              className="flex items-start justify-between gap-4 border-b border-border pb-4 last:border-b-0 last:pb-0"
+              className="flex items-start justify-between gap-4 pb-4 last:pb-0"
               key={category}
             >
               <div className="min-w-0">

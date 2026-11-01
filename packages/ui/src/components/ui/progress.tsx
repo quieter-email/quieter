@@ -41,7 +41,7 @@ export const ProgressTrack = ({
 }: ComponentPropsWithoutRef<typeof ProgressPrimitive.Track>) => (
   <ProgressPrimitive.Track
     className={cn(
-      "relative h-2.5 overflow-hidden rounded-full bg-muted",
+      "relative h-2.5 overflow-hidden rounded-full bg-muted not-squircle",
       className
     )}
     {...props}
@@ -54,7 +54,7 @@ export const ProgressIndicator = ({
 }: ComponentPropsWithoutRef<typeof ProgressPrimitive.Indicator>) => (
   <ProgressPrimitive.Indicator
     className={cn(
-      "h-full rounded-full bg-primary transition-[width] duration-200 ease-out",
+      "h-full rounded-full bg-primary transition-[width] duration-200 ease-out not-squircle",
       className
     )}
     {...props}

@@ -271,6 +271,82 @@ const UsageBreakdown = ({
   );
 };
 
+export const ManagedUsageSummary = ({
+  includedUsageCents,
+  rates,
+  usage,
+}: {
+  includedUsageCents: number;
+  rates: Awaited<
+    ReturnType<typeof rpc.organizationMailUsage.overview>
+  >["managedUsageRates"];
+  usage: Pick<
+    Awaited<ReturnType<typeof rpc.organizationMailUsage.overview>>["usage"],
+    "managedUsageCostCents" | "billableCostCents" | "breakdown"
+  >;
+}) => {
+  const managedUsageCostCents = usage.managedUsageCostCents ?? 0;
+  const usagePercent =
+    includedUsageCents > 0
+      ? Math.min(
+          100,
+          Math.round((managedUsageCostCents / includedUsageCents) * 100)
+        )
+      : 0;
+  return (
+    <Surface
+      // oxlint-disable-next-line shadcn/no-restyle -- Flow and gap arrange the groups without changing the shared surface appearance.
+      className="flex flex-col gap-4"
+    >
+      <Surface variant="detail">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <Text family="mono" size="metric" weight="medium">
+              {formatMoney(managedUsageCostCents)}
+            </Text>
+            <p className="mt-1 text-caption text-muted-fg">used this period</p>
+          </div>
+          <p className="text-right text-caption text-muted-fg">
+            {formatMoney(includedUsageCents)} monthly usage balance
+            <br />
+            {formatMoney(usage.billableCostCents)} overage
+          </p>
+        </div>
+      </Surface>
+
+      <UsageBreakdown
+        breakdown={usage.breakdown}
+        creditAmountCents={includedUsageCents}
+      />
+
+      <Progress className="sr-only" max={100} value={usagePercent}>
+        <ProgressTrack>
+          <ProgressIndicator />
+        </ProgressTrack>
+      </Progress>
+      <Surface variant="detail">
+        <div className="grid gap-4 @md:grid-cols-3">
+          <Price
+            label="Messages"
+            suffix="/ 1K"
+            value={rates.messagesPerThousandUsd}
+          />
+          <Price
+            label="Attachment data"
+            suffix="/ GB"
+            value={rates.attachmentDataPerGbUsd}
+          />
+          <Price
+            label="Incoming mail processing"
+            suffix="/ 1K units"
+            value={rates.inboundProcessingPerThousandUsd}
+          />
+        </div>
+      </Surface>
+    </Surface>
+  );
+};
+
 const ManagedUsageMilestoneRow = ({
   canManageOrganizationMailUsage,
   includedUsageCents,
@@ -589,13 +665,6 @@ const ManagedUsageSettingsForm = ({
     null;
   const includedUsageCents = overview.includedManagedUsageCents ?? 0;
   const managedUsageCostCents = overview.usage.managedUsageCostCents ?? 0;
-  const usagePercent =
-    includedUsageCents > 0
-      ? Math.min(
-          100,
-          Math.round((managedUsageCostCents / includedUsageCents) * 100)
-        )
-      : 0;
   const limitCents =
     limitDollars === null ? null : Math.round(limitDollars * centsPerDollar);
   const periodStart = formatPeriodDate(overview.period.start);
@@ -680,58 +749,11 @@ const ManagedUsageSettingsForm = ({
           : undefined
       }
     >
-      <Surface
-        // oxlint-disable-next-line shadcn/no-restyle -- Flow and gap arrange the groups without changing the shared surface appearance.
-        className="flex flex-col gap-4"
-      >
-        <Surface variant="detail">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <Text family="mono" size="metric" weight="medium">
-                {formatMoney(managedUsageCostCents)}
-              </Text>
-              <p className="mt-1 text-caption text-muted-fg">
-                used this period
-              </p>
-            </div>
-            <p className="text-right text-caption text-muted-fg">
-              {formatMoney(includedUsageCents)} monthly usage balance
-              <br />
-              {formatMoney(overview.usage.billableCostCents)} overage
-            </p>
-          </div>
-        </Surface>
-
-        <UsageBreakdown
-          breakdown={overview.usage.breakdown}
-          creditAmountCents={includedUsageCents}
-        />
-
-        <Progress className="sr-only" max={100} value={usagePercent}>
-          <ProgressTrack>
-            <ProgressIndicator />
-          </ProgressTrack>
-        </Progress>
-        <Surface variant="detail">
-          <div className="grid gap-4 @md:grid-cols-3">
-            <Price
-              label="Messages"
-              suffix="/ 1K"
-              value={overview.managedUsageRates.messagesPerThousandUsd}
-            />
-            <Price
-              label="Attachment data"
-              suffix="/ GB"
-              value={overview.managedUsageRates.attachmentDataPerGbUsd}
-            />
-            <Price
-              label="Incoming mail processing"
-              suffix="/ 1K units"
-              value={overview.managedUsageRates.inboundProcessingPerThousandUsd}
-            />
-          </div>
-        </Surface>
-      </Surface>
+      <ManagedUsageSummary
+        includedUsageCents={includedUsageCents}
+        rates={overview.managedUsageRates}
+        usage={overview.usage}
+      />
 
       <ManagedUsageSettingsControls
         canManageOrganizationMailUsage={canManageOrganizationMailUsage}

@@ -338,7 +338,7 @@ export const SettingsInlineLoading = ({ label }: { label: string }) => (
   >
     <span
       aria-hidden
-      className="h-2 w-10 animate-pulse rounded-full bg-muted motion-reduce:animate-none"
+      className="h-2 w-10 animate-pulse rounded-full bg-muted not-squircle motion-reduce:animate-none"
     />
     <span className="sr-only">{label}</span>
   </output>

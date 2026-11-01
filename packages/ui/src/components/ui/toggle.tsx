@@ -41,7 +41,7 @@ const toggleVariants = cva(
       variant: {
         default:
           "rounded-md text-muted-fg hover:text-fg active:text-fg data-pressed:text-fg",
-        pill: "rounded-full border border-border px-3 text-caption text-muted-fg hover:text-fg data-pressed:border-primary data-pressed:text-primary-fg data-pressed:hover:text-primary-fg",
+        pill: "rounded-full not-squircle border border-border px-3 text-caption text-muted-fg hover:text-fg data-pressed:border-primary data-pressed:text-primary-fg data-pressed:hover:text-primary-fg",
         secondary:
           "rounded-md text-muted-fg hover:text-fg active:text-fg data-pressed:text-secondary-fg",
       },

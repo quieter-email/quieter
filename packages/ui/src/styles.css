@@ -489,12 +489,14 @@
 .q-color-picker .react-colorful__hue {
   height: 0.5rem;
   border-radius: 9999px;
+  corner-shape: round;
 }
 
 .q-color-picker .react-colorful__pointer {
   width: 0.875rem;
   height: 0.875rem;
   border-width: 2px;
+  corner-shape: round;
 }
 
 @media (prefers-reduced-motion: reduce) {

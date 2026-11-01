@@ -11,6 +11,7 @@ import {
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
+import { ManagedUsageSummary } from "@quieter/app/features/settings/components/organization-settings/organization-mail-usage-settings";
 import { toastError } from "@quieter/app/lib/error-toast";
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
 import {
@@ -82,6 +83,7 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
+import { Kbd } from "@quieter/ui/kbd";
 import {
   MailListRowDetails,
   MailListRowMetadata,
@@ -109,17 +111,22 @@ import {
   SettingsSectionLayout,
 } from "@quieter/ui/settings-layout";
 import { SuccessPulse } from "@quieter/ui/success-pulse";
+import { Surface } from "@quieter/ui/surface";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
+import { Tabs, TabsList, TabsPanel, TabsTab } from "@quieter/ui/tabs";
 import { Text } from "@quieter/ui/text";
 import { Textarea } from "@quieter/ui/textarea";
 import { ThemePicker } from "@quieter/ui/theme-picker";
 import { TimePicker } from "@quieter/ui/time-picker";
 import { toast } from "@quieter/ui/toast";
+import { Toggle, ToggleGroup } from "@quieter/ui/toggle";
 import { TokenField } from "@quieter/ui/token-field";
 import type { TokenFieldToken } from "@quieter/ui/token-field";
+import { Toolbar, ToolbarButton } from "@quieter/ui/toolbar";
 import { WorkspaceDock } from "@quieter/ui/workspace-dock";
 import {
   workspaceGutterClassName,
+  WorkspaceHeader,
   WorkspaceSection,
 } from "@quieter/ui/workspace-section";
 import { useCallback, useState } from "react";
@@ -147,16 +154,21 @@ const showcaseTokens: TokenFieldToken[] = [
 
 // Literal classes: Tailwind cannot extract an interpolated `bg-${name}`.
 const surfaceTokens = [
-  { cls: "bg-bg", name: "bg", note: "canvas" },
-  { cls: "bg-bg-raised", name: "bg-raised", note: "raised" },
-  { cls: "bg-bg-surface", name: "bg-surface", note: "surface" },
-  { cls: "bg-card", name: "card", note: "raised, both themes" },
-  { cls: "bg-muted", name: "muted", note: "alias of control-hover" },
+  { cls: "bg-canvas", name: "canvas", note: "app background and sidebar" },
+  { cls: "bg-panel", name: "panel", note: "workspace and dialog" },
+  {
+    cls: "bg-section",
+    name: "section",
+    note: "header trays and grouped content",
+  },
+  { cls: "bg-detail", name: "detail", note: "controls and selected items" },
+  { cls: "bg-card", name: "card", note: "semantic content surface" },
+  { cls: "bg-muted", name: "muted", note: "quiet content surface" },
   { cls: "bg-secondary", name: "secondary", note: "secondary actions" },
   {
     cls: "bg-control",
     name: "control",
-    note: "fields, quiet buttons, popovers",
+    note: "fields and quiet buttons",
   },
   {
     cls: "bg-control-hover",
@@ -172,6 +184,7 @@ const textTokens = [
   { cls: "text-title-lg", name: "title-lg" },
   { cls: "text-title-md", name: "title-md" },
   { cls: "text-title-sm", name: "title-sm" },
+  { cls: "text-metric", name: "metric" },
   { cls: "text-body-lg", name: "body-lg" },
   { cls: "text-body", name: "body" },
   { cls: "text-body-sm", name: "body-sm" },
@@ -591,7 +604,7 @@ export const DesignSystemShowcase = () => {
         </header>
 
         <Section
-          description="The canvas, raised panels, and control states use semantic roles in every theme."
+          description="Canvas, Panel, Section and Detail establish the same hierarchy across every view. Semantic action and state roles remain independent."
           title="Surfaces"
         >
           <div className="grid grid-cols-2 gap-3 @md:grid-cols-3">
@@ -610,11 +623,60 @@ export const DesignSystemShowcase = () => {
           </div>
         </Section>
 
+        <Section title="Surface composition">
+          <WorkspaceSection layout="surface">
+            <WorkspaceHeader>
+              <div className="flex items-center gap-3">
+                <Input aria-label="Sample panel search" placeholder="Search" />
+                <Button variant="secondary">Refresh</Button>
+              </div>
+            </WorkspaceHeader>
+            <div className="p-4">
+              <Surface>
+                <div className="space-y-4">
+                  <Text weight="medium">Section</Text>
+                  <Surface variant="detail">
+                    <Text size="sm">
+                      Details stay one shade above their group.
+                    </Text>
+                  </Surface>
+                </div>
+              </Surface>
+            </div>
+          </WorkspaceSection>
+        </Section>
+
         <Section
           description="The workspace and its full-width side panel move together without scaling the content."
           title="Workspace dock"
         >
           <WorkspaceDockShowcase />
+        </Section>
+
+        <Section
+          title="Usage summary"
+          description="Sample usage rendered by the same summary as Billing & usage."
+        >
+          <ManagedUsageSummary
+            includedUsageCents={2000}
+            rates={{
+              attachmentDataPerGbUsd: 0.24,
+              inboundProcessingPerThousandUsd: 0.18,
+              messagesPerThousandUsd: 0.2,
+            }}
+            usage={{
+              billableCostCents: 0,
+              breakdown: [
+                { costCents: 565, kind: "aiChat" },
+                { costCents: 145, kind: "aiMemory" },
+                { costCents: 88, kind: "importance" },
+                { costCents: 112, kind: "autoLabel" },
+                { costCents: 96, kind: "inboundMail" },
+                { costCents: 178, kind: "outboundMail" },
+              ],
+              managedUsageCostCents: 1184,
+            }}
+          />
         </Section>
 
         <Section title="Borders">
@@ -1311,7 +1373,7 @@ export const DesignSystemShowcase = () => {
             </ComposerActionBar>
           </Row>
           <Row label="Token field">
-            <div className="w-80 rounded-md border border-border bg-input px-3 py-2 shadow-none squircle focus-within:border-ring focus-within:ring-2 focus-within:ring-ring focus-within:outline-hidden">
+            <PromptComposerFrame className="w-80">
               <TokenField
                 aria-label="Token field"
                 onChange={setTokenFieldValue}
@@ -1320,7 +1382,7 @@ export const DesignSystemShowcase = () => {
                 tokens={showcaseTokens}
                 value={tokenFieldValue}
               />
-            </div>
+            </PromptComposerFrame>
           </Row>
           <Row label="Field with label">
             <Field className="w-64">
@@ -1355,6 +1417,61 @@ export const DesignSystemShowcase = () => {
             <Checkbox checked={boxChecked} onCheckedChange={setBoxChecked}>
               <CheckboxIndicator />
             </Checkbox>
+          </Row>
+        </Section>
+
+        <Section title="Selection and keyboard controls">
+          <Row label="Tabs">
+            <Tabs defaultValue="mail">
+              <TabsList aria-label="Example workspace tabs">
+                <TabsTab value="mail">Mail</TabsTab>
+                <TabsTab value="calendar">Calendar</TabsTab>
+              </TabsList>
+              <TabsPanel value="mail">Mail content</TabsPanel>
+              <TabsPanel value="calendar">Calendar content</TabsPanel>
+            </Tabs>
+          </Row>
+          <Row label="Vertical tabs">
+            <Tabs defaultValue="account" orientation="vertical">
+              <TabsList aria-label="Example vertical settings tabs">
+                <TabsTab value="account">Account</TabsTab>
+                <TabsTab value="preferences">Preferences</TabsTab>
+              </TabsList>
+              <TabsPanel value="account">Account content</TabsPanel>
+              <TabsPanel value="preferences">Preferences content</TabsPanel>
+            </Tabs>
+          </Row>
+          <Row label="Toggle group">
+            <ToggleGroup defaultValue={["week"]}>
+              <Toggle value="day">Day</Toggle>
+              <Toggle value="week">Week</Toggle>
+              <Toggle value="month">Month</Toggle>
+            </ToggleGroup>
+          </Row>
+          <Row label="Toolbar">
+            <Toolbar aria-label="Example toolbar">
+              <ToolbarButton>Reply</ToolbarButton>
+              <ToolbarButton variant="selected">Archive</ToolbarButton>
+            </Toolbar>
+          </Row>
+          <Row label="Attached toolbar">
+            <Surface>
+              <Toolbar aria-label="Example editor toolbar" chrome="attached">
+                <ToolbarButton>Format</ToolbarButton>
+                <ToolbarButton>Attach</ToolbarButton>
+              </Toolbar>
+            </Surface>
+          </Row>
+          <Row label="Keyboard shortcut">
+            <div className="flex gap-1">
+              <Kbd>Ctrl</Kbd>
+              <Kbd>K</Kbd>
+            </div>
+          </Row>
+          <Row label="Usage metric">
+            <Text family="mono" size="metric" weight="medium">
+              $11.84
+            </Text>
           </Row>
         </Section>
 

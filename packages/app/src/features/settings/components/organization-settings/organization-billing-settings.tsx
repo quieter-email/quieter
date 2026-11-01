@@ -123,7 +123,7 @@ export const OrganizationBillingSettings = ({
                 portalMutation.mutate({ organizationId });
               }}
               size="sm"
-              variant="outline"
+              variant="secondary"
             >
               {portalMutation.isPending && (
                 <Icon aria-hidden animation="spin" icon={Loading03Icon} />

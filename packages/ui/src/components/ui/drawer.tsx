@@ -41,7 +41,10 @@ export const DrawerHandle = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Handle>) => (
   <DrawerPrimitive.Handle
-    className={cn("mx-auto my-2 h-1.5 w-12 rounded-full bg-border", className)}
+    className={cn(
+      "mx-auto my-2 h-1.5 w-12 rounded-full bg-border not-squircle",
+      className
+    )}
     {...props}
   />
 );

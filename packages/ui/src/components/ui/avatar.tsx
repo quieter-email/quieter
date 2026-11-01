@@ -8,7 +8,7 @@ import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
 
 const avatarRootVariants = cva(
-  "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-transparent bg-muted text-fg",
+  "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full not-squircle border border-transparent bg-muted text-fg",
   {
     defaultVariants: {
       size: "default",

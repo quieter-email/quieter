@@ -23,6 +23,9 @@ Before changing a UI, read the relevant component and its closest existing calle
 | --- | --- |
 | Action or button-shaped link | `Button`, `LinkButton` |
 | Selectable setup card | `Button variant="card"` |
+| Static content group | `Surface` with Section or Detail appearance |
+| Inset workspace header | `WorkspaceHeader` |
+| Shortcut key | `Kbd` |
 | Compact toggle chip or segmented option | `Button variant="chip"` or `variant="option"` with `aria-pressed` |
 | Icon action | Icon-sized `Button`, concise `aria-label`, `IconButtonTooltip` |
 | Product icon | `Icon` from `@quieter/ui/icon`, with `size`, `tone`, and `animation` props |
@@ -43,6 +46,8 @@ Before changing a UI, read the relevant component and its closest existing calle
 | Menu, tooltip, popover | Shared menu, tooltip, popover components |
 
 Settings feature code imports its local `settings-layout` adapter when it needs anchored rows or sections. The adapter re-exports shared components and adds search-anchor behavior; it does not define another visual system.
+
+The reference renders the product's `ManagedUsageSummary` with sample data. Its filled groups, rates and usage bar share the actual billing renderer, including when the preview account itself has unlimited access. Prompt token fields use `PromptComposerFrame`, as they do in mailbox actions, so their intrinsic height remains visible.
 
 Mail layout is a device preference owned by `features/settings/domain/mail-layout-setting.ts`. Two panels is the default. One panel reuses the existing mailbox and All inboxes list/detail paths, with selection kept in the route. Narrow screens always show one panel. Shared `MailListRowDetails` owns the row's responsive arrangement, type, and truncation. Wide rows keep the sender and address together, align subjects in one column, and place attachment filenames and thread counts before labels and the date. Stacked rows keep count pills. Rounded state surfaces distinguish message rows without separators. `mailListRowParts` owns the interactive row recipes. App code supplies formatted content and metadata slots. The virtualizer measures rendered row height and restores scroll and focus after a hidden list reappears at another width.
 
