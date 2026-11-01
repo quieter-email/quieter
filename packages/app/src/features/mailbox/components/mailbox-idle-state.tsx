@@ -33,10 +33,13 @@ export const MailboxIdleState = ({
   const recents = activity.entries
     .filter((entry) => mailboxIds.includes(entry.mailboxId))
     .slice(0, 3);
-  const codes = [...useThreadVerificationCodes(threads, scope).entries()].slice(
-    0,
-    2
-  );
+  const codesByThread = useThreadVerificationCodes(threads, scope);
+  const codes = threads
+    .flatMap(({ threadId }) => {
+      const code = codesByThread.get(threadId);
+      return code ? [{ code, threadId }] : [];
+    })
+    .slice(0, 2);
   return (
     <EmptyMessageState
       action={
@@ -96,7 +99,7 @@ export const MailboxIdleState = ({
                       Verification codes
                     </Text>
                     <div className="flex flex-col gap-2.5">
-                      {codes.map(([threadId, code]) => (
+                      {codes.map(({ threadId, code }) => (
                         <div
                           className="flex min-w-0 items-center justify-between gap-3"
                           key={threadId}

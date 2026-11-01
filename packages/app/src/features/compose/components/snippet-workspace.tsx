@@ -34,7 +34,6 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
-import { Surface } from "@quieter/ui/surface";
 import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
 import {
@@ -235,8 +234,8 @@ export const SnippetWorkspace = ({
             </InputGroup>
           </label>
         </WorkspaceHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <Surface className="overflow-hidden" padding="none" variant="section">
+        <div className="min-h-0 flex-1 overflow-y-auto p-0.5">
+          <div className="flex flex-col gap-0.5">
             {filteredSnippets.map((snippet) => (
               <Button
                 aria-label={`Edit snippet ${snippet.name}`}
@@ -264,7 +263,7 @@ export const SnippetWorkspace = ({
               </Button>
             ))}
             {snippetQueryState}
-          </Surface>
+          </div>
         </div>
       </WorkspaceSection>
 
