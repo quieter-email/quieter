@@ -491,7 +491,7 @@ export const ComposeEditorBody = ({
           "min-h-48": density === "comfortable",
         })}
       >
-        <div className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-muted px-4">
+        <div className="flex h-10 items-center gap-1.5 rounded-full bg-muted px-4">
           {audioWaveBars.map((bar, index) => (
             <span
               className={cn("h-6 w-1 animate-pulse rounded-full", {
@@ -535,9 +535,9 @@ export const ComposeEditorBody = ({
     <div
       aria-invalid={invalid || undefined}
       className={cn(
-        "relative min-h-20 w-full overflow-hidden rounded-md border border-border bg-control text-body text-fg shadow-sm transition-colors duration-150 ease-out squircle",
+        "relative min-h-20 w-full overflow-hidden rounded-md border border-transparent bg-control text-body text-fg transition-colors duration-150 ease-out squircle",
         {
-          "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:ring-2 has-[.ProseMirror:focus-visible]:ring-ring has-[.ProseMirror:focus-visible]:outline-hidden aria-invalid:border-destructive aria-invalid:focus-within:border-destructive aria-invalid:focus-within:ring-destructive":
+          "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:outline-hidden aria-invalid:border-destructive aria-invalid:focus-within:border-destructive":
             chrome === "default",
           "rounded-none border-0 bg-transparent shadow-none":
             chrome === "seamless",
@@ -730,14 +730,12 @@ export const ComposeEditorToolbar = ({
 
   return (
     <Toolbar
+      chrome={chrome === "footer" ? "attached" : "default"}
       size={chrome === "selection" ? "compact" : "default"}
       className={cn(
-        // oxlint-disable-next-line shadcn/no-restyle -- Composer bar keeps its control-surface metrics.
-        "min-w-0 shrink-0 rounded-md border-border bg-control",
+        "min-w-0 shrink-0",
         {
-          // oxlint-disable-next-line shadcn/no-restyle -- Composer footer keeps its attached-bar metrics.
-          "min-h-12 gap-1.5 rounded-none border-0 border-t border-border bg-control px-3 py-2 shadow-none @max-2xl:flex-wrap":
-            chrome === "footer",
+          "@max-2xl:flex-wrap": chrome === "footer",
           "w-full": chrome !== "selection",
         },
         className

@@ -73,7 +73,7 @@ const DeliveryEventRow = ({ event }: { event: MessageDeliveryEvent }) => (
       <Collapsible>
         <CollapsibleTrigger
           // oxlint-disable-next-line shadcn/no-restyle -- Technical details keeps its caption-link treatment.
-          className="rounded-sm text-caption text-muted-fg underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+          className="rounded-sm text-caption text-muted-fg underline underline-offset-2 hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden"
         >
           Technical details
         </CollapsibleTrigger>

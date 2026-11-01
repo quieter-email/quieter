@@ -97,16 +97,16 @@ const SearchDropdownRow = ({
   return (
     <button
       className={cn(
-        "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:z-10 focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
+        "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-control-hover focus-visible:z-10 focus-visible:border-ring focus-visible:bg-control-hover focus-visible:outline-hidden",
         className,
         {
-          "bg-accent": active && !className && !customColor,
-          "bg-muted": highlighted && !className && !customColor,
+          "bg-control-hover": highlighted && !className && !customColor,
+          "bg-detail": active && !highlighted && !className && !customColor,
+          "outline-1 -outline-offset-1 outline-ring":
+            highlighted && !!(className || customColor),
           "q-custom-color-surface": !!customColor,
           "ring-1 ring-ring ring-inset":
             active && !highlighted && !!(className || customColor),
-          "ring-2 ring-ring ring-inset":
-            highlighted && !!(className || customColor),
         }
       )}
       onClick={onClick}
@@ -353,7 +353,7 @@ export const MessageListSearchDropdown = ({
         </svg>
         <div
           aria-label="Labels"
-          className="pointer-events-auto absolute top-0 left-2 max-h-[calc(100dvh-1rem)] w-72 overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border bg-popover p-1 shadow-md"
+          className="pointer-events-auto absolute top-0 left-2 max-h-[calc(100dvh-1rem)] w-72 overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl bg-section p-1 shadow-elevation"
           onPointerEnter={(event) => {
             if (event.pointerType === "mouse") {
               cancelCloseLabelsSubmenu();
@@ -392,7 +392,7 @@ export const MessageListSearchDropdown = ({
             }}
             transition={{ duration: 0.1, ease: "easeOut" }}
             aria-label="Search filters"
-            className="fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex max-h-56 flex-col overflow-hidden rounded-lg border bg-popover p-2 shadow-md lg:absolute lg:inset-x-0 lg:top-full lg:mt-2 lg:max-h-72"
+            className="fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex max-h-56 flex-col overflow-hidden rounded-xl bg-section p-2 shadow-elevation lg:absolute lg:inset-x-0 lg:top-full lg:mt-2 lg:max-h-72"
             data-search-dropdown-content
             onMouseDown={(event) => {
               event.preventDefault();
@@ -459,10 +459,12 @@ export const MessageListSearchDropdown = ({
                       aria-expanded={showLabelsSubmenu}
                       aria-haspopup="true"
                       className={cn(
-                        "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-muted focus-visible:border-ring focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
+                        "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-control-hover focus-visible:border-ring focus-visible:bg-control-hover focus-visible:outline-hidden",
                         {
-                          "bg-accent": selectedUserLabelStates.size > 0,
-                          "bg-muted": isLabelHighlighted,
+                          "bg-control-hover": isLabelHighlighted,
+                          "bg-detail":
+                            selectedUserLabelStates.size > 0 &&
+                            !isLabelHighlighted,
                         }
                       )}
                       onClick={() => {
@@ -502,7 +504,7 @@ export const MessageListSearchDropdown = ({
                           <div className="min-h-0 overflow-hidden">
                             <div
                               aria-label="Labels"
-                              className="mt-1 rounded-md bg-muted p-1"
+                              className="mt-1 rounded-md bg-detail p-1"
                               ref={labelsInlineRef}
                             >
                               {labelsContent}

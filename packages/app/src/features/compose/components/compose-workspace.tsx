@@ -620,16 +620,7 @@ const ReadyComposeSurface = ({
           ref={attachmentInputRef}
           type="file"
         />
-        <ComposerFrame
-          className={cn(
-            // oxlint-disable-next-line shadcn/no-restyle -- Composer frame keeps its padded canvas.
-            "p-4 sm:p-6",
-            {
-              // oxlint-disable-next-line shadcn/no-restyle -- Inline composer collapses the frame.
-              "my-0 max-w-none flex-none p-0 sm:p-0": isInline,
-            }
-          )}
-        >
+        <ComposerFrame layout={isInline ? "inline" : "default"}>
           <p className="sr-only">
             {getDraftStatusMessage(compose.state.draft, persistDrafts)}
             {senderEmail ? `, sending from ${senderEmail}` : ""}
@@ -1080,7 +1071,7 @@ const ReadyComposeSurface = ({
                         {state.draft.attachments.map((attachment) => (
                           <li
                             className={cn(
-                              "flex max-w-full min-w-0 items-center gap-2 rounded-lg border border-border bg-control px-2 py-1 text-body-sm",
+                              "flex max-w-full min-w-0 items-center gap-2 rounded-sm border border-transparent bg-control px-2 py-1 text-body-sm",
                               entranceMotionVariants({ effect: "pop" })
                             )}
                             key={attachment.id}

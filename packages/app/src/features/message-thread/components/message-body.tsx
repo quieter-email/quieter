@@ -72,7 +72,7 @@ const CalendarLinkActions = ({ links }: { links: CalendarLink[] }) => {
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <div
           aria-hidden
-          className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-bg-raised text-muted-fg shadow-xs"
+          className="flex size-8 shrink-0 items-center justify-center rounded-md bg-control text-muted-fg"
         >
           <Icon icon={Calendar03Icon} />
         </div>
@@ -367,7 +367,7 @@ const HtmlMessageBodyContent = ({
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <div
               aria-hidden
-              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-bg-raised text-muted-fg shadow-xs"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md bg-control text-muted-fg"
             >
               <Icon icon={Image01Icon} />
             </div>
@@ -437,7 +437,7 @@ const PlainTextMessageBody = ({ text }: { text: string }) => {
         {segments.map((segment) =>
           segment.kind === "link" ? (
             <a
-              className="rounded-sm text-primary underline decoration-border underline-offset-2 hover:decoration-current focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+              className="rounded-sm text-primary underline decoration-border underline-offset-2 hover:decoration-current focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden"
               href={segment.href}
               key={`link:${segment.href}`}
               rel="noopener noreferrer"

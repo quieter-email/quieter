@@ -70,6 +70,7 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
+import { Surface } from "@quieter/ui/surface";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
@@ -477,7 +478,7 @@ export const LabelsWorkspacePanel = ({
     );
   } else {
     labelsContent = (
-      <ul className="-mx-3 space-y-1">
+      <ul className="-mx-4">
         {userLabels.map((label) => {
           const isShown = !effectiveHiddenLabelIds.has(label.id);
           const nameEdit =
@@ -491,7 +492,7 @@ export const LabelsWorkspacePanel = ({
           const prompt = getAutoLabelPrompt(label);
 
           return (
-            <li className="flex items-center gap-3 px-3 py-2.5" key={label.id}>
+            <li className="flex items-center gap-3 px-4 py-4" key={label.id}>
               <MailboxColorPicker
                 className="flex shrink-0"
                 disabled={
@@ -698,16 +699,18 @@ export const LabelsWorkspacePanel = ({
           </Button>
         </div>
 
-        <div className="space-y-6">
-          {isNonemptyMailboxId(mailboxId) ? (
-            <AutoLabelSwitch
-              canManage={canManage}
-              key={mailboxId}
-              mailboxId={mailboxId}
-            />
-          ) : null}
-          {labelsContent}
-        </div>
+        <Surface variant="section">
+          <div className="space-y-4">
+            {isNonemptyMailboxId(mailboxId) ? (
+              <AutoLabelSwitch
+                canManage={canManage}
+                key={mailboxId}
+                mailboxId={mailboxId}
+              />
+            ) : null}
+            {labelsContent}
+          </div>
+        </Surface>
       </div>
 
       <Dialog open={isCreatingLabel} onOpenChange={setIsCreatingLabel}>

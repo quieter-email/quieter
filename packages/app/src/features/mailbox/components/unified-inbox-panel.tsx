@@ -647,7 +647,7 @@ export const UnifiedInboxPanel = ({
           <div className="max-h-80 space-y-1 overflow-y-auto">
             {accessibleMailboxes.map((mailbox) => (
               <div
-                className="rounded-md px-2 py-2 hover:bg-muted"
+                className="rounded-md px-2 py-2 hover:bg-control-hover"
                 key={mailbox.id}
               >
                 <label

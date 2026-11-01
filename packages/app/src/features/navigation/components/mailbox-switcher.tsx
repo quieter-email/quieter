@@ -337,7 +337,7 @@ const MailboxMenuItem = ({
 }) => (
   <div
     className={cn(
-      "group/item flex items-center rounded-xs squircle focus-within:bg-muted hover:bg-muted",
+      "group/item flex items-center rounded-xs squircle focus-within:bg-control-hover hover:bg-control-hover",
       {
         "bg-muted": isActive,
       }
@@ -457,7 +457,7 @@ const MailboxTeam = ({
         disabled={disabled}
       >
         {(handleRef) => (
-          <div className="group/header flex min-h-7 items-center rounded-xs squircle focus-within:bg-muted hover:bg-muted">
+          <div className="group/header flex min-h-7 items-center rounded-xs squircle focus-within:bg-control-hover hover:bg-control-hover">
             <Button
               aria-describedby={disabled ? undefined : "mailbox-order-help"}
               aria-expanded={!closed}
@@ -811,7 +811,7 @@ export const MailboxSwitcherDropdown = ({
       }}
       open={isOpen}
     >
-      <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-muted">
+      <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-control-hover">
         <PopoverTrigger
           onKeyDownCapture={handleEscapeCapture}
           aria-label="Switch mailbox"
@@ -896,7 +896,7 @@ export const MailboxSwitcherDropdown = ({
                   </Button>
                 ) : null}
                 {(mailboxes.length >= 8 || isFiltering) && (
-                  <div className="sticky top-0 z-10 bg-popover">
+                  <div className="sticky top-0 z-10 bg-section">
                     <Input
                       aria-label="Search mailboxes"
                       onChange={(event) => {
@@ -1052,7 +1052,7 @@ export const MailboxSwitcherDropdown = ({
           {isOpen &&
             createPortal(
               <DragOverlay<SwitcherDragData, Draggable<SwitcherDragData>>
-                className="pointer-events-none z-50 rounded-xs border border-border bg-popover shadow-md"
+                className="pointer-events-none z-50 rounded-md bg-section shadow-elevation"
                 dropAnimation={null}
               >
                 {(source) => {
