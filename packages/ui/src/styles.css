@@ -25,11 +25,15 @@
   --auth-particle-tint: var(--primary);
   --font-geist: "Geist Variable", sans-serif;
   --font-geist-mono: "Geist Mono Variable", monospace;
-  --bg: oklch(0.96 0.002 264);
-  --bg-raised: oklch(0.995 0.001 264);
-  --bg-surface: oklch(1 0 0);
+  --canvas: oklch(0.96 0.002 264);
+  --panel: oklch(0.995 0.001 264);
+  --section: oklch(1 0 0);
+  --detail: oklch(0.975 0.002 264);
+  --bg: var(--canvas);
+  --bg-raised: var(--panel);
+  --bg-surface: var(--section);
   --fg: oklch(0.24 0.005 264);
-  --control: oklch(0.975 0.002 264);
+  --control: var(--detail);
   --control-hover: oklch(0.945 0.003 264);
   --control-active: oklch(0.91 0.004 264);
   --switch-track: oklch(0.82 0.003 264);
@@ -77,10 +81,10 @@
   --font-sans: var(--font-geist);
   --font-heading: var(--font-geist);
   --font-mono: var(--font-geist-mono);
-  --radius: 0.625rem;
+  --radius: 0.5rem;
   --workspace-gap: 6px;
   --workspace-gap-wide: 8px;
-  --settings-row-padding: 0.75rem;
+  --settings-row-padding: 1rem;
   --shadow-2xs: 0 1px 2px 0 oklch(0 0 0 / 0.03);
   --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.04);
   --shadow-sm:
@@ -119,32 +123,36 @@
   --brand-bg: rgb(15 15 15);
   --auth-visual-bg: rgb(10 10 10);
   --auth-particle-tint: var(--primary);
-  --bg: oklch(0.18 0 0);
-  --bg-raised: oklch(0.225 0 0);
-  --bg-surface: oklch(0.255 0 0);
+  --canvas: #0a0a0b;
+  --panel: #131315;
+  --section: #1b1b1e;
+  --detail: #26262a;
+  --bg: var(--canvas);
+  --bg-raised: var(--panel);
+  --bg-surface: var(--section);
   --fg: oklch(0.94 0 0);
-  --control: oklch(0.255 0 0);
-  --control-hover: oklch(0.3 0 0);
-  --control-active: oklch(0.34 0 0);
-  --switch-track: oklch(0.39 0 0);
-  --switch-thumb: oklch(0.92 0 0);
+  --control: var(--detail);
+  --control-hover: #2e2e31;
+  --control-active: #38383c;
+  --switch-track: var(--detail);
+  --switch-thumb: #9a9aa2;
   --card: var(--bg-surface);
   --card-fg: var(--fg);
-  --popover: var(--bg-surface);
+  --popover: var(--detail);
   --popover-fg: var(--fg);
   --primary: oklch(0.95 0 0);
   --primary-fg: oklch(0.141 0 0);
-  --secondary: oklch(0.31 0 0);
-  --secondary-hover: oklch(0.35 0 0);
-  --secondary-active: oklch(0.39 0 0);
+  --secondary: var(--detail);
+  --secondary-hover: var(--control-hover);
+  --secondary-active: var(--control-active);
   --secondary-fg: var(--fg);
-  --muted: var(--control-hover);
+  --muted: var(--detail);
   --muted-fg: oklch(0.74 0 0);
   --accent: var(--control-hover);
   --accent-fg: oklch(0.985 0 0);
-  --destructive: oklch(0.8 0.13 27.33);
+  --destructive: #f06a6a;
   --destructive-fg: oklch(0.14 0 0);
-  --success: oklch(0.8 0.1 149.57);
+  --success: oklch(0.8 0.17 145);
   --success-fg: oklch(0.14 0 0);
   --warning: oklch(0.7 0.09 70.08);
   --warning-fg: oklch(0.12 0 0);
@@ -157,7 +165,7 @@
   --q-red: oklch(0.81 0.13 25);
   --q-pink: oklch(0.8 0.14 345);
   --q-purple: oklch(0.8 0.14 300);
-  --border: oklch(0.34 0 0);
+  --border: var(--control-hover);
   --border-strong: oklch(0.53 0 0);
   --input: var(--control);
   --ring: var(--muted-fg);
@@ -187,7 +195,7 @@
 }
 
 .theme-swatch[data-color-theme="dark"] {
-  --theme-base: oklch(0.18 0 0);
+  --theme-base: #0a0a0b;
   --theme-primary: oklch(0.95 0 0);
 }
 
@@ -213,34 +221,27 @@
 :root[data-color-theme] {
   --brand-bg: var(--theme-base);
   --auth-visual-bg: var(--theme-base);
-  --bg: var(--theme-base);
+  --canvas: var(--theme-base);
+  --panel: var(--theme-raised);
+  --section: var(--theme-surface);
+  --detail: color-mix(in srgb, var(--theme-surface), var(--theme-ink) 5%);
   --fg: var(--theme-ink);
-  --bg-raised: var(--theme-raised);
-  --bg-surface: var(--theme-surface);
-  --control: var(--bg-raised);
+  --control: var(--detail);
   --control-hover: color-mix(in srgb, var(--theme-base), var(--theme-ink) 12%);
   --control-active: color-mix(in srgb, var(--theme-base), var(--theme-ink) 18%);
-  --switch-track: var(--control-active);
-  --switch-thumb: var(--primary);
+  --switch-track: var(--detail);
+  --switch-thumb: var(--muted-fg);
   --card: var(--bg-surface);
   --card-fg: var(--fg);
   --popover: var(--bg-raised);
   --popover-fg: var(--fg);
   --primary: var(--theme-primary);
   --primary-fg: var(--theme-primary-fg);
-  --secondary: color-mix(in srgb, var(--theme-base), var(--theme-ink) 18%);
-  --secondary-hover: color-mix(
-    in srgb,
-    var(--theme-base),
-    var(--theme-ink) 22%
-  );
-  --secondary-active: color-mix(
-    in srgb,
-    var(--theme-base),
-    var(--theme-ink) 26%
-  );
+  --secondary: var(--detail);
+  --secondary-hover: var(--control-hover);
+  --secondary-active: var(--control-active);
   --secondary-fg: var(--fg);
-  --muted: var(--control-hover);
+  --muted: var(--detail);
   --muted-fg: color-mix(in srgb, var(--theme-ink) 75%, var(--theme-base));
   --accent: var(--control-hover);
   --accent-fg: var(--fg);
@@ -263,6 +264,10 @@
 }
 
 @theme inline {
+  --color-canvas: var(--canvas);
+  --color-panel: var(--panel);
+  --color-section: var(--section);
+  --color-detail: var(--detail);
   --color-brand-bg: var(--brand-bg);
   --color-auth-visual-bg: var(--auth-visual-bg);
   --color-bg: var(--bg);
@@ -332,6 +337,9 @@
   --text-title-md: 1.5rem;
   --text-title-md--line-height: 1.25;
   --text-title-md--letter-spacing: -0.02em;
+  --text-metric: 1.75rem;
+  --text-metric--line-height: 2.125rem;
+  --text-metric--letter-spacing: -0.04em;
   --text-title-sm: 1.25rem;
   --text-title-sm--line-height: 1.3;
   --text-title-sm--letter-spacing: -0.015em;
@@ -357,6 +365,7 @@
   --radius-5xl: calc(var(--radius) + 14px);
   /* xl (radius + 6px) plus the 16px inset around search and toolbar icon buttons. */
   --radius-panel: calc(var(--radius) + 6px + 1rem);
+  --radius-section: calc(var(--radius-panel) - 3px);
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);

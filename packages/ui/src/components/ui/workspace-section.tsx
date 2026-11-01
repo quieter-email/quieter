@@ -8,7 +8,7 @@ export const workspaceGutterClassName =
   "[--workspace-gutter:0px] lg:[--workspace-gutter:var(--workspace-gap-wide)]";
 
 export const workspaceSectionVariants = cva(
-  `${workspaceGutterClassName} overflow-hidden rounded-none border-0 bg-bg-raised shadow-none [background-image:var(--panel-gradient)] lg:rounded-panel lg:border lg:border-border lg:shadow-surface`,
+  `${workspaceGutterClassName} overflow-hidden rounded-none border-0 bg-panel shadow-none [background-image:var(--panel-gradient)] lg:rounded-panel lg:border lg:border-transparent`,
   {
     defaultVariants: {
       centered: false,
@@ -31,10 +31,6 @@ export const workspaceSectionVariants = cva(
 export type WorkspaceSectionProps = ComponentPropsWithoutRef<"section"> &
   VariantProps<typeof workspaceSectionVariants>;
 
-/**
- * Shared mailbox workspace panel chrome: inset/margins, rounded border, muted surface.
- * Use `workspaceSectionVariants` when the host must be a `form`, motion node, or other element.
- */
 export const WorkspaceSection = ({
   centered = false,
   className,
@@ -44,5 +40,32 @@ export const WorkspaceSection = ({
   <section
     {...props}
     className={cn(workspaceSectionVariants({ centered, layout }), className)}
+  />
+);
+
+export const workspaceHeaderVariants = cva(
+  "relative m-0.5 shrink-0 rounded-section bg-section",
+  {
+    defaultVariants: { size: "default" },
+    variants: {
+      size: {
+        default: "p-3.5",
+        lg: "p-4",
+      },
+    },
+  }
+);
+
+export type WorkspaceHeaderProps = ComponentPropsWithoutRef<"header"> &
+  VariantProps<typeof workspaceHeaderVariants>;
+
+export const WorkspaceHeader = ({
+  className,
+  size = "default",
+  ...props
+}: WorkspaceHeaderProps) => (
+  <header
+    {...props}
+    className={cn(workspaceHeaderVariants({ size }), className)}
   />
 );

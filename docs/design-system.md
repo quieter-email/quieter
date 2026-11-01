@@ -44,7 +44,7 @@ Before changing a UI, read the relevant component and its closest existing calle
 
 Settings feature code imports its local `settings-layout` adapter when it needs anchored rows or sections. The adapter re-exports shared components and adds search-anchor behavior; it does not define another visual system.
 
-Mail layout is a device preference owned by `features/settings/domain/mail-layout-setting.ts`. Two panels is the default. One panel reuses the existing mailbox and All inboxes list/detail paths, with selection kept in the route. Narrow screens always show one panel. Shared `MailListRowDetails` owns the row's responsive arrangement, type, and truncation. Wide rows keep the sender and address together, align subjects in one column, and place attachment filenames and thread counts before labels and the date. Stacked rows keep count pills. Rows fill the list width with square corners and subtle separators. `mailListRowParts` owns the interactive row recipes. App code supplies formatted content and metadata slots. The virtualizer measures rendered row height and restores scroll and focus after a hidden list reappears at another width.
+Mail layout is a device preference owned by `features/settings/domain/mail-layout-setting.ts`. Two panels is the default. One panel reuses the existing mailbox and All inboxes list/detail paths, with selection kept in the route. Narrow screens always show one panel. Shared `MailListRowDetails` owns the row's responsive arrangement, type, and truncation. Wide rows keep the sender and address together, align subjects in one column, and place attachment filenames and thread counts before labels and the date. Stacked rows keep count pills. Rounded state surfaces distinguish message rows without separators. `mailListRowParts` owns the interactive row recipes. App code supplies formatted content and metadata slots. The virtualizer measures rendered row height and restores scroll and focus after a hidden list reappears at another width.
 
 ## Appearance and layout
 
@@ -77,6 +77,7 @@ Use shared `Text` props for repeated product headings and text treatments. Speci
 | `text-display-md` | 44px | Display text                           |
 | `text-title-lg`   | 32px | Large page headings                    |
 | `text-title-md`   | 24px | Page headings                          |
+| `text-metric`     | 28px | Usage totals and prominent metrics     |
 | `text-title-sm`   | 20px | Compact page headings                  |
 | `text-body-lg`    | 16px | Prominent body text and large controls |
 | `text-body`       | 14px | Body copy                              |
@@ -90,8 +91,9 @@ The type tokens include line heights and heading tracking. Prefer those defaults
 
 | Role | Tokens |
 | --- | --- |
+| Surface ladder | `canvas`, `panel`, `section`, `detail` |
 | Main canvas and text | `bg`, `fg` |
-| Raised workspace and panels | `bg-raised`, `bg-surface` |
+| Legacy surface roles | `bg-raised` (Panel), `bg-surface` (Section) |
 | Cards and popovers | `card`, `card-fg`, `popover`, `popover-fg` |
 | Fields and interaction ladder | `input`, `control`, `control-hover`, `control-active` |
 | Main action | `primary`, `primary-hover`, `primary-active`, `primary-fg` |
@@ -103,6 +105,8 @@ The type tokens include line heights and heading tracking. Prefer those defaults
 
 Use state colors for state, and categorical colors for labels or categories. A role such as mailbox manager maps to a generic Pill tone in the app. It does not need a second identical style called `access-manager` in the shared package.
 
+The default dark surface ladder is Canvas `#0A0A0B`, Panel `#131315`, Section `#1B1B1E`, and Detail `#26262A`. Canvas holds the sidebar. Panel holds the workspace and dialogs. Section groups content and header controls. Detail holds fields, secondary actions, nested summaries, and selected items. Hover and pressed states remain separate. Menus use Section, tooltips use Detail, and primary actions retain their theme's primary color. Filled surfaces usually need no visible border. Outline variants, invalid fields, keyboard focus, and calendar grid lines retain meaningful edges.
+
 Semantic aliases such as `card` and `bg-surface` can share values while serving different roles. Preserve those roles. Unused speculative aliases can be removed after checking all consumers, including CSS, theme code, generated assets, and the landing page. There is no requirement to use every token or keep every possible component variant.
 
 Themes own their colors. Avoid per-caller dark-mode color patches and feature-local copies of the palette. Graphics, external brand artwork, user-selected label colors, and rendered email content have separate color requirements.
@@ -113,7 +117,9 @@ App themes are defined in `APP_THEMES` in `lib/brand-themes.ts`, separately from
 
 Spacing uses the existing Tailwind scale with a 4px base, including half steps. There is no separate named spacing scale to invent. Repeated settings and workspace spacing belongs in those shared layouts. Unique viewport constraints and measured positions may use layout values without becoming global tokens.
 
-Workspace panels are edge to edge below the desktop breakpoint, with no outer gutter, border, rounding, or shadow. Desktop panels keep an 8px gutter. Their corner radius is `rounded-panel`, the `xl` radius of the search field and toolbar icon buttons plus the 16px header inset. Themes can adjust desktop gutters and settings row padding through shared tokens. `WorkspaceSection` owns the gutter for both full-page panels and grid cells. A layout wrapper that positions adjacent panels, including docked chat, imports `workspaceGutterClassName` from the same module and uses `--workspace-gutter`. Do not add another gutter between a trailing sidebar and the preceding panel's existing margin. Settings, Labels, Snippets and their loading states use the shared tokens. Internal cards and controls keep their own borders and rounding.
+Workspace panels are edge to edge below the desktop breakpoint, with no outer gutter, border, rounding, or shadow. Desktop panels keep an 8px gutter and a transparent 1px structural border. Their corner radius is `rounded-panel`, 30px in the default theme. `WorkspaceHeader` owns the Section tray, with a local 2px margin and `rounded-section`, 27px. The resulting 3px panel inset keeps those corners concentric. Its default content padding is 14px, or 16px with `size="lg"`. Themes can adjust desktop gutters and settings row padding through shared tokens. `WorkspaceSection` owns the gutter for both full-page panels and grid cells. A layout wrapper that positions adjacent panels, including docked chat, imports `workspaceGutterClassName` from the same module and uses `--workspace-gutter`. Do not add another gutter between a trailing sidebar and the preceding panel's existing margin.
+
+Ordinary settings rows use 16px vertical padding and 24px horizontal padding, reduced to 16px horizontally at narrow widths. The wider horizontal inset balances the action button's vertical clearance. Nested summaries use 16px padding through `Surface`. `SettingsCard` and Section surfaces share `rounded-section`; Detail surfaces and ordinary controls use `rounded-md`, 10px. Menus use `rounded-xl`, 14px. Sender avatars, tabs, and toggle-group rails intentionally retain `rounded-lg`, 12px. Switches and circular elements retain round corners. Keyboard focus uses a discreet 1px indicator, and pending switches keep their thumb while disabled.
 
 `WorkspaceDock` coordinates a fixed-width sidebar sliding from the right with the adjacent content's width transition. On narrow screens the sidebar covers the content. App code supplies the sidebar, open state and background inertness; the shared component owns geometry and motion, including reduced motion. Virtualized content keeps individual row measurements live and defers full-list measurement until the width transition settles, preserving its scroll anchor through reversals.
 

@@ -12,11 +12,10 @@ export const settingsSurfaceVariants = cva("", {
   variants: {
     variant: {
       body: "space-y-3 px-4 py-(--settings-row-padding) @md:px-6",
-      divide: "divide-y divide-border",
-      divider:
-        "relative after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:content-[''] last:after:hidden @md:after:inset-x-6",
+      divide: "",
+      divider: "relative",
       fieldRowShell:
-        "relative flex w-full flex-col items-start justify-between gap-4 px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:content-[''] last:after:hidden @md:flex-row @md:items-center @md:px-6 @md:after:inset-x-6",
+        "relative flex w-full flex-col items-start justify-between gap-4 px-4 py-(--settings-row-padding) @md:flex-row @md:items-center @md:px-6",
       footer:
         "flex flex-wrap items-center justify-between gap-3 px-4 py-(--settings-row-padding) @md:px-6",
       form: "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2",
@@ -24,14 +23,13 @@ export const settingsSurfaceVariants = cva("", {
         "flex w-full flex-col gap-4 px-4 py-(--settings-row-padding) @md:flex-row @md:items-center @md:justify-between @md:px-6",
       insetRow:
         "flex w-full items-center gap-4 px-4 py-(--settings-row-padding) @md:px-6",
-      insetSection:
-        "relative px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
+      insetSection: "relative px-4 py-(--settings-row-padding) @md:px-6",
       insetStackedRow:
         "flex w-full flex-col gap-3 px-4 py-(--settings-row-padding) @md:flex-row @md:items-center @md:px-6",
       padding: "px-4 py-(--settings-row-padding) @md:px-6",
       page: "@container space-y-8",
       rowShell:
-        "squircle relative flex w-full items-center gap-4 px-4 py-(--settings-row-padding) after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:content-[''] last:after:hidden @md:px-6 @md:after:inset-x-6",
+        "squircle relative flex w-full items-center gap-4 px-4 py-(--settings-row-padding) @md:px-6",
       title: "truncate text-body-sm font-medium text-fg",
       value: "text-body-sm/5 text-muted-fg",
     },
@@ -104,14 +102,16 @@ export const SettingsCard = ({
 }: {
   children: ReactNode;
   className?: string;
-  variant?: "default" | "error";
+  variant?: "default" | "detail" | "error";
 }) => (
   <div
     className={cn(
-      "@container overflow-hidden rounded-lg border border-border bg-bg-surface squircle",
+      "@container overflow-hidden squircle",
       {
         "flex min-h-15 items-center justify-between gap-4 px-4 py-(--settings-row-padding) @md:px-6":
           variant === "error",
+        "rounded-md bg-detail": variant === "detail",
+        "rounded-section bg-section": variant !== "detail",
       },
       className
     )}
@@ -242,7 +242,7 @@ export const SettingsRowLayout = ({
   <div
     ref={anchorRef}
     className={cn(settingsSurfaceVariants({ variant: "rowShell" }), {
-      "bg-accent": selected,
+      "bg-detail": selected,
     })}
   >
     {icon !== undefined && icon !== null ? (
@@ -279,7 +279,7 @@ export const SettingsNavigationRow = ({
   <button
     className={cn(
       settingsSurfaceVariants({ variant: "rowShell" }),
-      "group border border-transparent text-left transition-colors squircle first:rounded-t-lg last:rounded-b-lg hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
+      "group border border-transparent text-left transition-colors squircle first:rounded-t-section last:rounded-b-section hover:bg-detail focus-visible:border-ring focus-visible:outline-hidden",
       { "pointer-events-none": disabled }
     )}
     disabled={disabled}
@@ -294,7 +294,7 @@ export const SettingsNavigationRow = ({
     type="button"
   >
     {icon !== undefined && icon !== null ? (
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-muted-fg transition-colors squircle group-hover:text-fg [&_svg]:size-4">
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-detail text-muted-fg transition-colors squircle group-hover:text-fg [&_svg]:size-4">
         {icon}
       </div>
     ) : null}

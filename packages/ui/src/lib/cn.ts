@@ -15,6 +15,7 @@ const fontSizes = [
   "title-lg",
   "title-md",
   "title-sm",
+  "metric",
   "body-lg",
   "body",
   "body-sm",
@@ -28,7 +29,7 @@ const twMerge = extendTailwindMerge({
       "font-size": [{ text: fontSizes }],
     },
     theme: {
-      radius: ["panel"],
+      radius: ["panel", "section"],
     },
   },
 });
