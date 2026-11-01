@@ -338,7 +338,7 @@ const DomainCatchAllPickerBody = ({
   }
   if (candidates.length === 0) {
     return (
-      <Surface variant="detail">
+      <Surface>
         <p className="text-caption/5 text-muted-fg">
           Create a shared inbox on {domainName} first, then return here.
         </p>

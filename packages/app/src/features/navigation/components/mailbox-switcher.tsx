@@ -300,7 +300,7 @@ const ReorderRow = ({
   const { source } = useDragOperation<SwitcherDragData>();
   return (
     <div
-      className="relative rounded-xs"
+      className="relative rounded-md"
       data-mailbox-switcher-group={data.groupId}
       data-mailbox-switcher-mailbox={data.mailboxId}
       data-mailbox-switcher-navigation-row
@@ -308,7 +308,7 @@ const ReorderRow = ({
     >
       <m.div
         aria-hidden={isDragSource ? true : undefined}
-        className={cn("rounded-xs", {
+        className={cn("rounded-md", {
           "bg-muted opacity-35 ring-1 ring-border": isDragSource,
           "pointer-events-none": source !== null && source !== undefined,
         })}
@@ -337,7 +337,7 @@ const MailboxMenuItem = ({
 }) => (
   <div
     className={cn(
-      "group/item flex items-center rounded-xs squircle focus-within:bg-control-hover hover:bg-control-hover",
+      "group/item flex items-center rounded-md squircle focus-within:bg-control-hover hover:bg-control-hover",
       {
         "bg-muted": isActive,
       }
@@ -348,7 +348,7 @@ const MailboxMenuItem = ({
       aria-describedby="mailbox-order-help"
       aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
       // oxlint-disable-next-line shadcn/no-restyle -- Compact full-row mailbox selection and drag surface.
-      className="h-auto min-h-12 min-w-0 flex-1 touch-pan-y justify-start rounded-xs px-2.5 py-2 text-left hover:bg-transparent active:scale-100 aria-[current=page]:bg-transparent"
+      className="h-auto min-h-12 min-w-0 flex-1 touch-pan-y justify-start px-2.5 py-2 text-left hover:bg-transparent active:scale-100 aria-[current=page]:bg-transparent"
       data-mailbox-switcher-navigation-item
       onClick={(event) => {
         if (!event.defaultPrevented) {
@@ -457,13 +457,13 @@ const MailboxTeam = ({
         disabled={disabled}
       >
         {(handleRef) => (
-          <div className="group/header flex min-h-7 items-center rounded-xs squircle focus-within:bg-control-hover hover:bg-control-hover">
+          <div className="group/header flex min-h-7 items-center rounded-md squircle focus-within:bg-control-hover hover:bg-control-hover">
             <Button
               aria-describedby={disabled ? undefined : "mailbox-order-help"}
               aria-expanded={!closed}
               aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
               // oxlint-disable-next-line shadcn/no-restyle -- Team header preserves the compact selector hierarchy.
-              className="h-auto min-h-7 min-w-0 flex-1 touch-pan-y justify-start gap-2 rounded-xs px-2 py-1 text-left hover:bg-transparent active:scale-100"
+              className="h-auto min-h-7 min-w-0 flex-1 touch-pan-y justify-start gap-2 px-2 py-1 text-left hover:bg-transparent active:scale-100"
               data-mailbox-switcher-navigation-item
               onClick={(event) => {
                 if (!event.defaultPrevented) {
@@ -1030,7 +1030,7 @@ export const MailboxSwitcherDropdown = ({
                   <div className="mt-1">
                     <LinkButton
                       // oxlint-disable-next-line shadcn/no-restyle -- Manage row keeps its compact nav metrics.
-                      className="h-auto min-h-7 w-full justify-between rounded-xs px-2.5 py-1 squircle"
+                      className="h-auto min-h-7 w-full justify-between px-2.5 py-1 squircle"
                       data-mailbox-switcher-navigation-item
                       search={{ from: "/", mailboxId: "", tab: "mailboxes" }}
                       size="sm"

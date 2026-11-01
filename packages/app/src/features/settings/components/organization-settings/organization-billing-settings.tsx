@@ -147,31 +147,29 @@ export const OrganizationBillingSettings = ({
       )}
 
       <Surface padding="none">
-        <div className="px-4">
-          {(["managed", "pro"] as const).map((product) => (
-            <BillingProductCard
-              compact
-              canChoose={
-                billing.canManageBilling &&
-                (billing.hasAccess ||
-                  billing.subscription === null ||
-                  billing.subscription.status === "canceled" ||
-                  billing.subscription.status === "expired")
-              }
-              currentProduct={currentProduct}
-              isAnyCheckoutPending={checkoutMutation.isPending}
-              isStartingCheckout={
-                checkoutMutation.isPending &&
-                checkoutMutation.variables?.product === product
-              }
-              key={product}
-              onCheckout={() => {
-                checkoutMutation.mutate({ organizationId, product });
-              }}
-              productId={product}
-            />
-          ))}
-        </div>
+        {(["managed", "pro"] as const).map((product) => (
+          <BillingProductCard
+            compact
+            canChoose={
+              billing.canManageBilling &&
+              (billing.hasAccess ||
+                billing.subscription === null ||
+                billing.subscription.status === "canceled" ||
+                billing.subscription.status === "expired")
+            }
+            currentProduct={currentProduct}
+            isAnyCheckoutPending={checkoutMutation.isPending}
+            isStartingCheckout={
+              checkoutMutation.isPending &&
+              checkoutMutation.variables?.product === product
+            }
+            key={product}
+            onCheckout={() => {
+              checkoutMutation.mutate({ organizationId, product });
+            }}
+            productId={product}
+          />
+        ))}
       </Surface>
     </section>
   );

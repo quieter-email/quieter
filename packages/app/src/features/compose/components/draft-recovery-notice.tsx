@@ -6,6 +6,7 @@ import { toastError } from "@quieter/app/lib/error-toast";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { entranceMotionVariants } from "@quieter/ui/motion";
+import { surfaceVariants } from "@quieter/ui/surface";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
@@ -62,7 +63,8 @@ export const DraftRecoveryNotice = ({
   return (
     <output
       className={cn(
-        "m-3 flex shrink-0 items-center gap-3 rounded-lg border border-border bg-bg p-3",
+        "m-3 flex shrink-0 items-center gap-3",
+        surfaceVariants(),
         entranceMotionVariants()
       )}
     >

@@ -68,7 +68,12 @@ export const BillingProductCard = ({
 
   if (compact) {
     return (
-      <article className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-4">
+      <article
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-x-4 gap-y-2",
+          settingsSurfaceVariants({ variant: "padding" })
+        )}
+      >
         <div className="min-w-0 flex-1 basis-48">
           <div className="flex items-center gap-2">
             <h3 className="text-body-sm font-medium text-fg">{product.name}</h3>

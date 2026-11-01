@@ -32,6 +32,7 @@ import { FullPageDialogDescription } from "@quieter/ui/full-page-dialog";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { Surface } from "@quieter/ui/surface";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { toast } from "@quieter/ui/toast";
 import { Toggle, ToggleGroup } from "@quieter/ui/toggle";
@@ -120,126 +121,128 @@ const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
   } = props;
 
   return (
-    <div className="space-y-2 rounded-lg bg-muted p-3 squircle">
-      <p className="text-caption font-medium text-muted-fg">Then</p>
-      <ToggleGroup
-        aria-label="Rule action"
-        className="grid grid-cols-2 sm:grid-cols-4"
-        size="flush"
-        variant="plain"
-        value={[ruleActionKind]}
-      >
-        {(
-          [
-            ["set-labels", "Apply labels"],
-            ["set-read", "Read state"],
-            ["move", "Move"],
-            ["forward", "Forward"],
-          ] as const
-        ).map(([kind, label]) => (
-          <Toggle
-            size="sm"
-            key={kind}
-            onClick={() => {
-              setRuleActionKind(kind);
-            }}
-            type="button"
-            value={kind}
-          >
-            {label}
-          </Toggle>
-        ))}
-      </ToggleGroup>
-      {ruleActionKind === "set-read" ? (
+    <Surface>
+      <div className="space-y-2">
+        <p className="text-caption font-medium text-muted-fg">Then</p>
         <ToggleGroup
-          aria-label="Read state"
-          className="grid grid-cols-2"
+          aria-label="Rule action"
+          className="grid grid-cols-2 sm:grid-cols-4"
           size="flush"
           variant="plain"
-          value={[String(ruleReadState)]}
+          value={[ruleActionKind]}
         >
-          {[true, false].map((read) => (
+          {(
+            [
+              ["set-labels", "Apply labels"],
+              ["set-read", "Read state"],
+              ["move", "Move"],
+              ["forward", "Forward"],
+            ] as const
+          ).map(([kind, label]) => (
             <Toggle
               size="sm"
-              key={String(read)}
+              key={kind}
               onClick={() => {
-                setRuleReadState(read);
+                setRuleActionKind(kind);
               }}
               type="button"
-              value={String(read)}
+              value={kind}
             >
-              {read ? "Mark read" : "Mark unread"}
+              {label}
             </Toggle>
           ))}
         </ToggleGroup>
-      ) : null}
-      {ruleActionKind === "move" ? (
-        <ToggleGroup
-          aria-label="Move destination"
-          className="grid grid-cols-2"
-          size="flush"
-          variant="plain"
-          value={[ruleMoveDestination]}
-        >
-          {(["archive", "inbox", "spam", "trash"] as const).map(
-            (destination) => (
+        {ruleActionKind === "set-read" ? (
+          <ToggleGroup
+            aria-label="Read state"
+            className="grid grid-cols-2"
+            size="flush"
+            variant="plain"
+            value={[String(ruleReadState)]}
+          >
+            {[true, false].map((read) => (
               <Toggle
                 size="sm"
-                key={destination}
+                key={String(read)}
                 onClick={() => {
-                  setRuleMoveDestination(destination);
+                  setRuleReadState(read);
                 }}
                 type="button"
-                value={destination}
+                value={String(read)}
               >
-                {destination === "inbox"
-                  ? "Move to Inbox"
-                  : `Move to ${destination[0]?.toUpperCase()}${destination.slice(1)}`}
+                {read ? "Mark read" : "Mark unread"}
               </Toggle>
-            )
-          )}
-        </ToggleGroup>
-      ) : null}
-      {ruleActionKind === "forward" ? (
-        <div className="space-y-2">
-          <Input
-            aria-label="Forward recipients"
-            onChange={(event) => {
-              setRuleForwardRecipients(event.target.value);
-            }}
-            placeholder="Forward to email addresses"
-            size="sm"
-            value={ruleForwardRecipients}
-          />
-          <label
-            className="flex items-center gap-2 text-body"
-            htmlFor="rule-forward-includes-attachments"
+            ))}
+          </ToggleGroup>
+        ) : null}
+        {ruleActionKind === "move" ? (
+          <ToggleGroup
+            aria-label="Move destination"
+            className="grid grid-cols-2"
+            size="flush"
+            variant="plain"
+            value={[ruleMoveDestination]}
           >
-            <Checkbox
-              checked={ruleForwardIncludesAttachments}
-              id="rule-forward-includes-attachments"
-              onCheckedChange={setRuleForwardIncludesAttachments}
+            {(["archive", "inbox", "spam", "trash"] as const).map(
+              (destination) => (
+                <Toggle
+                  size="sm"
+                  key={destination}
+                  onClick={() => {
+                    setRuleMoveDestination(destination);
+                  }}
+                  type="button"
+                  value={destination}
+                >
+                  {destination === "inbox"
+                    ? "Move to Inbox"
+                    : `Move to ${destination[0]?.toUpperCase()}${destination.slice(1)}`}
+                </Toggle>
+              )
+            )}
+          </ToggleGroup>
+        ) : null}
+        {ruleActionKind === "forward" ? (
+          <div className="space-y-2">
+            <Input
+              aria-label="Forward recipients"
+              onChange={(event) => {
+                setRuleForwardRecipients(event.target.value);
+              }}
+              placeholder="Forward to email addresses"
+              size="sm"
+              value={ruleForwardRecipients}
+            />
+            <label
+              className="flex items-center gap-2 text-body"
+              htmlFor="rule-forward-includes-attachments"
             >
-              <CheckboxIndicator />
-            </Checkbox>
-            Include attachments
-          </label>
-        </div>
-      ) : null}
-      <label
-        className="flex items-center gap-2 text-body"
-        htmlFor="rule-stop-processing"
-      >
-        <Checkbox
-          checked={ruleStopsProcessing}
-          id="rule-stop-processing"
-          onCheckedChange={setRuleStopsProcessing}
+              <Checkbox
+                checked={ruleForwardIncludesAttachments}
+                id="rule-forward-includes-attachments"
+                onCheckedChange={setRuleForwardIncludesAttachments}
+              >
+                <CheckboxIndicator />
+              </Checkbox>
+              Include attachments
+            </label>
+          </div>
+        ) : null}
+        <label
+          className="flex items-center gap-2 text-body"
+          htmlFor="rule-stop-processing"
         >
-          <CheckboxIndicator />
-        </Checkbox>
-        Stop evaluating later rules after this match
-      </label>
-    </div>
+          <Checkbox
+            checked={ruleStopsProcessing}
+            id="rule-stop-processing"
+            onCheckedChange={setRuleStopsProcessing}
+          >
+            <CheckboxIndicator />
+          </Checkbox>
+          Stop evaluating later rules after this match
+        </label>
+      </div>
+    </Surface>
   );
 };
 
@@ -252,36 +255,38 @@ const ManagedRuleLabelsEditor = (props: MailboxOrganizerContentProps) => {
   } = props;
 
   return ruleActionKind === "set-labels" ? (
-    <div className="space-y-2 rounded-lg bg-muted p-3 squircle">
-      <p className="text-caption font-medium text-muted-fg">Labels</p>
-      {(labelsData ?? []).flatMap((label) =>
-        label.type === "user"
-          ? [
-              <label
-                className="flex items-center gap-2 text-body"
-                htmlFor={`rule-label-${label.id}`}
-                key={label.id}
-              >
-                <Checkbox
-                  checked={selectedRuleLabelIdSet.has(label.id)}
-                  id={`rule-label-${label.id}`}
-                  onCheckedChange={(checked) => {
-                    setSelectedRuleLabelIds((current) =>
-                      checked
-                        ? [...current, label.id]
-                        : current.filter((labelId) => labelId !== label.id)
-                    );
-                  }}
+    <Surface>
+      <div className="space-y-2">
+        <p className="text-caption font-medium text-muted-fg">Labels</p>
+        {(labelsData ?? []).flatMap((label) =>
+          label.type === "user"
+            ? [
+                <label
+                  className="flex items-center gap-2 text-body"
+                  htmlFor={`rule-label-${label.id}`}
+                  key={label.id}
                 >
-                  <CheckboxIndicator />
-                </Checkbox>
-                <Icon aria-hidden size={14} tone="muted" icon={Tag01Icon} />
-                {label.name}
-              </label>,
-            ]
-          : []
-      )}
-    </div>
+                  <Checkbox
+                    checked={selectedRuleLabelIdSet.has(label.id)}
+                    id={`rule-label-${label.id}`}
+                    onCheckedChange={(checked) => {
+                      setSelectedRuleLabelIds((current) =>
+                        checked
+                          ? [...current, label.id]
+                          : current.filter((labelId) => labelId !== label.id)
+                      );
+                    }}
+                  >
+                    <CheckboxIndicator />
+                  </Checkbox>
+                  <Icon aria-hidden size={14} tone="muted" icon={Tag01Icon} />
+                  {label.name}
+                </label>,
+              ]
+            : []
+        )}
+      </div>
+    </Surface>
   ) : null;
 };
 
@@ -705,8 +710,8 @@ const ManagedRuleBackfill = (props: MailboxOrganizerContentProps) => {
   const { backfillData, cancelBackfill, cancelBackfillMutation } = props;
 
   return backfillData ? (
-    <div className="mt-4 rounded-lg border bg-muted p-3 text-body">
-      <div className="flex items-center justify-between gap-3">
+    <Surface className="mt-4">
+      <div className="flex items-center justify-between gap-3 text-body">
         <div>
           <p className="font-medium">Historical rule run</p>
           {backfillData.status === "failed" && (
@@ -740,7 +745,7 @@ const ManagedRuleBackfill = (props: MailboxOrganizerContentProps) => {
           </span>
         )}
       </div>
-    </div>
+    </Surface>
   ) : null;
 };
 
