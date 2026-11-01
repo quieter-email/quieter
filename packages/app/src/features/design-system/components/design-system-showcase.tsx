@@ -624,6 +624,26 @@ export const DesignSystemShowcase = () => {
         </Section>
 
         <Section title="Surface composition">
+          <Surface padding="comfortable" variant="panel">
+            <div className="flex flex-col gap-6">
+              <Text weight="medium">Comfortable standalone panel</Text>
+              <Surface padding="dense">
+                <Text size="sm">Dense section content</Text>
+              </Surface>
+            </div>
+          </Surface>
+          <Surface padding="compact" variant="panel">
+            <Surface padding="compact">
+              <div className="p-4">
+                <Text weight="medium">Standalone panel</Text>
+              </div>
+              <Surface chrome="inset" variant="detail">
+                <Text size="sm">
+                  Panel, Section, and Detail share one surface ladder.
+                </Text>
+              </Surface>
+            </Surface>
+          </Surface>
           <WorkspaceSection layout="surface">
             <WorkspaceHeader>
               <div className="flex items-center gap-3">
@@ -1241,6 +1261,18 @@ export const DesignSystemShowcase = () => {
               />
             </InputGroup>
           </Row>
+          <Row label="Large input group">
+            <InputGroup className="w-80 max-w-full" size="lg" surface="panel">
+              <Input
+                aria-label="Email address"
+                chrome="attached"
+                placeholder="you@example.com"
+                size="lg"
+                type="email"
+              />
+              <Button className="mr-0.5">Join</Button>
+            </InputGroup>
+          </Row>
           <Row label="Borderless input">
             <Input
               aria-label="Example borderless input"
@@ -1475,6 +1507,10 @@ export const DesignSystemShowcase = () => {
               <Kbd>Ctrl</Kbd>
               <Kbd>K</Kbd>
             </div>
+          </Row>
+          <Row label="Interactive keycaps">
+            <Button variant="keycap">Ctrl</Button>
+            <Button variant="keycap">K</Button>
           </Row>
           <Row label="Usage metric">
             <Text family="mono" size="metric" weight="medium">

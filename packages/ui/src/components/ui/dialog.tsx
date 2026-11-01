@@ -110,7 +110,7 @@ export const DialogCloseButton = ({
   // special-purpose treatments do not belong in dialog footers.
   variant?: Exclude<
     ButtonProps["variant"],
-    "card" | "chip" | "option" | "overlay" | "result"
+    "card" | "chip" | "keycap" | "option" | "overlay" | "result"
   >;
 }) => (
   <DialogPrimitive.Close

@@ -23,9 +23,16 @@ export const surfaceVariants = cva("", {
       default: null,
       inset: null,
     },
-    padding: { compact: "p-0.5", default: "p-4", none: "p-0" },
+    padding: {
+      comfortable: "p-6",
+      compact: "p-0.5",
+      default: "p-4",
+      dense: "p-2",
+      none: "p-0",
+    },
     variant: {
       detail: "rounded-md bg-detail",
+      panel: "rounded-panel bg-panel",
       section: "rounded-section bg-section",
     },
   },

@@ -1,394 +1,392 @@
 "use client";
 
-import {
-  AiMicIcon,
-  ArrowRight01Icon,
-  Delete02Icon,
-  Mail01Icon,
-  MoreHorizontalIcon,
-  PinIcon,
-} from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Brand } from "@quieter/ui/brand";
+import { Mail01Icon, PinIcon } from "@hugeicons/core-free-icons";
+import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import {
-  ComposerEditorFrame,
-  ComposerFieldGroup,
-} from "@quieter/ui/composer-chrome";
+import { Icon } from "@quieter/ui/icon";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Pill } from "@quieter/ui/pill";
+import { SenderAvatar } from "@quieter/ui/sender-avatar";
+import { Surface } from "@quieter/ui/surface";
+import { Text } from "@quieter/ui/text";
+import { useId, useState } from "react";
 
-import { Reveal } from "./reveal";
+import { previewMessages } from "./preview-data";
+import type { PreviewMessage } from "./preview-data";
+import { PreviewMessageDialog } from "./preview-message";
 
 const mailboxes = [
   {
     address: "alex@example.com",
+    icon: <path d="M3 5h18v14H3zM3 5l9 8 9-8" />,
+    kind: "gmail",
     name: "Personal",
-    selected: true,
+    source: "Gmail",
     status: null,
     unread: "5",
   },
   {
     address: "hello@studio.example",
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M3 12h18M12 3c6 5 6 13 0 18-6-5-6-13 0-18" />
+      </>
+    ),
+    kind: "domain",
     name: "Hello",
-    selected: false,
+    source: "Your domain",
     status: "Shared",
     unread: "3",
   },
   {
     address: "app@studio.example",
+    icon: <path d="m7 6-5 6 5 6M17 6l5 6-5 6M14 3l-4 18" />,
+    kind: "api",
     name: "App",
-    selected: false,
+    source: "API & MCP",
     status: "Send only",
     unread: null,
   },
 ] as const;
 
-export const MailboxSwitcherPreview = () => (
-  <div aria-hidden="true" className="home-panel home-connect-art" inert>
-    <svg
-      aria-hidden="true"
-      className="home-connect-paths"
-      viewBox="0 0 316 204"
-    >
-      <path
-        className="home-connect-path"
-        d="M0 16h70c52 0 45 86 96 86h150M0 102h316M0 188h70c52 0 45-86 96-86h150"
-        fill="none"
-      />
-      <path
-        className="home-connect-path-active"
-        d="M0 16h70c52 0 45 86 96 86h150"
-        fill="none"
-        strokeWidth="1.5"
-      />
-      <circle className="home-connect-dot" cx="311" cy="102" r="3" />
-    </svg>
-    <div className="home-connect-sources">
-      <div className="home-connect-source">
-        <svg
-          aria-hidden="true"
-          className="home-source-mail"
-          viewBox="0 0 24 24"
-        >
-          <path
-            d="M3 5h18v14H3zM3 5l9 8 9-8"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-        </svg>
-        <span>Gmail</span>
-      </div>
-      <div className="home-connect-source">
-        <svg aria-hidden="true" viewBox="0 0 24 24">
-          <circle
-            cx="12"
-            cy="12"
-            fill="none"
-            r="9"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-          <path
-            d="M3 12h18M12 3c6 5 6 13 0 18-6-5-6-13 0-18"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-        </svg>
-        <span>Your domain</span>
-      </div>
-      <div className="home-connect-source">
-        <svg aria-hidden="true" viewBox="0 0 24 24">
-          <path
-            d="m7 6-5 6 5 6M17 6l5 6-5 6M14 3l-4 18"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-        </svg>
-        <span>API &amp; MCP</span>
-      </div>
-    </div>
-    <div className="home-mailbox-switcher">
-      <div className="home-mailbox-trigger">
-        <p>Personal</p>
-        <span>alex@example.com</span>
-      </div>
-      <div className="home-component-surface home-mailbox-menu">
+const paths = {
+  api: "M0 188h70c52 0 45-86 96-86h150",
+  domain: "M0 102h316",
+  gmail: "M0 16h70c52 0 45 86 96 86h150",
+} as const;
+
+export const MailboxSwitcherPreview = () => {
+  const [selected, setSelected] = useState<(typeof mailboxes)[number]>(
+    mailboxes[0]
+  );
+  const [expanded, setExpanded] = useState(true);
+  const menuId = useId();
+  return (
+    <div className="home-connect-art">
+      <svg
+        aria-hidden="true"
+        className="home-connect-paths"
+        preserveAspectRatio="none"
+        viewBox="0 0 316 204"
+      >
+        <path
+          className="home-connect-path"
+          d="M0 16h70c52 0 45 86 96 86h150M0 102h316M0 188h70c52 0 45-86 96-86h150"
+          fill="none"
+        />
+        <path
+          className="home-connect-path-active"
+          d={paths[selected.kind]}
+          fill="none"
+          strokeWidth="1.5"
+        />
+        <circle className="home-connect-dot" cx="311" cy="102" r="3" />
+      </svg>
+      <div className="home-connect-sources">
         {mailboxes.map((mailbox) => (
-          <div key={mailbox.address}>
-            {mailbox.name === "App" ? null : (
-              <div className="home-mailbox-group">
-                <span className="home-chevron" />
-                {mailbox.selected ? "Personal" : "Studio"}
-              </div>
-            )}
-            <div
-              className={cn("home-mailbox-row", {
-                "home-selected-surface": mailbox.selected,
-              })}
+          <div className="home-connect-source" key={mailbox.kind}>
+            <Button
+              aria-pressed={selected.kind === mailbox.kind}
+              className="lg:hidden"
+              fullWidth
+              onClick={() => {
+                setSelected(mailbox);
+                setExpanded(true);
+              }}
+              size="compact"
+              variant="option"
             >
-              <div className="home-mailbox-summary">
-                <p>{mailbox.name}</p>
-                <span>{mailbox.address}</span>
-              </div>
-              {mailbox.status === null ? null : (
-                <span className="home-mailbox-status">{mailbox.status}</span>
-              )}
-              {mailbox.unread === null ? null : (
-                <span className="home-mailbox-unread">{mailbox.unread}</span>
-              )}
-              <span className="home-mailbox-pin">
-                {mailbox.selected ? (
-                  <HugeiconsIcon icon={PinIcon} size={14} />
-                ) : null}
-              </span>
-            </div>
+              {mailbox.source}
+            </Button>
+            <Button
+              aria-pressed={selected.kind === mailbox.kind}
+              className="hidden lg:inline-flex"
+              fullWidth
+              onClick={() => {
+                setSelected(mailbox);
+                setExpanded(true);
+              }}
+              size="lg"
+              variant="ghost"
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={
+                  selected.kind === mailbox.kind
+                    ? "var(--q-blue)"
+                    : "currentColor"
+                }
+                strokeWidth="1.5"
+              >
+                {mailbox.icon}
+              </svg>
+              {mailbox.source}
+            </Button>
           </div>
         ))}
       </div>
+      <div className="home-mailbox-switcher">
+        <div className="home-mailbox-trigger">
+          <Button
+            aria-controls={menuId}
+            aria-expanded={expanded}
+            fullWidth
+            onClick={() => {
+              setExpanded(!expanded);
+            }}
+            size="auto"
+            variant="secondary"
+          >
+            <span className="home-mailbox-summary">
+              <Text as="span" size="sm" truncate weight="normal">
+                {selected.name}
+              </Text>
+              <Text
+                as="span"
+                size="caption"
+                tone="muted"
+                truncate
+                weight="normal"
+              >
+                {selected.address}
+              </Text>
+            </span>
+          </Button>
+        </div>
+        <div
+          className={cn("home-mailbox-menu", {
+            "home-mailbox-menu-collapsed": !expanded,
+          })}
+          id={menuId}
+        >
+          <Surface padding="compact">
+            <div className="flex flex-col gap-0.5">
+              {mailboxes.map((mailbox) => (
+                <div key={mailbox.address}>
+                  {mailbox.kind === "api" ? null : (
+                    <div className="home-mailbox-group">
+                      <span className="home-chevron" />
+                      {mailbox.kind === "gmail" ? "Personal" : "Studio"}
+                    </div>
+                  )}
+                  <Button
+                    aria-pressed={selected.kind === mailbox.kind}
+                    fullWidth
+                    onClick={() => {
+                      setSelected(mailbox);
+                    }}
+                    size="auto"
+                    variant="option"
+                  >
+                    <span className="home-mailbox-summary">
+                      <Text as="span" size="sm" truncate weight="normal">
+                        {mailbox.name}
+                      </Text>
+                      <Text
+                        as="span"
+                        size="caption"
+                        tone="muted"
+                        truncate
+                        weight="normal"
+                      >
+                        {mailbox.address}
+                      </Text>
+                    </span>
+                    {mailbox.status === null ? null : (
+                      <Pill size="xs" tone="neutral">
+                        {mailbox.status}
+                      </Pill>
+                    )}
+                    {mailbox.unread === null ? null : (
+                      <Pill size="xs" tone="neutral">
+                        {mailbox.unread}
+                      </Pill>
+                    )}
+                    <span className="home-mailbox-pin">
+                      {selected.kind === mailbox.kind ? (
+                        <Icon icon={PinIcon} size={14} />
+                      ) : null}
+                    </span>
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </Surface>
+        </div>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
-const messages = [
+const labelOptions = {
+  personal: { label: "Personal", next: "projects", tone: "cyan" },
+  projects: { label: "Projects", next: "receipts", tone: "blue" },
+  receipts: { label: "Receipts", next: "personal", tone: "yellow" },
+} as const;
+
+const labelledMessages = [
   {
     initials: "AM",
-    label: "Projects",
+    label: "projects",
     sender: "Alex Morgan",
     subject: "A few thoughts on the proposal",
-    tone: "home-label-blue",
   },
   {
     initials: "S",
-    label: "Receipts",
+    label: "receipts",
     sender: "Stripe",
     subject: "Your monthly invoice",
-    tone: "home-label-gold",
   },
   {
     initials: "LR",
-    label: "Personal",
+    label: "personal",
     sender: "Leander",
     subject: "Photos from Tokyo",
-    tone: "home-label-cyan",
   },
 ] as const;
+
+const LabelledMessage = ({
+  message,
+}: {
+  message: (typeof labelledMessages)[number];
+}) => {
+  const [choice, setChoice] = useState<keyof typeof labelOptions>(
+    message.label
+  );
+  const label = labelOptions[choice];
+  return (
+    <div className="home-label-row">
+      <SenderAvatar fallbackLabel={message.initials} />
+      <div className="home-label-copy">
+        <p>{message.sender}</p>
+        <span>{message.subject}</span>
+      </div>
+      <div className="home-label-slot">
+        <IconButtonTooltip label="Change label">
+          <Button
+            aria-label={`Change label for ${message.sender}, currently ${label.label}`}
+            onClick={() => {
+              setChoice(label.next);
+            }}
+            variant="inline-edit"
+          >
+            <Pill size="xs" tone={label.tone}>
+              {label.label}
+            </Pill>
+          </Button>
+        </IconButtonTooltip>
+      </div>
+    </div>
+  );
+};
 
 export const LabelsPreview = () => (
-  <div aria-hidden="true" className="home-panel home-labels-art" inert>
-    <div className="home-label-rows">
-      {messages.map((message) => (
-        <div className="home-label-row" key={message.sender}>
-          <span className="home-mail-avatar">{message.initials}</span>
-          <div className="home-label-copy">
-            <p>{message.sender}</p>
-            <span>{message.subject}</span>
-          </div>
-          <div className="home-label-slot">
-            <span className={cn("home-mail-label", message.tone)}>
-              {message.label}
-            </span>
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
+  <Surface className="flex flex-col" padding="dense">
+    {labelledMessages.map((message) => (
+      <LabelledMessage key={message.sender} message={message} />
+    ))}
+  </Surface>
 );
 
-const importantMessages = [
-  {
-    description: "Alex: Approved. Can you send a timeline by Friday?",
-    title: "Re: Project proposal",
-  },
-  {
-    description: "Travel desk: Your flights and hotel are confirmed.",
-    title: "Your trip confirmation",
-  },
-  {
-    description: "Sam: Does Thursday morning work for you?",
-    title: "Coffee with Sam",
-  },
-] as const;
-
-export const ImportantPreview = () => (
-  <div
-    aria-hidden="true"
-    className="home-panel home-panel-raised home-important-art"
-    inert
-  >
-    <div className="home-important-toolbar">
-      <span>
-        <Brand className="size-[18px]" />
-        Important
-      </span>
-      <span className="home-important-date">3 conversations</span>
-    </div>
-    <p className="home-important-greeting">Mail worth your attention.</p>
-    <div className="home-important-items">
-      {importantMessages.map((message) => (
-        <div className="home-important-item" key={message.title}>
-          <span className="home-important-dot" />
-          <div>
-            <p>{message.title}</p>
-            <span>{message.description}</span>
+export const ImportantPreview = () => {
+  const [selected, setSelected] = useState<PreviewMessage | null>(null);
+  return (
+    <>
+      <Surface>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <p className="home-important-greeting">
+              Mail worth your attention.
+            </p>
+            <Text size="caption" tone="muted">
+              {previewMessages.length} conversations
+            </Text>
+          </div>
+          <div className="flex flex-col gap-1">
+            {previewMessages.map((message) => (
+              <Button
+                aria-label={`Open sample email: ${message.subject}`}
+                fullWidth
+                key={message.id}
+                onClick={() => {
+                  setSelected(message);
+                }}
+                size="auto"
+                variant="ghost"
+              >
+                <span aria-hidden className="home-important-dot" />
+                <span className="flex min-w-0 flex-col gap-1">
+                  <Text as="span" size="sm" weight="normal">
+                    {message.title}
+                  </Text>
+                  <Text as="span" size="caption" tone="muted" weight="normal">
+                    {message.summary}
+                  </Text>
+                </span>
+              </Button>
+            ))}
           </div>
         </div>
-      ))}
-    </div>
-  </div>
-);
+      </Surface>
+      <PreviewMessageDialog
+        message={selected}
+        onClose={() => {
+          setSelected(null);
+        }}
+      />
+    </>
+  );
+};
 
-export const ComposePreview = () => (
-  <div
-    aria-hidden="true"
-    className="home-panel home-panel-raised home-compose-art"
-    inert
-  >
-    <ComposerEditorFrame
-      // oxlint-disable-next-line shadcn/no-restyle -- Preview surface uses the home.css exception.
-      className="home-component-surface home-composer-frame"
-    >
-      <ComposerFieldGroup
-        // oxlint-disable-next-line shadcn/no-restyle -- Preview fields use the home.css exception.
-        className="home-composer-fields"
-      >
-        <div className="home-composer-to">
-          <span>To</span>
-          <span>alex@example.com</span>
-        </div>
-      </ComposerFieldGroup>
-      <div className="home-composer-body">
-        <p>Hey Alex,</p>
-        <p>
-          Glad you like the direction. I&apos;ll send the timeline by Friday.
-        </p>
-        <p>Tuesday afternoon works for me.</p>
-      </div>
-      <div className="home-composer-toolbar">
-        <span className="home-composer-send">
-          Send <HugeiconsIcon icon={ArrowRight01Icon} size={14} />
-        </span>
-        <div className="home-composer-actions">
-          <HugeiconsIcon icon={AiMicIcon} size={16} />
-          <HugeiconsIcon icon={Delete02Icon} size={16} />
-          <HugeiconsIcon icon={MoreHorizontalIcon} size={16} />
-        </div>
-      </div>
-    </ComposerEditorFrame>
-  </div>
-);
-
-export const AssistantPreview = () => (
-  <div aria-hidden="true" className="home-panel home-chat-art" inert>
-    <div className="home-chat-conversation">
-      <p className="home-chat-question">
-        What did Alex say about the proposal?
-      </p>
-      <p className="home-chat-answer">
-        Alex approved the direction and asked for a timeline by Friday. He would
-        like to go through it together next week.
-      </p>
-      <div className="home-chat-source">
-        <HugeiconsIcon icon={Mail01Icon} size={16} />
-        <span>A few thoughts on the proposal</span>
-        <span className="home-source-separator" />
-        <span className="home-chat-source-author">Alex Morgan</span>
-      </div>
-    </div>
-  </div>
-);
-
-const SnippetsPreview = () => (
-  <div className="home-component-surface home-snippet-picker">
-    <div className="home-snippet-header">
-      <p>Insert a snippet</p>
-      <div className="home-snippet-search">
-        <span>/</span>
-        <span>Search snippets</span>
-      </div>
-    </div>
-    <div className="home-snippet-options">
-      <p className="home-selected-surface">Thanks for reaching out</p>
-      <p>A quick follow-up</p>
-    </div>
-  </div>
-);
-
-const DevicesPreview = () => (
-  <div className="home-devices">
-    <div className="home-device-desktop">
-      <div className="home-device-label">
-        <span />
-        Personal
-      </div>
-      <div className="home-device-content">
-        <div className="home-device-sidebar" />
-        <div className="home-device-lines">
-          {["inbox", "projects", "personal"].map((line) => (
-            <span key={line} />
-          ))}
-        </div>
-      </div>
-    </div>
-    <div className="home-device-phone">
-      {["inbox", "projects", "personal"].map((line) => (
-        <span key={line} />
-      ))}
-    </div>
-  </div>
-);
-
-export const WorkflowPreview = () => (
-  <div className="home-workflow-grid">
-    <Reveal className="home-workflow-backdrop" delay={0.2} />
-    <div className="home-workflow-feature">
-      <Reveal delay={0.24}>
-        <div
-          aria-hidden="true"
-          className="home-workflow-art home-keyboard-art"
-          inert
+export const AssistantPreview = () => {
+  const [selected, setSelected] = useState<PreviewMessage | null>(null);
+  return (
+    <>
+      <div className="home-chat-conversation">
+        <Surface
+          chrome="inset"
+          className="max-w-65 self-end sm:max-w-87.5"
+          variant="detail"
         >
-          <kbd>Ctrl</kbd>
-          <kbd>K</kbd>
-        </div>
-      </Reveal>
-      <Reveal className="home-workflow-caption" delay={0.4}>
-        <h3>Keyboard shortcuts</h3>
-        <p>
-          Search, compose, and move through your inbox with intuitive shortcuts.
+          <p className="home-chat-question">
+            What did Alex say about the proposal?
+          </p>
+        </Surface>
+        <p className="home-chat-answer">
+          Alex approved the direction and asked for a timeline by Friday. He
+          would like to go through it together next week.
         </p>
-      </Reveal>
-    </div>
-    <div className="home-workflow-feature">
-      <Reveal delay={0.4}>
-        <div aria-hidden="true" className="home-workflow-art" inert>
-          <SnippetsPreview />
-        </div>
-      </Reveal>
-      <Reveal className="home-workflow-caption" delay={0.56}>
-        <h3>Reusable snippets</h3>
-        <p>
-          Save text you use often.
-          <br />
-          Insert it with a slash.
-        </p>
-      </Reveal>
-    </div>
-    <div className="home-workflow-feature">
-      <Reveal delay={0.56}>
-        <div aria-hidden="true" className="home-workflow-art" inert>
-          <DevicesPreview />
-        </div>
-      </Reveal>
-      <Reveal className="home-workflow-caption" delay={0.72}>
-        <h3>Desktop and mobile</h3>
-        <p>
-          Keep work and life neatly separate.
-          <br />
-          Pick up on your computer or phone.
-        </p>
-      </Reveal>
-    </div>
-  </div>
-);
+        <Surface padding="none">
+          <Button
+            aria-label="Read source email from Alex Morgan"
+            fullWidth
+            onClick={() => {
+              setSelected(previewMessages[0]);
+            }}
+            size="auto"
+            variant="ghost"
+          >
+            <Icon icon={Mail01Icon} tone="muted" />
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <Text as="span" size="caption" weight="normal">
+                A few thoughts on the proposal
+              </Text>
+              <Text as="span" size="caption" tone="muted" weight="normal">
+                Alex Morgan
+              </Text>
+            </span>
+          </Button>
+        </Surface>
+      </div>
+      <PreviewMessageDialog
+        message={selected}
+        onClose={() => {
+          setSelected(null);
+        }}
+      />
+    </>
+  );
+};

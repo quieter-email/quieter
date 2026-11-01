@@ -1,11 +1,12 @@
 "use client";
 
 import { ConsentPreferencesLink } from "@quieter/app/components/consent-preferences-link";
+import { Brand } from "@quieter/ui/brand";
 import { cn } from "@quieter/ui/cn";
 import { Link, useLocation } from "@tanstack/react-router";
 import { domAnimation, LazyMotion } from "motion/react";
 
-import { Reveal, RevealChild } from "#/features/home/components/reveal";
+import { Reveal } from "#/features/home/components/reveal";
 
 const publicFooterRoutes = new Set([
   "/home",
@@ -65,11 +66,49 @@ export const SiteFooter = () => {
     return (
       <LazyMotion features={domAnimation}>
         <footer className="home-footer dark">
-          <Reveal className="home-footer-content" stagger={0.18}>
-            <RevealChild as="p">© 2026 quieter</RevealChild>
-            <RevealChild>
-              <FooterLinks className="home-footer-links max-w-xl md:justify-end" />
-            </RevealChild>
+          <div aria-hidden className="home-footer-wordmark">
+            <span>quieter</span>
+          </div>
+          <Reveal className="home-footer-content">
+            <div className="home-footer-navigation">
+              <Link aria-label="quieter home" to="/home">
+                <Brand className="h-7 w-28" variant="combination" />
+              </Link>
+              <div className="home-footer-columns">
+                <nav aria-label="Legal" className="home-footer-column">
+                  <h2>Legal</h2>
+                  <Link className="hover:text-muted-fg" to="/privacy">
+                    Privacy
+                  </Link>
+                  <Link className="hover:text-muted-fg" to="/cookies">
+                    Cookies
+                  </Link>
+                  <Link className="hover:text-muted-fg" to="/terms">
+                    Terms
+                  </Link>
+                  <Link className="hover:text-muted-fg" to="/imprint">
+                    Imprint
+                  </Link>
+                </nav>
+                <div className="home-footer-column">
+                  <h2>More</h2>
+                  {/* oxlint-disable-next-line shadcn/no-restyle -- The link variant renders a native text button, matching the neighboring footer links. */}
+                  <ConsentPreferencesLink className="hover:text-muted-fg">
+                    Preferences
+                  </ConsentPreferencesLink>
+                  <a
+                    className="hover:text-muted-fg"
+                    href="https://logo.dev"
+                    rel="noreferrer"
+                    target="_blank"
+                    title="Logos provided by logo.dev"
+                  >
+                    Logos by logo.dev
+                  </a>
+                </div>
+              </div>
+            </div>
+            <p className="home-footer-copyright">© 2026 quieter</p>
           </Reveal>
         </footer>
       </LazyMotion>

@@ -1,80 +1,99 @@
 "use client";
 
+import { Surface } from "@quieter/ui/surface";
+import type { ReactNode } from "react";
+
+import { ComposePreview } from "./compose-preview";
 import {
   AssistantPreview,
   ImportantPreview,
-  ComposePreview,
   LabelsPreview,
 } from "./product-previews";
-import { Reveal, RevealChild } from "./reveal";
+import { Reveal } from "./reveal";
+
+const Feature = ({
+  children,
+  description,
+  id,
+  title,
+}: {
+  children: ReactNode;
+  description: ReactNode;
+  id: string;
+  title: string;
+}) => (
+  <section aria-labelledby={id}>
+    <Reveal className="h-full">
+      <Surface className="h-full" padding="comfortable" variant="panel">
+        <div className="flex h-full flex-col gap-6">
+          <div className="home-card-heading">
+            <h2 id={id}>{title}</h2>
+            <p>{description}</p>
+          </div>
+          {children}
+        </div>
+      </Surface>
+    </Reveal>
+  </section>
+);
 
 export const AiSection = () => (
   <>
-    <section aria-labelledby="home-labels-title" className="home-feature">
-      <Reveal className="home-feature-heading" stagger={0.18}>
-        <RevealChild as="h2" className="home-heading" id="home-labels-title">
-          Automatic labels.
-        </RevealChild>
-        <RevealChild as="p" className="home-description">
-          Let AI label your mail around your preferences.{" "}
-          <br className="home-desktop-break" />
-          Everything in its place, as it arrives.
-        </RevealChild>
-      </Reveal>
-      <Reveal delay={0.3}>
+    <div className="home-paired-features">
+      <Feature
+        id="home-labels-title"
+        title="Automatic labels."
+        description={
+          <>
+            Let AI label your mail around your preferences.
+            <br />
+            Everything in its place, as it arrives.
+          </>
+        }
+      >
         <LabelsPreview />
-      </Reveal>
-    </section>
-    <div className="home-feature home-paired-features">
-      <section aria-labelledby="home-important-title">
-        <Reveal className="home-paired-feature" stagger={0.18}>
-          <RevealChild
-            as="h2"
-            className="home-heading"
-            id="home-important-title"
-          >
-            What matters, together.
-          </RevealChild>
-          <RevealChild as="p" className="home-description">
+      </Feature>
+      <Feature
+        id="home-important-title"
+        title="What matters, together."
+        description={
+          <>
             Important mail, picked out as it arrives.
             <br />
             You decide what deserves your attention.
-          </RevealChild>
-          <RevealChild>
-            <ImportantPreview />
-          </RevealChild>
-        </Reveal>
-      </section>
-      <section aria-labelledby="home-drafts-title">
-        <Reveal className="home-paired-feature" delay={0.12} stagger={0.18}>
-          <RevealChild as="h2" className="home-heading" id="home-drafts-title">
-            Draft replies faster.
-          </RevealChild>
-          <RevealChild as="p" className="home-description">
+          </>
+        }
+      >
+        <ImportantPreview />
+      </Feature>
+    </div>
+    <div className="home-paired-features">
+      <Feature
+        id="home-drafts-title"
+        title="Draft replies faster."
+        description={
+          <>
             Thoughtful drafts with context from your inbox.
             <br />
             You review, make it yours, and send.
-          </RevealChild>
-          <RevealChild>
-            <ComposePreview />
-          </RevealChild>
-        </Reveal>
-      </section>
-    </div>
-    <section aria-labelledby="home-chat-title" className="home-feature">
-      <Reveal className="home-feature-heading" stagger={0.18}>
-        <RevealChild as="h2" className="home-heading" id="home-chat-title">
-          Ask your mailbox.
-        </RevealChild>
-        <RevealChild as="p" className="home-description">
-          Get an answer with the emails to back it up.{" "}
-          <br className="home-desktop-break" />
-          AI is optional, always.
-        </RevealChild>
-      </Reveal>
-      <Reveal delay={0.3}>
+          </>
+        }
+      >
+        <ComposePreview />
+      </Feature>
+      <Feature
+        id="home-chat-title"
+        title="Ask your mailbox."
+        description={
+          <>
+            Get an answer with the emails to back it up.
+            <br />
+            AI is optional, always.
+          </>
+        }
+      >
         <AssistantPreview />
-      </Reveal>
-    </section>
+      </Feature>
+    </div>
   </>
 );

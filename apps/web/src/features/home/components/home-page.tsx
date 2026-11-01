@@ -15,7 +15,7 @@ import "../home.css";
 
 const Hero = () => (
   <section className="home-hero">
-    <HomeAtmosphericBackground fadeBottom="black" />
+    <HomeAtmosphericBackground className="home-atmosphere" fadeBottom="black" />
     <div className="home-hero-content">
       <h1 className="home-hero-heading">
         <Reveal onMount as="span" className="block" delay={0.2}>
@@ -51,11 +51,9 @@ export const HomePage = () => (
           </RevealChild>
           <RevealChild>
             <LinkButton
-              // oxlint-disable-next-line shadcn/no-restyle -- home-access is the documented home.css exception.
-              className="home-access"
               search={{ returnTo: "/auth" }}
               to="/site-password"
-              variant="outline"
+              variant="secondary"
             >
               Access
             </LinkButton>

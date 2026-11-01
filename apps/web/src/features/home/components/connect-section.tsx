@@ -1,7 +1,9 @@
 "use client";
 
+import { Surface } from "@quieter/ui/surface";
+
 import { MailboxSwitcherPreview } from "./product-previews";
-import { Reveal, RevealChild } from "./reveal";
+import { Reveal } from "./reveal";
 
 export const ConnectSection = () => (
   <section
@@ -9,19 +11,23 @@ export const ConnectSection = () => (
     className="home-feature home-connect"
     id="features"
   >
-    <Reveal className="home-feature-heading" stagger={0.18}>
-      <RevealChild as="h2" className="home-heading" id="home-connect-title">
-        All your email, <wbr />
-        in one place.
-      </RevealChild>
-      <RevealChild as="p" className="home-description">
-        Connect Gmail, use your own domain,{" "}
-        <br className="home-desktop-break" />
-        or bring email into your app with API and MCP.
-      </RevealChild>
-    </Reveal>
-    <Reveal delay={0.3}>
-      <MailboxSwitcherPreview />
+    <Reveal>
+      <Surface padding="comfortable" variant="panel">
+        <div className="flex flex-col gap-6">
+          <div className="home-feature-heading">
+            <h2 className="home-heading" id="home-connect-title">
+              All your email, <wbr />
+              in one place.
+            </h2>
+            <p className="home-description">
+              Connect Gmail, use your own domain,
+              <br className="home-desktop-break" />
+              or bring email into your app with API and MCP.
+            </p>
+          </div>
+          <MailboxSwitcherPreview />
+        </div>
+      </Surface>
     </Reveal>
   </section>
 );
