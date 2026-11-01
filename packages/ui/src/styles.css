@@ -499,6 +499,10 @@
   corner-shape: round;
 }
 
+.q-color-picker .react-colorful__pointer-fill {
+  corner-shape: round;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .toast-shake-odd,
   .toast-shake-even {

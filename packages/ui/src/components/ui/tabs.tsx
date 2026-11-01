@@ -20,7 +20,7 @@ export const TabsList = ({
       <LayoutGroup id={id}>
         <TabsPrimitive.List
           className={cn(
-            "inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-bg p-1 shadow-sm squircle data-[orientation=vertical]:h-auto data-[orientation=vertical]:flex-col data-[orientation=vertical]:items-stretch",
+            "inline-flex min-h-9 items-center gap-1 rounded-lg border border-border bg-bg p-1 shadow-sm squircle data-[orientation=vertical]:flex-col data-[orientation=vertical]:items-stretch",
             className
           )}
           {...props}

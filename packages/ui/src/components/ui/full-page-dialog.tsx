@@ -4,6 +4,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
+import { buttonVariants } from "./button";
 
 export const FullPageDialog = DialogPrimitive.Root;
 export const FullPageDialogTrigger = DialogPrimitive.Trigger;
@@ -33,7 +34,7 @@ export const FullPageDialogHeader = ({
 }: ComponentPropsWithoutRef<"header">) => (
   <header
     className={cn(
-      "m-0.5 flex shrink-0 items-center gap-3 rounded-section bg-section p-3.5 sm:p-4",
+      "m-0.5 flex shrink-0 items-center gap-3 rounded-section bg-section p-3.5",
       className
     )}
     {...props}
@@ -73,7 +74,7 @@ export const FullPageDialogClose = ({
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Close>) => (
   <DialogPrimitive.Close
     className={cn(
-      "inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-fg transition-colors squircle hover:bg-muted hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] active:bg-control-active motion-reduce:active:scale-100 [&_svg]:size-4",
+      buttonVariants({ chrome: "toolbar", size: "icon", variant: "ghost" }),
       className
     )}
     {...props}

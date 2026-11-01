@@ -21,7 +21,7 @@ export const mailListRowFrameVariants = cva(
     variants: {
       accent: {
         yellow:
-          "after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:z-0 after:w-1/3 after:bg-linear-to-l after:from-q-yellow/8 after:via-q-yellow/4 after:to-transparent after:content-['']",
+          "after:pointer-events-none after:absolute after:inset-y-0.5 after:right-0.5 after:z-0 after:w-1/3 after:rounded-r-section after:bg-linear-to-l after:from-q-yellow/8 after:via-q-yellow/4 after:to-transparent after:content-['']",
       },
       layout: {
         adaptive: "@3xl:h-12",

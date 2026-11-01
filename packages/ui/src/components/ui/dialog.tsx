@@ -48,7 +48,7 @@ export const DialogHeader = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<"div">) => (
-  <div className={cn("px-5 py-4", className)} {...props} />
+  <div className={cn("p-4", className)} {...props} />
 );
 
 const dialogBodySpacing = {
@@ -66,7 +66,7 @@ export const DialogBody = ({
 }) => (
   <div
     className={cn(
-      "px-5 py-4",
+      "p-4",
       spacing === undefined ? undefined : dialogBodySpacing[spacing],
       className
     )}
@@ -78,7 +78,7 @@ export const DialogFooter = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<"div">) => (
-  <ActionFooter className={cn("px-5 py-4", className)} {...props} />
+  <ActionFooter className={cn("p-4", className)} {...props} />
 );
 
 export const DialogTitle = ({

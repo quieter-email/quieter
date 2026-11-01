@@ -23,10 +23,15 @@ export const selectTriggerVariants = cva(
   "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap select-none focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     defaultVariants: {
+      chrome: "default",
       size: "default",
       variant: "default",
     },
     variants: {
+      chrome: {
+        default: null,
+        toolbar: "rounded-xl",
+      },
       size: {
         default: "h-8 px-2.5 text-body-sm [&_svg]:size-4",
         sm: "h-7 px-2 text-body-sm [&_svg]:size-3.5",
@@ -78,6 +83,7 @@ export type SelectTriggerProps = ComponentPropsWithoutRef<
 
 export const SelectTrigger = ({
   children,
+  chrome = "default",
   className,
   pending = false,
   size = "default",
@@ -87,7 +93,7 @@ export const SelectTrigger = ({
   <SelectPrimitive.Trigger
     {...props}
     aria-busy={pending || undefined}
-    className={cn(selectTriggerVariants({ size, variant }), className)}
+    className={cn(selectTriggerVariants({ chrome, size, variant }), className)}
     disabled={pending || props.disabled}
   >
     {children}

@@ -65,11 +65,16 @@ export const buttonVariants = cva(
     ],
     defaultVariants: {
       auxiliaryPress: false,
+      chrome: "default",
       size: "default",
       variant: "default",
     },
     variants: {
       auxiliaryPress: { false: null, true: null },
+      chrome: {
+        default: null,
+        toolbar: "rounded-xl",
+      },
       fullWidth: {
         true: "group relative w-full gap-3",
       },
@@ -88,7 +93,7 @@ export const buttonVariants = cva(
       },
       variant: {
         // Large selectable card, e.g. the mailbox-type options.
-        card: "group h-auto min-h-32 w-full flex-col items-start justify-start rounded-section bg-section p-5 text-left text-fg whitespace-normal hover:bg-control-hover",
+        card: "group h-auto min-h-32 w-full flex-col items-start justify-start rounded-section bg-section p-4 text-left text-fg whitespace-normal hover:bg-control-hover",
         // Compact toggle chip, e.g. the Cc/Bcc switches. The pressed look
         // follows aria-pressed so callers only pass the state.
         chip: "h-7 px-1.5 text-caption text-muted-fg active:scale-100 aria-pressed:bg-detail aria-pressed:text-fg",
@@ -131,6 +136,7 @@ export type ButtonProps = BaseUIButtonProps &
   };
 
 export const Button = ({
+  chrome = "default",
   className,
   fullWidth = false,
   onKeyDown,
@@ -174,6 +180,7 @@ export const Button = ({
               cn(
                 buttonVariants({
                   auxiliaryPress: isAuxiliaryPress,
+                  chrome,
                   fullWidth,
                   size,
                   variant,
@@ -183,6 +190,7 @@ export const Button = ({
           : cn(
               buttonVariants({
                 auxiliaryPress: isAuxiliaryPress,
+                chrome,
                 fullWidth,
                 size,
                 variant,

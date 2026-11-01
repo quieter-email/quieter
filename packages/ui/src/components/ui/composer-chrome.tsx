@@ -108,7 +108,7 @@ export const ComposerFieldGroup = ({
 );
 
 const composerFieldRowClassName =
-  "flex min-w-0 items-center gap-2.5 px-5 transition-colors duration-150 ease-out has-[:focus-visible]:bg-detail";
+  "flex min-w-0 items-center gap-(--composer-field-gap) px-(--composer-field-inset) transition-colors duration-150 ease-out has-[:focus-visible]:bg-detail";
 
 export const ComposerFieldRow = ({
   children,
@@ -126,17 +126,21 @@ export const ComposerFieldRow = ({
   trailing?: ReactNode;
 }) => (
   <Field
-    className={cn("gap-0", { "border-b border-border": divided }, className)}
+    className={cn(
+      "gap-0 [--composer-field-gap:calc(var(--spacing)*2.5)] [--composer-field-inset:calc(var(--spacing)*4)] [--composer-field-label-width:calc(var(--spacing)*14)]",
+      { "border-b border-transparent": divided },
+      className
+    )}
   >
     <div className={composerFieldRowClassName}>
-      <FieldLabel className="w-14 shrink-0 text-body font-normal text-muted-fg">
+      <FieldLabel className="w-(--composer-field-label-width) shrink-0 text-body font-normal text-muted-fg">
         {label}
       </FieldLabel>
       {children}
       {trailing}
     </div>
     {error === undefined ? null : (
-      <FieldError className="px-3.5 pb-2 pl-[4.75rem] text-caption">
+      <FieldError className="px-(--composer-field-inset) pb-2 pl-[calc(var(--composer-field-inset)+var(--composer-field-label-width)+var(--composer-field-gap))] text-caption">
         {error}
       </FieldError>
     )}

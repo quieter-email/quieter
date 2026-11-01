@@ -44,28 +44,14 @@ export const WorkspaceSection = ({
 );
 
 export const workspaceHeaderVariants = cva(
-  "relative m-0.5 shrink-0 rounded-section bg-section",
-  {
-    defaultVariants: { size: "default" },
-    variants: {
-      size: {
-        default: "p-3.5",
-        lg: "p-4",
-      },
-    },
-  }
+  "relative m-0.5 shrink-0 rounded-section bg-section p-3.5"
 );
 
-export type WorkspaceHeaderProps = ComponentPropsWithoutRef<"header"> &
-  VariantProps<typeof workspaceHeaderVariants>;
+export type WorkspaceHeaderProps = ComponentPropsWithoutRef<"header">;
 
 export const WorkspaceHeader = ({
   className,
-  size = "default",
   ...props
 }: WorkspaceHeaderProps) => (
-  <header
-    {...props}
-    className={cn(workspaceHeaderVariants({ size }), className)}
-  />
+  <header {...props} className={cn(workspaceHeaderVariants(), className)} />
 );

@@ -81,7 +81,7 @@ export const DrawerHeader = ({
   ...props
 }: ComponentPropsWithoutRef<"div">) => (
   <div
-    className={cn("m-0.5 rounded-section bg-section px-5 py-4", className)}
+    className={cn("m-0.5 rounded-section bg-section p-3.5", className)}
     {...props}
   />
 );
@@ -90,7 +90,7 @@ export const DrawerBody = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<"div">) => (
-  <div className={cn("flex-1 px-5 py-4", className)} {...props} />
+  <div className={cn("flex-1 p-4", className)} {...props} />
 );
 
 export const DrawerFooter = ({
@@ -98,7 +98,7 @@ export const DrawerFooter = ({
   ...props
 }: ComponentPropsWithoutRef<"div">) => (
   <ActionFooter
-    className={cn("border-t border-transparent px-5 py-4", className)}
+    className={cn("border-t border-transparent p-4", className)}
     {...props}
   />
 );

@@ -982,7 +982,7 @@ export const Schedule = ({
                       <IconButtonTooltip label="Resize event, or use arrow keys">
                         <button
                           aria-label={`Resize ${item.title}. Use up or down arrows to adjust by 15 minutes.`}
-                          className="absolute inset-x-1 bottom-0.5 z-20 h-2 cursor-ns-resize touch-none rounded-b-sm opacity-0 outline-none group-hover/event-slot:opacity-100 after:mx-auto after:mt-1 after:block after:h-0.5 after:w-6 after:rounded-full after:bg-muted-fg focus-visible:bg-primary focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden"
+                          className="absolute inset-x-1 bottom-0.5 z-20 h-2 cursor-ns-resize touch-none rounded-b-sm opacity-0 outline-none group-hover/event-slot:opacity-100 after:mx-auto after:mt-1 after:block after:h-0.5 after:w-6 after:rounded-full after:bg-muted-fg after:not-squircle focus-visible:bg-primary focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden"
                           onClick={(event) => {
                             event.stopPropagation();
                           }}
@@ -1098,7 +1098,7 @@ export const Schedule = ({
             {date === today && currentMinute !== undefined ? (
               <div
                 aria-label={`Current time ${formatTimeMinute(currentMinute, timeFormat)}`}
-                className="pointer-events-none absolute inset-x-0 top-[var(--schedule-top)] z-20 border-t border-primary before:absolute before:-top-1 before:-left-1 before:size-2 before:rounded-full before:bg-primary"
+                className="pointer-events-none absolute inset-x-0 top-[var(--schedule-top)] z-20 border-t border-primary before:absolute before:-top-1 before:-left-1 before:size-2 before:rounded-full before:bg-primary before:not-squircle"
                 style={currentTimeStyle}
               />
             ) : null}
