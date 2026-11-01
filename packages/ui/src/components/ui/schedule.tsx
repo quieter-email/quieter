@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "./dialog";
 import { IconButtonTooltip } from "./icon-button-tooltip";
+import { surfaceVariants } from "./surface";
 import { useScheduleEventDrag } from "./use-schedule-event-drag";
 
 export type ScheduleItem = {
@@ -75,6 +76,8 @@ export type ScheduleProps = {
 };
 
 const hourHeight = 56;
+const scheduleFrameClassName =
+  "relative m-0.5 min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain";
 type ScheduleStyle = CSSProperties & {
   "--schedule-columns"?: string;
   "--schedule-event-color"?: string;
@@ -435,15 +438,13 @@ export const Schedule = ({
 
   const renderAgendaDay = (date: string, dayItems: ScheduleItem[]) => (
     <section
-      className={cn("border-b border-border last:border-b-0", {
-        "py-6": view === "agenda",
-      })}
+      className="space-y-4"
       data-selected-date={date === selectedDate || undefined}
       key={date}
     >
       {view === "agenda" ? (
         <h3
-          className={cn("mb-4 text-body-sm font-medium", {
+          className={cn("text-body-sm font-medium", {
             "text-primary": date === today,
           })}
         >
@@ -484,7 +485,7 @@ export const Schedule = ({
     return (
       <div
         aria-label="Calendar agenda"
-        className="min-h-0 flex-1 overflow-y-auto px-5"
+        className={cn(surfaceVariants(), scheduleFrameClassName, "space-y-4")}
       >
         {occupied.length === 0 ? (
           <div className="flex min-h-64 flex-col items-center justify-center gap-3 text-center">
@@ -518,10 +519,14 @@ export const Schedule = ({
       <>
         <div
           aria-label="Month calendar"
-          className="flex min-h-0 flex-1 flex-col overflow-auto"
+          className={cn(
+            surfaceVariants({ padding: "none" }),
+            scheduleFrameClassName,
+            "flex flex-col"
+          )}
           ref={scrollRef}
         >
-          <div className="grid min-w-xl grid-cols-7">
+          <div className="grid min-w-xl grid-cols-7 bg-detail">
             {dates.slice(0, 7).map((date) => (
               <div className="px-3 py-3 text-caption text-muted-fg" key={date}>
                 {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
@@ -662,7 +667,10 @@ export const Schedule = ({
   return (
     <div
       aria-label={`${view === "day" ? "Day" : "Week"} calendar`}
-      className="relative min-h-0 flex-1 overflow-auto overscroll-contain bg-bg-raised"
+      className={cn(
+        surfaceVariants({ padding: "none" }),
+        scheduleFrameClassName
+      )}
       ref={scrollRef}
     >
       <p className="sr-only" id={slotHelpId}>
@@ -672,7 +680,7 @@ export const Schedule = ({
         date and time.
       </p>
       <div
-        className="sticky top-0 z-30 grid w-full min-w-[var(--schedule-min-width)] grid-cols-[var(--schedule-columns)] border-b border-border bg-section"
+        className="sticky top-0 z-30 grid w-full min-w-[var(--schedule-min-width)] grid-cols-[var(--schedule-columns)] border-b border-border bg-detail"
         style={columnStyle}
       >
         <div className="border-r border-border" />

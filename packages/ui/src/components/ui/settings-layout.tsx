@@ -27,7 +27,7 @@ export const settingsSurfaceVariants = cva("", {
       insetStackedRow:
         "flex w-full flex-col gap-3 px-4 py-(--settings-row-padding) @md:flex-row @md:items-center @md:px-6",
       padding: "px-4 py-(--settings-row-padding) @md:px-6",
-      page: "@container space-y-8",
+      page: "@container space-y-6",
       rowShell:
         "squircle relative flex w-full items-center gap-4 px-4 py-(--settings-row-padding) @md:px-6",
       title: "truncate text-body-sm font-medium text-fg",

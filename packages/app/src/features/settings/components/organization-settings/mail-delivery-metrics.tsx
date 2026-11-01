@@ -110,7 +110,7 @@ export const MailDeliveryMetrics = ({
           </Surface>
         </div>
 
-        <div className="flex flex-col gap-6 p-4">
+        <div className="flex flex-col gap-4 px-4">
           <Surface variant="detail">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-body-sm text-fg">Daily activity</h2>
