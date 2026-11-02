@@ -4,8 +4,8 @@ import { BILLING_PRODUCTS, GMAIL_MAILBOX_LIMITS } from "@quieter/billing/plans";
 import { getManagedUsageRates } from "@quieter/billing/ses-pricing";
 import { Surface } from "@quieter/ui/surface";
 
-import { AiSection } from "./ai-section";
 import { ConnectSection } from "./connect-section";
+import { FeatureCards } from "./feature-cards";
 import { HomeAtmosphericBackground } from "./lazy-webgl-backgrounds";
 import { Reveal, RevealChild } from "./reveal";
 import { WaitlistForm } from "./waitlist-form";
@@ -121,7 +121,7 @@ export const HomeSections = () => (
   <>
     <div className="home-features">
       <ConnectSection />
-      <AiSection />
+      <FeatureCards />
       <section aria-labelledby="home-tools-title" className="home-feature">
         <Reveal>
           <h2 className="home-heading" id="home-tools-title">
