@@ -24,6 +24,10 @@ const resolution = z.discriminatedUnion("kind", [
     kind: z.literal("actual-cost"),
   }),
   z.strictObject({ kind: z.literal("non-execution") }),
+  z.strictObject({
+    authorization: reference,
+    kind: z.literal("merchant-write-off"),
+  }),
 ]);
 const decision = {
   ...identity,
@@ -107,7 +111,7 @@ export const runAiCreditRecovery = async (raw: unknown) => {
   if (
     input.mode === "resolve" &&
     input.confirmation !==
-      `resolve:${input.reservationId}:${input.expectedSnapshot}`
+      `${input.resolution.kind === "merchant-write-off" ? "merchant-write-off" : "resolve"}:${input.reservationId}:${input.expectedSnapshot}`
   ) {
     throw new Error(
       "Explicit reservation and snapshot confirmation is required."
@@ -135,7 +139,24 @@ export const runAiCreditRecovery = async (raw: unknown) => {
       .where(eq(billingCreditUsageEvent.dedupeKey, `ai:reservation:${row.id}`));
     const targetStatus =
       input.resolution.kind === "actual-cost" ? "settled" : "released";
+    const result = {
+      costMicroCents,
+      resolution: input.resolution.kind,
+      ...(input.resolution.kind === "merchant-write-off"
+        ? {
+            customerChargeMicroCents: 0,
+            providerOutcome: "unknown",
+            releasedReservedCostMicroCents: row.reservedCostMicroCents,
+          }
+        : {}),
+    };
     const audit = {
+      ...(input.resolution.kind === "merchant-write-off"
+        ? {
+            recoveryMerchantAuthorization: input.resolution.authorization,
+            recoveryProviderOutcome: "unknown",
+          }
+        : {}),
       recoveryEvidence: input.evidence,
       recoveryOperator: input.operator,
       recoveryReason: input.reason,
@@ -157,7 +178,7 @@ export const runAiCreditRecovery = async (raw: unknown) => {
         ([key, value]) => previous.metadata?.[key] === value
       )
     ) {
-      return { outcome: "already-resolved", status: row.status };
+      return { ...result, outcome: "already-resolved", status: row.status };
     }
     if (
       snapshot(row) !== input.expectedSnapshot ||
@@ -184,7 +205,7 @@ export const runAiCreditRecovery = async (raw: unknown) => {
       );
     }
     if (input.mode === "dry-run") {
-      return { costMicroCents, outcome: "dry-run", status: targetStatus };
+      return { ...result, outcome: "dry-run", status: targetStatus };
     }
     if (row.account === null) {
       throw new Error("The authorizing account is unavailable.");
@@ -214,6 +235,6 @@ export const runAiCreditRecovery = async (raw: unknown) => {
         status: targetStatus,
       })
       .where(eq(aiCreditReservation.id, row.id));
-    return { costMicroCents, outcome: "resolved", status: targetStatus };
+    return { ...result, outcome: "resolved", status: targetStatus };
   });
 };
