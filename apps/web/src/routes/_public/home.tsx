@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_public/home")({
       { title: "quieter | Email, without the noise." },
       {
         content:
-          "Your Gmail, your team's mailboxes and the mail your product sends, in one place.",
+          "Your Gmail, managed transactional mail, and API & MCP, in one place.",
         name: "description",
       },
       {

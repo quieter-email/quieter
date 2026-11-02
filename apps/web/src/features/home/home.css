@@ -30,6 +30,7 @@
 .home-closing {
   position: relative;
   display: flex;
+  min-height: 100svh;
   align-items: center;
   justify-content: center;
   overflow: hidden;
@@ -43,7 +44,6 @@
   mask-image: linear-gradient(transparent, black 20%, black 70%, transparent);
 }
 .home-hero {
-  min-height: 740px;
   padding-block: 120px 96px;
 }
 .home-hero-content,
@@ -93,7 +93,6 @@
   max-width: 384px;
 }
 .home-closing {
-  min-height: 640px;
   padding-block: 96px;
 }
 .home-closing-content {
@@ -110,7 +109,7 @@
   display: flex;
   width: min(1120px, calc(100% - 48px));
   flex-direction: column;
-  gap: 32px;
+  gap: 16px;
   margin-inline: auto;
   padding-block: 48px 80px;
 }
@@ -362,25 +361,25 @@
 .home-device-lines span:last-child {
   width: 75%;
 }
-.home-device-phone {
+.home-device-browser {
   position: absolute;
   right: 0;
   bottom: 0;
   display: flex;
-  width: 62px;
-  height: 114px;
+  width: 160px;
+  height: 100px;
   flex-direction: column;
-  gap: 15px;
-  padding: 14px 10px;
+  gap: 12px;
+  padding: 12px;
   border-radius: var(--radius-lg);
   background: var(--detail);
 }
-.home-device-phone span {
+.home-device-browser > span {
   height: 3px;
   border-radius: 2px;
   background: var(--muted-fg);
 }
-.home-device-phone span:nth-child(2) {
+.home-device-browser > span:last-child {
   width: 76%;
 }
 .home-pricing {
@@ -509,7 +508,6 @@
 }
 @media (min-width: 768px) {
   .home-hero {
-    min-height: 855px;
     padding-block: 144px 96px;
   }
   .home-hero-content {
@@ -524,7 +522,6 @@
     line-height: 28px;
   }
   .home-closing {
-    min-height: 760px;
     padding-block: 100px;
   }
   .home-closing-heading {
@@ -534,7 +531,6 @@
 }
 @media (min-width: 1024px) {
   .home-features {
-    gap: 48px;
     padding-block: 80px;
   }
   .home-feature-heading {
