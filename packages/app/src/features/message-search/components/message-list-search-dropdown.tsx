@@ -18,6 +18,7 @@ import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
+import { popupSurfaceClassName } from "@quieter/ui/popup-surface";
 import { LazyMotion, domAnimation, AnimatePresence, m } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
@@ -109,6 +110,7 @@ const SearchDropdownRow = ({
             active && !highlighted && !!(className || customColor),
         }
       )}
+      data-search-highlighted={highlighted || undefined}
       onClick={onClick}
       style={rowStyle}
       type="button"
@@ -171,6 +173,7 @@ export const MessageListSearchDropdown = ({
   const closeLabelsSubmenuTimeoutRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const labelsInlineRef = useRef<HTMLDivElement>(null);
   const labelsSubmenuRef = useRef<HTMLDivElement>(null);
   const labelsTriggerRef = useRef<HTMLButtonElement>(null);
@@ -209,50 +212,116 @@ export const MessageListSearchDropdown = ({
 
   useEffect(() => cancelCloseLabelsSubmenu, []);
 
-  useLayoutEffect(() => {
-    if (!showLabelsSubmenu) {
-      return;
+  useLayoutEffect((): (() => void) | undefined => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    const container = scrollContainerRef.current;
+    const isDesktop = window.matchMedia("(min-width: 1024px)").matches;
+    const revealHighlightedRow = () => {
+      const highlightedRow = container?.querySelector<HTMLElement>(
+        "[data-search-highlighted]"
+      );
+      const target =
+        isDesktop &&
+        (isLabelHighlighted || (showLabelsSubmenu && !highlightedItemKey))
+          ? labelsTriggerRef.current
+          : highlightedRow;
+      if (container && target) {
+        const containerRect = container.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        if (targetRect.top < containerRect.top) {
+          container.scrollTop += targetRect.top - containerRect.top;
+        } else if (targetRect.bottom > containerRect.bottom) {
+          container.scrollTop += targetRect.bottom - containerRect.bottom;
+        }
+      }
+    };
+    revealHighlightedRow();
+
+    if (isLabelHighlighted && isDesktop) {
+      const submenu = labelsSubmenuRef.current;
+      const row = submenu?.querySelector<HTMLElement>(
+        "[data-search-highlighted]"
+      );
+      if (submenu && row) {
+        const submenuRect = submenu.getBoundingClientRect();
+        const rowRect = row.getBoundingClientRect();
+        if (rowRect.top < submenuRect.top) {
+          submenu.scrollTop += rowRect.top - submenuRect.top;
+        } else if (rowRect.bottom > submenuRect.bottom) {
+          submenu.scrollTop += rowRect.bottom - submenuRect.bottom;
+        }
+      }
+    }
+    const inlineViewport = labelsInlineRef.current?.parentElement;
+    if (!isDesktop && inlineViewport) {
+      const observer = new ResizeObserver(revealHighlightedRow);
+      observer.observe(inlineViewport);
+      return () => {
+        observer.disconnect();
+      };
+    }
+    return undefined;
+  }, [highlightedItemKey, isLabelHighlighted, isOpen, showLabelsSubmenu]);
+
+  useLayoutEffect((): (() => void) | undefined => {
+    if (!isOpen || !showLabelsSubmenu) {
+      return undefined;
     }
 
     const submenu = labelsSubmenuRef.current;
     const trigger = labelsTriggerRef.current;
     if (!submenu || !trigger) {
-      return;
+      return undefined;
     }
 
-    const triggerRect = trigger.getBoundingClientRect();
-    const submenuWidth = submenu.offsetWidth;
-    const submenuHeight = submenu.offsetHeight;
-    const viewportGap = 8;
-    const top = Math.min(
-      triggerRect.top,
-      Math.max(viewportGap, window.innerHeight - submenuHeight - viewportGap)
-    );
-    setLabelsLayout({
-      coneHeight: submenuHeight,
-      coneOriginY: triggerRect.top + triggerRect.height / 2 - top,
-      left: Math.min(
-        triggerRect.right + viewportGap,
-        Math.max(viewportGap, window.innerWidth - submenuWidth - viewportGap)
-      ),
-      top,
-    });
-  }, [
-    showLabelsSubmenu,
-    isLoadingLabels,
-    labelsErrorMessage,
-    userLabels.length,
-  ]);
-
-  useLayoutEffect(() => {
-    if (
-      !showLabelsSubmenu ||
-      window.matchMedia("(min-width: 1024px)").matches
-    ) {
-      return;
-    }
-    labelsInlineRef.current?.scrollIntoView({ block: "nearest" });
-  }, [showLabelsSubmenu]);
+    const updateLayout = () => {
+      if (!window.matchMedia("(min-width: 1024px)").matches) {
+        return;
+      }
+      const triggerRect = trigger.getBoundingClientRect();
+      const submenuWidth = submenu.offsetWidth;
+      const submenuHeight = submenu.offsetHeight;
+      const viewportGap = 8;
+      const top = Math.max(
+        viewportGap,
+        Math.min(
+          triggerRect.top,
+          window.innerHeight - submenuHeight - viewportGap
+        )
+      );
+      setLabelsLayout({
+        coneHeight: submenuHeight,
+        coneOriginY: Math.max(
+          0,
+          Math.min(
+            submenuHeight,
+            triggerRect.top + triggerRect.height / 2 - top
+          )
+        ),
+        left: Math.max(
+          viewportGap,
+          Math.min(
+            triggerRect.right + viewportGap,
+            window.innerWidth - submenuWidth - viewportGap
+          )
+        ),
+        top,
+      });
+    };
+    updateLayout();
+    window.addEventListener("scroll", updateLayout, true);
+    window.addEventListener("resize", updateLayout);
+    const observer = new ResizeObserver(updateLayout);
+    observer.observe(submenu);
+    return () => {
+      window.removeEventListener("scroll", updateLayout, true);
+      window.removeEventListener("resize", updateLayout);
+      observer.disconnect();
+    };
+  }, [isOpen, showLabelsSubmenu, highlightedItemKey]);
 
   let labelsContent: ReactNode;
   if (labelsErrorMessage) {
@@ -353,7 +422,10 @@ export const MessageListSearchDropdown = ({
         </svg>
         <div
           aria-label="Labels"
-          className="pointer-events-auto absolute top-0 left-2 max-h-[calc(100dvh-1rem)] w-72 overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl bg-section p-1 shadow-elevation"
+          className={cn(
+            popupSurfaceClassName,
+            "pointer-events-auto absolute top-0 left-2 max-h-[calc(100dvh-1rem)] w-72 overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl p-1"
+          )}
           onPointerEnter={(event) => {
             if (event.pointerType === "mouse") {
               cancelCloseLabelsSubmenu();
@@ -392,13 +464,19 @@ export const MessageListSearchDropdown = ({
             }}
             transition={{ duration: 0.1, ease: "easeOut" }}
             aria-label="Search filters"
-            className="fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex max-h-56 flex-col overflow-hidden rounded-xl bg-section p-2 shadow-elevation lg:absolute lg:inset-x-0 lg:top-full lg:mt-2 lg:max-h-72"
+            className={cn(
+              popupSurfaceClassName,
+              "fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex max-h-56 flex-col overflow-hidden rounded-xl p-2 lg:absolute lg:inset-x-0 lg:top-full lg:mt-2 lg:max-h-72"
+            )}
             data-search-dropdown-content
             onMouseDown={(event) => {
               event.preventDefault();
             }}
           >
-            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
+            <div
+              className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+              ref={scrollContainerRef}
+            >
               <div className="flex flex-col gap-3">
                 {searchFilterSections.map((section) => (
                   <div className="flex flex-col gap-1" key={section.label}>

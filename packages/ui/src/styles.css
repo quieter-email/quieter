@@ -40,7 +40,7 @@
   --switch-thumb: oklch(0.42 0.003 264);
   --card: var(--bg-surface);
   --card-fg: var(--fg);
-  --popover: var(--bg-surface);
+  --popover: oklch(0.985 0.002 264);
   --popover-fg: var(--fg);
   --primary: oklch(0.55 0.22 270);
   --primary-fg: oklch(0.985 0.002 264);
@@ -138,7 +138,7 @@
   --switch-thumb: #9a9aa2;
   --card: var(--bg-surface);
   --card-fg: var(--fg);
-  --popover: var(--detail);
+  --popover: #303034;
   --popover-fg: var(--fg);
   --primary: oklch(0.95 0 0);
   --primary-fg: oklch(0.141 0 0);
@@ -233,7 +233,7 @@
   --switch-thumb: var(--muted-fg);
   --card: var(--bg-surface);
   --card-fg: var(--fg);
-  --popover: var(--bg-raised);
+  --popover: color-mix(in srgb, var(--section), var(--fg) 9%);
   --popover-fg: var(--fg);
   --primary: var(--theme-primary);
   --primary-fg: var(--theme-primary-fg);

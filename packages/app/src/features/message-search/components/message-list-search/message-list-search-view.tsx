@@ -25,6 +25,7 @@ import { Calendar } from "@quieter/ui/calendar";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { popupSurfaceClassName } from "@quieter/ui/popup-surface";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 
@@ -499,7 +500,10 @@ export const MessageListSearchView = ({
             (activeDateFilter.type === "after" ||
               activeDateFilter.type === "before") && (
               <div
-                className="absolute top-full z-40 mt-2 max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] overflow-auto overscroll-contain rounded-xl bg-section p-2 shadow-elevation"
+                className={cn(
+                  popupSurfaceClassName,
+                  "absolute top-full z-40 mt-2 max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] overflow-auto overscroll-contain rounded-xl p-2"
+                )}
                 // oxlint-disable-next-line shadcn/no-inline-styles -- Popover anchors to measured input position.
                 style={{ left: datePopoverLeft }}
               >
