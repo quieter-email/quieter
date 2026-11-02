@@ -30,10 +30,15 @@ import {
 } from "@quieter/app/features/motion/app-motion";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
 import { AnimatePresence, m, useReducedMotion, useSpring } from "motion/react";
 import type { MotionValue } from "motion/react";
 import { useRef, useState } from "react";
@@ -343,25 +348,30 @@ const MailboxMenuItem = ({
       }
     )}
   >
-    <Button
+    <DropdownMenuItem
+      nativeButton
+      render={
+        <Button
+          focusRing="inset"
+          ref={handleRef}
+          type="button"
+          variant="ghost"
+        />
+      }
       aria-current={isActive ? "page" : undefined}
       aria-describedby="mailbox-order-help"
       aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
       // oxlint-disable-next-line shadcn/no-restyle -- Compact full-row mailbox selection and drag surface.
       className="h-auto min-h-12 min-w-0 flex-1 touch-pan-y justify-start px-2.5 py-2 text-left hover:bg-transparent active:scale-100 aria-[current=page]:bg-transparent"
       data-mailbox-switcher-navigation-item
-      focusRing="inset"
-      onClick={(event) => {
+      onSelect={(event) => {
         if (!event.defaultPrevented) {
           onSelect();
         }
       }}
-      ref={handleRef}
-      type="button"
-      variant="ghost"
     >
       {children}
-    </Button>
+    </DropdownMenuItem>
     {action !== null && action !== undefined && action !== false && (
       <div className="flex shrink-0 items-center gap-1 pr-2.5">{action}</div>
     )}
@@ -459,20 +469,21 @@ const MailboxTeam = ({
       >
         {(handleRef) => (
           <div className="group/header flex min-h-7 items-center rounded-md squircle focus-within:bg-control-hover hover:bg-control-hover">
-            <Button
+            <DropdownMenuItem
+              closeOnSelect={false}
+              nativeButton
+              render={<Button ref={handleRef} variant="ghost" />}
               aria-describedby={disabled ? undefined : "mailbox-order-help"}
               aria-expanded={!closed}
               aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
               // oxlint-disable-next-line shadcn/no-restyle -- Team header preserves the compact selector hierarchy.
               className="h-auto min-h-7 min-w-0 flex-1 touch-pan-y justify-start gap-2 px-2 py-1 text-left hover:bg-transparent active:scale-100"
               data-mailbox-switcher-navigation-item
-              onClick={(event) => {
+              onSelect={(event) => {
                 if (!event.defaultPrevented) {
                   onToggle(group.id);
                 }
               }}
-              ref={handleRef}
-              variant="ghost"
             >
               <m.span
                 animate={{ rotate: closed ? 0 : 90 }}
@@ -488,7 +499,7 @@ const MailboxTeam = ({
               <span className="min-w-0 flex-1 truncate text-caption text-muted-fg">
                 {group.name}
               </span>
-            </Button>
+            </DropdownMenuItem>
             {group.kind === "organization" && !embedded && (
               <IconButtonTooltip label={`Open ${group.name} settings`}>
                 <LinkButton
@@ -609,6 +620,7 @@ export const MailboxSwitcherDropdown = ({
     const { target } = event;
     if (event.key === "/" && !(target instanceof HTMLInputElement)) {
       event.preventDefault();
+      event.stopPropagation();
       searchRef.current?.focus();
       return;
     }
@@ -628,6 +640,7 @@ export const MailboxSwitcherDropdown = ({
         return;
       }
       event.preventDefault();
+      event.stopPropagation();
       const items = mailboxId ? group.mailboxes : groups;
       const fromIndex = mailboxId
         ? group.mailboxes.findIndex((mailbox) => mailbox.id === mailboxId)
@@ -678,6 +691,7 @@ export const MailboxSwitcherDropdown = ({
     ) {
       if (action) {
         event.preventDefault();
+        event.stopPropagation();
         action.focus();
       }
       return;
@@ -689,6 +703,7 @@ export const MailboxSwitcherDropdown = ({
     ) {
       if (primaryItem) {
         event.preventDefault();
+        event.stopPropagation();
         primaryItem.focus();
       }
       return;
@@ -710,6 +725,7 @@ export const MailboxSwitcherDropdown = ({
     );
     if (target instanceof HTMLInputElement) {
       event.preventDefault();
+      event.stopPropagation();
       items[0]?.focus();
       return;
     }
@@ -724,6 +740,7 @@ export const MailboxSwitcherDropdown = ({
     }
 
     event.preventDefault();
+    event.stopPropagation();
     let nextIndex = Math.max(
       0,
       Math.min(
@@ -798,9 +815,11 @@ export const MailboxSwitcherDropdown = ({
   };
 
   return (
-    <Popover
-      onOpenChange={(open) => {
+    <DropdownMenu
+      modal={false}
+      onOpenChange={(open, details) => {
         if (!open && isDragging) {
+          details.cancel();
           return;
         }
         setIsOpen(open);
@@ -813,9 +832,11 @@ export const MailboxSwitcherDropdown = ({
       open={isOpen}
     >
       <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-control-hover">
-        <PopoverTrigger
+        <DropdownMenuTrigger
           onKeyDownCapture={handleEscapeCapture}
           aria-label="Switch mailbox"
+          render={<Button size="auto" variant="ghost" />}
+          nativeButton
           // oxlint-disable-next-line shadcn/no-restyle -- Switcher trigger keeps its nav metrics.
           className="relative z-10 w-full min-w-0 rounded-md px-3 py-2 text-left squircle hover:bg-transparent hover:text-fg active:scale-100"
         >
@@ -823,7 +844,7 @@ export const MailboxSwitcherDropdown = ({
             <m.div
               key={`${selectedMailbox?.id ?? "empty"}:${primaryLabel}:${secondaryLabel}`}
               animate={{ opacity: 1 }}
-              className="min-w-0"
+              className="min-w-0 flex-1"
               exit={{ opacity: 0 }}
               initial={{ opacity: 0 }}
               transition={{
@@ -841,10 +862,10 @@ export const MailboxSwitcherDropdown = ({
               </p>
             </m.div>
           </AnimatePresence>
-        </PopoverTrigger>
+        </DropdownMenuTrigger>
       </div>
 
-      <PopoverContent
+      <DropdownMenuContent
         onKeyDownCapture={handleEscapeCapture}
         align="start"
         // oxlint-disable-next-line shadcn/no-restyle -- Switcher popover keeps its compact panel.
@@ -882,22 +903,20 @@ export const MailboxSwitcherDropdown = ({
               <>
                 {onSelectAllInboxes &&
                 mailboxes.some((mailbox) => mailbox.provider !== "api") ? (
-                  <Button
+                  <DropdownMenuItem
+                    nativeButton
+                    render={<Button variant="ghost" />}
                     aria-current={allInboxesActive ? "page" : undefined}
                     className="w-full justify-start"
                     data-mailbox-switcher-navigation-item
-                    onClick={() => {
-                      onSelectAllInboxes();
-                      setIsOpen(false);
-                    }}
-                    variant="ghost"
+                    onSelect={onSelectAllInboxes}
                   >
                     <Icon aria-hidden icon={Mail01Icon} />
                     All inboxes
-                  </Button>
+                  </DropdownMenuItem>
                 ) : null}
                 {(mailboxes.length >= 8 || isFiltering) && (
-                  <div className="sticky top-0 z-10 bg-section">
+                  <div className="sticky top-0 z-10 bg-popover">
                     <Input
                       aria-label="Search mailboxes"
                       onChange={(event) => {
@@ -993,7 +1012,6 @@ export const MailboxSwitcherDropdown = ({
                                     isActive={isActive}
                                     onSelect={() => {
                                       onSelectMailboxId(mailbox.id);
-                                      setIsOpen(false);
                                     }}
                                   >
                                     <MailboxSummary
@@ -1027,18 +1045,27 @@ export const MailboxSwitcherDropdown = ({
                 </output>
                 {!embedded && (
                   <div className="mt-1">
-                    <LinkButton
+                    <DropdownMenuItem
+                      nativeButton
+                      render={
+                        <LinkButton
+                          search={{
+                            from: "/",
+                            mailboxId: "",
+                            tab: "mailboxes",
+                          }}
+                          size="sm"
+                          to="/settings"
+                          variant="ghost"
+                        />
+                      }
                       // oxlint-disable-next-line shadcn/no-restyle -- Manage row keeps its compact nav metrics.
                       className="h-auto min-h-7 w-full justify-between px-2.5 py-1 squircle"
                       data-mailbox-switcher-navigation-item
-                      search={{ from: "/", mailboxId: "", tab: "mailboxes" }}
-                      size="sm"
-                      to="/settings"
-                      variant="ghost"
                     >
                       Manage mailboxes
                       <Icon aria-hidden icon={Settings01Icon} />
-                    </LinkButton>
+                    </DropdownMenuItem>
                   </div>
                 )}
               </>
@@ -1051,7 +1078,7 @@ export const MailboxSwitcherDropdown = ({
           {isOpen &&
             createPortal(
               <DragOverlay<SwitcherDragData, Draggable<SwitcherDragData>>
-                className="pointer-events-none z-50 rounded-md bg-section shadow-elevation"
+                className="pointer-events-none z-50 rounded-md bg-popover shadow-elevation"
                 dropAnimation={null}
               >
                 {(source) => {
@@ -1083,7 +1110,7 @@ export const MailboxSwitcherDropdown = ({
               document.body
             )}
         </DragDropProvider>
-      </PopoverContent>
-    </Popover>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };

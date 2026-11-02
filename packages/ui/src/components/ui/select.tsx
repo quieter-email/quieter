@@ -14,6 +14,7 @@ import {
   anchoredPopupMotionClassName,
   overlayBackdropClassName,
 } from "./overlay-chrome";
+import { popupSurfaceClassName } from "./popup-surface";
 
 type SelectDensity = "default" | "compact";
 
@@ -140,7 +141,8 @@ export const SelectContent = ({
         <SelectPrimitive.Popup
           className={cn(
             anchoredPopupMotionClassName,
-            "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 overflow-y-auto overscroll-contain rounded-xl border border-transparent bg-section p-1 text-popover-fg shadow-md data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
+            popupSurfaceClassName,
+            "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 overflow-y-auto overscroll-contain rounded-xl p-1 data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
             { "min-w-40 p-0.5 text-caption": size === "compact" },
             className
           )}
