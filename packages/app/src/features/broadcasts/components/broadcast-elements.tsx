@@ -9,6 +9,9 @@ import {
   AlertDialogTitle,
 } from "@quieter/ui/alert-dialog";
 import { Button, LinkButton } from "@quieter/ui/button";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Text } from "@quieter/ui/text";
+import { WorkspaceHeader } from "@quieter/ui/workspace-section";
 import { useBlocker } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useRef } from "react";
@@ -19,38 +22,53 @@ export const BroadcastHeader = ({
   action,
   back,
   children,
+  controls,
+  description,
   title,
 }: {
   action?: ReactNode;
-  back?: "campaigns" | "templates";
+  back?: "audiences" | "campaigns" | "templates";
   children?: ReactNode;
+  controls?: ReactNode;
+  description?: ReactNode;
   title: string;
 }) => {
   const { organizationId } = useBroadcastWorkspace();
   return (
-    <header className="flex flex-col gap-4">
-      {back ? (
-        <LinkButton
-          className="self-start"
-          search={{ organizationId }}
-          size="sm"
-          to={back === "campaigns" ? "/campaigns" : "/templates"}
-          variant="ghost"
-        >
-          <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
-          {back === "campaigns" ? "Campaigns" : "Templates"}
-        </LinkButton>
-      ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <h1 className="truncate text-title-sm font-normal tracking-tight">
-            {title}
-          </h1>
-          {children}
+    <WorkspaceHeader>
+      <div className="@container flex flex-col gap-3">
+        <div className="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 @lg:flex-1">
+            <div className="flex max-w-full min-w-0 items-center gap-3">
+              {back ? (
+                <IconButtonTooltip
+                  label={`Back to ${back === "audiences" ? "all audiences" : back}`}
+                >
+                  <LinkButton
+                    aria-label={`Back to ${back === "audiences" ? "all audiences" : back}`}
+                    search={{ organizationId }}
+                    size="icon"
+                    to={`/${back}`}
+                    variant="ghost"
+                  >
+                    <HugeiconsIcon aria-hidden icon={ArrowLeft01Icon} />
+                  </LinkButton>
+                </IconButtonTooltip>
+              ) : null}
+              <Text as="h1" size="lg" truncate weight="medium">
+                {title}
+              </Text>
+            </div>
+            {children}
+          </div>
+          {action}
         </div>
-        {action}
+        {description !== undefined && description !== null ? (
+          <div className="text-body-sm/5 text-muted-fg">{description}</div>
+        ) : null}
+        {controls}
       </div>
-    </header>
+    </WorkspaceHeader>
   );
 };
 
@@ -63,7 +81,7 @@ export const BroadcastLoading = ({ label }: { label: string }) => (
 export const BroadcastError = ({ onRetry }: { onRetry: () => void }) => (
   <div className="flex items-center justify-center gap-3 py-12">
     <p className="text-body text-muted-fg">Could not load this page.</p>
-    <Button onClick={onRetry} size="sm" variant="outline">
+    <Button onClick={onRetry} size="default" variant="secondary">
       Try again
     </Button>
   </div>
@@ -93,12 +111,16 @@ export const useDraftNavigation = (dirty: boolean) => {
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <Button onClick={() => blocker.reset?.()} size="sm" variant="outline">
+          <Button
+            onClick={() => blocker.reset?.()}
+            size="default"
+            variant="secondary"
+          >
             Keep editing
           </Button>
           <Button
             onClick={() => blocker.proceed?.()}
-            size="sm"
+            size="default"
             variant="destructive"
           >
             Discard changes

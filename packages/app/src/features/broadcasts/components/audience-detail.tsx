@@ -1,10 +1,8 @@
 import { Add01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  SettingsCard,
   SettingsErrorState,
   SettingsLoadingState,
-  SettingsPageHeader,
 } from "@quieter/app/features/settings/components/settings-layout";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { rpc } from "@quieter/app/lib/orpc";
@@ -13,8 +11,7 @@ import type {
   AudienceMembershipStatus,
   AudienceSegmentCriteria,
 } from "@quieter/mail/audiences";
-import { Button, LinkButton } from "@quieter/ui/button";
-import { ContentSection } from "@quieter/ui/content-section";
+import { Button } from "@quieter/ui/button";
 import {
   Dialog,
   DialogBody,
@@ -35,6 +32,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import {
+  SettingsSectionLayout,
+  settingsNavigationRowVariants,
+} from "@quieter/ui/settings-layout";
+import { Surface } from "@quieter/ui/surface";
+import { Text } from "@quieter/ui/text";
 import { Textarea } from "@quieter/ui/textarea";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -42,6 +45,7 @@ import { useDeferredValue, useState } from "react";
 
 import { AudienceContactDialog } from "./audience-contact-dialog";
 import { AudienceImportDialog } from "./audience-import-dialog";
+import { BroadcastHeader } from "./broadcast-elements";
 import { useBroadcastWorkspace } from "./broadcast-workspace";
 
 type Segment = { id: string; name: string; criteria: AudienceSegmentCriteria };
@@ -113,38 +117,6 @@ const SegmentDialog = ({
       onClose();
     },
   });
-  let segmentDeleteContent: ReactNode;
-  if (deleting) {
-    segmentDeleteContent = (
-      <div className="space-y-2">
-        <p className="text-body text-fg">
-          Delete this segment? Contacts stay in the audience.
-        </p>
-        <Button
-          disabled={mutation.isPending}
-          onClick={() => {
-            mutation.mutate(true);
-          }}
-          size="sm"
-          variant="destructive"
-        >
-          Confirm delete
-        </Button>
-      </div>
-    );
-  } else {
-    segmentDeleteContent = segment ? (
-      <Button
-        onClick={() => {
-          setDeleting(true);
-        }}
-        size="sm"
-        variant="ghost"
-      >
-        Delete segment
-      </Button>
-    ) : null;
-  }
   return (
     <Dialog
       open
@@ -209,15 +181,34 @@ const SegmentDialog = ({
                 value={excludeTags}
               />
             </Field>
-            {segmentDeleteContent}
+            {deleting ? (
+              <p className="text-body text-fg">
+                Delete this segment? Contacts stay in the audience.
+              </p>
+            ) : null}
           </DialogBody>
           <DialogFooter>
             <DialogCloseButton disabled={mutation.isPending}>
               Cancel
             </DialogCloseButton>
+            {segment ? (
+              <Button
+                disabled={mutation.isPending}
+                onClick={() => {
+                  if (deleting) {
+                    mutation.mutate(true);
+                  } else {
+                    setDeleting(true);
+                  }
+                }}
+                variant="destructive"
+              >
+                {deleting ? "Confirm delete" : "Delete segment"}
+              </Button>
+            ) : null}
             <Button
               disabled={mutation.isPending || !name.trim()}
-              size="sm"
+              size="default"
               type="submit"
             >
               Save segment
@@ -313,7 +304,7 @@ const EditAudienceDialog = ({
             </DialogCloseButton>
             <Button
               disabled={mutation.isPending || !name.trim()}
-              size="sm"
+              size="default"
               type="submit"
             >
               Save changes
@@ -398,8 +389,8 @@ export const AudienceDetail = ({ audienceId }: { audienceId: string }) => {
         onRetry={() => void contacts.refetch()}
       />
     ) : (
-      <SettingsCard>
-        <ul className="divide-y divide-border">
+      <div className="@container">
+        <ul className="flex flex-col gap-0.5">
           {contacts.data.items.length === 0 ? (
             <li className="px-6 py-10 text-center text-body text-muted-fg">
               No contacts match these filters.
@@ -408,14 +399,16 @@ export const AudienceDetail = ({ audienceId }: { audienceId: string }) => {
             contacts.data.items.map((contact) => (
               <li key={contact.id}>
                 <button
-                  className="flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-ring sm:px-6"
+                  className={settingsNavigationRowVariants({
+                    chrome: "standalone",
+                  })}
                   onClick={() => {
                     setContactDialog(contact);
                   }}
                   type="button"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-body-sm text-fg">
+                    <span className="block truncate text-body font-medium text-fg">
                       {contact.name || contact.email}
                     </span>
                     {contact.name ? (
@@ -449,20 +442,13 @@ export const AudienceDetail = ({ audienceId }: { audienceId: string }) => {
             ))
           )}
         </ul>
-      </SettingsCard>
+      </div>
     );
   }
   return (
-    <div className="space-y-8">
-      <LinkButton
-        search={{ organizationId }}
-        size="sm"
-        to="/audiences"
-        variant="ghost"
-      >
-        All audiences
-      </LinkButton>
-      <SettingsPageHeader
+    <div className="flex flex-col gap-0.5">
+      <BroadcastHeader
+        back="audiences"
         title={audience.data.name}
         action={
           canManage ? (
@@ -471,8 +457,8 @@ export const AudienceDetail = ({ audienceId }: { audienceId: string }) => {
                 onClick={() => {
                   setImportOpen(true);
                 }}
-                size="sm"
-                variant="outline"
+                size="default"
+                variant="secondary"
               >
                 Import contacts
               </Button>
@@ -480,7 +466,7 @@ export const AudienceDetail = ({ audienceId }: { audienceId: string }) => {
                 onClick={() => {
                   setContactDialog("new");
                 }}
-                size="sm"
+                size="default"
               >
                 <HugeiconsIcon
                   aria-hidden
@@ -492,210 +478,221 @@ export const AudienceDetail = ({ audienceId }: { audienceId: string }) => {
             </div>
           ) : undefined
         }
+        description={audience.data.description || undefined}
       >
-        {audience.data.description ? <p>{audience.data.description}</p> : null}
-        <p>
+        <span className="text-body-sm text-muted-fg">
           {audience.data.subscribedCount.toLocaleString()} subscribed,{" "}
           {audience.data.contactCount.toLocaleString()} contacts
-        </p>
-      </SettingsPageHeader>
-      {canManage ? (
-        <Button
-          onClick={() => {
-            setEditOpen(true);
-          }}
-          size="sm"
-          variant="ghost"
-        >
-          Edit audience details
-        </Button>
-      ) : null}
-      <ContentSection title="Contacts">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          <Input
-            aria-label="Search contacts"
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setCursor(undefined);
-            }}
-            placeholder="Search name or email"
-            value={search}
-          />
-          <Select
-            items={[
-              { label: "All subscriptions", value: "all" },
-              { label: "Subscribed", value: "subscribed" },
-              { label: "Unsubscribed", value: "unsubscribed" },
-              { label: "Removed", value: "removed" },
-            ]}
-            onValueChange={(value) => {
-              if (
-                value === "all" ||
-                value === "subscribed" ||
-                value === "unsubscribed" ||
-                value === "removed"
-              ) {
-                setStatus(value);
-                setCursor(undefined);
-              }
-            }}
-            value={status}
-          >
-            <SelectTrigger aria-label="Subscription status">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectList>
-                <SelectItem value="all">All subscriptions</SelectItem>
-                <SelectItem value="subscribed">Subscribed</SelectItem>
-                <SelectItem value="unsubscribed">Unsubscribed</SelectItem>
-                <SelectItem value="removed">Removed</SelectItem>
-              </SelectList>
-            </SelectContent>
-          </Select>
-          <Select
-            items={[
-              { label: "All safety states", value: "all" },
-              { label: "Blocked", value: "suppressed" },
-              { label: "No safety block", value: "clear" },
-            ]}
-            onValueChange={(value) => {
-              if (
-                value === "all" ||
-                value === "suppressed" ||
-                value === "clear"
-              ) {
-                setSuppression(value);
-                setCursor(undefined);
-              }
-            }}
-            value={suppression}
-          >
-            <SelectTrigger aria-label="Safety block">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectList>
-                <SelectItem value="all">All safety states</SelectItem>
-                <SelectItem value="suppressed">Blocked</SelectItem>
-                <SelectItem value="clear">No safety block</SelectItem>
-              </SelectList>
-            </SelectContent>
-          </Select>
-          <Input
-            aria-label="Filter by tag"
-            onChange={(event) => {
-              setTag(event.target.value);
-              setCursor(undefined);
-            }}
-            placeholder="Filter by tag"
-            value={tag}
-          />
-          <Select
-            items={[
-              { label: "All segments", value: "" },
-              ...(segments.data?.map((segment) => ({
-                label: segment.name,
-                value: segment.id,
-              })) ?? []),
-            ]}
-            onValueChange={(value) => {
-              setSegmentId(value ?? "");
-              setCursor(undefined);
-            }}
-            value={segmentId}
-          >
-            <SelectTrigger aria-label="Filter by segment">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectList>
-                <SelectItem value="">All segments</SelectItem>
-                {segments.data?.map((segment) => (
-                  <SelectItem key={segment.id} value={segment.id}>
-                    {segment.name}
-                  </SelectItem>
-                ))}
-              </SelectList>
-            </SelectContent>
-          </Select>
-        </div>
-        {contactsContent}
-        {cursor || contacts.data?.nextCursor ? (
-          <div className="flex justify-end gap-2">
-            <Button
-              disabled={!cursor}
-              onClick={() => {
-                setCursor(undefined);
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              First page
-            </Button>
-            <Button
-              disabled={!contacts.data?.nextCursor}
-              onClick={() => {
-                setCursor(contacts.data?.nextCursor ?? undefined);
-              }}
-              size="sm"
-              variant="outline"
-            >
-              Next page
-            </Button>
-          </div>
-        ) : null}
-      </ContentSection>
-      <ContentSection
-        title="Segments"
-        description="Saved tag rules keep each campaign's audience easy to review."
-      >
-        {segments.isError ? (
-          <SettingsErrorState
-            message="Could not load segments."
-            onRetry={() => void segments.refetch()}
-          />
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {segments.data?.map((segment) => (
-              <Button
-                key={segment.id}
-                onClick={() => {
-                  if (canManage) {
-                    setSegmentDialog(segment);
-                  } else {
-                    setSegmentId(segment.id);
-                    setCursor(undefined);
-                  }
-                }}
-                size="sm"
-                variant="outline"
-              >
-                {segment.name}
-              </Button>
-            ))}
+        </span>
+      </BroadcastHeader>
+      <div className="space-y-4 p-4">
+        <SettingsSectionLayout>
+          <div className="flex items-center justify-between gap-3">
+            <Text as="h2" weight="medium">
+              Contacts
+            </Text>
             {canManage ? (
               <Button
                 onClick={() => {
-                  setSegmentDialog("new");
+                  setEditOpen(true);
                 }}
-                size="sm"
+                size="default"
                 variant="ghost"
               >
-                <HugeiconsIcon
-                  aria-hidden
-                  className="size-4"
-                  icon={Add01Icon}
-                />
-                Create segment
+                Edit audience details
               </Button>
             ) : null}
-            {segments.data?.length === 0 && !canManage ? (
-              <p className="text-body text-muted-fg">No saved segments.</p>
-            ) : null}
           </div>
-        )}
-      </ContentSection>
+          <Surface>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <Input
+                aria-label="Search contacts"
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setCursor(undefined);
+                }}
+                placeholder="Search name or email"
+                value={search}
+              />
+              <Select
+                items={[
+                  { label: "All subscriptions", value: "all" },
+                  { label: "Subscribed", value: "subscribed" },
+                  { label: "Unsubscribed", value: "unsubscribed" },
+                  { label: "Removed", value: "removed" },
+                ]}
+                onValueChange={(value) => {
+                  if (
+                    value === "all" ||
+                    value === "subscribed" ||
+                    value === "unsubscribed" ||
+                    value === "removed"
+                  ) {
+                    setStatus(value);
+                    setCursor(undefined);
+                  }
+                }}
+                value={status}
+              >
+                <SelectTrigger aria-label="Subscription status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectList>
+                    <SelectItem value="all">All subscriptions</SelectItem>
+                    <SelectItem value="subscribed">Subscribed</SelectItem>
+                    <SelectItem value="unsubscribed">Unsubscribed</SelectItem>
+                    <SelectItem value="removed">Removed</SelectItem>
+                  </SelectList>
+                </SelectContent>
+              </Select>
+              <Select
+                items={[
+                  { label: "All safety states", value: "all" },
+                  { label: "Blocked", value: "suppressed" },
+                  { label: "No safety block", value: "clear" },
+                ]}
+                onValueChange={(value) => {
+                  if (
+                    value === "all" ||
+                    value === "suppressed" ||
+                    value === "clear"
+                  ) {
+                    setSuppression(value);
+                    setCursor(undefined);
+                  }
+                }}
+                value={suppression}
+              >
+                <SelectTrigger aria-label="Safety block">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectList>
+                    <SelectItem value="all">All safety states</SelectItem>
+                    <SelectItem value="suppressed">Blocked</SelectItem>
+                    <SelectItem value="clear">No safety block</SelectItem>
+                  </SelectList>
+                </SelectContent>
+              </Select>
+              <Input
+                aria-label="Filter by tag"
+                onChange={(event) => {
+                  setTag(event.target.value);
+                  setCursor(undefined);
+                }}
+                placeholder="Filter by tag"
+                value={tag}
+              />
+              <Select
+                items={[
+                  { label: "All segments", value: "" },
+                  ...(segments.data?.map((segment) => ({
+                    label: segment.name,
+                    value: segment.id,
+                  })) ?? []),
+                ]}
+                onValueChange={(value) => {
+                  setSegmentId(value ?? "");
+                  setCursor(undefined);
+                }}
+                value={segmentId}
+              >
+                <SelectTrigger aria-label="Filter by segment">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectList>
+                    <SelectItem value="">All segments</SelectItem>
+                    {segments.data?.map((segment) => (
+                      <SelectItem key={segment.id} value={segment.id}>
+                        {segment.name}
+                      </SelectItem>
+                    ))}
+                  </SelectList>
+                </SelectContent>
+              </Select>
+            </div>
+          </Surface>
+          {contactsContent}
+          {cursor || contacts.data?.nextCursor ? (
+            <div className="flex justify-end gap-2">
+              <Button
+                disabled={!cursor}
+                onClick={() => {
+                  setCursor(undefined);
+                }}
+                size="default"
+                variant="ghost"
+              >
+                First page
+              </Button>
+              <Button
+                disabled={!contacts.data?.nextCursor}
+                onClick={() => {
+                  setCursor(contacts.data?.nextCursor ?? undefined);
+                }}
+                size="default"
+                variant="secondary"
+              >
+                Next page
+              </Button>
+            </div>
+          ) : null}
+        </SettingsSectionLayout>
+        <Surface>
+          <SettingsSectionLayout
+            title="Segments"
+            description="Saved tag rules keep each campaign's audience easy to review."
+          >
+            {segments.isError ? (
+              <SettingsErrorState
+                message="Could not load segments."
+                onRetry={() => void segments.refetch()}
+              />
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {segments.data?.map((segment) => (
+                  <Button
+                    key={segment.id}
+                    onClick={() => {
+                      if (canManage) {
+                        setSegmentDialog(segment);
+                      } else {
+                        setSegmentId(segment.id);
+                        setCursor(undefined);
+                      }
+                    }}
+                    size="default"
+                    variant="secondary"
+                  >
+                    {segment.name}
+                  </Button>
+                ))}
+                {canManage ? (
+                  <Button
+                    onClick={() => {
+                      setSegmentDialog("new");
+                    }}
+                    size="default"
+                    variant="ghost"
+                  >
+                    <HugeiconsIcon
+                      aria-hidden
+                      className="size-4"
+                      icon={Add01Icon}
+                    />
+                    Create segment
+                  </Button>
+                ) : null}
+                {segments.data?.length === 0 && !canManage ? (
+                  <p className="text-body text-muted-fg">No saved segments.</p>
+                ) : null}
+              </div>
+            )}
+          </SettingsSectionLayout>
+        </Surface>
+      </div>
       {contactDialog === undefined ? null : (
         <AudienceContactDialog
           audienceId={audienceId}

@@ -434,7 +434,7 @@ const ThemeProperties = ({
         onChange={(event) => {
           onChange({ ...design, preheader: event.target.value });
         }}
-        size="sm"
+        size="default"
         value={design.preheader}
       />
     </Field>
@@ -456,7 +456,7 @@ const ThemeProperties = ({
         }}
         value={design.theme.fontFamily}
       >
-        <SelectTrigger aria-label="Email font" size="sm">
+        <SelectTrigger aria-label="Email font" size="default">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -485,7 +485,7 @@ const ThemeProperties = ({
                   theme: { ...design.theme, [key]: event.target.value },
                 });
               }}
-              size="sm"
+              size="default"
               type="color"
               value={design.theme[key]}
             />
@@ -523,7 +523,7 @@ const ThemeProperties = ({
                   },
                 });
               }}
-              size="sm"
+              size="default"
               type="number"
               value={design.theme[key]}
             />
@@ -884,6 +884,7 @@ export const EmailContentEditor = ({
                       {[
                         {
                           actionDisabled: selectedIndex <= 0,
+                          destructive: false,
                           icon: ArrowUp01Icon,
                           label: "Move block up",
                           onClick: () => {
@@ -894,6 +895,7 @@ export const EmailContentEditor = ({
                           actionDisabled:
                             selectedIndex < 0 ||
                             selectedIndex >= design.blocks.length - 1,
+                          destructive: false,
                           icon: ArrowDown01Icon,
                           label: "Move block down",
                           onClick: () => {
@@ -902,12 +904,14 @@ export const EmailContentEditor = ({
                         },
                         {
                           actionDisabled: false,
+                          destructive: false,
                           icon: Copy01Icon,
                           label: "Duplicate block",
                           onClick: duplicateSelected,
                         },
                         {
                           actionDisabled: false,
+                          destructive: true,
                           icon: Delete02Icon,
                           label: "Delete block",
                           onClick: deleteSelected,
@@ -924,7 +928,9 @@ export const EmailContentEditor = ({
                               action.onClick();
                             }}
                             size="icon-sm"
-                            variant="ghost"
+                            variant={
+                              action.destructive ? "destructive" : "ghost"
+                            }
                           >
                             <HugeiconsIcon aria-hidden icon={action.icon} />
                           </Button>
@@ -1123,7 +1129,7 @@ export const EmailContentEditor = ({
               <DropdownMenu>
                 <DropdownMenuTrigger
                   disabled={disabled}
-                  render={<Button size="sm" variant="ghost" />}
+                  render={<Button size="default" variant="ghost" />}
                 >
                   Import
                 </DropdownMenuTrigger>
@@ -1175,7 +1181,7 @@ export const EmailContentEditor = ({
               </DropdownMenu>
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  render={<Button size="sm" variant="ghost" />}
+                  render={<Button size="default" variant="ghost" />}
                 >
                   Export
                 </DropdownMenuTrigger>

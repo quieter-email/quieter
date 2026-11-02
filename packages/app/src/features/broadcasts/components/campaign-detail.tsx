@@ -1,8 +1,6 @@
 import {
-  SettingsCard,
   SettingsErrorState,
   SettingsLoadingState,
-  SettingsPageHeader,
 } from "@quieter/app/features/settings/components/settings-layout";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { rpc } from "@quieter/app/lib/orpc";
@@ -15,8 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@quieter/ui/alert-dialog";
-import { Button, LinkButton } from "@quieter/ui/button";
-import { ContentSection } from "@quieter/ui/content-section";
+import { Button } from "@quieter/ui/button";
 import { EmailPreview } from "@quieter/ui/email-editor";
 import type { PillTone } from "@quieter/ui/pill";
 import { Pill } from "@quieter/ui/pill";
@@ -33,10 +30,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import {
+  SettingsSectionLayout,
+  SettingsInsetRow,
+} from "@quieter/ui/settings-layout";
+import { Surface } from "@quieter/ui/surface";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
+import { BroadcastHeader } from "./broadcast-elements";
 import { useBroadcastWorkspace } from "./broadcast-workspace";
 import { CampaignEditor } from "./campaign-editor";
 import { CampaignStatus } from "./campaign-status";
@@ -126,16 +129,9 @@ export const CampaignDetail = ({ campaignId }: { campaignId: string }) => {
       confirmAction === "cancel" ? "Cancel remaining" : "Retry failed";
   }
   return (
-    <div className="mx-auto max-w-240 space-y-8">
-      <LinkButton
-        search={{ organizationId }}
-        size="sm"
-        to="/campaigns"
-        variant="ghost"
-      >
-        All campaigns
-      </LinkButton>
-      <SettingsPageHeader
+    <div className="flex flex-col gap-0.5">
+      <BroadcastHeader
+        back="campaigns"
         title={item.name}
         action={
           <div className="flex items-center gap-2">
@@ -143,240 +139,246 @@ export const CampaignDetail = ({ campaignId }: { campaignId: string }) => {
             <Button
               disabled={campaign.isFetching}
               onClick={() => void campaign.refetch()}
-              size="sm"
+              size="default"
               variant="ghost"
             >
               Refresh results
             </Button>
           </div>
         }
-      >
-        {item.subject}
-      </SettingsPageHeader>
-      <ContentSection title="Delivery progress">
-        <SettingsCard>
-          <div className="space-y-5 p-5 sm:p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p aria-live="polite" className="text-body text-fg">
-                {processed.toLocaleString()} of {total.toLocaleString()}{" "}
-                recipients processed
-              </p>
-              {canManage ? (
-                <div className="flex gap-2">
-                  {counts.failed > 0 && item.status !== "canceled" ? (
-                    <Button
-                      disabled={action.isPending}
-                      onClick={() => {
-                        setConfirmAction("retry");
-                      }}
-                      size="sm"
-                      variant="outline"
-                    >
-                      Retry failed
-                    </Button>
-                  ) : null}
-                  {["queued", "sending", "paused"].includes(item.status) ? (
-                    <Button
-                      disabled={action.isPending}
-                      onClick={() => {
-                        setConfirmAction("cancel");
-                      }}
-                      size="sm"
-                      variant="outline"
-                    >
-                      Cancel remaining
-                    </Button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-            <Progress
-              aria-label="Campaign progress"
-              max={Math.max(total, 1)}
-              value={processed}
-            >
-              <ProgressTrack>
-                <ProgressIndicator />
-              </ProgressTrack>
-            </Progress>
-            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              {Object.entries(counts).map(([label, count]) => (
-                <div key={label}>
-                  <dt className="text-caption text-muted-fg">
-                    {label === "uncertain"
-                      ? "Confirmation pending"
-                      : label.charAt(0).toUpperCase() + label.slice(1)}
-                  </dt>
-                  <dd className="mt-1 text-title-sm text-fg">
-                    {count.toLocaleString()}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            {counts.uncertain > 0 ? (
-              <p className="text-caption/5 text-muted-fg">
-                Some deliveries are waiting for confirmation. Retrying failed
-                recipients does not resend these messages.
-              </p>
-            ) : null}
-            {item.status === "paused" ? (
-              <p className="text-body text-muted-fg">
-                {counts.failed > 0
-                  ? "Sending is paused. Review failed recipients and retry when the issue is resolved."
-                  : "Delivery confirmations are pending. Refresh results to check for updates."}
-              </p>
-            ) : null}
-            <p className="text-caption/5 text-muted-fg">
-              {["queued", "sending"].includes(item.status)
-                ? "Sending continues when you leave this page. Progress updates automatically."
-                : "The original recipient selection and message are preserved for this campaign."}
-            </p>
-          </div>
-        </SettingsCard>
-      </ContentSection>
-      <ContentSection title="Delivery results">
-        <SettingsCard>
-          <dl className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-3 sm:p-6">
-            {Object.entries(deliveryCounts).map(([label, count]) => (
-              <div key={label}>
-                <dt className="text-caption text-muted-fg">
-                  {label.charAt(0).toUpperCase() + label.slice(1)}
-                </dt>
-                <dd className="mt-1 text-title-sm text-fg">
-                  {count.toLocaleString()}
-                </dd>
+        description={item.subject}
+      />
+      <div className="space-y-6 p-4">
+        <SettingsSectionLayout title="Delivery progress">
+          <Surface padding="compact">
+            <div className="space-y-4 p-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p aria-live="polite" className="text-body text-fg">
+                  {processed.toLocaleString()} of {total.toLocaleString()}{" "}
+                  recipients processed
+                </p>
+                {canManage ? (
+                  <div className="flex gap-2">
+                    {counts.failed > 0 && item.status !== "canceled" ? (
+                      <Button
+                        disabled={action.isPending}
+                        onClick={() => {
+                          setConfirmAction("retry");
+                        }}
+                        size="default"
+                        variant="secondary"
+                      >
+                        Retry failed
+                      </Button>
+                    ) : null}
+                    {["queued", "sending", "paused"].includes(item.status) ? (
+                      <Button
+                        disabled={action.isPending}
+                        onClick={() => {
+                          setConfirmAction("cancel");
+                        }}
+                        size="default"
+                        variant="destructive"
+                      >
+                        Cancel remaining
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
-            ))}
-          </dl>
-        </SettingsCard>
-        <p className="text-caption/5 text-muted-fg">
-          Delivery and engagement results can arrive after sending finishes.
-        </p>
-      </ContentSection>
-      <ContentSection title="Recipients">
-        <Select
-          items={[
-            { label: "All outcomes", value: "all" },
-            ...campaignRecipientStatusSchema.options.map((value) => ({
-              label: recipientLabels[value],
-              value,
-            })),
-          ]}
-          onValueChange={(value) => {
-            setStatus(value ?? "all");
-            setOffset(0);
-          }}
-          value={status}
-        >
-          <SelectTrigger aria-label="Filter recipient outcome">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectList>
-              <SelectItem value="all">All outcomes</SelectItem>
-              {campaignRecipientStatusSchema.options.map((value) => (
-                <SelectItem key={value} value={value}>
-                  {recipientLabels[value]}
-                </SelectItem>
-              ))}
-            </SelectList>
-          </SelectContent>
-        </Select>
-        <SettingsCard>
-          <ul className="divide-y divide-border">
-            {campaign.data.recipients.length === 0 ? (
-              <li className="px-5 py-8 text-center text-body text-muted-fg">
-                No recipients match this outcome.
-              </li>
-            ) : (
-              campaign.data.recipients.map((recipient) => (
-                <li
-                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6"
-                  key={recipient.id}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-body-sm text-fg">
-                      {recipient.name || recipient.email}
-                    </p>
-                    {recipient.name ? (
-                      <p className="truncate text-caption text-muted-fg">
-                        {recipient.email}
-                      </p>
-                    ) : null}
-                    {recipient.exclusionReason ? (
-                      <p className="text-caption text-muted-fg">
-                        {recipient.exclusionReason.replaceAll("_", " ")}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Pill size="xs" tone={recipientTones[recipient.status]}>
-                      {recipientLabels[recipient.status]}
-                    </Pill>
-                    {recipient.deliveryStatus ? (
-                      <Pill size="xs">
-                        {recipient.deliveryStatus.replaceAll("_", " ")}
-                      </Pill>
-                    ) : null}
-                  </div>
-                </li>
-              ))
-            )}
-          </ul>
-        </SettingsCard>
-        {offset > 0 || campaign.data.nextOffset !== null ? (
-          <div className="flex justify-end gap-2">
-            <Button
-              disabled={offset === 0}
-              onClick={() => {
-                setOffset(Math.max(0, offset - 50));
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              Previous
-            </Button>
-            <Button
-              disabled={campaign.data.nextOffset === null}
-              onClick={() => {
-                setOffset(campaign.data.nextOffset ?? offset);
-              }}
-              size="sm"
-              variant="outline"
-            >
-              Next
-            </Button>
-          </div>
-        ) : null}
-      </ContentSection>
-      <ContentSection title="Sent message">
-        <SettingsCard>
-          <div className="space-y-3 p-5 sm:p-6">
-            <p className="text-caption text-muted-fg">From {item.from}</p>
-            <p className="text-body font-medium text-fg">{item.subject}</p>
-            <EmailPreview html={item.html} text={item.text} />
-          </div>
-        </SettingsCard>
-      </ContentSection>
-      {campaign.data.events.length ? (
-        <ContentSection title="Recent activity">
-          <ol className="divide-y divide-border">
-            {campaign.data.events.map((event) => (
-              <li
-                className="flex flex-wrap justify-between gap-2 py-3 text-caption"
-                key={`${event.recipient}-${event.eventType}-${event.occurredAt}`}
+              <Progress
+                aria-label="Campaign progress"
+                max={Math.max(total, 1)}
+                value={processed}
               >
-                <span className="break-all text-fg">
-                  {event.recipient}, {event.eventType.replaceAll("_", " ")}
-                </span>
-                <time className="text-muted-fg">
-                  {new Date(event.occurredAt).toLocaleString()}
-                </time>
-              </li>
-            ))}
-          </ol>
-        </ContentSection>
-      ) : null}
+                <ProgressTrack>
+                  <ProgressIndicator />
+                </ProgressTrack>
+              </Progress>
+            </div>
+            <Surface chrome="inset" variant="detail">
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                {Object.entries(counts).map(([label, count]) => (
+                  <div key={label}>
+                    <dt className="text-caption text-muted-fg">
+                      {label === "uncertain"
+                        ? "Confirmation pending"
+                        : label.charAt(0).toUpperCase() + label.slice(1)}
+                    </dt>
+                    <dd className="mt-1 text-title-sm text-fg">
+                      {count.toLocaleString()}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </Surface>
+            <div className="space-y-4 p-3.5">
+              {counts.uncertain > 0 ? (
+                <p className="text-caption/5 text-muted-fg">
+                  Some deliveries are waiting for confirmation. Retrying failed
+                  recipients does not resend these messages.
+                </p>
+              ) : null}
+              {item.status === "paused" ? (
+                <p className="text-body text-muted-fg">
+                  {counts.failed > 0
+                    ? "Sending is paused. Review failed recipients and retry when the issue is resolved."
+                    : "Delivery confirmations are pending. Refresh results to check for updates."}
+                </p>
+              ) : null}
+              <p className="text-caption/5 text-muted-fg">
+                {["queued", "sending"].includes(item.status)
+                  ? "Sending continues when you leave this page. Progress updates automatically."
+                  : "The original recipient selection and message are preserved for this campaign."}
+              </p>
+            </div>
+          </Surface>
+        </SettingsSectionLayout>
+        <SettingsSectionLayout title="Delivery results">
+          <Surface padding="compact">
+            <Surface chrome="inset" variant="detail">
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {Object.entries(deliveryCounts).map(([label, count]) => (
+                  <div key={label}>
+                    <dt className="text-caption text-muted-fg">
+                      {label.charAt(0).toUpperCase() + label.slice(1)}
+                    </dt>
+                    <dd className="mt-1 text-title-sm text-fg">
+                      {count.toLocaleString()}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </Surface>
+          </Surface>
+          <p className="text-caption/5 text-muted-fg">
+            Delivery and engagement results can arrive after sending finishes.
+          </p>
+        </SettingsSectionLayout>
+        <SettingsSectionLayout title="Recipients">
+          <Select
+            items={[
+              { label: "All outcomes", value: "all" },
+              ...campaignRecipientStatusSchema.options.map((value) => ({
+                label: recipientLabels[value],
+                value,
+              })),
+            ]}
+            onValueChange={(value) => {
+              setStatus(value ?? "all");
+              setOffset(0);
+            }}
+            value={status}
+          >
+            <SelectTrigger aria-label="Filter recipient outcome">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectList>
+                <SelectItem value="all">All outcomes</SelectItem>
+                {campaignRecipientStatusSchema.options.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {recipientLabels[value]}
+                  </SelectItem>
+                ))}
+              </SelectList>
+            </SelectContent>
+          </Select>
+          <div className="@container">
+            <ul className="flex flex-col gap-0.5">
+              {campaign.data.recipients.length === 0 ? (
+                <li className="px-5 py-8 text-center text-body text-muted-fg">
+                  No recipients match this outcome.
+                </li>
+              ) : (
+                campaign.data.recipients.map((recipient) => (
+                  <li key={recipient.id}>
+                    <SettingsInsetRow>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-body-sm text-fg">
+                          {recipient.name || recipient.email}
+                        </p>
+                        {recipient.name ? (
+                          <p className="truncate text-caption text-muted-fg">
+                            {recipient.email}
+                          </p>
+                        ) : null}
+                        {recipient.exclusionReason ? (
+                          <p className="text-caption text-muted-fg">
+                            {recipient.exclusionReason.replaceAll("_", " ")}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Pill size="xs" tone={recipientTones[recipient.status]}>
+                          {recipientLabels[recipient.status]}
+                        </Pill>
+                        {recipient.deliveryStatus ? (
+                          <Pill size="xs">
+                            {recipient.deliveryStatus.replaceAll("_", " ")}
+                          </Pill>
+                        ) : null}
+                      </div>
+                    </SettingsInsetRow>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+          {offset > 0 || campaign.data.nextOffset !== null ? (
+            <div className="flex justify-end gap-2">
+              <Button
+                disabled={offset === 0}
+                onClick={() => {
+                  setOffset(Math.max(0, offset - 50));
+                }}
+                size="default"
+                variant="ghost"
+              >
+                Previous
+              </Button>
+              <Button
+                disabled={campaign.data.nextOffset === null}
+                onClick={() => {
+                  setOffset(campaign.data.nextOffset ?? offset);
+                }}
+                size="default"
+                variant="secondary"
+              >
+                Next
+              </Button>
+            </div>
+          ) : null}
+        </SettingsSectionLayout>
+        <SettingsSectionLayout title="Sent message">
+          <Surface padding="compact">
+            <div className="space-y-3 p-3.5">
+              <p className="text-caption text-muted-fg">From {item.from}</p>
+              <p className="text-body font-medium text-fg">{item.subject}</p>
+              <EmailPreview html={item.html} text={item.text} />
+            </div>
+          </Surface>
+        </SettingsSectionLayout>
+        {campaign.data.events.length ? (
+          <SettingsSectionLayout title="Recent activity">
+            <ol className="flex flex-col gap-0.5">
+              {campaign.data.events.map((event) => (
+                <li
+                  className="flex flex-wrap justify-between gap-2 py-3 text-caption"
+                  key={`${event.recipient}-${event.eventType}-${event.occurredAt}`}
+                >
+                  <span className="break-all text-fg">
+                    {event.recipient}, {event.eventType.replaceAll("_", " ")}
+                  </span>
+                  <time className="text-muted-fg">
+                    {new Date(event.occurredAt).toLocaleString()}
+                  </time>
+                </li>
+              ))}
+            </ol>
+          </SettingsSectionLayout>
+        ) : null}
+      </div>
       <AlertDialog
         open={!!confirmAction}
         onOpenChange={(open) => {
@@ -404,8 +406,8 @@ export const CampaignDetail = ({ campaignId }: { campaignId: string }) => {
               onClick={() => {
                 setConfirmAction(undefined);
               }}
-              size="sm"
-              variant="outline"
+              size="default"
+              variant="secondary"
             >
               Go back
             </Button>
@@ -416,7 +418,8 @@ export const CampaignDetail = ({ campaignId }: { campaignId: string }) => {
                   action.mutate(confirmAction);
                 }
               }}
-              size="sm"
+              size="default"
+              variant={confirmAction === "cancel" ? "destructive" : "default"}
             >
               {actionContent}
             </Button>

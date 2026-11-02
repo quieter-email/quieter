@@ -1,31 +1,37 @@
 import { ORPCError } from "@orpc/server";
 import { createFileRoute } from "@tanstack/react-router";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
+import { UnsubscribeDocument } from "#/components/unsubscribe-document";
+import type { UnsubscribePage } from "#/components/unsubscribe-document";
 import { reportServerError } from "#/lib/server-error-reporting";
 
 const pageHeaders = {
   "cache-control": "no-store",
   "content-security-policy":
-    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+    "default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
   "content-type": "text/html; charset=utf-8",
   "referrer-policy": "no-referrer",
   "x-robots-tag": "noindex, nofollow",
 };
 
+const pageResponse = (page: UnsubscribePage, status = 200) =>
+  new Response(
+    `<!doctype html>${renderToStaticMarkup(createElement(UnsubscribeDocument, { page }))}`,
+    { headers: pageHeaders, status }
+  );
+
 export const Route = createFileRoute("/api/unsubscribe/$token")({
   server: {
     handlers: {
-      GET: (): Response =>
-        new Response(
-          `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribe</title><style>body{font:17px/1.6 system-ui,sans-serif;max-width:34rem;margin:12vh auto;padding:1.5rem;color:#252525;background:#faf9f6}button{font:inherit;padding:.65rem 1.1rem;border:0;border-radius:.5rem;background:#252525;color:white;cursor:pointer}</style><h1>Leave this audience</h1><p>You will stop receiving broadcasts from this audience. Your other subscriptions will stay the same.</p><form method="post"><input type="hidden" name="List-Unsubscribe" value="One-Click"><button type="submit">Unsubscribe</button></form></html>`,
-          { headers: pageHeaders }
-        ),
+      GET: (): Response => pageResponse({ status: "confirmation" }),
       POST: async ({ request, params }): Promise<Response> => {
         if (!/^[\w-]{40,100}$/u.test(params.token)) {
-          return new Response("This unsubscribe link is invalid.", {
-            headers: pageHeaders,
-            status: 404,
-          });
+          return pageResponse(
+            { message: "This unsubscribe link is invalid.", status: "error" },
+            404
+          );
         }
         const contentType = request.headers
           .get("content-type")
@@ -35,10 +41,13 @@ export const Route = createFileRoute("/api/unsubscribe/$token")({
           contentType !== "application/x-www-form-urlencoded" &&
           contentType !== "multipart/form-data"
         ) {
-          return new Response("Send the one-click unsubscribe form.", {
-            headers: pageHeaders,
-            status: 415,
-          });
+          return pageResponse(
+            {
+              message: "Send the one-click unsubscribe form.",
+              status: "error",
+            },
+            415
+          );
         }
         const declaredLength = Number(request.headers.get("content-length"));
         if (declaredLength > 4096) {
@@ -63,33 +72,33 @@ export const Route = createFileRoute("/api/unsubscribe/$token")({
             }
           }
           if (oneClick !== "One-Click") {
-            return new Response("Invalid unsubscribe request.", {
-              headers: pageHeaders,
-              status: 400,
-            });
+            return pageResponse(
+              { message: "Invalid unsubscribe request.", status: "error" },
+              400
+            );
           }
           const { unsubscribeCampaignRecipient } =
             await import("@quieter/orpc/campaigns");
           await unsubscribeCampaignRecipient(params.token);
-          return new Response(
-            '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribed</title><h1>You have been unsubscribed</h1><p>You will no longer receive broadcasts from this audience.</p></html>',
-            { headers: pageHeaders }
-          );
+          return pageResponse({ status: "success" });
         } catch (error) {
           if (error instanceof ORPCError && error.status < 500) {
-            return new Response(error.message, {
-              headers: pageHeaders,
-              status: error.status,
-            });
+            return pageResponse(
+              { message: error.message, status: "error" },
+              error.status
+            );
           }
           if (error instanceof RangeError) {
             return new Response(null, { status: 413 });
           }
           reportServerError(error, "campaign-unsubscribe");
-          return new Response("Could not unsubscribe. Please try again.", {
-            headers: pageHeaders,
-            status: 500,
-          });
+          return pageResponse(
+            {
+              message: "Could not unsubscribe. Please try again.",
+              status: "error",
+            },
+            500
+          );
         }
       },
     },

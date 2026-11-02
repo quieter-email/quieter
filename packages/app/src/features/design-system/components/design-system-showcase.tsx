@@ -108,6 +108,7 @@ import {
   SettingsFieldRow,
   SettingsNavigationRow,
   SettingsPageHeader,
+  SettingsRows,
   SettingsSectionLayout,
 } from "@quieter/ui/settings-layout";
 import {
@@ -1595,6 +1596,30 @@ export const DesignSystemShowcase = () => {
                   title="Mailbox access"
                 />
               </SettingsCard>
+            </SettingsSectionLayout>
+            <SettingsSectionLayout title="Workspace navigation rows">
+              <WorkspaceSection layout="surface">
+                <SettingsRows variant="plain">
+                  <SettingsNavigationRow
+                    chrome="standalone"
+                    description="Updates for people who subscribed."
+                    meta="1,284 subscribed"
+                    onClick={() => {
+                      setSettingsDialogOpen(true);
+                    }}
+                    title="Product updates"
+                  />
+                  <SettingsNavigationRow
+                    chrome="standalone"
+                    description="Notes on calmer work."
+                    meta="842 subscribed"
+                    onClick={() => {
+                      setSettingsDialogOpen(true);
+                    }}
+                    title="Quiet newsletter"
+                  />
+                </SettingsRows>
+              </WorkspaceSection>
             </SettingsSectionLayout>
           </div>
           <Dialog

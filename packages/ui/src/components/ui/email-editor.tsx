@@ -3,6 +3,7 @@
 import type { CSSProperties, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
+import { Surface } from "./surface";
 
 export const EmailEditorLayout = ({
   canvas,
@@ -15,34 +16,33 @@ export const EmailEditorLayout = ({
   palette?: ReactNode;
   toolbar: ReactNode;
 }) => (
-  <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-bg-surface">
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5 border-b border-border px-2 py-1.5">
+  <Surface padding="compact" className="flex flex-col overflow-hidden">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5 p-3.5">
       {toolbar}
     </div>
     {palette === undefined ? null : (
-      <div className="min-w-0 border-b border-border px-2 py-1.5">
-        {palette}
-      </div>
+      <div className="min-w-0 px-3.5 pb-3.5">{palette}</div>
     )}
     <div
-      className={cn("grid", {
+      className={cn("grid gap-0.5", {
         "lg:grid-cols-[minmax(0,1fr)_16rem] lg:items-start":
           inspector !== undefined,
       })}
     >
-      <div className="min-w-0 overflow-x-auto bg-muted/40 p-4 sm:p-6">
+      <Surface
+        chrome="inset"
+        variant="detail"
+        className="min-w-0 overflow-x-auto"
+      >
         {canvas}
-      </div>
+      </Surface>
       {inspector === undefined ? null : (
-        <aside
-          aria-label="Email properties"
-          className="border-t border-border p-3 lg:border-t-0 lg:border-l"
-        >
+        <aside aria-label="Email properties" className="min-w-0 p-4">
           {inspector}
         </aside>
       )}
     </div>
-  </div>
+  </Surface>
 );
 
 export const EmailCanvas = ({
@@ -82,8 +82,8 @@ export const EmailCanvasBlock = ({
       aria-label={`Edit ${label} block`}
       aria-pressed={selected}
       className={cn(
-        "absolute inset-0 rounded-sm outline-2 outline-offset-2 outline-transparent transition-colors hover:outline-primary/35 focus-visible:outline-primary",
-        { "outline-primary": selected }
+        "absolute inset-0 rounded-sm outline-2 outline-offset-2 outline-transparent transition-colors hover:outline-q-blue/35 focus-visible:outline-q-blue",
+        { "outline-q-blue": selected }
       )}
       onClick={onSelect}
       type="button"

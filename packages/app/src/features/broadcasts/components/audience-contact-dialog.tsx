@@ -5,6 +5,7 @@ import {
 import { toastError } from "@quieter/app/lib/error-toast";
 import { rpc } from "@quieter/app/lib/orpc";
 import type { AudienceContact } from "@quieter/mail/audiences";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import {
@@ -20,6 +21,7 @@ import {
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { Input } from "@quieter/ui/input";
 import { Pill } from "@quieter/ui/pill";
+import { Surface } from "@quieter/ui/surface";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -169,7 +171,7 @@ export const AudienceContactDialog = ({
         onRetry={() => void history.refetch()}
       />
     ) : (
-      <ol className="max-h-60 divide-y divide-border overflow-y-auto">
+      <ol className="flex max-h-60 flex-col gap-0.5 overflow-y-auto">
         {history.data.items.map((event) => (
           <li className="py-3 text-caption/5" key={event.id}>
             <div className="flex flex-wrap justify-between gap-2">
@@ -203,8 +205,8 @@ export const AudienceContactDialog = ({
         onClick={() => {
           setHistoryCursor(history.data?.nextCursor ?? undefined);
         }}
-        size="sm"
-        variant="ghost"
+        size="default"
+        variant="secondary"
       >
         Older events
       </Button>
@@ -215,8 +217,8 @@ export const AudienceContactDialog = ({
         onClick={() => {
           setHistoryCursor(undefined);
         }}
-        size="sm"
-        variant="ghost"
+        size="default"
+        variant="secondary"
       >
         Latest events
       </Button>
@@ -299,12 +301,14 @@ export const AudienceContactDialog = ({
               />
             </Field>
             {contact ? (
-              <p className="text-caption/5 text-muted-fg">
-                Consent source: {contact.consentSource}
-                <br />
-                Consent recorded for{" "}
-                {new Date(contact.consentOccurredAt).toLocaleString()}.
-              </p>
+              <Surface>
+                <p className="text-caption/5 text-muted-fg">
+                  Consent source: {contact.consentSource}
+                  <br />
+                  Consent recorded for{" "}
+                  {new Date(contact.consentOccurredAt).toLocaleString()}.
+                </p>
+              </Surface>
             ) : (
               <>
                 <Field>
@@ -334,135 +338,153 @@ export const AudienceContactDialog = ({
               </>
             )}
             {contact && canManage ? (
-              <div className="space-y-3 border-t border-border pt-4">
-                <p className="text-body text-fg">Contact actions</p>
-                <div className="flex flex-wrap gap-2">
-                  {contact.status === "subscribed" ? (
-                    <Button
-                      onClick={() => {
-                        setConfirmation("unsubscribe");
-                      }}
-                      size="sm"
-                      variant="outline"
-                    >
-                      Unsubscribe
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={() => {
-                        setConfirmation("resubscribe");
-                      }}
-                      size="sm"
-                      variant="outline"
-                    >
-                      Resubscribe with consent
-                    </Button>
-                  )}
-                  {contact.status === "removed" ? null : (
-                    <Button
-                      onClick={() => {
-                        setConfirmation("remove");
-                      }}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      Remove from audience
-                    </Button>
-                  )}
-                  {!contact.suppression ||
-                  contact.suppression.reason === "manual" ? (
-                    <Button
-                      onClick={() => {
-                        setConfirmation("block");
-                      }}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      {contact.suppression
-                        ? "Clear manual safety block"
-                        : "Block across team"}
-                    </Button>
+              <Surface>
+                <div className="space-y-3">
+                  <p className="text-body text-fg">Contact actions</p>
+                  <div className="flex flex-wrap gap-2">
+                    {contact.status === "subscribed" ? (
+                      <Button
+                        onClick={() => {
+                          setConfirmation("unsubscribe");
+                        }}
+                        size="default"
+                        variant="secondary"
+                      >
+                        Unsubscribe
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={() => {
+                          setConfirmation("resubscribe");
+                        }}
+                        size="default"
+                        variant="secondary"
+                      >
+                        Resubscribe with consent
+                      </Button>
+                    )}
+                    {contact.status === "removed" ? null : (
+                      <Button
+                        onClick={() => {
+                          setConfirmation("remove");
+                        }}
+                        size="default"
+                        variant="destructive"
+                      >
+                        Remove from audience
+                      </Button>
+                    )}
+                    {!contact.suppression ||
+                    contact.suppression.reason === "manual" ? (
+                      <Button
+                        onClick={() => {
+                          setConfirmation("block");
+                        }}
+                        size="default"
+                        variant="secondary"
+                      >
+                        {contact.suppression
+                          ? "Clear manual safety block"
+                          : "Block across team"}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {confirmation ? (
+                    <Surface variant="detail">
+                      <div className="space-y-3">
+                        <p className="text-body text-fg">
+                          {confirmationCopy[confirmation]}
+                        </p>
+                        <Field>
+                          <FieldLabel>
+                            {confirmation === "resubscribe"
+                              ? "New consent source"
+                              : "Reason"}
+                          </FieldLabel>
+                          <Input
+                            maxLength={500}
+                            onChange={(event) => {
+                              if (confirmation === "resubscribe") {
+                                setSource(event.target.value);
+                              } else {
+                                setReason(event.target.value);
+                              }
+                            }}
+                            value={
+                              confirmation === "resubscribe" ? source : reason
+                            }
+                          />
+                        </Field>
+                        {confirmation === "resubscribe" ? (
+                          <label
+                            className="flex items-start gap-2 text-body"
+                            htmlFor="audience-contact-consent"
+                          >
+                            <Checkbox
+                              checked={consent}
+                              id="audience-contact-consent"
+                              onCheckedChange={setConsent}
+                            >
+                              <CheckboxIndicator />
+                            </Checkbox>
+                            This person has given fresh consent to receive
+                            email.
+                          </label>
+                        ) : null}
+                        <ActionFooter>
+                          <Button
+                            onClick={() => {
+                              setConfirmation(undefined);
+                            }}
+                            variant="secondary"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            disabled={
+                              mutation.isPending ||
+                              (confirmation === "resubscribe" &&
+                                (!consent || !source.trim()))
+                            }
+                            onClick={() => {
+                              mutation.mutate(confirmation);
+                            }}
+                            size="default"
+                            variant={
+                              confirmation === "remove"
+                                ? "destructive"
+                                : "default"
+                            }
+                          >
+                            Confirm{" "}
+                            {confirmation === "block"
+                              ? "safety change"
+                              : confirmation}
+                          </Button>
+                        </ActionFooter>
+                      </div>
+                    </Surface>
                   ) : null}
                 </div>
-                {confirmation ? (
-                  <div className="space-y-3 rounded-md border border-border p-3">
-                    <p className="text-body text-fg">
-                      {confirmationCopy[confirmation]}
-                    </p>
-                    <Field>
-                      <FieldLabel>
-                        {confirmation === "resubscribe"
-                          ? "New consent source"
-                          : "Reason"}
-                      </FieldLabel>
-                      <Input
-                        maxLength={500}
-                        onChange={(event) => {
-                          if (confirmation === "resubscribe") {
-                            setSource(event.target.value);
-                          } else {
-                            setReason(event.target.value);
-                          }
-                        }}
-                        value={confirmation === "resubscribe" ? source : reason}
-                      />
-                    </Field>
-                    {confirmation === "resubscribe" ? (
-                      <label
-                        className="flex items-start gap-2 text-body"
-                        htmlFor="audience-contact-consent"
-                      >
-                        <Checkbox
-                          checked={consent}
-                          id="audience-contact-consent"
-                          onCheckedChange={setConsent}
-                        >
-                          <CheckboxIndicator />
-                        </Checkbox>
-                        This person has given fresh consent to receive email.
-                      </label>
-                    ) : null}
-                    <div className="flex gap-2">
-                      <Button
-                        disabled={
-                          mutation.isPending ||
-                          (confirmation === "resubscribe" &&
-                            (!consent || !source.trim()))
-                        }
-                        onClick={() => {
-                          mutation.mutate(confirmation);
-                        }}
-                        size="sm"
-                      >
-                        Confirm{" "}
-                        {confirmation === "block"
-                          ? "safety change"
-                          : confirmation}
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          setConfirmation(undefined);
-                        }}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+              </Surface>
             ) : null}
             {contact ? (
-              <section className="space-y-3 border-t border-border pt-4">
-                <h2 className="text-body text-fg">History</h2>
-                {historyContent}
-                {historyPagination}
-              </section>
+              <Surface>
+                <div className="space-y-3">
+                  <h2 className="text-body text-fg">History</h2>
+                  {historyContent}
+                  {historyPagination === null ? null : (
+                    <ActionFooter>{historyPagination}</ActionFooter>
+                  )}
+                </div>
+              </Surface>
             ) : null}
           </DialogBody>
           <DialogFooter>
-            <DialogCloseButton disabled={mutation.isPending}>
+            <DialogCloseButton
+              disabled={mutation.isPending}
+              variant={canManage ? "secondary" : "default"}
+            >
               Close
             </DialogCloseButton>
             {canManage ? (
@@ -471,7 +493,7 @@ export const AudienceContactDialog = ({
                   mutation.isPending ||
                   (!contact && (!consent || !email || !source.trim()))
                 }
-                size="sm"
+                size="default"
                 type="submit"
               >
                 {mutation.isPending ? "Saving…" : submitLabel}

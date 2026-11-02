@@ -65,6 +65,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Surface } from "@quieter/ui/surface";
 import { Text } from "@quieter/ui/text";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
@@ -221,112 +222,115 @@ const ApiKeyPermissionFields = ({
   permissions: ApiKeyPermissions;
   onChange: (value: ApiKeyPermissions) => void;
 }) => (
-  <fieldset className="space-y-3">
-    <legend className="text-body font-medium text-fg">Permissions</legend>
-    <p className="text-caption/5 text-muted-fg">
-      Transactional sending is included. Choose additional access for this key.
-    </p>
-    <div className="space-y-2">
-      <p className="text-caption text-muted-fg">Audiences</p>
-      {(
-        [
-          { label: "Read audiences and contacts", permission: "read" },
-          { label: "Manage audiences and contacts", permission: "write" },
-        ] as const
-      ).map(({ permission, label }) => (
-        <label
-          className="flex items-center gap-2 text-body"
-          htmlFor={`api-key-audiences-${permission}`}
-          key={permission}
-        >
-          <Checkbox
-            checked={permissions.audiences.includes(permission)}
-            id={`api-key-audiences-${permission}`}
-            onCheckedChange={(checked) => {
-              onChange({
-                ...permissions,
-                audiences: checked
-                  ? [...permissions.audiences, permission]
-                  : permissions.audiences.filter(
-                      (value) => value !== permission
-                    ),
-              });
-            }}
+  <Surface>
+    <fieldset className="space-y-4">
+      <legend className="text-body font-medium text-fg">Permissions</legend>
+      <p className="text-caption/5 text-muted-fg">
+        Transactional sending is included. Choose additional access for this
+        key.
+      </p>
+      <div className="space-y-2">
+        <p className="text-caption text-muted-fg">Audiences</p>
+        {(
+          [
+            { label: "Read audiences and contacts", permission: "read" },
+            { label: "Manage audiences and contacts", permission: "write" },
+          ] as const
+        ).map(({ permission, label }) => (
+          <label
+            className="flex items-center gap-2 text-body"
+            htmlFor={`api-key-audiences-${permission}`}
+            key={permission}
           >
-            <CheckboxIndicator />
-          </Checkbox>
-          {label}
-        </label>
-      ))}
-    </div>
-    <div className="space-y-2">
-      <p className="text-caption text-muted-fg">Campaigns</p>
-      {(
-        [
-          { label: "Read campaigns and results", permission: "read" },
-          { label: "Manage campaign drafts", permission: "write" },
-          { label: "Send and control campaigns", permission: "send" },
-        ] as const
-      ).map(({ permission, label }) => (
-        <label
-          className="flex items-center gap-2 text-body"
-          htmlFor={`api-key-campaigns-${permission}`}
-          key={permission}
-        >
-          <Checkbox
-            checked={permissions.campaigns.includes(permission)}
-            id={`api-key-campaigns-${permission}`}
-            onCheckedChange={(checked) => {
-              onChange({
-                ...permissions,
-                campaigns: checked
-                  ? [...permissions.campaigns, permission]
-                  : permissions.campaigns.filter(
-                      (value) => value !== permission
-                    ),
-              });
-            }}
+            <Checkbox
+              checked={permissions.audiences.includes(permission)}
+              id={`api-key-audiences-${permission}`}
+              onCheckedChange={(checked) => {
+                onChange({
+                  ...permissions,
+                  audiences: checked
+                    ? [...permissions.audiences, permission]
+                    : permissions.audiences.filter(
+                        (value) => value !== permission
+                      ),
+                });
+              }}
+            >
+              <CheckboxIndicator />
+            </Checkbox>
+            {label}
+          </label>
+        ))}
+      </div>
+      <div className="space-y-2">
+        <p className="text-caption text-muted-fg">Campaigns</p>
+        {(
+          [
+            { label: "Read campaigns and results", permission: "read" },
+            { label: "Manage campaign drafts", permission: "write" },
+            { label: "Send and control campaigns", permission: "send" },
+          ] as const
+        ).map(({ permission, label }) => (
+          <label
+            className="flex items-center gap-2 text-body"
+            htmlFor={`api-key-campaigns-${permission}`}
+            key={permission}
           >
-            <CheckboxIndicator />
-          </Checkbox>
-          {label}
-        </label>
-      ))}
-    </div>
-    <div className="space-y-2">
-      <p className="text-caption text-muted-fg">Templates</p>
-      {(
-        [
-          { label: "Read and render templates", permission: "read" },
-          { label: "Manage templates", permission: "write" },
-        ] as const
-      ).map(({ permission, label }) => (
-        <label
-          className="flex items-center gap-2 text-body"
-          htmlFor={`api-key-templates-${permission}`}
-          key={permission}
-        >
-          <Checkbox
-            checked={permissions.templates.includes(permission)}
-            id={`api-key-templates-${permission}`}
-            onCheckedChange={(checked) => {
-              onChange({
-                ...permissions,
-                templates: checked
-                  ? [...permissions.templates, permission]
-                  : permissions.templates.filter(
-                      (value) => value !== permission
-                    ),
-              });
-            }}
+            <Checkbox
+              checked={permissions.campaigns.includes(permission)}
+              id={`api-key-campaigns-${permission}`}
+              onCheckedChange={(checked) => {
+                onChange({
+                  ...permissions,
+                  campaigns: checked
+                    ? [...permissions.campaigns, permission]
+                    : permissions.campaigns.filter(
+                        (value) => value !== permission
+                      ),
+                });
+              }}
+            >
+              <CheckboxIndicator />
+            </Checkbox>
+            {label}
+          </label>
+        ))}
+      </div>
+      <div className="space-y-2">
+        <p className="text-caption text-muted-fg">Templates</p>
+        {(
+          [
+            { label: "Read and render templates", permission: "read" },
+            { label: "Manage templates", permission: "write" },
+          ] as const
+        ).map(({ permission, label }) => (
+          <label
+            className="flex items-center gap-2 text-body"
+            htmlFor={`api-key-templates-${permission}`}
+            key={permission}
           >
-            <CheckboxIndicator />
-          </Checkbox>
-          {label}
-        </label>
-      ))}
-    </div>
-  </fieldset>
+            <Checkbox
+              checked={permissions.templates.includes(permission)}
+              id={`api-key-templates-${permission}`}
+              onCheckedChange={(checked) => {
+                onChange({
+                  ...permissions,
+                  templates: checked
+                    ? [...permissions.templates, permission]
+                    : permissions.templates.filter(
+                        (value) => value !== permission
+                      ),
+                });
+              }}
+            >
+              <CheckboxIndicator />
+            </Checkbox>
+            {label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  </Surface>
 );
 
 const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {

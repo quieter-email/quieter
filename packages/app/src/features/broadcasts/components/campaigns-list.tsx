@@ -1,8 +1,19 @@
-import { Add01Icon, MailSend02Icon } from "@hugeicons/core-free-icons";
+import {
+  Add01Icon,
+  ArrowRight01Icon,
+  MailSend02Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { rpc } from "@quieter/app/lib/orpc";
 import { Button, LinkButton } from "@quieter/ui/button";
+import { Icon } from "@quieter/ui/icon";
+import {
+  settingsNavigationRowVariants,
+  SettingsRows,
+} from "@quieter/ui/settings-layout";
+import { Text } from "@quieter/ui/text";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 
 import {
@@ -29,13 +40,13 @@ export const CampaignsList = () => {
         : false,
   });
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-0.5">
       <BroadcastHeader
         action={
           canManage ? (
             <LinkButton
               search={{ organizationId }}
-              size="sm"
+              size="default"
               to="/campaigns/new"
             >
               <HugeiconsIcon aria-hidden icon={Add01Icon} />
@@ -50,7 +61,7 @@ export const CampaignsList = () => {
       ) : campaigns.isError ? (
         <BroadcastError onRetry={() => void campaigns.refetch()} />
       ) : campaigns.data.campaigns.length === 0 ? (
-        <div className="grid min-h-80 place-content-center gap-3 rounded-xl border border-dashed border-border text-center">
+        <div className="grid min-h-80 place-content-center gap-3 p-4 text-center">
           <HugeiconsIcon
             aria-hidden
             className="mx-auto size-6 text-muted-fg"
@@ -62,57 +73,70 @@ export const CampaignsList = () => {
           {canManage && offset === 0 ? (
             <LinkButton
               search={{ organizationId }}
-              size="sm"
+              size="default"
               to="/campaigns/new"
-              variant="outline"
+              variant="secondary"
             >
               Create campaign
             </LinkButton>
           ) : null}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border">
+        <SettingsRows variant="plain">
           {campaigns.data.campaigns.map((campaign) => (
-            <div
-              className="flex items-center gap-4 border-b border-border px-4 py-4 last:border-b-0"
+            <Link
+              className={settingsNavigationRowVariants({
+                chrome: "standalone",
+              })}
               key={campaign.id}
+              params={{ campaignId: campaign.id }}
+              search={{ organizationId }}
+              to={
+                campaign.status === "draft"
+                  ? "/campaigns/$campaignId/content"
+                  : "/campaigns/$campaignId"
+              }
             >
-              <div className="min-w-0 flex-1">
-                <LinkButton
-                  params={{ campaignId: campaign.id }}
-                  search={{ organizationId }}
-                  size="sm"
-                  to={
-                    campaign.status === "draft"
-                      ? "/campaigns/$campaignId/content"
-                      : "/campaigns/$campaignId"
-                  }
-                  variant="ghost"
-                >
+              <span className="min-w-0 flex-1">
+                <Text as="span" className="block" truncate weight="medium">
                   {campaign.name}
-                </LinkButton>
-                <p className="mt-1 truncate pl-2.5 text-caption text-muted-fg">
+                </Text>
+                <Text
+                  as="span"
+                  className="mt-0.5 block"
+                  size="sm"
+                  tone="muted"
+                  truncate
+                >
                   {campaign.subject || "No subject yet"}
-                </p>
-              </div>
-              <CampaignStatus status={campaign.status} />
-              <span className="hidden text-caption text-muted-fg sm:block">
-                {new Date(campaign.updatedAt).toLocaleDateString()}
+                </Text>
               </span>
-            </div>
+              <span className="w-35 shrink-0">
+                <CampaignStatus status={campaign.status} />
+              </span>
+              <Text
+                as="span"
+                className="hidden w-24 shrink-0 text-right sm:block"
+                size="caption"
+                tone="muted"
+              >
+                {new Date(campaign.updatedAt).toLocaleDateString()}
+              </Text>
+              <Icon aria-hidden tone="muted" icon={ArrowRight01Icon} />
+            </Link>
           ))}
-        </div>
+        </SettingsRows>
       )}
       {offset > 0 ||
       (campaigns.data?.nextOffset !== null &&
         campaigns.data?.nextOffset !== undefined) ? (
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 p-4">
           <Button
             disabled={offset === 0}
             onClick={() => {
               setOffset(Math.max(0, offset - 50));
             }}
-            size="sm"
+            size="default"
             variant="ghost"
           >
             Previous
@@ -125,8 +149,8 @@ export const CampaignsList = () => {
             onClick={() => {
               setOffset(campaigns.data?.nextOffset ?? offset);
             }}
-            size="sm"
-            variant="outline"
+            size="default"
+            variant="secondary"
           >
             Next
           </Button>

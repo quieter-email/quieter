@@ -6,6 +6,7 @@ import {
   NoteEditIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { fullOrganizationQueryOptions } from "@quieter/app/features/settings/components/organization-settings/domain";
 import {
   SettingsErrorState,
@@ -14,7 +15,6 @@ import {
 import { authClient } from "@quieter/app/lib/auth";
 import { useOrderedOrganizations } from "@quieter/app/lib/use-ordered-organizations";
 import { Button, LinkButton } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
   Select,
@@ -27,7 +27,7 @@ import {
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { createContext, useContext, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -102,7 +102,7 @@ export const BroadcastWorkspace = ({
       >
         {(close) => (
           <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-6 px-5 py-6">
-            <LinkButton onClick={close} size="sm" to="/" variant="ghost">
+            <LinkButton onClick={close} size="default" to="/" variant="ghost">
               <HugeiconsIcon
                 aria-hidden
                 className="size-4"
@@ -149,12 +149,16 @@ export const BroadcastWorkspace = ({
               </Select>
             </div>
             <nav aria-label="Broadcasts" className="grid gap-1">
-              <LinkButton
+              <SidebarNavItem
+                active={section === "audiences"}
                 aria-current={section === "audiences" ? "page" : undefined}
+                className="justify-start"
+                nativeButton={false}
                 onClick={close}
-                search={{ organizationId }}
-                to="/audiences"
-                variant={section === "audiences" ? "secondary" : "ghost"}
+                render={<Link search={{ organizationId }} to="/audiences" />}
+                // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native link.
+                role="link"
+                variant="ghost"
               >
                 <HugeiconsIcon
                   aria-hidden
@@ -162,13 +166,17 @@ export const BroadcastWorkspace = ({
                   icon={UserGroupIcon}
                 />
                 Audiences
-              </LinkButton>
-              <LinkButton
+              </SidebarNavItem>
+              <SidebarNavItem
+                active={section === "templates"}
                 aria-current={section === "templates" ? "page" : undefined}
+                className="justify-start"
+                nativeButton={false}
                 onClick={close}
-                search={{ organizationId }}
-                to="/templates"
-                variant={section === "templates" ? "secondary" : "ghost"}
+                render={<Link search={{ organizationId }} to="/templates" />}
+                // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native link.
+                role="link"
+                variant="ghost"
               >
                 <HugeiconsIcon
                   aria-hidden
@@ -176,13 +184,17 @@ export const BroadcastWorkspace = ({
                   icon={NoteEditIcon}
                 />
                 Templates
-              </LinkButton>
-              <LinkButton
+              </SidebarNavItem>
+              <SidebarNavItem
+                active={section === "campaigns"}
                 aria-current={section === "campaigns" ? "page" : undefined}
+                className="justify-start"
+                nativeButton={false}
                 onClick={close}
-                search={{ organizationId }}
-                to="/campaigns"
-                variant={section === "campaigns" ? "secondary" : "ghost"}
+                render={<Link search={{ organizationId }} to="/campaigns" />}
+                // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native link.
+                role="link"
+                variant="ghost"
               >
                 <HugeiconsIcon
                   aria-hidden
@@ -190,7 +202,7 @@ export const BroadcastWorkspace = ({
                   icon={MailSend02Icon}
                 />
                 Campaigns
-              </LinkButton>
+              </SidebarNavItem>
             </nav>
             <p className="mt-auto text-caption text-muted-fg">
               {team?.name ?? "Your team"}
@@ -218,16 +230,7 @@ export const BroadcastWorkspace = ({
               </Button>
             </IconButtonTooltip>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <div
-              className={cn("mx-auto w-full px-5 py-6 md:px-7", {
-                "max-w-240 space-y-8 md:py-14": section === "audiences",
-                "max-w-440": section !== "audiences",
-              })}
-            >
-              {content}
-            </div>
-          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">{content}</div>
         </WorkspaceSection>
       </main>
     </div>

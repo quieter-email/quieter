@@ -18,6 +18,7 @@ import { Field, FieldLabel } from "@quieter/ui/field";
 import { Input } from "@quieter/ui/input";
 import type { PillTone } from "@quieter/ui/pill";
 import { Pill } from "@quieter/ui/pill";
+import { Surface } from "@quieter/ui/surface";
 import { Textarea } from "@quieter/ui/textarea";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -197,7 +198,7 @@ export const AudienceImportDialog = ({
                 <Textarea
                   aria-describedby="import-policy"
                   // oxlint-disable-next-line shadcn/no-restyle -- CSV entry uses compact monospace text.
-                  className="min-h-36 font-mono text-caption"
+                  className="min-h-36"
                   maxLength={500_001}
                   onChange={(event) => {
                     setInput(event.target.value);
@@ -246,29 +247,39 @@ export const AudienceImportDialog = ({
             </p>
           ) : null}
           {rows.length ? (
-            <div className="max-h-64 overflow-y-auto rounded-lg border border-border">
-              <ol className="divide-y divide-border">
-                {rows.map((row) => (
-                  <li
-                    className="flex flex-wrap items-center gap-2 px-3 py-2 text-caption"
-                    key={row.row}
-                  >
-                    <span className="w-6 text-muted-fg">{row.row}</span>
-                    <span className="min-w-0 flex-1 break-all">
-                      {row.email || "Missing email"}
-                    </span>
-                    <Pill size="xs" tone={rowTones[row.status]}>
-                      {row.status}
-                    </Pill>
-                    <p className="w-full pl-8 text-muted-fg">{row.message}</p>
-                  </li>
-                ))}
-              </ol>
-            </div>
+            <Surface padding="compact">
+              <Surface
+                chrome="inset"
+                padding="dense"
+                variant="detail"
+                className="max-h-64 overflow-y-auto"
+              >
+                <ol className="flex flex-col gap-0.5">
+                  {rows.map((row) => (
+                    <li
+                      className="flex flex-wrap items-center gap-2 px-3 py-2 text-caption"
+                      key={row.row}
+                    >
+                      <span className="w-6 text-muted-fg">{row.row}</span>
+                      <span className="min-w-0 flex-1 break-all">
+                        {row.email || "Missing email"}
+                      </span>
+                      <Pill size="xs" tone={rowTones[row.status]}>
+                        {row.status}
+                      </Pill>
+                      <p className="w-full pl-8 text-muted-fg">{row.message}</p>
+                    </li>
+                  ))}
+                </ol>
+              </Surface>
+            </Surface>
           ) : null}
         </DialogBody>
         <DialogFooter>
-          <DialogCloseButton disabled={mutation.isPending}>
+          <DialogCloseButton
+            disabled={mutation.isPending}
+            variant={result ? "default" : "secondary"}
+          >
             {result ? "Done" : "Cancel"}
           </DialogCloseButton>
           {result ? null : (
@@ -283,7 +294,7 @@ export const AudienceImportDialog = ({
               onClick={() => {
                 mutation.mutate();
               }}
-              size="sm"
+              size="default"
             >
               {mutation.isPending
                 ? "Importing…"

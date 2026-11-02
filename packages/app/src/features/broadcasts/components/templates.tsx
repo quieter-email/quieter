@@ -9,13 +9,16 @@ import {
 } from "@quieter/mail/email-design";
 import type { EmailContent } from "@quieter/mail/email-design";
 import type { EmailTemplate } from "@quieter/mail/templates";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { EmailPreview } from "@quieter/ui/email-editor";
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { Input } from "@quieter/ui/input";
+import { Surface } from "@quieter/ui/surface";
+import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 
 import {
@@ -97,13 +100,13 @@ export const TemplatesList = () => {
     },
   });
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <BroadcastHeader
         action={
           canManage ? (
             <LinkButton
               search={{ organizationId }}
-              size="sm"
+              size="default"
               to="/templates/new"
             >
               <HugeiconsIcon aria-hidden icon={Add01Icon} />
@@ -111,38 +114,40 @@ export const TemplatesList = () => {
             </LinkButton>
           ) : undefined
         }
+        controls={
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <Input
+                aria-label="Search templates"
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setOffset(0);
+                }}
+                placeholder="Search templates"
+                value={search}
+              />
+            </div>
+            <Button
+              aria-pressed={archived}
+              onClick={() => {
+                setArchived(!archived);
+                setOffset(0);
+              }}
+              size="default"
+              variant="ghost"
+            >
+              {archived ? "Show active" : "Archived"}
+            </Button>
+          </div>
+        }
         title="Templates"
       />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="w-full max-w-72">
-          <Input
-            aria-label="Search templates"
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setOffset(0);
-            }}
-            placeholder="Search templates"
-            value={search}
-          />
-        </div>
-        <Button
-          aria-pressed={archived}
-          onClick={() => {
-            setArchived(!archived);
-            setOffset(0);
-          }}
-          size="sm"
-          variant="ghost"
-        >
-          {archived ? "Show active" : "Archived"}
-        </Button>
-      </div>
       {templates.isPending ? (
         <BroadcastLoading label="Loading templates" />
       ) : templates.isError ? (
         <BroadcastError onRetry={() => void templates.refetch()} />
       ) : templates.data.items.length === 0 ? (
-        <div className="grid min-h-80 place-content-center gap-3 rounded-xl border border-dashed border-border text-center">
+        <div className="grid min-h-80 place-content-center gap-3 p-4 text-center">
           <p className="text-body text-muted-fg">
             {search
               ? "No matching templates"
@@ -153,88 +158,91 @@ export const TemplatesList = () => {
           {canManage && !archived && !search ? (
             <LinkButton
               search={{ organizationId }}
-              size="sm"
+              size="default"
               to="/templates/new"
-              variant="outline"
+              variant="secondary"
             >
               Create template
             </LinkButton>
           ) : null}
         </div>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 2xl:grid-cols-3">
+        <div className="grid gap-4 px-4 pb-4 sm:grid-cols-2 2xl:grid-cols-3">
           {templates.data.items.map((template) => {
             const rendered = renderEmailContent(template.content);
             return (
-              <article
-                className="overflow-hidden rounded-xl border border-border bg-bg-surface"
-                key={template.id}
-              >
-                <div className="relative h-56 overflow-hidden border-b border-border bg-muted/40">
-                  <div aria-hidden inert>
-                    <EmailPreview
-                      html={rendered.html}
-                      text={rendered.text}
-                      title={`${template.name} preview`}
-                    />
-                  </div>
-                  <LinkButton
-                    aria-label={`Edit ${template.name}`}
-                    // oxlint-disable-next-line shadcn/no-restyle -- The preview has a full-card accessible link.
-                    className="absolute inset-0 h-full w-full rounded-none opacity-0 focus-visible:opacity-100"
-                    params={{ templateId: template.id }}
-                    search={{ organizationId }}
-                    to="/templates/$templateId"
-                    variant="ghost"
+              <article key={template.id}>
+                <Surface padding="compact" className="overflow-hidden">
+                  <Surface
+                    chrome="inset"
+                    padding="none"
+                    variant="detail"
+                    className="relative h-56 overflow-hidden"
                   >
-                    <span className="sr-only">Open template</span>
-                  </LinkButton>
-                </div>
-                <div className="flex flex-col gap-3 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <LinkButton
+                    <div aria-hidden inert>
+                      <EmailPreview
+                        html={rendered.html}
+                        text={rendered.text}
+                        title={`${template.name} preview`}
+                      />
+                    </div>
+                    <Link
+                      aria-label={`Edit ${template.name}`}
+                      className="absolute inset-0 focus-visible:outline focus-visible:outline-ring"
                       params={{ templateId: template.id }}
                       search={{ organizationId }}
-                      size="sm"
                       to="/templates/$templateId"
-                      variant="ghost"
                     >
-                      {template.name}
-                    </LinkButton>
-                    <span className="text-caption text-muted-fg">
-                      {template.content.kind === "visual"
-                        ? "Design"
-                        : template.content.kind === "html"
-                          ? "HTML"
-                          : "Text"}
-                    </span>
-                  </div>
-                  {canManage ? (
-                    <div className="flex items-center justify-between gap-2">
-                      <Button
-                        disabled={duplicate.isPending}
-                        onClick={() => {
-                          duplicate.mutate(template.id);
-                        }}
-                        size="sm"
-                        variant="ghost"
+                      <span className="sr-only">Open template</span>
+                    </Link>
+                  </Surface>
+                  <div className="flex flex-col gap-3 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <Link
+                        className="min-w-0"
+                        params={{ templateId: template.id }}
+                        search={{ organizationId }}
+                        to="/templates/$templateId"
                       >
-                        <HugeiconsIcon aria-hidden icon={Copy01Icon} />
-                        Duplicate
-                      </Button>
-                      <Button
-                        disabled={archive.isPending}
-                        onClick={() => {
-                          archive.mutate(template);
-                        }}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        {archived ? "Restore" : "Archive"}
-                      </Button>
+                        <Text size="body" truncate weight="medium">
+                          {template.name}
+                        </Text>
+                      </Link>
+                      <span className="text-caption text-muted-fg">
+                        {template.content.kind === "visual"
+                          ? "Design"
+                          : template.content.kind === "html"
+                            ? "HTML"
+                            : "Text"}
+                      </span>
                     </div>
-                  ) : null}
-                </div>
+                    {canManage ? (
+                      <ActionFooter>
+                        <Button
+                          disabled={duplicate.isPending}
+                          onClick={() => {
+                            duplicate.mutate(template.id);
+                          }}
+                          size="default"
+                          variant="secondary"
+                        >
+                          <HugeiconsIcon aria-hidden icon={Copy01Icon} />
+                          Duplicate
+                        </Button>
+                        <Button
+                          disabled={archive.isPending}
+                          onClick={() => {
+                            archive.mutate(template);
+                          }}
+                          size="default"
+                          variant="secondary"
+                        >
+                          {archived ? "Restore" : "Archive"}
+                        </Button>
+                      </ActionFooter>
+                    ) : null}
+                  </div>
+                </Surface>
               </article>
             );
           })}
@@ -243,13 +251,13 @@ export const TemplatesList = () => {
       {offset > 0 ||
       (templates.data?.nextOffset !== null &&
         templates.data?.nextOffset !== undefined) ? (
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 px-4 pb-4">
           <Button
             disabled={offset === 0}
             onClick={() => {
               setOffset(Math.max(0, offset - 24));
             }}
-            size="sm"
+            size="default"
             variant="ghost"
           >
             Previous
@@ -262,8 +270,8 @@ export const TemplatesList = () => {
             onClick={() => {
               setOffset(templates.data?.nextOffset ?? offset);
             }}
-            size="sm"
-            variant="outline"
+            size="default"
+            variant="secondary"
           >
             Next
           </Button>
@@ -340,7 +348,7 @@ export const TemplateEditor = ({ template }: { template?: EmailTemplate }) => {
     },
   });
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-0.5">
       <BroadcastHeader
         action={
           <div className="flex items-center gap-3">
@@ -355,7 +363,7 @@ export const TemplateEditor = ({ template }: { template?: EmailTemplate }) => {
                   save.mutate();
                 }}
                 pending={save.isPending}
-                size="sm"
+                size="default"
               >
                 Save template
               </Button>
@@ -365,38 +373,40 @@ export const TemplateEditor = ({ template }: { template?: EmailTemplate }) => {
         back="templates"
         title={saved?.name ?? "New template"}
       />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field>
-          <FieldLabel htmlFor="template-name">Name</FieldLabel>
-          <Input
-            disabled={!canManage || save.isPending}
-            id="template-name"
-            maxLength={200}
-            onChange={(event) => {
-              setName(event.target.value);
-            }}
-            value={name}
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="template-subject">Subject</FieldLabel>
-          <Input
-            disabled={!canManage || save.isPending}
-            id="template-subject"
-            maxLength={998}
-            onChange={(event) => {
-              setSubject(event.target.value);
-            }}
-            placeholder="Email subject"
-            value={subject}
-          />
-        </Field>
+      <div className="flex flex-col gap-4 p-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="template-name">Name</FieldLabel>
+            <Input
+              disabled={!canManage || save.isPending}
+              id="template-name"
+              maxLength={200}
+              onChange={(event) => {
+                setName(event.target.value);
+              }}
+              value={name}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="template-subject">Subject</FieldLabel>
+            <Input
+              disabled={!canManage || save.isPending}
+              id="template-subject"
+              maxLength={998}
+              onChange={(event) => {
+                setSubject(event.target.value);
+              }}
+              placeholder="Email subject"
+              value={subject}
+            />
+          </Field>
+        </div>
+        <EmailContentEditor
+          disabled={!canManage || save.isPending}
+          onChange={setContent}
+          value={content}
+        />
       </div>
-      <EmailContentEditor
-        disabled={!canManage || save.isPending}
-        onChange={setContent}
-        value={content}
-      />
       {navigation.dialog}
     </div>
   );

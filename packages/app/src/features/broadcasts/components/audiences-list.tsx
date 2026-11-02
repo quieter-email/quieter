@@ -4,7 +4,6 @@ import {
   SettingsErrorState,
   SettingsLoadingState,
   SettingsNavigationRow,
-  SettingsPageHeader,
   SettingsRows,
 } from "@quieter/app/features/settings/components/settings-layout";
 import { toastError } from "@quieter/app/lib/error-toast";
@@ -27,6 +26,7 @@ import { useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useDeferredValue, useState } from "react";
 
+import { BroadcastHeader } from "./broadcast-elements";
 import { useBroadcastWorkspace } from "./broadcast-workspace";
 
 export const AudiencesList = () => {
@@ -90,7 +90,7 @@ export const AudiencesList = () => {
     );
   } else if (audiences.data.items.length === 0) {
     audiencesContent = (
-      <div className="rounded-lg border border-border px-6 py-14 text-center">
+      <div className="px-6 py-14 text-center">
         <HugeiconsIcon
           aria-hidden
           className="mx-auto mb-3 size-6 text-muted-fg"
@@ -108,9 +108,10 @@ export const AudiencesList = () => {
     );
   } else {
     audiencesContent = (
-      <SettingsRows>
+      <SettingsRows variant="plain">
         {audiences.data.items.map((audience) => (
           <SettingsNavigationRow
+            chrome="standalone"
             key={audience.id}
             title={audience.name}
             description={
@@ -131,8 +132,20 @@ export const AudiencesList = () => {
     );
   }
   return (
-    <div className="space-y-8">
-      <SettingsPageHeader
+    <div className="flex flex-col gap-0.5">
+      <BroadcastHeader
+        controls={
+          <Input
+            aria-label="Search audiences"
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setCursor(undefined);
+            }}
+            placeholder="Search audiences"
+            value={search}
+          />
+        }
+        description="The people who have agreed to hear from your team."
         title="Audiences"
         action={
           canManage ? (
@@ -143,34 +156,23 @@ export const AudiencesList = () => {
                 setIdempotencyKey(crypto.randomUUID());
                 setOpen(true);
               }}
-              size="sm"
+              size="default"
             >
               <HugeiconsIcon aria-hidden className="size-4" icon={Add01Icon} />
               Create audience
             </Button>
           ) : undefined
         }
-      >
-        The people who have agreed to hear from your team.
-      </SettingsPageHeader>
-      <Input
-        aria-label="Search audiences"
-        onChange={(event) => {
-          setSearch(event.target.value);
-          setCursor(undefined);
-        }}
-        placeholder="Search audiences"
-        value={search}
       />
       {audiencesContent}
       {cursor || audiences.data?.nextCursor ? (
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 p-4">
           <Button
             disabled={!cursor}
             onClick={() => {
               setCursor(undefined);
             }}
-            size="sm"
+            size="default"
             variant="ghost"
           >
             First page
@@ -180,8 +182,8 @@ export const AudiencesList = () => {
             onClick={() => {
               setCursor(audiences.data?.nextCursor ?? undefined);
             }}
-            size="sm"
-            variant="outline"
+            size="default"
+            variant="secondary"
           >
             Next page
           </Button>
@@ -227,7 +229,7 @@ export const AudiencesList = () => {
               </DialogCloseButton>
               <Button
                 disabled={create.isPending || !name.trim()}
-                size="sm"
+                size="default"
                 type="submit"
               >
                 {create.isPending ? "Creating…" : "Create audience"}

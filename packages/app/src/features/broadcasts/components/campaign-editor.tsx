@@ -6,8 +6,10 @@ import {
   createEmailDesign,
   emailContentSchema,
 } from "@quieter/mail/email-design";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
+import { cn } from "@quieter/ui/cn";
 import { EmailPreview } from "@quieter/ui/email-editor";
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { Input } from "@quieter/ui/input";
@@ -19,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
+import { Surface, surfaceVariants } from "@quieter/ui/surface";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -47,7 +50,7 @@ const CampaignSteps = ({
   return (
     <nav
       aria-label="Campaign steps"
-      className="flex items-center gap-2 border-b border-border pb-3"
+      className="flex flex-wrap items-center gap-2 px-4 py-3"
     >
       {(["content", "audience", "review"] as const).map((item, index) => (
         <LinkButton
@@ -55,7 +58,7 @@ const CampaignSteps = ({
           key={item}
           params={{ campaignId: campaign.id }}
           search={{ organizationId }}
-          size="sm"
+          size="default"
           to={
             item === "content"
               ? "/campaigns/$campaignId/content"
@@ -122,85 +125,89 @@ export const CampaignCreate = () => {
     },
   });
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-0.5">
       <BroadcastHeader back="campaigns" title="New campaign" />
       <form
-        className="mx-auto flex w-full max-w-160 flex-col gap-6 py-8 md:py-14"
+        className="mx-auto w-full max-w-160 p-4"
         onSubmit={(event) => {
           event.preventDefault();
           create.mutate();
         }}
       >
-        <Field>
-          <FieldLabel htmlFor="new-campaign-name">Campaign name</FieldLabel>
-          <Input
-            id="new-campaign-name"
-            disabled={!canManage || create.isPending}
-            maxLength={200}
-            onChange={(event) => {
-              setName(event.target.value);
-            }}
-            placeholder="October newsletter"
-            required
-            value={name}
-          />
-        </Field>
-        <Field>
-          <FieldLabel>Audience</FieldLabel>
-          <Select
-            disabled={!canManage || create.isPending}
-            items={
-              audiences.data?.items.map((audience) => ({
-                label: audience.name,
-                value: audience.id,
-              })) ?? []
-            }
-            onValueChange={(value) => {
-              setAudienceId(value ?? "");
-            }}
-            value={audienceId}
-          >
-            <SelectTrigger
-              aria-label="Campaign audience"
-              pending={audiences.isPending}
-            >
-              <SelectValue placeholder="Choose an audience" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectList>
-                {audiences.data?.items.map((audience) => (
-                  <SelectItem key={audience.id} value={audience.id}>
-                    {audience.name}
-                  </SelectItem>
-                ))}
-              </SelectList>
-            </SelectContent>
-          </Select>
-        </Field>
-        {audiences.isError ? (
-          <BroadcastError onRetry={() => void audiences.refetch()} />
-        ) : audiences.data?.items.length === 0 ? (
-          <LinkButton
-            search={{ organizationId }}
-            size="sm"
-            to="/audiences"
-            variant="outline"
-          >
-            Create an audience
-          </LinkButton>
-        ) : null}
-        <div className="flex justify-end">
-          <Button
-            disabled={
-              !canManage || !name.trim() || !audienceId || create.isPending
-            }
-            pending={create.isPending}
-            size="sm"
-            type="submit"
-          >
-            Create draft
-          </Button>
-        </div>
+        <Surface>
+          <div className="flex flex-col gap-4">
+            <Field>
+              <FieldLabel htmlFor="new-campaign-name">Campaign name</FieldLabel>
+              <Input
+                id="new-campaign-name"
+                disabled={!canManage || create.isPending}
+                maxLength={200}
+                onChange={(event) => {
+                  setName(event.target.value);
+                }}
+                placeholder="October newsletter"
+                required
+                value={name}
+              />
+            </Field>
+            <Field>
+              <FieldLabel>Audience</FieldLabel>
+              <Select
+                disabled={!canManage || create.isPending}
+                items={
+                  audiences.data?.items.map((audience) => ({
+                    label: audience.name,
+                    value: audience.id,
+                  })) ?? []
+                }
+                onValueChange={(value) => {
+                  setAudienceId(value ?? "");
+                }}
+                value={audienceId}
+              >
+                <SelectTrigger
+                  aria-label="Campaign audience"
+                  pending={audiences.isPending}
+                >
+                  <SelectValue placeholder="Choose an audience" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectList>
+                    {audiences.data?.items.map((audience) => (
+                      <SelectItem key={audience.id} value={audience.id}>
+                        {audience.name}
+                      </SelectItem>
+                    ))}
+                  </SelectList>
+                </SelectContent>
+              </Select>
+            </Field>
+            {audiences.isError ? (
+              <BroadcastError onRetry={() => void audiences.refetch()} />
+            ) : audiences.data?.items.length === 0 ? (
+              <LinkButton
+                search={{ organizationId }}
+                size="default"
+                to="/audiences"
+                variant="secondary"
+              >
+                Create an audience
+              </LinkButton>
+            ) : null}
+            <ActionFooter>
+              <Button
+                disabled={
+                  !canManage || !name.trim() || !audienceId || create.isPending
+                }
+                pending={create.isPending}
+                size="default"
+                type="submit"
+              >
+                Create draft
+              </Button>
+            </ActionFooter>
+          </div>
+        </Surface>
       </form>
       {navigation.dialog}
     </div>
@@ -315,7 +322,7 @@ export const CampaignEditor = ({
     (template) => template.id === templateId
   );
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-0.5">
       <BroadcastHeader
         action={
           <div className="flex items-center gap-2">
@@ -338,8 +345,8 @@ export const CampaignEditor = ({
                     save.mutate("stay");
                   }}
                   pending={save.isPending && save.variables === "stay"}
-                  size="sm"
-                  variant="outline"
+                  size="default"
+                  variant="secondary"
                 >
                   Save draft
                 </Button>
@@ -360,7 +367,7 @@ export const CampaignEditor = ({
                     }
                   }}
                   pending={save.isPending && save.variables !== "stay"}
-                  size="sm"
+                  size="default"
                 >
                   {step === "content" ? "Continue" : "Review send"}
                 </Button>
@@ -373,7 +380,7 @@ export const CampaignEditor = ({
       />
       <CampaignSteps campaign={saved} step={step} />
       {step === "content" ? (
-        <>
+        <div className="flex flex-col gap-4 p-4">
           <div className="grid gap-4 md:grid-cols-3">
             <Field>
               <FieldLabel htmlFor="campaign-name">Name</FieldLabel>
@@ -466,7 +473,7 @@ export const CampaignEditor = ({
                   setEditorKey(editorKey + 1);
                 }
               }}
-              size="sm"
+              size="default"
               variant="ghost"
             >
               Use template
@@ -474,7 +481,7 @@ export const CampaignEditor = ({
             {templates.isError ? (
               <Button
                 onClick={() => void templates.refetch()}
-                size="sm"
+                size="default"
                 variant="ghost"
               >
                 Retry templates
@@ -489,99 +496,113 @@ export const CampaignEditor = ({
             }}
             value={draft.content}
           />
-        </>
+        </div>
       ) : (
-        <div className="mx-auto flex w-full max-w-180 flex-col gap-6 py-6">
-          <Field>
-            <FieldLabel>Audience</FieldLabel>
-            <Select
-              disabled={!canManage || save.isPending}
-              items={
-                audiences.data?.items.map((audience) => ({
-                  label: audience.name,
-                  value: audience.id,
-                })) ?? []
-              }
-              onValueChange={(value) => {
-                if (value) {
-                  setDraft({ ...draft, audienceId: value, segmentIds: [] });
-                }
-              }}
-              value={draft.audienceId}
-            >
-              <SelectTrigger
-                aria-label="Audience"
-                pending={audiences.isPending}
-              >
-                <SelectValue placeholder="Choose an audience" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectList>
-                  {audiences.data?.items.map((audience) => (
-                    <SelectItem key={audience.id} value={audience.id}>
-                      {audience.name}
-                    </SelectItem>
-                  ))}
-                </SelectList>
-              </SelectContent>
-            </Select>
-          </Field>
-          {audiences.isError ? (
-            <BroadcastError onRetry={() => void audiences.refetch()} />
-          ) : null}
-          <fieldset className="flex flex-col gap-3">
-            <legend className="mb-3 text-body font-medium">Recipients</legend>
-            <label
-              className="flex items-center gap-3 rounded-lg border border-border p-4 text-body"
-              htmlFor="campaign-whole-audience"
-            >
-              <Checkbox
-                checked={draft.segmentIds.length === 0}
-                disabled={!canManage || save.isPending}
-                id="campaign-whole-audience"
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    setDraft({ ...draft, segmentIds: [] });
-                  }
-                }}
-              >
-                <CheckboxIndicator />
-              </Checkbox>
-              Whole audience
-            </label>
-            {segments.data?.map((segment) => (
-              <label
-                className="flex items-center gap-3 rounded-lg border border-border p-4 text-body"
-                htmlFor={`campaign-segment-${segment.id}`}
-                key={segment.id}
-              >
-                <Checkbox
-                  checked={draft.segmentIds.includes(segment.id)}
+        <div className="p-4">
+          <Surface className="mx-auto w-full max-w-180">
+            <div className="flex flex-col gap-6">
+              <Field>
+                <FieldLabel>Audience</FieldLabel>
+                <Select
                   disabled={!canManage || save.isPending}
-                  id={`campaign-segment-${segment.id}`}
-                  onCheckedChange={(checked) => {
-                    setDraft({
-                      ...draft,
-                      segmentIds: checked
-                        ? [...draft.segmentIds, segment.id]
-                        : draft.segmentIds.filter((id) => id !== segment.id),
-                    });
+                  items={
+                    audiences.data?.items.map((audience) => ({
+                      label: audience.name,
+                      value: audience.id,
+                    })) ?? []
+                  }
+                  onValueChange={(value) => {
+                    if (value) {
+                      setDraft({ ...draft, audienceId: value, segmentIds: [] });
+                    }
                   }}
+                  value={draft.audienceId}
                 >
-                  <CheckboxIndicator />
-                </Checkbox>
-                {segment.name}
-              </label>
-            ))}
-          </fieldset>
-          {segments.isError ? (
-            <BroadcastError onRetry={() => void segments.refetch()} />
-          ) : null}
-          {draft.segmentIds.length > 1 ? (
-            <p className="text-caption text-muted-fg">
-              Contacts matching any selected segment.
-            </p>
-          ) : null}
+                  <SelectTrigger
+                    aria-label="Audience"
+                    pending={audiences.isPending}
+                  >
+                    <SelectValue placeholder="Choose an audience" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectList>
+                      {audiences.data?.items.map((audience) => (
+                        <SelectItem key={audience.id} value={audience.id}>
+                          {audience.name}
+                        </SelectItem>
+                      ))}
+                    </SelectList>
+                  </SelectContent>
+                </Select>
+              </Field>
+              {audiences.isError ? (
+                <BroadcastError onRetry={() => void audiences.refetch()} />
+              ) : null}
+              <fieldset className="flex flex-col gap-3">
+                <legend className="mb-3 text-body font-medium">
+                  Recipients
+                </legend>
+                <label
+                  className={cn(
+                    surfaceVariants({ variant: "detail" }),
+                    "flex items-center gap-3 text-body"
+                  )}
+                  htmlFor="campaign-whole-audience"
+                >
+                  <Checkbox
+                    checked={draft.segmentIds.length === 0}
+                    disabled={!canManage || save.isPending}
+                    id="campaign-whole-audience"
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setDraft({ ...draft, segmentIds: [] });
+                      }
+                    }}
+                  >
+                    <CheckboxIndicator />
+                  </Checkbox>
+                  Whole audience
+                </label>
+                {segments.data?.map((segment) => (
+                  <label
+                    className={cn(
+                      surfaceVariants({ variant: "detail" }),
+                      "flex items-center gap-3 text-body"
+                    )}
+                    htmlFor={`campaign-segment-${segment.id}`}
+                    key={segment.id}
+                  >
+                    <Checkbox
+                      checked={draft.segmentIds.includes(segment.id)}
+                      disabled={!canManage || save.isPending}
+                      id={`campaign-segment-${segment.id}`}
+                      onCheckedChange={(checked) => {
+                        setDraft({
+                          ...draft,
+                          segmentIds: checked
+                            ? [...draft.segmentIds, segment.id]
+                            : draft.segmentIds.filter(
+                                (id) => id !== segment.id
+                              ),
+                        });
+                      }}
+                    >
+                      <CheckboxIndicator />
+                    </Checkbox>
+                    {segment.name}
+                  </label>
+                ))}
+              </fieldset>
+              {segments.isError ? (
+                <BroadcastError onRetry={() => void segments.refetch()} />
+              ) : null}
+              {draft.segmentIds.length > 1 ? (
+                <p className="text-caption text-muted-fg">
+                  Contacts matching any selected segment.
+                </p>
+              ) : null}
+            </div>
+          </Surface>
         </div>
       )}
       {navigation.dialog}
@@ -685,7 +706,7 @@ const CampaignReview = ({ campaign }: { campaign: Campaign }) => {
     },
   });
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-0.5">
       <BroadcastHeader
         action={
           <Button
@@ -695,8 +716,8 @@ const CampaignReview = ({ campaign }: { campaign: Campaign }) => {
               setIdempotencyKey(crypto.randomUUID());
               void preview.refetch();
             }}
-            size="sm"
-            variant="outline"
+            size="default"
+            variant="secondary"
           >
             Refresh review
           </Button>
@@ -705,9 +726,9 @@ const CampaignReview = ({ campaign }: { campaign: Campaign }) => {
         title={campaign.name}
       />
       <CampaignSteps campaign={campaign} step="review" />
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="overflow-hidden rounded-xl border border-border bg-muted/40">
-          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+      <div className="grid items-start gap-6 px-4 pb-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <Surface padding="compact" className="overflow-hidden">
+          <div className="flex items-center justify-between gap-3 p-3.5">
             <div className="min-w-0">
               <p className="truncate text-body font-medium">
                 {campaign.subject}
@@ -721,130 +742,140 @@ const CampaignReview = ({ campaign }: { campaign: Campaign }) => {
               onClick={() => {
                 setDevice(device === "mobile" ? "desktop" : "mobile");
               }}
-              size="sm"
+              size="default"
               variant="ghost"
             >
               {device === "mobile" ? "Desktop" : "Mobile"}
             </Button>
           </div>
-          <EmailPreview
-            device={device}
-            html={campaign.html}
-            text={campaign.text}
-          />
-        </div>
-        <div className="flex flex-col gap-5 rounded-xl border border-border bg-bg-surface p-5">
-          <div>
-            <h2 className="text-body font-medium">
-              {audience.data?.name ?? "Loading audience"}
-            </h2>
-            <p className="mt-1 text-caption text-muted-fg">
-              {campaign.segmentIds.length
-                ? segments.data
-                    ?.filter((segment) =>
-                      campaign.segmentIds.includes(segment.id)
-                    )
-                    .map((segment) => segment.name)
-                    .join(", ")
-                : "Whole audience"}
-            </p>
-          </div>
-          {audience.isError || segments.isError ? (
-            <BroadcastError
-              onRetry={() => {
-                void audience.refetch();
-                if (campaign.segmentIds.length > 0) {
-                  void segments.refetch();
-                }
-              }}
+          <Surface chrome="inset" variant="detail">
+            <EmailPreview
+              device={device}
+              html={campaign.html}
+              text={campaign.text}
             />
-          ) : null}
-          {preview.isPending ? (
-            <BroadcastLoading label="Reviewing recipients" />
-          ) : preview.isError ? (
-            <BroadcastError onRetry={() => void preview.refetch()} />
-          ) : (
-            <>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-body">
-                <dt className="text-muted-fg">Recipients</dt>
-                <dd className="text-right font-medium">
-                  {preview.data.eligibleCount.toLocaleString()}
-                </dd>
-                <dt className="text-muted-fg">Excluded</dt>
-                <dd className="text-right">
-                  {preview.data.excludedCount.toLocaleString()}
-                </dd>
-                <dt className="text-muted-fg">Estimated cost</dt>
-                <dd className="text-right">
-                  {new Intl.NumberFormat("en", {
-                    currency: "USD",
-                    maximumFractionDigits: 4,
-                    minimumFractionDigits: 2,
-                    style: "currency",
-                  }).format(preview.data.estimatedCostMicroCents / 100_000_000)}
-                </dd>
-              </dl>
-              {Object.keys(preview.data.exclusions).length ? (
-                <ul className="flex flex-col gap-1 text-caption text-muted-fg">
-                  {Object.entries(preview.data.exclusions).map(
-                    ([reason, count]) => (
-                      <li key={reason}>
-                        {count.toLocaleString()} {reason.replaceAll("_", " ")}
-                      </li>
-                    )
-                  )}
-                </ul>
-              ) : null}
-              <p className="border-t border-border pt-4 text-caption/5 text-muted-fg">
-                Each email includes an unsubscribe link.
+          </Surface>
+        </Surface>
+        <Surface padding="compact">
+          <div className="flex flex-col gap-0.5">
+            <div className="p-3.5">
+              <h2 className="text-body font-medium">
+                {audience.data?.name ?? "Loading audience"}
+              </h2>
+              <p className="mt-1 text-caption text-muted-fg">
+                {campaign.segmentIds.length
+                  ? segments.data
+                      ?.filter((segment) =>
+                        campaign.segmentIds.includes(segment.id)
+                      )
+                      .map((segment) => segment.name)
+                      .join(", ")
+                  : "Whole audience"}
               </p>
-              {canManage ? (
-                <>
-                  <label
-                    className="flex items-start gap-2 text-body/5"
-                    htmlFor="campaign-send-confirmation"
-                  >
-                    <Checkbox
-                      checked={confirmedToken === preview.data.previewToken}
-                      disabled={
-                        send.isPending ||
-                        !targetingReady ||
-                        preview.isFetching ||
-                        preview.data.eligibleCount === 0
-                      }
-                      id="campaign-send-confirmation"
-                      onCheckedChange={(checked) => {
-                        setConfirmedToken(
-                          checked ? preview.data.previewToken : null
-                        );
-                      }}
+            </div>
+            {audience.isError || segments.isError ? (
+              <BroadcastError
+                onRetry={() => {
+                  void audience.refetch();
+                  if (campaign.segmentIds.length > 0) {
+                    void segments.refetch();
+                  }
+                }}
+              />
+            ) : null}
+            {preview.isPending ? (
+              <BroadcastLoading label="Reviewing recipients" />
+            ) : preview.isError ? (
+              <BroadcastError onRetry={() => void preview.refetch()} />
+            ) : (
+              <>
+                <Surface chrome="inset" variant="detail">
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-body-sm">
+                    <dt className="text-muted-fg">Recipients</dt>
+                    <dd className="text-right font-medium">
+                      {preview.data.eligibleCount.toLocaleString()}
+                    </dd>
+                    <dt className="text-muted-fg">Excluded</dt>
+                    <dd className="text-right">
+                      {preview.data.excludedCount.toLocaleString()}
+                    </dd>
+                    <dt className="text-muted-fg">Estimated cost</dt>
+                    <dd className="text-right">
+                      {new Intl.NumberFormat("en", {
+                        currency: "USD",
+                        maximumFractionDigits: 4,
+                        minimumFractionDigits: 2,
+                        style: "currency",
+                      }).format(
+                        preview.data.estimatedCostMicroCents / 100_000_000
+                      )}
+                    </dd>
+                  </dl>
+                </Surface>
+                {Object.keys(preview.data.exclusions).length ? (
+                  <ul className="flex flex-col gap-1 p-3.5 text-caption text-muted-fg">
+                    {Object.entries(preview.data.exclusions).map(
+                      ([reason, count]) => (
+                        <li key={reason}>
+                          {count.toLocaleString()} {reason.replaceAll("_", " ")}
+                        </li>
+                      )
+                    )}
+                  </ul>
+                ) : null}
+                <p className="p-3.5 text-caption/5 text-muted-fg">
+                  Each email includes an unsubscribe link.
+                </p>
+                {canManage ? (
+                  <div className="flex flex-col gap-4 p-3.5">
+                    <label
+                      className="flex items-start gap-2 text-body/5"
+                      htmlFor="campaign-send-confirmation"
                     >
-                      <CheckboxIndicator />
-                    </Checkbox>
-                    I reviewed this email and its recipients.
-                  </label>
-                  <Button
-                    disabled={
-                      send.isPending ||
-                      !targetingReady ||
-                      preview.isFetching ||
-                      confirmedToken !== preview.data.previewToken ||
-                      preview.data.eligibleCount === 0
-                    }
-                    onClick={() => {
-                      send.mutate();
-                    }}
-                    pending={send.isPending}
-                    size="sm"
-                  >
-                    Send to {preview.data.eligibleCount.toLocaleString()}{" "}
-                    contacts
-                  </Button>
-                </>
-              ) : null}
-            </>
-          )}
-        </div>
+                      <Checkbox
+                        checked={confirmedToken === preview.data.previewToken}
+                        disabled={
+                          send.isPending ||
+                          !targetingReady ||
+                          preview.isFetching ||
+                          preview.data.eligibleCount === 0
+                        }
+                        id="campaign-send-confirmation"
+                        onCheckedChange={(checked) => {
+                          setConfirmedToken(
+                            checked ? preview.data.previewToken : null
+                          );
+                        }}
+                      >
+                        <CheckboxIndicator />
+                      </Checkbox>
+                      I reviewed this email and its recipients.
+                    </label>
+                    <ActionFooter>
+                      <Button
+                        disabled={
+                          send.isPending ||
+                          !targetingReady ||
+                          preview.isFetching ||
+                          confirmedToken !== preview.data.previewToken ||
+                          preview.data.eligibleCount === 0
+                        }
+                        onClick={() => {
+                          send.mutate();
+                        }}
+                        pending={send.isPending}
+                        size="default"
+                      >
+                        Send to {preview.data.eligibleCount.toLocaleString()}{" "}
+                        contacts
+                      </Button>
+                    </ActionFooter>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+        </Surface>
       </div>
     </div>
   );
@@ -871,12 +902,12 @@ export const CampaignPage = ({
   }
   if (campaign.data.campaign.status !== "draft") {
     return (
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-0.5">
         <BroadcastHeader back="campaigns" title={campaign.data.campaign.name} />
         <LinkButton
           params={{ campaignId }}
           search={{ organizationId }}
-          size="sm"
+          size="default"
           to="/campaigns/$campaignId"
         >
           View delivery report
