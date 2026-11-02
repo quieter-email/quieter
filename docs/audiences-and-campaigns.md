@@ -92,11 +92,38 @@ Registration and import never restore an unsubscribed or removed membership. Exp
 
 Audience subscription and organization safety suppression are separate. Resubscribing does not clear a bounce, complaint, manual block, or other safety suppression. `setSuppression` is a separate audited action. Campaign eligibility requires both an active subscription and no current suppression.
 
-Every broadcast includes a visible `/unsubscribe/:token` link in its HTML and text footer. Recipients can open this public page and confirm without signing in. GET never changes a subscription, so opening or scanning a link is safe. RFC 8058 `List-Unsubscribe` and `List-Unsubscribe-Post` headers keep using `/api/unsubscribe/:token` for automatic one-click requests. Both paths use the same opaque recipient capability and POST handler. A form POST containing `List-Unsubscribe=One-Click` unsubscribes that audience without login or redirect. Existing API links remain valid. The action records an audience event and delivery evidence without globally suppressing the address. Treat capability URLs as secrets and exclude them from logs and screenshots.
+Every broadcast includes one `List-Unsubscribe` header, one `List-Unsubscribe-Post: List-Unsubscribe=One-Click` header, and a visible link in its HTML and text footer. Managed handling uses the public `/unsubscribe/:token` page for both human visits and automatic requests. GET displays confirmation without changing subscriptions. A form POST containing `List-Unsubscribe=One-Click` unsubscribes that audience without login or redirect. The API alias `/api/unsubscribe/:token` remains valid. The action records an audience event and delivery evidence without globally suppressing the address. Treat capability URLs as secrets and exclude them from logs and screenshots.
+
+### Set an audience default or campaign override
+
+Audiences use **Managed by Quieter** unless you choose a custom destination when creating or editing the audience. Campaigns use **Use audience default** unless you select **Managed by Quieter** or **Custom endpoint** in the Audience step. Headers remain automatic in every mode. Custom handling changes their destination and the visible footer link; it does not remove either.
+
+The API, SDK, and MCP use the same fields. An audience's `unsubscribePolicy` is `{ "kind": "managed" }` or `{ "kind": "custom", "urlTemplate": "..." }`. A campaign's `unsubscribeOverride` accepts either policy or `null` to inherit. Omitting either field on update preserves the saved choice. Existing audiences normalize to managed handling, and existing drafts inherit their audience.
+
+```ts
+await client.audiences.update({
+  organizationId,
+  audienceId,
+  unsubscribePolicy: {
+    kind: "custom",
+    urlTemplate: "https://news.example.com/unsubscribe/{{unsubscribe_token}}",
+  },
+});
+```
+
+A custom URL must use HTTPS and contain exactly one literal `{{unsubscribe_token}}` as a complete path segment or query value. For example, `https://news.example.com/unsubscribe?token={{unsubscribe_token}}` is valid. Credentials, fragments, unsafe syntax, and other placeholders are rejected. The opaque token identifies the recipient's audience membership; no email-address interpolation is needed. Saving checks the format without making a request to the host.
+
+Review displays the assembled email, including its footer, and the effective unsubscribe destination. Its confirmation token includes that resolved choice. An audience-default edit invalidates an inherited campaign's previous review. Sending atomically freezes the destination with the recipient snapshot. Later audience edits and configuration changes cannot alter new queued campaigns or their retries.
+
+### Host a custom unsubscribe endpoint
+
+Your HTTPS endpoint must display a safe GET page and accept one-click POST requests without cookies, login, or redirects. Forward the received opaque token to Quieter's `/unsubscribe/:token` endpoint with a form-encoded `List-Unsubscribe=One-Click` body. Return success only after Quieter accepts the update; retry transient failures. Otherwise the recipient remains subscribed in Quieter and can be selected by future campaigns.
+
+Apply no-store and no-referrer policies and exclude tokens from analytics and logs. Do not redirect an email client's POST to Quieter: forward it on the server. These HTTP and DKIM requirements follow [RFC 8058](https://www.rfc-editor.org/rfc/rfc8058.html). Both unsubscribe fields must be covered by a valid DKIM signature. Raw MIME assembly checks prove header presence, not the provider's delivered signature; verify that signature with a dedicated recipient before claiming live one-click delivery.
 
 ## Delivery and recovery
 
-Confirmation atomically freezes content, selection criteria, and recipient eligibility while holding the audience lock. The snapshot is capped at 10,000 contacts, including excluded contacts. Membership changes and snapshot creation have a defined serialized order. Late eligibility and suppression checks run again immediately before submission.
+Confirmation atomically freezes content, selection criteria, unsubscribe handling, and recipient eligibility while holding the audience lock. The snapshot is capped at 10,000 contacts, including excluded contacts. Membership changes and snapshot creation have a defined serialized order. Late eligibility and suppression checks run again immediately before submission.
 
 The browser only observes progress. A bounded server processor claims campaigns with leases, uses stable private send keys per recipient, and reuses verified-sender checks, billing credit reservations, raw-message storage, and delivery feedback. Durable recipient state survives transactional send-record retention. Known unsubmitted or rejected attempts can retry; unknown provider acceptance remains `uncertain` and is never automatically resent. A campaign with unresolved delivery or exhausted safe retries is `paused`; `campaigns.retry` resumes only safely failed recipients. Later acceptance reconciles durable results.
 
@@ -115,3 +142,5 @@ vp run dev:trigger campaigns
 This invokes `POST /__dev/campaigns` using the configured local-worker token. The endpoint is local-only, rejects browser-origin requests, and hardcodes `dryRun: true`; request input cannot enable sending. The result reports `considered`, `eligible`, `excluded`, and `processed: 0` without claiming work or changing delivery state. Queue a reviewed campaign against development data to inspect pending recipients; an empty queue returns zero counts. Local deployment mode hard-blocks real delivery. Do not change deployment mode to bypass that guard. Real delivery verification requires an approved deployed development setup and dedicated test recipients.
 
 The initial additive migration is `20261019215405_fresh_stone_men`. The follow-up `20261019215649_large_tattoo` carries the `quieter:contract` marker and changes the campaign-to-audience tenant foreign key to `ON DELETE CASCADE`, matching organization deletion behavior. Preserve both migrations in order and follow [Database safety](database-safety.md) for protected contract rollout. No production migration, deployment, or real provider send is claimed by this implementation work. Dry-run and bundle validation do not establish live delivery or feedback correctness.
+
+`20261102172008_careless_the_professor` adds nullable audience policy, campaign override, and frozen unsubscribe snapshot columns. Apply this additive schema first, deploy and drain older campaign processors, then enable policy writes in the app and API. Older processors do not understand custom destinations. Pre-change queued campaigns with no snapshot retain their existing API header and public footer URLs. Keep their configured app origin unchanged until those retries drain; it was not historically frozen. New snapshots retain their own origin or custom template. Local HTTP development uses a non-deliverable HTTPS example consistently for review and queueing; the local processor still blocks real delivery. Review uses synthetic tokens throughout.

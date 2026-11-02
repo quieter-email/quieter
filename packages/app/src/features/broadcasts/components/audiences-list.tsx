@@ -8,6 +8,8 @@ import {
 } from "@quieter/app/features/settings/components/settings-layout";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { rpc } from "@quieter/app/lib/orpc";
+import { unsubscribePolicySchema } from "@quieter/mail/campaign-unsubscribe";
+import type { UnsubscribePolicy } from "@quieter/mail/campaign-unsubscribe";
 import { Button } from "@quieter/ui/button";
 import {
   Dialog,
@@ -28,6 +30,7 @@ import { useDeferredValue, useState } from "react";
 
 import { BroadcastHeader } from "./broadcast-elements";
 import { useBroadcastWorkspace } from "./broadcast-workspace";
+import { UnsubscribePolicyField } from "./unsubscribe-policy-field";
 
 export const AudiencesList = () => {
   const { canManage, organizationId } = useBroadcastWorkspace();
@@ -39,6 +42,13 @@ export const AudiencesList = () => {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [unsubscribePolicy, setUnsubscribePolicy] = useState<UnsubscribePolicy>(
+    {
+      kind: "managed",
+    }
+  );
+  const validPolicy =
+    unsubscribePolicySchema.safeParse(unsubscribePolicy).success;
   const [idempotencyKey, setIdempotencyKey] = useState(() =>
     crypto.randomUUID()
   );
@@ -59,6 +69,7 @@ export const AudiencesList = () => {
         idempotencyKey,
         name,
         organizationId,
+        unsubscribePolicy,
       }),
     onError: (error) => {
       toastError(error, {
@@ -153,6 +164,7 @@ export const AudiencesList = () => {
               onClick={() => {
                 setName("");
                 setDescription("");
+                setUnsubscribePolicy({ kind: "managed" });
                 setIdempotencyKey(crypto.randomUUID());
                 setOpen(true);
               }}
@@ -194,7 +206,9 @@ export const AudiencesList = () => {
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              create.mutate();
+              if (canManage && !create.isPending && validPolicy) {
+                create.mutate();
+              }
             }}
           >
             <DialogHeader>
@@ -204,6 +218,7 @@ export const AudiencesList = () => {
               <Field>
                 <FieldLabel>Name</FieldLabel>
                 <Input
+                  disabled={!canManage || create.isPending}
                   maxLength={100}
                   required
                   onChange={(event) => {
@@ -215,6 +230,7 @@ export const AudiencesList = () => {
               <Field>
                 <FieldLabel>Description</FieldLabel>
                 <Textarea
+                  disabled={!canManage || create.isPending}
                   maxLength={1000}
                   onChange={(event) => {
                     setDescription(event.target.value);
@@ -222,13 +238,21 @@ export const AudiencesList = () => {
                   value={description}
                 />
               </Field>
+              <UnsubscribePolicyField
+                disabled={!canManage || create.isPending}
+                onChange={setUnsubscribePolicy}
+                scope="audience"
+                value={unsubscribePolicy}
+              />
             </DialogBody>
             <DialogFooter>
               <DialogCloseButton disabled={create.isPending}>
                 Cancel
               </DialogCloseButton>
               <Button
-                disabled={create.isPending || !name.trim()}
+                disabled={
+                  !canManage || create.isPending || !name.trim() || !validPolicy
+                }
                 size="default"
                 type="submit"
               >

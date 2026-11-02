@@ -9,6 +9,7 @@
     "./control": "./src/control.ts",
     "./audiences": "./src/audiences.ts",
     "./campaigns": "./src/campaigns.ts",
+    "./campaign-unsubscribe": "./src/campaign-unsubscribe.ts",
     "./snippet": "./src/snippet.ts",
     "./delivery": "./src/delivery.ts",
     "./data-plane": "./src/data-plane.ts",

@@ -75,6 +75,7 @@ const getAudienceSummary = async (
   return audienceSchema.parse({
     ...audience,
     createdAt: audience.createdAt.toISOString(),
+    unsubscribePolicy: audience.unsubscribePolicy ?? { kind: "managed" },
     updatedAt: audience.updatedAt.toISOString(),
     ...counts,
   });
@@ -151,6 +152,7 @@ export const create = async (
           id: audienceId,
           name: input.name,
           organizationId: input.organizationId,
+          unsubscribePolicy: input.unsubscribePolicy,
           updatedAt: now,
         });
         return await getAudienceSummary(transaction, {
@@ -179,6 +181,7 @@ export const update = async (
       .set({
         description: input.description,
         name: input.name,
+        unsubscribePolicy: input.unsubscribePolicy,
         updatedAt: new Date(),
       })
       .where(

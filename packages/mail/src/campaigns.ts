@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+import {
+  unsubscribePolicySchema,
+  unsubscribeSnapshotSchema,
+} from "./campaign-unsubscribe";
 import { emailContentSchema } from "./email-design";
 
 const organizationInput = z.object({ organizationId: z.string().min(1) });
@@ -14,6 +18,7 @@ const draftFields = {
   segmentIds: z.array(z.string().min(1)).max(25).default([]),
   subject: z.string().trim().max(998),
   text: z.string().max(100_000).default(""),
+  unsubscribeOverride: unsubscribePolicySchema.nullable().optional(),
 };
 export const campaignStatusSchema = z.enum([
   "draft",
@@ -65,6 +70,7 @@ export const campaignSchema = z.object({
   segmentIds: z.array(z.string()),
   sentAt: z.iso.datetime().nullable(),
   status: campaignStatusSchema,
+  unsubscribeOverride: unsubscribePolicySchema.nullable().default(null),
   updatedAt: z.iso.datetime(),
 });
 export const campaignListResultSchema = z.object({
@@ -77,8 +83,10 @@ export const campaignPreviewResultSchema = z.object({
   estimatedCostMicroCents: z.number(),
   excludedCount: z.number(),
   exclusions: z.record(z.string(), z.number()),
+  message: z.object({ html: z.string().nullable(), text: z.string() }),
   previewToken: z.string(),
   totalCount: z.number(),
+  unsubscribe: unsubscribeSnapshotSchema,
   verifiedDomains: z.array(z.string()),
 });
 export const campaignDetailResultSchema = z.object({

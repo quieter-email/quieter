@@ -11,6 +11,8 @@ import type {
   AudienceMembershipStatus,
   AudienceSegmentCriteria,
 } from "@quieter/mail/audiences";
+import { unsubscribePolicySchema } from "@quieter/mail/campaign-unsubscribe";
+import type { UnsubscribePolicy } from "@quieter/mail/campaign-unsubscribe";
 import { Button } from "@quieter/ui/button";
 import {
   Dialog,
@@ -47,6 +49,7 @@ import { AudienceContactDialog } from "./audience-contact-dialog";
 import { AudienceImportDialog } from "./audience-import-dialog";
 import { BroadcastHeader } from "./broadcast-elements";
 import { useBroadcastWorkspace } from "./broadcast-workspace";
+import { UnsubscribePolicyField } from "./unsubscribe-policy-field";
 
 type Segment = { id: string; name: string; criteria: AudienceSegmentCriteria };
 
@@ -224,17 +227,24 @@ const EditAudienceDialog = ({
   audienceId,
   initialName,
   initialDescription,
+  initialUnsubscribePolicy,
   onClose,
 }: {
   audienceId: string;
   initialName: string;
   initialDescription: string;
+  initialUnsubscribePolicy: UnsubscribePolicy;
   onClose: () => void;
 }) => {
-  const { organizationId } = useBroadcastWorkspace();
+  const { organizationId, canManage } = useBroadcastWorkspace();
   const queryClient = useQueryClient();
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription);
+  const [unsubscribePolicy, setUnsubscribePolicy] = useState(
+    initialUnsubscribePolicy
+  );
+  const validPolicy =
+    unsubscribePolicySchema.safeParse(unsubscribePolicy).success;
   const mutation = useMutation({
     mutationFn: async () =>
       await rpc.audiences.update({
@@ -242,6 +252,7 @@ const EditAudienceDialog = ({
         description,
         name,
         organizationId,
+        unsubscribePolicy,
       }),
     onError: (error) => {
       toastError(error, {
@@ -250,9 +261,14 @@ const EditAudienceDialog = ({
       });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["audiences", organizationId],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["audiences", organizationId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["campaign-review", organizationId],
+        }),
+      ]);
       onClose();
     },
   });
@@ -269,7 +285,9 @@ const EditAudienceDialog = ({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            mutation.mutate();
+            if (canManage && !mutation.isPending && validPolicy) {
+              mutation.mutate();
+            }
           }}
         >
           <DialogHeader>
@@ -279,6 +297,7 @@ const EditAudienceDialog = ({
             <Field>
               <FieldLabel>Name</FieldLabel>
               <Input
+                disabled={!canManage || mutation.isPending}
                 maxLength={100}
                 required
                 onChange={(event) => {
@@ -290,6 +309,7 @@ const EditAudienceDialog = ({
             <Field>
               <FieldLabel>Description</FieldLabel>
               <Textarea
+                disabled={!canManage || mutation.isPending}
                 maxLength={1000}
                 onChange={(event) => {
                   setDescription(event.target.value);
@@ -297,13 +317,21 @@ const EditAudienceDialog = ({
                 value={description}
               />
             </Field>
+            <UnsubscribePolicyField
+              disabled={!canManage || mutation.isPending}
+              onChange={setUnsubscribePolicy}
+              scope="audience"
+              value={unsubscribePolicy}
+            />
           </DialogBody>
           <DialogFooter>
             <DialogCloseButton disabled={mutation.isPending}>
               Cancel
             </DialogCloseButton>
             <Button
-              disabled={mutation.isPending || !name.trim()}
+              disabled={
+                !canManage || mutation.isPending || !name.trim() || !validPolicy
+              }
               size="default"
               type="submit"
             >
@@ -723,6 +751,7 @@ export const AudienceDetail = ({ audienceId }: { audienceId: string }) => {
           audienceId={audienceId}
           initialName={audience.data.name}
           initialDescription={audience.data.description ?? ""}
+          initialUnsubscribePolicy={audience.data.unsubscribePolicy}
           onClose={() => {
             setEditOpen(false);
           }}

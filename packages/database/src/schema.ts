@@ -1,5 +1,9 @@
 import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 import type {
+  UnsubscribePolicy,
+  UnsubscribeSnapshot,
+} from "@quieter/mail/campaign-unsubscribe";
+import type {
   CapturedMailSnapshot,
   MailCaptureHistoryPage,
   MailCaptureIdPage,
@@ -2381,6 +2385,7 @@ export const organizationAudience = pgTable(
     organizationId: text("organizationId")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    unsubscribePolicy: jsonb("unsubscribePolicy").$type<UnsubscribePolicy>(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
@@ -2744,6 +2749,12 @@ export const organizationCampaign = pgTable(
       .default("draft"),
     subject: text("subject").notNull(),
     text: text("text").notNull(),
+    unsubscribeOverride: jsonb(
+      "unsubscribeOverride"
+    ).$type<UnsubscribePolicy>(),
+    unsubscribeSnapshot: jsonb(
+      "unsubscribeSnapshot"
+    ).$type<UnsubscribeSnapshot>(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [

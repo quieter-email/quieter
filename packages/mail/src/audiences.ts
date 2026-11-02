@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { unsubscribePolicySchema } from "./campaign-unsubscribe";
+
 const idSchema = z.string().trim().min(1).max(200);
 const organizationInputSchema = z.object({ organizationId: idSchema });
 const audienceInputSchema = organizationInputSchema.extend({
@@ -42,10 +44,12 @@ export const audienceCreateInputSchema = organizationInputSchema.extend({
   description: z.string().trim().max(1000).nullable().optional(),
   idempotencyKey: idempotencyKeySchema,
   name: z.string().trim().min(1).max(100),
+  unsubscribePolicy: unsubscribePolicySchema.optional(),
 });
 export const audienceUpdateInputSchema = audienceInputSchema.extend({
   description: z.string().trim().max(1000).nullable().optional(),
   name: z.string().trim().min(1).max(100).optional(),
+  unsubscribePolicy: unsubscribePolicySchema.optional(),
 });
 export const audienceListContactsInputSchema = audienceInputSchema.extend({
   search: z.string().trim().max(200).optional(),
@@ -120,6 +124,7 @@ export const audienceSchema = z.object({
   id: z.string(),
   name: z.string(),
   subscribedCount: z.number(),
+  unsubscribePolicy: unsubscribePolicySchema.default({ kind: "managed" }),
   updatedAt: z.iso.datetime(),
 });
 export const audienceContactSchema = z.object({

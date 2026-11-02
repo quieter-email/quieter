@@ -1,6 +1,7 @@
 import { resolveMailDomainVerified } from "@quieter/app/features/settings/components/organization-settings/mail-domains";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { rpc } from "@quieter/app/lib/orpc";
+import { unsubscribePolicySchema } from "@quieter/mail/campaign-unsubscribe";
 import type { Campaign } from "@quieter/mail/campaigns";
 import {
   createEmailDesign,
@@ -35,6 +36,7 @@ import {
 } from "./broadcast-elements";
 import { useBroadcastWorkspace } from "./broadcast-workspace";
 import { EmailContentEditor } from "./email-content-editor";
+import { UnsubscribePolicyField } from "./unsubscribe-policy-field";
 
 export type CampaignStep = "content" | "audience" | "review";
 
@@ -233,6 +235,7 @@ export const CampaignEditor = ({
     segmentIds: campaign.segmentIds,
     subject: campaign.subject,
     text: campaign.text,
+    unsubscribeOverride: campaign.unsubscribeOverride,
   });
   const [templateId, setTemplateId] = useState("");
   const [editorKey, setEditorKey] = useState(0);
@@ -242,7 +245,9 @@ export const CampaignEditor = ({
     draft.from !== saved.from ||
     draft.subject !== saved.subject ||
     JSON.stringify(draft.content) !== JSON.stringify(saved.content) ||
-    draft.segmentIds.join("\n") !== saved.segmentIds.join("\n");
+    draft.segmentIds.join("\n") !== saved.segmentIds.join("\n") ||
+    JSON.stringify(draft.unsubscribeOverride) !==
+      JSON.stringify(saved.unsubscribeOverride);
   const navigation = useDraftNavigation(dirty);
   const audiences = useQuery({
     enabled: step === "audience",
@@ -294,6 +299,7 @@ export const CampaignEditor = ({
         segmentIds: data.segmentIds,
         subject: data.subject,
         text: data.text,
+        unsubscribeOverride: data.unsubscribeOverride,
       });
       await queryClient.invalidateQueries({
         queryKey: ["campaigns", organizationId],
@@ -315,8 +321,14 @@ export const CampaignEditor = ({
     },
   });
   const validContent = emailContentSchema.safeParse(draft.content).success;
+  const validPolicy =
+    draft.unsubscribeOverride === null ||
+    unsubscribePolicySchema.safeParse(draft.unsubscribeOverride).success;
   const ready =
-    validContent && draft.subject.trim() !== "" && draft.from.includes("@");
+    validContent &&
+    validPolicy &&
+    draft.subject.trim() !== "" &&
+    draft.from.includes("@");
   const next = step === "content" ? "audience" : "review";
   const selectedTemplate = templates.data?.items.find(
     (template) => template.id === templateId
@@ -339,6 +351,7 @@ export const CampaignEditor = ({
                     !dirty ||
                     save.isPending ||
                     !validContent ||
+                    !validPolicy ||
                     !draft.name.trim()
                   }
                   onClick={() => {
@@ -601,6 +614,19 @@ export const CampaignEditor = ({
                   Contacts matching any selected segment.
                 </p>
               ) : null}
+              <UnsubscribePolicyField
+                audiencePolicy={
+                  audiences.data?.items.find(
+                    (audience) => audience.id === draft.audienceId
+                  )?.unsubscribePolicy
+                }
+                disabled={!canManage || save.isPending}
+                onChange={(unsubscribeOverride) => {
+                  setDraft({ ...draft, unsubscribeOverride });
+                }}
+                scope="campaign"
+                value={draft.unsubscribeOverride}
+              />
             </div>
           </Surface>
         </div>
@@ -749,11 +775,17 @@ const CampaignReview = ({ campaign }: { campaign: Campaign }) => {
             </Button>
           </div>
           <Surface chrome="inset" variant="detail">
-            <EmailPreview
-              device={device}
-              html={campaign.html}
-              text={campaign.text}
-            />
+            {preview.isPending ? (
+              <BroadcastLoading label="Loading email preview" />
+            ) : preview.isError ? (
+              <BroadcastError onRetry={() => void preview.refetch()} />
+            ) : (
+              <EmailPreview
+                device={device}
+                html={preview.data.message.html}
+                text={preview.data.message.text}
+              />
+            )}
           </Surface>
         </Surface>
         <Surface padding="compact">
@@ -823,9 +855,19 @@ const CampaignReview = ({ campaign }: { campaign: Campaign }) => {
                     )}
                   </ul>
                 ) : null}
-                <p className="p-3.5 text-caption/5 text-muted-fg">
-                  Each email includes an unsubscribe link.
-                </p>
+                <div className="space-y-1 p-3.5 text-caption/5 text-muted-fg">
+                  <p>
+                    {campaign.unsubscribeOverride === null
+                      ? "Unsubscribe uses the audience default."
+                      : "Unsubscribe uses a campaign override."}
+                  </p>
+                  <p className="break-words">
+                    {preview.data.unsubscribe.kind === "managed"
+                      ? `Managed by Quieter at ${preview.data.unsubscribe.origin}.`
+                      : `Custom endpoint, ${preview.data.unsubscribe.urlTemplate}`}
+                  </p>
+                  <p>Each email includes an unsubscribe link.</p>
+                </div>
                 {canManage ? (
                   <div className="flex flex-col gap-4 p-3.5">
                     <label

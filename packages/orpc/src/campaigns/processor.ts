@@ -8,7 +8,10 @@ import {
   organizationMailSendIdempotency,
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
-import { appendEmailUnsubscribe } from "@quieter/mail/email-design";
+import {
+  renderCampaignEmail,
+  unsubscribeSnapshotSchema,
+} from "@quieter/mail/campaign-unsubscribe";
 import { sendMessageInputSchema } from "@quieter/mail/send";
 import { reportError } from "@quieter/observability";
 import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
@@ -67,10 +70,6 @@ export const processCampaignBatch = async (
     };
   }
   assertLocalMailSend();
-  const origin = serverEnv.BETTER_AUTH_URL;
-  if (origin === undefined || new URL(origin).protocol !== "https:") {
-    throw new Error("Campaign unsubscribe origin is not configured.");
-  }
   const recovered = await db
     .select({
       recipientId: organizationCampaignRecipient.id,
@@ -246,6 +245,18 @@ export const processCampaignBatch = async (
   }
   let processed = 0;
   try {
+    let unsubscribe: Parameters<typeof renderCampaignEmail>[0]["unsubscribe"];
+    if (campaign.unsubscribeSnapshot === null) {
+      const origin = serverEnv.BETTER_AUTH_URL;
+      if (origin === undefined || new URL(origin).protocol !== "https:") {
+        throw new Error("Campaign unsubscribe origin is not configured.");
+      }
+      unsubscribe = { kind: "managed", origin, version: 0 };
+    } else {
+      unsubscribe = unsubscribeSnapshotSchema.parse(
+        campaign.unsubscribeSnapshot
+      );
+    }
     const stale = await db
       .select()
       .from(organizationCampaignRecipient)
@@ -369,14 +380,6 @@ export const processCampaignBatch = async (
       if (claimed === undefined) {
         continue;
       }
-      const unsubscribeUrl = new URL(
-        `/unsubscribe/${recipient.unsubscribeToken}`,
-        origin
-      ).toString();
-      const oneClickUnsubscribeUrl = new URL(
-        `/api/unsubscribe/${recipient.unsubscribeToken}`,
-        origin
-      ).toString();
       try {
         const result = await sendOrganizationMailMessage({
           beforeSubmit: async (operationId) => {
@@ -412,18 +415,15 @@ export const processCampaignBatch = async (
               .where(eq(organizationCampaignRecipient.id, recipient.id));
           },
           message: sendMessageInputSchema.parse({
+            ...renderCampaignEmail({
+              html: campaign.html,
+              text: campaign.text,
+              token: recipient.unsubscribeToken,
+              unsubscribe,
+            }),
             from: campaign.from,
-            headers: {
-              "List-Unsubscribe": `<${oneClickUnsubscribeUrl}>`,
-              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-            },
-            html:
-              campaign.html === null
-                ? undefined
-                : appendEmailUnsubscribe(campaign.html, unsubscribeUrl),
             idempotencyKey: recipient.sendKey,
             subject: campaign.subject,
-            text: `${campaign.text}\n\nUnsubscribe from this audience: ${unsubscribeUrl}`,
             to: [recipient.email],
           }),
           organizationId: campaign.organizationId,

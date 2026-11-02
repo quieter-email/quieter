@@ -15,6 +15,11 @@ import {
   organizationMailDeliveryEvent,
   organizationMailDeliveryRecipient,
 } from "@quieter/database/schema";
+import { serverEnv } from "@quieter/env/server";
+import {
+  freezeCampaignUnsubscribe,
+  renderCampaignEmail,
+} from "@quieter/mail/campaign-unsubscribe";
 import { campaignSchema } from "@quieter/mail/campaigns";
 import type {
   campaignCreateInputSchema,
@@ -23,10 +28,7 @@ import type {
   campaignSendInputSchema,
   campaignListInputSchema,
 } from "@quieter/mail/campaigns";
-import {
-  appendEmailUnsubscribe,
-  renderEmailContent,
-} from "@quieter/mail/email-design";
+import { renderEmailContent } from "@quieter/mail/email-design";
 import { sendMessageInputSchema } from "@quieter/mail/send";
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
@@ -44,6 +46,18 @@ import { hashRequest } from "../request-hash";
 
 type CampaignRow = typeof organizationCampaign.$inferSelect;
 type CampaignInput = { campaignId: string; organizationId: string };
+
+const freezeUnsubscribe = (
+  input: Omit<Parameters<typeof freezeCampaignUnsubscribe>[0], "managedOrigin">
+) => {
+  const configuredOrigin = serverEnv.BETTER_AUTH_URL;
+  const managedOrigin =
+    serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
+    configuredOrigin?.startsWith("https:") !== true
+      ? "https://unsubscribe.example"
+      : configuredOrigin;
+  return freezeCampaignUnsubscribe({ ...input, managedOrigin });
+};
 
 const serializeCampaign = (row: CampaignRow) =>
   campaignSchema.parse({
@@ -172,6 +186,7 @@ export const updateCampaign = async (
         segmentIds: input.segmentIds,
         subject: input.subject,
         text: rendered.text,
+        unsubscribeOverride: input.unsubscribeOverride,
         updatedAt: new Date(
           Math.max(Date.now(), new Date(input.expectedUpdatedAt).getTime() + 1)
         ),
@@ -203,9 +218,9 @@ export const previewCampaign = async (
     actor.organizationId,
     input.campaignId
   );
-  const { campaign, recipients, previewToken } = await db.transaction(
-    async (tx) => {
-      await lockAudienceForSnapshot(
+  const { campaign, recipients, previewToken, unsubscribe } =
+    await db.transaction(async (tx) => {
+      const audience = await lockAudienceForSnapshot(
         tx,
         actor.organizationId,
         initialCampaign.audienceId
@@ -250,17 +265,22 @@ export const previewCampaign = async (
                 )
               )
               .orderBy(asc(organizationAudienceSegment.id));
+      const resolvedUnsubscribe = freezeUnsubscribe({
+        audiencePolicy: audience.unsubscribePolicy ?? { kind: "managed" },
+        campaignOverride: currentDraft.unsubscribeOverride,
+      });
       return {
         campaign: currentDraft,
         previewToken: hashRequest({
           campaign: serializeCampaign(currentDraft),
           recipients: selectedRecipients,
           segments,
+          unsubscribe: resolvedUnsubscribe,
         }),
         recipients: selectedRecipients,
+        unsubscribe: resolvedUnsubscribe,
       };
-    }
-  );
+    });
   const domains = await db
     .select({ domain: mailDomain.domain })
     .from(mailDomain)
@@ -280,21 +300,19 @@ export const previewCampaign = async (
       exclusions[reason] = (exclusions[reason] ?? 0) + 1;
     }
   }
+  const message = renderCampaignEmail({
+    html: campaign.html,
+    text: campaign.text,
+    token: "x".repeat(43),
+    unsubscribe,
+  });
   const estimate = estimateOutboundOrganizationMailUsage({
     attachmentSizeBytes: 0,
     bcc: [],
     cc: [],
-    html:
-      campaign.html === null
-        ? undefined
-        : appendEmailUnsubscribe(
-            campaign.html,
-            `https://unsubscribe.example/unsubscribe/${"x".repeat(43)}`
-          ),
+    html: message.html,
     subject: campaign.subject,
-    text:
-      `${campaign.text}\n\nUnsubscribe from this audience: ` +
-      `https://unsubscribe.example/unsubscribe/${"x".repeat(43)}`,
+    text: message.text,
     to: ["estimate@example.com"],
   });
   return {
@@ -306,8 +324,10 @@ export const previewCampaign = async (
       }),
     excludedCount: recipients.length - eligibleCount,
     exclusions,
+    message: { html: message.html ?? null, text: message.text },
     previewToken,
     totalCount: recipients.length,
+    unsubscribe,
     verifiedDomains: domains.map((domain) => domain.domain),
   };
 };
@@ -360,7 +380,7 @@ export const sendCampaign = async (
       .from(organization)
       .where(eq(organization.id, actor.organizationId))
       .for("update");
-    await lockAudienceForSnapshot(
+    const audience = await lockAudienceForSnapshot(
       tx,
       actor.organizationId,
       campaign.audienceId
@@ -443,9 +463,18 @@ export const sendCampaign = async (
               )
             )
             .orderBy(asc(organizationAudienceSegment.id));
+    const unsubscribe = freezeUnsubscribe({
+      audiencePolicy: audience.unsubscribePolicy ?? { kind: "managed" },
+      campaignOverride: locked.unsubscribeOverride,
+    });
     if (
       input.previewToken !==
-      hashRequest({ campaign: serializeCampaign(locked), recipients, segments })
+      hashRequest({
+        campaign: serializeCampaign(locked),
+        recipients,
+        segments,
+        unsubscribe,
+      })
     ) {
       throw new ORPCError("CONFLICT", {
         message:
@@ -489,6 +518,7 @@ export const sendCampaign = async (
         sendRequestHash: requestHash,
         sentAt: now,
         status: "queued",
+        unsubscribeSnapshot: unsubscribe,
         updatedAt: now,
       })
       .where(eq(organizationCampaign.id, locked.id))
