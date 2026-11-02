@@ -1,176 +1,82 @@
 "use client";
 
-import { Loading03Icon } from "@hugeicons/core-free-icons";
+import { BillingCreditSummary } from "@quieter/app/features/settings/components/billing-product-card";
 import {
-  BillingCreditSummary,
-  BillingProductCard,
-} from "@quieter/app/features/settings/components/billing-product-card";
-import {
+  SettingsCard,
+  SettingsInsetRow,
   SettingsRowText,
-  settingsSurfaceVariants,
 } from "@quieter/app/features/settings/components/settings-layout";
-import {
-  normalizeBillingProduct,
-  getBillingStatusMessage,
-  USER_BILLING_QUERY_KEY,
-} from "@quieter/app/features/settings/domain/billing";
+import { normalizeBillingProduct } from "@quieter/app/features/settings/domain/billing";
 import type { UserBillingOverview } from "@quieter/app/features/settings/domain/billing";
-import { toastError } from "@quieter/app/lib/error-toast";
-import { orpc } from "@quieter/app/lib/orpc";
-import { openExternalUrl } from "@quieter/app/runtime";
+import { GMAIL_MAILBOX_LIMITS } from "@quieter/billing/plans";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
-import { Icon } from "@quieter/ui/icon";
-import { Surface } from "@quieter/ui/surface";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 
 export const OrganizationBillingSettings = ({
   billing,
   billingAccessUnknown,
   billingPending,
-  organizationId,
 }: {
   billing: UserBillingOverview["teams"][number] | null;
   billingAccessUnknown: boolean;
   billingPending: boolean;
-  organizationId: string;
 }) => {
-  const queryClient = useQueryClient();
-  const checkoutMutation = useMutation({
-    ...orpc.billing.createCheckout.mutationOptions(),
-    onError: (error) => {
-      toastError(error, {
-        boundary: "billing",
-        fallback: "Could not start checkout.",
-      });
-    },
-    onSuccess: async (result) => {
-      void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
-      await openExternalUrl(result.checkoutUrl);
-    },
-  });
-  const portalMutation = useMutation({
-    ...orpc.billing.createPortal.mutationOptions(),
-    onError: (error) => {
-      toastError(error, {
-        boundary: "billing",
-        fallback: "Could not open billing.",
-      });
-    },
-    onSuccess: async (result) => {
-      await openExternalUrl(result.portalUrl);
-    },
-  });
-
-  if (billingPending) {
-    return (
-      <section
-        className={cn(
-          settingsSurfaceVariants({ variant: "insetSection" }),
-          "flex items-center gap-2",
-          settingsSurfaceVariants({ variant: "value" })
-        )}
-      >
-        <Icon aria-hidden animation="spin" icon={Loading03Icon} />
-        Loading billing…
-      </section>
-    );
-  }
-
-  if (!billing && !billingAccessUnknown) {
-    return (
-      <section className={settingsSurfaceVariants({ variant: "insetSection" })}>
-        <SettingsRowText title="Billing">
-          Billing details are unavailable for this team.
-        </SettingsRowText>
-      </section>
-    );
-  }
-
   if (!billing) {
+    let message = "Billing details are unavailable for this team.";
+    if (billingPending) {
+      message = "Loading the team's plan…";
+    } else if (billingAccessUnknown) {
+      message = "Could not load the team's plan.";
+    }
     return (
-      <section
-        className={cn(
-          settingsSurfaceVariants({ variant: "insetSection" }),
-          "flex items-center gap-2",
-          settingsSurfaceVariants({ variant: "value" })
-        )}
-      >
-        <Icon aria-hidden icon={Loading03Icon} />
-        Could not load billing.
-      </section>
+      <SettingsCard>
+        <SettingsInsetRow>
+          <SettingsRowText title="Billing account">{message}</SettingsRowText>
+        </SettingsInsetRow>
+      </SettingsCard>
     );
   }
 
   const currentProduct = normalizeBillingProduct(billing.product);
-  const statusMessage = getBillingStatusMessage(billing);
+  const gmailSlots = GMAIL_MAILBOX_LIMITS[currentProduct ?? "free"];
 
   return (
-    <section className="@container space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <SettingsRowText title="Plan & balance">
+    <SettingsCard>
+      <SettingsInsetRow className="justify-between gap-4">
+        <SettingsRowText title="Billing account">
+          {billing.billingOwnerIsCurrentUser
+            ? "Your account plan and usage balance are shared across the teams you pay for."
+            : `${billing.billingOwnerName}'s account plan covers this team. Contact them to change the plan or payment settings.`}
+        </SettingsRowText>
+        {billing.billingOwnerIsCurrentUser && (
+          <Button
+            nativeButton={false}
+            render={<Link to="/settings" search={{ tab: "billing" }} />}
+            size="sm"
+            variant="secondary"
+          >
+            Personal billing
+          </Button>
+        )}
+      </SettingsInsetRow>
+      <SettingsInsetRow>
+        <SettingsRowText title="Plan & shared balance">
           <BillingCreditSummary
             creditAmountCents={billing.creditAmountCents}
             product={currentProduct}
             usage={billing.usage}
           />
-        </SettingsRowText>
-        {(currentProduct !== null || billing.subscription !== null) &&
-          billing.canManageBilling && (
-            <Button
-              disabled={portalMutation.isPending}
-              onClick={() => {
-                portalMutation.mutate({ organizationId });
-              }}
-              size="sm"
-              variant="secondary"
-            >
-              {portalMutation.isPending && (
-                <Icon aria-hidden animation="spin" icon={Loading03Icon} />
-              )}
-              Manage billing
-            </Button>
+          <p className="mt-2">
+            {gmailSlots} Gmail accounts per team. Gmail slots are not pooled.
+          </p>
+          {!billing.hasAccess && (
+            <p className="mt-2">
+              The billing account needs an active plan to restore sending and
+              API access.
+            </p>
           )}
-      </div>
-
-      {statusMessage !== null && (
-        <output className="mt-4 block text-body text-muted-fg">
-          {statusMessage}
-        </output>
-      )}
-      {!billing.hasAccess && billing.subscription !== null && (
-        <p className="mt-2 text-body text-muted-fg">
-          Your domains, keys, and existing mail are kept. Incoming mail
-          continues for configured inboxes. You can remove domains and keys in
-          settings.
-        </p>
-      )}
-
-      <Surface padding="none">
-        {(["managed", "pro"] as const).map((product) => (
-          <BillingProductCard
-            compact
-            canChoose={
-              billing.canManageBilling &&
-              (billing.hasAccess ||
-                billing.subscription === null ||
-                billing.subscription.status === "canceled" ||
-                billing.subscription.status === "expired")
-            }
-            currentProduct={currentProduct}
-            isAnyCheckoutPending={checkoutMutation.isPending}
-            isStartingCheckout={
-              checkoutMutation.isPending &&
-              checkoutMutation.variables?.product === product
-            }
-            key={product}
-            onCheckout={() => {
-              checkoutMutation.mutate({ organizationId, product });
-            }}
-            productId={product}
-          />
-        ))}
-      </Surface>
-    </section>
+        </SettingsRowText>
+      </SettingsInsetRow>
+    </SettingsCard>
   );
 };

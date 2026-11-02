@@ -30,6 +30,12 @@ const AccountSettingsPanel = lazy(
       })
     )
 );
+const AccountBillingPanel = lazy(
+  async () =>
+    await import("@quieter/app/features/settings/components/account-billing-panel").then(
+      ({ AccountBillingPanel: component }) => ({ default: component })
+    )
+);
 const AiSettingsPanel = lazy(
   async () =>
     await import("@quieter/app/features/settings/components/ai-settings-panel").then(
@@ -180,6 +186,7 @@ export const SettingsScreen = ({
                       {tab === "account" && (
                         <AccountSettingsPanel initialUser={initialUser} />
                       )}
+                      {tab === "billing" && <AccountBillingPanel />}
                       {tab === "mailboxes" && <MailboxesSettingsPanel />}
                       {tab === "connectors" && <ConnectorsSettingsPanel />}
                       {tab === "organization" && <OrganizationSettingsPanel />}

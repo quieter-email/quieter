@@ -56,12 +56,12 @@ export const BillingProductCard = ({
       )}
       {(() => {
         if (isCurrent) {
-          return "Current billing";
+          return "Current plan";
         }
         if (canChoose) {
           return "Choose";
         }
-        return "Owner or admin required";
+        return "Manage billing first";
       })()}
     </Button>
   );
@@ -85,7 +85,8 @@ export const BillingProductCard = ({
           </div>
           <p className="mt-0.5 text-caption text-muted-fg">
             {moneyFormatter.format(product.creditAmountCents / 100)} monthly
-            balance, {GMAIL_MAILBOX_LIMITS[productId]} Gmail accounts
+            shared balance, {GMAIL_MAILBOX_LIMITS[productId]} Gmail accounts per
+            team
             {productId === "pro" ? ", includes AI" : ", domains & API keys"}
           </p>
         </div>

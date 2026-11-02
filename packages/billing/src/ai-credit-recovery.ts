@@ -5,13 +5,12 @@ import type { DatabaseExecutor } from "@quieter/database/client";
 import {
   aiCreditReservation,
   billingCreditUsageEvent,
-  organization,
 } from "@quieter/database/schema";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { getAiUsageCostMicroCents } from "./ai-pricing.ts";
-import { recordBillingCreditUsage } from "./credits.ts";
+import { lockBillingAccount, recordBillingCreditUsage } from "./credits.ts";
 
 const identity = {
   organizationId: z.string().min(1).max(200),
@@ -127,12 +126,40 @@ export const runAiCreditRecovery = async (raw: unknown) => {
     );
   }
   return await db.transaction(async (tx) => {
-    await tx
-      .select({ id: organization.id })
-      .from(organization)
-      .where(eq(organization.id, input.organizationId))
-      .for("update");
+    const [reservationIdentity] = await tx
+      .select()
+      .from(aiCreditReservation)
+      .where(
+        and(
+          eq(aiCreditReservation.id, input.reservationId),
+          eq(aiCreditReservation.organizationId, input.organizationId)
+        )
+      )
+      .limit(1);
+    if (reservationIdentity === undefined) {
+      throw new Error("The AI billing reservation is unavailable.");
+    }
+    await lockBillingAccount(
+      {
+        billingOwnerUserId:
+          reservationIdentity.account?.billingOwnerUserId ??
+          reservationIdentity.billingUserId ??
+          undefined,
+        organizationId: input.organizationId,
+        scope: reservationIdentity.account?.scope,
+      },
+      tx
+    );
     const row = await readReservation(input, tx);
+    if (
+      (row.account?.billingOwnerUserId ?? row.billingUserId) !==
+      (reservationIdentity.account?.billingOwnerUserId ??
+        reservationIdentity.billingUserId)
+    ) {
+      throw new Error(
+        "The reservation changed. Inspect it again before recovery."
+      );
+    }
     const [previous] = await tx
       .select()
       .from(billingCreditUsageEvent)
@@ -214,6 +241,8 @@ export const runAiCreditRecovery = async (raw: unknown) => {
       {
         account: {
           ...row.account,
+          billingOwnerUserId:
+            row.account.billingOwnerUserId ?? row.billingUserId ?? undefined,
           currentPeriodEnd: new Date(row.account.currentPeriodEnd),
           currentPeriodStart: new Date(row.account.currentPeriodStart),
         },

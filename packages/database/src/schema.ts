@@ -136,7 +136,7 @@ export type ManagedMailHeader = {
 export type OrganizationApiMailHeader = ManagedMailHeader;
 export type BillingPlan = "managed" | "pro";
 export type BillingProvider = "polar";
-export type BillingScope = "team";
+export type BillingScope = "team" | "account";
 export type BillingSubscriptionStatus =
   | "active"
   | "canceled"
@@ -154,6 +154,7 @@ export type MailSendSnapshot = {
   actorUserId?: string;
   rawSizeBytes: number;
   billingAccount?: {
+    billingOwnerUserId?: string;
     creditAmountCents: number;
     currentPeriodEnd: string;
     currentPeriodStart: string;
@@ -161,6 +162,7 @@ export type MailSendSnapshot = {
     organizationId: string;
     product: Exclude<BillingPlan, "free">;
     providerSubscriptionId?: string;
+    scope?: BillingScope;
   } | null;
   attachments: {
     contentId?: string | null;
@@ -2928,11 +2930,9 @@ export const billingSubscription = pgTable(
     id: text("id").primaryKey(),
     lastReconciliationFailureAt: timestamp("lastReconciliationFailureAt"),
     metadata: jsonb("metadata").$type<Record<string, string>>(),
-    organizationId: text("organizationId")
-      .notNull()
-      .references(() => organization.id, {
-        onDelete: "cascade",
-      }),
+    organizationId: text("organizationId").references(() => organization.id, {
+      onDelete: "set null",
+    }),
     plan: text("plan").$type<BillingPlan>().notNull(),
     provider: text("provider").$type<BillingProvider>().notNull(),
     providerCustomerId: text("providerCustomerId"),
@@ -2964,6 +2964,36 @@ export const billingSubscription = pgTable(
   ]
 );
 
+export const billingAccountSettings = pgTable(
+  "billingAccountSettings",
+  {
+    activatedAt: timestamp("activatedAt"),
+    checkoutAttemptId: text("checkoutAttemptId"),
+    checkoutExpiresAt: timestamp("checkoutExpiresAt"),
+    checkoutId: text("checkoutId"),
+    checkoutProduct: text("checkoutProduct").$type<BillingPlan>(),
+    checkoutUrl: text("checkoutUrl"),
+    monthlyOverageLimitMicroCents: bigint("monthlyOverageLimitMicroCents", {
+      mode: "number",
+    }),
+    overageEnabled: boolean("overageEnabled").notNull().default(false),
+    selectedSubscriptionId: text("selectedSubscriptionId").references(
+      () => billingSubscription.id,
+      { onDelete: "set null" }
+    ),
+    updatedAt: timestamp("updatedAt").notNull(),
+    userId: text("userId")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    check(
+      "billing_account_settings_limit_check",
+      sql`${table.monthlyOverageLimitMicroCents} is null or ${table.monthlyOverageLimitMicroCents} >= 0`
+    ),
+  ]
+);
+
 export const billingCreditUsageEvent = pgTable(
   "billingCreditUsageEvent",
   {
@@ -2974,14 +3004,13 @@ export const billingCreditUsageEvent = pgTable(
     costMicroCents: bigint("costMicroCents", { mode: "number" }).notNull(),
     createdAt: timestamp("createdAt").notNull(),
     dedupeKey: text("dedupeKey").notNull(),
+    externalCustomerId: text("externalCustomerId"),
     id: text("id").primaryKey(),
     metadata:
       jsonb("metadata").$type<Record<string, string | number | boolean>>(),
-    organizationId: text("organizationId")
-      .notNull()
-      .references(() => organization.id, {
-        onDelete: "cascade",
-      }),
+    organizationId: text("organizationId").references(() => organization.id, {
+      onDelete: "set null",
+    }),
     polarEventReportedAt: timestamp("polarEventReportedAt"),
     scope: text("scope").$type<BillingScope>().notNull().default("team"),
     userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
@@ -2989,7 +3018,7 @@ export const billingCreditUsageEvent = pgTable(
   (table) => [
     check(
       "billing_credit_usage_event_target_check",
-      sql`${table.scope} = 'team' and ${table.userId} is null and ${table.organizationId} is not null`
+      sql`${table.scope} = 'team' or (${table.scope} = 'account' and ${table.userId} is not null)`
     ),
     check(
       "billing_credit_usage_event_cost_check",
@@ -3017,6 +3046,9 @@ export const aiCreditReservation = pgTable(
     account:
       jsonb("account").$type<NonNullable<MailSendSnapshot["billingAccount"]>>(),
     actualCostMicroCents: bigint("actualCostMicroCents", { mode: "number" }),
+    billingUserId: text("billingUserId").references(() => user.id, {
+      onDelete: "cascade",
+    }),
     createdAt: timestamp("createdAt").notNull(),
     groupId: text("groupId").notNull(),
     id: text("id").primaryKey(),
@@ -3035,6 +3067,10 @@ export const aiCreditReservation = pgTable(
   },
   (table) => [
     index("ai_credit_reservation_group_idx").on(table.groupId),
+    index("ai_credit_reservation_billing_user_idx").on(
+      table.billingUserId,
+      table.status
+    ),
     index("ai_credit_reservation_organization_idx").on(
       table.organizationId,
       table.status
@@ -3160,6 +3196,9 @@ export const organizationMailSendIdempotency = pgTable(
   "organizationMailSendIdempotency",
   {
     attemptedAt: timestamp("attemptedAt"),
+    billingUserId: text("billingUserId").references(() => user.id, {
+      onDelete: "cascade",
+    }),
     createdAt: timestamp("createdAt").notNull(),
     estimatedCostMicroCents: bigint("estimatedCostMicroCents", {
       mode: "number",
@@ -3196,6 +3235,10 @@ export const organizationMailSendIdempotency = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
+    index("organization_mail_send_billing_user_idx").on(
+      table.billingUserId,
+      table.status
+    ),
     index("organization_mail_send_recovery_idx").on(
       table.status,
       table.updatedAt
@@ -3444,6 +3487,7 @@ export const tables = {
   aiMemoryMailboxState,
   aiMemoryScopeConfig,
   apikey,
+  billingAccountSettings,
   billingCreditUsageEvent,
   billingEntitlementOverride,
   billingSubscription,

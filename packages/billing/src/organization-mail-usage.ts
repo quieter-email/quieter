@@ -446,14 +446,17 @@ export const recordOrganizationMailUsage = async (
     const creditUsageOverview = await getBillingCreditUsage(
       entitlement.account
     );
+    const organizationUsage = creditUsageOverview.organizations.find(
+      (item) => item.organizationId === input.organizationId
+    );
     await recordOrganizationMailUsageAlerts({
       creditAmountMicroCents: creditUsageOverview.creditAmountMicroCents,
       organizationId: input.organizationId,
       period,
       settings,
       usage: {
-        billableCostMicroCents: creditUsageOverview.billableCostMicroCents,
-        sesCostMicroCents: creditUsageOverview.costMicroCents,
+        billableCostMicroCents: organizationUsage?.billableCostMicroCents ?? 0,
+        sesCostMicroCents: organizationUsage?.costMicroCents ?? 0,
       },
     });
   }
@@ -495,6 +498,9 @@ export const getOrganizationMailUsageOverview = async (
   const usedCreditMicroCents =
     creditUsage?.costMicroCents ??
     getManagedUsageCostMicroCents(mailUsage.sesCostMicroCents);
+  const organizationUsage = creditUsage?.organizations.find(
+    (item) => item.organizationId === organizationId
+  );
 
   return {
     hasAccess: entitlement.hasAccess,
@@ -507,9 +513,11 @@ export const getOrganizationMailUsageOverview = async (
       : Math.max(0, creditAmountMicroCents - usedCreditMicroCents),
     settings,
     usage: {
-      billableCostMicroCents: creditUsage?.billableCostMicroCents ?? 0,
-      breakdown: creditUsage?.breakdown ?? [],
-      sesCostMicroCents: usedCreditMicroCents,
+      billableCostMicroCents: organizationUsage?.billableCostMicroCents ?? 0,
+      breakdown: organizationUsage?.breakdown ?? [],
+      sesCostMicroCents:
+        organizationUsage?.costMicroCents ??
+        getManagedUsageCostMicroCents(mailUsage.sesCostMicroCents),
     },
   };
 };

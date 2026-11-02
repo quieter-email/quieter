@@ -53,7 +53,7 @@ import type { ReactNode } from "react";
 const SETTINGS_ICONS: Record<string, typeof Settings01Icon> = {
   "API keys": Key01Icon,
   Account: UserIcon,
-  "Billing & usage": CreditCardIcon,
+  Billing: CreditCardIcon,
   "Blocked recipients": MailSend02Icon,
   "Connected apps": Plug01Icon,
   Delivery: MailSend02Icon,
@@ -65,10 +65,12 @@ const SETTINGS_ICONS: Record<string, typeof Settings01Icon> = {
   "Members & invitations": UserGroupIcon,
   Memories: AiChat01Icon,
   Preferences: Settings01Icon,
+  "Usage & limits": CreditCardIcon,
 };
 
 const PERSONAL_ITEMS = [
   { tab: "account", title: "Account" },
+  { tab: "billing", title: "Billing" },
   { tab: "appearance", title: "Preferences" },
   { tab: "ai", title: "Memories" },
   { tab: "connectors", title: "Connected apps" },

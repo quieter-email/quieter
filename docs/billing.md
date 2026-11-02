@@ -1,5 +1,17 @@
 # Billing operations
 
+## Account plans and shared usage
+
+Personal settings owns Billing, including the account plan, payments, shared usage balance, and account overage consent and cap. A team's Usage & limits page shows its own usage and stricter team spending limits. Only the account payer can manage the plan or view usage from sibling teams. Organization admins cannot open the payer's customer portal.
+
+`organization.billingOwnerUserId` determines the payer for every project and mailbox in that organization. Account subscriptions use the user's external customer identity. One allowance covers all organizations owned by that user. Admission and settlement lock that payer before the originating organization, and reservations and ledger events retain their payer, original customer destination, and organization attribution. New account overage is off until the payer enables it. A team's separate overage setting and cap can stop its own sending sooner.
+
+Existing team subscriptions remain in their original mode until the payer selects **Use this plan** in Personal Billing. The selection imports attributable usage in the selected current period and outstanding reservations into the shared account calculation. It preserves recorded overage amounts and previously reported events. Other subscriptions keep their original customer records and renewal obligations. The selection does not cancel, refund, combine, or move those subscriptions. Review and cancel unwanted subscriptions individually through their Manage links. Unknown legacy products require a separate reviewed mapping.
+
+The migration expands nullable subscription and ledger organization references and retains deleted-team history. Its constraint changes carry the required contract marker for review. Deploy every billing writer, including web, background Workers, receipt processing, and mail sending, before activating a legacy account plan. Mixed-version workers still enforce independent team allowances. Apply production migrations and deploy only through the protected, explicitly authorized workflow. The nullable fields and legacy snapshot readers remain necessary while existing subscriptions and queued operations use them.
+
+Gmail connection slots remain per team and inherit the owner's plan. Monetary usage is pooled across the account.
+
 ## Gmail connections and live updates
 
 All plans receive Gmail live updates. Free teams can connect 5 Gmail accounts, Managed teams 25, and Pro teams 100. The allowance is shared across team members; each Gmail mailbox remains private to its owner. Managed mailboxes do not consume Gmail slots. Limits are defined in `packages/billing/src/plans.ts` and enforced at OAuth start, transactionally at OAuth completion, and when moving a mailbox into a team.

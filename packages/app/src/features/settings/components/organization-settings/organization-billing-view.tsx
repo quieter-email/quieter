@@ -29,13 +29,12 @@ export const OrganizationBillingView = ({
   const { ref: usageRef } = useSettingsAnchor("usage");
   return (
     <section className={settingsSurfaceVariants({ variant: "page" })}>
-      <SettingsPageHeader title="Billing" />
+      <SettingsPageHeader title="Usage & limits" />
 
       <OrganizationBillingSettings
         billing={billing}
         billingAccessUnknown={billingAccessUnknown}
         billingPending={billingPending}
-        organizationId={organizationId}
       />
       <div className="@container" ref={usageRef}>
         <OrganizationMailUsageSettings

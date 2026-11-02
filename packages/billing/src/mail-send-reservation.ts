@@ -2,7 +2,6 @@ import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
   billingCreditUsageEvent,
-  organization,
   organizationMailSendIdempotency,
 } from "@quieter/database/schema";
 import type {
@@ -11,8 +10,13 @@ import type {
 } from "@quieter/database/schema";
 import { and, eq, gte, inArray, isNull, lt, ne, sql, sum } from "drizzle-orm";
 
+import { getAccountUsageSettings } from "./account-settings.ts";
 import { getOutstandingAiCreditReservations } from "./ai-reservation.ts";
-import { getBillingCreditUsage, getBillingUsagePeriodEnd } from "./credits.ts";
+import {
+  getBillingCreditUsage,
+  getBillingUsagePeriodEnd,
+  lockBillingAccount,
+} from "./credits.ts";
 import { getOrganizationBillingEntitlement } from "./entitlements.ts";
 import {
   estimateOutboundOrganizationMailUsage,
@@ -53,11 +57,13 @@ export const reserveOrganizationMailSend = async (input: {
     sesCostUsdMicroCents: estimate.sesCostMicroCents,
   });
   return await db.transaction(async (tx) => {
-    await tx
-      .select({ id: organization.id })
-      .from(organization)
-      .where(eq(organization.id, input.organizationId))
-      .for("update");
+    await lockBillingAccount(
+      entitlement.account ?? {
+        organizationId: input.organizationId,
+      },
+      tx,
+      { admission: true }
+    );
     const [existing] = await tx
       .select()
       .from(organizationMailSendIdempotency)
@@ -130,12 +136,21 @@ export const reserveOrganizationMailSend = async (input: {
         input.organizationId,
         tx
       );
+      const accountSettings =
+        account.scope === "account" && account.billingOwnerUserId !== undefined
+          ? await getAccountUsageSettings(account.billingOwnerUserId, tx)
+          : settings;
       const usage = await getBillingCreditUsage(account, tx);
       const [reserved] = await tx
         .select({
           cost: sql`coalesce(${sum(organizationMailSendIdempotency.estimatedCostMicroCents)}, 0)`.mapWith(
             Number
           ),
+          organizationCost:
+            sql`coalesce(sum(case when ${organizationMailSendIdempotency.organizationId} = ${input.organizationId}
+            then ${organizationMailSendIdempotency.estimatedCostMicroCents} else 0 end), 0)`.mapWith(
+              Number
+            ),
         })
         .from(organizationMailSendIdempotency)
         .leftJoin(
@@ -147,10 +162,19 @@ export const reserveOrganizationMailSend = async (input: {
         )
         .where(
           and(
-            eq(
-              organizationMailSendIdempotency.organizationId,
-              input.organizationId
-            ),
+            account.scope === "account" &&
+              account.billingOwnerUserId !== undefined
+              ? eq(
+                  organizationMailSendIdempotency.billingUserId,
+                  account.billingOwnerUserId
+                )
+              : and(
+                  eq(
+                    organizationMailSendIdempotency.organizationId,
+                    input.organizationId
+                  ),
+                  sql`coalesce(${organizationMailSendIdempotency.snapshot}->'billingAccount'->>'scope', 'team') = 'team'`
+                ),
             inArray(organizationMailSendIdempotency.status, [
               "prepared",
               "submitting",
@@ -185,14 +209,70 @@ export const reserveOrganizationMailSend = async (input: {
           estimatedCostMicroCents -
           usage.creditAmountMicroCents
       );
-      if (projectedOverage > 0 && !settings.overageEnabled) {
+      const alreadyOverage = Math.max(
+        0,
+        usage.costMicroCents - usage.creditAmountMicroCents
+      );
+      const projectedAccountOverage =
+        usage.billableCostMicroCents + projectedOverage - alreadyOverage;
+      if (projectedOverage > 0 && !accountSettings.overageEnabled) {
+        throw new ORPCError("FORBIDDEN", {
+          message: "Usage beyond the account's monthly balance is disabled.",
+        });
+      }
+      if (
+        accountSettings.monthlyOverageLimitMicroCents !== null &&
+        projectedAccountOverage > accountSettings.monthlyOverageLimitMicroCents
+      ) {
+        throw new ORPCError("FORBIDDEN", {
+          message:
+            "The account's usage limit has been reached for the billing period.",
+        });
+      }
+      const [organizationUsage] = await tx
+        .select({
+          billableCost:
+            sql`coalesce(${sum(billingCreditUsageEvent.billableCostMicroCents)}, 0)`.mapWith(
+              Number
+            ),
+        })
+        .from(billingCreditUsageEvent)
+        .where(
+          and(
+            eq(billingCreditUsageEvent.organizationId, input.organizationId),
+            account.scope === "account" &&
+              account.billingOwnerUserId !== undefined
+              ? eq(billingCreditUsageEvent.userId, account.billingOwnerUserId)
+              : eq(billingCreditUsageEvent.scope, "team"),
+            gte(billingCreditUsageEvent.createdAt, account.currentPeriodStart),
+            lt(
+              billingCreditUsageEvent.createdAt,
+              getBillingUsagePeriodEnd(account, tx)
+            )
+          )
+        );
+      const pendingOverage = Math.max(
+        0,
+        usage.costMicroCents +
+          (reserved?.cost ?? 0) -
+          usage.creditAmountMicroCents
+      );
+      const projectedOrganizationOverage =
+        (organizationUsage?.billableCost ?? 0) +
+        Math.min(
+          reserved?.organizationCost ?? 0,
+          Math.max(0, pendingOverage - alreadyOverage)
+        ) +
+        projectedOverage -
+        pendingOverage;
+      if (projectedOverage > pendingOverage && !settings.overageEnabled) {
         throw new ORPCError("FORBIDDEN", {
           message: "Usage beyond this team's monthly balance is disabled.",
         });
       }
       if (
         settings.monthlyOverageLimitMicroCents !== null &&
-        projectedOverage > settings.monthlyOverageLimitMicroCents
+        projectedOrganizationOverage > settings.monthlyOverageLimitMicroCents
       ) {
         throw new ORPCError("FORBIDDEN", {
           message:
@@ -217,6 +297,7 @@ export const reserveOrganizationMailSend = async (input: {
         .update(organizationMailSendIdempotency)
         .set({
           attemptedAt: null,
+          billingUserId: account?.billingOwnerUserId ?? null,
           createdAt: now,
           estimatedCostMicroCents,
           failureMessage: null,
@@ -241,6 +322,7 @@ export const reserveOrganizationMailSend = async (input: {
     const [created] = await tx
       .insert(organizationMailSendIdempotency)
       .values({
+        billingUserId: account?.billingOwnerUserId ?? null,
         createdAt: now,
         estimatedCostMicroCents,
         id: input.id,

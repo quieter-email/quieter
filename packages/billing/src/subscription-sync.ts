@@ -1,10 +1,15 @@
 import type { models } from "@polar-sh/sdk/2026-04";
 import { db } from "@quieter/database/client";
-import { billingSubscription } from "@quieter/database/schema";
+import {
+  billingAccountSettings,
+  billingSubscription,
+  organization,
+  user,
+} from "@quieter/database/schema";
 import type { BillingSubscriptionStatus } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
-import { gte, isNull, or } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
@@ -13,6 +18,7 @@ import { BILLING_PRODUCTS, billingProductIdSchema } from "./plans.ts";
 export const BILLING_METADATA_PRODUCT = "quieterProduct";
 export const BILLING_METADATA_USER_ID = "quieterUserId";
 export const BILLING_METADATA_ORGANIZATION_ID = "quieterOrganizationId";
+export const BILLING_METADATA_SCOPE = "quieterScope";
 const BILLING_METADATA_LEGACY_PLAN = "quieterPlan";
 const BILLING_PROVIDER = "polar" as const;
 const excludedBillingSubscription = alias(billingSubscription, "excluded");
@@ -28,10 +34,14 @@ export type BillingPolarSubscription = Pick<
   | "modified_at"
   | "product_id"
   | "status"
-> & { product: Pick<models.Subscription["product"], "metadata"> };
+> & {
+  checkout_id?: string | null;
+  product: Pick<models.Subscription["product"], "metadata">;
+};
 
 export const billingPolarSubscriptionSchema = z.object({
   cancel_at_period_end: z.boolean(),
+  checkout_id: z.string().nullable().optional(),
   created_at: z.iso.datetime({ offset: true }),
   current_period_end: z.iso.datetime({ offset: true }),
   current_period_start: z.iso.datetime({ offset: true }),
@@ -157,7 +167,12 @@ export const syncBillingSubscription = async (
       ? metadataOrganizationId.trim() || null
       : null;
 
-  if (organizationId === null) {
+  const scope =
+    subscription.metadata[BILLING_METADATA_SCOPE] === "account"
+      ? ("account" as const)
+      : ("team" as const);
+
+  if (organizationId === null && scope === "team") {
     reportError(new Error("Billing subscription organization is missing."), {
       operation: "billing:sync-subscription",
       reason: "missing-organization",
@@ -181,13 +196,17 @@ export const syncBillingSubscription = async (
         String(value),
       ])
     ),
-    organizationId,
+    organizationId:
+      scope === "account"
+        ? null
+        : sql`(select ${organization.id} from ${organization} where ${organization.id} = ${organizationId})`,
     plan: product,
     provider: BILLING_PROVIDER,
     providerCustomerId: subscription.customer_id,
     providerModifiedAt,
     providerProductId: subscription.product_id,
     providerSubscriptionId: subscription.id,
+    scope,
     status: normalizeSubscriptionStatus(subscription.status),
     updatedAt: now,
     userId,
@@ -214,6 +233,70 @@ export const syncBillingSubscription = async (
         billingSubscription.providerSubscriptionId,
       ],
     });
+
+  if (
+    scope === "account" &&
+    (values.status === "active" || values.status === "trialing")
+  ) {
+    await db.transaction(async (transaction) => {
+      await transaction
+        .select({ id: user.id })
+        .from(user)
+        .where(eq(user.id, userId))
+        .for("update");
+      const [synced] = await transaction
+        .select({ id: billingSubscription.id })
+        .from(billingSubscription)
+        .where(
+          and(
+            eq(billingSubscription.providerSubscriptionId, subscription.id),
+            eq(billingSubscription.userId, userId),
+            eq(billingSubscription.scope, "account"),
+            inArray(billingSubscription.status, ["active", "trialing"])
+          )
+        )
+        .for("update");
+      if (synced === undefined) {
+        return;
+      }
+      const [settings] = await transaction
+        .select()
+        .from(billingAccountSettings)
+        .where(eq(billingAccountSettings.userId, userId))
+        .for("update");
+      if (
+        settings !== undefined &&
+        ((settings.selectedSubscriptionId !== null &&
+          settings.selectedSubscriptionId !== synced.id) ||
+          (settings.checkoutAttemptId !== null &&
+            (settings.checkoutId === null ||
+              settings.checkoutId !== subscription.checkout_id)))
+      ) {
+        return;
+      }
+      await transaction
+        .insert(billingAccountSettings)
+        .values({
+          activatedAt: now,
+          selectedSubscriptionId: synced.id,
+          updatedAt: now,
+          userId,
+        })
+        .onConflictDoUpdate({
+          set: {
+            activatedAt: sql`coalesce(${billingAccountSettings.activatedAt}, ${now.toISOString()}::timestamp)`,
+            checkoutAttemptId: null,
+            checkoutExpiresAt: null,
+            checkoutId: null,
+            checkoutProduct: null,
+            checkoutUrl: null,
+            selectedSubscriptionId: sql`coalesce(${billingAccountSettings.selectedSubscriptionId}, ${synced.id})`,
+            updatedAt: now,
+          },
+          target: billingAccountSettings.userId,
+        });
+    });
+  }
 
   return { synced: true };
 };

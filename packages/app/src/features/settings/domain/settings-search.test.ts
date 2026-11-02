@@ -21,8 +21,7 @@ describe("settings search", () => {
     expect(match("dark mode")).toStrictEqual(["appearance"]);
     expect(match("hotkeys")).toStrictEqual(["shortcuts"]);
     expect(
-      matchSettingsEntries("billing", { includeDevelopment: false })[0]
-        ?.organizationView
+      matchSettingsEntries("billing", { includeDevelopment: false })[0]?.tab
     ).toBe("billing");
     expect(match("signature")).toStrictEqual(["mailboxes"]);
   });

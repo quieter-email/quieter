@@ -45,31 +45,30 @@ describe("Polar server selection", () => {
 });
 
 describe("Polar checkout metadata", () => {
-  test("includes organization metadata for checkout", () => {
+  test("includes the payer account in checkout metadata", () => {
     const metadata = createBillingCheckoutMetadata({
       organizationId: "organization-1",
       product: "managed",
       userId: "user-1",
     });
 
-    expect(metadata.customerMetadata.quieterOrganizationId).toBe(
-      "organization-1"
-    );
-    expect(metadata.metadata.quieterOrganizationId).toBe("organization-1");
+    expect(metadata.customerMetadata).toMatchObject({
+      quieterScope: "account",
+      quieterUserId: "user-1",
+    });
+    expect(metadata.metadata).not.toHaveProperty("quieterOrganizationId");
   });
 });
 
 describe("Polar customer portal", () => {
-  test("opens team customer sessions for the current member", () => {
+  test("opens the payer's account customer session", () => {
     expect(
       createBillingPortalSession({
-        organizationId: "organization-1",
         returnUrl: "https://quieter.email/settings",
         userId: "user-1",
       })
     ).toStrictEqual({
-      externalCustomerId: "organization:organization-1",
-      externalMemberId: "user-1",
+      externalCustomerId: "user-1",
       returnUrl: "https://quieter.email/settings",
     });
   });

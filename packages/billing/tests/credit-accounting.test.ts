@@ -415,7 +415,7 @@ describe("credit accounting with PostgreSQL numeric aggregates", () => {
   test("decodes totals and breakdown amounts before doing arithmetic", async () => {
     const usage = await getBillingCreditUsage(account);
 
-    expect(usage).toStrictEqual({
+    expect(usage).toMatchObject({
       billableCostMicroCents: 0,
       breakdown: [{ costMicroCents: 78_000_000, kind: "aiChat" }],
       costMicroCents: 78_000_000,

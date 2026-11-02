@@ -37,6 +37,7 @@ export const prefetchSettingsTab = async (
       await Promise.allSettled([queryClient.query(connectorsQueryOptions())]);
       return;
     }
+    case "billing":
     case "organization": {
       await Promise.allSettled([queryClient.query(userBillingQueryOptions())]);
       break;

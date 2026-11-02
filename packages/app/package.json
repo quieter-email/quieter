@@ -158,6 +158,7 @@
     "./features/onboarding/components/onboarding-screen": "./src/features/onboarding/components/onboarding-screen.tsx",
     "./features/onboarding/domain/onboarding-intents": "./src/features/onboarding/domain/onboarding-intents.ts",
     "./features/onboarding/domain/onboarding-playbooks": "./src/features/onboarding/domain/onboarding-playbooks.ts",
+    "./features/settings/components/account-billing-panel": "./src/features/settings/components/account-billing-panel.tsx",
     "./features/settings/components/account-settings-panel": "./src/features/settings/components/account-settings-panel.tsx",
     "./features/settings/components/add-mailbox-settings-store": "./src/features/settings/components/add-mailbox-settings-store.ts",
     "./features/settings/components/add-mailbox-settings-view": "./src/features/settings/components/add-mailbox-settings-view.tsx",

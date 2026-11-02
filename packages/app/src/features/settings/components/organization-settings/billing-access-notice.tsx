@@ -15,9 +15,9 @@ export const BillingAccessNotice = ({
       Sending and API access are paused
     </p>
     <p className={settingsSurfaceVariants({ variant: "value" })}>
-      This team needs an active subscription. Your domains, keys, and existing
-      mail are kept. Incoming mail continues for configured inboxes. You can
-      remove domains and keys below.
+      The team billing account needs an active plan. Your domains, keys, and
+      existing mail are kept. Incoming mail continues for configured inboxes.
+      You can remove domains and keys below.
     </p>
     <Button
       render={
@@ -33,7 +33,7 @@ export const BillingAccessNotice = ({
       size="sm"
       variant="outline"
     >
-      View billing
+      View usage & limits
     </Button>
   </SettingsCard>
 );

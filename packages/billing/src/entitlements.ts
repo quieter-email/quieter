@@ -7,6 +7,7 @@ import {
 import { db } from "@quieter/database/client";
 import {
   billingEntitlementOverride,
+  billingAccountSettings,
   billingSubscription,
   member,
   organization,
@@ -14,6 +15,7 @@ import {
 import type {
   BillingPlan as StoredBillingPlan,
   BillingSubscriptionStatus,
+  BillingScope,
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
@@ -49,6 +51,7 @@ export const isActiveBillingSubscription = (
     (subscription.status === "active" && !subscription.cancelAtPeriodEnd));
 
 export type BillingAccount = {
+  billingOwnerUserId?: string;
   creditAmountCents: number;
   currentPeriodEnd: Date;
   currentPeriodStart: Date;
@@ -56,6 +59,7 @@ export type BillingAccount = {
   organizationId: string;
   product: BillingProductId;
   providerSubscriptionId?: string;
+  scope?: BillingScope;
 };
 
 type BillingEntitlement = {
@@ -106,13 +110,18 @@ type SubscriptionRow = {
   currentPeriodEnd: Date;
   currentPeriodStart: Date;
   lastReconciliationFailureAt: Date | null;
+  id: string;
   metadata: Record<string, string> | null;
+  organizationId: string | null;
   plan: StoredBillingPlan;
   provider: "polar";
+  providerCustomerId: string | null;
   providerModifiedAt: Date | null;
   providerSubscriptionId: string;
   status: BillingSubscriptionStatus;
+  scope: BillingScope;
   updatedAt: Date;
+  userId: string;
 };
 
 const BILLING_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1000;
@@ -169,20 +178,27 @@ const toBillingAccount = (
   }
 
   return {
+    billingOwnerUserId: row.userId,
     creditAmountCents: BILLING_PRODUCTS[parsedProduct.data].creditAmountCents,
     currentPeriodEnd: row.currentPeriodEnd,
     currentPeriodStart: row.currentPeriodStart,
-    externalCustomerId: getBillingExternalIdentity(
-      "organization",
-      organizationId
-    ),
+    externalCustomerId:
+      row.metadata?.quieterScope === "account"
+        ? getBillingExternalIdentity("user", row.userId)
+        : getBillingExternalIdentity(
+            "organization",
+            row.metadata?.quieterOrganizationId ??
+              row.organizationId ??
+              organizationId
+          ),
     organizationId,
     product: parsedProduct.data,
     providerSubscriptionId: row.providerSubscriptionId,
+    scope: row.scope,
   };
 };
 
-const getOrganizationBillingOwnerId = async (organizationId: string) => {
+export const getOrganizationBillingOwnerId = async (organizationId: string) => {
   const [current] = await db
     .select({ billingOwnerUserId: organization.billingOwnerUserId })
     .from(organization)
@@ -239,13 +255,13 @@ const getOrganizationBillingOwnerId = async (organizationId: string) => {
 
 const recordReconciliationFailure = async ({
   allowCachedAccess,
-  organizationId,
+  id,
   providerModifiedAt,
   providerSubscriptionId,
   updatedAt,
 }: {
   allowCachedAccess: boolean;
-  organizationId: string;
+  id: string;
   providerModifiedAt: Date | null;
   providerSubscriptionId: string;
   updatedAt: Date;
@@ -259,7 +275,7 @@ const recordReconciliationFailure = async ({
       })
       .where(
         and(
-          eq(billingSubscription.organizationId, organizationId),
+          eq(billingSubscription.id, id),
           eq(billingSubscription.provider, "polar"),
           eq(
             billingSubscription.providerSubscriptionId,
@@ -281,8 +297,14 @@ const recordReconciliationFailure = async ({
   }
 };
 
-export const getOrganizationSubscriptionRecord = async (
-  organizationId: string,
+const getSubscriptionRecord = async (
+  target:
+    | { scope: "team"; organizationId: string }
+    | {
+        scope: "account";
+        userId: string;
+        selectedSubscriptionId: string | null;
+      },
   options: { forceReconcile?: boolean } = {}
 ) => {
   const loadRows = () =>
@@ -291,20 +313,35 @@ export const getOrganizationSubscriptionRecord = async (
         cancelAtPeriodEnd: billingSubscription.cancelAtPeriodEnd,
         currentPeriodEnd: billingSubscription.currentPeriodEnd,
         currentPeriodStart: billingSubscription.currentPeriodStart,
+        id: billingSubscription.id,
         lastReconciliationFailureAt:
           billingSubscription.lastReconciliationFailureAt,
         metadata: billingSubscription.metadata,
+        organizationId: billingSubscription.organizationId,
         plan: billingSubscription.plan,
         provider: billingSubscription.provider,
+        providerCustomerId: billingSubscription.providerCustomerId,
         providerModifiedAt: billingSubscription.providerModifiedAt,
         providerSubscriptionId: billingSubscription.providerSubscriptionId,
+        scope: billingSubscription.scope,
         status: billingSubscription.status,
         updatedAt: billingSubscription.updatedAt,
+        userId: billingSubscription.userId,
       })
       .from(billingSubscription)
       .where(
         and(
-          eq(billingSubscription.organizationId, organizationId),
+          target.scope === "team"
+            ? and(
+                eq(billingSubscription.organizationId, target.organizationId),
+                eq(billingSubscription.scope, "team")
+              )
+            : and(
+                eq(billingSubscription.userId, target.userId),
+                target.selectedSubscriptionId === null
+                  ? eq(billingSubscription.scope, "account")
+                  : eq(billingSubscription.id, target.selectedSubscriptionId)
+              ),
           inArray(billingSubscription.plan, ["managed", "pro"])
         )
       )
@@ -312,7 +349,14 @@ export const getOrganizationSubscriptionRecord = async (
 
   const findSubscription = (rows: Awaited<ReturnType<typeof loadRows>>) => {
     const ownedRows = rows.filter((candidate) =>
-      subscriptionBelongsToOrganization(candidate.metadata, organizationId)
+      target.scope === "team"
+        ? subscriptionBelongsToOrganization(
+            candidate.metadata,
+            target.organizationId
+          )
+        : candidate.metadata?.quieterUserId === target.userId &&
+          (candidate.id === target.selectedSubscriptionId ||
+            candidate.metadata.quieterScope === "account")
     );
     return (
       ownedRows.find(
@@ -355,8 +399,16 @@ export const getOrganizationSubscriptionRecord = async (
             error instanceof PolarRateLimitError;
           throw error;
         });
-      if (subscription.metadata.quieterOrganizationId !== organizationId) {
-        throw new Error("The subscription belongs to a different team.");
+      if (
+        subscription.metadata.quieterUserId !== row.userId ||
+        (row.metadata?.quieterScope === "account"
+          ? subscription.metadata.quieterScope !== "account"
+          : subscription.metadata.quieterOrganizationId !==
+            row.metadata?.quieterOrganizationId)
+      ) {
+        throw new Error(
+          "The subscription belongs to a different billing account."
+        );
       }
       const syncResult = await syncBillingSubscription(subscription);
       if (!syncResult.synced || syncResult.ignored === true) {
@@ -371,7 +423,7 @@ export const getOrganizationSubscriptionRecord = async (
         row.currentPeriodEnd > new Date();
       await recordReconciliationFailure({
         allowCachedAccess,
-        organizationId,
+        id: row.id,
         providerModifiedAt: row.providerModifiedAt,
         providerSubscriptionId,
         updatedAt: row.updatedAt,
@@ -386,7 +438,9 @@ export const getOrganizationSubscriptionRecord = async (
           isActiveBillingStatus(row.status) &&
           row.currentPeriodEnd > new Date()
         ) {
-          return row;
+          return target.scope === "account"
+            ? { ...row, scope: "account" as const }
+            : row;
         }
       }
       throw new ORPCError("SERVICE_UNAVAILABLE", {
@@ -404,7 +458,68 @@ export const getOrganizationSubscriptionRecord = async (
     });
   }
 
-  return row ?? null;
+  if (row === undefined) {
+    return null;
+  }
+  return target.scope === "account"
+    ? { ...row, scope: "account" as const }
+    : row;
+};
+
+export const getAccountSubscriptionRecord = async (
+  userId: string,
+  options: { forceReconcile?: boolean } = {}
+) => {
+  const [settings] = await db
+    .select({
+      selectedSubscriptionId: billingAccountSettings.selectedSubscriptionId,
+    })
+    .from(billingAccountSettings)
+    .where(eq(billingAccountSettings.userId, userId))
+    .limit(1);
+  return await getSubscriptionRecord(
+    {
+      scope: "account",
+      selectedSubscriptionId: settings?.selectedSubscriptionId ?? null,
+      userId,
+    },
+    options
+  );
+};
+
+export const getOrganizationSubscriptionRecord = async (
+  organizationId: string,
+  options: { forceReconcile?: boolean } = {}
+) => {
+  const ownerId = await getOrganizationBillingOwnerId(organizationId);
+  if (ownerId !== null) {
+    const account = await getAccountSubscriptionRecord(ownerId, options);
+    if (account !== null) {
+      return account;
+    }
+  }
+  return await getSubscriptionRecord(
+    { organizationId, scope: "team" },
+    options
+  );
+};
+
+export const getAccountBillingEntitlement = async (userId: string) => {
+  if (isLocalDevelopmentBillingEntitlementEnabled()) {
+    return localDevelopmentBillingEntitlement();
+  }
+  const subscription = await getAccountSubscriptionRecord(userId);
+  const account =
+    subscription !== null && isActiveBillingSubscription(subscription)
+      ? toBillingAccount(subscription, subscription.organizationId ?? "")
+      : null;
+  const override = await getActiveOverride(userId);
+  return {
+    account: override === null ? account : null,
+    hasAccess: override !== null || account !== null,
+    hasUnlimitedAccess: override !== null,
+    product: override === null ? (account?.product ?? null) : "pro",
+  } satisfies BillingEntitlement;
 };
 
 export const getOrganizationSubscription = async (organizationId: string) => {

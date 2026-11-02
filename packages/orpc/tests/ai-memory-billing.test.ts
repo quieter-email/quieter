@@ -90,6 +90,7 @@ describe("interactive memory billing", () => {
       breakdown: [],
       costMicroCents: 100,
       creditAmountMicroCents: 100,
+      organizations: [],
     });
     await expect(requestAiMemoryUpdate(request)).rejects.toMatchObject({
       code: "FORBIDDEN",

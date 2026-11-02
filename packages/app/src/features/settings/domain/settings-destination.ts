@@ -16,7 +16,7 @@ export const TEAM_SETTINGS_NAV = [
   { title: "Domains", view: "domains" },
   { title: "Delivery", view: "delivery" },
   { title: "Blocked recipients", view: "suppressions" },
-  { title: "Billing & usage", view: "billing" },
+  { title: "Usage & limits", view: "billing" },
   { title: "API keys", view: "api-keys" },
 ] as const satisfies readonly {
   title: string;

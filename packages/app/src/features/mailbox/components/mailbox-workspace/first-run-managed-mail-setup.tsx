@@ -52,7 +52,7 @@ import { TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 type FirstRunOrganization = {
@@ -163,6 +163,7 @@ const FirstRunBillingStep = ({
   isBillingPending,
   isCheckoutPending,
   isStartingCheckout,
+  needsAccountBilling,
   onCheckout,
   organizationName,
 }: {
@@ -172,15 +173,11 @@ const FirstRunBillingStep = ({
   isBillingPending: boolean;
   isCheckoutPending: boolean;
   isStartingCheckout: (product: "managed" | "pro") => boolean;
+  needsAccountBilling: boolean;
   onCheckout: (product: "managed" | "pro") => void;
   organizationName: string;
 }) => {
-  const accessContent = hasManagedAccess ? (
-    <p className="inline-flex items-center gap-2 text-body text-success">
-      <Icon aria-hidden icon={CheckmarkCircle01Icon} />
-      Managed mail is active for this organization.
-    </p>
-  ) : (
+  let accessContent = (
     <div className="grid gap-3 @5xl:grid-cols-2">
       {(["managed", "pro"] as const).map((product) => (
         <BillingProductCard
@@ -197,6 +194,30 @@ const FirstRunBillingStep = ({
       ))}
     </div>
   );
+  if (hasManagedAccess) {
+    accessContent = (
+      <p className="inline-flex items-center gap-2 text-body text-success">
+        <Icon aria-hidden icon={CheckmarkCircle01Icon} />
+        Managed mail is active for this team.
+      </p>
+    );
+  } else if (!canManageBilling) {
+    accessContent = (
+      <p className="text-body text-muted-fg">
+        Ask the team billing owner to set up their account plan.
+      </p>
+    );
+  } else if (needsAccountBilling) {
+    accessContent = (
+      <Button
+        nativeButton={false}
+        render={<Link to="/settings" search={{ tab: "billing" }} />}
+        size="sm"
+      >
+        Open personal billing
+      </Button>
+    );
+  }
   const content = isBillingPending ? (
     <p className="inline-flex items-center gap-2 text-body text-muted-fg">
       <Icon aria-hidden animation="spin" icon={Loading03Icon} />
@@ -213,8 +234,9 @@ const FirstRunBillingStep = ({
           1. Choose managed access
         </h2>
         <p className="mt-1 text-body text-muted-fg">
-          Managed mail requires a Managed or Pro subscription for{" "}
-          {organizationName}.
+          Managed mail for {organizationName} uses a Managed or Pro plan from
+          the team billing account. One plan and usage balance cover the teams
+          that account pays for.
         </p>
       </div>
       {content}
@@ -678,6 +700,10 @@ export const FirstRunManagedMailSetup = ({
             isStartingCheckout={(product) =>
               checkoutMutation.isPending &&
               checkoutMutation.variables?.product === product
+            }
+            needsAccountBilling={
+              billing?.account.requiresPlanSelection === true ||
+              (teamBilling?.subscription ?? null) !== null
             }
             onCheckout={(product) => {
               checkoutMutation.mutate({

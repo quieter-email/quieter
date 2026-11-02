@@ -99,6 +99,7 @@ describe("mail automation settings", () => {
       breakdown: [],
       costMicroCents: 10,
       creditAmountMicroCents: 10,
+      organizations: [],
     });
   });
 

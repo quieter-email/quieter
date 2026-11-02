@@ -49,7 +49,10 @@ const polarSubscriptionSchema = z.custom<Subscription>(
 const polarSubscription = (id: string) =>
   polarSubscriptionSchema.parse({
     id,
-    metadata: { quieterOrganizationId: "organization-a" },
+    metadata: {
+      quieterOrganizationId: "organization-a",
+      quieterUserId: "user-a",
+    },
   });
 
 const polarState = vi.hoisted(() => ({
@@ -310,14 +313,22 @@ describe("organization subscription reconciliation", () => {
     cancelAtPeriodEnd: false,
     currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
     currentPeriodStart: new Date("2026-06-23T00:00:00.000Z"),
+    id: "subscription-row-a",
     lastReconciliationFailureAt: null,
-    metadata: { quieterOrganizationId: "organization-a" },
+    metadata: {
+      quieterOrganizationId: "organization-a",
+      quieterUserId: "user-a",
+    },
+    organizationId: "organization-a",
     plan: "pro" as const,
     provider: "polar" as const,
+    providerCustomerId: "customer-a",
     providerModifiedAt: null,
     providerSubscriptionId: "polar-subscription-1",
+    scope: "team" as const,
     status: "active" as const,
     updatedAt: new Date("2026-07-23T00:00:00.000Z"),
+    userId: "user-a",
   };
   const refreshedRow = {
     ...staleRow,
@@ -328,6 +339,7 @@ describe("organization subscription reconciliation", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    billingMocks.limit.mockResolvedValue([]);
     vi.setSystemTime(new Date("2026-08-02T00:00:00.000Z"));
     billingMocks.where.mockReturnValue({
       limit: billingMocks.limit,
@@ -420,6 +432,7 @@ describe("organization subscription reconciliation", () => {
       const database = new DatabaseSync(":memory:");
       try {
         database.exec(`create table "billingSubscription" (
+        "id" text,
         "organizationId" text,
         "provider" text,
         "providerSubscriptionId" text,
@@ -429,9 +442,10 @@ describe("organization subscription reconciliation", () => {
       )`);
         database
           .prepare(
-            'insert into "billingSubscription" values (?, ?, ?, ?, ?, ?)'
+            'insert into "billingSubscription" values (?, ?, ?, ?, ?, ?, ?)'
           )
           .run(
+            staleRow.id,
             "organization-a",
             "polar",
             refreshedRow.providerSubscriptionId,
