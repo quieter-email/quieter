@@ -6,6 +6,7 @@ import type { ComponentProps } from "react";
 import { cn } from "../../lib/cn";
 import { Input } from "./input";
 import { anchoredPopupMotionClassName } from "./overlay-chrome";
+import { popupSurfaceClassName } from "./popup-surface";
 
 export type AutocompleteProps = Pick<
   ComponentProps<typeof Input>,
@@ -60,7 +61,8 @@ export const Autocomplete = ({
         <AutocompletePrimitive.Popup
           className={cn(
             anchoredPopupMotionClassName,
-            "flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-xl border border-transparent bg-section text-popover-fg shadow-md"
+            popupSurfaceClassName,
+            "flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-xl"
           )}
         >
           <AutocompletePrimitive.Empty className="px-3 py-4 text-body-sm text-muted-fg empty:p-0">

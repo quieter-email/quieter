@@ -2,6 +2,7 @@
 
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 import { cn } from "../../lib/cn";
 import { Button } from "./button";
@@ -12,15 +13,38 @@ import { IconButtonTooltip } from "./icon-button-tooltip";
 export const PromptComposerFrame = ({
   className,
   ...props
-}: ComponentPropsWithoutRef<"div">) => (
-  <div
-    className={cn(
-      "flex min-w-0 flex-col gap-1 rounded-section border border-transparent bg-section p-2 shadow-sm has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring",
-      className
-    )}
-    {...props}
-  />
-);
+}: ComponentPropsWithoutRef<"div">) => {
+  const [keyboardNavigation, setKeyboardNavigation] = useState(false);
+
+  useEffect(() => {
+    // Text inputs also match :focus-visible after a click or while typing.
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Tab") {
+        setKeyboardNavigation(true);
+      }
+    };
+    const handlePointerDown = () => {
+      setKeyboardNavigation(false);
+    };
+    document.addEventListener("keydown", handleKeyDown, true);
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, true);
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, []);
+
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 flex-col gap-1 rounded-section border border-transparent bg-section p-2 shadow-sm data-keyboard-navigation:has-[:focus-visible]:ring-1 data-keyboard-navigation:has-[:focus-visible]:ring-ring data-keyboard-navigation:has-[:focus-visible]:ring-inset",
+        className
+      )}
+      data-keyboard-navigation={keyboardNavigation || undefined}
+      {...props}
+    />
+  );
+};
 
 export const ComposerActionBar = ({
   className,

@@ -49,6 +49,7 @@
     "./motion": "./src/components/ui/motion.ts",
     "./number-field": "./src/components/ui/number-field.tsx",
     "./popover": "./src/components/ui/popover.tsx",
+    "./popup-surface": "./src/components/ui/popup-surface.ts",
     "./pill": "./src/components/ui/pill.tsx",
     "./progress": "./src/components/ui/progress.tsx",
     "./radio-group": "./src/components/ui/radio-group.tsx",

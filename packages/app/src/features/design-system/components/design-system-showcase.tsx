@@ -794,6 +794,13 @@ export const DesignSystemShowcase = () => {
             <SenderAvatar fallbackLabel="N" size="sm" />
             <SenderAvatar fallbackLabel="A" />
           </Row>
+          <Row label="Inset keyboard focus">
+            <div className="overflow-hidden">
+              <Button focusRing="inset" variant="ghost">
+                Mailbox row
+              </Button>
+            </div>
+          </Row>
         </Section>
 
         <Section

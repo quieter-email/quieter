@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
+import { popupSurfaceClassName } from "./popup-surface";
 
 export type CommandMenuItem = {
   description?: string;
@@ -27,7 +28,12 @@ export const CommandMenu = ({
   onSelect: (index: number) => void;
   status?: string;
 }) => (
-  <div className="z-50 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-transparent bg-section text-popover-fg shadow-md">
+  <div
+    className={cn(
+      popupSurfaceClassName,
+      "z-50 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl"
+    )}
+  >
     <div
       aria-label="Insert or format"
       className="max-h-64 overflow-y-auto p-1"

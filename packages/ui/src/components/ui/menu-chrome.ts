@@ -1,6 +1,7 @@
 import { anchoredPopupMotionClassName } from "./overlay-chrome";
+import { popupSurfaceClassName } from "./popup-surface";
 
-export const menuPopupClassName = `${anchoredPopupMotionClassName} z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl border border-transparent bg-section p-1 text-body text-popover-fg shadow-md outline-none`;
+export const menuPopupClassName = `${anchoredPopupMotionClassName} ${popupSurfaceClassName} z-50 max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] min-w-52 overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl p-1 text-body outline-none`;
 
 export const menuCompactPopupClassName = "min-w-40 p-0.5 text-caption";
 

@@ -99,7 +99,8 @@ The type tokens include line heights and heading tracking. Prefer those defaults
 | Surface ladder | `canvas`, `panel`, `section`, `detail` |
 | Main canvas and text | `bg`, `fg` |
 | Legacy surface roles | `bg-raised` (Panel), `bg-surface` (Section) |
-| Cards and popovers | `card`, `card-fg`, `popover`, `popover-fg` |
+| Cards | `card`, `card-fg` |
+| Floating menus, selectors, and popovers | `popover`, `popover-fg` |
 | Fields and interaction ladder | `input`, `control`, `control-hover`, `control-active` |
 | Main action | `primary`, `primary-hover`, `primary-active`, `primary-fg` |
 | Secondary action | `secondary`, `secondary-hover`, `secondary-active`, `secondary-fg` |
@@ -110,7 +111,7 @@ The type tokens include line heights and heading tracking. Prefer those defaults
 
 Use state colors for state, and categorical colors for labels or categories. A role such as mailbox manager maps to a generic Pill tone in the app. It does not need a second identical style called `access-manager` in the shared package.
 
-The default dark surface ladder is Canvas `#0A0A0B`, Panel `#131315`, Section `#1B1B1E`, and Detail `#26262A`. Canvas holds the sidebar. Panel holds the workspace and dialogs. Section groups content and header controls. Detail holds fields, secondary actions, nested summaries, and selected items. Hover and pressed states remain separate. Menus use Section, tooltips use Detail, and primary actions retain their theme's primary color. Filled surfaces usually need no visible border. Outline variants, invalid fields, keyboard focus, and calendar grid lines retain meaningful edges.
+The default dark surface ladder is Canvas `#0A0A0B`, Panel `#131315`, Section `#1B1B1E`, and Detail `#26262A`. Canvas holds the sidebar. Panel holds the workspace and dialogs. Section groups content and header controls. Detail holds fields, secondary actions, nested summaries, and selected items. Hover and pressed states remain separate. Floating menus, selectors, and popovers use their own `popover` fill. Their shared `popupSurfaceClassName` adds a subtle foreground border and shadow so they remain distinct over every surface. Tooltips use Detail, and primary actions retain their theme's primary color. Other filled surfaces usually need no visible border. Outline variants, invalid fields, keyboard focus, and calendar grid lines retain meaningful edges.
 
 Semantic aliases such as `card` and `bg-surface` can share values while serving different roles. Preserve those roles. Unused speculative aliases can be removed after checking all consumers, including CSS, theme code, generated assets, and the landing page. There is no requirement to use every token or keep every possible component variant.
 
