@@ -1,0 +1,11 @@
+{
+  "automaticRecovery": true,
+  "sourceEditsRequired": false,
+  "injected": [
+    "preflight 429",
+    "preflight TimeoutError",
+    "TimeoutError after committed create"
+  ],
+  "matchingTemplates": 1,
+  "templateId": "b8a8998f-8344-4d1e-8c3d-16b6d134ca9f"
+}

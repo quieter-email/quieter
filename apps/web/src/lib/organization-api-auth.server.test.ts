@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
-import { getOrganizationApiKeyOrganizationId } from "./organization-api-auth.server";
+import {
+  getOrganizationApiKeyAccess,
+  getOrganizationApiKeyOrganizationId,
+} from "./organization-api-auth.server";
 
 const mocks = vi.hoisted(() => ({
   hasBillingAccess: vi.fn<() => Promise<boolean>>(),
   verifyApiKey: vi.fn<
     () => Promise<{
       valid: boolean;
+      error?: { code: string; details?: { tryAgainIn: number } };
       key: { configId: string; referenceId: string } | null;
     }>
   >(),
@@ -71,6 +75,24 @@ describe("organization API access", () => {
         })
       )
     ).resolves.toBeNull();
+    expect(mocks.hasBillingAccess).not.toHaveBeenCalled();
+  });
+
+  test("returns a retryable response when a valid key is rate limited", async () => {
+    mocks.verifyApiKey.mockResolvedValue({
+      error: { code: "RATE_LIMITED", details: { tryAgainIn: 15_000 } },
+      key: null,
+      valid: false,
+    });
+    const request = new Request("https://quieter.email/api/control", {
+      headers: { authorization: "Bearer test-key" },
+    });
+    await expect(getOrganizationApiKeyAccess(request)).resolves.toMatchObject({
+      status: 429,
+    });
+    await expect(
+      getOrganizationApiKeyOrganizationId(request)
+    ).resolves.toMatchObject({ status: 429 });
     expect(mocks.hasBillingAccess).not.toHaveBeenCalled();
   });
 

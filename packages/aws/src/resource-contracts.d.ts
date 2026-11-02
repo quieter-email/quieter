@@ -5,6 +5,10 @@ import "sst";
 declare module "sst" {
   // oxlint-disable-next-line typescript/consistent-type-definitions
   interface Resource {
+    DatabaseUrl: { type: "sst.sst.Secret"; value: string };
+    R2AccessKeyId: { type: "sst.sst.Secret"; value: string };
+    R2SecretAccessKey: { type: "sst.sst.Secret"; value: string };
+    SentryDsn: { type: "sst.sst.Secret"; value: string };
     MailBucket: { name: string; type: "sst.aws.Bucket" };
     MailIngestToken: { type: "sst.sst.Secret"; value: string };
     GmailTokenEncryptionKey: { type: "sst.sst.Secret"; value: string };

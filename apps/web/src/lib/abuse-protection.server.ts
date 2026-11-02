@@ -1,5 +1,10 @@
 import { serverEnv } from "@quieter/env/server";
-import { MCP_API_PATH, SEND_API_PATH } from "@quieter/mail/public-api";
+import {
+  CONTROL_API_PATH,
+  CONTROL_MCP_API_PATH,
+  MCP_API_PATH,
+  SEND_API_PATH,
+} from "@quieter/mail/public-api";
 import { consumeRateLimit } from "@quieter/orpc/abuse-protection";
 
 import { reportServerError } from "./server-error-reporting";
@@ -16,7 +21,11 @@ const getRateLimitPolicy = (pathname: string) => {
   if (pathname === "/api/waitlist") {
     return { group: "waitlist", limit: 5, windowMs: 60 * 60_000 };
   }
-  if (pathname === SEND_API_PATH || pathname === MCP_API_PATH) {
+  if (
+    [SEND_API_PATH, MCP_API_PATH, CONTROL_API_PATH, CONTROL_MCP_API_PATH].some(
+      (path) => path === pathname
+    )
+  ) {
     return { group: "send", limit: 60, windowMs: 60_000 };
   }
   if (pathname.includes("/chat")) {

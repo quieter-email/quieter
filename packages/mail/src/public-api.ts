@@ -1,6 +1,8 @@
 export const API_COMPATIBILITY_DATE = "2026-10" as const;
 export const API_VERSION_HEADER = "Quieter-Version" as const;
 
+export const CONTROL_API_PATH = "/api/control" as const;
+export const CONTROL_MCP_API_PATH = "/api/control/mcp" as const;
 export const SEND_API_PATH = "/api/send" as const;
 export const MCP_API_PATH = "/api/mcp" as const;
 export const SUPPRESSIONS_API_PATH = "/api/suppressions" as const;

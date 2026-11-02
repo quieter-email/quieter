@@ -6,6 +6,8 @@ import {
   SUPPRESSIONS_API_PATH,
 } from "@quieter/mail/public-api";
 
+import { controlOpenApiPaths } from "./control-openapi.server";
+
 const compatibilityDateParameter = {
   description: `Required compatibility date. Send ${API_COMPATIBILITY_DATE}. A new date is published only when a breaking change replaces this one. Responses repeat the date in this header.`,
   in: "header",
@@ -261,6 +263,7 @@ export const openApiDocument = {
   },
   openapi: "3.1.0",
   paths: {
+    ...controlOpenApiPaths,
     [`${MESSAGES_API_PATH}/{messageId}`]: {
       get: {
         description:

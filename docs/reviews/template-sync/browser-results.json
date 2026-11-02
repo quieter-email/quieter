@@ -1,0 +1,69 @@
+[
+  {
+    "case": "Clean editor adopts local code, metadata and shared imports",
+    "result": {
+      "name": "Welcome from your local project",
+      "saveDisabled": true,
+      "sharedImportRendered": true,
+      "subject": "Designed in code, ready in Quieter"
+    }
+  },
+  {
+    "case": "Incoming code preserves unsaved browser fields and content",
+    "result": {
+      "conflictVisible": true,
+      "draftBodyPreserved": true,
+      "name": "My unsaved browser draft",
+      "noHorizontalOverflow": true,
+      "saveDisabled": true
+    }
+  },
+  {
+    "case": "Failed background requests preserve a dirty editor",
+    "result": {
+      "draftBodyPreserved": true,
+      "editorMounted": true,
+      "name": "My unsaved browser draft",
+      "requestBlocked": true
+    }
+  },
+  {
+    "case": "Cancel reload preserves the dirty draft",
+    "result": {
+      "conflictVisible": true,
+      "draftBodyPreserved": true,
+      "name": "My unsaved browser draft"
+    }
+  },
+  {
+    "case": "Confirmed reload adopts the latest code and clears the conflict",
+    "result": {
+      "conflictVisible": false,
+      "latestCodeRendered": true,
+      "name": "Welcome from your local project",
+      "noHorizontalOverflow": true,
+      "saveDisabled": true,
+      "subject": "The next version from code"
+    }
+  },
+  {
+    "case": "Narrow setup dialog and copied commands",
+    "result": {
+      "dialogVisible": true,
+      "footerButtons": [
+        {
+          "label": "Cancel",
+          "visible": true,
+          "width": 158
+        },
+        {
+          "label": "Done",
+          "visible": true,
+          "width": 158
+        }
+      ],
+      "noHorizontalOverflow": true,
+      "requiresReactDom": true
+    }
+  }
+]

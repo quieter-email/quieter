@@ -1,6 +1,8 @@
 import { getSafeAuthReturnTo } from "@quieter/app/lib/return-to";
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import {
+  CONTROL_API_PATH,
+  CONTROL_MCP_API_PATH,
   MCP_API_PATH,
   OPEN_TRACKING_PATH_PREFIX,
   SEND_API_PATH,
@@ -46,6 +48,8 @@ const sitePasswordPaths = new Set([
   "/api/openapi",
   MCP_API_PATH,
   SEND_API_PATH,
+  CONTROL_API_PATH,
+  CONTROL_MCP_API_PATH,
   "/api/site-password",
   "/api/waitlist",
 ]);
@@ -59,7 +63,12 @@ const publicLegalPaths = new Set([
 ]);
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
-const publicPathPrefixes = ["/_build/", "/assets/"];
+const publicPathPrefixes = [
+  "/_build/",
+  "/assets/",
+  "/api/unsubscribe/",
+  "/unsubscribe/",
+];
 /** Open-tracking markers are fetched by mail clients without cookies. */
 const openTrackingPrefix = `${OPEN_TRACKING_PATH_PREFIX}/`;
 const csrfMiddleware = createCsrfMiddleware({

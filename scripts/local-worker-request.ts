@@ -11,10 +11,11 @@ if (
     "importance",
     "memory",
     "actions",
+    "campaigns",
   ].includes(action)
 ) {
   throw new Error(
-    "Use dev:trigger health, maintenance, mail-recovery, importance, memory, or actions."
+    "Use dev:trigger health, maintenance, mail-recovery, importance, memory, actions, or campaigns."
   );
 }
 const response = await fetch(`http://127.0.0.1:8787/__dev/${action}`, {

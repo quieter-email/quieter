@@ -10,6 +10,9 @@ import { reportServerError } from "#/lib/server-error-reporting";
 
 const handleSuppressions = async (request: Request): Promise<Response> => {
   const organizationId = await getOrganizationApiKeyOrganizationId(request);
+  if (organizationId instanceof Response) {
+    return organizationId;
+  }
   if (organizationId === null) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }

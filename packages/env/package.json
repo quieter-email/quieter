@@ -1,9 +1,15 @@
 {
   "name": "@quieter/env",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./cli": {
+      "types": "./src/cli.ts",
+      "development": "./src/cli.ts",
+      "default": "./dist/cli.js"
+    },
     "./deployment": {
       "types": "./src/deployment.ts",
       "development": "./src/deployment.ts",

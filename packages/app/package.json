@@ -305,7 +305,19 @@
     "./features/calendar/domain/calendar-preview": "./src/features/calendar/domain/calendar-preview.ts",
     "./features/calendar/domain/calendar-schedule": "./src/features/calendar/domain/calendar-schedule.ts",
     "./lib/calendar-query": "./src/lib/calendar-query.ts",
-    "./lib/calendar-cache-lifecycle": "./src/lib/calendar-cache-lifecycle.ts"
+    "./lib/calendar-cache-lifecycle": "./src/lib/calendar-cache-lifecycle.ts",
+    "./features/broadcasts/components/audience-contact-dialog": "./src/features/broadcasts/components/audience-contact-dialog.tsx",
+    "./features/broadcasts/components/audience-detail": "./src/features/broadcasts/components/audience-detail.tsx",
+    "./features/broadcasts/components/audience-import-dialog": "./src/features/broadcasts/components/audience-import-dialog.tsx",
+    "./features/broadcasts/components/audiences-list": "./src/features/broadcasts/components/audiences-list.tsx",
+    "./features/broadcasts/components/broadcast-elements": "./src/features/broadcasts/components/broadcast-elements.tsx",
+    "./features/broadcasts/components/broadcast-workspace": "./src/features/broadcasts/components/broadcast-workspace.tsx",
+    "./features/broadcasts/components/campaign-detail": "./src/features/broadcasts/components/campaign-detail.tsx",
+    "./features/broadcasts/components/campaign-editor": "./src/features/broadcasts/components/campaign-editor.tsx",
+    "./features/broadcasts/components/campaign-status": "./src/features/broadcasts/components/campaign-status.tsx",
+    "./features/broadcasts/components/campaigns-list": "./src/features/broadcasts/components/campaigns-list.tsx",
+    "./features/broadcasts/components/email-content-editor": "./src/features/broadcasts/components/email-content-editor.tsx",
+    "./features/broadcasts/components/templates": "./src/features/broadcasts/components/templates.tsx"
   },
   "dependencies": {
     "@ai-sdk/provider-utils": "5.0.59",

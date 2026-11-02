@@ -1,11 +1,14 @@
 {
   "name": "quieter",
   "version": "0.0.3",
-  "description": "TypeScript SDK for the quieter send API.",
+  "description": "TypeScript SDK and local email template CLI for quieter.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/quieter-email/quieter"
+  },
+  "bin": {
+    "quieter": "./dist/cli/cli.js"
   },
   "files": [
     "dist",
@@ -33,14 +36,20 @@
     "prepublishOnly": "vp pack"
   },
   "dependencies": {
+    "chokidar": "6.0.0",
+    "jiti": "2.7.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@quieter/config": "workspace:*",
+    "@quieter/env": "workspace:*",
     "@quieter/mail": "workspace:*",
     "@react-email/render": "^2.1.0",
+    "@types/node": "catalog:",
     "@types/react": "catalog:",
     "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-email": "^6.11.3",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

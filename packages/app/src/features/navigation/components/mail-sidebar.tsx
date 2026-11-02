@@ -6,6 +6,8 @@ import {
   Edit01Icon,
   LayoutRightIcon,
   NoteEditIcon,
+  MailSend02Icon,
+  UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 import { AssistantSidebarContext } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import {
@@ -29,6 +31,7 @@ import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
+import { Link } from "@tanstack/react-router";
 import { use, useEffect, useState } from "react";
 
 import { SidebarFooterLinks } from "./sidebar-footer-links";
@@ -41,6 +44,7 @@ type MailSidebarProps = {
   groups: {
     id: string;
     kind: "division" | "organization" | "unassigned";
+    organizationId?: string;
     mailboxes: {
       capabilities: MailboxCapabilities;
       connectionStatus: "connected" | "needs_reconnect";
@@ -123,6 +127,9 @@ const SidebarInboxSection = ({
   const selectedMailboxGrantRole = groups
     .flatMap((group) => group.mailboxes)
     .find((mailbox) => mailbox.id === selectedMailboxId)?.grantRole;
+  const organizationId = groups.find((group) =>
+    group.mailboxes.some((mailbox) => mailbox.id === selectedMailboxId)
+  )?.organizationId;
   const handleComposeNewMail = () => {
     onComposeNewMail();
     onRequestClose?.();
@@ -238,6 +245,37 @@ const SidebarInboxSection = ({
             </SidebarMailboxNavItem>
           </SidebarEntrance>
         ) : null}
+        {embedded === true ? null : (
+          <nav
+            aria-label="Broadcasts"
+            className="mt-3 grid gap-1 border-t border-border/60 pt-3"
+          >
+            <SidebarNavItem
+              nativeButton={false}
+              onClick={onRequestClose}
+              render={<Link search={{ organizationId }} to="/audiences" />}
+            >
+              <Icon icon={UserGroupIcon} />
+              Audiences
+            </SidebarNavItem>
+            <SidebarNavItem
+              nativeButton={false}
+              onClick={onRequestClose}
+              render={<Link search={{ organizationId }} to="/campaigns" />}
+            >
+              <Icon icon={MailSend02Icon} />
+              Campaigns
+            </SidebarNavItem>
+            <SidebarNavItem
+              nativeButton={false}
+              onClick={onRequestClose}
+              render={<Link search={{ organizationId }} to="/templates" />}
+            >
+              <Icon icon={NoteEditIcon} />
+              Templates
+            </SidebarNavItem>
+          </nav>
+        )}
         {!allInboxesActive &&
         selectedMailboxProvider === "managed" &&
         selectedMailboxId ? (

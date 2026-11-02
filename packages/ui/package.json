@@ -6,6 +6,7 @@
     "./src/styles.css"
   ],
   "exports": {
+    "./email-editor": "./src/components/ui/email-editor.tsx",
     "./accordion": "./src/components/ui/accordion.tsx",
     "./action-footer": "./src/components/ui/action-footer.tsx",
     "./alert-dialog": "./src/components/ui/alert-dialog.tsx",
@@ -28,6 +29,7 @@
     "./composer-chrome": "./src/components/ui/composer-chrome.tsx",
     "./command-menu": "./src/components/ui/command-menu.tsx",
     "./context-menu": "./src/components/ui/context-menu.tsx",
+    "./content-section": "./src/components/ui/content-section.tsx",
     "./date-picker": "./src/components/ui/date-picker.tsx",
     "./date-time-preferences": "./src/components/ui/date-time-preferences.tsx",
     "./time-picker": "./src/components/ui/time-picker.tsx",

@@ -3,6 +3,12 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./templates": "./src/templates/service.ts",
+    "./control": "./src/control.ts",
+    "./audiences": "./src/audiences/service.ts",
+    "./campaigns": "./src/campaigns/service.ts",
+    "./campaigns/processor": "./src/campaigns/processor.ts",
+    "./growth-access": "./src/growth-access.ts",
     "./ai-mail-authorship": "./src/ai-mail-authorship.ts",
     "./ai-memory": "./src/ai-memory.ts",
     "./ai-memory-capture": "./src/ai-memory-capture.ts",

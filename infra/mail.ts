@@ -1,6 +1,6 @@
 import type { DeploymentContext } from "./runtime";
 import { requireSecretResource } from "./secrets";
-import { deploymentEnvironment } from "./stage";
+import { appOrigin, deploymentEnvironment } from "./stage";
 import type { SecretResources } from "./types";
 
 const mailObjectKeyPrefix = "mail/inbound/";
@@ -299,7 +299,39 @@ export const createMailResources = async (
     properties: {},
   });
 
+  const campaignProcessor = new sst.aws.CronV2("CampaignProcessor", {
+    function: {
+      concurrency: { reserved: 1 },
+      environment: {
+        BETTER_AUTH_URL: appOrigin,
+        SES_CONFIGURATION_SET_NAME:
+          mailOutboundConfigurationSet.configurationSetName,
+        ...context.billingEnvironment,
+        R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",
+        R2_BUCKET: context.env.R2_BUCKET ?? "",
+        R2_ENDPOINT: context.env.R2_ENDPOINT ?? "",
+      },
+      handler: "packages/aws/src/campaigns.handler",
+      link: [
+        mailBucket,
+        webAwsPermissions,
+        ...(
+          [
+            "DATABASE_URL",
+            "R2_ACCESS_KEY_ID",
+            "R2_SECRET_ACCESS_KEY",
+            "POLAR_ACCESS_TOKEN",
+            "SENTRY_DSN",
+          ] as const
+        ).map((name) => requireSecretResource(secretResources, name)),
+      ],
+      timeout: "120 seconds",
+    },
+    schedule: "rate(1 minute)",
+  });
+
   return {
+    campaignProcessor,
     mailBucket,
     mailIngress,
     mailIngressToken,

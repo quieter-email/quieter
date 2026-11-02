@@ -14,6 +14,7 @@ import { retryIdempotentDatabaseQuery } from "@quieter/database/retry";
 import {
   mailbox,
   managedMailMessage,
+  organizationCampaignRecipient,
   organization,
   organizationMailSendIdempotency,
 } from "@quieter/database/schema";
@@ -65,6 +66,23 @@ const completeMailSend = async (operation: MailSend) => {
     provider: operation.rawObjectProvider,
   };
   const storedAccount = snapshot.billingAccount;
+  await db
+    .update(organizationCampaignRecipient)
+    .set({
+      providerMessageId: response.messageId,
+      status: "sent",
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(
+          organizationCampaignRecipient.organizationId,
+          operation.organizationId
+        ),
+        eq(organizationCampaignRecipient.sendOperationId, operation.id),
+        inArray(organizationCampaignRecipient.status, ["sending", "uncertain"])
+      )
+    );
   const projection = {
     ...snapshot,
     id: operation.id,
@@ -163,6 +181,7 @@ const completeMailSend = async (operation: MailSend) => {
 };
 
 export const sendPreparedMail = async (input: {
+  beforeSubmit?: (operationId: string) => Promise<void>;
   id: string;
   idempotencyKey: string;
   messageHeaderId: string;
@@ -286,6 +305,7 @@ export const sendPreparedMail = async (input: {
       s3Bucket: null,
       s3Key: null,
     });
+    await input.beforeSubmit?.(operation.id);
     const fromAddress = await assertRawMailSender(
       raw,
       operation.snapshot?.sender ?? ""

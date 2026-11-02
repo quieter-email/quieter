@@ -1,6 +1,6 @@
 # quieter
 
-TypeScript SDK for the quieter send API.
+TypeScript SDK and local email template CLI for quieter.
 
 ```ts
 import { Quieter } from "quieter";
@@ -29,7 +29,7 @@ Every request sends `Quieter-Version: 2026-10`. quieter accepts only that date. 
 
 ## React Email
 
-Install `react` and `@react-email/render`, then import `Quieter` from `quieter/react` to pass a React Email component to `send`. The core `quieter` entry point supports text and HTML without React.
+Install `react` and `@react-email/render`, then import `Quieter` from `quieter/react` to pass a React Email component to `send`, template creation/update, or campaign creation/update. React inputs generate a plain-text fallback when `text` is omitted. The core `quieter` entry point supports text, HTML, and visual designs without React.
 
 ```tsx
 import { Quieter } from "quieter/react";
@@ -46,6 +46,79 @@ await quieter.send({
 ```
 
 Version 0.0.3 moves React input to `quieter/react`. Existing React callers need to change that import. API credentials and the fetch implementation are private, and internal attachment-normalization helpers are no longer exported. `openTracking` is supported by the shared send contract.
+
+## Local template CLI
+
+Install `quieter`, `react`, `react-dom`, `react-email`, and `@react-email/render` in your project. Create a team key with both `templates:read` and `templates:write`, then set `QUIETER_MAIL_API_KEY` in your shell.
+
+```sh
+vp exec quieter templates init
+vp exec quieter templates dev
+```
+
+Edit `emails/welcome.tsx`. The CLI renders your React Email component locally, uploads HTML and text through the template API, and prints the URL to open in Quieter. Open pages refresh saved changes while preserving unsaved browser drafts.
+
+`quieter.templates.json` maps stable logical keys to source files, names, subjects, and JSON preview props. It also supports HTML, text, and exported visual-design JSON files. Shared imports within the project directory trigger sync. `--config file` selects a manifest, `--only key` selects one entry, and `--env-file file` loads an explicit ignored environment file. `QUIETER_MAIL_API_URL` or `--base-url` selects an HTTPS origin or loopback HTTP for development.
+
+Use `templates push` for a single upload. Use `templates link welcome TEMPLATE_ID` to connect an existing template or deliberately accept a new baseline after a conflict. The next sync applies your local content through the normal version check. There is no automatic overwrite of another editor's changes.
+
+Keep the ignored `.quieter/` state directory for remote bindings and interrupted-upload recovery. The first connection pins the origin and authenticated team. Rotating a key for that team works. A different team or origin is rejected before uploads. A crashed process can leave a lock that requires confirming the owner has exited before removing the lock file. Removing local files never deletes remote templates.
+
+The CLI requires Node.js 22 or later. Older team keys retain their original request allowance; rotate one if sync reaches that limit. New keys use a bounded per-minute allowance, and throttling returns HTTP 429.
+
+Sync updates templates. Campaigns still copy content into a draft and require review before sending. The CLI does not send email or upload JavaScript. See [the local template guide](https://github.com/quieter-email/quieter/blob/main/docs/template-sync.md) for manifest examples and recovery steps. Version 0.0.3 includes the CLI after its protected release is published.
+
+## Templates and campaigns
+
+Organization API keys need explicit `templates:read` / `templates:write`, `audiences:read` / `audiences:write`, and `campaigns:read` / `campaigns:write` / `campaigns:send` permissions for their operations. These grants are independent. Existing transactional keys do not gain management permissions.
+
+Save a React Email component as a reusable template. It appears in the team's Templates library as imported HTML with a source editor and preview. React runs in your project; the API receives rendered HTML and text.
+
+```tsx
+const template = await quieter.templates.create({
+  name: "Product update",
+  subject: "What's new this month",
+  idempotencyKey: "product-template-2026-10",
+  react: <ProductUpdate />,
+});
+
+const draft = await quieter.campaigns.create({
+  name: "October update",
+  audienceId,
+  segmentIds: [newsletterSegmentId],
+  from: "Updates <updates@example.com>",
+  subject: template.subject,
+  content: template.content,
+});
+
+const review = await quieter.campaigns.preview({ campaignId: draft.id });
+```
+
+Campaign `create` and `update` also accept `react: <ProductUpdate />` directly through `quieter/react`. Multiple segments include their union; an empty segment list includes the whole audience. Drafts do not send until confirmed. Present the saved message, sender, audience, exclusions, eligible count, and cost to the user before invoking:
+
+```ts
+await quieter.campaigns.send({
+  campaignId: draft.id,
+  confirmed: true,
+  expectedUpdatedAt: draft.updatedAt,
+  previewToken: review.previewToken,
+  idempotencyKey: "october-campaign-confirmation",
+});
+```
+
+Keep the confirmation key and input unchanged when retrying an interrupted request. Changes to content or recipient eligibility require another preview. Later template changes do not modify existing drafts or queued messages. Use `campaigns.get`, `list`, `cancel`, and `retry` to manage progress; uncertain provider acceptance is never automatically resent.
+
+Templates support `list`, `get`, `create`, `update`, `duplicate`, `archive`, and `render`. Updates and archive/restore require `expectedUpdatedAt`. `archive({ archived: false, ... })` restores a template. Create and duplicate require a stable `idempotencyKey`. `templates.render` returns HTML, text, and warnings, plus editable JSON and React Email source for visual designs. Exported React components use the current `react-email` package.
+
+For a core SDK or HTTP client, pass content explicitly:
+
+```ts
+content: { kind: "html", html: renderedHtml, text: plainText }
+content: { kind: "text", text: "A short update" }
+content: { kind: "visual", design }
+```
+
+`createEmailDesign`, `renderEmailContent`, `exportEmailDesign`, and `importEmailTheme` are also exported for local workflows. Theme imports accept the documented flat theme or matching typed design tokens and reject unsupported values. Imported HTML must be bounded, static email markup with safe links and images. Arbitrary JSX, scripts, forms, and active CSS are rejected. Imported HTML stays source-editable; visual designs round-trip through their versioned JSON.
 
 ## Verification codes
 

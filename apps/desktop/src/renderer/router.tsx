@@ -1,5 +1,19 @@
 import { AppProviders } from "@quieter/app/components/app-providers";
 import { LoadingPage } from "@quieter/app/components/loading-page";
+import { AudienceDetail } from "@quieter/app/features/broadcasts/components/audience-detail";
+import { AudiencesList } from "@quieter/app/features/broadcasts/components/audiences-list";
+import { BroadcastWorkspace } from "@quieter/app/features/broadcasts/components/broadcast-workspace";
+import { CampaignDetail } from "@quieter/app/features/broadcasts/components/campaign-detail";
+import {
+  CampaignPage,
+  CampaignCreate,
+} from "@quieter/app/features/broadcasts/components/campaign-editor";
+import { CampaignsList } from "@quieter/app/features/broadcasts/components/campaigns-list";
+import {
+  TemplateEditor,
+  TemplateDetail,
+  TemplatesList,
+} from "@quieter/app/features/broadcasts/components/templates";
 import {
   mailboxSearchSchema,
   onboardingSearchSchema,
@@ -155,6 +169,153 @@ const designSystemRoute = createRoute({
   path: "/design-system",
 });
 
+const loadBroadcastUser = async () => {
+  const user = await loadUser();
+  if (!user) {
+    throw redirect({ to: "/auth" });
+  }
+  if (user.needsOnboarding) {
+    throw redirect({ to: "/onboarding" });
+  }
+  return { user };
+};
+
+const audiencesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/audiences",
+  validateSearch: zodValidator(
+    z.object({ organizationId: z.string().optional() })
+  ),
+  loader: loadBroadcastUser,
+  pendingComponent: LoadingPage,
+  component: () => (
+    <BroadcastWorkspace
+      organizationId={audiencesRoute.useSearch().organizationId}
+      section="audiences"
+    >
+      <Outlet />
+    </BroadcastWorkspace>
+  ),
+});
+const audiencesIndexRoute = createRoute({
+  getParentRoute: () => audiencesRoute,
+  path: "/",
+  component: AudiencesList,
+});
+const audienceRoute = createRoute({
+  getParentRoute: () => audiencesRoute,
+  path: "/$audienceId",
+  component: () => {
+    const { audienceId } = audienceRoute.useParams();
+    return <AudienceDetail audienceId={audienceId} key={audienceId} />;
+  },
+});
+const campaignsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/campaigns",
+  validateSearch: zodValidator(
+    z.object({ organizationId: z.string().optional() })
+  ),
+  loader: loadBroadcastUser,
+  pendingComponent: LoadingPage,
+  component: () => (
+    <BroadcastWorkspace
+      organizationId={campaignsRoute.useSearch().organizationId}
+      section="campaigns"
+    >
+      <Outlet />
+    </BroadcastWorkspace>
+  ),
+});
+const campaignsIndexRoute = createRoute({
+  getParentRoute: () => campaignsRoute,
+  path: "/",
+  component: CampaignsList,
+});
+const campaignNewRoute = createRoute({
+  getParentRoute: () => campaignsRoute,
+  path: "/new",
+  component: CampaignCreate,
+});
+const campaignRoute = createRoute({
+  getParentRoute: () => campaignsRoute,
+  path: "/$campaignId",
+  component: Outlet,
+});
+const campaignDetailRoute = createRoute({
+  getParentRoute: () => campaignRoute,
+  path: "/",
+  component: () => {
+    const { campaignId } = campaignDetailRoute.useParams();
+    return <CampaignDetail campaignId={campaignId} key={campaignId} />;
+  },
+});
+const campaignContentRoute = createRoute({
+  getParentRoute: () => campaignRoute,
+  path: "/content",
+  component: () => (
+    <CampaignPage
+      campaignId={campaignContentRoute.useParams().campaignId}
+      step="content"
+    />
+  ),
+});
+const campaignAudienceRoute = createRoute({
+  getParentRoute: () => campaignRoute,
+  path: "/audience",
+  component: () => (
+    <CampaignPage
+      campaignId={campaignAudienceRoute.useParams().campaignId}
+      step="audience"
+    />
+  ),
+});
+const campaignReviewRoute = createRoute({
+  getParentRoute: () => campaignRoute,
+  path: "/review",
+  component: () => (
+    <CampaignPage
+      campaignId={campaignReviewRoute.useParams().campaignId}
+      step="review"
+    />
+  ),
+});
+const templatesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/templates",
+  validateSearch: zodValidator(
+    z.object({ organizationId: z.string().optional() })
+  ),
+  loader: loadBroadcastUser,
+  pendingComponent: LoadingPage,
+  component: () => (
+    <BroadcastWorkspace
+      organizationId={templatesRoute.useSearch().organizationId}
+      section="templates"
+    >
+      <Outlet />
+    </BroadcastWorkspace>
+  ),
+});
+const templatesIndexRoute = createRoute({
+  getParentRoute: () => templatesRoute,
+  path: "/",
+  component: TemplatesList,
+});
+const templateNewRoute = createRoute({
+  getParentRoute: () => templatesRoute,
+  path: "/new",
+  component: TemplateEditor,
+});
+const templateRoute = createRoute({
+  getParentRoute: () => templatesRoute,
+  path: "/$templateId",
+  component: () => {
+    const { templateId } = templateRoute.useParams();
+    return <TemplateDetail key={templateId} templateId={templateId} />;
+  },
+});
+
 const legalRoutes = (
   ["/privacy", "/cookies", "/terms", "/imprint"] as const
 ).map((path) =>
@@ -177,6 +338,22 @@ export const router = createRouter({
       settingsRoute,
       onboardingRoute,
       designSystemRoute,
+      audiencesRoute.addChildren([audiencesIndexRoute, audienceRoute]),
+      campaignsRoute.addChildren([
+        campaignsIndexRoute,
+        campaignNewRoute,
+        campaignRoute.addChildren([
+          campaignDetailRoute,
+          campaignContentRoute,
+          campaignAudienceRoute,
+          campaignReviewRoute,
+        ]),
+      ]),
+      templatesRoute.addChildren([
+        templatesIndexRoute,
+        templateNewRoute,
+        templateRoute,
+      ]),
     ]),
     homeRoute,
     ...legalRoutes,

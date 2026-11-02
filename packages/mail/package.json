@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./email-design": "./src/email-design.ts",
+    "./templates": "./src/templates.ts",
+    "./control": "./src/control.ts",
+    "./audiences": "./src/audiences.ts",
+    "./campaigns": "./src/campaigns.ts",
+    "./campaign-unsubscribe": "./src/campaign-unsubscribe.ts",
     "./snippet": "./src/snippet.ts",
     "./delivery": "./src/delivery.ts",
     "./data-plane": "./src/data-plane.ts",
@@ -42,6 +48,7 @@
     "html-to-text": "10.0.1",
     "htmlparser2": "10.1.0",
     "nodemailer": "^10.1.0",
+    "parse5": "^8.0.1",
     "postal-mime": "^4.0.5",
     "structured-headers": "2.1.1",
     "zod": "catalog:"

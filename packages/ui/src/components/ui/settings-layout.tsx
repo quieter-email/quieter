@@ -182,11 +182,20 @@ export const SettingsInsetStackedRow = ({
   </div>
 );
 
-export const SettingsRows = ({ children }: { children: ReactNode }) => (
-  <SettingsCard>
-    <div>{children}</div>
-  </SettingsCard>
-);
+export const SettingsRows = ({
+  children,
+  variant = "default",
+}: {
+  children: ReactNode;
+  variant?: "default" | "plain";
+}) =>
+  variant === "plain" ? (
+    <div className="@container flex flex-col gap-0.5 p-0.5">{children}</div>
+  ) : (
+    <SettingsCard>
+      <div>{children}</div>
+    </SettingsCard>
+  );
 
 export const SettingsRowText = ({
   children,
@@ -259,7 +268,21 @@ export const SettingsRowLayout = ({
   </div>
 );
 
+export const settingsNavigationRowVariants = cva(
+  `${settingsSurfaceVariants({ variant: "rowShell" })} group border border-transparent text-left transition-colors squircle hover:bg-detail focus-visible:border-ring focus-visible:outline-hidden`,
+  {
+    defaultVariants: { chrome: "default" },
+    variants: {
+      chrome: {
+        default: "first:rounded-t-section last:rounded-b-section",
+        standalone: "rounded-section",
+      },
+    },
+  }
+);
+
 export const SettingsNavigationRow = ({
+  chrome = "default",
   description,
   disabled,
   icon,
@@ -268,6 +291,7 @@ export const SettingsNavigationRow = ({
   onIntent,
   title,
 }: {
+  chrome?: "default" | "standalone";
   description: string;
   disabled?: boolean;
   icon?: ReactNode;
@@ -277,11 +301,9 @@ export const SettingsNavigationRow = ({
   title: string;
 }) => (
   <button
-    className={cn(
-      settingsSurfaceVariants({ variant: "rowShell" }),
-      "group border border-transparent text-left transition-colors squircle first:rounded-t-section last:rounded-b-section hover:bg-detail focus-visible:border-ring focus-visible:outline-hidden",
-      { "pointer-events-none": disabled }
-    )}
+    className={cn(settingsNavigationRowVariants({ chrome }), {
+      "pointer-events-none": disabled,
+    })}
     disabled={disabled}
     onFocus={onIntent}
     onMouseEnter={onIntent}
@@ -299,14 +321,15 @@ export const SettingsNavigationRow = ({
       </div>
     ) : null}
     <span className="min-w-0 flex-1">
-      <span
-        className={cn(
-          "block truncate",
-          settingsSurfaceVariants({ variant: "title" })
-        )}
+      <Text
+        as="span"
+        className="block"
+        size={chrome === "standalone" ? "body" : "sm"}
+        truncate
+        weight="medium"
       >
         {title}
-      </span>
+      </Text>
       <span
         className={cn(
           "mt-0.5 block truncate",
@@ -317,7 +340,11 @@ export const SettingsNavigationRow = ({
       </span>
     </span>
     {meta !== undefined && meta !== null ? (
-      <span className="hidden text-caption text-muted-fg @sm:block">
+      <span
+        className={cn("shrink-0 text-caption text-muted-fg", {
+          "hidden @sm:block": chrome === "default",
+        })}
+      >
         {meta}
       </span>
     ) : null}
