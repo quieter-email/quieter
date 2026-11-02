@@ -90,7 +90,7 @@ export const ChatComposer = ({
   }
 
   return (
-    <form className="mt-auto w-full shrink-0 p-3" onSubmit={onSubmit}>
+    <form className="mt-auto w-full shrink-0 p-0.5" onSubmit={onSubmit}>
       <PromptComposerFrame>
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {contextPicker}
