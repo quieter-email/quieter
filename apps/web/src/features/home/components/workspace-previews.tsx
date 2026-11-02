@@ -31,7 +31,7 @@ export const CalendarPreview = () => {
   const selected = calendarItems.find((item) => item.id === selectedId);
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      <div className="flex h-96 min-w-0 flex-col">
+      <div className="flex h-96 min-w-0 flex-col" data-lenis-prevent-wheel>
         <Schedule
           dates={calendarDates}
           items={calendarItems}
