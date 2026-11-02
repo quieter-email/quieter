@@ -80,7 +80,10 @@ import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSelector } from "@tanstack/react-store";
 import { useCallback, useEffect, useId, useReducer, useState } from "react";
+
+import { getLabelUpdates } from "./label-update-mutation";
 
 type LabelsWorkspacePanelProps = {
   canManage: boolean;
@@ -90,7 +93,6 @@ type LabelsWorkspacePanelProps = {
 
 type LabelEdit = {
   labelId: MailboxLabel["id"];
-  status: "editing" | "saving";
 } & (
   | { kind: "name"; value: MailboxLabel["name"] }
   | { kind: "color"; value: MailboxLabelColor }
@@ -165,7 +167,15 @@ export const LabelsWorkspacePanel = ({
     managedLabelCounts.map((record) => [record.labelId, record.count])
   );
 
-  const userLabels = getUserLabels(labels ?? []);
+  const labelUpdates = getLabelUpdates({
+    mailboxId: mailboxId ?? "",
+    mailboxProvider,
+    queryClient,
+  });
+  const labelUpdateState = useSelector(labelUpdates.state);
+  const userLabels = getUserLabels(
+    labelUpdates.project(labels ?? [], labelUpdateState)
+  );
   const automationLabel = userLabels.find(
     (label) => label.id === automationLabelId
   );
@@ -185,9 +195,7 @@ export const LabelsWorkspacePanel = ({
   const createLabelMutation = useMutation(
     orpc.mail.createLabel.mutationOptions()
   );
-  const updateLabelMutation = useMutation(
-    orpc.mail.updateLabel.mutationOptions()
-  );
+  const updateLabelMutation = useMutation(labelUpdates.options);
   const deleteLabelMutation = useMutation(
     orpc.mail.deleteLabel.mutationOptions()
   );
@@ -195,9 +203,7 @@ export const LabelsWorkspacePanel = ({
     orpc.mail.updateLabelDetails.mutationOptions()
   );
   const isSavingLabel =
-    labelEdit?.status === "saving" ||
-    updateLabelMutation.isPending ||
-    updateLabelDetailsMutation.isPending;
+    labelUpdateState.pending.length > 0 || updateLabelDetailsMutation.isPending;
   const areLabelActionsDisabled =
     !canManage || isSavingLabel || labelEdit !== null;
 
@@ -326,97 +332,44 @@ export const LabelsWorkspacePanel = ({
     }
   };
 
-  const saveLabelEdit = async (label: MailboxLabel, edit: LabelEdit) => {
-    if (
-      !isNonemptyMailboxId(mailboxId) ||
-      !canManage ||
-      isSavingLabel ||
-      edit.status !== "editing"
-    ) {
+  const saveLabelEdit = (label: MailboxLabel, edit: LabelEdit) => {
+    if (!isNonemptyMailboxId(mailboxId) || !canManage) {
       return;
     }
     const name = edit.kind === "name" ? edit.value.trim() : label.name;
-    const color = edit.kind === "color" ? edit.value : label.color;
     if (name === "") {
       toast.error("Enter a label name.");
       return;
     }
+    setLabelEdit((current) => (current === edit ? null : current));
     if (
       edit.kind === "name"
         ? name === label.name
         : edit.value === (label.color ?? "gray")
     ) {
-      setLabelEdit(null);
       return;
     }
-
-    setLabelEdit({ ...edit, status: "saving" });
-    try {
-      if (isSandboxMailboxId(mailboxId)) {
-        const current = getDemoLabelAutomation(mailboxId);
-        saveDemoLabelAutomation(mailboxId, {
-          ...current,
-          updatedLabels: {
-            ...current.updatedLabels,
-            [label.id]: {
-              ...label,
-              color,
-              name,
-            },
-          },
-        });
-      } else {
-        await updateLabelMutation.mutateAsync({
-          ...(edit.kind === "color" ? { color: edit.value } : {}),
-          labelId: label.id,
-          mailboxId,
-          name,
-        });
-      }
-      await invalidateLabels();
-      setLabelEdit(null);
-    } catch (error) {
-      setLabelEdit({ ...edit, status: "editing" });
-      toastError(error, {
-        boundary: "labels-panel",
-        fallback: "Could not update label.",
-      });
-    }
+    updateLabelMutation.mutate({
+      change:
+        edit.kind === "name"
+          ? { kind: "name", name }
+          : { color: edit.value, kind: "color" },
+      labelId: label.id,
+    });
   };
 
-  const toggleSidebarVisibility = async (label: MailboxLabel) => {
+  const toggleSidebarVisibility = (label: MailboxLabel) => {
     if (!isNonemptyMailboxId(mailboxId)) {
       return;
     }
     if (mailboxProvider === "managed") {
-      try {
-        if (isSandboxMailboxId(mailboxId)) {
-          const current = getDemoLabelAutomation(mailboxId);
-          saveDemoLabelAutomation(mailboxId, {
-            ...current,
-            updatedLabels: {
-              ...current.updatedLabels,
-              [label.id]: {
-                ...label,
-                visible: effectiveHiddenLabelIds.has(label.id),
-              },
-            },
-          });
-        } else {
-          await updateLabelMutation.mutateAsync({
-            labelId: label.id,
-            mailboxId,
-            name: label.name,
-            visible: effectiveHiddenLabelIds.has(label.id),
-          });
-        }
-        await invalidateLabels();
-      } catch (error) {
-        toastError(error, {
-          boundary: "labels-panel",
-          fallback: "Could not update label.",
-        });
-      }
+      updateLabelMutation.mutate({
+        change: {
+          kind: "visibility",
+          visible: effectiveHiddenLabelIds.has(label.id),
+        },
+        labelId: label.id,
+      });
       return;
     }
 
@@ -524,30 +477,25 @@ export const LabelsWorkspacePanel = ({
             >
               <MailboxColorPicker
                 className="flex shrink-0"
-                disabled={
-                  !canManage ||
-                  isSavingLabel ||
-                  (labelEdit !== null && !colorEdit)
-                }
+                disabled={!canManage || (labelEdit !== null && !colorEdit)}
                 label={`Edit color for ${label.name}`}
                 onChange={(value) => {
-                  if (colorEdit?.status === "editing") {
+                  if (colorEdit) {
                     setLabelEdit({ ...colorEdit, value });
                   }
                 }}
                 onOpenChange={(open) => {
-                  if (open && !areLabelActionsDisabled) {
+                  if (open && canManage && labelEdit === null) {
                     setLabelEdit({
                       kind: "color",
                       labelId: label.id,
-                      status: "editing",
                       value: label.color ?? "gray",
                     });
-                  } else if (!open && colorEdit?.status === "editing") {
-                    void saveLabelEdit(label, colorEdit);
+                  } else if (!open && colorEdit) {
+                    saveLabelEdit(label, colorEdit);
                   }
                 }}
-                open={colorEdit?.status === "editing"}
+                open={colorEdit !== null}
                 trigger="swatch"
                 value={colorEdit?.value ?? label.color ?? "gray"}
               />
@@ -559,7 +507,7 @@ export const LabelsWorkspacePanel = ({
                     disabled={!canManage}
                     maxLength={225}
                     onBlur={() => {
-                      void saveLabelEdit(label, nameEdit);
+                      saveLabelEdit(label, nameEdit);
                     }}
                     onChange={(event) => {
                       setLabelEdit({
@@ -568,10 +516,7 @@ export const LabelsWorkspacePanel = ({
                       });
                     }}
                     onKeyDown={(event) => {
-                      if (
-                        nameEdit.status === "saving" ||
-                        event.nativeEvent.isComposing
-                      ) {
+                      if (event.nativeEvent.isComposing) {
                         return;
                       }
                       if (event.key === "Escape") {
@@ -582,7 +527,6 @@ export const LabelsWorkspacePanel = ({
                         event.currentTarget.blur();
                       }
                     }}
-                    readOnly={nameEdit.status === "saving"}
                     ref={focusNameInput}
                     required
                     value={nameEdit.value}
@@ -591,12 +535,11 @@ export const LabelsWorkspacePanel = ({
                   <Button
                     aria-label={`Edit name for ${label.name}`}
                     className="w-full"
-                    disabled={areLabelActionsDisabled}
+                    disabled={!canManage || labelEdit !== null}
                     onClick={() => {
                       setLabelEdit({
                         kind: "name",
                         labelId: label.id,
-                        status: "editing",
                         value: label.name,
                       });
                     }}
@@ -674,7 +617,7 @@ export const LabelsWorkspacePanel = ({
                   <DropdownMenuItem
                     disabled={areLabelActionsDisabled}
                     onSelect={() => {
-                      void toggleSidebarVisibility(label);
+                      toggleSidebarVisibility(label);
                     }}
                   >
                     {isShown ? (
