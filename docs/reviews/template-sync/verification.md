@@ -10,6 +10,8 @@ The `quieter` CLI and open template editor were exercised against the local app 
 - `vp run quieter#build` and `vp pm pack` produced the browser SDK, optional React entry, and executable Node CLI.
 - A separate consumer installed the tarball with automatic peer installation disabled and strict peer checks. Core imports, CLI help, and initialization worked without React. React Email rendering worked after installing the documented React peers.
 
+Current main was merged after the feature checks. Its landing-page update was preserved. Import boundaries and the affected app lint/type checks passed after that merge.
+
 The [sync behavior tests](../../../packages/sdk/tests/template-sync.test.ts) cover identity, metadata, explicit text, interrupted create/update recovery, conflicts, archives, key rotation, target isolation, lost state, inherited property names, and concurrent ownership. The [source tests](../../../packages/sdk/tests/template-project.test.ts) exercise actual React Email rendering and transitive import reload. The [draft tests](../../../packages/app/src/features/broadcasts/components/template-editor-draft.test.ts) cover incoming versions, dirty drafts, and save races.
 
 ## Live API and terminal checks
