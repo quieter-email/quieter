@@ -227,7 +227,12 @@ export const MessageListSearchDropdown = ({
         isDesktop &&
         (isLabelHighlighted || (showLabelsSubmenu && !highlightedItemKey))
           ? labelsTriggerRef.current
-          : highlightedRow;
+          : (highlightedRow ??
+            (!isDesktop && showLabelsSubmenu
+              ? (labelsInlineRef.current?.querySelector<HTMLElement>(
+                  "button"
+                ) ?? labelsInlineRef.current)
+              : null));
       if (container && target) {
         const containerRect = container.getBoundingClientRect();
         const targetRect = target.getBoundingClientRect();
