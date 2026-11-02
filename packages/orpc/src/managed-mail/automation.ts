@@ -7,6 +7,7 @@ import type {
   MailAutoLabelCandidate,
 } from "@quieter/ai/classify-gmail-message";
 import { isAiCreditAdmissionBusy } from "@quieter/ai/errors";
+import { AI_CREDIT_ADMISSION_BUSY_MESSAGE } from "@quieter/billing/ai-credit-errors";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
@@ -23,7 +24,7 @@ import { partitionAutoLabelCandidates } from "@quieter/mail/auto-label-matching"
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { parseOtpTokenHeaders } from "@quieter/mail/otp-token";
 import { reportError } from "@quieter/observability";
-import { and, eq, isNull, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lte, or } from "drizzle-orm";
 
 import {
   buildMailMemoryQuery,
@@ -35,7 +36,10 @@ import {
 import type { AiAgentMemoryCandidates } from "../ai-memory";
 import { getMailboxMemoryActor } from "../ai-memory-capture";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
-import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
+import {
+  autoLabelBudgetDeferred,
+  deferAutoLabelAutomation,
+} from "../mail-automation/auto-label-events";
 import { loadManagedAutomationLabelHistory } from "../mail-automation/history";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
 import { updateManagedMessageLabelAssignments } from "./labels/repository";
@@ -403,6 +407,13 @@ const processManagedAutoLabelMessage = async (input: {
     });
     await reportAutoLabelUsage({ ...event, userId: input.userId });
   } catch (error) {
+    if (isAiCreditAdmissionBusy(error)) {
+      await deferAutoLabelAutomation(
+        event.id,
+        AI_CREDIT_ADMISSION_BUSY_MESSAGE
+      );
+      return;
+    }
     const now = new Date();
     const attemptCount = event.attemptCount + 1;
     await db
@@ -420,30 +431,54 @@ const processManagedAutoLabelMessage = async (input: {
         updatedAt: now,
       })
       .where(eq(gmailAutoLabelEvent.id, event.id));
-    if (!isAiCreditAdmissionBusy(error)) {
-      reportError(error, { operation: "managed-mail:auto-label-message" });
-    }
+    reportError(error, { operation: "managed-mail:auto-label-message" });
   }
 };
 
-const listPendingManagedAutoLabelMessageIds = async (mailboxId: string) => {
+const listPendingManagedAutoLabelMessageIds = async (input: {
+  mailboxId: string;
+  organizationId: string;
+  userId: string;
+}) => {
   const now = new Date();
   const events = await db
-    .select({ messageId: gmailAutoLabelEvent.gmailMessageId })
+    .select({
+      messageId: gmailAutoLabelEvent.gmailMessageId,
+      nextAttemptAt: gmailAutoLabelEvent.nextAttemptAt,
+    })
     .from(gmailAutoLabelEvent)
     .where(
       and(
-        eq(gmailAutoLabelEvent.mailboxId, mailboxId),
+        eq(gmailAutoLabelEvent.mailboxId, input.mailboxId),
         isNull(gmailAutoLabelEvent.appliedAt),
         or(
           isNull(gmailAutoLabelEvent.nextAttemptAt),
-          lte(gmailAutoLabelEvent.nextAttemptAt, now)
+          lte(gmailAutoLabelEvent.nextAttemptAt, now),
+          autoLabelBudgetDeferred
         )
       )
     )
+    .orderBy(
+      desc(isNull(gmailAutoLabelEvent.nextAttemptAt)),
+      asc(gmailAutoLabelEvent.nextAttemptAt)
+    )
     .limit(20);
 
-  return events.map((event) => event.messageId);
+  const budgetStatus = events.some(
+    (event) => event.nextAttemptAt !== null && event.nextAttemptAt > now
+  )
+    ? await getMailAutomationAiBudgetStatus(input)
+    : null;
+  const resumeBudgetDeferred = budgetStatus?.allowed ?? false;
+
+  return events
+    .filter(
+      (event) =>
+        event.nextAttemptAt === null ||
+        event.nextAttemptAt <= now ||
+        resumeBudgetDeferred
+    )
+    .map((event) => event.messageId);
 };
 
 const reportPendingManagedAutoLabelUsage = async (
@@ -533,9 +568,11 @@ export const processManagedMailAutomation = async (input: {
     return;
   }
 
-  const pendingAutoLabelIds = await listPendingManagedAutoLabelMessageIds(
-    input.mailboxId
-  );
+  const pendingAutoLabelIds = await listPendingManagedAutoLabelMessageIds({
+    mailboxId: input.mailboxId,
+    organizationId: owner.organizationId,
+    userId: owner.userId,
+  });
   let autoLabelContextPromise: Promise<ManagedAutoLabelContext> | null = null;
   const getAutoLabelContext = async () => {
     autoLabelContextPromise ??= getManagedAutoLabelCandidates({
