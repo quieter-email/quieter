@@ -10,6 +10,7 @@ import {
   LabelsPreview,
 } from "./product-previews";
 import { Reveal } from "./reveal";
+import { BillingPreview, CalendarPreview } from "./workspace-previews";
 
 const Feature = ({
   children,
@@ -37,7 +38,7 @@ const Feature = ({
   </section>
 );
 
-export const AiSection = () => (
+export const FeatureCards = () => (
   <>
     <div className="home-paired-features">
       <Feature
@@ -93,6 +94,34 @@ export const AiSection = () => (
         }
       >
         <AssistantPreview />
+      </Feature>
+    </div>
+    <div className="home-paired-features">
+      <Feature
+        id="home-calendar-title"
+        title="Calendar view."
+        description={
+          <>
+            Make room for what matters.
+            <br />
+            Your schedule, right beside your inbox.
+          </>
+        }
+      >
+        <CalendarPreview />
+      </Feature>
+      <Feature
+        id="home-billing-title"
+        title="Transparent billing."
+        description={
+          <>
+            See where every credit goes.
+            <br />
+            Clear usage, included balances, and rates.
+          </>
+        }
+      >
+        <BillingPreview />
       </Feature>
     </div>
   </>

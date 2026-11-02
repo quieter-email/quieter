@@ -302,6 +302,8 @@
     "./session-user": "./src/session-user.ts",
     "./styles.css": "./src/styles.css",
     "./features/calendar/components/calendar-workspace": "./src/features/calendar/components/calendar-workspace.tsx",
+    "./features/calendar/domain/calendar-preview": "./src/features/calendar/domain/calendar-preview.ts",
+    "./features/calendar/domain/calendar-schedule": "./src/features/calendar/domain/calendar-schedule.ts",
     "./lib/calendar-query": "./src/lib/calendar-query.ts",
     "./lib/calendar-cache-lifecycle": "./src/lib/calendar-cache-lifecycle.ts"
   },

@@ -20,7 +20,7 @@ export const ConnectSection = () => (
               in one place.
             </h2>
             <p className="home-description">
-              Connect Gmail, use your own domain,
+              Connect Gmail, send transactional mail on your domain,
               <br className="home-desktop-break" />
               or bring email into your app with API and MCP.
             </p>

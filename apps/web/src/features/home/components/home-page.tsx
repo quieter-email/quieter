@@ -28,9 +28,9 @@ const Hero = () => (
         </Reveal>
       </h1>
       <Reveal onMount as="p" className="home-hero-description" delay={0.62}>
-        Your Gmail, your team&rsquo;s mailboxes
+        Your Gmail, managed transactional mail,
         <br />
-        and the mail your product sends, in one place.
+        and API &amp; MCP, in one place.
       </Reveal>
       <Reveal onMount className="home-waitlist-wrap" delay={0.84} id="waitlist">
         <WaitlistForm className="home-waitlist" />
