@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
 import type { MailAutoLabelCandidate } from "@quieter/ai/classify-gmail-message";
-import { shouldReportAiTaskFailure } from "@quieter/ai/errors";
+import {
+  isAiCreditAdmissionBusy,
+  shouldReportAiTaskFailure,
+} from "@quieter/ai/errors";
+import { AI_CREDIT_ADMISSION_BUSY_MESSAGE } from "@quieter/billing/ai-credit-errors";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import {
@@ -59,7 +63,10 @@ import { syncGmailLabels } from "../gmail-labels";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { enqueueMailAgentMessage } from "../mail-agent/inbox";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
-import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
+import {
+  autoLabelBudgetDeferred,
+  deferAutoLabelAutomation,
+} from "../mail-automation/auto-label-events";
 import { loadMailAutoLabelHistory } from "../mail-automation/history";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
 import { processGmailMailCapture } from "../mail-capture";
@@ -481,6 +488,13 @@ const processAutoLabelMessage = async ({
       .where(eq(gmailAutoLabelEvent.id, event.id));
     await reportAutoLabelUsage({ ...event, userId });
   } catch (error) {
+    if (isAiCreditAdmissionBusy(error)) {
+      await deferAutoLabelAutomation(
+        event.id,
+        AI_CREDIT_ADMISSION_BUSY_MESSAGE
+      );
+      return;
+    }
     const now = new Date();
     const attemptCount = event.attemptCount + 1;
     await db
@@ -654,12 +668,7 @@ export const retryPendingAutomationMessages = async ({
               or(
                 isNull(gmailAutoLabelEvent.nextAttemptAt),
                 lte(gmailAutoLabelEvent.nextAttemptAt, now),
-                // Budget deferrals have no classification or failed attempt.
-                and(
-                  eq(gmailAutoLabelEvent.attemptCount, 0),
-                  isNull(gmailAutoLabelEvent.labelIds),
-                  isNotNull(gmailAutoLabelEvent.lastError)
-                )
+                autoLabelBudgetDeferred
               )
             )
           )
@@ -1140,10 +1149,7 @@ export const listGmailPubSubMaintenanceJobs = async (limit = 500) => {
                 and(
                   eq(gmailAutoLabelEvent.mailboxId, mailbox.id),
                   eq(mailboxAutomationSettings.autoLabelEnabled, true),
-                  isNull(gmailAutoLabelEvent.appliedAt),
-                  eq(gmailAutoLabelEvent.attemptCount, 0),
-                  isNull(gmailAutoLabelEvent.labelIds),
-                  isNotNull(gmailAutoLabelEvent.lastError)
+                  autoLabelBudgetDeferred
                 )
               )
           ),

@@ -48,6 +48,8 @@ jobs:
           aws-region: eu-central-1
       - name: Inspect or resolve one reservation through linked SST Secrets
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ vars.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
           RECOVERY_REQUEST: ${{ inputs.request }}
         run: |
           vp run @quieter/env#build
