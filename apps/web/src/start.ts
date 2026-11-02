@@ -63,7 +63,12 @@ const publicLegalPaths = new Set([
 ]);
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
-const publicPathPrefixes = ["/_build/", "/assets/", "/api/unsubscribe/"];
+const publicPathPrefixes = [
+  "/_build/",
+  "/assets/",
+  "/api/unsubscribe/",
+  "/unsubscribe/",
+];
 /** Open-tracking markers are fetched by mail clients without cookies. */
 const openTrackingPrefix = `${OPEN_TRACKING_PATH_PREFIX}/`;
 const csrfMiddleware = createCsrfMiddleware({

@@ -370,6 +370,10 @@ export const processCampaignBatch = async (
         continue;
       }
       const unsubscribeUrl = new URL(
+        `/unsubscribe/${recipient.unsubscribeToken}`,
+        origin
+      ).toString();
+      const oneClickUnsubscribeUrl = new URL(
         `/api/unsubscribe/${recipient.unsubscribeToken}`,
         origin
       ).toString();
@@ -410,7 +414,7 @@ export const processCampaignBatch = async (
           message: sendMessageInputSchema.parse({
             from: campaign.from,
             headers: {
-              "List-Unsubscribe": `<${unsubscribeUrl}>`,
+              "List-Unsubscribe": `<${oneClickUnsubscribeUrl}>`,
               "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
             },
             html:

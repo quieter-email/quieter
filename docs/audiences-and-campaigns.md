@@ -92,7 +92,7 @@ Registration and import never restore an unsubscribed or removed membership. Exp
 
 Audience subscription and organization safety suppression are separate. Resubscribing does not clear a bounce, complaint, manual block, or other safety suppression. `setSuppression` is a separate audited action. Campaign eligibility requires both an active subscription and no current suppression.
 
-Every broadcast includes a visible unsubscribe footer and RFC 8058 `List-Unsubscribe` / `List-Unsubscribe-Post` headers. `/api/unsubscribe/:token` uses an opaque recipient capability. GET displays a confirmation form and never changes subscription. A form POST containing `List-Unsubscribe=One-Click` unsubscribes that audience without login or redirect. It records an audience event and delivery evidence without globally suppressing the address. Treat capability URLs as secrets and exclude them from logs and screenshots.
+Every broadcast includes a visible `/unsubscribe/:token` link in its HTML and text footer. Recipients can open this public page and confirm without signing in. GET never changes a subscription, so opening or scanning a link is safe. RFC 8058 `List-Unsubscribe` and `List-Unsubscribe-Post` headers keep using `/api/unsubscribe/:token` for automatic one-click requests. Both paths use the same opaque recipient capability and POST handler. A form POST containing `List-Unsubscribe=One-Click` unsubscribes that audience without login or redirect. Existing API links remain valid. The action records an audience event and delivery evidence without globally suppressing the address. Treat capability URLs as secrets and exclude them from logs and screenshots.
 
 ## Delivery and recovery
 

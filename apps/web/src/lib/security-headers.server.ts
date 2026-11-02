@@ -15,7 +15,8 @@ export const withSecurityHeaders = (response: Response) => {
       connections.push(liveUrl.origin);
     }
   }
-  headers.set(
+  // Multiple CSP policies enforce both the baseline and route-specific restrictions.
+  headers.append(
     "Content-Security-Policy",
     [
       "default-src 'self'",
@@ -36,7 +37,9 @@ export const withSecurityHeaders = (response: Response) => {
     "Permissions-Policy",
     "camera=(), microphone=(self), geolocation=()"
   );
-  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (!headers.has("Referrer-Policy")) {
+    headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  }
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "DENY");
 

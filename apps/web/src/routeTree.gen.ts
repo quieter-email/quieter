@@ -36,6 +36,7 @@ import { Route as ApiSendRouteImport } from './routes/api/send'
 import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
 import { Route as ApiSuppressionsRouteImport } from './routes/api/suppressions'
 import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
+import { Route as UnsubscribeTokenRouteImport } from './routes/unsubscribe.$token'
 import { Route as AppAudiencesIndexRouteImport } from './routes/_app/audiences.index'
 import { Route as AppAudiencesAudienceIdRouteImport } from './routes/_app/audiences.$audienceId'
 import { Route as AppCampaignsIndexRouteImport } from './routes/_app/campaigns.index'
@@ -197,6 +198,11 @@ const ApiWaitlistRoute = ApiWaitlistRouteImport.update({
   path: '/api/waitlist',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UnsubscribeTokenRoute = UnsubscribeTokenRouteImport.update({
+  id: '/unsubscribe/$token',
+  path: '/unsubscribe/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppAudiencesIndexRoute = AppAudiencesIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -356,6 +362,7 @@ export interface FileRoutesByFullPath {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/suppressions': typeof ApiSuppressionsRoute
   '/api/waitlist': typeof ApiWaitlistRoute
+  '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/audiences/$audienceId': typeof AppAudiencesAudienceIdRoute
   '/campaigns/$campaignId': typeof AppCampaignsCampaignIdRouteWithChildren
   '/campaigns/new': typeof AppCampaignsNewRoute
@@ -405,6 +412,7 @@ export interface FileRoutesByTo {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/suppressions': typeof ApiSuppressionsRoute
   '/api/waitlist': typeof ApiWaitlistRoute
+  '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/audiences/$audienceId': typeof AppAudiencesAudienceIdRoute
   '/campaigns/new': typeof AppCampaignsNewRoute
   '/desktop/auth': typeof AppDesktopAuthRoute
@@ -458,6 +466,7 @@ export interface FileRoutesById {
   '/api/site-password': typeof ApiSitePasswordRoute
   '/api/suppressions': typeof ApiSuppressionsRoute
   '/api/waitlist': typeof ApiWaitlistRoute
+  '/unsubscribe/$token': typeof UnsubscribeTokenRoute
   '/_app/': typeof AppIndexRoute
   '/_app/audiences/$audienceId': typeof AppAudiencesAudienceIdRoute
   '/_app/campaigns/$campaignId': typeof AppCampaignsCampaignIdRouteWithChildren
@@ -513,6 +522,7 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/suppressions'
     | '/api/waitlist'
+    | '/unsubscribe/$token'
     | '/audiences/$audienceId'
     | '/campaigns/$campaignId'
     | '/campaigns/new'
@@ -562,6 +572,7 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/suppressions'
     | '/api/waitlist'
+    | '/unsubscribe/$token'
     | '/audiences/$audienceId'
     | '/campaigns/new'
     | '/desktop/auth'
@@ -614,6 +625,7 @@ export interface FileRouteTypes {
     | '/api/site-password'
     | '/api/suppressions'
     | '/api/waitlist'
+    | '/unsubscribe/$token'
     | '/_app/'
     | '/_app/audiences/$audienceId'
     | '/_app/campaigns/$campaignId'
@@ -654,6 +666,7 @@ export interface RootRouteChildren {
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
   ApiSuppressionsRoute: typeof ApiSuppressionsRoute
   ApiWaitlistRoute: typeof ApiWaitlistRoute
+  UnsubscribeTokenRoute: typeof UnsubscribeTokenRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiConnectorsCallbackRoute: typeof ApiConnectorsCallbackRoute
   ApiDesktopSessionRoute: typeof ApiDesktopSessionRoute
@@ -856,6 +869,13 @@ declare module '@tanstack/react-router' {
       path: '/api/waitlist'
       fullPath: '/api/waitlist'
       preLoaderRoute: typeof ApiWaitlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/unsubscribe/$token': {
+      id: '/unsubscribe/$token'
+      path: '/unsubscribe/$token'
+      fullPath: '/unsubscribe/$token'
+      preLoaderRoute: typeof UnsubscribeTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/audiences/': {
@@ -1177,6 +1197,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSitePasswordRoute: ApiSitePasswordRoute,
   ApiSuppressionsRoute: ApiSuppressionsRoute,
   ApiWaitlistRoute: ApiWaitlistRoute,
+  UnsubscribeTokenRoute: UnsubscribeTokenRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiConnectorsCallbackRoute: ApiConnectorsCallbackRoute,
   ApiDesktopSessionRoute: ApiDesktopSessionRoute,

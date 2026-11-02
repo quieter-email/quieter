@@ -36,6 +36,23 @@ describe("security headers", () => {
     expect(policy).not.toContain("'unsafe-eval'");
   });
 
+  test("preserves route privacy restrictions alongside the baseline policy", () => {
+    const response = withSecurityHeaders(
+      new Response(null, {
+        headers: {
+          "content-security-policy": "default-src 'none'; base-uri 'none'",
+          "referrer-policy": "no-referrer",
+        },
+      })
+    );
+    const policy = response.headers.get("content-security-policy") ?? "";
+
+    expect(policy).toContain("default-src 'none'");
+    expect(policy).toContain("base-uri 'none'");
+    expect(policy).toContain("frame-ancestors 'none'");
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  });
+
   test("allows same-origin dictation while denying camera and location access", () => {
     const response = withSecurityHeaders(new Response(null));
     const policy = response.headers.get("permissions-policy") ?? "";
