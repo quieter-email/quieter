@@ -1,6 +1,6 @@
 # quieter
 
-TypeScript SDK for the quieter send API.
+TypeScript SDK and local email template CLI for quieter.
 
 ```ts
 import { Quieter } from "quieter";
@@ -46,6 +46,27 @@ await quieter.send({
 ```
 
 Version 0.0.3 moves React input to `quieter/react`. Existing React callers need to change that import. API credentials and the fetch implementation are private, and internal attachment-normalization helpers are no longer exported. `openTracking` is supported by the shared send contract.
+
+## Local template CLI
+
+Install `quieter`, `react`, `react-dom`, `react-email`, and `@react-email/render` in your project. Create a team key with both `templates:read` and `templates:write`, then set `QUIETER_MAIL_API_KEY` in your shell.
+
+```sh
+vp exec quieter templates init
+vp exec quieter templates dev
+```
+
+Edit `emails/welcome.tsx`. The CLI renders your React Email component locally, uploads HTML and text through the template API, and prints the URL to open in Quieter. Open pages refresh saved changes while preserving unsaved browser drafts.
+
+`quieter.templates.json` maps stable logical keys to source files, names, subjects, and JSON preview props. It also supports HTML, text, and exported visual-design JSON files. Shared imports within the project directory trigger sync. `--config file` selects a manifest, `--only key` selects one entry, and `--env-file file` loads an explicit ignored environment file. `QUIETER_MAIL_API_URL` or `--base-url` selects an HTTPS origin or loopback HTTP for development.
+
+Use `templates push` for a single upload. Use `templates link welcome TEMPLATE_ID` to connect an existing template or deliberately accept a new baseline after a conflict. The next sync applies your local content through the normal version check. There is no automatic overwrite of another editor's changes.
+
+Keep the ignored `.quieter/` state directory for remote bindings and interrupted-upload recovery. The first connection pins the origin and authenticated team. Rotating a key for that team works. A different team or origin is rejected before uploads. A crashed process can leave a lock that requires confirming the owner has exited before removing the lock file. Removing local files never deletes remote templates.
+
+The CLI requires Node.js 22 or later. Older team keys retain their original request allowance; rotate one if sync reaches that limit. New keys use a bounded per-minute allowance, and throttling returns HTTP 429.
+
+Sync updates templates. Campaigns still copy content into a draft and require review before sending. The CLI does not send email or upload JavaScript. See [the local template guide](https://github.com/quieter-email/quieter/blob/main/docs/template-sync.md) for manifest examples and recovery steps. Version 0.0.3 includes the CLI after its protected release is published.
 
 ## Templates and campaigns
 

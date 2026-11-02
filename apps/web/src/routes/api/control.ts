@@ -30,6 +30,9 @@ export const Route = createFileRoute("/api/control")({
 const handleControlRequest = async (request: Request): Promise<Response> => {
   try {
     const actor = await getOrganizationApiKeyAccess(request);
+    if (actor instanceof Response) {
+      return actor;
+    }
     if (actor === null) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }

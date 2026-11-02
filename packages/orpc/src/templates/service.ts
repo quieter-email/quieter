@@ -171,6 +171,7 @@ export const listTemplates = async (
       input.offset + rows.length < totalCount
         ? input.offset + rows.length
         : null,
+    organizationId: actor.organizationId,
     totalCount,
   };
 };

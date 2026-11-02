@@ -10,6 +10,8 @@ The editor exports HTML, editable JSON, and React Email source. The React export
 
 React elements are rendered in the optional `quieter/react` SDK entry. The API never evaluates uploaded JavaScript or JSX. `templates.create/update` and `campaigns.create/update` accept React inputs in that SDK entry, generating text when omitted. Other clients can send `{ "kind": "html", "html": "...", "text": "..." }` as content. Existing text-only campaign requests remain valid.
 
+The `quieter` package also includes `templates init`, `push`, `dev`, and `link` commands for local code authoring. The watcher renders React Email locally and updates the same templates through the scoped API. Open template pages adopt clean incoming versions and preserve unsaved browser drafts on conflicts. See [Design templates locally](template-sync.md) for setup, source formats, and recovery.
+
 Imported HTML is parsed with an HTML parser and CSS syntax tree. Validation rejects active markup, unsafe schemes, event attributes, invalid CSS, and excessive size/nesting while preserving accepted source. Email preview frames have no script, form, popup, top-navigation, or same-origin privileges. They remain scrollable with pointer and keyboard input, and links default to a new browsing context that the sandbox blocks. External HTTPS images may load; client previews and warnings do not establish identical rendering in every email application. Real cross-client delivery still needs a deployed development send to dedicated recipients.
 
 ## Theme import

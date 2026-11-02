@@ -9,7 +9,7 @@ export type OrganizationApiKeyAccess = {
 
 export const getOrganizationApiKeyAccess = async (
   request: Request
-): Promise<OrganizationApiKeyAccess | null> => {
+): Promise<OrganizationApiKeyAccess | Response | null> => {
   const authorization = request.headers.get("authorization")?.trim();
   if (
     authorization === undefined ||
@@ -37,6 +37,26 @@ export const getOrganizationApiKeyAccess = async (
       key: apiKey,
     },
   });
+
+  if (verifiedApiKey.error?.code === "RATE_LIMITED") {
+    const details = z
+      .object({
+        details: z.object({ tryAgainIn: z.number().nonnegative() }),
+      })
+      .safeParse(verifiedApiKey.error).data?.details;
+    return Response.json(
+      { error: "This key has reached its request limit. Try again later." },
+      {
+        headers: {
+          "cache-control": "no-store",
+          "retry-after": String(
+            Math.max(1, Math.ceil((details?.tryAgainIn ?? 60_000) / 1000))
+          ),
+        },
+        status: 429,
+      }
+    );
+  }
 
   if (
     !verifiedApiKey.valid ||
@@ -86,7 +106,10 @@ export const getOrganizationApiKeyAccess = async (
 
 export const getOrganizationApiKeyOrganizationId = async (
   request: Request
-): Promise<string | null> => {
+): Promise<string | Response | null> => {
   const access = await getOrganizationApiKeyAccess(request);
+  if (access instanceof Response) {
+    return access;
+  }
   return access?.organizationId ?? null;
 };

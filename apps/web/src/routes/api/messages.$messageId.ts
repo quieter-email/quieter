@@ -13,6 +13,9 @@ const handleMessage = async (
   messageId: string
 ): Promise<Response> => {
   const organizationId = await getOrganizationApiKeyOrganizationId(request);
+  if (organizationId instanceof Response) {
+    return organizationId;
+  }
   if (organizationId === null) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }

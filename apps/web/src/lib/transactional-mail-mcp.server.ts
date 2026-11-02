@@ -323,6 +323,9 @@ export const handleTransactionalMailMcpRequest = async (
   }
 
   const organizationId = await getOrganizationApiKeyOrganizationId(request);
+  if (organizationId instanceof Response) {
+    return withCompatibleCors(organizationId);
+  }
   if (organizationId === null) {
     return withCompatibleCors(
       Response.json(

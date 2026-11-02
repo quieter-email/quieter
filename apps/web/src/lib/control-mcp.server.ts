@@ -129,6 +129,9 @@ const handleVersionedControlMcpRequest = async (
   }
   try {
     const actor = await getOrganizationApiKeyAccess(request);
+    if (actor instanceof Response) {
+      return actor;
+    }
     if (actor === null) {
       return Response.json(
         { error: "Unauthorized" },

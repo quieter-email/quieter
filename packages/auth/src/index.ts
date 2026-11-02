@@ -127,6 +127,7 @@ const organizationApiKeyPlugin = apiKey({
   defaultPrefix: "quieter_",
   keyExpiration: { minExpiresIn: 1 / 86_400 },
   maximumNameLength: 64,
+  rateLimit: { maxRequests: 120, timeWindow: 60_000 },
   references: "organization",
   startingCharactersConfig: {
     charactersLength: 12,

@@ -47,6 +47,7 @@ export const emailTemplateSchema = z.object({
 export const templateListResultSchema = z.object({
   items: z.array(emailTemplateSchema),
   nextOffset: z.number().nullable(),
+  organizationId: z.string().min(1),
   totalCount: z.number(),
 });
 export const templateRenderResultSchema = z.object({
