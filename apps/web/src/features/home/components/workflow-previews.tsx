@@ -239,7 +239,7 @@ const DevicesPreview = () => (
     <div className="home-device-desktop">
       <div className="home-device-label">
         <span />
-        Personal
+        Desktop app
       </div>
       <div className="home-device-content">
         <div className="home-device-sidebar" />
@@ -250,7 +250,11 @@ const DevicesPreview = () => (
         </div>
       </div>
     </div>
-    <div className="home-device-phone">
+    <div className="home-device-browser">
+      <div className="home-device-label">
+        <span />
+        Web app
+      </div>
       {["inbox", "projects", "personal"].map((line) => (
         <span key={line} />
       ))}
@@ -285,13 +289,13 @@ export const WorkflowPreview = () => (
       {
         description: (
           <>
-            Keep work and life neatly separate.
+            Your inbox, wherever you work.
             <br />
-            Pick up on your computer or phone.
+            Open it in your browser or desktop app.
           </>
         ),
         preview: <DevicesPreview />,
-        title: "Desktop and mobile",
+        title: "Web and desktop",
       },
     ].map((feature) => (
       <Reveal className="h-full" key={feature.title}>
