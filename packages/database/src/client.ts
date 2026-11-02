@@ -5,7 +5,10 @@ import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { Resource } from "sst";
 
+import { assertLocalDevelopmentDatabaseUrl } from "../scripts/local-development.ts";
 import { authRelations } from "./schema.ts";
+
+declare const __QUIETER_LOCAL_DEVELOPMENT__: boolean;
 
 export type DatabaseClient = ReturnType<typeof drizzlePostgres>;
 export type DatabaseTransaction = Parameters<
@@ -36,13 +39,20 @@ const getLinkedHyperdriveConnectionString = (): string | undefined => {
 const getDatabaseUrl = () => {
   const linkedConnectionString = getLinkedHyperdriveConnectionString();
 
-  if (linkedConnectionString) {
-    return linkedConnectionString;
-  }
-
-  const databaseUrl = serverEnv.DATABASE_URL;
+  const databaseUrl = linkedConnectionString ?? serverEnv.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error("DATABASE_URL environment variable is missing");
+  }
+  if (
+    // oxlint-disable-next-line unicorn/no-typeof-undefined -- Node callers do not receive Vite's compile-time marker.
+    (typeof __QUIETER_LOCAL_DEVELOPMENT__ !== "undefined" &&
+      __QUIETER_LOCAL_DEVELOPMENT__) ||
+    serverEnv.QUIETER_DEPLOYMENT_ENV === "local"
+  ) {
+    assertLocalDevelopmentDatabaseUrl("DATABASE_URL", databaseUrl, {
+      QUIETER_DEPLOYMENT_ENV: "local",
+      QUIETER_LOCAL_PLANETSCALE_HOST: serverEnv.QUIETER_LOCAL_PLANETSCALE_HOST,
+    });
   }
   return databaseUrl;
 };

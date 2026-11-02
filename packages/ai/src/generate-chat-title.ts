@@ -1,3 +1,5 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
+
 import type { AiUsageReport } from "./chat-usage";
 import { runTextGeneration } from "./generation";
 import { resolveBackgroundModel } from "./model-config";
@@ -57,13 +59,16 @@ export const normalizeChatTitle = (title: string, prompt: string) => {
 };
 
 export const generateChatTitle = async ({
+  billing,
   onUsage,
   prompt,
 }: {
+  billing: AiBillingContext;
   onUsage?: (usage: AiUsageReport) => void;
   prompt: string;
 }) => {
   const title = await runTextGeneration({
+    billing,
     maxOutputTokens: 128,
     model: resolveBackgroundModel(),
     // Reasoning tokens are billed against this budget too. A tight cap truncates the

@@ -135,6 +135,164 @@ describe("Polar webhook receiver", () => {
     mocks.sync.mockResolvedValue({ synced: true });
   });
 
+  test.each([undefined, "1", "not-a-length"])(
+    "bounds actual streamed bytes independently of content-length=%s",
+    async (declaredLength) => {
+      const cancel = vi.fn<() => void>();
+      const chunk = new TextEncoder().encode("é".repeat(262_144));
+      let reads = 0;
+      const body = new ReadableStream<Uint8Array>(
+        {
+          cancel,
+          pull(controller) {
+            reads += 1;
+            if (reads <= 4) {
+              controller.enqueue(chunk);
+            } else {
+              controller.close();
+            }
+          },
+        },
+        { highWaterMark: 0 }
+      );
+      const headers = new Headers();
+      if (declaredLength !== undefined) {
+        headers.set("content-length", declaredLength);
+      }
+      const init = {
+        body,
+        duplex: "half",
+        headers,
+        method: "POST",
+      };
+      const request = new Request(
+        "https://quieter.email/api/auth/polar/webhooks",
+        init
+      );
+      const verify = vi.spyOn(Webhook.prototype, "verify");
+      const response = await handlePolarWebhookRequest(request);
+      expect(response.status).toBe(413);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(reads).toBeLessThan(4);
+      expect(verify).not.toHaveBeenCalled();
+      expect(mocks.sync).not.toHaveBeenCalled();
+      verify.mockRestore();
+    }
+  );
+
+  test("rejects an excessive declared size without reading or verifying", async () => {
+    const pull = vi.fn<() => void>();
+    const init = {
+      body: new ReadableStream<Uint8Array>({ pull }, { highWaterMark: 0 }),
+      duplex: "half",
+      headers: { "content-length": "9999999999999999999999999" },
+      method: "POST",
+    };
+    const request = new Request(
+      "https://quieter.email/api/auth/polar/webhooks",
+      init
+    );
+    const verify = vi.spyOn(Webhook.prototype, "verify");
+    const response = await handlePolarWebhookRequest(request);
+    expect(response.status).toBe(413);
+    expect(pull).not.toHaveBeenCalled();
+    expect(verify).not.toHaveBeenCalled();
+    verify.mockRestore();
+  });
+
+  test.each([false, true])(
+    "preserves signed UTF-8 and whitespace at the byte limit, legacy=%s",
+    async (legacy) => {
+      const payload = JSON.stringify({
+        data: { name: "é🐈" },
+        type: "order.paid",
+      });
+      const body = `${payload}${" ".repeat(1_048_576 - Buffer.byteLength(payload))}`;
+      const signer = new Webhook(
+        legacy ? Buffer.from(mocks.secret).toString("base64") : mocks.secret
+      );
+      const timestamp = new Date();
+      const bytes = new TextEncoder().encode(body);
+      let offset = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (offset === bytes.length) {
+            controller.close();
+            return;
+          }
+          const end = Math.min(offset + 31, bytes.length);
+          controller.enqueue(bytes.subarray(offset, end));
+          offset = end;
+        },
+      });
+      const init = {
+        body: stream,
+        duplex: "half",
+        headers: {
+          "webhook-id": "event-a",
+          "webhook-signature": signer.sign("event-a", timestamp, body),
+          "webhook-timestamp": String(Math.floor(timestamp.getTime() / 1e3)),
+        },
+        method: "POST",
+      };
+      const response = await handlePolarWebhookRequest(
+        new Request("https://quieter.email/api/auth/polar/webhooks", init)
+      );
+      expect(response.status).toBe(200);
+      expect(mocks.sync).not.toHaveBeenCalled();
+    }
+  );
+
+  test("keeps overflow rejection when transport cancellation fails", async () => {
+    const cancel = vi.fn<() => void>(() => {
+      throw new Error("Transport closed");
+    });
+    const init = {
+      body: new ReadableStream<Uint8Array>(
+        {
+          cancel,
+          pull(controller) {
+            controller.enqueue(new Uint8Array(1_048_577));
+          },
+        },
+        { highWaterMark: 0 }
+      ),
+      duplex: "half",
+      method: "POST",
+    };
+    const request = new Request(
+      "https://quieter.email/api/auth/polar/webhooks",
+      init
+    );
+    const response = await handlePolarWebhookRequest(request);
+    expect(response.status).toBe(413);
+    expect(request.body?.locked).toBeFalsy();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  test("preserves authenticated invalid-envelope errors", async () => {
+    const response = await handlePolarWebhookRequest(
+      signedRequest({ data: {} })
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.sync).not.toHaveBeenCalled();
+  });
+
+  test("preserves method and unsigned empty-body errors", async () => {
+    const get = await handlePolarWebhookRequest(
+      new Request("https://quieter.email/api/auth/polar/webhooks")
+    );
+    expect(get.status).toBe(405);
+    expect(get.headers.get("allow")).toBe("POST");
+    const empty = await handlePolarWebhookRequest(
+      new Request("https://quieter.email/api/auth/polar/webhooks", {
+        method: "POST",
+      })
+    );
+    expect(empty.status).toBe(403);
+    expect(mocks.sync).not.toHaveBeenCalled();
+  });
+
   test.each([false, true])(
     "accepts signed subscription updates, legacy=%s",
     async (legacy) => {

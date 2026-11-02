@@ -67,17 +67,29 @@ describe("stale deployment notice", () => {
           if (scenario === "offline") {
             throw new Error("offline");
           }
-          return new Response(scenario === "empty" ? "" : scenario, {
-            headers: {
-              "content-type": scenario === "html" ? "text/html" : "text/plain",
-            },
-          });
+          return new Response(
+            scenario === "empty"
+              ? ""
+              : JSON.stringify({
+                  current: { buildId: scenario, slot: "a" },
+                  previous: null,
+                  serverTime: Date.now(),
+                }),
+            {
+              headers: {
+                "content-type":
+                  scenario === "html" ? "text/html" : "application/json",
+              },
+            }
+          );
         })
       );
-      const { checkForDeploymentUpdate, useDeploymentUpdateRequired } =
+      const { checkForDeploymentUpdate, useDeploymentUpdateStatus } =
         await import("./stale-deployment");
       await checkForDeploymentUpdate();
-      expect(useDeploymentUpdateRequired()).toBe(scenario === "changed");
+      expect(useDeploymentUpdateStatus()).toBe(
+        scenario === "changed" ? "required" : "current"
+      );
     }
   );
 });

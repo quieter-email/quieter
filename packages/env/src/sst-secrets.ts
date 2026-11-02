@@ -2,7 +2,6 @@ export const sstSecretNames = {
   APP_SITE_PASSWORD: "AppSitePassword",
   BETTER_AUTH_SECRET: "BetterAuthSecret",
   CLOUDFLARE_ACCOUNT_ID: "CloudflareAccountId",
-  CLOUDFLARE_AI_API_TOKEN: "CloudflareAiApiToken",
   CONNECTOR_TOKEN_ENCRYPTION_KEY: "ConnectorTokenEncryptionKey",
   DATABASE_URL: "DatabaseUrl",
   GMAIL_CREDENTIAL_ROTATION_TOKEN: "GmailCredentialRotationToken",

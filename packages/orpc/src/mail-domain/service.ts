@@ -121,11 +121,14 @@ const isAwsNotFoundError = (error: unknown) =>
     error.name === "NotFound" ||
     error.name === "RuleDoesNotExist");
 
-export const assertUserOrganizationMember = async (input: {
-  organizationId: string;
-  userId: string;
-}) => {
-  const [membership] = await db
+export const assertUserOrganizationMember = async (
+  input: {
+    organizationId: string;
+    userId: string;
+  },
+  database: Pick<typeof db, "select"> = db
+) => {
+  const [membership] = await database
     .select({ id: member.id, role: member.role })
     .from(member)
     .where(
@@ -164,11 +167,14 @@ export const assertUserCanManageMailDomains = async (input: {
   }
 };
 
-export const assertUserCanManageOrganizationSettings = async (input: {
-  organizationId: string;
-  userId: string;
-}) => {
-  const membership = await assertUserOrganizationMember(input);
+export const assertUserCanManageOrganizationSettings = async (
+  input: {
+    organizationId: string;
+    userId: string;
+  },
+  database: Pick<typeof db, "select"> = db
+) => {
+  const membership = await assertUserOrganizationMember(input, database);
 
   if (!hasOrganizationManagerRole(membership.role)) {
     throw new ORPCError("FORBIDDEN", {

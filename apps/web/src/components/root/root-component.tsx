@@ -1,6 +1,5 @@
+import { Providers } from "@quieter/app/components/providers";
 import { Outlet } from "@tanstack/react-router";
-
-import { Providers } from "#/components/providers";
 
 export const RootComponent = () => (
   <Providers>

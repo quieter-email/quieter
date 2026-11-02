@@ -12,7 +12,7 @@ export const Route = createFileRoute("/_public/imprint")({
       },
     ],
     meta: [
-      { title: "Imprint | Quieter" },
+      { title: "Imprint | quieter" },
       {
         content: "https://quieter.email/imprint",
         property: "og:url",
@@ -24,7 +24,7 @@ export const Route = createFileRoute("/_public/imprint")({
 function ImprintPage() {
   return (
     <LegalDocumentPage
-      description="Legal information about the operator of Quieter."
+      description="Legal information about the operator of quieter."
       title="Imprint"
     >
       <h2>Service provider</h2>

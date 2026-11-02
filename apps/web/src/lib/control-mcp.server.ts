@@ -8,6 +8,10 @@ import {
   controlOperations,
   controlOperationSchema,
 } from "@quieter/mail/control";
+import {
+  rejectApiCompatibility,
+  stampApiCompatibility,
+} from "@quieter/mail/public-api";
 import type { GrowthActor } from "@quieter/orpc/growth-access";
 import { z } from "zod";
 
@@ -114,7 +118,7 @@ const handler = createMcpHandler(
   }
 );
 
-export const handleControlMcpRequest = async (
+const handleVersionedControlMcpRequest = async (
   request: Request
 ): Promise<Response> => {
   if (request.method === "OPTIONS") {
@@ -173,4 +177,16 @@ export const handleControlMcpRequest = async (
       { status: 500 }
     );
   }
+};
+
+export const handleControlMcpRequest = async (
+  request: Request
+): Promise<Response> => {
+  if (request.method !== "OPTIONS") {
+    const rejected = rejectApiCompatibility(request.headers);
+    if (rejected !== null) {
+      return rejected;
+    }
+  }
+  return stampApiCompatibility(await handleVersionedControlMcpRequest(request));
 };

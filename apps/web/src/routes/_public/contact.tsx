@@ -12,10 +12,10 @@ export const Route = createFileRoute("/_public/contact")({
       },
     ],
     meta: [
-      { title: "Contact | Quieter" },
+      { title: "Contact | quieter" },
       {
         content:
-          "How to reach the Quieter team for support, legal, and other inquiries.",
+          "How to reach the quieter team for support, legal, and other inquiries.",
         name: "description",
       },
       {
@@ -29,7 +29,7 @@ export const Route = createFileRoute("/_public/contact")({
 function ContactPage() {
   return (
     <LegalDocumentPage
-      description="How to reach the Quieter team."
+      description="How to reach the quieter team."
       title="Contact"
     >
       <p>

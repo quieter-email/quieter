@@ -1,10 +1,14 @@
-# Quieter Documentation
+# quieter Documentation
 
 - [Development](development.md)
+- [Electron desktop](desktop.md)
 - [Development integration plan](development-integrations.md)
 - [Architecture](architecture.md)
+- [Design system](design-system.md)
 - [Responsive mail baseline](responsive-mail.md)
 - [Live mail and browser caching](mail-live-updates.md)
+- [Server-side mail capture](mail-capture.md)
+- [Mail importance](mail-importance.md)
 - [Database safety](database-safety.md)
 - [Outbound mail feedback](outbound-mail-feedback.md)
 - [Audiences and broadcast campaigns](audiences-and-campaigns.md)

@@ -7,8 +7,10 @@ import {
   managedMailMessage,
   managedMailMessageLabel,
 } from "@quieter/database/schema";
+import { analyzeMailMessage } from "@quieter/mail/capture";
 import { extractMailAddress } from "@quieter/mail/compose/schema";
 import type { SendHeader } from "@quieter/mail/send";
+import { createMailSnippet } from "@quieter/mail/snippet";
 import { and, eq, ne, sql } from "drizzle-orm";
 
 import { publishMailUpdate } from "../../mail-updates";
@@ -82,6 +84,11 @@ export const recordOutboundManagedMessageForSender = async (input: {
     const [inserted] = await tx
       .insert(managedMailMessage)
       .values({
+        analysis: analyzeMailMessage({
+          ...input,
+          from: input.sender,
+          headers: input.headers ?? [],
+        }),
         bcc: input.bcc?.join(", ") ? input.bcc.join(", ") : null,
         bccNormalized: normalizeManagedSearchValue(input.bcc?.join(", ")),
         bodyHtml: input.bodyHtml ?? null,
@@ -109,16 +116,12 @@ export const recordOutboundManagedMessageForSender = async (input: {
         s3Key: null,
         searchText: createManagedMessageSearchText(input),
         sentAt,
-        snippet: (() => {
-          const snippetSource =
-            input.bodyText ||
-            (input.bodyHtml?.replaceAll(/<[^>]+>/gu, " ") ?? "");
-          const trimmedSnippet = snippetSource
-            .replaceAll(/\s+/gu, " ")
-            .trim()
-            .slice(0, 240);
-          return trimmedSnippet || null;
-        })(),
+        snippet:
+          createMailSnippet({
+            bodyHtml: input.bodyHtml,
+            bodyText: input.bodyText || undefined,
+            includeScriptAndStyleText: true,
+          }) ?? null,
         subject: input.subject || null,
         threadId: input.threadId ?? id,
         to: input.to.join(", "),

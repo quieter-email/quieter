@@ -3,36 +3,43 @@
 import { Input as InputPrimitive } from "@base-ui/react/input";
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
-import type {
-  ComponentPropsWithoutRef,
-  ComponentRef,
-  ReactNode,
-  Ref,
-} from "react";
+import type { ComponentPropsWithoutRef, ComponentRef, Ref } from "react";
 
 import { cn } from "../../lib/cn";
+import {
+  ghostInputClassName,
+  inputControlClassName,
+  inputControlSizeVariants,
+} from "./input-chrome";
 
-const inputVariants = cva(
-  "w-full text-fg transition-colors duration-150 ease-out placeholder:text-muted-fg focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive/45",
-  {
-    defaultVariants: {
-      chrome: "default",
-      size: "default",
+export const inputVariants = cva(inputControlClassName, {
+  compoundVariants: [
+    {
+      chrome: "ghost",
+      className: "px-2.5",
     },
-    variants: {
-      chrome: {
-        default:
-          "squircle rounded-md border border-border bg-input shadow-none read-only:cursor-default read-only:bg-input",
-        ghost: "border-0 bg-transparent shadow-none read-only:bg-transparent",
-      },
-      size: {
-        default: "h-8 px-2.5 text-body-sm",
-        lg: "h-10 px-4 text-body-lg",
-        sm: "h-7 px-2 text-body-sm",
-      },
+    {
+      chrome: "inline",
+      className: "h-5 min-w-0 p-0 text-body",
     },
-  }
-);
+  ],
+  defaultVariants: {
+    chrome: "default",
+    size: "default",
+  },
+  variants: {
+    chrome: {
+      attached:
+        "border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0",
+      default:
+        "squircle rounded-md border border-border bg-input shadow-none read-only:cursor-default read-only:bg-input dark:border-transparent",
+      ghost: ghostInputClassName,
+      inline:
+        "rounded-none border-0 bg-transparent shadow-none read-only:bg-transparent",
+    },
+    size: inputControlSizeVariants,
+  },
+});
 
 type InputProps = Omit<
   ComponentPropsWithoutRef<typeof InputPrimitive>,
@@ -42,39 +49,22 @@ type InputProps = Omit<
     ref?: Ref<ComponentRef<typeof InputPrimitive>>;
   };
 
-export const GhostFieldShell = ({ children }: { children: ReactNode }) => (
-  <div className="flex h-full min-w-0 flex-1 items-stretch gap-2 has-focus-visible:**:data-[slot=ghost-focus]:bg-fg/50">
-    <span
-      aria-hidden
-      className="w-0.5 shrink-0 self-stretch rounded-md bg-transparent transition-colors"
-      data-slot="ghost-focus"
-    />
-    {children}
-  </div>
-);
-
 export const Input = ({
   chrome = "default",
   className,
   ref,
   size = "default",
   ...props
-}: InputProps) => {
-  const input = (
-    <InputPrimitive
-      ref={ref}
-      className={cn(
-        inputVariants({ chrome, size }),
-        { "min-w-0 flex-1": chrome === "ghost" },
-        className
-      )}
-      {...props}
-    />
-  );
-
-  if (chrome !== "ghost") {
-    return input;
-  }
-
-  return <GhostFieldShell>{input}</GhostFieldShell>;
-};
+}: InputProps) => (
+  <InputPrimitive
+    ref={ref}
+    className={cn(
+      inputVariants({ chrome, size }),
+      {
+        "h-full min-w-0 flex-1 pr-1": chrome === "attached",
+      },
+      className
+    )}
+    {...props}
+  />
+);

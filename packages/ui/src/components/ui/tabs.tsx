@@ -20,7 +20,7 @@ export const TabsList = ({
       <LayoutGroup id={id}>
         <TabsPrimitive.List
           className={cn(
-            "inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-bg p-1 shadow-sm squircle",
+            "inline-flex min-h-9 items-center gap-1 rounded-lg border border-border bg-bg p-1 shadow-sm squircle data-[orientation=vertical]:flex-col data-[orientation=vertical]:items-stretch",
             className
           )}
           {...props}
@@ -36,7 +36,7 @@ export const TabsTab = ({
 }: ComponentPropsWithoutRef<typeof TabsPrimitive.Tab>) => (
   <TabsPrimitive.Tab
     className={cn(
-      "relative isolate inline-flex min-h-7 min-w-0 items-center justify-center rounded-md px-2.5 text-body-sm font-medium text-muted-fg squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none data-active:text-fg data-disabled:pointer-events-none data-disabled:opacity-50",
+      "relative isolate inline-flex min-h-7 min-w-0 items-center justify-center rounded-md px-2.5 text-body-sm font-medium text-muted-fg squircle focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden data-active:text-fg data-disabled:pointer-events-none data-disabled:opacity-50 data-[orientation=vertical]:justify-start",
       className
     )}
     {...props}

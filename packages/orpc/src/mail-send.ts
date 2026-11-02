@@ -15,22 +15,27 @@ import {
   mailbox,
   managedMailMessage,
   organizationCampaignRecipient,
+  organization,
   organizationMailSendIdempotency,
 } from "@quieter/database/schema";
 import type { MailSendSnapshot } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
-import { extractMailAddress } from "@quieter/mail/compose/schema";
+import { assertRawMailSender } from "@quieter/mail/raw-message";
 import type { SendMessageResult } from "@quieter/mail/send";
 import { reportError } from "@quieter/observability";
 import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
 
+import { captureManagedMessageMemory } from "./ai-memory-capture";
 import { assertLocalMailSend } from "./local-managed-mail";
 import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/outbound";
 import { readRawMailObject } from "./managed-mail/messages/raw-object";
 import { storeRawMailObject } from "./managed-mail/messages/raw-object-lifecycle";
 import { recordOrganizationApiMailMessage } from "./organization-api-mail";
 import { assertOrganizationMailRecipientsNotSuppressed } from "./organization-mail-delivery";
-import { assertOrganizationOwnsVerifiedSenderDomain } from "./organization-mail-policy";
+import {
+  assertOrganizationOwnsVerifiedSenderDomain,
+  OrganizationMailSendError,
+} from "./organization-mail-policy";
 
 type MailSend = typeof organizationMailSendIdempotency.$inferSelect;
 const UNCERTAIN_DELIVERY_MESSAGE =
@@ -122,6 +127,19 @@ const completeMailSend = async (operation: MailSend) => {
   const failed = results.find((result) => result.status === "rejected");
   if (failed) {
     throw failed.reason;
+  }
+  if (
+    snapshot.kind === "mailbox" &&
+    snapshot.mailboxId &&
+    snapshot.actorUserId
+  ) {
+    await captureManagedMessageMemory({
+      actorUserId: snapshot.actorUserId,
+      failureMode: "retry",
+      mailboxId: snapshot.mailboxId,
+      messageId: operation.id,
+      source: "sent",
+    });
   }
   await db.transaction(async (tx) => {
     if (
@@ -288,29 +306,78 @@ export const sendPreparedMail = async (input: {
       s3Key: null,
     });
     await input.beforeSubmit?.(operation.id);
-    await assertOrganizationMailRecipientsNotSuppressed({
-      organizationId: input.organizationId,
-      recipients: [
-        ...input.snapshot.to,
-        ...input.snapshot.cc,
-        ...input.snapshot.bcc,
-      ],
-    });
-    const [claimed] = await db
-      .update(organizationMailSendIdempotency)
-      .set({
-        attemptedAt: new Date(),
-        status: "submitting",
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(organizationMailSendIdempotency.id, operation.id),
-          eq(organizationMailSendIdempotency.requestHash, input.requestHash),
-          eq(organizationMailSendIdempotency.status, "prepared")
+    const fromAddress = await assertRawMailSender(
+      raw,
+      operation.snapshot?.sender ?? ""
+    );
+    const claimed = await db.transaction(async (transaction) => {
+      await transaction
+        .select({ id: organization.id })
+        .from(organization)
+        .where(eq(organization.id, input.organizationId))
+        .for("update");
+      try {
+        if (operation.snapshot !== null) {
+          await assertOrganizationMailRecipientsNotSuppressed(
+            {
+              organizationId: input.organizationId,
+              recipients: [
+                ...operation.snapshot.to,
+                ...operation.snapshot.cc,
+                ...operation.snapshot.bcc,
+              ],
+            },
+            transaction
+          );
+        }
+      } catch (error) {
+        if (!(error instanceof OrganizationMailSendError)) {
+          throw error;
+        }
+        const [rejected] = await transaction
+          .update(organizationMailSendIdempotency)
+          .set({ status: "rejected", updatedAt: new Date() })
+          .where(
+            and(
+              eq(organizationMailSendIdempotency.id, operation.id),
+              eq(
+                organizationMailSendIdempotency.requestHash,
+                input.requestHash
+              ),
+              eq(organizationMailSendIdempotency.status, "prepared")
+            )
+          )
+          .returning({ id: organizationMailSendIdempotency.id });
+        return rejected === undefined ? undefined : error;
+      }
+      const [authorized] = await transaction
+        .update(organizationMailSendIdempotency)
+        .set({
+          attemptedAt: new Date(),
+          snapshot:
+            operation.snapshot?.kind === "mailbox" &&
+            input.snapshot.kind === "mailbox"
+              ? {
+                  ...operation.snapshot,
+                  actorUserId: input.snapshot.actorUserId,
+                }
+              : operation.snapshot,
+          status: "submitting",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(organizationMailSendIdempotency.id, operation.id),
+            eq(organizationMailSendIdempotency.requestHash, input.requestHash),
+            eq(organizationMailSendIdempotency.status, "prepared")
+          )
         )
-      )
-      .returning();
+        .returning();
+      return authorized;
+    });
+    if (claimed instanceof OrganizationMailSendError) {
+      throw claimed;
+    }
     if (claimed === undefined || claimed.snapshot === null) {
       throw new ORPCError("CONFLICT", {
         data: { deliveryUncertain: true },
@@ -335,7 +402,7 @@ export const sendPreparedMail = async (input: {
               .map((tag) => ({ Name: tag.name, Value: tag.value })),
             { Name: "quieter_send_id", Value: claimed.id },
           ],
-          FromEmailAddress: extractMailAddress(snapshot.sender),
+          FromEmailAddress: fromAddress,
           ReplyToAddresses: snapshot.replyTo,
         }),
         { abortSignal: AbortSignal.timeout(60_000) }

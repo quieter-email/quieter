@@ -80,6 +80,8 @@ Local development requires only the values needed by the paths you exercise. Imp
 - Polar: checkout and subscription flows
 - PostHog, Sentry, and logo.dev: optional integrations
 
+Interactive chat selects model families through OpenRouter's [latest aliases](https://openrouter.ai/docs/guides/routing/routers/latest-resolution), so releases update without redeploying. Flash Lite has no dedicated alias and is pinned to the current stable version in `chat-models.ts`; update it when a new release ships. `QuieterChatModel` chooses the Auto family; existing concrete chat identifiers normalize to that family. Explicit family choices stay within that family when a provider is unavailable.
+
 ## Running
 
 For the SST-managed local session, sign in to the development AWS profile and run:
@@ -109,12 +111,15 @@ vp run dev:pubsub
 vp run dev:trigger health
 vp run dev:trigger maintenance
 vp run dev:trigger mail-recovery
-vp run dev:trigger briefs
+vp run dev:trigger importance
+vp run dev:trigger actions
 ```
 
 The local Worker handles Gmail notifications, realtime updates, managed-mail fixtures, and maintenance in one process. Production deploys separate Workers. Local maintenance uses manual triggers, not an automatically running cron. The Pub/Sub bridge uses `gcloud auth print-access-token`, pulls one message at a time from its own subscription, extends the acknowledgment deadline during processing, and acknowledges only after the local Worker finishes.
 
-Daily Brief has a separate manual maintenance trigger. Enable it for a mailbox in the app, then use `vp run dev:trigger briefs` to process due editions and pending urgent updates. It uses the development model credentials and billing controls. See [Daily Brief](daily-brief.md) for the source limits, privacy rules, rollout checks, and a manual verification walkthrough. The trigger reads mail without changing Gmail watch ownership or provider data.
+Important classification has a manual maintenance trigger. Use `vp run dev:trigger importance` to process pending incoming mail with development model credentials and billing controls. See [Mail importance](mail-importance.md) for classification, manual overrides, and privacy rules. The trigger preserves Gmail watch ownership and provider data.
+
+Mailbox Actions use `vp run dev:trigger actions` to drain one queued incoming-mail or manual run. Review and activate a mailbox prompt first, then ingest fresh fixture mail. The command uses the same authorization, usage controls, and effect journal as scheduled maintenance. See [Action specifications](action-specifications.md#development-walkthrough) for exact account mentions, private results, draft review, and uncertain-effect recovery.
 
 Shared Gmail accounts default to `QUIETER_LOCAL_PROVIDER_MODE=observe` and `QUIETER_LOCAL_GMAIL_WATCH_OWNER=production`. Mail reads and AI results stored in `quieter_dev` work in this mode. Gmail, Calendar and Linear writes are rejected server-side. Auto-label classification is saved without applying labels. Write tests require a dedicated mailbox or a verified ownership handoff, plus the explicit Gmail account allowlist. Never start a competing consumer on the production subscription.
 
@@ -171,6 +176,8 @@ vp run dev:fixtures your-local-login@example.com
 The command creates a private fixture mailbox in `quieter_dev` and prints its localhost URL. Its reserved `.test` address has no DNS records and cannot receive Internet mail. The background Worker writes the original MIME message to Wrangler's native R2 simulation. Both local runtimes share `.wrangler/state`, so attachments remain available after a restart. No remote bucket or R2 credential is required. Running the command again restores the raw fixture without duplicating the message. If you erase local storage, run it again.
 
 The fixture endpoint requires the local Worker bearer token and rejects browser origins. Raw-message reads and deletes locally accept only the fixture storage namespace and `fixtures/` keys; copied production object references cannot reach remote storage.
+
+For public, synthetic rendering examples, run `vp run dev:fixtures your-local-login@example.com --rendering`. This seeds four stable messages covering table spacing, constrained widths, image dimensions, owned CID images, body typography and direction, quotations, and content/resource policy. Sign in with a local account and disable either demo-mailbox switch in Development settings to use the printed mailbox URL. The managed-mail preview persona uses `managed.preview@quieter.email`. Bump a fixture's `messageKey` when changing its content, then re-run the command and reload the page; ingestion preserves existing messages. See [mail rendering](mail-rendering.md) for the rendering boundary and manual checks.
 
 The old `dev:mail` and AWS package `dev` commands were removed because they evaluated cloud infrastructure. Local development must not create mail domains, DNS records, SES identities, Lambda functions, SNS topics or remote mail buckets. Real managed-mail domain changes and external sending are blocked in the local application.
 

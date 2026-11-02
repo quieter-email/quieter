@@ -4,6 +4,7 @@ import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
   mailbox,
+  mailMessageImportance,
   managedMailAttachment,
   managedMailLabel,
   managedMailMessage,
@@ -15,7 +16,11 @@ import type {
   ManagedMailMailboxState,
 } from "@quieter/database/schema";
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
-import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
+import type {
+  MailCommand,
+  MailMutationTarget,
+  MailMutationTargetResult,
+} from "@quieter/mail/data-plane";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import type {
   ListMessagesPageResult,
@@ -33,12 +38,14 @@ import {
   eq,
   inArray,
   isNotNull,
+  isNull,
   lt,
   ne,
   or,
   sql,
 } from "drizzle-orm";
 
+import { hydrateMailImportance } from "../../mail-importance";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
   getOrganizationMailDelivery,
@@ -125,6 +132,7 @@ const toMessageListItem = async (
     attachments?: MessageListItem["attachments"];
     inlineImages?: MessageListItem["inlineImages"];
     attachmentCount?: number;
+    attachmentNames?: string[];
     labelIds?: string[];
     threadLabelIds?: string[];
     threadMessageCount?: number;
@@ -162,6 +170,7 @@ const toMessageListItem = async (
   snippet: record.snippet ?? undefined,
   subject: record.subject ?? undefined,
   threadAttachmentCount: options.attachmentCount,
+  threadAttachmentNames: options.attachmentNames,
   threadId: record.threadId,
   threadLabelIds: options.threadLabelIds,
   threadMessageCount: options.threadMessageCount,
@@ -169,6 +178,13 @@ const toMessageListItem = async (
 });
 
 const getCategoryCondition = (category: MailboxCategory) => {
+  if (category === "important") {
+    return and(
+      eq(managedMailMessage.direction, "inbound"),
+      inArray(managedMailMessage.mailboxState, ["active", "archived"]),
+      sql`exists (select 1 from ${mailMessageImportance} i inner join ${managedMailMessage} m on m."mailboxId" = i."mailboxId" and m.id = i."messageId" where i."mailboxId" = ${managedMailMessage.mailboxId} and i."threadId" = ${managedMailMessage.threadId} and coalesce(i."manualImportant", i."aiImportant", false) and m.direction = 'inbound' and m."mailboxState" in ('active', 'archived'))`
+    );
+  }
   if (category === "inbox") {
     return and(
       eq(managedMailMessage.direction, "inbound"),
@@ -323,9 +339,15 @@ export const listManagedMessages = async (input: {
           db
             .select({
               attachmentCount: countDistinct(managedMailAttachment.id),
+              attachments: sql<
+                Pick<
+                  typeof managedMailAttachment.$inferSelect,
+                  "id" | "fileName"
+                >[]
+              >`coalesce(jsonb_agg(distinct jsonb_build_object('id', ${managedMailAttachment.id}, 'fileName', ${managedMailAttachment.fileName})) filter (where ${isNotNull(managedMailAttachment.id)}), '[]'::jsonb)`,
               labelIds: sql<
                 string[]
-              >`coalesce(array_agg(distinct ${managedMailMessageLabel.labelId}) filter (where ${isNotNull(managedMailMessageLabel.labelId)}), '{}')`,
+              >`coalesce(jsonb_agg(distinct ${managedMailMessageLabel.labelId}) filter (where ${isNotNull(managedMailMessageLabel.labelId)}), '[]'::jsonb)`,
               messageCount: countDistinct(managedMailMessage.id),
               threadId: managedMailMessage.threadId,
             })
@@ -336,7 +358,14 @@ export const listManagedMessages = async (input: {
             )
             .leftJoin(
               managedMailAttachment,
-              eq(managedMailMessage.id, managedMailAttachment.messageId)
+              and(
+                eq(managedMailMessage.id, managedMailAttachment.messageId),
+                or(
+                  eq(managedMailAttachment.inline, false),
+                  isNull(managedMailAttachment.contentId),
+                  eq(managedMailAttachment.contentId, "")
+                )
+              )
             )
             .where(
               and(
@@ -380,25 +409,33 @@ export const listManagedMessages = async (input: {
   const messageCountByThreadId = new Map(
     aggregates.map((record) => [record.threadId, record.messageCount])
   );
-  const attachmentCountByThreadId = new Map(
-    aggregates.map((record) => [record.threadId, record.attachmentCount])
+  const attachmentSummaryByThreadId = new Map(
+    aggregates.map((record) => [record.threadId, record])
   );
 
   return {
     historyId: String(selectedMailbox.contentRevision),
-    messages: await Promise.all(
-      pageRecords.map(
-        async (record) =>
-          await toMessageListItem(record, {
-            attachmentCount:
-              attachmentCountByThreadId.get(record.threadId) ?? 0,
-            labelIds: labelIdsByThreadId.get(record.threadId) ?? [],
-            threadLabelIds: [
-              ...(threadLabelIdsByThreadId.get(record.threadId) ?? []),
-            ],
-            threadMessageCount:
-              messageCountByThreadId.get(record.threadId) ?? 1,
-          })
+    messages: await hydrateMailImportance(
+      input.mailboxId,
+      await Promise.all(
+        pageRecords.map(
+          async (record) =>
+            await toMessageListItem(record, {
+              attachmentCount:
+                attachmentSummaryByThreadId.get(record.threadId)
+                  ?.attachmentCount ?? 0,
+              attachmentNames:
+                attachmentSummaryByThreadId
+                  .get(record.threadId)
+                  ?.attachments.map((attachment) => attachment.fileName) ?? [],
+              labelIds: labelIdsByThreadId.get(record.threadId) ?? [],
+              threadLabelIds: [
+                ...(threadLabelIdsByThreadId.get(record.threadId) ?? []),
+              ],
+              threadMessageCount:
+                messageCountByThreadId.get(record.threadId) ?? 1,
+            })
+        )
       )
     ),
     nextPageToken: (() => {
@@ -516,7 +553,10 @@ export const getManagedThread = async (input: {
     ...new Set(messages.flatMap((message) => message.labelIds ?? [])),
   ];
   return {
-    messages: messages.map((message) => ({ ...message, threadLabelIds })),
+    messages: await hydrateMailImportance(
+      input.mailboxId,
+      messages.map((message) => ({ ...message, threadLabelIds }))
+    ),
     snippet: messages.at(-1)?.snippet,
     subject: messages.find((message) => !!message.subject)?.subject,
     threadId: input.threadId,
@@ -584,8 +624,7 @@ const updateManagedMessageState = async (input: {
 }) => {
   await getAuthorizedManagedMailbox({
     mailboxId: input.mailboxId,
-    requiredRoles:
-      "mailboxState" in input.changes ? ["manager", "responder"] : undefined,
+    requiredRoles: ["manager", "responder"],
     userId: input.userId,
   });
   const { record, customLabels } = await db.transaction(async (tx) => {
@@ -642,7 +681,7 @@ const updateManagedMessageState = async (input: {
 };
 
 export const applyManagedMessageChanges = async (input: {
-  command: MailCommand;
+  command: Exclude<MailCommand, { kind: "set-importance" }>;
   mailboxId: string;
   targets: MailMutationTarget[];
   userId: string;
@@ -690,7 +729,7 @@ export const applyManagedMessageChanges = async (input: {
     const appliedMessageIds = [
       ...new Set(validTargets.flatMap((target) => target.messageIds)),
     ];
-    const targets = input.targets.map((target) => ({
+    const targets = input.targets.map((target): MailMutationTargetResult => ({
       status: validTargets.includes(target) ? "applied" : "failed",
       threadId: target.threadId,
     }));
@@ -808,8 +847,7 @@ const updateManagedThreadState = async (input: {
 }) => {
   await getAuthorizedManagedMailbox({
     mailboxId: input.mailboxId,
-    requiredRoles:
-      "mailboxState" in input.changes ? ["manager", "responder"] : undefined,
+    requiredRoles: ["manager", "responder"],
     userId: input.userId,
   });
   const stateCondition =

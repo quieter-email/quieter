@@ -1,0 +1,61 @@
+"use client";
+
+import { ArrowLeft01Icon, SidebarLeftIcon } from "@hugeicons/core-free-icons";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import type { ReactNode } from "react";
+
+const leadingIcons = {
+  back: { icon: ArrowLeft01Icon, label: "Back to list" },
+  sidebar: { icon: SidebarLeftIcon, label: "Open sidebar" },
+} as const;
+
+/**
+ * The single narrow-viewport header for every product surface: Mail, message
+ * detail, Compose, Chat, Snippets, and Settings.
+ */
+export const MobileHeader = ({
+  children,
+  className,
+  leading,
+  onLeadingClick,
+  title,
+}: {
+  children?: ReactNode;
+  className?: string;
+  leading: keyof typeof leadingIcons;
+  onLeadingClick: () => void;
+  title?: string;
+}) => {
+  const { icon, label } = leadingIcons[leading];
+
+  return (
+    <header
+      className={cn(
+        "flex min-h-12 shrink-0 items-center gap-2 px-2 lg:hidden",
+        className
+      )}
+    >
+      <IconButtonTooltip label={label}>
+        <Button
+          chrome="toolbar"
+          aria-label={label}
+          onClick={onLeadingClick}
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+        >
+          <Icon aria-hidden icon={icon} />
+        </Button>
+      </IconButtonTooltip>
+      {title === undefined || title === "" ? null : (
+        <p className="truncate text-body font-medium text-fg">{title}</p>
+      )}
+      {children === undefined ? null : (
+        <div className="ml-auto flex items-center gap-1">{children}</div>
+      )}
+    </header>
+  );
+};

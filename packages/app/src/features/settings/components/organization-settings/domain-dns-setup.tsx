@@ -1,0 +1,344 @@
+"use client";
+
+import {
+  Alert02Icon,
+  CheckmarkCircle01Icon,
+  Globe02Icon,
+  Loading03Icon,
+} from "@hugeicons/core-free-icons";
+import { RecordState } from "@quieter/app/features/settings/components/organization-settings/domain-status";
+import type {
+  getDomainVerificationStatus,
+  DomainStatusTone,
+  DomainDetail,
+  DomainDnsCheck,
+} from "@quieter/app/features/settings/components/organization-settings/domain-status";
+import { MutedActionButton } from "@quieter/app/features/settings/components/organization-settings/settings-row";
+import {
+  SettingsCard,
+  SettingsFieldRow,
+  SettingsRowText,
+  SettingsSection,
+  settingsSurfaceVariants,
+} from "@quieter/app/features/settings/components/settings-layout";
+import type { RouterOutputs } from "@quieter/orpc";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
+import { Surface, surfaceVariants } from "@quieter/ui/surface";
+import { toast } from "@quieter/ui/toast";
+
+const dnsTableColumns =
+  "grid grid-cols-[2.5rem_minmax(5.5rem,1fr)_minmax(9rem,2fr)_3rem_2rem_5.25rem] items-center gap-2";
+
+const copyDnsValue = async (value: string) => {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success(
+      <>
+        Copied{" "}
+        <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-caption font-normal break-all">
+          {value}
+        </code>
+      </>,
+      { id: `dns-copy:${value}` }
+    );
+  } catch {
+    toast.error("Could not copy to clipboard.");
+  }
+};
+
+const DnsCopyCell = ({ value }: { value: string }) => (
+  <Button
+    aria-label={`Copy ${value}`}
+    className="max-w-full min-w-0"
+    onClick={() => {
+      void copyDnsValue(value);
+    }}
+    size="xs"
+    title={`Copy ${value}`}
+    type="button"
+    variant="ghost"
+  >
+    <code className="block truncate font-mono text-caption">{value}</code>
+  </Button>
+);
+
+const getStatusIconTone = (tone: DomainStatusTone) => {
+  if (tone === "success") {
+    return "success";
+  }
+  if (tone === "error") {
+    return "destructive";
+  }
+  return "muted";
+};
+
+const getDnsRecordStatusMessage = (
+  check: { ok: boolean } | undefined,
+  required: boolean
+) => {
+  if (check?.ok === true) {
+    return "Verified";
+  }
+  if (required) {
+    return check === undefined ? "Pending" : "Fix";
+  }
+  return "Recommended";
+};
+
+const getDnsRecordStatusOk = (
+  check: { ok: boolean } | undefined,
+  required: boolean
+): boolean | null => {
+  if (check?.ok === true) {
+    return true;
+  }
+  if (required) {
+    return check?.ok ?? null;
+  }
+  return null;
+};
+
+const getStatusIcon = (tone: DomainStatusTone) => {
+  if (tone === "success") {
+    return CheckmarkCircle01Icon;
+  }
+  if (tone === "error") {
+    return Alert02Icon;
+  }
+  return Globe02Icon;
+};
+
+type DomainDnsRecord = DomainDetail["requiredDnsRecords"][number];
+
+type DomainConnectAvailability =
+  RouterOutputs["mailDomains"]["getDomainConnectAvailability"];
+
+export const DomainStatusSummary = ({
+  domain,
+  passingRecords,
+  sendingReady,
+  status,
+  totalRecords,
+}: {
+  domain: DomainDetail;
+  passingRecords: number;
+  sendingReady: boolean;
+  status: ReturnType<typeof getDomainVerificationStatus>;
+  totalRecords: number;
+}) => (
+  <SettingsCard>
+    <div
+      className={cn(
+        settingsSurfaceVariants({ variant: "padding" }),
+        "grid gap-4 @lg:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(7rem,0.7fr))] @lg:items-center"
+      )}
+    >
+      <SettingsRowText
+        title={
+          <span className="flex items-center gap-2">
+            <Icon
+              aria-hidden
+              tone={getStatusIconTone(status.tone)}
+              icon={getStatusIcon(status.tone)}
+            />
+            {status.label}
+          </span>
+        }
+      >
+        {status.description}
+      </SettingsRowText>
+      {[
+        ["DNS records", `${passingRecords}/${totalRecords}`],
+        ["Sending", sendingReady ? "Ready" : "Checking"],
+        ["Incoming mail", domain.mode === "send_only" ? "Off" : "Enabled"],
+      ].map(([label, value]) => (
+        <div key={label}>
+          <p className={settingsSurfaceVariants({ variant: "value" })}>
+            {label}
+          </p>
+          <p
+            className={cn(
+              "mt-1",
+              settingsSurfaceVariants({ variant: "title" })
+            )}
+          >
+            {value}
+          </p>
+        </div>
+      ))}
+    </div>
+  </SettingsCard>
+);
+
+const DomainConnectCard = ({
+  availability,
+  isPending,
+  manageReason,
+  onStart,
+  startPending,
+}: {
+  availability: DomainConnectAvailability | undefined;
+  isPending: boolean;
+  manageReason: string | null;
+  onStart: () => void;
+  startPending: boolean;
+}) => {
+  if (availability?.available !== true && !isPending) {
+    return null;
+  }
+
+  return (
+    <SettingsCard>
+      <SettingsFieldRow
+        action={
+          availability?.available === true &&
+          (manageReason === null ? (
+            <Button disabled={startPending} onClick={onStart} size="sm">
+              <Icon
+                aria-hidden
+                animation={startPending ? "spin" : undefined}
+                icon={startPending ? Loading03Icon : Globe02Icon}
+              />
+              Connect DNS
+            </Button>
+          ) : (
+            <MutedActionButton
+              icon={<Icon aria-hidden icon={Globe02Icon} />}
+              label="Connect DNS"
+              reason={manageReason}
+            />
+          ))
+        }
+        label={
+          availability?.available === true
+            ? `Connect with ${availability.provider.displayName}`
+            : "Checking your DNS provider…"
+        }
+        value={
+          availability?.available === true ? (
+            <>
+              Authorize the exact records, then quieter verifies DNS when you
+              return.
+            </>
+          ) : null
+        }
+      />
+    </SettingsCard>
+  );
+};
+
+const DomainDnsRecordsTable = ({
+  dnsChecks,
+  records,
+}: {
+  dnsChecks: DomainDnsCheck[];
+  records: DomainDnsRecord[];
+}) => (
+  <Surface padding="compact">
+    <div className="overflow-x-auto">
+      <table
+        aria-label="DNS records"
+        className="block w-full min-w-152 text-left"
+      >
+        <thead className="block">
+          <tr
+            className={cn(
+              dnsTableColumns,
+              surfaceVariants({ chrome: "inset", variant: "detail" }),
+              "text-caption font-medium text-muted-fg [&_th]:font-medium"
+            )}
+          >
+            <th scope="col">Type</th>
+            <th scope="col">Host</th>
+            <th scope="col">Value</th>
+            <th scope="col">Priority</th>
+            <th scope="col">TTL</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody className="block">
+          {records.map((record) => {
+            const check = dnsChecks.find(
+              (candidate) =>
+                candidate.recordName === record.name &&
+                candidate.purpose === record.purpose
+            );
+            const priority =
+              record.priority === null || record.priority === undefined
+                ? null
+                : String(record.priority);
+            return (
+              <tr
+                className={cn(dnsTableColumns, "px-4 py-3")}
+                key={`${record.type}:${record.name}:${record.value}`}
+              >
+                <td className="min-w-0">
+                  <DnsCopyCell value={record.type} />
+                </td>
+                <td className="min-w-0">
+                  <DnsCopyCell value={record.name} />
+                </td>
+                <td className="min-w-0">
+                  <DnsCopyCell value={record.value} />
+                </td>
+                <td className="min-w-0">
+                  {priority === null ? (
+                    <span className="px-1.5 font-mono text-caption text-muted-fg">
+                      -
+                    </span>
+                  ) : (
+                    <DnsCopyCell value={priority} />
+                  )}
+                </td>
+                <td className="min-w-0 px-1.5 text-caption text-fg">Auto</td>
+                <td>
+                  <RecordState
+                    message={getDnsRecordStatusMessage(check, record.required)}
+                    ok={getDnsRecordStatusOk(check, record.required)}
+                  />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </Surface>
+);
+
+export const DomainDnsSetupSection = ({
+  availability,
+  dnsChecks,
+  isDomainConnectPending,
+  manageReason,
+  onStartDomainConnect,
+  startDomainConnectPending,
+  domain,
+}: {
+  availability: DomainConnectAvailability | undefined;
+  dnsChecks: DomainDnsCheck[];
+  domain: DomainDetail;
+  isDomainConnectPending: boolean;
+  manageReason: string | null;
+  onStartDomainConnect: () => void;
+  startDomainConnectPending: boolean;
+}) => (
+  <SettingsSection
+    description="Use one-click setup when your provider confirms support, or add every record manually."
+    title="DNS setup"
+  >
+    <DomainConnectCard
+      availability={availability}
+      isPending={isDomainConnectPending}
+      manageReason={manageReason}
+      onStart={onStartDomainConnect}
+      startPending={startDomainConnectPending}
+    />
+    <DomainDnsRecordsTable
+      dnsChecks={dnsChecks}
+      records={domain.requiredDnsRecords}
+    />
+  </SettingsSection>
+);

@@ -27,7 +27,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       BETTER_AUTH_TRUSTED_ORIGINS: runtimeEnv.BETTER_AUTH_TRUSTED_ORIGINS,
       BETTER_AUTH_URL: runtimeEnv.BETTER_AUTH_URL,
       CLOUDFLARE_ACCOUNT_ID: runtimeEnv.CLOUDFLARE_ACCOUNT_ID,
-      CLOUDFLARE_AI_API_TOKEN: runtimeEnv.CLOUDFLARE_AI_API_TOKEN,
       CONNECTOR_TOKEN_ENCRYPTION_KEY: runtimeEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY,
       DATABASE_MIGRATION_URL: runtimeEnv.DATABASE_MIGRATION_URL,
       DATABASE_URL: runtimeEnv.DATABASE_URL,
@@ -81,6 +80,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS:
         runtimeEnv.QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS,
       QUIETER_LOCAL_LINEAR_WRITES: runtimeEnv.QUIETER_LOCAL_LINEAR_WRITES,
+      QUIETER_LOCAL_PLANETSCALE_HOST: runtimeEnv.QUIETER_LOCAL_PLANETSCALE_HOST,
       QUIETER_LOCAL_PROVIDER_MODE: runtimeEnv.QUIETER_LOCAL_PROVIDER_MODE,
       QUIETER_LOCAL_WORKER_TOKEN: runtimeEnv.QUIETER_LOCAL_WORKER_TOKEN,
       QUIETER_MAIL_API_KEY: runtimeEnv.QUIETER_MAIL_API_KEY,
@@ -119,7 +119,6 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       BETTER_AUTH_TRUSTED_ORIGINS: optionalString,
       BETTER_AUTH_URL: optionalHttpUrl,
       CLOUDFLARE_ACCOUNT_ID: optionalString,
-      CLOUDFLARE_AI_API_TOKEN: optionalString,
       CONNECTOR_TOKEN_ENCRYPTION_KEY: optionalString,
       DATABASE_MIGRATION_URL: optionalUrl,
       DATABASE_URL: optionalUrl,
@@ -168,6 +167,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
         .default("production"),
       QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS: optionalString,
       QUIETER_LOCAL_LINEAR_WRITES: optionalBooleanString,
+      QUIETER_LOCAL_PLANETSCALE_HOST: optionalString,
       QUIETER_LOCAL_PROVIDER_MODE: z
         .enum(["observe", "write"])
         .default("observe"),

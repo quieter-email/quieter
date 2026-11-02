@@ -1,11 +1,17 @@
 "use client";
 
-import { cva } from "class-variance-authority";
 import type { ComponentPropsWithoutRef } from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
 
 import { cn } from "../../lib/cn";
+import { ActionFooter } from "./action-footer";
+import { buttonFooterClassName, buttonVariants } from "./button";
 import type { ButtonProps } from "./button";
+import {
+  overlayDescriptionClassName,
+  overlayTitleClassName,
+  overlayTriggerClassName,
+} from "./overlay-chrome";
 
 export const Drawer = DrawerPrimitive.Root;
 export const DrawerPortal = DrawerPrimitive.Portal;
@@ -15,11 +21,7 @@ export const DrawerTrigger = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Trigger>) => (
   <DrawerPrimitive.Trigger
-    className={cn(
-      "squircle",
-      className,
-      "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
-    )}
+    className={cn("squircle", className, overlayTriggerClassName)}
     {...props}
   />
 );
@@ -39,7 +41,10 @@ export const DrawerHandle = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Handle>) => (
   <DrawerPrimitive.Handle
-    className={cn("mx-auto my-2 h-1.5 w-12 rounded-full bg-border", className)}
+    className={cn(
+      "mx-auto my-2 h-1.5 w-12 rounded-full bg-border not-squircle",
+      className
+    )}
     {...props}
   />
 );
@@ -56,11 +61,11 @@ export const DrawerContent = ({
     <DrawerOverlay />
     <DrawerPrimitive.Content
       className={cn(
-        "fixed z-50 flex flex-col overflow-hidden rounded-xl border bg-bg-surface text-popover-fg shadow-lg",
-        "data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=bottom]:bottom-0 data-[vaul-drawer-direction=bottom]:max-h-[96vh] data-[vaul-drawer-direction=bottom]:rounded-t-xl data-[vaul-drawer-direction=bottom]:border-t",
-        "data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:max-h-[96vh] data-[vaul-drawer-direction=top]:rounded-b-xl data-[vaul-drawer-direction=top]:border-b",
-        "data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:h-full data-[vaul-drawer-direction=left]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=left]:rounded-r-2xl data-[vaul-drawer-direction=left]:border-r",
-        "data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=right]:rounded-l-2xl data-[vaul-drawer-direction=right]:border-l",
+        "fixed z-50 flex flex-col overflow-hidden rounded-panel border border-transparent bg-panel text-popover-fg shadow-lg",
+        "data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=bottom]:bottom-0 data-[vaul-drawer-direction=bottom]:max-h-[96vh] data-[vaul-drawer-direction=bottom]:rounded-t-panel data-[vaul-drawer-direction=bottom]:border-t",
+        "data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:max-h-[96vh] data-[vaul-drawer-direction=top]:rounded-b-panel data-[vaul-drawer-direction=top]:border-b",
+        "data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:h-full data-[vaul-drawer-direction=left]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=left]:rounded-r-panel data-[vaul-drawer-direction=left]:border-r",
+        "data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=right]:rounded-l-panel data-[vaul-drawer-direction=right]:border-l",
         className
       )}
       {...props}
@@ -75,25 +80,25 @@ export const DrawerHeader = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<"div">) => (
-  <div className={cn("border-b px-5 py-4", className)} {...props} />
+  <div
+    className={cn("m-0.5 rounded-section bg-section p-3.5", className)}
+    {...props}
+  />
 );
 
 export const DrawerBody = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<"div">) => (
-  <div className={cn("flex-1 px-5 py-4", className)} {...props} />
+  <div className={cn("flex-1 p-4", className)} {...props} />
 );
 
 export const DrawerFooter = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<"div">) => (
-  <div
-    className={cn(
-      "flex items-center justify-end gap-2 border-t px-5 py-4",
-      className
-    )}
+  <ActionFooter
+    className={cn("mt-auto border-t border-transparent p-4", className)}
     {...props}
   />
 );
@@ -103,7 +108,7 @@ export const DrawerTitle = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Title>) => (
   <DrawerPrimitive.Title
-    className={cn("text-body-lg font-semibold tracking-tight", className)}
+    className={cn(overlayTitleClassName, className)}
     {...props}
   />
 );
@@ -113,46 +118,29 @@ export const DrawerDescription = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Description>) => (
   <DrawerPrimitive.Description
-    className={cn("mt-2 text-body text-muted-fg", className)}
+    className={cn(overlayDescriptionClassName, className)}
     {...props}
   />
 );
 
-const drawerCloseButtonVariants = cva(
-  "squircle inline-flex min-w-20 shrink-0 items-center justify-center gap-2 rounded-md px-3.5 text-body-sm font-medium whitespace-nowrap transition-transform duration-100 ease-out select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
-  {
-    defaultVariants: {
-      variant: "outline",
-    },
-    variants: {
-      variant: {
-        default:
-          "h-8 bg-primary text-primary-fg shadow-sm hover:bg-primary/90 active:bg-primary/85",
-        destructive:
-          "h-8 bg-destructive text-destructive-fg shadow-sm hover:bg-destructive/90 active:bg-destructive/85",
-        ghost:
-          "h-8 bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg",
-        outline:
-          "h-8 border border-border bg-bg-surface text-fg shadow-sm hover:bg-muted active:bg-muted/80",
-      },
-    },
-  }
-);
-
 export const DrawerCloseButton = ({
   className,
-  variant = "outline",
+  variant = "secondary",
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Close> & {
   // Close buttons support the core button looks; card, chip, and the other
   // special-purpose treatments do not belong in dialog footers.
   variant?: Exclude<
     ButtonProps["variant"],
-    "card" | "chip" | "option" | "overlay" | "result" | "secondary"
+    "card" | "chip" | "option" | "overlay" | "result"
   >;
 }) => (
   <DrawerPrimitive.Close
-    className={cn(drawerCloseButtonVariants({ variant }), className)}
+    className={cn(
+      buttonVariants({ variant }),
+      buttonFooterClassName,
+      className
+    )}
     {...props}
   />
 );

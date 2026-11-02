@@ -5,6 +5,8 @@ import {
   managedMailMessage,
 } from "@quieter/database/schema";
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
+import { extractMessageIds } from "@quieter/mail/message-id";
+import { parseRawMailSender } from "@quieter/mail/raw-message";
 import { and, eq } from "drizzle-orm";
 
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
@@ -94,10 +96,11 @@ export const getManagedDraft = async (input: {
       draftAnchor?.seededBy !== "forward" && message.inReplyTo
         ? {
             messageHeaderId: message.inReplyTo ?? undefined,
-            references: message.references?.match(/<[^>]+>/gu) ?? [],
+            references: extractMessageIds(message.references),
             threadId: message.threadId,
           }
         : null,
+    senderName: parseRawMailSender(message.from)?.name || undefined,
     subject: message.subject ?? "",
   };
 };

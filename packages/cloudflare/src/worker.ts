@@ -1,10 +1,6 @@
 import { handleMailUpdates } from "./mail-updates";
 import { withSentryReporting } from "./worker-runtime";
-import {
-  handleLiveMailboxRequest,
-  handlePubSub,
-  requestErrorResponse,
-} from "./worker-utils";
+import { handlePubSub, requestErrorResponse } from "./worker-utils";
 
 export { GmailLiveSyncMailboxV2 } from "./gmail-live-sync-mailbox";
 export { signaturesMatch } from "./worker-utils";
@@ -15,9 +11,6 @@ export default withSentryReporting({
     try {
       if (route.startsWith("/mail/")) {
         return await handleMailUpdates(request, env);
-      }
-      if (route === "/gmail/live") {
-        return await handleLiveMailboxRequest(request, env);
       }
       if (route === "/gmail/pubsub" && request.method === "POST") {
         return await handlePubSub(request, env);

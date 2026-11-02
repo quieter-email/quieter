@@ -1,12 +1,26 @@
 import { controlOperations } from "@quieter/mail/control";
+import {
+  API_COMPATIBILITY_DATE,
+  API_VERSION_HEADER,
+  CONTROL_API_PATH,
+  CONTROL_MCP_API_PATH,
+} from "@quieter/mail/public-api";
 import { z } from "zod";
 
+const compatibilityDateParameter = {
+  in: "header",
+  name: API_VERSION_HEADER,
+  required: true,
+  schema: { const: API_COMPATIBILITY_DATE, type: "string" },
+};
+
 export const controlOpenApiPaths = {
-  "/api/v1/control": {
+  [CONTROL_API_PATH]: {
     post: {
       description:
         "Organization-bound audience, template, and campaign operations. The API key must have the operation's explicit permission. Organization identity comes from the authenticated key. Transactional-only keys have no control access. All operations reuse the app's authorization, validation, consent, suppression, and history services.",
       operationId: "controlOperation",
+      parameters: [compatibilityDateParameter],
       requestBody: {
         content: {
           "application/json": {
@@ -64,10 +78,11 @@ export const controlOpenApiPaths = {
       summary: "Manage audiences, templates, and campaigns",
     },
   },
-  "/api/v1/control/mcp": {
+  [CONTROL_MCP_API_PATH]: {
     post: {
       description:
-        "Streamable HTTP MCP with tools discovered from the authenticated key's audience, template, and campaign permissions. Uses the same operation contracts as /api/v1/control.",
+        "Streamable HTTP MCP with tools discovered from the authenticated key's audience, template, and campaign permissions. Uses the same operation contracts as /api/control.",
+      parameters: [compatibilityDateParameter],
       responses: {
         "200": { description: "MCP response." },
         "401": { description: "Invalid API key." },

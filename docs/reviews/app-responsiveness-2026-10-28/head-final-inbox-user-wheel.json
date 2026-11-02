@@ -1,0 +1,142 @@
+{
+  "results": [
+    {
+      "delta": 120,
+      "before": {
+        "query": {
+          "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+          "key": ["messages", "demo:mailbox", "inbox", ""],
+          "pages": 27,
+          "pageSizes": [
+            15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+            15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+          ],
+          "records": 393,
+          "threads": 360,
+          "fetchStatus": "idle"
+        },
+        "width": 1006,
+        "scrollTop": 7217,
+        "scrollHeight": 17352,
+        "rowHeights": [48],
+        "rendered": 42,
+        "anchor": {
+          "id": "release-inbox-0150",
+          "index": 150,
+          "offset": 17
+        },
+        "selected": ["release-inbox-0150"],
+        "search": null,
+        "assistant": {
+          "width": 332.796875,
+          "x": 1280
+        }
+      },
+      "after": {
+        "query": {
+          "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+          "key": ["messages", "demo:mailbox", "inbox", ""],
+          "pages": 27,
+          "pageSizes": [
+            15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+            15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+          ],
+          "records": 393,
+          "threads": 360,
+          "fetchStatus": "idle"
+        },
+        "width": 673,
+        "scrollTop": 10357,
+        "scrollHeight": 24552,
+        "rowHeights": [68],
+        "rendered": 37,
+        "anchor": {
+          "id": "release-inbox-0152",
+          "index": 152,
+          "offset": 21
+        },
+        "selected": ["release-inbox-0150"],
+        "search": null,
+        "assistant": {
+          "width": 332.796875,
+          "x": 947.203125
+        }
+      },
+      "activeAtWheel": true
+    },
+    {
+      "delta": -120,
+      "before": {
+        "query": {
+          "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+          "key": ["messages", "demo:mailbox", "inbox", ""],
+          "pages": 27,
+          "pageSizes": [
+            15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+            15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+          ],
+          "records": 393,
+          "threads": 360,
+          "fetchStatus": "idle"
+        },
+        "width": 673,
+        "scrollTop": 10357,
+        "scrollHeight": 24552,
+        "rowHeights": [68],
+        "rendered": 37,
+        "anchor": {
+          "id": "release-inbox-0152",
+          "index": 152,
+          "offset": 21
+        },
+        "selected": ["release-inbox-0150"],
+        "search": null,
+        "assistant": {
+          "width": 332.796875,
+          "x": 947.203125
+        }
+      },
+      "after": {
+        "query": {
+          "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+          "key": ["messages", "demo:mailbox", "inbox", ""],
+          "pages": 27,
+          "pageSizes": [
+            15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+            15, 15, 15, 15, 15, 15, 15, 15, 15, 3
+          ],
+          "records": 393,
+          "threads": 360,
+          "fetchStatus": "idle"
+        },
+        "width": 1006,
+        "scrollTop": 7177,
+        "scrollHeight": 17352,
+        "rowHeights": [48],
+        "rendered": 42,
+        "anchor": {
+          "id": "release-inbox-0149",
+          "index": 149,
+          "offset": 25
+        },
+        "selected": ["release-inbox-0150"],
+        "search": null,
+        "assistant": {
+          "width": 332.796875,
+          "x": 1280
+        }
+      },
+      "activeAtWheel": true
+    }
+  ],
+  "events": [
+    {
+      "trusted": true,
+      "delta": 120
+    },
+    {
+      "trusted": true,
+      "delta": -120
+    }
+  ]
+}

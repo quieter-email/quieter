@@ -1,0 +1,251 @@
+{
+  "baseline": [
+    {
+      "activation": {
+        "paintMs": 911,
+        "readyMs": 344.10000002384186,
+        "shellMs": 46.40000003576279,
+        "start": 6452.399999976158
+      },
+      "inputValue": "",
+      "longTasks": [
+        {
+          "duration": 566,
+          "start": 6796.599999964237
+        }
+      ],
+      "resources": [
+        {
+          "bytes": 10202,
+          "duration": 6.400000035762787,
+          "name": "snippet-workspace-BnoMFw8Z.js",
+          "start": 6443.099999964237
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "paintMs": 869.5,
+        "readyMs": 334.10000002384186,
+        "shellMs": 35.69999998807907,
+        "start": 6374.5
+      },
+      "inputValue": "",
+      "longTasks": [
+        {
+          "duration": 534,
+          "start": 6708.699999988079
+        }
+      ],
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 7.199999988079071,
+          "name": "snippet-workspace-BnoMFw8Z.js",
+          "start": 6366.5
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "paintMs": 940.4000000357628,
+        "readyMs": 334.19999998807907,
+        "shellMs": 36.10000002384186,
+        "start": 6424.199999988079
+      },
+      "inputValue": "",
+      "longTasks": [
+        {
+          "duration": 605,
+          "start": 6758.5
+        }
+      ],
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 8,
+          "name": "snippet-workspace-BnoMFw8Z.js",
+          "start": 6415.600000023842
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "paintMs": 935.1999999880792,
+        "readyMs": 335.19999998807907,
+        "shellMs": 37.19999998807907,
+        "start": 6543.199999988079
+      },
+      "inputValue": "",
+      "longTasks": [
+        {
+          "duration": 598,
+          "start": 6878.5
+        }
+      ],
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 6.400000035762787,
+          "name": "snippet-workspace-BnoMFw8Z.js",
+          "start": 6533.899999976158
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "paintMs": 892.3999999761581,
+        "readyMs": 344.5999999642372,
+        "shellMs": 44.80000001192093,
+        "start": 6634.699999988079
+      },
+      "inputValue": "",
+      "longTasks": [
+        {
+          "duration": 546,
+          "start": 6979.5
+        }
+      ],
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 9.099999964237211,
+          "name": "snippet-workspace-BnoMFw8Z.js",
+          "start": 6626.5
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    }
+  ],
+  "head": [
+    {
+      "activation": {
+        "paintMs": 49.09999996423721,
+        "readyMs": 48.39999997615814,
+        "shellMs": 23.19999998807907,
+        "start": 3855.800000011921
+      },
+      "inputValue": "",
+      "longTasks": [],
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 7.800000011920929,
+          "name": "snippet-workspace-CF3-Hy-E.js",
+          "start": 3846
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "paintMs": 48.80000001192093,
+        "readyMs": 48.19999998807907,
+        "shellMs": 23.80000001192093,
+        "start": 3750.599999964237
+      },
+      "inputValue": "",
+      "longTasks": [],
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 8.399999976158142,
+          "name": "snippet-workspace-CF3-Hy-E.js",
+          "start": 3740.699999988079
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "paintMs": 47.59999996423721,
+        "readyMs": 46.89999997615814,
+        "shellMs": 21.099999964237213,
+        "start": 3769.800000011921
+      },
+      "inputValue": "",
+      "longTasks": [],
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 5.800000011920929,
+          "name": "snippet-workspace-CF3-Hy-E.js",
+          "start": 3760.699999988079
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "paintMs": 60.19999998807907,
+        "readyMs": 59.39999997615814,
+        "shellMs": 27.399999976158146,
+        "start": 3916.5
+      },
+      "inputValue": "",
+      "longTasks": [],
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 7.400000035762787,
+          "name": "snippet-workspace-CF3-Hy-E.js",
+          "start": 3899.099999964237
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "paintMs": 76.90000003576279,
+        "readyMs": 75,
+        "shellMs": 19.900000035762787,
+        "start": 3797.699999988079
+      },
+      "inputValue": "",
+      "longTasks": [],
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 9,
+          "name": "snippet-workspace-CF3-Hy-E.js",
+          "start": 3785.900000035763
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    }
+  ]
+}

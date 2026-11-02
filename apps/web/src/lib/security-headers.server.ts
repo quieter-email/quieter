@@ -32,7 +32,10 @@ export const withSecurityHeaders = (response: Response) => {
       "style-src 'self' 'unsafe-inline' https:",
     ].join("; ")
   );
-  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  headers.set(
+    "Permissions-Policy",
+    "camera=(), microphone=(self), geolocation=()"
+  );
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "DENY");

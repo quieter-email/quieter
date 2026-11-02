@@ -1,0 +1,336 @@
+"use client";
+
+import { MoreVerticalIcon } from "@hugeicons/core-free-icons";
+import { applyMailboxSearchPatch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
+import {
+  SIDEBAR_LABEL_VISIBILITY_EVENT,
+  computeEffectiveHiddenLabelIds,
+  createHiddenLabelState,
+  readHiddenLabelIds,
+  reduceHiddenLabelState,
+} from "@quieter/app/features/message-labels/domain/sidebar-label-visibility";
+import { serializeStructuredSearchState } from "@quieter/app/features/message-search/components/message-list-search/message-list-search-utils";
+import {
+  getUserLabels,
+  normalizeLabelSelectionKey,
+  parseStructuredSearchQuery,
+} from "@quieter/app/features/message-search/state/message-list-search-state";
+import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
+import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
+import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
+import { managedLabelCountsQueryOptions } from "@quieter/app/lib/managed-mailbox-organization-query";
+import { mailboxSearchSchema } from "@quieter/app/route-search";
+import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
+import { ColorSwatch } from "@quieter/ui/color-swatch";
+import { Icon } from "@quieter/ui/icon";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import type { ReactNode } from "react";
+import { useEffect, useReducer } from "react";
+
+type SidebarLabelNavProps = {
+  animateEntrance: boolean;
+  canManage: boolean;
+  embedded: boolean;
+  mailboxId: string | null;
+  mailboxProvider: "gmail" | "managed";
+  onManageLabels: () => void;
+  onRequestClose?: () => void;
+  onSearch: (query: string) => void;
+  searchQuery: string;
+};
+
+const ManagedLabelColorDot = ({
+  className,
+  color,
+}: {
+  className?: string;
+  color: MailboxLabel["color"] | null | undefined;
+}) => (
+  <ColorSwatch
+    className={className}
+    color={
+      color?.startsWith("#") === true ? color : `var(--q-${color ?? "gray"})`
+    }
+  />
+);
+
+const SidebarLabelEntrance = ({
+  animateEntrance,
+  children,
+  index,
+}: {
+  animateEntrance: boolean;
+  children: ReactNode;
+  index: number;
+}) => (
+  <SidebarEntrance
+    animateEntrance={animateEntrance}
+    className="w-full"
+    index={index}
+  >
+    {children}
+  </SidebarEntrance>
+);
+
+const updateLabelFilter = (
+  searchQuery: string,
+  labelName: string,
+  enabled: boolean
+) => {
+  const state = parseStructuredSearchQuery(searchQuery);
+  const labelKey = normalizeLabelSelectionKey(labelName);
+  const filters = state.filters.filter(
+    (filter) =>
+      filter.type !== "label" ||
+      normalizeLabelSelectionKey(filter.value) !== labelKey
+  );
+
+  return serializeStructuredSearchState({
+    ...state,
+    filters: enabled
+      ? [...filters, { type: "label", value: labelName }]
+      : filters,
+  });
+};
+
+const isNonemptyMailboxId = (
+  mailboxId: string | null | undefined
+): mailboxId is string => (mailboxId?.trim() ?? "") !== "";
+
+export const SidebarLabelNav = ({
+  animateEntrance,
+  canManage,
+  embedded,
+  mailboxId,
+  mailboxProvider,
+  onManageLabels,
+  onRequestClose,
+  onSearch,
+  searchQuery,
+}: SidebarLabelNavProps) => {
+  const shouldAnimateEntrance = animateEntrance;
+  const [hiddenLabelState, updateHiddenLabelState] = useReducer(
+    reduceHiddenLabelState,
+    mailboxId,
+    createHiddenLabelState
+  );
+  const {
+    data: labels,
+    isError: areLabelsError,
+    isPending: areLabelsPending,
+  } = useQuery(
+    labelsQueryOptions(mailboxId ?? "", isNonemptyMailboxId(mailboxId))
+  );
+  const labelsUnavailable = areLabelsError && labels === undefined;
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!isNonemptyMailboxId(mailboxId)) {
+        return;
+      }
+      updateHiddenLabelState({
+        mailboxId,
+        updater: () => readHiddenLabelIds(mailboxId),
+      });
+    };
+    window.addEventListener(
+      SIDEBAR_LABEL_VISIBILITY_EVENT,
+      handleVisibilityChange
+    );
+    return () => {
+      window.removeEventListener(
+        SIDEBAR_LABEL_VISIBILITY_EVENT,
+        handleVisibilityChange
+      );
+    };
+  }, [mailboxId]);
+
+  const { data: managedLabelCounts = [] } = useQuery(
+    managedLabelCountsQueryOptions(
+      mailboxId ?? "",
+      mailboxProvider === "managed" && isNonemptyMailboxId(mailboxId)
+    )
+  );
+  const managedLabelCountById = new Map(
+    managedLabelCounts.map((record) => [record.labelId, record.count])
+  );
+  const userLabels = getUserLabels(labels ?? []);
+  const hiddenLabelIds =
+    hiddenLabelState.mailboxId === mailboxId
+      ? hiddenLabelState.value
+      : readHiddenLabelIds(mailboxId);
+  const effectiveHiddenLabelIds = computeEffectiveHiddenLabelIds(
+    mailboxProvider,
+    userLabels,
+    hiddenLabelIds
+  );
+  const visibleUserLabels = userLabels.filter(
+    (label) => !effectiveHiddenLabelIds.has(label.id)
+  );
+  const selectedLabelKeys = new Set(
+    parseStructuredSearchQuery(searchQuery).filters.flatMap((filter) =>
+      filter.type === "label" ? [normalizeLabelSelectionKey(filter.value)] : []
+    )
+  );
+  const labelTitle = "Labels";
+  const labelNounPlural = "labels";
+
+  const renderLabelNavContent = (): ReactNode => {
+    if (areLabelsPending) {
+      return (
+        <SidebarEntrance
+          animateEntrance={shouldAnimateEntrance}
+          className="px-2 py-1 text-caption text-muted-fg"
+          index={9}
+        >
+          Loading {labelNounPlural}…
+        </SidebarEntrance>
+      );
+    }
+    if (labelsUnavailable) {
+      return (
+        <SidebarEntrance
+          animateEntrance={shouldAnimateEntrance}
+          className="px-2 py-1 text-caption text-destructive"
+          index={9}
+        >
+          Could not load {labelNounPlural}.
+        </SidebarEntrance>
+      );
+    }
+    if (visibleUserLabels.length === 0) {
+      return (
+        <SidebarEntrance
+          animateEntrance={shouldAnimateEntrance}
+          className="px-2 py-1 text-caption text-muted-fg"
+          index={9}
+        >
+          No {labelNounPlural} shown.
+        </SidebarEntrance>
+      );
+    }
+    return visibleUserLabels.map((label, index) => {
+      const isActive =
+        selectedLabelKeys.has(normalizeLabelSelectionKey(label.id)) ||
+        selectedLabelKeys.has(normalizeLabelSelectionKey(label.name));
+      const nextQuery = updateLabelFilter(
+        searchQuery,
+        selectedLabelKeys.has(normalizeLabelSelectionKey(label.id))
+          ? label.id
+          : label.name,
+        !isActive
+      );
+
+      return (
+        <SidebarLabelEntrance
+          key={label.id}
+          animateEntrance={shouldAnimateEntrance}
+          index={index + 9}
+        >
+          <SidebarMailboxNavItem
+            active={isActive}
+            aria-current={isActive ? "page" : undefined}
+            // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom label-row spacing.
+            className={cn(
+              "min-w-0 justify-start text-left text-caption font-normal squircle",
+              {
+                "text-fg": isActive,
+                "text-muted-fg": !isActive,
+              }
+            )}
+            // oxlint-enable shadcn/no-restyle
+            mailboxSearch={
+              embedded
+                ? undefined
+                : {
+                    mailboxId,
+                    messageId: null,
+                    query: nextQuery,
+                    workspace: null,
+                  }
+            }
+            onClick={() => {
+              if (embedded) {
+                onSearch(nextQuery);
+              }
+              onRequestClose?.();
+            }}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <ManagedLabelColorDot color={label.color} />
+            <span className="min-w-0 truncate">{label.name}</span>
+            {mailboxProvider === "managed" ? (
+              <span className="ml-auto text-micro text-muted-fg tabular-nums">
+                {managedLabelCountById.get(label.id) ?? 0}
+              </span>
+            ) : null}
+          </SidebarMailboxNavItem>
+        </SidebarLabelEntrance>
+      );
+    });
+  };
+
+  return (
+    <section className="mt-4">
+      <SidebarEntrance
+        animateEntrance={shouldAnimateEntrance}
+        className="mb-1 flex items-center justify-between px-2"
+        index={8}
+      >
+        <p className="text-caption font-medium text-muted-fg">{labelTitle}</p>
+        {canManage && (
+          <IconButtonTooltip label={`Manage ${labelNounPlural}`}>
+            <Button
+              aria-label={`Manage ${labelNounPlural}`}
+              nativeButton={embedded}
+              onClick={() => {
+                if (embedded) {
+                  onManageLabels();
+                }
+                onRequestClose?.();
+              }}
+              render={
+                embedded ? undefined : (
+                  <Link
+                    replace
+                    resetScroll={false}
+                    search={(previous) =>
+                      applyMailboxSearchPatch(
+                        mailboxSearchSchema.parse(previous),
+                        {
+                          mailbox: "inbox",
+                          mailboxId,
+                          messageId: null,
+                          query: null,
+                          view: "labels",
+                          workspace: null,
+                        }
+                      )
+                    }
+                    to="/"
+                  />
+                )
+              }
+              role={embedded ? "button" : "link"}
+              size="icon-xs"
+              type="button"
+              variant="ghost"
+            >
+              <Icon aria-hidden size={14} icon={MoreVerticalIcon} />
+            </Button>
+          </IconButtonTooltip>
+        )}
+      </SidebarEntrance>
+
+      <nav aria-label={labelTitle} className="flex flex-col">
+        {renderLabelNavContent()}
+      </nav>
+    </section>
+  );
+};

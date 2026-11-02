@@ -74,7 +74,9 @@ export const normalizeExpiredChatParts = (
     ) {
       return false;
     }
-    const foreground = foregroundSnapshotSchema.safeParse(part.foreground);
+    const foreground = foregroundSnapshotSchema
+      .strip()
+      .safeParse(part.foreground);
     return !foreground.success || foreground.data.expiresAt <= now;
   });
   return hasExpiredPendingPart ? cancelForegroundExchangeParts(parts) : parts;

@@ -2,25 +2,32 @@ import { randomUUID } from "node:crypto";
 
 import { db } from "@quieter/database/client";
 import {
+  aiMemoryScopeConfig,
+  gmailCapturedMessage,
   gmailLabel,
   mailAutoLabelFeedback,
   managedMailLabel,
   managedMailMessage,
-  mailbox,
+  user,
 } from "@quieter/database/schema";
 import type {
   MailAutoLabelFeedbackSignal,
   PersistedMailboxProvider,
 } from "@quieter/database/schema";
+import type { CapturedMailSnapshot } from "@quieter/mail/capture";
+import { extractMailAddress } from "@quieter/mail/compose/schema";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
-import { and, count, desc, eq, inArray, max, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { z } from "zod";
 
 import {
-  recordAndRefreshAiMemory,
-  replaceMailboxFeedbackMemories,
+  getPersonalAiMemoryScopeConfig,
+  learnAiMemoryFromFeedback,
+  replaceAiMemoryFeedback,
 } from "../ai-memory";
+import { assertAccessibleMailbox } from "../mailbox/service";
 
 const SYSTEM_LABEL_IDS = new Set<string>(Object.values(MAILBOX_LABELS));
 
@@ -38,10 +45,10 @@ export type AutoLabelMemoryProfile = {
 };
 
 export const getSenderSource = (from?: string | null) => {
-  const domain = from?.match(
-    /[A-Z0-9._%+-]+@(?<domain>[A-Z0-9.-]+\.[A-Z]{2,})/iu
-  )?.groups?.domain;
-  return domain?.toLowerCase().slice(0, 253) ?? null;
+  const address = extractMailAddress(from ?? "")
+    .trim()
+    .toLowerCase();
+  return z.email().safeParse(address).success ? address : null;
 };
 
 const toMemoryKeyPart = (value: string) =>
@@ -110,6 +117,36 @@ const listManagedMessageSources = async (
   return new Map(rows.map((row) => [row.id, getSenderSource(row.from)]));
 };
 
+const listGmailMessageSources = async (
+  mailboxId: string,
+  messageIds: string[]
+) => {
+  const rows = await db
+    .select({
+      headers: sql<
+        CapturedMailSnapshot["headers"] | null
+      >`${gmailCapturedMessage.snapshot}->'headers'`,
+      id: gmailCapturedMessage.messageId,
+    })
+    .from(gmailCapturedMessage)
+    .where(
+      and(
+        eq(gmailCapturedMessage.mailboxId, mailboxId),
+        inArray(gmailCapturedMessage.messageId, messageIds),
+        isNull(gmailCapturedMessage.deletedAt)
+      )
+    );
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      getSenderSource(
+        row.headers?.find((header) => header.name.toLowerCase() === "from")
+          ?.value
+      ),
+    ])
+  );
+};
+
 export const buildAutoLabelMemoryProfile = (
   rows: {
     added: number;
@@ -159,8 +196,13 @@ export const buildAutoLabelMemoryProfile = (
 
 export const refreshAutoLabelMemoryProfile = async (
   mailboxId: string,
-  userId: string
+  userId: string,
+  expectedRevision?: number
 ) => {
+  let revision = expectedRevision;
+  if (revision === undefined) {
+    ({ revision } = await getPersonalAiMemoryScopeConfig(userId));
+  }
   const rows = await db
     .select({
       added:
@@ -176,13 +218,19 @@ export const refreshAutoLabelMemoryProfile = async (
       source: mailAutoLabelFeedback.source,
     })
     .from(mailAutoLabelFeedback)
-    .where(eq(mailAutoLabelFeedback.mailboxId, mailboxId))
+    .where(
+      and(
+        eq(mailAutoLabelFeedback.mailboxId, mailboxId),
+        eq(mailAutoLabelFeedback.createdByUserId, userId)
+      )
+    )
     .groupBy(mailAutoLabelFeedback.labelId, mailAutoLabelFeedback.source)
     .orderBy(desc(count()));
 
   const profile = buildAutoLabelMemoryProfile(rows);
-  await replaceMailboxFeedbackMemories({
+  await replaceAiMemoryFeedback({
     agent: "auto_label",
+    expectedRevision: revision,
     mailboxId,
     memories: profile.rules.map((rule) => {
       const label = rule.labelName ?? rule.labelId;
@@ -197,11 +245,16 @@ export const refreshAutoLabelMemoryProfile = async (
         importance: rule.source ? 4 : 3,
         key: `${toMemoryKeyPart(rule.labelId)}:${toMemoryKeyPart(rule.source ?? "all")}`,
         metadata: {
+          correspondents:
+            rule.source?.includes("@") === true ? [rule.source] : [],
+          feedbackSource: rule.source,
           labelId: rule.labelId,
           policy: rule.policy,
         },
         reinforcementCount: rule.count,
-        sourceDomains: rule.source ? [rule.source] : [],
+        sourceDomains: rule.source
+          ? [rule.source.split("@").at(-1) ?? rule.source]
+          : [],
         summary: `${rule.policy === "prefer" ? "Prefers" : "Avoids"} “${label}”${rule.source ? ` for ${rule.source}` : ""}`,
         topics: [
           "email-labeling",
@@ -216,13 +269,71 @@ export const refreshAutoLabelMemoryProfile = async (
 
 const refreshAutoLabelMemoryInBackground = async (
   mailboxId: string,
-  userId: string
+  userId: string,
+  expectedRevision?: number
 ) => {
   try {
-    await refreshAutoLabelMemoryProfile(mailboxId, userId);
+    await refreshAutoLabelMemoryProfile(mailboxId, userId, expectedRevision);
   } catch (error: unknown) {
     reportError(error, { operation: "mail-automation:refresh-memory" });
   }
+};
+
+export const enrichMailAutoLabelFeedbackSource = async (input: {
+  from?: string;
+  mailboxId: string;
+  providerMessageId: string;
+  userId: string;
+}) => {
+  const source = getSenderSource(input.from);
+  if (source === null) {
+    return;
+  }
+  const { getMailboxMemoryActor } = await import("../ai-memory-capture");
+  const [actor, config] = await Promise.all([
+    getMailboxMemoryActor({
+      actorUserId: input.userId,
+      mailboxId: input.mailboxId,
+    }),
+    getPersonalAiMemoryScopeConfig(input.userId),
+  ]);
+  if (actor === null) {
+    return;
+  }
+  const enriched = await db
+    .update(mailAutoLabelFeedback)
+    .set({ source })
+    .where(
+      and(
+        eq(mailAutoLabelFeedback.mailboxId, input.mailboxId),
+        eq(mailAutoLabelFeedback.createdByUserId, input.userId),
+        eq(mailAutoLabelFeedback.providerMessageId, input.providerMessageId),
+        isNull(mailAutoLabelFeedback.source)
+      )
+    )
+    .returning({ id: mailAutoLabelFeedback.id });
+  if (enriched.length === 0) {
+    const [existing] = await db
+      .select({ id: mailAutoLabelFeedback.id })
+      .from(mailAutoLabelFeedback)
+      .where(
+        and(
+          eq(mailAutoLabelFeedback.mailboxId, input.mailboxId),
+          eq(mailAutoLabelFeedback.createdByUserId, input.userId),
+          eq(mailAutoLabelFeedback.providerMessageId, input.providerMessageId),
+          eq(mailAutoLabelFeedback.source, source)
+        )
+      )
+      .limit(1);
+    if (existing === undefined) {
+      return;
+    }
+  }
+  await refreshAutoLabelMemoryProfile(
+    input.mailboxId,
+    actor.userId,
+    config.revision
+  );
 };
 
 const recordAutoLabelFeedbackMemoryInBackground = async (input: {
@@ -234,7 +345,7 @@ const recordAutoLabelFeedbackMemoryInBackground = async (input: {
   userId: string;
 }) => {
   try {
-    await recordAndRefreshAiMemory({
+    await learnAiMemoryFromFeedback({
       kind: "auto_label_feedback",
       mailboxId: input.mailboxId,
       metadata: {
@@ -258,6 +369,10 @@ export const recordMailAutoLabelFeedback = async (input: {
   removeLabelIds?: string[];
   userId: string;
 }) => {
+  const selectedMailbox = await assertAccessibleMailbox({
+    mailboxId: input.mailboxId,
+    userId: input.userId,
+  });
   const addLabelIds = (input.addLabelIds ?? []).filter(
     (labelId) => !SYSTEM_LABEL_IDS.has(labelId)
   );
@@ -270,16 +385,12 @@ export const recordMailAutoLabelFeedback = async (input: {
     providerMessageIds.length === 0 ||
     (addLabelIds.length === 0 && removeLabelIds.length === 0)
   ) {
-    return;
+    return null;
   }
 
-  const [selectedMailbox] = await db
-    .select({ provider: mailbox.provider })
-    .from(mailbox)
-    .where(eq(mailbox.id, input.mailboxId))
-    .limit(1);
-  if (selectedMailbox === undefined) {
-    return;
+  const config = await getPersonalAiMemoryScopeConfig(input.userId);
+  if (!config.activeLearningEnabled) {
+    return null;
   }
 
   const labelNames = await listLabelNames(
@@ -290,7 +401,7 @@ export const recordMailAutoLabelFeedback = async (input: {
   const sources =
     selectedMailbox.provider === "managed"
       ? await listManagedMessageSources(input.mailboxId, providerMessageIds)
-      : new Map<string, string | null>();
+      : await listGmailMessageSources(input.mailboxId, providerMessageIds);
   const sourceOverrides = new Map(Object.entries(input.messageSources ?? {}));
   const resolveSource = (providerMessageId: string) =>
     sourceOverrides.has(providerMessageId)
@@ -326,36 +437,69 @@ export const recordMailAutoLabelFeedback = async (input: {
     })),
   ]);
 
-  await db
-    .insert(mailAutoLabelFeedback)
-    .values(values)
-    .onConflictDoUpdate({
-      set: {
-        createdByUserId: input.userId,
-        labelName: alias(mailAutoLabelFeedback, "excluded").labelName,
-        signal: alias(mailAutoLabelFeedback, "excluded").signal,
-        source: alias(mailAutoLabelFeedback, "excluded").source,
-        updatedAt: now,
-      },
-      target: [
-        mailAutoLabelFeedback.mailboxId,
-        mailAutoLabelFeedback.providerMessageId,
-        mailAutoLabelFeedback.labelId,
-      ],
-    });
+  const captured = await db.transaction(async (tx) => {
+    await tx
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.id, input.userId))
+      .for("update");
+    const [currentConfig = { activeLearningEnabled: true, revision: 0 }] =
+      await tx
+        .select({
+          activeLearningEnabled: aiMemoryScopeConfig.activeLearningEnabled,
+          revision: aiMemoryScopeConfig.revision,
+        })
+        .from(aiMemoryScopeConfig)
+        .where(eq(aiMemoryScopeConfig.scopeKey, `user:${input.userId}`))
+        .for("share");
+    if (
+      !currentConfig.activeLearningEnabled ||
+      currentConfig.revision !== config.revision
+    ) {
+      return false;
+    }
+    await tx
+      .insert(mailAutoLabelFeedback)
+      .values(values)
+      .onConflictDoUpdate({
+        set: {
+          createdByUserId: input.userId,
+          labelName: alias(mailAutoLabelFeedback, "excluded").labelName,
+          signal: alias(mailAutoLabelFeedback, "excluded").signal,
+          source: alias(mailAutoLabelFeedback, "excluded").source,
+          updatedAt: now,
+        },
+        target: [
+          mailAutoLabelFeedback.mailboxId,
+          mailAutoLabelFeedback.providerMessageId,
+          mailAutoLabelFeedback.labelId,
+        ],
+      });
+    return true;
+  });
+  if (!captured) {
+    return null;
+  }
 
-  void refreshAutoLabelMemoryInBackground(input.mailboxId, input.userId);
-  void recordAutoLabelFeedbackMemoryInBackground({
+  const labelChanges = {
     addedLabels: addLabelIds
       .map((labelId) => labelNames.get(labelId) ?? labelId)
       .join(", ")
       .slice(0, 600),
-    mailboxId: input.mailboxId,
-    messageCount: providerMessageIds.length,
     removedLabels: removeLabelIds
       .map((labelId) => labelNames.get(labelId) ?? labelId)
       .join(", ")
       .slice(0, 600),
+  };
+  await refreshAutoLabelMemoryInBackground(
+    input.mailboxId,
+    input.userId,
+    config.revision
+  );
+  await recordAutoLabelFeedbackMemoryInBackground({
+    ...labelChanges,
+    mailboxId: input.mailboxId,
+    messageCount: providerMessageIds.length,
     sources: [
       ...new Set(
         providerMessageIds.map((providerMessageId) =>
@@ -368,4 +512,5 @@ export const recordMailAutoLabelFeedback = async (input: {
       .slice(0, 600),
     userId: input.userId,
   });
+  return labelChanges;
 };

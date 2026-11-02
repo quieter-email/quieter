@@ -7,7 +7,6 @@ import { broadcastGmailUpdate } from "./mail-updates";
 import realtimeWorker from "./worker";
 import {
   parseGmailNotification,
-  broadcastMailboxEvent,
   readBoundedJson,
   requestErrorResponse,
   signaturesMatch,
@@ -27,7 +26,7 @@ export default {
       return new Response(null, { status: 404 });
     }
     const url = new URL(request.url);
-    if (url.pathname === "/gmail/live" || url.pathname.startsWith("/mail/")) {
+    if (url.pathname.startsWith("/mail/")) {
       return await realtimeWorker.fetch(request, env);
     }
     const token = serverEnv.QUIETER_LOCAL_WORKER_TOKEN;
@@ -54,9 +53,9 @@ export default {
       try {
         const input = z
           .object({
-            dailyBrief: z.boolean().optional(),
             fresh: z.boolean().optional(),
             ownerEmail: z.email(),
+            rendering: z.boolean().optional(),
           })
           .safeParse(await readBoundedJson(request, 4096));
         if (!input.success) {
@@ -68,8 +67,8 @@ export default {
           await withRequestDatabaseClient(
             async () =>
               await seedLocalManagedMail(input.data.ownerEmail, {
-                dailyBrief: input.data.dailyBrief,
                 fresh: input.data.fresh,
+                rendering: input.data.rendering,
               })
           )
         );
@@ -99,18 +98,11 @@ export default {
             })
         );
         if (!result.ignored) {
-          await Promise.allSettled([
-            broadcastMailboxEvent(
-              env,
-              notification.emailAddress,
-              "mailbox-dirty"
-            ),
-            broadcastGmailUpdate(
-              env,
-              notification.emailAddress,
-              "mailbox.changed"
-            ),
-          ]);
+          await broadcastGmailUpdate(
+            env,
+            notification.emailAddress,
+            "mailbox.changed"
+          );
         }
         if (
           !result.ignored &&
@@ -130,16 +122,60 @@ export default {
         return requestErrorResponse(error, "local-maintenance");
       }
     }
-    if (url.pathname === "/__dev/briefs") {
+    if (url.pathname === "/__dev/importance") {
       try {
-        const { runDueDailyBriefs } = await import("@quieter/orpc/daily-brief");
+        const { processPendingMailImportance } =
+          await import("@quieter/orpc/mail-importance");
+        await withRequestDatabaseClient(async () => {
+          await processPendingMailImportance({ limit: 1 });
+        });
+        return Response.json({ processed: true });
+      } catch (error) {
+        return requestErrorResponse(error, "local-mail-importance");
+      }
+    }
+    if (url.pathname === "/__dev/actions") {
+      try {
+        const { drainMailAgentRuns } = await import("@quieter/orpc/mail-agent");
         return Response.json(
           await withRequestDatabaseClient(
-            async () => await runDueDailyBriefs({ limit: 1 })
+            async () => await drainMailAgentRuns({ limit: 1 })
           )
         );
       } catch (error) {
-        return requestErrorResponse(error, "local-daily-briefs");
+        return requestErrorResponse(error, "local-mail-agent");
+      }
+    }
+    if (url.pathname === "/__dev/memory") {
+      try {
+        const input = z
+          .object({ userId: z.string().min(1).max(500) })
+          .safeParse(await readBoundedJson(request, 4096));
+        if (!input.success) {
+          return Response.json(
+            { error: "Choose a local user to process memory for." },
+            { status: 400 }
+          );
+        }
+        const { processPendingAiMemoryEvents } =
+          await import("@quieter/orpc/ai-memory");
+        const { processPendingMailMemoryBootstrap } =
+          await import("@quieter/orpc/ai-memory-capture");
+        return Response.json(
+          await withRequestDatabaseClient(async () => {
+            const bootstrap = await processPendingMailMemoryBootstrap({
+              allowLocal: true,
+              userId: input.data.userId,
+            });
+            const memory = await processPendingAiMemoryEvents({
+              allowLocal: true,
+              userId: input.data.userId,
+            });
+            return { bootstrap, ...memory };
+          })
+        );
+      } catch (error) {
+        return requestErrorResponse(error, "local-memory");
       }
     }
     if (url.pathname === "/__dev/campaigns") {
@@ -171,6 +207,7 @@ export default {
         await import("@quieter/orpc/managed-mail/ingestion");
       const { cleanupMailboxVerificationCodes } =
         await import("@quieter/orpc/verification-codes");
+      const { drainMailAgentRuns } = await import("@quieter/orpc/mail-agent");
       await withRequestDatabaseClient(async () => {
         const results = await Promise.allSettled([
           recoverMailSends(),
@@ -181,6 +218,7 @@ export default {
           processManagedRuleBackfills(),
           retryPendingManagedVerificationCodes(),
           cleanupMailboxVerificationCodes(),
+          drainMailAgentRuns({ limit: 1 }),
         ]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed !== undefined) {

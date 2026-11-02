@@ -1,5 +1,7 @@
 # Agent debugging tools
 
+For the shared Codex and Cursor engineering workflows, see [Pstack](pstack.md).
+
 Application credentials, agent access, and feature acceptance are separate checks. A local app can run while an agent has no access to its provider logs. Sentry and PostHog capture remain off locally by default; agents still need authenticated inspection access.
 
 Run `vp run agent:doctor` to check required Codex MCP configuration and saved OAuth status without printing headers, tokens, or command arguments. Exit code 1 means configuration or authentication is missing. Exit code 0 only means those inventory checks passed. It does not establish that the active task can discover tools or make authorized provider calls.
@@ -27,6 +29,8 @@ PlanetScale's MCP creates temporary read-only credentials for SQL execution. The
 
 A fresh Codex app-server connection subsequently completed tool discovery for Sentry, PlanetScale, Cloudflare bindings, builds and observability. Sentry returned 9 tools and PlanetScale 25. Trying to attach that separate connection was rejected because this task already has an active writer. No task or model turn was created. Cloudflare operational tools later became callable in the active task and passed the reads above. Sentry and PlanetScale still require the desktop MCP connections to reload before this task can make resource reads. Polar sandbox still exposes no tools because its OAuth fails.
 
+On October 22, 2026, the Sentry connection was repaired and verified in the active desktop chat with a live issue search and issue-detail reads for `leander-riefel/quieter`. The current desktop client rejected the older saved OAuth credentials because they lacked authorization-server issuer metadata. Reauthentication with the CLI bundled with the running desktop app repaired the credentials. An older CLI on `PATH` reported saved OAuth without detecting this failure, so inventory alone remains insufficient. Only inspection tools were selected during renewed consent; local application telemetry stays disabled.
+
 Calling the standalone client's read-only MCP interface without attaching the task also failed with `thread not found`. The user wants to keep this conversation. Do not create a replacement task or force ownership of this one to work around tool discovery. Continue through the existing browser and CLI access, and leave active-task MCP read verification marked incomplete until those tools become available.
 
 ## Bootstrap and verification
@@ -53,12 +57,12 @@ After setup, verify tool discovery in the task that will do the debugging. If co
 
 Complete a small read against each provider needed for the feature:
 
-1. Sentry: list the Quieter project and retrieve one issue's error details. Confirm project and environment before interpreting results.
+1. Sentry: list the quieter project and retrieve one issue's error details. Confirm project and environment before interpreting results.
 2. PlanetScale: inspect `quieter/main` metadata and Insights. For SQL, explicitly target the logical database and use a bounded read such as `SELECT current_database()`. Never infer the logical database from the branch name.
 3. Cloudflare: list the account's Workers and retrieve a bounded log or observability result for the relevant Worker. Documentation search does not pass this check.
 4. AWS: use `quieter-readonly` for STS identity, then inspect the relevant Lambda or bounded CloudWatch logs. The MCP `call_boto3` expects operation names such as `GetCallerIdentity`, not `get_caller_identity`.
 5. Polar: discover and describe `organizations_list`, execute it, and confirm the expected environment's organization. Repeat independently for sandbox.
-6. PostHog: list accessible projects through its app connector, then scope any data read to Quieter or its staging project.
+6. PostHog: list accessible projects through its app connector, then scope any data read to quieter or its staging project.
 
 Keep MCP OAuth credentials in Codex's credential store. Application development tokens stay in SST Secrets and ignored local caches. Do not paste raw inventory/configuration, OAuth callback URLs, or provider responses containing credentials into reports.
 

@@ -12,7 +12,7 @@ export const Route = createFileRoute("/_public/cookies")({
       },
     ],
     meta: [
-      { title: "Cookie Policy | Quieter" },
+      { title: "Cookie Policy | quieter" },
       {
         content: "https://quieter.email/cookies",
         property: "og:url",
@@ -24,12 +24,12 @@ export const Route = createFileRoute("/_public/cookies")({
 function CookiesPage() {
   return (
     <LegalDocumentPage
-      description="How Quieter uses cookies and similar technologies."
+      description="How quieter uses cookies and similar technologies."
       title="Cookie Policy"
     >
       <p>
         Cookies are small files stored on your device. We use cookies and
-        similar storage to operate Quieter, remember your preferences, and—only
+        similar storage to operate quieter, remember your preferences, and—only
         with consent—measure product usage.
       </p>
 

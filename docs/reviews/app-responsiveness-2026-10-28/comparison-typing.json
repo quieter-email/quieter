@@ -1,0 +1,726 @@
+{
+  "baseline": {
+    "short": [
+      {
+        "events": [
+          {
+            "commitMs": 5.700000047683716,
+            "paintMs": 16.700000047683716,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.899999976158142,
+            "paintMs": 27.899999976158146,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.800000011920929,
+            "paintMs": 12.300000011920927,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.800000011920929,
+            "paintMs": 14.200000047683716,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.599999964237213,
+            "paintMs": 11.099999964237211,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 26,
+        "bodyLength": 0,
+        "textLength": 5
+      },
+      {
+        "events": [
+          {
+            "commitMs": 4.399999976158142,
+            "paintMs": 12.5,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.200000047683716,
+            "paintMs": 12.300000011920927,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.800000011920929,
+            "paintMs": 21.80000001192093,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.599999964237213,
+            "paintMs": 9.899999976158142,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.5,
+            "paintMs": 11,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 26,
+        "bodyLength": 0,
+        "textLength": 5
+      },
+      {
+        "events": [
+          {
+            "commitMs": 6.5,
+            "paintMs": 15.800000011920927,
+            "trusted": true
+          },
+          {
+            "commitMs": 4,
+            "paintMs": 15.599999964237211,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.700000047683716,
+            "paintMs": 12.900000035762789,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.5,
+            "paintMs": 9.800000011920927,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.5,
+            "paintMs": 11.199999988079073,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 26,
+        "bodyLength": 0,
+        "textLength": 5
+      },
+      {
+        "events": [
+          {
+            "commitMs": 4.5,
+            "paintMs": 12.300000011920927,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.900000035762787,
+            "paintMs": 11.5,
+            "trusted": true
+          },
+          {
+            "commitMs": 3,
+            "paintMs": 13.100000023841858,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.300000011920929,
+            "paintMs": 10.5,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.5,
+            "paintMs": 13.300000011920927,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 26,
+        "bodyLength": 0,
+        "textLength": 5
+      },
+      {
+        "events": [
+          {
+            "commitMs": 5.100000023841858,
+            "paintMs": 15.300000011920927,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.5,
+            "paintMs": 25,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.599999964237213,
+            "paintMs": 10.599999964237211,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.299999952316284,
+            "paintMs": 8.899999976158142,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.5,
+            "paintMs": 12.699999988079073,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 26,
+        "bodyLength": 0,
+        "textLength": 5
+      }
+    ],
+    "long": [
+      {
+        "events": [
+          {
+            "commitMs": 6.100000023841858,
+            "paintMs": 17,
+            "trusted": true
+          },
+          {
+            "commitMs": 8,
+            "paintMs": 20.69999998807907,
+            "trusted": true
+          },
+          {
+            "commitMs": 8.300000011920929,
+            "paintMs": 23.19999998807907,
+            "trusted": true
+          },
+          {
+            "commitMs": 7.199999988079071,
+            "paintMs": 17,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.800000011920929,
+            "paintMs": 15.600000023841858,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 25,
+        "bodyLength": 21750,
+        "textLength": 21755
+      },
+      {
+        "events": [
+          {
+            "commitMs": 10,
+            "paintMs": 24.19999998807907,
+            "trusted": true
+          },
+          {
+            "commitMs": 8.099999964237213,
+            "paintMs": 18.5,
+            "trusted": true
+          },
+          {
+            "commitMs": 7,
+            "paintMs": 14.899999976158142,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.599999964237213,
+            "paintMs": 11.699999988079073,
+            "trusted": true
+          },
+          {
+            "commitMs": 8.800000011920929,
+            "paintMs": 18.69999998807907,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 25,
+        "bodyLength": 21750,
+        "textLength": 21755
+      },
+      {
+        "events": [
+          {
+            "commitMs": 4.899999976158142,
+            "paintMs": 12.099999964237211,
+            "trusted": true
+          },
+          {
+            "commitMs": 5.5,
+            "paintMs": 12.5,
+            "trusted": true
+          },
+          {
+            "commitMs": 5.399999976158142,
+            "paintMs": 16.799999952316284,
+            "trusted": true
+          },
+          {
+            "commitMs": 6.300000011920929,
+            "paintMs": 16.100000023841858,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.800000011920929,
+            "paintMs": 12.5,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 25,
+        "bodyLength": 21750,
+        "textLength": 21755
+      },
+      {
+        "events": [
+          {
+            "commitMs": 9.099999964237211,
+            "paintMs": 23.80000001192093,
+            "trusted": true
+          },
+          {
+            "commitMs": 6.400000035762787,
+            "paintMs": 18.5,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.200000047683716,
+            "paintMs": 21.200000047683716,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.699999988079071,
+            "paintMs": 10.100000023841858,
+            "trusted": true
+          },
+          {
+            "commitMs": 7.399999976158142,
+            "paintMs": 14.800000011920927,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 25,
+        "bodyLength": 21750,
+        "textLength": 21755
+      },
+      {
+        "events": [
+          {
+            "commitMs": 9.100000023841858,
+            "paintMs": 23.600000023841854,
+            "trusted": true
+          },
+          {
+            "commitMs": 7.900000035762787,
+            "paintMs": 18.600000023841854,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.300000011920929,
+            "paintMs": 10.5,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.400000035762787,
+            "paintMs": 10.699999988079073,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.299999952316284,
+            "paintMs": 13.699999988079073,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 25,
+        "bodyLength": 21750,
+        "textLength": 21755
+      }
+    ],
+    "errors": {
+      "errors": [],
+      "lifecycle": {
+        "effectiveLaunch": {
+          "browserLaunched": true,
+          "engine": "chrome",
+          "launchHash": 11677035664275010974
+        },
+        "launched": false,
+        "relaunchedBrowser": false,
+        "restartedBackground": false,
+        "restoreStatus": "not_configured",
+        "reused": true,
+        "saveStatus": "not_attempted"
+      }
+    }
+  },
+  "head": {
+    "short": [
+      {
+        "events": [
+          {
+            "commitMs": 5.400000035762787,
+            "paintMs": 18.80000001192093,
+            "trusted": true
+          },
+          {
+            "commitMs": 5,
+            "paintMs": 18.399999976158146,
+            "trusted": true
+          },
+          {
+            "commitMs": 4,
+            "paintMs": 23.69999998807907,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.400000035762787,
+            "paintMs": 10.699999988079073,
+            "trusted": true
+          },
+          {
+            "commitMs": 6.100000023841858,
+            "paintMs": 14.300000011920927,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 0,
+        "bodyLength": 0,
+        "textLength": 5
+      },
+      {
+        "events": [
+          {
+            "commitMs": 4,
+            "paintMs": 12,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.899999976158142,
+            "paintMs": 13.199999988079073,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.600000023841858,
+            "paintMs": 23.900000035762787,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.300000011920929,
+            "paintMs": 10.800000011920927,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.399999976158142,
+            "paintMs": 8.800000011920929,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 0,
+        "bodyLength": 0,
+        "textLength": 5
+      },
+      {
+        "events": [
+          {
+            "commitMs": 5,
+            "paintMs": 15.399999976158142,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.800000011920929,
+            "paintMs": 13.399999976158142,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.699999988079071,
+            "paintMs": 9.300000011920927,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.399999976158142,
+            "paintMs": 19.80000001192093,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.599999964237213,
+            "paintMs": 9.199999988079073,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 0,
+        "bodyLength": 0,
+        "textLength": 5
+      },
+      {
+        "events": [
+          {
+            "commitMs": 3.899999976158142,
+            "paintMs": 12.099999964237211,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.100000023841858,
+            "paintMs": 13.399999976158142,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.800000011920929,
+            "paintMs": 20.399999976158146,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.699999988079071,
+            "paintMs": 9.5,
+            "trusted": true
+          },
+          {
+            "commitMs": 4,
+            "paintMs": 10.699999988079073,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 0,
+        "bodyLength": 0,
+        "textLength": 5
+      },
+      {
+        "events": [
+          {
+            "commitMs": 4.200000047683716,
+            "paintMs": 11.5,
+            "trusted": true
+          },
+          {
+            "commitMs": 2.5,
+            "paintMs": 24.19999998807907,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.199999988079071,
+            "paintMs": 12.800000011920927,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.300000011920929,
+            "paintMs": 12,
+            "trusted": true
+          },
+          {
+            "commitMs": 3,
+            "paintMs": 12.899999976158142,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 0,
+        "bodyLength": 0,
+        "textLength": 5
+      }
+    ],
+    "long": [
+      {
+        "events": [
+          {
+            "commitMs": 5.599999964237213,
+            "paintMs": 13.399999976158142,
+            "trusted": true
+          },
+          {
+            "commitMs": 5.300000011920929,
+            "paintMs": 13.400000035762789,
+            "trusted": true
+          },
+          {
+            "commitMs": 5.299999952316284,
+            "paintMs": 23.899999976158146,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.199999988079071,
+            "paintMs": 10.899999976158142,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.699999988079071,
+            "paintMs": 12.300000011920927,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 0,
+        "bodyLength": 21750,
+        "textLength": 21755
+      },
+      {
+        "events": [
+          {
+            "commitMs": 7.899999976158142,
+            "paintMs": 19.100000023841854,
+            "trusted": true
+          },
+          {
+            "commitMs": 7.300000011920929,
+            "paintMs": 17.600000023841858,
+            "trusted": true
+          },
+          {
+            "commitMs": 5,
+            "paintMs": 28,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.399999976158142,
+            "paintMs": 13.5,
+            "trusted": true
+          },
+          {
+            "commitMs": 7.199999988079071,
+            "paintMs": 16.19999998807907,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 0,
+        "bodyLength": 21750,
+        "textLength": 21755
+      },
+      {
+        "events": [
+          {
+            "commitMs": 7.399999976158142,
+            "paintMs": 15.699999988079073,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.5,
+            "paintMs": 14.100000023841858,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.199999988079071,
+            "paintMs": 14.399999976158142,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.300000011920929,
+            "paintMs": 11.699999988079073,
+            "trusted": true
+          },
+          {
+            "commitMs": 5.299999952316284,
+            "paintMs": 14.199999988079073,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 0,
+        "bodyLength": 21750,
+        "textLength": 21755
+      },
+      {
+        "events": [
+          {
+            "commitMs": 5.800000011920929,
+            "paintMs": 18.899999976158146,
+            "trusted": true
+          },
+          {
+            "commitMs": 6.699999988079071,
+            "paintMs": 14.399999976158142,
+            "trusted": true
+          },
+          {
+            "commitMs": 6.599999964237213,
+            "paintMs": 16.19999998807907,
+            "trusted": true
+          },
+          {
+            "commitMs": 6.800000011920929,
+            "paintMs": 14.300000011920927,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.699999988079071,
+            "paintMs": 14.5,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 0,
+        "bodyLength": 21750,
+        "textLength": 21755
+      },
+      {
+        "events": [
+          {
+            "commitMs": 5.300000011920929,
+            "paintMs": 14.300000011920927,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.899999976158142,
+            "paintMs": 12.600000023841858,
+            "trusted": true
+          },
+          {
+            "commitMs": 6.599999964237213,
+            "paintMs": 13.899999976158142,
+            "trusted": true
+          },
+          {
+            "commitMs": 3.699999988079071,
+            "paintMs": 10.399999976158142,
+            "trusted": true
+          },
+          {
+            "commitMs": 4.699999988079071,
+            "paintMs": 14.600000023841858,
+            "trusted": true
+          }
+        ],
+        "focused": true,
+        "longTasks": [],
+        "parserCalls": 0,
+        "bodyLength": 21750,
+        "textLength": 21755
+      }
+    ],
+    "errors": {
+      "errors": [],
+      "lifecycle": {
+        "effectiveLaunch": {
+          "browserLaunched": true,
+          "engine": "chrome",
+          "launchHash": 11677035664275010974
+        },
+        "launched": false,
+        "relaunchedBrowser": false,
+        "restartedBackground": false,
+        "restoreStatus": "not_configured",
+        "reused": true,
+        "saveStatus": "not_attempted"
+      }
+    }
+  }
+}

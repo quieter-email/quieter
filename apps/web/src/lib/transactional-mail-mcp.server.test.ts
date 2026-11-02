@@ -1,5 +1,14 @@
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import type { McpHttpHandler } from "@modelcontextprotocol/server";
+import {
+  API_COMPATIBILITY_DATE,
+  API_VERSION_HEADER,
+  MCP_API_PATH,
+} from "@quieter/mail/public-api";
+import {
+  MAX_SEND_ATTACHMENTS,
+  MAX_SEND_ATTACHMENT_METADATA_LENGTH,
+} from "@quieter/mail/send";
 import type { SendMessageInput, SendMessageResult } from "@quieter/mail/send";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
@@ -66,11 +75,12 @@ const createTestHandler = (
   );
 
 const mcpRequest = (body: Record<string, unknown>) =>
-  new Request("https://quieter.email/api/v1/mcp", {
+  new Request(`https://quieter.email${MCP_API_PATH}`, {
     body: JSON.stringify(body),
     headers: {
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
+      [API_VERSION_HEADER]: API_COMPATIBILITY_DATE,
     },
     method: "POST",
   });
@@ -111,6 +121,74 @@ describe("transactional mail MCP tools", () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
+
+  test.each([
+    "victim@victim.example ( <sender@attacker.example>",
+    "one@example.com, Two <two@example.com>",
+    "Team: sender@example.com;",
+  ])("rejects ambiguous From before dispatch %s", async (from) => {
+    const sendTransactionalMail = vi.fn<SendTransactionalMail>();
+    const response = await postMcp(createTestHandler(sendTransactionalMail), {
+      id: 1,
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        arguments: {
+          from,
+          subject: "Hello",
+          text: "Hello",
+          to: "to@example.com",
+        },
+        name: "send_email",
+      },
+    });
+    const result = await readToolCallResult(response);
+    expect(result.isError).toBeTruthy();
+    expect(sendTransactionalMail).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    {
+      attachments: Array.from({ length: MAX_SEND_ATTACHMENTS + 1 }, () => ({
+        content: "YQ==",
+        filename: "a.txt",
+      })),
+      kind: "count",
+    },
+    ...["filename", "contentType", "contentId"].map((kind) => ({
+      attachments: [
+        {
+          content: "YQ==",
+          filename: "a.txt",
+          [kind]: "x".repeat(MAX_SEND_ATTACHMENT_METADATA_LENGTH + 1),
+        },
+      ],
+      kind,
+    })),
+  ])(
+    "rejects excessive attachment $kind without sending",
+    async ({ attachments }) => {
+      const send = vi.fn<SendTransactionalMail>();
+      const response = await postMcp(createTestHandler(send), {
+        id: 1,
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          arguments: {
+            attachments,
+            from: "demo@example.com",
+            subject: "Hello",
+            text: "Hello",
+            to: "to@example.com",
+          },
+          name: "send_email",
+        },
+      });
+      const result = await readToolCallResult(response);
+      expect(result.isError).toBeTruthy();
+      expect(send).not.toHaveBeenCalled();
+    }
+  );
 
   test("advertises the send_email tool with its input schema", async () => {
     const handler = createTestHandler(
@@ -305,7 +383,7 @@ describe("transactional mail MCP endpoint", () => {
 
   test("answers CORS preflight without credentials", async () => {
     const response = await handleTransactionalMailMcpRequest(
-      new Request("https://quieter.email/api/v1/mcp", { method: "OPTIONS" })
+      new Request(`https://quieter.email${MCP_API_PATH}`, { method: "OPTIONS" })
     );
 
     expect(response.status).toBe(204);
@@ -313,6 +391,31 @@ describe("transactional mail MCP endpoint", () => {
     expect(
       response.headers.get("access-control-allow-headers") ?? ""
     ).toContain("authorization");
+    expect(
+      response.headers.get("access-control-allow-headers") ?? ""
+    ).toContain(API_VERSION_HEADER);
+    expect(mocks.resolveOrganizationId).not.toHaveBeenCalled();
+  });
+
+  test("rejects a missing compatibility date before auth", async () => {
+    const response = await handleTransactionalMailMcpRequest(
+      new Request(`https://quieter.email${MCP_API_PATH}`, {
+        body: JSON.stringify({
+          id: 1,
+          jsonrpc: "2.0",
+          method: "tools/list",
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get(API_VERSION_HEADER)).toBe(
+      API_COMPATIBILITY_DATE
+    );
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(mocks.resolveOrganizationId).not.toHaveBeenCalled();
   });
 
   test("rejects requests without a team API key", async () => {
@@ -328,11 +431,12 @@ describe("transactional mail MCP endpoint", () => {
   test("rejects payloads above the send limit", async () => {
     mocks.resolveOrganizationId.mockResolvedValue("team-a");
     const response = await handleTransactionalMailMcpRequest(
-      new Request("https://quieter.email/api/v1/mcp", {
+      new Request(`https://quieter.email${MCP_API_PATH}`, {
         body: "{}",
         headers: {
           "content-length": String(26 * 1024 * 1024),
           "content-type": "application/json",
+          [API_VERSION_HEADER]: API_COMPATIBILITY_DATE,
         },
         method: "POST",
       })

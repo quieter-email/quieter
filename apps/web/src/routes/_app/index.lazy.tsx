@@ -1,6 +1,5 @@
+import { InboxPageClient } from "@quieter/app/features/mailbox/components/inbox-page-client";
 import { createLazyFileRoute } from "@tanstack/react-router";
-
-import { InboxPageClient } from "#/features/mailbox/components/inbox-page-client";
 
 export const Route = createLazyFileRoute("/_app/")({
   component: InboxRouteComponent,
@@ -12,5 +11,10 @@ function InboxRouteComponent() {
     return null;
   }
 
-  return <InboxPageClient user={loaderData.user} />;
+  return (
+    <InboxPageClient
+      gmailError={loaderData.gmailError}
+      user={loaderData.user}
+    />
+  );
 }

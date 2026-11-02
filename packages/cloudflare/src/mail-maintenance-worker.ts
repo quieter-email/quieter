@@ -1,8 +1,11 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { cleanupRateLimitBuckets } from "@quieter/orpc/abuse-protection";
+import { purgeExpiredAiGeneratedMailBodies } from "@quieter/orpc/ai-mail-authorship";
 import { processPendingAiMemoryEvents } from "@quieter/orpc/ai-memory";
-import { runDueDailyBriefs } from "@quieter/orpc/daily-brief";
+import { processPendingMailMemoryBootstrap } from "@quieter/orpc/ai-memory-capture";
 import { cleanupGmailComposeOperations } from "@quieter/orpc/gmail-compose-retention";
+import { drainMailAgentRuns } from "@quieter/orpc/mail-agent";
+import { processPendingMailImportance } from "@quieter/orpc/mail-importance";
 import { recoverMailSends } from "@quieter/orpc/mail-send";
 import { retryPendingManagedVerificationCodes } from "@quieter/orpc/managed-mail/ingestion";
 import { processManagedRuleBackfills } from "@quieter/orpc/managed-mail/rule-backfills";
@@ -18,13 +21,16 @@ export default withSentryReporting({
         const results = await Promise.allSettled([
           recoverMailSends(),
           processPendingAiMemoryEvents(),
+          processPendingMailMemoryBootstrap(),
+          purgeExpiredAiGeneratedMailBodies(),
           cleanupGmailComposeOperations(),
           cleanupMailObjects(),
           cleanupRateLimitBuckets(),
           processManagedRuleBackfills(),
           retryPendingManagedVerificationCodes(),
           cleanupMailboxVerificationCodes(),
-          runDueDailyBriefs({ limit: 2 }),
+          drainMailAgentRuns({ limit: 2 }),
+          processPendingMailImportance({ limit: 20 }),
         ]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed !== undefined) {

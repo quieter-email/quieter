@@ -1,4 +1,12 @@
+import { getSafeAuthReturnTo } from "@quieter/app/lib/return-to";
 import { withRequestDatabaseClient } from "@quieter/database/client";
+import {
+  CONTROL_API_PATH,
+  CONTROL_MCP_API_PATH,
+  MCP_API_PATH,
+  OPEN_TRACKING_PATH_PREFIX,
+  SEND_API_PATH,
+} from "@quieter/mail/public-api";
 import { checkDeploymentDatabase } from "@quieter/orpc/deployment-health";
 import {
   createCsrfMiddleware,
@@ -29,17 +37,19 @@ import {
   isValidSitePasswordToken,
   sitePasswordCookieName,
 } from "#/lib/site-password.server";
-
-import { getSafeAuthReturnTo } from "./lib/return-to";
+import { deploymentFetch } from "#/lib/stale-deployment";
 
 const sitePasswordPaths = new Set([
+  "/api/auth/electron/token",
+  "/api/auth/get-session",
   "/api/auth/polar/webhooks",
   "/api/internal/gmail-credentials/rotate",
+  "/api/desktop/session",
   "/api/openapi",
-  "/api/v1/mcp",
-  "/api/v1/control",
-  "/api/v1/control/mcp",
-  "/api/v1/send",
+  MCP_API_PATH,
+  SEND_API_PATH,
+  CONTROL_API_PATH,
+  CONTROL_MCP_API_PATH,
   "/api/site-password",
   "/api/waitlist",
 ]);
@@ -53,9 +63,9 @@ const publicLegalPaths = new Set([
 ]);
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
-const publicPathPrefixes = ["/_build/", "/assets/", "/api/v1/unsubscribe/"];
+const publicPathPrefixes = ["/_build/", "/assets/", "/api/unsubscribe/"];
 /** Open-tracking markers are fetched by mail clients without cookies. */
-const openTrackingPrefix = "/api/v1/o/";
+const openTrackingPrefix = `${OPEN_TRACKING_PATH_PREFIX}/`;
 const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === "serverFn",
 });
@@ -335,6 +345,14 @@ const sitePasswordMiddleware = createMiddleware().server(
     }
 
     if (shouldRedirectToHomePage(request)) {
+      if (normalizedPath === "/desktop/auth") {
+        const passwordUrl = new URL(sitePasswordPagePath, requestUrl);
+        passwordUrl.searchParams.set(
+          "returnTo",
+          `${requestUrl.pathname}${requestUrl.search}`
+        );
+        return Response.redirect(passwordUrl, 302);
+      }
       return Response.redirect(getHomePageUrl(request), 302);
     }
 
@@ -355,6 +373,7 @@ export const startInstance = createStart(() => ({
     sitePasswordMiddleware,
     csrfMiddleware,
   ],
+  serverFns: { fetch: deploymentFetch },
 }));
 
 const normalizePathname = (pathname: string) => {

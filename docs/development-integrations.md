@@ -100,10 +100,10 @@ The user clarified that unsupported local behavior must remain a documented limi
 
 Sentry/PostHog opt-in checks, c15t coverage, and disposable migration tests remain part of targeted verification. Domain Connect is deferred until used. A change is complete only when the affected local feature can be started, exercised, and debugged, or an exact external blocker is recorded with the required user action.
 
-## Custom action removal
+## Mailbox actions and retained graphs
 
-Custom action settings and execution are removed. Connectors remain available to chat, and managed inbox rules remain supported. `infra/mail-maintenance.ts` schedules `packages/cloudflare/src/mail-maintenance-worker.ts` every minute for send recovery, storage cleanup, expired rate-limit cleanup, and managed rule backfills. Invoke these operations locally with `vp run dev:trigger mail-recovery`.
+The custom graph editor and runtime remain removed. Mailbox Actions now use one natural-language prompt, reviewed specification revisions, and a durable run inbox. `infra/mail-maintenance.ts` schedules the existing maintenance Worker every minute, including bounded action draining alongside recovery and cleanup. Invoke action work alone with `vp run dev:trigger actions`; other recovery operations remain available through `vp run dev:trigger mail-recovery`. See [Action specifications](action-specifications.md) for supported triggers and tool authority.
 
-Existing action tables remain untouched for expand/contract deployment. The new application does not enqueue action runs. Release requires pausing old dispatch and producers, draining in-flight workers, and accounting for queued retries before retiring their infrastructure. No production changes were performed.
+Existing graph action tables remain untouched for expand/contract deployment. New specifications use four additive `mailboxAgent*` tables and never reuse graph records. Legacy names require fresh review. Any old dispatchers must stay paused; their remaining retries must be accounted for before retiring old infrastructure. This change does not deploy or mutate production resources.
 
 Seven unpublished migrations were consolidated into `20260907233131_melodic_blacklash` after a read-only development-ledger check found none of the seven applied. Main history is unchanged. Preserve normal Drizzle SQL/snapshot pairs and consolidate only unapplied feature migrations; see [migration workflow](architecture.md#migration-workflow). Earlier setup and verification counts in this document describe their dated revision.

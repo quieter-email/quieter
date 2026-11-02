@@ -22,14 +22,14 @@ const toggleGroupVariants = cva(
       variant: {
         default: "",
         plain: "border-0 bg-transparent shadow-none",
-        subtle: "border-0 bg-muted/40 shadow-none",
+        subtle: "border-0 bg-section shadow-none",
       },
     },
   }
 );
 
 const toggleVariants = cva(
-  "relative isolate inline-flex shrink-0 items-center justify-center gap-2 bg-transparent font-medium whitespace-nowrap select-none squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+  "relative isolate inline-flex shrink-0 items-center justify-center gap-2 bg-transparent font-medium whitespace-nowrap select-none squircle focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
   {
     defaultVariants: { size: "default", variant: "default" },
     variants: {
@@ -41,7 +41,9 @@ const toggleVariants = cva(
       variant: {
         default:
           "rounded-md text-muted-fg hover:text-fg active:text-fg data-pressed:text-fg",
-        pill: "rounded-full border border-border px-3 text-caption text-muted-fg hover:text-fg data-pressed:border-primary data-pressed:text-primary-fg data-pressed:hover:text-primary-fg",
+        pill: "rounded-full not-squircle border border-border px-3 text-caption text-muted-fg hover:text-fg data-pressed:border-primary data-pressed:text-primary-fg data-pressed:hover:text-primary-fg",
+        secondary:
+          "rounded-md text-muted-fg hover:text-fg active:text-fg data-pressed:text-secondary-fg",
       },
     },
   }
@@ -86,7 +88,9 @@ export const Toggle = ({
             {state.pressed && (
               <SelectionIndicator
                 layoutId={selectionId}
-                variant={variant === "pill" ? "primary" : "default"}
+                variant={
+                  variant === "pill" ? "primary" : (variant ?? "default")
+                }
               />
             )}
             {toggleProps.children}

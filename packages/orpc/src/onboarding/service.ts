@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
   account,
@@ -8,8 +9,10 @@ import {
   organization,
   user,
 } from "@quieter/database/schema";
+import { reportError } from "@quieter/observability";
 import { and, asc, eq, exists, or } from "drizzle-orm";
 
+import { assertUserCanManageOrganizationSettings } from "../mail-domain/service";
 import {
   MAILBOX_PROVIDER_GMAIL,
   MAILBOX_PROVIDER_MANAGED,
@@ -218,9 +221,14 @@ export const completeOnboarding = async (input: {
       );
       const [defaultOrganization] = organizations;
 
-      if (defaultOrganization !== undefined) {
-        // Only the display name changes; the slug stays stable because default
-        // team provisioning looks organizations up by it.
+      if (
+        defaultOrganization !== undefined &&
+        defaultOrganization.name !== trimmedTeamName
+      ) {
+        await assertUserCanManageOrganizationSettings(
+          { organizationId: defaultOrganization.id, userId: input.userId },
+          transaction
+        );
         await transaction
           .update(organization)
           .set({ name: trimmedTeamName, updatedAt: now })
@@ -228,4 +236,64 @@ export const completeOnboarding = async (input: {
       }
     }
   });
+  try {
+    const connectedMailboxes = await db
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(
+        and(
+          eq(mailbox.status, "connected"),
+          or(
+            and(
+              eq(mailbox.provider, "gmail"),
+              eq(mailbox.ownerUserId, input.userId)
+            ),
+            and(
+              eq(mailbox.provider, "managed"),
+              eq(mailbox.managedOwnerUserId, input.userId),
+              exists(
+                db
+                  .select({ id: member.id })
+                  .from(member)
+                  .where(
+                    and(
+                      eq(member.userId, input.userId),
+                      eq(member.organizationId, mailbox.organizationId)
+                    )
+                  )
+              )
+            )
+          )
+        )
+      );
+    const { queueMailboxMemoryBootstrap } =
+      await import("../ai-memory-capture");
+    const results = await Promise.allSettled(
+      connectedMailboxes.map(async (selected) => {
+        await queueMailboxMemoryBootstrap({
+          mailboxId: selected.id,
+          userId: input.userId,
+        });
+      })
+    );
+    for (const result of results) {
+      if (result.status !== "rejected") {
+        continue;
+      }
+      const error: unknown = result.reason;
+      if (
+        error instanceof ORPCError &&
+        (error.code === "NOT_FOUND" || error.code === "FORBIDDEN")
+      ) {
+        continue;
+      }
+      reportError(new Error("Recent mail learning could not be queued."), {
+        operation: "onboarding:queue-mail-memory",
+      });
+    }
+  } catch {
+    reportError(new Error("Recent mail learning could not be queued."), {
+      operation: "onboarding:queue-mail-memory",
+    });
+  }
 };

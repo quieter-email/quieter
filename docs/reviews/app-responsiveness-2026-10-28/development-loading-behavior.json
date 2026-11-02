@@ -1,0 +1,65 @@
+{
+  "firstClick": {
+    "activation": {
+      "editorMs": 349.4000000357628,
+      "paintMs": 351.9000000357628,
+      "shellMs": 127.69999998807909,
+      "start": 2048.300000011921
+    },
+    "firstInput": "First click input"
+  },
+  "keyboard": {
+    "activation": {
+      "editorMs": 294.9000000357628,
+      "paintMs": 295.9000000357628,
+      "shellMs": 107.60000002384186,
+      "start": 2195.199999988079
+    },
+    "mailbox": "compose",
+    "firstInput": "Keyboard input"
+  },
+  "directRoute": {
+    "mailbox": "compose",
+    "firstInput": "Direct route input"
+  },
+  "snippetsDirectRoute": {
+    "mailbox": "snippets",
+    "heading": true
+  },
+  "healthyDocuments": [
+    {
+      "path": "fresh click",
+      "counts": {
+        "errors": [],
+        "unhandled": []
+      },
+      "timeOrigin": 1793151140829.8
+    },
+    {
+      "path": "fresh keyboard shortcut",
+      "counts": {
+        "errors": [],
+        "unhandled": []
+      },
+      "timeOrigin": 1793151146054.1
+    },
+    {
+      "path": "direct compose route",
+      "counts": {
+        "errors": [],
+        "unhandled": []
+      },
+      "timeOrigin": 1793151151264.1
+    },
+    {
+      "path": "direct snippets route",
+      "counts": {
+        "errors": [],
+        "unhandled": []
+      },
+      "timeOrigin": 1793151155130
+    }
+  ],
+  "historicalInjectedFaultRecords": 14,
+  "newErrors": []
+}

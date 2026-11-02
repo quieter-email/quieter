@@ -1,0 +1,36 @@
+{
+  "activation": {
+    "start": 4402.800000011921,
+    "shellMs": 48.60000002384186,
+    "editorMs": 392.60000002384186,
+    "paintMs": 401.19999998807907
+  },
+  "bodyTextLength": 0,
+  "bodyHtmlLength": 141,
+  "fields": [
+    {
+      "label": "",
+      "length": 0
+    },
+    {
+      "label": "",
+      "length": 0
+    }
+  ],
+  "quotedControl": false,
+  "signatureHtmlLength": 0,
+  "signatureTextLength": 0,
+  "composeResources": [
+    {
+      "name": "compose-workspace-C4xly5Kl.js",
+      "start": 4391,
+      "duration": 10.600000023841858,
+      "bytes": 300,
+      "encodedBytes": 0
+    }
+  ],
+  "firstTyping": {
+    "text": "Ready.",
+    "focused": true
+  }
+}

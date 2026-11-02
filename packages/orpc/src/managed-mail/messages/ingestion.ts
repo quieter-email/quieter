@@ -9,9 +9,10 @@ import {
   managedMailMessage,
   mailboxVerificationCode,
 } from "@quieter/database/schema";
+import { analyzeMailMessage } from "@quieter/mail/capture";
+import { getReplyReferenceIds } from "@quieter/mail/message-id";
 import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
-import { reportError } from "@quieter/observability";
 import {
   and,
   desc,
@@ -26,7 +27,12 @@ import {
   sql,
 } from "drizzle-orm";
 
-import { markDailyBriefUrgentPending } from "../../daily-brief";
+import { captureManagedMessageMemory } from "../../ai-memory-capture";
+import { enqueueMailAgentMessage } from "../../mail-agent/inbox";
+import {
+  ensureMailImportanceWork,
+  processPendingMailImportance,
+} from "../../mail-importance";
 import { publishMailUpdate } from "../../mail-updates";
 import {
   processMailVerificationCode,
@@ -48,14 +54,6 @@ type RawMailObjectProvider = "r2" | "s3";
 
 const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
 
-const getReplyReferenceIds = (message: ParsedRawMailMessage) => [
-  ...new Set(
-    [message.inReplyTo, ...(message.references?.match(/<[^>]+>/gu) ?? [])]
-      .map((value) => value?.trim())
-      .filter((value): value is string => !!value)
-  ),
-];
-
 const deriveThreadId = (mailboxId: string, canonicalRef: string) =>
   createHash("sha256")
     .update(`${mailboxId}\0${canonicalRef}`)
@@ -65,10 +63,9 @@ const deriveThreadId = (mailboxId: string, canonicalRef: string) =>
 const resolveManagedThreadId = async (
   database: DatabaseExecutor,
   mailboxId: string,
-  message: ParsedRawMailMessage,
+  referenceIds: string[],
   fallbackThreadId: string
 ) => {
-  const referenceIds = getReplyReferenceIds(message);
   if (referenceIds.length === 0) {
     return fallbackThreadId;
   }
@@ -136,16 +133,12 @@ const runPostIngestionProcessing = async (input: {
     }
     const results = await Promise.allSettled([
       processManagedVerificationCode(input),
+      processPendingMailImportance({ limit: 1, mailboxId: input.mailboxId }),
       processManagedMailAutomation({
         mailboxId: input.mailboxId,
         messageId: input.messageId,
       }),
     ]);
-    try {
-      await markDailyBriefUrgentPending({ mailboxId: input.mailboxId });
-    } catch (error) {
-      reportError(error, { operation: "managed-mail:daily-brief-pending" });
-    }
     const failed = results.find((result) => result.status === "rejected");
     if (failed) {
       throw failed.reason;
@@ -230,9 +223,21 @@ const finishIngestion = async (input: {
   mailboxId: string;
   messageId: string;
   providerMessageId: string;
+  receivedAt: Date;
   threadId: string;
 }) => {
+  await enqueueMailAgentMessage({
+    mailboxId: input.mailboxId,
+    messageId: input.messageId,
+    receivedAt: input.receivedAt,
+    threadId: input.threadId,
+  });
   const results = await Promise.allSettled([
+    captureManagedMessageMemory({
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+      source: "received",
+    }),
     publishMailUpdate({
       mailboxId: input.mailboxId,
       threadIds: [input.threadId],
@@ -248,6 +253,7 @@ const finishIngestion = async (input: {
 
 const ingestManagedMessageForMailbox = async (input: {
   parsed: ParsedRawMailMessage;
+  referenceIds: string[];
   providerMessageId: string;
   rawObjectBucket: string;
   rawObjectKey: string;
@@ -266,19 +272,20 @@ const ingestManagedMessageForMailbox = async (input: {
     const threadId = await resolveManagedThreadId(
       tx,
       input.targetMailboxId,
-      input.parsed,
+      input.referenceIds,
       deriveThreadId(input.targetMailboxId, canonicalRef)
     );
     const [message] = await tx
       .insert(managedMailMessage)
       .values({
+        analysis: analyzeMailMessage(input.parsed),
         bcc: input.parsed.bcc ?? null,
         bccNormalized: normalizeManagedSearchValue(input.parsed.bcc),
         bodyHtml: input.parsed.bodyHtml ?? null,
         bodyText: input.parsed.bodyText ?? null,
         cc: input.parsed.cc ?? null,
         ccNormalized: normalizeManagedSearchValue(input.parsed.cc),
-        createdAt: new Date(),
+        createdAt: input.receivedAt,
         direction: "inbound",
         from: input.parsed.from,
         fromNormalized: normalizeManagedSearchValue(input.parsed.from),
@@ -345,6 +352,19 @@ const ingestManagedMessageForMailbox = async (input: {
     }
 
     if (message !== undefined) {
+      await ensureMailImportanceWork(tx, {
+        mailboxId: message.mailboxId,
+        message: {
+          ...input.parsed,
+          attachments: undefined,
+          date: input.parsed.date?.toISOString(),
+          id: message.id,
+          threadId: message.threadId,
+        },
+        messageId: message.id,
+        receivedAt: sentAt,
+        threadId: message.threadId,
+      });
       await tx
         .update(mailbox)
         .set({
@@ -354,6 +374,36 @@ const ingestManagedMessageForMailbox = async (input: {
         .where(eq(mailbox.id, input.targetMailboxId));
     }
 
+    if (message === undefined) {
+      const [existing] = await tx
+        .select({
+          bodyHtml: managedMailMessage.bodyHtml,
+          bodyText: managedMailMessage.bodyText,
+          from: managedMailMessage.from,
+          headers: managedMailMessage.headers,
+          id: managedMailMessage.id,
+        })
+        .from(managedMailMessage)
+        .where(
+          and(
+            eq(managedMailMessage.mailboxId, input.targetMailboxId),
+            eq(managedMailMessage.providerMessageId, input.providerMessageId),
+            isNull(managedMailMessage.analysis)
+          )
+        )
+        .for("update");
+      if (existing !== undefined) {
+        await tx
+          .update(managedMailMessage)
+          .set({ analysis: analyzeMailMessage(existing) })
+          .where(
+            and(
+              eq(managedMailMessage.mailboxId, input.targetMailboxId),
+              eq(managedMailMessage.id, existing.id)
+            )
+          );
+      }
+    }
     return message;
   });
 
@@ -362,6 +412,7 @@ const ingestManagedMessageForMailbox = async (input: {
       mailboxId: inserted.mailboxId,
       messageId: inserted.id,
       providerMessageId: input.providerMessageId,
+      receivedAt: input.receivedAt,
       threadId: inserted.threadId,
     });
     return inserted.mailboxId;
@@ -369,6 +420,7 @@ const ingestManagedMessageForMailbox = async (input: {
 
   const [existing] = await db
     .select({
+      createdAt: managedMailMessage.createdAt,
       id: managedMailMessage.id,
       threadId: managedMailMessage.threadId,
     })
@@ -385,6 +437,7 @@ const ingestManagedMessageForMailbox = async (input: {
       mailboxId: input.targetMailboxId,
       messageId: existing.id,
       providerMessageId: input.providerMessageId,
+      receivedAt: existing.createdAt,
       threadId: existing.threadId,
     });
     return input.targetMailboxId;
@@ -511,6 +564,7 @@ export const recordInboundManagedMessage = async (input: {
   }
 
   const parsed = await parseRawMailMessage(input.rawMessage);
+  const referenceIds = getReplyReferenceIds(parsed);
   const rawObjectProvider = input.rawObjectProvider ?? "s3";
   const rawObjectBucket = input.rawObjectBucket ?? input.s3Bucket;
   const rawObjectKey = input.rawObjectKey ?? input.s3Key;
@@ -532,6 +586,7 @@ export const recordInboundManagedMessage = async (input: {
           rawSizeBytes: input.rawSizeBytes,
           receivedAt: input.receivedAt,
           recipients,
+          referenceIds,
           s3Bucket: input.s3Bucket,
           s3Key: input.s3Key,
           targetMailboxId,

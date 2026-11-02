@@ -1,0 +1,56 @@
+"use client";
+
+import { USER_BILLING_QUERY_KEY } from "@quieter/app/features/settings/domain/billing";
+import { orpc } from "@quieter/app/lib/orpc";
+import { settingsRouteApi } from "@quieter/app/lib/route-apis";
+import { toast } from "@quieter/ui/toast";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
+
+export const BillingCheckoutResult = () => {
+  const navigate = useNavigate({ from: "/settings" });
+  const queryClient = useQueryClient();
+  const { billing, checkoutId } = settingsRouteApi.useSearch();
+  const { mutate: syncCheckout } = useMutation({
+    ...orpc.billing.syncCheckout.mutationOptions(),
+    onError: () => {
+      toast.error("We could not activate your plan. Please contact support.");
+    },
+    onSuccess: () => {
+      toast.success("Your plan is active.");
+      void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
+    },
+  });
+
+  useEffect(() => {
+    if (!billing) {
+      return;
+    }
+
+    if (billing === "success") {
+      if (checkoutId === undefined || checkoutId === "") {
+        toast.success("Your purchase was completed.");
+        void queryClient.invalidateQueries({
+          queryKey: USER_BILLING_QUERY_KEY,
+        });
+      } else {
+        syncCheckout({ checkoutId });
+      }
+    } else {
+      toast.message("Checkout canceled.");
+    }
+
+    void navigate({
+      replace: true,
+      search: (previous) => ({
+        ...previous,
+        billing: undefined,
+        checkoutId: undefined,
+      }),
+      to: ".",
+    });
+  }, [billing, checkoutId, navigate, queryClient, syncCheckout]);
+
+  return null;
+};

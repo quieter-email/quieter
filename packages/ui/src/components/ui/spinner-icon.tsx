@@ -1,12 +1,12 @@
 "use client";
 
 import { Loading03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
+import { Icon } from "./icon";
 
 const spinnerIconVariants = cva("animate-spin", {
   defaultVariants: {
@@ -25,11 +25,11 @@ export const SpinnerIcon = ({
   icon = Loading03Icon,
   size,
   ...props
-}: Omit<ComponentPropsWithoutRef<typeof HugeiconsIcon>, "icon"> &
+}: Omit<ComponentPropsWithoutRef<typeof Icon>, "icon"> &
   VariantProps<typeof spinnerIconVariants> & {
-    icon?: ComponentPropsWithoutRef<typeof HugeiconsIcon>["icon"];
+    icon?: ComponentPropsWithoutRef<typeof Icon>["icon"];
   }) => (
-  <HugeiconsIcon
+  <Icon
     aria-hidden
     className={cn(spinnerIconVariants({ size }), className)}
     icon={icon}

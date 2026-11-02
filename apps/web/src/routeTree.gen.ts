@@ -28,37 +28,39 @@ import { Route as PublicImprintRouteImport } from './routes/_public/imprint'
 import { Route as PublicPrivacyRouteImport } from './routes/_public/privacy'
 import { Route as PublicTermsRouteImport } from './routes/_public/terms'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiControlRouteImport } from './routes/api/control'
+import { Route as ApiMcpRouteImport } from './routes/api/mcp'
 import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiPreviewPersonaRouteImport } from './routes/api/preview-persona'
+import { Route as ApiSendRouteImport } from './routes/api/send'
 import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
+import { Route as ApiSuppressionsRouteImport } from './routes/api/suppressions'
 import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
 import { Route as AppAudiencesIndexRouteImport } from './routes/_app/audiences.index'
 import { Route as AppAudiencesAudienceIdRouteImport } from './routes/_app/audiences.$audienceId'
 import { Route as AppCampaignsIndexRouteImport } from './routes/_app/campaigns.index'
 import { Route as AppCampaignsCampaignIdRouteImport } from './routes/_app/campaigns.$campaignId'
 import { Route as AppCampaignsNewRouteImport } from './routes/_app/campaigns.new'
+import { Route as AppDesktopAuthRouteImport } from './routes/_app/desktop.auth'
 import { Route as AppTemplatesIndexRouteImport } from './routes/_app/templates.index'
 import { Route as AppTemplatesTemplateIdRouteImport } from './routes/_app/templates.$templateId'
 import { Route as AppTemplatesNewRouteImport } from './routes/_app/templates.new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 import { Route as ApiConnectorsCallbackRouteImport } from './routes/api/connectors.callback'
+import { Route as ApiControlMcpRouteImport } from './routes/api/control.mcp'
+import { Route as ApiDesktopSessionRouteImport } from './routes/api/desktop.session'
 import { Route as ApiDomainConnectCallbackRouteImport } from './routes/api/domain-connect.callback'
 import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
+import { Route as ApiMessagesMessageIdRouteImport } from './routes/api/messages.$messageId'
+import { Route as ApiOTokenRouteImport } from './routes/api/o.$token'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
-import { Route as ApiV1ControlRouteImport } from './routes/api/v1/control'
-import { Route as ApiV1McpRouteImport } from './routes/api/v1/mcp'
-import { Route as ApiV1SendRouteImport } from './routes/api/v1/send'
-import { Route as ApiV1SuppressionsRouteImport } from './routes/api/v1/suppressions'
+import { Route as ApiUnsubscribeTokenRouteImport } from './routes/api/unsubscribe.$token'
 import { Route as AppCampaignsCampaignIdIndexRouteImport } from './routes/_app/campaigns.$campaignId.index'
 import { Route as AppCampaignsCampaignIdAudienceRouteImport } from './routes/_app/campaigns.$campaignId.audience'
 import { Route as AppCampaignsCampaignIdContentRouteImport } from './routes/_app/campaigns.$campaignId.content'
 import { Route as AppCampaignsCampaignIdReviewRouteImport } from './routes/_app/campaigns.$campaignId.review'
 import { Route as ApiDomainConnectTemplatesServiceIdRouteImport } from './routes/api/domain-connect.templates.$serviceId'
 import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/api.internal.gmail-credentials.rotate'
-import { Route as ApiV1ControlMcpRouteImport } from './routes/api/v1/control.mcp'
-import { Route as ApiV1MessagesMessageIdRouteImport } from './routes/api/v1/messages.$messageId'
-import { Route as ApiV1OTokenRouteImport } from './routes/api/v1/o.$token'
-import { Route as ApiV1UnsubscribeTokenRouteImport } from './routes/api/v1/unsubscribe.$token'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -155,6 +157,16 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiControlRoute = ApiControlRouteImport.update({
+  id: '/api/control',
+  path: '/api/control',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMcpRoute = ApiMcpRouteImport.update({
+  id: '/api/mcp',
+  path: '/api/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiOpenapiRoute = ApiOpenapiRouteImport.update({
   id: '/api/openapi',
   path: '/api/openapi',
@@ -165,9 +177,19 @@ const ApiPreviewPersonaRoute = ApiPreviewPersonaRouteImport.update({
   path: '/api/preview-persona',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSendRoute = ApiSendRouteImport.update({
+  id: '/api/send',
+  path: '/api/send',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSitePasswordRoute = ApiSitePasswordRouteImport.update({
   id: '/api/site-password',
   path: '/api/site-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSuppressionsRoute = ApiSuppressionsRouteImport.update({
+  id: '/api/suppressions',
+  path: '/api/suppressions',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiWaitlistRoute = ApiWaitlistRouteImport.update({
@@ -200,6 +222,11 @@ const AppCampaignsNewRoute = AppCampaignsNewRouteImport.update({
   path: '/new',
   getParentRoute: () => AppCampaignsRoute,
 } as any)
+const AppDesktopAuthRoute = AppDesktopAuthRouteImport.update({
+  id: '/desktop/auth',
+  path: '/desktop/auth',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppTemplatesIndexRoute = AppTemplatesIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -225,6 +252,16 @@ const ApiConnectorsCallbackRoute = ApiConnectorsCallbackRouteImport.update({
   path: '/api/connectors/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiControlMcpRoute = ApiControlMcpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => ApiControlRoute,
+} as any)
+const ApiDesktopSessionRoute = ApiDesktopSessionRouteImport.update({
+  id: '/api/desktop/session',
+  path: '/api/desktop/session',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDomainConnectCallbackRoute =
   ApiDomainConnectCallbackRouteImport.update({
     id: '/api/domain-connect/callback',
@@ -236,29 +273,24 @@ const ApiGmailCallbackRoute = ApiGmailCallbackRouteImport.update({
   path: '/api/gmail/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMessagesMessageIdRoute = ApiMessagesMessageIdRouteImport.update({
+  id: '/api/messages/$messageId',
+  path: '/api/messages/$messageId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOTokenRoute = ApiOTokenRouteImport.update({
+  id: '/api/o/$token',
+  path: '/api/o/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
   id: '/api/orpc/$',
   path: '/api/orpc/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiV1ControlRoute = ApiV1ControlRouteImport.update({
-  id: '/api/v1/control',
-  path: '/api/v1/control',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiV1McpRoute = ApiV1McpRouteImport.update({
-  id: '/api/v1/mcp',
-  path: '/api/v1/mcp',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiV1SendRoute = ApiV1SendRouteImport.update({
-  id: '/api/v1/send',
-  path: '/api/v1/send',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiV1SuppressionsRoute = ApiV1SuppressionsRouteImport.update({
-  id: '/api/v1/suppressions',
-  path: '/api/v1/suppressions',
+const ApiUnsubscribeTokenRoute = ApiUnsubscribeTokenRouteImport.update({
+  id: '/api/unsubscribe/$token',
+  path: '/api/unsubscribe/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppCampaignsCampaignIdIndexRoute =
@@ -297,26 +329,6 @@ const ApiInternalGmailCredentialsRotateRoute =
     path: '/api/internal/gmail-credentials/rotate',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiV1ControlMcpRoute = ApiV1ControlMcpRouteImport.update({
-  id: '/mcp',
-  path: '/mcp',
-  getParentRoute: () => ApiV1ControlRoute,
-} as any)
-const ApiV1MessagesMessageIdRoute = ApiV1MessagesMessageIdRouteImport.update({
-  id: '/api/v1/messages/$messageId',
-  path: '/api/v1/messages/$messageId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiV1OTokenRoute = ApiV1OTokenRouteImport.update({
-  id: '/api/v1/o/$token',
-  path: '/api/v1/o/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiV1UnsubscribeTokenRoute = ApiV1UnsubscribeTokenRouteImport.update({
-  id: '/api/v1/unsubscribe/$token',
-  path: '/api/v1/unsubscribe/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -336,24 +348,30 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PublicPrivacyRoute
   '/terms': typeof PublicTermsRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/control': typeof ApiControlRouteWithChildren
+  '/api/mcp': typeof ApiMcpRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
+  '/api/send': typeof ApiSendRoute
   '/api/site-password': typeof ApiSitePasswordRoute
+  '/api/suppressions': typeof ApiSuppressionsRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/audiences/$audienceId': typeof AppAudiencesAudienceIdRoute
   '/campaigns/$campaignId': typeof AppCampaignsCampaignIdRouteWithChildren
   '/campaigns/new': typeof AppCampaignsNewRoute
+  '/desktop/auth': typeof AppDesktopAuthRoute
   '/templates/$templateId': typeof AppTemplatesTemplateIdRoute
   '/templates/new': typeof AppTemplatesNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/control/mcp': typeof ApiControlMcpRoute
+  '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
+  '/api/messages/$messageId': typeof ApiMessagesMessageIdRoute
+  '/api/o/$token': typeof ApiOTokenRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
-  '/api/v1/control': typeof ApiV1ControlRouteWithChildren
-  '/api/v1/mcp': typeof ApiV1McpRoute
-  '/api/v1/send': typeof ApiV1SendRoute
-  '/api/v1/suppressions': typeof ApiV1SuppressionsRoute
+  '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
   '/audiences/': typeof AppAudiencesIndexRoute
   '/campaigns/': typeof AppCampaignsIndexRoute
   '/templates/': typeof AppTemplatesIndexRoute
@@ -362,10 +380,6 @@ export interface FileRoutesByFullPath {
   '/campaigns/$campaignId/review': typeof AppCampaignsCampaignIdReviewRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
-  '/api/v1/control/mcp': typeof ApiV1ControlMcpRoute
-  '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
-  '/api/v1/o/$token': typeof ApiV1OTokenRoute
-  '/api/v1/unsubscribe/$token': typeof ApiV1UnsubscribeTokenRoute
   '/campaigns/$campaignId/': typeof AppCampaignsCampaignIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -383,23 +397,29 @@ export interface FileRoutesByTo {
   '/privacy': typeof PublicPrivacyRoute
   '/terms': typeof PublicTermsRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/control': typeof ApiControlRouteWithChildren
+  '/api/mcp': typeof ApiMcpRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
+  '/api/send': typeof ApiSendRoute
   '/api/site-password': typeof ApiSitePasswordRoute
+  '/api/suppressions': typeof ApiSuppressionsRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/audiences/$audienceId': typeof AppAudiencesAudienceIdRoute
   '/campaigns/new': typeof AppCampaignsNewRoute
+  '/desktop/auth': typeof AppDesktopAuthRoute
   '/templates/$templateId': typeof AppTemplatesTemplateIdRoute
   '/templates/new': typeof AppTemplatesNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/control/mcp': typeof ApiControlMcpRoute
+  '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
+  '/api/messages/$messageId': typeof ApiMessagesMessageIdRoute
+  '/api/o/$token': typeof ApiOTokenRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
-  '/api/v1/control': typeof ApiV1ControlRouteWithChildren
-  '/api/v1/mcp': typeof ApiV1McpRoute
-  '/api/v1/send': typeof ApiV1SendRoute
-  '/api/v1/suppressions': typeof ApiV1SuppressionsRoute
+  '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
   '/audiences': typeof AppAudiencesIndexRoute
   '/campaigns': typeof AppCampaignsIndexRoute
   '/templates': typeof AppTemplatesIndexRoute
@@ -408,10 +428,6 @@ export interface FileRoutesByTo {
   '/campaigns/$campaignId/review': typeof AppCampaignsCampaignIdReviewRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
-  '/api/v1/control/mcp': typeof ApiV1ControlMcpRoute
-  '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
-  '/api/v1/o/$token': typeof ApiV1OTokenRoute
-  '/api/v1/unsubscribe/$token': typeof ApiV1UnsubscribeTokenRoute
   '/campaigns/$campaignId': typeof AppCampaignsCampaignIdIndexRoute
 }
 export interface FileRoutesById {
@@ -434,25 +450,31 @@ export interface FileRoutesById {
   '/_public/privacy': typeof PublicPrivacyRoute
   '/_public/terms': typeof PublicTermsRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/control': typeof ApiControlRouteWithChildren
+  '/api/mcp': typeof ApiMcpRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
+  '/api/send': typeof ApiSendRoute
   '/api/site-password': typeof ApiSitePasswordRoute
+  '/api/suppressions': typeof ApiSuppressionsRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/_app/': typeof AppIndexRoute
   '/_app/audiences/$audienceId': typeof AppAudiencesAudienceIdRoute
   '/_app/campaigns/$campaignId': typeof AppCampaignsCampaignIdRouteWithChildren
   '/_app/campaigns/new': typeof AppCampaignsNewRoute
+  '/_app/desktop/auth': typeof AppDesktopAuthRoute
   '/_app/templates/$templateId': typeof AppTemplatesTemplateIdRoute
   '/_app/templates/new': typeof AppTemplatesNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/control/mcp': typeof ApiControlMcpRoute
+  '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
+  '/api/messages/$messageId': typeof ApiMessagesMessageIdRoute
+  '/api/o/$token': typeof ApiOTokenRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
-  '/api/v1/control': typeof ApiV1ControlRouteWithChildren
-  '/api/v1/mcp': typeof ApiV1McpRoute
-  '/api/v1/send': typeof ApiV1SendRoute
-  '/api/v1/suppressions': typeof ApiV1SuppressionsRoute
+  '/api/unsubscribe/$token': typeof ApiUnsubscribeTokenRoute
   '/_app/audiences/': typeof AppAudiencesIndexRoute
   '/_app/campaigns/': typeof AppCampaignsIndexRoute
   '/_app/templates/': typeof AppTemplatesIndexRoute
@@ -461,10 +483,6 @@ export interface FileRoutesById {
   '/_app/campaigns/$campaignId/review': typeof AppCampaignsCampaignIdReviewRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
-  '/api/v1/control/mcp': typeof ApiV1ControlMcpRoute
-  '/api/v1/messages/$messageId': typeof ApiV1MessagesMessageIdRoute
-  '/api/v1/o/$token': typeof ApiV1OTokenRoute
-  '/api/v1/unsubscribe/$token': typeof ApiV1UnsubscribeTokenRoute
   '/_app/campaigns/$campaignId/': typeof AppCampaignsCampaignIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -487,24 +505,30 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/terms'
     | '/api/chat'
+    | '/api/control'
+    | '/api/mcp'
     | '/api/openapi'
     | '/api/preview-persona'
+    | '/api/send'
     | '/api/site-password'
+    | '/api/suppressions'
     | '/api/waitlist'
     | '/audiences/$audienceId'
     | '/campaigns/$campaignId'
     | '/campaigns/new'
+    | '/desktop/auth'
     | '/templates/$templateId'
     | '/templates/new'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/control/mcp'
+    | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
+    | '/api/messages/$messageId'
+    | '/api/o/$token'
     | '/api/orpc/$'
-    | '/api/v1/control'
-    | '/api/v1/mcp'
-    | '/api/v1/send'
-    | '/api/v1/suppressions'
+    | '/api/unsubscribe/$token'
     | '/audiences/'
     | '/campaigns/'
     | '/templates/'
@@ -513,10 +537,6 @@ export interface FileRouteTypes {
     | '/campaigns/$campaignId/review'
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
-    | '/api/v1/control/mcp'
-    | '/api/v1/messages/$messageId'
-    | '/api/v1/o/$token'
-    | '/api/v1/unsubscribe/$token'
     | '/campaigns/$campaignId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -534,23 +554,29 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/terms'
     | '/api/chat'
+    | '/api/control'
+    | '/api/mcp'
     | '/api/openapi'
     | '/api/preview-persona'
+    | '/api/send'
     | '/api/site-password'
+    | '/api/suppressions'
     | '/api/waitlist'
     | '/audiences/$audienceId'
     | '/campaigns/new'
+    | '/desktop/auth'
     | '/templates/$templateId'
     | '/templates/new'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/control/mcp'
+    | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
+    | '/api/messages/$messageId'
+    | '/api/o/$token'
     | '/api/orpc/$'
-    | '/api/v1/control'
-    | '/api/v1/mcp'
-    | '/api/v1/send'
-    | '/api/v1/suppressions'
+    | '/api/unsubscribe/$token'
     | '/audiences'
     | '/campaigns'
     | '/templates'
@@ -559,10 +585,6 @@ export interface FileRouteTypes {
     | '/campaigns/$campaignId/review'
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
-    | '/api/v1/control/mcp'
-    | '/api/v1/messages/$messageId'
-    | '/api/v1/o/$token'
-    | '/api/v1/unsubscribe/$token'
     | '/campaigns/$campaignId'
   id:
     | '__root__'
@@ -584,25 +606,31 @@ export interface FileRouteTypes {
     | '/_public/privacy'
     | '/_public/terms'
     | '/api/chat'
+    | '/api/control'
+    | '/api/mcp'
     | '/api/openapi'
     | '/api/preview-persona'
+    | '/api/send'
     | '/api/site-password'
+    | '/api/suppressions'
     | '/api/waitlist'
     | '/_app/'
     | '/_app/audiences/$audienceId'
     | '/_app/campaigns/$campaignId'
     | '/_app/campaigns/new'
+    | '/_app/desktop/auth'
     | '/_app/templates/$templateId'
     | '/_app/templates/new'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/control/mcp'
+    | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
+    | '/api/messages/$messageId'
+    | '/api/o/$token'
     | '/api/orpc/$'
-    | '/api/v1/control'
-    | '/api/v1/mcp'
-    | '/api/v1/send'
-    | '/api/v1/suppressions'
+    | '/api/unsubscribe/$token'
     | '/_app/audiences/'
     | '/_app/campaigns/'
     | '/_app/templates/'
@@ -611,10 +639,6 @@ export interface FileRouteTypes {
     | '/_app/campaigns/$campaignId/review'
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
-    | '/api/v1/control/mcp'
-    | '/api/v1/messages/$messageId'
-    | '/api/v1/o/$token'
-    | '/api/v1/unsubscribe/$token'
     | '/_app/campaigns/$campaignId/'
   fileRoutesById: FileRoutesById
 }
@@ -622,24 +646,25 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   PublicRoute: typeof PublicRouteWithChildren
   ApiChatRoute: typeof ApiChatRoute
+  ApiControlRoute: typeof ApiControlRouteWithChildren
+  ApiMcpRoute: typeof ApiMcpRoute
   ApiOpenapiRoute: typeof ApiOpenapiRoute
   ApiPreviewPersonaRoute: typeof ApiPreviewPersonaRoute
+  ApiSendRoute: typeof ApiSendRoute
   ApiSitePasswordRoute: typeof ApiSitePasswordRoute
+  ApiSuppressionsRoute: typeof ApiSuppressionsRoute
   ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiConnectorsCallbackRoute: typeof ApiConnectorsCallbackRoute
+  ApiDesktopSessionRoute: typeof ApiDesktopSessionRoute
   ApiDomainConnectCallbackRoute: typeof ApiDomainConnectCallbackRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
+  ApiMessagesMessageIdRoute: typeof ApiMessagesMessageIdRoute
+  ApiOTokenRoute: typeof ApiOTokenRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
-  ApiV1ControlRoute: typeof ApiV1ControlRouteWithChildren
-  ApiV1McpRoute: typeof ApiV1McpRoute
-  ApiV1SendRoute: typeof ApiV1SendRoute
-  ApiV1SuppressionsRoute: typeof ApiV1SuppressionsRoute
+  ApiUnsubscribeTokenRoute: typeof ApiUnsubscribeTokenRoute
   ApiDomainConnectTemplatesServiceIdRoute: typeof ApiDomainConnectTemplatesServiceIdRoute
   ApiInternalGmailCredentialsRotateRoute: typeof ApiInternalGmailCredentialsRotateRoute
-  ApiV1MessagesMessageIdRoute: typeof ApiV1MessagesMessageIdRoute
-  ApiV1OTokenRoute: typeof ApiV1OTokenRoute
-  ApiV1UnsubscribeTokenRoute: typeof ApiV1UnsubscribeTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -777,6 +802,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/control': {
+      id: '/api/control'
+      path: '/api/control'
+      fullPath: '/api/control'
+      preLoaderRoute: typeof ApiControlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mcp': {
+      id: '/api/mcp'
+      path: '/api/mcp'
+      fullPath: '/api/mcp'
+      preLoaderRoute: typeof ApiMcpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/openapi': {
       id: '/api/openapi'
       path: '/api/openapi'
@@ -791,11 +830,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPreviewPersonaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/send': {
+      id: '/api/send'
+      path: '/api/send'
+      fullPath: '/api/send'
+      preLoaderRoute: typeof ApiSendRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/site-password': {
       id: '/api/site-password'
       path: '/api/site-password'
       fullPath: '/api/site-password'
       preLoaderRoute: typeof ApiSitePasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/suppressions': {
+      id: '/api/suppressions'
+      path: '/api/suppressions'
+      fullPath: '/api/suppressions'
+      preLoaderRoute: typeof ApiSuppressionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/waitlist': {
@@ -840,6 +893,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCampaignsNewRouteImport
       parentRoute: typeof AppCampaignsRoute
     }
+    '/_app/desktop/auth': {
+      id: '/_app/desktop/auth'
+      path: '/desktop/auth'
+      fullPath: '/desktop/auth'
+      preLoaderRoute: typeof AppDesktopAuthRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/templates/': {
       id: '/_app/templates/'
       path: '/'
@@ -875,6 +935,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiConnectorsCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/control/mcp': {
+      id: '/api/control/mcp'
+      path: '/mcp'
+      fullPath: '/api/control/mcp'
+      preLoaderRoute: typeof ApiControlMcpRouteImport
+      parentRoute: typeof ApiControlRoute
+    }
+    '/api/desktop/session': {
+      id: '/api/desktop/session'
+      path: '/api/desktop/session'
+      fullPath: '/api/desktop/session'
+      preLoaderRoute: typeof ApiDesktopSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/domain-connect/callback': {
       id: '/api/domain-connect/callback'
       path: '/api/domain-connect/callback'
@@ -889,6 +963,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGmailCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/messages/$messageId': {
+      id: '/api/messages/$messageId'
+      path: '/api/messages/$messageId'
+      fullPath: '/api/messages/$messageId'
+      preLoaderRoute: typeof ApiMessagesMessageIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/o/$token': {
+      id: '/api/o/$token'
+      path: '/api/o/$token'
+      fullPath: '/api/o/$token'
+      preLoaderRoute: typeof ApiOTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/orpc/$': {
       id: '/api/orpc/$'
       path: '/api/orpc/$'
@@ -896,32 +984,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOrpcSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/v1/control': {
-      id: '/api/v1/control'
-      path: '/api/v1/control'
-      fullPath: '/api/v1/control'
-      preLoaderRoute: typeof ApiV1ControlRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/mcp': {
-      id: '/api/v1/mcp'
-      path: '/api/v1/mcp'
-      fullPath: '/api/v1/mcp'
-      preLoaderRoute: typeof ApiV1McpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/send': {
-      id: '/api/v1/send'
-      path: '/api/v1/send'
-      fullPath: '/api/v1/send'
-      preLoaderRoute: typeof ApiV1SendRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/suppressions': {
-      id: '/api/v1/suppressions'
-      path: '/api/v1/suppressions'
-      fullPath: '/api/v1/suppressions'
-      preLoaderRoute: typeof ApiV1SuppressionsRouteImport
+    '/api/unsubscribe/$token': {
+      id: '/api/unsubscribe/$token'
+      path: '/api/unsubscribe/$token'
+      fullPath: '/api/unsubscribe/$token'
+      preLoaderRoute: typeof ApiUnsubscribeTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/campaigns/$campaignId/': {
@@ -964,34 +1031,6 @@ declare module '@tanstack/react-router' {
       path: '/api/internal/gmail-credentials/rotate'
       fullPath: '/api/internal/gmail-credentials/rotate'
       preLoaderRoute: typeof ApiInternalGmailCredentialsRotateRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/control/mcp': {
-      id: '/api/v1/control/mcp'
-      path: '/mcp'
-      fullPath: '/api/v1/control/mcp'
-      preLoaderRoute: typeof ApiV1ControlMcpRouteImport
-      parentRoute: typeof ApiV1ControlRoute
-    }
-    '/api/v1/messages/$messageId': {
-      id: '/api/v1/messages/$messageId'
-      path: '/api/v1/messages/$messageId'
-      fullPath: '/api/v1/messages/$messageId'
-      preLoaderRoute: typeof ApiV1MessagesMessageIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/o/$token': {
-      id: '/api/v1/o/$token'
-      path: '/api/v1/o/$token'
-      fullPath: '/api/v1/o/$token'
-      preLoaderRoute: typeof ApiV1OTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/unsubscribe/$token': {
-      id: '/api/v1/unsubscribe/$token'
-      path: '/api/v1/unsubscribe/$token'
-      fullPath: '/api/v1/unsubscribe/$token'
-      preLoaderRoute: typeof ApiV1UnsubscribeTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -1073,6 +1112,7 @@ interface AppRouteChildren {
   AppSitePasswordRoute: typeof AppSitePasswordRoute
   AppTemplatesRoute: typeof AppTemplatesRouteWithChildren
   AppIndexRoute: typeof AppIndexRoute
+  AppDesktopAuthRoute: typeof AppDesktopAuthRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -1085,6 +1125,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSitePasswordRoute: AppSitePasswordRoute,
   AppTemplatesRoute: AppTemplatesRouteWithChildren,
   AppIndexRoute: AppIndexRoute,
+  AppDesktopAuthRoute: AppDesktopAuthRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -1112,42 +1153,43 @@ const PublicRouteChildren: PublicRouteChildren = {
 const PublicRouteWithChildren =
   PublicRoute._addFileChildren(PublicRouteChildren)
 
-interface ApiV1ControlRouteChildren {
-  ApiV1ControlMcpRoute: typeof ApiV1ControlMcpRoute
+interface ApiControlRouteChildren {
+  ApiControlMcpRoute: typeof ApiControlMcpRoute
 }
 
-const ApiV1ControlRouteChildren: ApiV1ControlRouteChildren = {
-  ApiV1ControlMcpRoute: ApiV1ControlMcpRoute,
+const ApiControlRouteChildren: ApiControlRouteChildren = {
+  ApiControlMcpRoute: ApiControlMcpRoute,
 }
 
-const ApiV1ControlRouteWithChildren = ApiV1ControlRoute._addFileChildren(
-  ApiV1ControlRouteChildren,
+const ApiControlRouteWithChildren = ApiControlRoute._addFileChildren(
+  ApiControlRouteChildren,
 )
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   PublicRoute: PublicRouteWithChildren,
   ApiChatRoute: ApiChatRoute,
+  ApiControlRoute: ApiControlRouteWithChildren,
+  ApiMcpRoute: ApiMcpRoute,
   ApiOpenapiRoute: ApiOpenapiRoute,
   ApiPreviewPersonaRoute: ApiPreviewPersonaRoute,
+  ApiSendRoute: ApiSendRoute,
   ApiSitePasswordRoute: ApiSitePasswordRoute,
+  ApiSuppressionsRoute: ApiSuppressionsRoute,
   ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiConnectorsCallbackRoute: ApiConnectorsCallbackRoute,
+  ApiDesktopSessionRoute: ApiDesktopSessionRoute,
   ApiDomainConnectCallbackRoute: ApiDomainConnectCallbackRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
+  ApiMessagesMessageIdRoute: ApiMessagesMessageIdRoute,
+  ApiOTokenRoute: ApiOTokenRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
-  ApiV1ControlRoute: ApiV1ControlRouteWithChildren,
-  ApiV1McpRoute: ApiV1McpRoute,
-  ApiV1SendRoute: ApiV1SendRoute,
-  ApiV1SuppressionsRoute: ApiV1SuppressionsRoute,
+  ApiUnsubscribeTokenRoute: ApiUnsubscribeTokenRoute,
   ApiDomainConnectTemplatesServiceIdRoute:
     ApiDomainConnectTemplatesServiceIdRoute,
   ApiInternalGmailCredentialsRotateRoute:
     ApiInternalGmailCredentialsRotateRoute,
-  ApiV1MessagesMessageIdRoute: ApiV1MessagesMessageIdRoute,
-  ApiV1OTokenRoute: ApiV1OTokenRoute,
-  ApiV1UnsubscribeTokenRoute: ApiV1UnsubscribeTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

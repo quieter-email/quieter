@@ -9,17 +9,18 @@ export const SelectionIndicator = ({
   variant = "default",
 }: {
   layoutId?: string;
-  variant?: "default" | "primary";
+  variant?: "default" | "primary" | "secondary";
 }) => {
   const reducedMotion = useReducedMotion() === true;
   return (
     <m.span
       aria-hidden
       className={cn(
-        "pointer-events-none absolute inset-0 -z-10 rounded-[inherit]",
+        "pointer-events-none absolute inset-0 -z-10 rounded-[inherit] [corner-shape:inherit]",
         {
-          "bg-bg-surface shadow-sm": variant === "default",
+          "bg-detail shadow-sm": variant === "default",
           "bg-primary": variant === "primary",
+          "bg-secondary shadow-sm": variant === "secondary",
         }
       )}
       initial={false}

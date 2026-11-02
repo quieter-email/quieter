@@ -1,0 +1,162 @@
+[
+  {
+    "before": {
+      "id": "release-inbox-0150",
+      "index": 150,
+      "offset": 17
+    },
+    "after": {
+      "id": "release-inbox-0150",
+      "index": 150,
+      "offset": 17
+    },
+    "sameThread": true,
+    "sameOffset": true,
+    "requests": [
+      {
+        "open": true,
+        "t": 1.5
+      },
+      {
+        "open": false,
+        "t": 101.10000002384186
+      },
+      {
+        "open": true,
+        "t": 175.10000002384186
+      },
+      {
+        "open": false,
+        "t": 221.30000001192093
+      }
+    ]
+  },
+  {
+    "before": {
+      "id": "release-inbox-0150",
+      "index": 150,
+      "offset": 17
+    },
+    "after": {
+      "id": "release-inbox-0150",
+      "index": 150,
+      "offset": 17
+    },
+    "sameThread": true,
+    "sameOffset": true,
+    "requests": [
+      {
+        "open": true,
+        "t": 0.7999999523162842
+      },
+      {
+        "open": false,
+        "t": 92.39999997615814
+      },
+      {
+        "open": true,
+        "t": 153.89999997615814
+      },
+      {
+        "open": false,
+        "t": 215.29999995231628
+      }
+    ]
+  },
+  {
+    "before": {
+      "id": "release-inbox-0150",
+      "index": 150,
+      "offset": 17
+    },
+    "after": {
+      "id": "release-inbox-0150",
+      "index": 150,
+      "offset": 17
+    },
+    "sameThread": true,
+    "sameOffset": true,
+    "requests": [
+      {
+        "open": true,
+        "t": 0.699999988079071
+      },
+      {
+        "open": false,
+        "t": 136.89999997615814
+      },
+      {
+        "open": true,
+        "t": 173.5
+      },
+      {
+        "open": false,
+        "t": 209.89999997615817
+      }
+    ]
+  },
+  {
+    "before": {
+      "id": "release-inbox-0150",
+      "index": 150,
+      "offset": 17
+    },
+    "after": {
+      "id": "release-inbox-0150",
+      "index": 150,
+      "offset": 17
+    },
+    "sameThread": true,
+    "sameOffset": true,
+    "requests": [
+      {
+        "open": true,
+        "t": 0.9000000357627869
+      },
+      {
+        "open": false,
+        "t": 96.9000000357628
+      },
+      {
+        "open": true,
+        "t": 164.4000000357628
+      },
+      {
+        "open": false,
+        "t": 286.4000000357628
+      }
+    ]
+  },
+  {
+    "before": {
+      "id": "release-inbox-0150",
+      "index": 150,
+      "offset": 17
+    },
+    "after": {
+      "id": "release-inbox-0150",
+      "index": 150,
+      "offset": 17
+    },
+    "sameThread": true,
+    "sameOffset": true,
+    "requests": [
+      {
+        "open": true,
+        "t": 0.9000000357627869
+      },
+      {
+        "open": false,
+        "t": 97.10000002384186
+      },
+      {
+        "open": true,
+        "t": 160.70000004768372
+      },
+      {
+        "open": false,
+        "t": 218.70000004768372
+      }
+    ]
+  }
+]

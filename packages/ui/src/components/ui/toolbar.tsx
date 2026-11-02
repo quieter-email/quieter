@@ -3,28 +3,44 @@
 import { Toolbar as ToolbarPrimitive } from "@base-ui/react/toolbar";
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
+import { createContext, useContext } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
+import { inputControlClassName } from "./input-chrome";
+import { surfaceVariants } from "./surface";
+
+const ToolbarChromeContext = createContext<"default" | "inset">("default");
 
 export const Toolbar = ({
+  chrome = "default",
   className,
   size = "default",
   ...props
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Root> & {
+  chrome?: "default" | "inset";
   size?: "default" | "compact";
 }) => (
-  <ToolbarPrimitive.Root
-    className={cn(
-      "inline-flex items-center rounded-lg border border-border bg-bg shadow-sm squircle",
-      {
-        "min-h-10 gap-1 p-1": size === "default",
-        "min-h-8 gap-0.5 p-0.5": size === "compact",
-      },
-      className
-    )}
-    {...props}
-  />
+  <ToolbarChromeContext value={chrome}>
+    <ToolbarPrimitive.Root
+      className={cn(
+        surfaceVariants({
+          chrome: chrome === "inset" ? "inset" : "default",
+          padding: "none",
+          variant: chrome === "inset" ? "detail" : "section",
+        }),
+        "inline-flex items-center border border-transparent shadow-sm squircle",
+        {
+          "m-0.5 min-h-12 gap-1.5 border-0 p-2 shadow-none": chrome === "inset",
+          "min-h-10 gap-1 p-1": chrome === "default" && size === "default",
+          "min-h-8 gap-0.5 rounded-lg p-0.5":
+            chrome === "default" && size === "compact",
+        },
+        className
+      )}
+      {...props}
+    />
+  </ToolbarChromeContext>
 );
 
 export const ToolbarGroup = ({
@@ -38,13 +54,27 @@ export const ToolbarGroup = ({
 );
 
 const toolbarButtonVariants = cva(
-  "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm font-medium whitespace-nowrap text-muted-fg transition-[background-color,color,transform] duration-150 ease-out select-none hover:bg-muted hover:text-fg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] active:bg-muted/80 active:text-fg disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+  "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-transparent px-3.5 text-body-sm font-medium whitespace-nowrap text-muted-fg transition-[background-color,color,scale] duration-150 ease-out select-none hover:bg-muted hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] active:bg-control-active active:text-fg disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
   {
+    compoundVariants: [
+      {
+        chrome: "inset",
+        className: "hover:bg-control-hover",
+        variant: "default",
+      },
+      {
+        chrome: "inset",
+        className: "bg-control-hover hover:bg-control-active",
+        variant: "selected",
+      },
+    ],
     defaultVariants: {
+      chrome: "default",
       size: "default",
       variant: "default",
     },
     variants: {
+      chrome: { default: null, inset: null },
       size: {
         default: "",
         icon: "size-8 p-0",
@@ -53,8 +83,8 @@ const toolbarButtonVariants = cva(
       variant: {
         default: "",
         primary:
-          "bg-primary text-primary-fg shadow-sm hover:bg-primary/90 hover:text-primary-fg active:bg-primary/85 active:text-primary-fg",
-        selected: "bg-control-active text-fg shadow-sm",
+          "bg-primary text-primary-fg shadow-sm hover:bg-primary-hover hover:text-primary-fg active:bg-primary-active active:text-primary-fg",
+        selected: "bg-detail text-fg shadow-sm",
       },
     },
   }
@@ -63,29 +93,38 @@ const toolbarButtonVariants = cva(
 type ToolbarButtonProps = ComponentPropsWithoutRef<
   typeof ToolbarPrimitive.Button
 > &
-  VariantProps<typeof toolbarButtonVariants>;
+  Omit<VariantProps<typeof toolbarButtonVariants>, "chrome">;
 
 export const ToolbarButton = ({
   className,
   size,
   variant,
   ...props
-}: ToolbarButtonProps) => (
-  <ToolbarPrimitive.Button
-    className={cn(toolbarButtonVariants({ size, variant }), className)}
-    {...props}
-  />
-);
+}: ToolbarButtonProps) => {
+  const chrome = useContext(ToolbarChromeContext);
+  return (
+    <ToolbarPrimitive.Button
+      className={cn(
+        toolbarButtonVariants({ chrome, size, variant }),
+        className
+      )}
+      {...props}
+    />
+  );
+};
 
 export const ToolbarLink = ({
   className,
   ...props
-}: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Link>) => (
-  <ToolbarPrimitive.Link
-    className={cn(toolbarButtonVariants(), className)}
-    {...props}
-  />
-);
+}: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Link>) => {
+  const chrome = useContext(ToolbarChromeContext);
+  return (
+    <ToolbarPrimitive.Link
+      className={cn(toolbarButtonVariants({ chrome }), className)}
+      {...props}
+    />
+  );
+};
 
 export const ToolbarInput = ({
   className,
@@ -93,7 +132,8 @@ export const ToolbarInput = ({
 }: ComponentPropsWithoutRef<typeof ToolbarPrimitive.Input>) => (
   <ToolbarPrimitive.Input
     className={cn(
-      "h-8 w-full min-w-32 rounded-md border border-border bg-bg px-3 text-body-sm text-fg shadow-sm transition-colors duration-150 ease-out squircle placeholder:text-muted-fg read-only:cursor-default read-only:bg-bg focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive/45",
+      inputControlClassName,
+      "h-8 min-w-32 rounded-md border border-border bg-detail px-3 text-body-sm shadow-sm squircle read-only:cursor-default read-only:bg-detail dark:border-transparent",
       className
     )}
     {...props}

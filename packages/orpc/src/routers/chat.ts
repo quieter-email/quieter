@@ -5,6 +5,7 @@ import {
   openRouterAudioFormatSchema,
 } from "@quieter/ai/transcription-format";
 import { reportAiUsage } from "@quieter/billing";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import { chat, chatMessage } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
@@ -12,6 +13,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { assertCanUseAi } from "../ai-access";
+import { recordAiGeneratedMailBody } from "../ai-mail-authorship";
 import { loadAiAgentContext, serializeAiAgentContext } from "../ai-memory";
 import {
   cancelForegroundExchangeParts,
@@ -328,13 +330,28 @@ export const chatRouter = {
 
       const { generateOpenRouterTranscription } =
         await import("@quieter/ai/openrouter-transcription");
+      const transcriptionUsageId = `chat-transcription:${crypto.randomUUID()}`;
+      const transcriptionBilling = await createMailboxAiBillingContext({
+        externalId: transcriptionUsageId,
+        mailboxId: input.mailboxId,
+        usageKind: "aiChat",
+        userId: context.userId,
+      });
       let result: Awaited<ReturnType<typeof generateOpenRouterTranscription>>;
       try {
         result = await generateOpenRouterTranscription({
           audioBase64: input.audioBase64,
+          billing: transcriptionBilling,
           format: input.format,
         });
       } catch (error: unknown) {
+        if (
+          error instanceof ORPCError &&
+          error.status >= 400 &&
+          error.status < 500
+        ) {
+          throw error;
+        }
         reportError(error, { operation: "chat:transcribe-audio" });
         const message =
           error instanceof Error &&
@@ -356,21 +373,24 @@ export const chatRouter = {
           ? await (async () => {
               const { formatTranscribedEmail } =
                 await import("@quieter/ai/format-transcribed-email");
-              const memoryContext = await loadAiAgentContext({
-                agent: "compose",
-                mailboxId: input.mailboxId,
-                query: text,
-                userId: context.userId,
-              });
+              let formatted: string;
               try {
-                return await formatTranscribedEmail({
+                const memoryContext = await loadAiAgentContext({
+                  agent: "compose",
+                  mailboxId: input.mailboxId,
+                  query: text,
+                  userId: context.userId,
+                });
+                const formatUsageId = `chat-transcription-format:${crypto.randomUUID()}`;
+                formatted = await formatTranscribedEmail({
+                  billing: { ...transcriptionBilling, groupId: formatUsageId },
                   memoryContext: serializeAiAgentContext(memoryContext),
                   onUsage: (usage) => {
                     void reportAiUsage({
                       chatId: input.chatId ?? null,
                       completionTokens: usage.completionTokens,
                       costUsd: usage.costUsd,
-                      externalId: `chat-transcription-format:${crypto.randomUUID()}`,
+                      externalId: formatUsageId,
                       mailboxId: input.mailboxId,
                       model: resolveBackgroundModel(),
                       promptTokens: usage.promptTokens,
@@ -388,12 +408,31 @@ export const chatRouter = {
                   },
                   transcript: text,
                 });
-              } catch (error: unknown) {
-                reportError(error, {
+              } catch (error) {
+                if (
+                  error instanceof ORPCError &&
+                  error.status >= 400 &&
+                  error.status < 500
+                ) {
+                  throw error;
+                }
+                reportError(new Error("Dictated email formatting failed."), {
                   operation: "chat:format-transcribed-email",
                 });
                 return text;
               }
+              try {
+                await recordAiGeneratedMailBody({
+                  bodyText: formatted,
+                  mailboxId: input.mailboxId,
+                  userId: context.userId,
+                });
+              } catch {
+                throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                  message: "Could not prepare that email. Please try again.",
+                });
+              }
+              return formatted;
             })()
           : text;
 
@@ -403,7 +442,7 @@ export const chatRouter = {
           chatId: input.chatId ?? null,
           completionTokens: result.usage.completionTokens,
           costUsd: cost,
-          externalId: `chat-transcription:${crypto.randomUUID()}`,
+          externalId: transcriptionUsageId,
           mailboxId: input.mailboxId,
           model: OPENROUTER_TRANSCRIPTION_MODEL,
           promptTokens: result.usage.promptTokens,

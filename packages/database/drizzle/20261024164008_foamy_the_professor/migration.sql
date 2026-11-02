@@ -1,0 +1,1 @@
+ALTER TABLE "mailImportanceAttempt" ADD COLUMN "usageReportAttemptedAt" timestamp;

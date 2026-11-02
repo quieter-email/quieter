@@ -5,6 +5,7 @@ import {
   extractMessageAttachments,
   extractMessageContent,
 } from "@quieter/mail/message-content";
+import { extractMessageIds } from "@quieter/mail/message-id";
 
 import type { GmailDraft } from "../service";
 
@@ -41,8 +42,7 @@ export const parseDraftMessage = (
       ?.value ?? "";
   const draftAnchor = parseDraftAnchorFromHeaderReader(readHeader) ?? null;
   const inReplyTo = readHeader("In-Reply-To").trim();
-  const referenceMatches = readHeader("References").match(/<[^>]+>/gu);
-  const references = referenceMatches ? [...new Set(referenceMatches)] : [];
+  const references = [...new Set(extractMessageIds(readHeader("References")))];
 
   return {
     attachments: extractMessageAttachments(message.payload, bodyHtml),

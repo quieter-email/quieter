@@ -6,9 +6,7 @@ const serverDirectory = path.resolve(
   import.meta.dirname,
   "../.cloudflare/output/v0/workers/default/bundle"
 );
-const assetDirectory = path.join(serverDirectory, "assets");
-const serverFiles = await readdir(serverDirectory);
-const assetFiles = await readdir(assetDirectory);
+const serverFiles = await readdir(serverDirectory, { recursive: true });
 const boundaries: {
   forbiddenMarkers?: string[];
   marker: string;
@@ -35,14 +33,9 @@ const boundaries: {
   },
 ];
 
-const files = [
-  ...serverFiles
-    .filter((file) => file.endsWith(".js"))
-    .map((file) => path.join(serverDirectory, file)),
-  ...assetFiles
-    .filter((file) => file.endsWith(".js"))
-    .map((file) => path.join(assetDirectory, file)),
-];
+const files = serverFiles
+  .filter((file) => file.endsWith(".js"))
+  .map((file) => path.join(serverDirectory, file));
 const sources = new Map<string, string>(
   await Promise.all(
     files.map(async (file) => [file, await readFile(file, "utf-8")] as const)

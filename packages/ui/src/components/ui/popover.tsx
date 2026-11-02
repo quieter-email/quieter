@@ -4,6 +4,11 @@ import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
+import {
+  anchoredPopupMotionClassName,
+  overlayBackdropClassName,
+  overlayTriggerClassName,
+} from "./overlay-chrome";
 
 export const Popover = PopoverPrimitive.Root;
 export const PopoverPortal = PopoverPrimitive.Portal;
@@ -13,11 +18,7 @@ export const PopoverTrigger = ({
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger>) => (
   <PopoverPrimitive.Trigger
-    className={cn(
-      "squircle",
-      className,
-      "transition-transform duration-100 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
-    )}
+    className={cn("squircle", className, overlayTriggerClassName)}
     {...props}
   />
 );
@@ -27,25 +28,32 @@ export const PopoverContent = ({
   alignOffset = 0,
   children,
   className,
+  collisionPadding,
   side = "bottom",
   sideOffset = 8,
+  size = "default",
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Popup> &
   Pick<
     ComponentPropsWithoutRef<typeof PopoverPrimitive.Positioner>,
-    "align" | "alignOffset" | "side" | "sideOffset"
-  >) => (
+    "align" | "alignOffset" | "collisionPadding" | "side" | "sideOffset"
+  > & {
+    size?: "default" | "sm";
+  }) => (
   <PopoverPortal>
     <PopoverPrimitive.Positioner
       align={align}
       alignOffset={alignOffset}
       className="isolate z-50"
+      collisionPadding={collisionPadding}
       side={side}
       sideOffset={sideOffset}
     >
       <PopoverPrimitive.Popup
         className={cn(
-          "z-50 max-w-sm min-w-52 origin-(--transform-origin) rounded-lg border bg-popover p-4 text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0",
+          anchoredPopupMotionClassName,
+          "z-50 max-w-sm min-w-52 rounded-xl border border-transparent bg-section p-4 text-popover-fg shadow-md",
+          { "w-80 max-w-(--available-width)": size === "sm" },
           className
         )}
         {...props}
@@ -61,7 +69,7 @@ export const PopoverTitle = ({
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Title>) => (
   <PopoverPrimitive.Title
-    className={cn("text-body font-semibold text-fg", className)}
+    className={cn("text-body font-medium text-fg", className)}
     {...props}
   />
 );
@@ -82,7 +90,7 @@ export const PopoverArrow = ({
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Arrow>) => (
   <PopoverPrimitive.Arrow
     className={cn(
-      "pointer-events-none absolute size-2.5 rotate-45 rounded-sm bg-popover data-[side=bottom]:-top-1.25 data-[side=bottom]:border-t data-[side=bottom]:border-l data-[side=left]:-right-1.25 data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:-left-1.25 data-[side=right]:border-b data-[side=right]:border-l data-[side=top]:-bottom-1.25 data-[side=top]:border-r data-[side=top]:border-b",
+      "pointer-events-none absolute size-2.5 rotate-45 rounded-sm border-transparent bg-section data-[side=bottom]:-top-1.25 data-[side=bottom]:border-t data-[side=bottom]:border-l data-[side=left]:-right-1.25 data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:-left-1.25 data-[side=right]:border-b data-[side=right]:border-l data-[side=top]:-bottom-1.25 data-[side=top]:border-r data-[side=top]:border-b",
       className
     )}
     {...props}
@@ -94,10 +102,7 @@ export const PopoverBackdrop = ({
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Backdrop>) => (
   <PopoverPrimitive.Backdrop
-    className={cn(
-      "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0",
-      className
-    )}
+    className={cn(overlayBackdropClassName, className)}
     {...props}
   />
 );

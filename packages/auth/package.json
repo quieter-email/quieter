@@ -4,20 +4,23 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./desktop": "./src/desktop.ts",
     "./google-scopes": "./src/google-scopes.ts",
     "./organization-api-key": "./src/organization-api-key.ts",
     "./polar-webhooks": "./src/polar-webhooks.ts",
     "./preview-personas": "./src/preview-personas.ts",
+    "./regional-time": "./src/regional-time.ts",
     "./session": "./src/session.ts",
-    "./terms-acceptance": "./src/terms-acceptance.ts",
-    "./user-status": "./src/user-status.ts"
+    "./terms-acceptance": "./src/terms-acceptance.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",
+    "@better-auth/electron": "1.7.7",
     "@polar-sh/sdk": "^1.0.2",
     "@quieter/billing": "workspace:*",
     "@quieter/database": "workspace:*",
     "@quieter/env": "workspace:*",
+    "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
     "@react-email/render": "^2.1.0",
     "react": "catalog:",

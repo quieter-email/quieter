@@ -6,6 +6,7 @@ import {
   listLinearMcpToolsForUser,
   runLinearMcpToolCallsForUser,
 } from "../src/connectors/linear-mcp";
+import type { getLinearConnectionForUser } from "../src/connectors/runtime";
 
 vi.mock(import("../src/connectors/linear-mcp"), () => ({
   isMutatingLinearMcpTool: vi.fn<(input: { name: string }) => boolean>(
@@ -14,6 +15,16 @@ vi.mock(import("../src/connectors/linear-mcp"), () => ({
   ),
   listLinearMcpToolsForUser: vi.fn<typeof listLinearMcpToolsForUser>(),
   runLinearMcpToolCallsForUser: vi.fn<typeof runLinearMcpToolCallsForUser>(),
+}));
+
+vi.mock(import("../src/connectors/runtime"), () => ({
+  getLinearConnectionForUser: vi
+    .fn<typeof getLinearConnectionForUser>()
+    .mockResolvedValue({
+      account: "user@example.test",
+      connectionId: "connection-1",
+      workspace: "Test workspace",
+    }),
 }));
 
 type LinearChatTools = ReturnType<typeof createLinearChatTools>;
@@ -81,6 +92,7 @@ describe("chat Linear tools", () => {
 
     await invokeTool(tools, "linear_list_tools", {});
     expect(listLinearMcpToolsForUser).toHaveBeenCalledWith({
+      connectionId: "connection-1",
       signal: undefined,
       userId: "user-1",
     });
@@ -91,10 +103,24 @@ describe("chat Linear tools", () => {
     });
     expect(runLinearMcpToolCallsForUser).toHaveBeenCalledWith({
       calls: [{ arguments: {}, toolName: "list_teams" }],
+      connectionId: undefined,
       maxCalls: 1,
       signal: undefined,
       userId: "user-1",
     });
+  });
+
+  test("does not dispatch an unbound write through a direct caller", async () => {
+    const tools = createLinearChatTools({
+      latestUserRequest: "Use @Linear to create an issue.",
+      userId: "user-1",
+    });
+    const result = await invokeTool(tools, "linear_write", {
+      arguments: {},
+      toolName: "create_issue",
+    });
+    expect(result).toMatchObject({ status: "error" });
+    expect(runLinearMcpToolCallsForUser).not.toHaveBeenCalled();
   });
 
   test("does not allow a read proxy to bypass write approval", async () => {

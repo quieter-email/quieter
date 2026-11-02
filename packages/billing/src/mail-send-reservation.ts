@@ -11,6 +11,7 @@ import type {
 } from "@quieter/database/schema";
 import { and, eq, gte, inArray, isNull, lt, ne, sql, sum } from "drizzle-orm";
 
+import { getOutstandingAiCreditReservations } from "./ai-reservation.ts";
 import { getBillingCreditUsage, getBillingUsagePeriodEnd } from "./credits.ts";
 import { getOrganizationBillingEntitlement } from "./entitlements.ts";
 import {
@@ -170,6 +171,13 @@ export const reserveOrganizationMailSend = async (input: {
               : ne(organizationMailSendIdempotency.id, existing.id)
           )
         );
+      const aiReserved = await getOutstandingAiCreditReservations(account, tx);
+      if (aiReserved > 0) {
+        throw new ORPCError("FORBIDDEN", {
+          message:
+            "Wait for the current AI request to finish before sending team mail.",
+        });
+      }
       const projectedOverage = Math.max(
         0,
         usage.costMicroCents +

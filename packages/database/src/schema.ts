@@ -1,4 +1,10 @@
-import type { DailyBriefItem } from "@quieter/mail/daily-brief";
+import type { AutoLabelSettings } from "@quieter/mail/auto-label";
+import type {
+  CapturedMailSnapshot,
+  MailCaptureHistoryPage,
+  MailCaptureIdPage,
+  MailMessageAnalysis,
+} from "@quieter/mail/capture";
 import type {
   DeliveryEvent,
   DeliveryStatus,
@@ -26,6 +32,24 @@ import {
 } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { defineRelations } from "drizzle-orm/relations";
+
+type DailyBriefItem = {
+  id: string;
+  title: string;
+  summary: string;
+  reason: string;
+  group: string;
+  priority: number;
+  urgent: boolean;
+  urgentAddition?: boolean;
+  sources: {
+    messageId: string;
+    threadId: string;
+    subject: string;
+    fromName?: string;
+  }[];
+  deferredUntil: string | null;
+};
 
 export type MailDomainStatus = "failed" | "pending_dns" | "verified";
 export type MailDomainMode = "send_and_receive" | "send_only";
@@ -129,6 +153,7 @@ export type OrganizationMailUsageAlertTarget =
 export type OrganizationMailUsageDirection = "inbound" | "outbound";
 
 export type MailSendSnapshot = {
+  actorUserId?: string;
   rawSizeBytes: number;
   billingAccount?: {
     creditAmountCents: number;
@@ -261,8 +286,19 @@ export type AiMemoryIndexJobStatus =
   | "pending"
   | "processing";
 export const AI_MEMORY_EMBEDDING_DIMENSIONS = 1024;
+export type AiMemoryCategory =
+  | "identity"
+  | "writing_style"
+  | "relationships"
+  | "preferences"
+  | "work"
+  | "interests"
+  | "activity"
+  | "labeling";
 export type AiMemoryMetadata = {
   agents?: string[];
+  category?: AiMemoryCategory;
+  correspondents?: string[];
   sourceDomains?: string[];
   topics?: string[];
   [key: string]: unknown;
@@ -289,6 +325,9 @@ export type AiMemoryChange = {
 export const user = pgTable("user", {
   createdAt: timestamp("createdAt").notNull(),
   defaultMailboxId: text("defaultMailboxId"),
+  defaultOrganizationProvisioned: boolean("defaultOrganizationProvisioned")
+    .notNull()
+    .default(false),
   email: text("email").notNull().unique(),
   emailVerified: boolean("emailVerified").notNull(),
   id: text("id").primaryKey(),
@@ -299,7 +338,9 @@ export const user = pgTable("user", {
   name: text("name").notNull(),
   onboardingCompletedAt: timestamp("onboardingCompletedAt"),
   termsAcceptedAt: timestamp("termsAcceptedAt"),
+  timeFormat: text("timeFormat").$type<"12h" | "24h">(),
   updatedAt: timestamp("updatedAt").notNull(),
+  weekStartsOn: integer("weekStartsOn").$type<0 | 1 | 2 | 3 | 4 | 5 | 6>(),
 });
 
 export const userAiContext = pgTable(
@@ -667,6 +708,37 @@ export const userAiContextEvent = pgTable(
   ]
 );
 
+export const aiGeneratedMailBody = pgTable(
+  "aiGeneratedMailBody",
+  {
+    bodyDigest: text("bodyDigest").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    check(
+      "ai_generated_mail_body_digest_check",
+      sql`${table.bodyDigest} ~ '^[0-9a-f]{64}$'`
+    ),
+    unique("ai_generated_mail_body_mailbox_user_digest_unique").on(
+      table.mailboxId,
+      table.userId,
+      table.bodyDigest
+    ),
+    index("ai_generated_mail_body_mailbox_digest_idx").on(
+      table.mailboxId,
+      table.bodyDigest
+    ),
+    index("ai_generated_mail_body_expiration_idx").on(table.expiresAt),
+  ]
+);
+
 export const aiMemory = pgTable(
   "aiMemory",
   {
@@ -757,6 +829,15 @@ export const aiMemory = pgTable(
       table.updatedAt
     ),
     index("ai_memory_expiration_idx").on(table.status, table.expiresAt),
+    index("ai_memory_scope_category_idx").on(
+      table.scopeKey,
+      sql`(${table.metadata}->>'category')`
+    ),
+    index("ai_memory_metadata_idx").using("gin", table.metadata),
+    index("ai_memory_text_idx").using(
+      "gin",
+      sql`to_tsvector('simple', ${table.content} || ' ' || ${table.summary})`
+    ),
     index("ai_memory_embedding_pending_idx")
       .on(table.scopeKey, table.updatedAt)
       .where(sql`${table.status} = 'active' and ${table.embedding} is null`),
@@ -770,12 +851,7 @@ export const aiMemory = pgTable(
   ]
 );
 
-/**
- * Retired. Memory embeddings live on `aiMemory.embedding`, so no external
- * index needs an outbox. The table is kept only so the expand deploy stays
- * safe; a contract migration drops it once every environment is past this
- * release.
- */
+// Retained for an expand/contract deployment. Plain-text memory does not use this table.
 export const aiMemoryIndexJob = pgTable(
   "aiMemoryIndexJob",
   {
@@ -909,6 +985,44 @@ export const aiMemoryScopeConfig = pgTable(
       sql`char_length(${table.learningPrompt}) <= 6000`
     ),
     unique("ai_memory_scope_config_scope_key_unique").on(table.scopeKey),
+  ]
+);
+
+export const aiMemoryMailboxState = pgTable(
+  "aiMemoryMailboxState",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    lastError: text("lastError"),
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    processingAt: timestamp("processingAt"),
+    receivedComplete: boolean("receivedComplete").notNull().default(false),
+    receivedCount: integer("receivedCount").notNull().default(0),
+    receivedCursor: text("receivedCursor"),
+    sentComplete: boolean("sentComplete").notNull().default(false),
+    sentCount: integer("sentCount").notNull().default(0),
+    sentCursor: text("sentCursor"),
+    status: text("status")
+      .$type<"pending" | "processing" | "completed" | "failed">()
+      .notNull()
+      .default("pending"),
+    updatedAt: timestamp("updatedAt").notNull(),
+    userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    check(
+      "ai_memory_mailbox_state_status_check",
+      sql`${table.status} in ('pending', 'processing', 'completed', 'failed')`
+    ),
+    check(
+      "ai_memory_mailbox_state_count_check",
+      sql`${table.receivedCount} >= 0 and ${table.sentCount} >= 0`
+    ),
+    index("ai_memory_mailbox_state_status_updated_idx").on(
+      table.status,
+      table.updatedAt
+    ),
   ]
 );
 
@@ -1075,6 +1189,7 @@ export const connectorCredential = pgTable(
 export const gmailLabel = pgTable(
   "gmailLabel",
   {
+    autoLabel: jsonb("autoLabel").$type<AutoLabelSettings>(),
     color: text("color").notNull().default("gray"),
     createdAt: timestamp("createdAt").notNull(),
     description: text("description"),
@@ -1125,6 +1240,168 @@ export const gmailWatchState = pgTable(
     index("gmail_watch_state_processing_lease_expires_at_idx").on(
       table.processingLeaseExpiresAt
     ),
+  ]
+);
+
+export const gmailCaptureState = pgTable(
+  "gmailCaptureState",
+  {
+    bootstrapCompletedAt: timestamp("bootstrapCompletedAt"),
+    bootstrapMessageIds: jsonb("bootstrapMessageIds").$type<string[]>(),
+    bootstrapOffset: integer("bootstrapOffset").notNull().default(0),
+    coverageGapAt: timestamp("coverageGapAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    historyChangeOffset: integer("historyChangeOffset").notNull().default(0),
+    historyId: text("historyId"),
+    historyPageToken: text("historyPageToken"),
+    lastCapturedAt: timestamp("lastCapturedAt"),
+    lastErrorAt: timestamp("lastErrorAt"),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    leaseId: text("leaseId"),
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    pendingHistoryPage:
+      jsonb("pendingHistoryPage").$type<MailCaptureHistoryPage>(),
+    pendingRecoveryPage: jsonb(
+      "pendingRecoveryPage"
+    ).$type<MailCaptureIdPage>(),
+    phase: text("phase")
+      .$type<"pending" | "bootstrap" | "history" | "recovery" | "reconcile">()
+      .notNull()
+      .default("pending"),
+    reconcileAfterMessageId: text("reconcileAfterMessageId"),
+    recoveryAfter: timestamp("recoveryAfter"),
+    recoveryBefore: timestamp("recoveryBefore"),
+    recoveryOffset: integer("recoveryOffset").notNull().default(0),
+    recoveryPageToken: text("recoveryPageToken"),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    check(
+      "gmail_capture_state_phase_check",
+      sql`${table.phase} in ('pending', 'bootstrap', 'history', 'recovery', 'reconcile')`
+    ),
+    check(
+      "gmail_capture_state_history_check",
+      sql`${table.historyId} is null or ${table.historyId} ~ '^[0-9]+$'`
+    ),
+    index("gmail_capture_state_progress_idx").on(
+      table.phase,
+      table.lastCapturedAt
+    ),
+  ]
+);
+
+export const gmailCapturedMessage = pgTable(
+  "gmailCapturedMessage",
+  {
+    analysis: jsonb("analysis").$type<MailMessageAnalysis>(),
+    capturedAt: timestamp("capturedAt").notNull(),
+    deletedAt: timestamp("deletedAt"),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    messageId: text("messageId").notNull(),
+    providerRevision: text("providerRevision").notNull(),
+    snapshot: jsonb("snapshot").$type<CapturedMailSnapshot>(),
+    source: text("source")
+      .$type<"bootstrap" | "history" | "on_demand" | "recovery">()
+      .notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.messageId] }),
+    check(
+      "gmail_captured_message_revision_check",
+      sql`${table.providerRevision} ~ '^[0-9]+$'`
+    ),
+    check(
+      "gmail_captured_message_content_check",
+      sql`(${table.deletedAt} is null and ${table.snapshot} is not null and ${table.analysis} is not null) or (${table.deletedAt} is not null and ${table.snapshot} is null and ${table.analysis} is null)`
+    ),
+    index("gmail_captured_message_mailbox_captured_idx").on(
+      table.mailboxId,
+      table.capturedAt
+    ),
+    index("gmail_captured_message_live_thread_idx")
+      .on(table.mailboxId, sql`(${table.snapshot}->>'threadId')`)
+      .where(sql`${table.deletedAt} is null`),
+  ]
+);
+
+export const mailMessageImportance = pgTable(
+  "mailMessageImportance",
+  {
+    aiImportant: boolean("aiImportant"),
+    attemptCount: integer("attemptCount").notNull().default(0),
+    classifierVersion: text("classifierVersion").notNull(),
+    contentHash: text("contentHash").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    lastError: text("lastError"),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    leaseId: text("leaseId"),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    manualActorUserId: text("manualActorUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    manualImportant: boolean("manualImportant"),
+    manualUpdatedAt: timestamp("manualUpdatedAt"),
+    messageId: text("messageId").notNull(),
+    nextAttemptAt: timestamp("nextAttemptAt").notNull(),
+    receivedAt: timestamp("receivedAt").notNull(),
+    state: text("state")
+      .$type<
+        | "pending"
+        | "processing"
+        | "completed"
+        | "paused"
+        | "error"
+        | "cancelled"
+      >()
+      .notNull()
+      .default("pending"),
+    threadId: text("threadId").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.messageId] }),
+    index("mail_importance_due_idx").on(table.state, table.nextAttemptAt),
+    index("mail_importance_thread_idx").on(table.mailboxId, table.threadId),
+  ]
+);
+
+export const mailImportanceAttempt = pgTable(
+  "mailImportanceAttempt",
+  {
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    messageId: text("messageId").notNull(),
+    model: text("model").notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    usage: jsonb("usage").$type<{
+      promptTokens: number;
+      completionTokens: number;
+      cachedTokens: number;
+      cacheWriteTokens: number;
+      costUsd?: number;
+    }>(),
+    usageReportAttemptedAt: timestamp("usageReportAttemptedAt"),
+    usageReportedAt: timestamp("usageReportedAt"),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("mail_importance_attempt_unreported_idx").on(table.usageReportedAt),
   ]
 );
 
@@ -1388,6 +1665,139 @@ export const mailboxAutomationSettings = pgTable("mailboxAutomationSettings", {
     .notNull()
     .default(false),
 });
+
+export const mailboxAgentSetting = pgTable("mailboxAgentSetting", {
+  activatedAt: timestamp("activatedAt"),
+  activatedByUserId: text("activatedByUserId").references(() => user.id, {
+    onDelete: "set null",
+  }),
+  activationVersion: integer("activationVersion").notNull().default(0),
+  activeRevisionId: text("activeRevisionId"),
+  createdAt: timestamp("createdAt").notNull(),
+  draftRevisionId: text("draftRevisionId"),
+  enabled: boolean("enabled").notNull().default(false),
+  mailboxId: text("mailboxId")
+    .primaryKey()
+    .references(() => mailbox.id, { onDelete: "cascade" }),
+  updatedAt: timestamp("updatedAt").notNull(),
+  version: integer("version").notNull().default(0),
+});
+
+export const mailboxAgentRevision = pgTable(
+  "mailboxAgentRevision",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    createdByUserId: text("createdByUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    manifest: jsonb("manifest").$type<unknown>().notNull(),
+    manifestDigest: text("manifestDigest").notNull(),
+    specification: jsonb("specification").$type<unknown>().notNull(),
+    usage: jsonb("usage").$type<MailboxAgentUsage | null>(),
+    usageReportedAt: timestamp("usageReportedAt"),
+  },
+  (table) => [index("mailbox_agent_revision_mailbox_idx").on(table.mailboxId)]
+);
+
+export type MailboxAgentRunStatus =
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "skipped"
+  | "needs_attention";
+export type MailboxAgentUsage = {
+  cacheWriteTokens: number;
+  cachedTokens: number;
+  completionTokens: number;
+  costUsd?: number;
+  promptTokens: number;
+  model: string;
+};
+export const mailboxAgentRun = pgTable(
+  "mailboxAgentRun",
+  {
+    actorUserId: text("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    attempts: integer("attempts").notNull().default(0),
+    createdAt: timestamp("createdAt").notNull(),
+    draftId: text("draftId"),
+    errorMessage: text("errorMessage"),
+    finishedAt: timestamp("finishedAt"),
+    id: text("id").primaryKey(),
+    invocationKey: text("invocationKey").notNull(),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    leaseToken: text("leaseToken"),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    messageId: text("messageId"),
+    privateResult: boolean("privateResult").notNull().default(true),
+    revisionId: text("revisionId")
+      .notNull()
+      .references(() => mailboxAgentRevision.id, { onDelete: "cascade" }),
+    settingVersion: integer("settingVersion").notNull(),
+    status: text("status")
+      .$type<MailboxAgentRunStatus>()
+      .notNull()
+      .default("queued"),
+    summary: text("summary"),
+    threadId: text("threadId").notNull(),
+    triggerKind: text("triggerKind")
+      .$type<"mail_received" | "manual">()
+      .notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+    usage: jsonb("usage").$type<MailboxAgentUsage[]>(),
+    usageReportedAt: timestamp("usageReportedAt"),
+  },
+  (table) => [
+    unique("mailbox_agent_run_invocation_unique").on(
+      table.mailboxId,
+      table.invocationKey
+    ),
+    index("mailbox_agent_run_pending_idx").on(
+      table.status,
+      table.leaseExpiresAt
+    ),
+    index("mailbox_agent_run_thread_idx").on(table.mailboxId, table.threadId),
+    check(
+      "mailbox_agent_run_status_check",
+      sql`${table.status} in ('queued', 'running', 'succeeded', 'skipped', 'needs_attention')`
+    ),
+  ]
+);
+
+export const mailboxAgentEffect = pgTable(
+  "mailboxAgentEffect",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    inputDigest: text("inputDigest").notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    result: jsonb("result").$type<unknown>(),
+    runId: text("runId")
+      .notNull()
+      .references(() => mailboxAgentRun.id, { onDelete: "cascade" }),
+    status: text("status")
+      .$type<"pending" | "completed" | "uncertain">()
+      .notNull(),
+    toolCallId: text("toolCallId").notNull(),
+    toolId: text("toolId").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    unique("mailbox_agent_effect_call_unique").on(
+      table.runId,
+      table.toolCallId
+    ),
+  ]
+);
 
 // Retained until the release removing custom actions has replaced all old workers.
 export const mailboxAction = pgTable(
@@ -1817,6 +2227,7 @@ export const mailboxDivisionGrant = pgTable(
 export const managedMailMessage = pgTable(
   "managedMailMessage",
   {
+    analysis: jsonb("analysis").$type<MailMessageAnalysis>(),
     bcc: text("bcc"),
     bccNormalized: text("bccNormalized").notNull().default(""),
     bodyHtml: text("bodyHtml"),
@@ -2567,6 +2978,7 @@ export const organizationMailSuppressionAudit = pgTable(
 export const managedMailLabel = pgTable(
   "managedMailLabel",
   {
+    autoLabel: jsonb("autoLabel").$type<AutoLabelSettings>(),
     color: text("color").notNull().default("gray"),
     createdAt: timestamp("createdAt").notNull(),
     createdByUserId: text("createdByUserId").references(() => user.id, {
@@ -2842,6 +3254,7 @@ export const mailDomain = pgTable(
     organizationId: text("organizationId")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    ownershipVerifiedAt: timestamp("ownershipVerifiedAt"),
     requiredDnsRecords: jsonb("requiredDnsRecords")
       .$type<MailDomainDnsRecord[]>()
       .notNull(),
@@ -2858,6 +3271,15 @@ export const mailDomain = pgTable(
     index("mail_domain_catch_all_mailbox_idx").on(table.catchAllMailboxId),
     unique("mail_domain_catch_all_mailbox_unique").on(table.catchAllMailboxId),
     unique("mail_domain_domain_unique").on(table.domain),
+    unique("mail_domain_organization_domain_unique").on(
+      table.organizationId,
+      table.domain
+    ),
+    uniqueIndex("mail_domain_owner_unique")
+      .on(table.domain)
+      .where(
+        sql`${table.ownershipVerifiedAt} is not null or ${table.status} = 'verified'`
+      ),
   ]
 );
 
@@ -2994,6 +3416,41 @@ export const billingCreditUsageEvent = pgTable(
       table.createdAt
     ),
     unique("billing_credit_usage_event_dedupe_key_unique").on(table.dedupeKey),
+  ]
+);
+
+export const aiCreditReservation = pgTable(
+  "aiCreditReservation",
+  {
+    account:
+      jsonb("account").$type<NonNullable<MailSendSnapshot["billingAccount"]>>(),
+    actualCostMicroCents: bigint("actualCostMicroCents", { mode: "number" }),
+    createdAt: timestamp("createdAt").notNull(),
+    groupId: text("groupId").notNull(),
+    id: text("id").primaryKey(),
+    lastReconciledAt: timestamp("lastReconciledAt"),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    providerGenerationId: text("providerGenerationId"),
+    reservedCostMicroCents: bigint("reservedCostMicroCents", {
+      mode: "number",
+    }).notNull(),
+    status: text("status")
+      .$type<"reserved" | "settled" | "released">()
+      .notNull(),
+    usageKind: text("usageKind").notNull(),
+  },
+  (table) => [
+    index("ai_credit_reservation_group_idx").on(table.groupId),
+    index("ai_credit_reservation_organization_idx").on(
+      table.organizationId,
+      table.status
+    ),
+    check(
+      "ai_credit_reservation_cost_check",
+      sql`${table.reservedCostMicroCents} >= 0`
+    ),
   ]
 );
 
@@ -3388,9 +3845,11 @@ export const apikey = pgTable(
 
 export const tables = {
   account,
+  aiGeneratedMailBody,
   aiMemory,
   aiMemoryChangeSet,
   aiMemoryIndexJob,
+  aiMemoryMailboxState,
   aiMemoryScopeConfig,
   apikey,
   billingCreditUsageEvent,
@@ -3405,6 +3864,8 @@ export const tables = {
   dailyBriefSettings,
   gmailAutoLabelEvent,
   gmailAutoLabelSettings,
+  gmailCaptureState,
+  gmailCapturedMessage,
   gmailCredential,
   gmailLabel,
   gmailOAuthState,
@@ -3418,6 +3879,8 @@ export const tables = {
   mailAutomationMemoryProfile,
   mailDomain,
   mailDomainConnectAttempt,
+  mailImportanceAttempt,
+  mailMessageImportance,
   mailSnippet,
   mailbox,
   mailboxAction,
@@ -3426,6 +3889,10 @@ export const tables = {
   mailboxActionRun,
   mailboxActionRunFrame,
   mailboxActionStepRun,
+  mailboxAgentEffect,
+  mailboxAgentRevision,
+  mailboxAgentRun,
+  mailboxAgentSetting,
   mailboxAutomationSettings,
   mailboxDivisionGrant,
   mailboxGrant,

@@ -4,18 +4,25 @@ import { organizationMailSendIdempotency } from "@quieter/database/schema";
 import {
   extractListUnsubscribeTargets,
   getGmailMessageMetadata,
-  sendRawMessage,
 } from "@quieter/gmail";
-import { buildPlainTextMessage } from "@quieter/mail/compose/mime";
-import { splitMailAddressList } from "@quieter/mail/compose/schema";
+import {
+  findInvalidMailAddresses,
+  splitMailAddressList,
+} from "@quieter/mail/compose/schema";
+import { getUnsubscribeKey } from "@quieter/mail/unsubscribe";
 import { reportError } from "@quieter/observability";
 import { and, eq, sql } from "drizzle-orm";
 
+import {
+  captureMailboxDraftMemory,
+  captureMailboxMessageMemory,
+} from "../ai-memory-capture";
 import {
   deleteGmailComposeDraft,
   getGmailComposeSendStatus,
   saveGmailDraft,
   sendGmailMessage,
+  sendGmailUnsubscribe,
 } from "../gmail-compose";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
@@ -25,14 +32,16 @@ import {
   deleteManagedDraft,
 } from "../managed-mail/messages/drafts";
 import { sendManagedMailboxMessage } from "../managed-mail/messages/send";
-import { learnAiMemoryFromSentMessage } from "./feedback";
+import { learnAiMemoryFromMailAction } from "./feedback";
 import type { MailInputs } from "./inputs";
 
 const parseListUnsubscribeMailto = (value: string) => {
   let url: URL;
+  let path: string;
 
   try {
     url = new URL(value);
+    path = decodeURIComponent(url.pathname);
   } catch {
     throw new ORPCError("BAD_REQUEST", {
       message: "This message does not expose a valid unsubscribe address.",
@@ -47,12 +56,17 @@ const parseListUnsubscribeMailto = (value: string) => {
 
   const recipients = [
     ...new Set([
-      ...splitMailAddressList(decodeURIComponent(url.pathname)),
+      ...splitMailAddressList(path),
       ...splitMailAddressList(url.searchParams.get("to") ?? ""),
     ]),
   ];
 
-  if (recipients.length === 0) {
+  if (
+    recipients.length === 0 ||
+    recipients.some(
+      (recipient) => findInvalidMailAddresses(recipient).length > 0
+    )
+  ) {
     throw new ORPCError("BAD_REQUEST", {
       message: "This message does not expose a valid unsubscribe address.",
     });
@@ -164,8 +178,10 @@ export const composeMailOperations = {
   saveDraft: async ({
     context,
     input,
+    privateContext = false,
   }: {
     context: MailRequestContext;
+    privateContext?: boolean;
     input: MailInputs["saveDraft"];
   }) => {
     const selectedMailbox = await assertAccessibleMailbox({
@@ -173,23 +189,35 @@ export const composeMailOperations = {
       userId: context.userId,
     });
     if (selectedMailbox.provider === "managed") {
-      return await saveManagedDraft({
+      const saved = await saveManagedDraft({
         ...input,
+        privateContext,
         userId: context.userId,
       });
+      await captureMailboxDraftMemory({
+        draft: input.draft,
+        draftId: saved.draftId,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      return saved;
     }
 
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken) =>
-        await saveGmailDraft(
-          accessToken,
-          input.mailboxId,
-          input.draft,
-          context.signal
-        )
-    );
+    return await callGmail(context, input.mailboxId, async (accessToken) => {
+      const saved = await saveGmailDraft(
+        accessToken,
+        input.mailboxId,
+        input.draft,
+        context.signal
+      );
+      await captureMailboxDraftMemory({
+        draft: input.draft,
+        draftId: saved.draftId,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      return saved;
+    });
   },
   sendDraft: async ({
     context,
@@ -214,29 +242,10 @@ export const composeMailOperations = {
       userId: context.userId,
     });
     if (selectedMailbox.provider === "managed") {
-      const sent = await sendManagedMailboxMessage({
+      return await sendManagedMailboxMessage({
         ...input,
         userId: context.userId,
       });
-      if (sent.idempotent === true) {
-        return sent;
-      }
-      await learnAiMemoryFromSentMessage({
-        bodyText: input.message.bodyText,
-        isReply: !!input.message.replyContext,
-        mailboxId: input.mailboxId,
-        recipients: [
-          input.message.recipients.to,
-          input.message.recipients.cc,
-          input.message.recipients.bcc,
-        ].join(","),
-        userId: context.userId,
-      }).catch((error: unknown) => {
-        reportError(error, {
-          operation: "Could not record sent-message learning.",
-        });
-      });
-      return sent;
     }
 
     return await callGmail(context, input.mailboxId, async (accessToken) => {
@@ -246,19 +255,22 @@ export const composeMailOperations = {
         input.message,
         context.signal
       );
-      if (sent.idempotent) {
-        return sent;
-      }
-      await learnAiMemoryFromSentMessage({
-        bodyText: input.message.bodyText,
-        isReply: !!input.message.replyContext,
+      await captureMailboxMessageMemory({
+        actorUserId: context.userId,
         mailboxId: input.mailboxId,
-        recipients: [
-          input.message.recipients.to,
-          input.message.recipients.cc,
-          input.message.recipients.bcc,
-        ].join(","),
-        userId: context.userId,
+        message: {
+          bcc: input.message.recipients.bcc,
+          bodyHtml: input.message.bodyHtml,
+          bodyText: input.message.bodyText,
+          cc: input.message.recipients.cc,
+          date: new Date().toISOString(),
+          id: sent.id,
+          inReplyTo: input.message.replyContext?.messageHeaderId,
+          subject: input.message.subject,
+          threadId: sent.threadId ?? sent.id,
+          to: input.message.recipients.to,
+        },
+        source: "sent",
       }).catch((error: unknown) => {
         reportError(error, {
           operation: "Could not record sent-message learning.",
@@ -292,14 +304,49 @@ export const composeMailOperations = {
         });
       }
 
-      const raw = Buffer.from(
-        await buildPlainTextMessage(
-          parseListUnsubscribeMailto(unsubscribeMailto)
-        )
-      ).toString("base64url");
+      const key = getUnsubscribeKey(message.payload?.headers ?? []);
+      if (key === undefined) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "This message does not identify a mailing list or sender.",
+        });
+      }
+      const result = await sendGmailUnsubscribe(
+        accessToken,
+        input.mailboxId,
+        {
+          key,
+          message: parseListUnsubscribeMailto(unsubscribeMailto),
+        },
+        signal
+      );
 
-      await sendRawMessage(accessToken, raw);
-
-      return { sent: true };
+      if (!result.idempotent) {
+        await learnAiMemoryFromMailAction({
+          action: "unsubscribe",
+          mailboxId: input.mailboxId,
+          metadata: {
+            senderDomain:
+              message.payload?.headers
+                ?.find((header) => header.name.toLowerCase() === "from")
+                ?.value.match(/@(?<domain>[a-z0-9.-]+\.[a-z]{2,})/iu)
+                ?.groups?.domain?.toLowerCase() ?? null,
+            subject:
+              message.payload?.headers?.find(
+                (header) => header.name.toLowerCase() === "subject"
+              )?.value ?? null,
+          },
+          targetCount: 1,
+          userId: context.userId,
+        }).catch((error: unknown) => {
+          reportError(error, {
+            operation: "Could not record unsubscribe learning.",
+          });
+        });
+      }
+      return {
+        key,
+        newlyRequested: !result.idempotent,
+        status: "requested" as const,
+      };
     }),
 };

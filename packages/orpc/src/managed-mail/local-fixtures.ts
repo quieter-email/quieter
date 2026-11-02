@@ -7,10 +7,11 @@ import { and, asc, eq } from "drizzle-orm";
 
 import { getLocalMailStorage, LOCAL_MAIL_BUCKET } from "./local-storage";
 import { recordInboundManagedMessage } from "./messages/ingestion";
+import { buildLocalRenderingFixtures } from "./rendering-fixtures";
 
 export const seedLocalManagedMail = async (
   ownerEmail: string,
-  options: { fresh?: boolean; dailyBrief?: boolean } = {}
+  options: { fresh?: boolean; rendering?: boolean } = {}
 ) => {
   if (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local") {
     throw new Error("Mail fixtures are only available in local development.");
@@ -84,21 +85,47 @@ export const seedLocalManagedMail = async (
       "The existing fixture mailbox no longer matches this local account."
     );
   }
-  let messageKey =
-    options.dailyBrief === true ? "daily-brief-v1" : "welcome-v1";
-  if (options.fresh === true) {
-    messageKey = crypto.randomUUID();
+  if (options.rendering === true) {
+    const messages = [];
+    for (const fixture of buildLocalRenderingFixtures({
+      address,
+      receivedAt: now,
+      suffix,
+    })) {
+      const key = `fixtures/${suffix}/${fixture.messageKey}.eml`;
+      const providerMessageId = `local-${fixture.messageKey}-${suffix}`;
+      await storage.put(key, fixture.raw);
+      await recordInboundManagedMessage({
+        providerMessageId,
+        rawMessage: fixture.raw,
+        rawObjectBucket: LOCAL_MAIL_BUCKET,
+        rawObjectKey: key,
+        rawObjectProvider: "r2",
+        rawSizeBytes: fixture.raw.byteLength,
+        receivedAt: now,
+        recipients: [address],
+      });
+      messages.push({
+        messageKey: fixture.messageKey,
+        providerMessageId,
+        subject: fixture.subject,
+      });
+    }
+    return {
+      mailboxId,
+      messages,
+      storage: "local",
+      url: `http://localhost:3000/?mailboxId=${mailboxId}&mailbox=inbox&query=&view=inbox`,
+    };
   }
-  let subject = "Local mail fixture with attachment";
-  let body =
+  const messageKey =
+    options.fresh === true ? crypto.randomUUID() : "welcome-v1";
+  const subject =
+    options.fresh === true
+      ? `Live mail update ${now.toISOString()}`
+      : "Local mail fixture with attachment";
+  const body =
     "This message was created locally. It was never sent through an email provider.";
-  if (options.dailyBrief === true) {
-    subject = "Please review the launch plan before tomorrow";
-    body =
-      "Could you review the launch plan and reply with your approval or requested changes before tomorrow? The launch is waiting for your review. This is local sample mail, created for Daily Brief verification.";
-  } else if (options.fresh === true) {
-    subject = `Live mail update ${now.toISOString()}`;
-  }
   const key = `fixtures/${suffix}/${messageKey}.eml`;
   const raw = new TextEncoder().encode(
     [

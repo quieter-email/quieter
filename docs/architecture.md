@@ -70,7 +70,7 @@ Interactive write requests use database-backed rate limits. The per-minute mail 
 
 ### `packages/mail` and `packages/gmail`
 
-`packages/mail` owns shared message, attachment, label, category, and pagination contracts, along with MIME construction, raw parsing, content extraction, draft anchors, and avatar derivation. Both provider adapters return these contracts. The browser's mail helpers live in `apps/web/src/lib/mail.ts`; the web and AI packages have no direct Gmail-package dependency.
+`packages/mail` owns shared message, attachment, label, category, and pagination contracts, along with MIME construction, raw parsing, content extraction, draft anchors, and avatar derivation. Both provider adapters return these contracts. The browser's mail helpers live in `packages/app/src/lib/mail.ts`; the web and AI packages have no direct Gmail-package dependency.
 
 Managed rule conditions store stable label IDs. Definition writes hold shared locks on referenced labels until commit. Renaming or deleting a label locks it before repairing legacy name references and updating dependent definitions in the same transaction. Deletion disables affected rules without removing predicates or actions; the organizer explains the missing reference, and saving a repaired definition clears that reason. The nullable rule reason column is an additive migration and must precede the application release.
 
@@ -162,8 +162,9 @@ Inbound:
 Outbound:
 
 - Managed compose and replies send through server-side mail logic.
-- `POST /api/v1/send` authenticates an organization API key and requires a verified sender domain.
-- `POST /api/v1/mcp` serves the transactional-mail MCP tool `send_email` over Streamable HTTP with the same organization API key, verified-domain, suppression, idempotency, and usage rules as the REST send endpoint. It exposes sending only: no mailbox, content, or settings access.
+- `POST /api/send` authenticates an organization API key, requires the `Quieter-Version: 2026-10` compatibility date, and requires a verified sender domain.
+- `POST /api/mcp` serves the transactional-mail MCP tool `send_email` over Streamable HTTP with the same organization API key, compatibility date, verified-domain, suppression, idempotency, and usage rules as the REST send endpoint. OPTIONS preflight does not require the date. It exposes sending only: no mailbox, content, or settings access.
+- `GET /api/messages/{messageId}` and `GET /api/suppressions` use the same date. `GET /api/o/{token}` is unversioned because mail clients cannot send the header.
 - Better Auth email hooks call the same endpoint.
 
 ## Chat

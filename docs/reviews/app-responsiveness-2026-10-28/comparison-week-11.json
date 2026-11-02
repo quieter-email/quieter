@@ -1,0 +1,175 @@
+{
+  "baseline": {
+    "clicks": [
+      {
+        "commitMs": 67.39999997615814,
+        "label": "A quiet start, 09:00 to 10:00. Open event to edit.",
+        "paintMs": 73.80000001192093,
+        "selectedBefore": false,
+        "started": 2055337.900000036
+      },
+      {
+        "commitMs": 73.40000003576279,
+        "label": "Design review, 10:00 to 11:30. Open event to edit.",
+        "paintMs": 79.30000001192093,
+        "selectedBefore": false,
+        "started": 2057160.5
+      },
+      {
+        "commitMs": 51.5,
+        "label": "A quiet start, 09:00 to 10:00. Open event to edit.",
+        "paintMs": 57.69999998807907,
+        "selectedBefore": false,
+        "started": 2059010.7000000477
+      },
+      {
+        "commitMs": 56.90000003576279,
+        "label": "Design review, 10:00 to 11:30. Open event to edit.",
+        "paintMs": 62.80000001192093,
+        "selectedBefore": false,
+        "started": 2060803.800000012
+      },
+      {
+        "commitMs": 55.79999995231629,
+        "label": "A quiet start, 09:00 to 10:00. Open event to edit.",
+        "paintMs": 61.19999998807907,
+        "selectedBefore": false,
+        "started": 2062630.7000000477
+      },
+      {
+        "commitMs": 70.10000002384186,
+        "label": "Design review, 10:00 to 11:30. Open event to edit.",
+        "paintMs": 75.89999997615814,
+        "selectedBefore": false,
+        "started": 2064427.600000024
+      }
+    ],
+    "devtools": "undefined",
+    "eventCount": 11,
+    "longTasks": [
+      {
+        "duration": 73,
+        "start": 2055337.5
+      },
+      {
+        "duration": 73,
+        "start": 2055337.5
+      },
+      {
+        "duration": 73,
+        "start": 2055337.5
+      },
+      {
+        "duration": 79,
+        "start": 2057159.800000012
+      },
+      {
+        "duration": 79,
+        "start": 2057159.800000012
+      },
+      {
+        "duration": 79,
+        "start": 2057159.800000012
+      },
+      {
+        "duration": 57,
+        "start": 2059010.400000036
+      },
+      {
+        "duration": 57,
+        "start": 2059010.400000036
+      },
+      {
+        "duration": 57,
+        "start": 2059010.400000036
+      },
+      {
+        "duration": 62,
+        "start": 2060803.5
+      },
+      {
+        "duration": 62,
+        "start": 2060803.5
+      },
+      {
+        "duration": 62,
+        "start": 2060803.5
+      },
+      {
+        "duration": 60,
+        "start": 2062630.5
+      },
+      {
+        "duration": 60,
+        "start": 2062630.5
+      },
+      {
+        "duration": 60,
+        "start": 2062630.5
+      },
+      {
+        "duration": 75,
+        "start": 2064427.100000024
+      },
+      {
+        "duration": 75,
+        "start": 2064427.100000024
+      },
+      {
+        "duration": 75,
+        "start": 2064427.100000024
+      }
+    ],
+    "rendered": 11
+  },
+  "head": {
+    "clicks": [
+      {
+        "commitMs": 33.69999998807907,
+        "label": "A quiet start, 09:00 to 10:00. Open event to edit.",
+        "paintMs": 39.89999997615814,
+        "selectedBefore": false,
+        "started": 91047.89999997616
+      },
+      {
+        "commitMs": 31.599999964237213,
+        "label": "Design review, 10:00 to 11:30. Open event to edit.",
+        "paintMs": 36.5,
+        "selectedBefore": false,
+        "started": 92864.69999998808
+      },
+      {
+        "commitMs": 32.80000001192093,
+        "label": "A quiet start, 09:00 to 10:00. Open event to edit.",
+        "paintMs": 38.90000003576279,
+        "selectedBefore": false,
+        "started": 94663.79999995232
+      },
+      {
+        "commitMs": 33.299999952316284,
+        "label": "Design review, 10:00 to 11:30. Open event to edit.",
+        "paintMs": 38,
+        "selectedBefore": false,
+        "started": 96466.5
+      },
+      {
+        "commitMs": 28.899999976158146,
+        "label": "A quiet start, 09:00 to 10:00. Open event to edit.",
+        "paintMs": 33.69999998807907,
+        "selectedBefore": false,
+        "started": 98284.5
+      },
+      {
+        "commitMs": 36.39999997615814,
+        "label": "Design review, 10:00 to 11:30. Open event to edit.",
+        "paintMs": 41.59999996423721,
+        "selectedBefore": false,
+        "started": 100108.19999998808
+      }
+    ],
+    "devtools": "undefined",
+    "eventCount": 11,
+    "longTasks": [],
+    "rendered": 11
+  }
+}

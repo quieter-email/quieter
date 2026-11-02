@@ -9,6 +9,7 @@ import type {
   PersistedMailboxProvider,
 } from "@quieter/database/schema";
 import {
+  gmailCaptureState,
   gmailCredential,
   gmailOAuthState,
   mailbox,
@@ -25,6 +26,7 @@ import {
 } from "@quieter/database/schema";
 import { getGmailMessageCount, getGmailProfile } from "@quieter/gmail";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
+import { reportError } from "@quieter/observability";
 import { and, asc, count, eq, gt, inArray, isNull, lt } from "drizzle-orm";
 import { z } from "zod";
 
@@ -102,13 +104,20 @@ const normalizeEmailAddress = (emailAddress: string) =>
 const normalizeReturnTo = (returnTo: string | undefined) => {
   const normalized = returnTo?.trim();
   if (
-    normalized &&
-    normalized.startsWith("/") &&
-    !normalized.startsWith("//")
+    normalized === undefined ||
+    !normalized.startsWith("/") ||
+    normalized.startsWith("//") ||
+    // oxlint-disable-next-line eslint/no-control-regex -- Reject control characters before URL normalization can discard them.
+    /[\\\u0000-\u001F\u007F]/u.test(returnTo ?? "")
   ) {
-    return normalized;
+    return "/settings";
   }
-  return "/settings";
+  const origin = "https://quieter.invalid";
+  const returnUrl = new URL(normalized, origin);
+  if (returnUrl.origin !== origin || returnUrl.pathname.startsWith("//")) {
+    return "/settings";
+  }
+  return `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`;
 };
 
 const createCodeVerifier = () => randomBytes(48).toString("base64url");
@@ -800,7 +809,10 @@ export const startGmailOAuth = async (input: {
   );
   authorizationUrl.searchParams.set("code_challenge_method", "S256");
   authorizationUrl.searchParams.set("include_granted_scopes", "true");
-  authorizationUrl.searchParams.set("prompt", "consent select_account");
+  authorizationUrl.searchParams.set(
+    "prompt",
+    loginHint ? "consent" : "consent select_account"
+  );
   authorizationUrl.searchParams.set("redirect_uri", config.redirectUri);
   authorizationUrl.searchParams.set("response_type", "code");
   authorizationUrl.searchParams.set("scope", GMAIL_SCOPES.join(" "));
@@ -949,7 +961,7 @@ const assertGmailOAuthMailboxAvailability = (input: {
   ) {
     throw new ORPCError("CONFLICT", {
       message:
-        "That Gmail mailbox is already connected to another Quieter user.",
+        "That Gmail mailbox is already connected to another quieter user.",
     });
   }
 };
@@ -958,6 +970,7 @@ const persistGmailOAuthMailbox = async (input: {
   encryptedRefreshToken: string;
   emailAddress: string;
   existingMailboxId: string | null;
+  historyId: string;
   mailboxId: string;
   organizationId: string;
   ownerUserId: string;
@@ -1003,6 +1016,15 @@ const persistGmailOAuthMailbox = async (input: {
         input.tokenResponse.access_token
       );
       await mailboxWrite;
+      await database
+        .insert(gmailCaptureState)
+        .values({
+          createdAt: now,
+          historyId: input.historyId,
+          mailboxId: input.mailboxId,
+          updatedAt: now,
+        })
+        .onConflictDoNothing();
       await database
         .insert(gmailCredential)
         .values({
@@ -1065,7 +1087,15 @@ const exchangeAndValidateGmailOAuthGrant = async (input: {
 
   assertGoogleGmailScopes(tokenResponse.scope);
 
-  return { emailAddress, tokenInfo, tokenResponse };
+  if (!profile.historyId || !/^\d+$/u.test(profile.historyId)) {
+    throw new Error("Mailbox has no reliable capture baseline.");
+  }
+  return {
+    emailAddress,
+    historyId: profile.historyId,
+    tokenInfo,
+    tokenResponse,
+  };
 };
 
 const resolveGmailOAuthMailboxIdentity = (input: {
@@ -1104,7 +1134,7 @@ const resolveGmailOAuthMailboxIdentity = (input: {
   return { encryptedRefreshToken, existingMailboxId, mailboxId };
 };
 
-export const getGmailOAuthCallbackMailboxId = async (input: {
+export const getGmailOAuthCallbackContext = async (input: {
   headers: Headers;
   state: string;
 }) => {
@@ -1114,7 +1144,10 @@ export const getGmailOAuthCallbackMailboxId = async (input: {
     return null;
   }
   const [context] = await db
-    .select({ mailboxId: gmailOAuthState.mailboxId })
+    .select({
+      mailboxId: gmailOAuthState.mailboxId,
+      returnTo: gmailOAuthState.returnTo,
+    })
     .from(gmailOAuthState)
     .where(
       and(
@@ -1123,7 +1156,9 @@ export const getGmailOAuthCallbackMailboxId = async (input: {
       )
     )
     .limit(1);
-  return context?.mailboxId ?? null;
+  return context === undefined
+    ? null
+    : { ...context, returnTo: normalizeReturnTo(context.returnTo) };
 };
 
 export const completeGmailOAuth = async (input: {
@@ -1173,7 +1208,7 @@ export const completeGmailOAuth = async (input: {
     });
   }
 
-  const { emailAddress, tokenInfo, tokenResponse } =
+  const { emailAddress, historyId, tokenInfo, tokenResponse } =
     await exchangeAndValidateGmailOAuthGrant({
       code: input.code,
       codeVerifier: oauthState.codeVerifier,
@@ -1207,16 +1242,31 @@ export const completeGmailOAuth = async (input: {
     emailAddress,
     encryptedRefreshToken,
     existingMailboxId,
+    historyId,
     mailboxId,
     organizationId,
     ownerUserId: session.user.id,
     tokenInfo,
     tokenResponse,
   });
+  try {
+    const { queueMailboxMemoryBootstrap } =
+      await import("../ai-memory-capture");
+    await queueMailboxMemoryBootstrap({ mailboxId, userId: session.user.id });
+  } catch (error) {
+    if (
+      !(error instanceof ORPCError) ||
+      (error.code !== "NOT_FOUND" && error.code !== "FORBIDDEN")
+    ) {
+      reportError(new Error("Recent mail learning could not be queued."), {
+        operation: "mailbox:queue-mail-memory",
+      });
+    }
+  }
 
   return {
     mailboxId,
-    returnTo: oauthState.returnTo,
+    returnTo: normalizeReturnTo(oauthState.returnTo),
   };
 };
 

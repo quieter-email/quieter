@@ -11,7 +11,7 @@ import {
 } from "react";
 import type { PropsWithChildren } from "react";
 
-import { BRAND_THEMES } from "../../lib/brand-themes";
+import { APP_THEMES } from "../../lib/brand-themes";
 
 export const COLOR_MODE_STORAGE_KEY = "quieter-color-mode";
 
@@ -25,7 +25,7 @@ export const COLOR_THEMES: {
 }[] = [
   { colorMode: "dark", label: "Dark", name: "dark" },
   { colorMode: "light", label: "Light", name: "light" },
-  ...BRAND_THEMES,
+  ...APP_THEMES,
 ];
 
 export type ColorModeProviderProps = PropsWithChildren<{

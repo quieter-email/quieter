@@ -49,6 +49,7 @@ export const organizationRouter = {
         from: z.coerce.date().optional(),
         mailboxId: z.string().trim().min(1).optional(),
         organizationId: organizationIdSchema,
+        range: z.enum(["7d", "30d"]).optional(),
         to: z.coerce.date().optional(),
       })
     )
@@ -57,7 +58,21 @@ export const organizationRouter = {
         organizationId: input.organizationId,
         userId: context.userId,
       });
-      return await getOrganizationMailDeliveryMetrics(input);
+      let { from } = input;
+      let { to } = input;
+      if (input.range !== undefined) {
+        to = new Date();
+        from = new Date(to);
+        from.setUTCHours(0, 0, 0, 0);
+        from.setUTCDate(from.getUTCDate() - (input.range === "7d" ? 6 : 29));
+      }
+      const metrics = await getOrganizationMailDeliveryMetrics({
+        from,
+        mailboxId: input.mailboxId,
+        organizationId: input.organizationId,
+        to,
+      });
+      return { ...metrics, to: to ?? new Date() };
     }),
   getMailTrackingSettings: protectedProcedure
     .route({ method: "GET" })

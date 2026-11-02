@@ -9,7 +9,7 @@ import {
 } from "@quieter/database/schema";
 import { composeDraftInputSchema } from "@quieter/mail/compose/schema";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   afterAll,
   beforeAll,
@@ -19,6 +19,10 @@ import {
   vi,
 } from "vite-plus/test";
 
+import {
+  setManagedMailboxGrant,
+  removeManagedMailboxGrant,
+} from "../src/mailbox/managed-grants";
 import { getManagedMessageAttachment } from "../src/managed-mail/messages/attachments";
 import {
   deleteManagedDraft,
@@ -159,6 +163,208 @@ describe.skipIf(state.databaseUrl === undefined)(
       await db.delete(organization).where(eq(organization.id, organizationId));
       await db.delete(user).where(inArray(user.id, [userId, otherUserId]));
       await db.$client.end();
+    });
+
+    test("rejects private-context updates and identical retries after sharing without replacing the private draft", async () => {
+      const saved = await saveManagedDraft({ ...input, privateContext: true });
+      await setManagedMailboxGrant({
+        mailboxId,
+        role: "reader",
+        targetUserId: otherUserId,
+        userId,
+      });
+      try {
+        await expect(
+          saveManagedDraft({ ...input, privateContext: true })
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        await expect(
+          saveManagedDraft({
+            ...input,
+            draft: {
+              ...draft,
+              baseRevision: saved.baseRevision,
+              bodyText: "Private update",
+              draftId: saved.draftId,
+            },
+            privateContext: true,
+          })
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        const [record] = await db
+          .select()
+          .from(managedMailMessage)
+          .where(eq(managedMailMessage.id, saved.messageId));
+        expect(record?.bodyText).toBe(draft.bodyText);
+      } finally {
+        await removeManagedMailboxGrant({
+          mailboxId,
+          targetUserId: otherUserId,
+          userId,
+        });
+        await deleteManagedDraft({
+          baseRevision: saved.baseRevision,
+          draftId: saved.draftId,
+          mailboxId,
+          userId,
+        });
+        state.objects.clear();
+      }
+    });
+
+    test.each(["update", "retry"])(
+      "private-context %s lets a competing message mutation finish before acquiring the mailbox",
+      async (operation) => {
+        const saved = await saveManagedDraft(input);
+        const locked = Promise.withResolvers<boolean>();
+        const release = Promise.withResolvers<boolean>();
+        const competitor = db.transaction(async (tx) => {
+          await tx.execute(sql`set local lock_timeout = '2s'`);
+          await tx
+            .select({ id: managedMailMessage.id })
+            .from(managedMailMessage)
+            .where(eq(managedMailMessage.id, saved.messageId))
+            .for("update");
+          locked.resolve(true);
+          await release.promise;
+          await tx
+            .update(mailbox)
+            .set({ contentRevision: sql`${mailbox.contentRevision} + 1` })
+            .where(eq(mailbox.id, mailboxId));
+        });
+        await locked.promise;
+        const saving = saveManagedDraft({
+          ...input,
+          draft:
+            operation === "retry"
+              ? draft
+              : {
+                  ...draft,
+                  baseRevision: saved.baseRevision,
+                  draftId: saved.draftId,
+                  subject: "Private update",
+                },
+          privateContext: true,
+        });
+        try {
+          await vi.waitFor(async () => {
+            const waiting = await db.execute(sql`
+              select pid from pg_stat_activity
+              where datname = current_database()
+                and wait_event_type = 'Lock'
+                and query like '%managedMailMessage%'
+                and query not like '%pg_stat_activity%'
+            `);
+            expect(waiting.length).toBeGreaterThan(0);
+          });
+        } finally {
+          release.resolve(true);
+        }
+        const results = await Promise.allSettled([competitor, saving]);
+        expect(
+          results.every((result) => result.status === "fulfilled")
+        ).toBeTruthy();
+        const [record] = await db
+          .select()
+          .from(managedMailMessage)
+          .where(eq(managedMailMessage.id, saved.messageId));
+        await deleteManagedDraft({
+          baseRevision: record?.updatedAt.toISOString(),
+          draftId: saved.draftId,
+          mailboxId,
+          userId,
+        });
+      }
+    );
+
+    test("private inserts complete while another insert holds a mailbox foreign-key lock", async () => {
+      const saved = await saveManagedDraft(input);
+      const [template] = await db
+        .select()
+        .from(managedMailMessage)
+        .where(eq(managedMailMessage.id, saved.messageId));
+      if (template === undefined) {
+        throw new Error("Draft fixture is missing");
+      }
+      const inserted = Promise.withResolvers<boolean>();
+      const release = Promise.withResolvers<boolean>();
+      const competingId = crypto.randomUUID();
+      const competing = db.transaction(async (tx) => {
+        await tx.insert(managedMailMessage).values({
+          ...template,
+          id: competingId,
+          providerMessageId: crypto.randomUUID(),
+        });
+        inserted.resolve(true);
+        await release.promise;
+        await tx
+          .delete(managedMailMessage)
+          .where(eq(managedMailMessage.id, competingId));
+      });
+      await inserted.promise;
+      let completed = false;
+      const saving = saveManagedDraft({
+        ...input,
+        draft: { ...draft, localId: crypto.randomUUID() },
+        privateContext: true,
+      }).then((result) => {
+        completed = true;
+        return result;
+      });
+      try {
+        await vi.waitFor(() => {
+          expect(completed).toBeTruthy();
+        });
+      } finally {
+        release.resolve(true);
+        await competing;
+        const privateSaved = await saving;
+        for (const result of [saved, privateSaved]) {
+          await deleteManagedDraft({
+            baseRevision: result.baseRevision,
+            draftId: result.draftId,
+            mailboxId,
+            userId,
+          });
+        }
+      }
+    });
+
+    test("concurrent private and ordinary inserts in one mailbox finish without foreign-key lock upgrades deadlocking", async () => {
+      const gate = Promise.withResolvers<boolean>();
+      let arrivals = 0;
+      state.barrier = async () => {
+        arrivals += 1;
+        if (arrivals === 2) {
+          gate.resolve(true);
+        }
+        await gate.promise;
+      };
+      try {
+        const results = await Promise.allSettled(
+          [true, false].map(
+            async (privateContext) =>
+              await saveManagedDraft({
+                ...input,
+                draft: { ...draft, localId: crypto.randomUUID() },
+                privateContext,
+              })
+          )
+        );
+        expect(
+          results.every((result) => result.status === "fulfilled")
+        ).toBeTruthy();
+        for (const result of results) {
+          if (result.status === "fulfilled") {
+            await deleteManagedDraft({
+              baseRevision: result.value.baseRevision,
+              draftId: result.value.draftId,
+              mailboxId,
+              userId,
+            });
+          }
+        }
+      } finally {
+        state.barrier = undefined;
+      }
     });
 
     test("saves and reopens identical attachment metadata using the correct MIME part", async () => {

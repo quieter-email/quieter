@@ -146,7 +146,7 @@ const createAuthActionEmail = (props: AuthActionEmailProps) =>
               {
                 style: styles.brand,
               },
-              "Quieter"
+              "quieter"
             )
           ),
           h(
@@ -203,7 +203,7 @@ const createAuthActionEmail = (props: AuthActionEmailProps) =>
               {
                 style: styles.footer,
               },
-              "This email was sent because someone requested access to Quieter."
+              "This email was sent because someone requested access to quieter."
             )
           )
         )
@@ -213,18 +213,18 @@ const createAuthActionEmail = (props: AuthActionEmailProps) =>
 
 export const VerificationEmail = (props: { url: string }) =>
   createAuthActionEmail({
-    body: "Confirm this email address to finish setting up Quieter.",
+    body: "Confirm this email address to finish setting up quieter.",
     cta: "Verify email",
-    preview: "Confirm this email address to finish setting up Quieter.",
-    title: "Verify your Quieter email",
+    preview: "Confirm this email address to finish setting up quieter.",
+    title: "Verify your quieter email",
     url: props.url,
   });
 
 export const MagicLinkEmail = (props: { url: string }) =>
   createAuthActionEmail({
-    body: "Use this link to sign in to Quieter.",
+    body: "Use this link to sign in to quieter.",
     cta: "Sign in",
-    preview: "Use this link to sign in to Quieter.",
-    title: "Sign in to Quieter",
+    preview: "Use this link to sign in to quieter.",
+    title: "Sign in to quieter",
     url: props.url,
   });

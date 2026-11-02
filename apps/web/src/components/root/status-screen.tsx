@@ -1,9 +1,8 @@
 "use client";
 
+import type { AtmosphericBackground } from "@quieter/app/components/atmospheric-background";
 import { lazy, Suspense } from "react";
 import type { CSSProperties, ReactNode } from "react";
-
-import type { AtmosphericBackground } from "#/components/atmospheric-background";
 
 /**
  * Shared canvas for the dead ends: not found and unrecoverable errors. Same
@@ -25,7 +24,8 @@ const NoAtmosphere: typeof AtmosphericBackground = () => (
 
 const StatusAtmosphere = lazy(async () => {
   try {
-    const module = await import("#/components/atmospheric-background");
+    const module =
+      await import("@quieter/app/components/atmospheric-background");
     return { default: module.AtmosphericBackground };
   } catch {
     return { default: NoAtmosphere };

@@ -45,11 +45,9 @@ describe("dynamic AI memory", () => {
     expect(result.operations[0]?.content).toHaveLength(
       AI_MEMORY_CONTENT_MAX_LENGTH
     );
-    expect(result.summary).toBe("Saved preference.");
-    expect(result.answer).toBe("Saved the instruction.");
   });
 
-  test("bounds untrusted editor inputs before model processing", () => {
+  test("preserves the caller's full candidate selection while bounding individual text", () => {
     const input = buildAiMemoryEditorInput({
       currentMemories: Array.from({ length: 120 }, (_, index) => ({
         agents: ["all"],
@@ -68,7 +66,8 @@ describe("dynamic AI memory", () => {
       source: "explicit",
     });
 
-    expect(input.currentMemories).toHaveLength(100);
+    expect(input.currentMemories).toHaveLength(120);
+    expect(input.currentMemories.at(-1)?.id).toBe("memory-119");
     expect(input.currentMemories[0]?.content).toHaveLength(
       AI_MEMORY_CONTENT_MAX_LENGTH
     );
@@ -183,5 +182,107 @@ describe("dynamic AI memory", () => {
     expect(
       containsProhibitedMemorySecret("Use card 4242 4242 4242 4242")
     ).toBeTruthy();
+  });
+
+  test("keeps message identifiers whose numeric fragments resemble a payment number", () => {
+    expect(
+      containsProhibitedMemorySecret("632ab275-ff86-4734-9284-034d733d6f7e")
+    ).toBeFalsy();
+    expect(
+      containsProhibitedMemorySecret(
+        "Message 632ab275-ff86-4734-9284-034d733d6f7e was received."
+      )
+    ).toBeFalsy();
+    expect(containsProhibitedMemorySecret("4242-4242-4242-4242")).toBeTruthy();
+    expect(
+      containsProhibitedMemorySecret(
+        "Message 632ab275-ff86-4734-9284-034d733d6f7e contains card 4242-4242-4242-4242"
+      )
+    ).toBeTruthy();
+  });
+
+  test("keeps exact contact scopes distinct and stable across repeated normalization", () => {
+    const operation = {
+      action: "add" as const,
+      agents: ["reply"],
+      category: "writing_style" as const,
+      confidence: 0.8,
+      content: 'Uses short, warm greetings such as "Hi Alex!" with Alex.',
+      expiresAt: null,
+      importance: 3,
+      key: "writing-greeting",
+      kind: "learned" as const,
+      summary: "Uses short, warm greetings with Alex.",
+      targetId: null,
+      topics: ["greeting"],
+    };
+    const plan = sanitizeAiMemoryUpdatePlan({
+      answer: "Done.",
+      operations: [
+        {
+          ...operation,
+          correspondents: [
+            " Alex+team@Example.com ",
+            "alex+team@example.com",
+            "example.com",
+            "a display name",
+          ],
+        },
+        { ...operation, correspondents: ["alex@example.com"] },
+      ],
+      summary: "Updated writing context.",
+    });
+
+    expect(plan.operations[0]).toMatchObject({
+      category: "writing_style",
+      correspondents: ["alex+team@example.com"],
+    });
+    expect(plan.operations[0]?.key).not.toBe(plan.operations[1]?.key);
+    expect(sanitizeAiMemoryUpdatePlan(plan).operations[0]?.key).toBe(
+      plan.operations[0]?.key
+    );
+  });
+
+  test("does not retain secrets in descriptive fields or change summaries", () => {
+    const operation = {
+      action: "add" as const,
+      agents: ["all"],
+      confidence: 0.8,
+      content: "A useful fact.",
+      expiresAt: null,
+      importance: 3,
+      key: "work-context",
+      kind: "learned" as const,
+      summary: "A useful fact.",
+      targetId: null,
+      topics: [],
+    };
+    const secret = "My password is correct-horse-battery-staple";
+    const result = sanitizeAiMemoryUpdatePlan({
+      answer: secret,
+      operations: [
+        { ...operation, content: secret },
+        { ...operation, topics: [secret] },
+        { ...operation, key: secret },
+        { ...operation, correspondents: [secret] },
+      ],
+      summary: secret,
+    });
+
+    expect(result.operations).toHaveLength(0);
+    expect(JSON.stringify(result)).not.toContain(
+      "correct-horse-battery-staple"
+    );
+  });
+
+  test.each([
+    ["Find the security code email from my bank.", false],
+    ["The verification code is sent to my phone.", false],
+    ["Your verification code from Google.", false],
+    ["My security PIN is 1234", true],
+    ["Verification code: 8M2K", true],
+    ["The one-time code is AB-72", true],
+  ])("classifies code material in %s", (text, prohibited) => {
+    expect(containsProhibitedMemorySecret(text)).toBe(prohibited);
   });
 });

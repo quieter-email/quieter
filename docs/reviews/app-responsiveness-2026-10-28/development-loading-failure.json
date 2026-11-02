@@ -1,0 +1,41 @@
+{
+  "failed-load-final.json": {
+    "errorUI": {
+      "title": "Something broke on our end.",
+      "retry": true,
+      "back": true,
+      "loading": false,
+      "unhandled": []
+    },
+    "recovered": {
+      "compose": false,
+      "mail": true
+    }
+  },
+  "failed-snippets-final.json": {
+    "errorUI": {
+      "title": "Something broke on our end.",
+      "retry": true,
+      "back": true,
+      "loading": false,
+      "unhandled": []
+    },
+    "recovered": {
+      "compose": false,
+      "mail": true
+    }
+  },
+  "interrupted-load.json": {
+    "pending": {
+      "mailbox": "compose",
+      "editor": false,
+      "loading": true
+    },
+    "afterRelease": {
+      "mailbox": "inbox",
+      "composeShell": false,
+      "mail": true
+    },
+    "exceptions": 0
+  }
+}

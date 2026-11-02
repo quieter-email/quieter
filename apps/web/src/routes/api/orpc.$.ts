@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { waitUntil } from "cloudflare:workers";
 
 export const Route = createFileRoute("/api/orpc/$")({
   server: {
@@ -24,7 +25,10 @@ export const Route = createFileRoute("/api/orpc/$")({
           },
         });
         const { response } = await orpcHandler.handle(request, {
-          context: createOrpcContext({ req: request }),
+          context: createOrpcContext({
+            req: request,
+            scheduleBackgroundTask: waitUntil,
+          }),
           prefix: "/api/orpc",
         });
 

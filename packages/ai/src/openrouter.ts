@@ -1,8 +1,10 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { serverEnv } from "@quieter/env/server";
 import { wrapLanguageModel } from "ai";
 import { z } from "zod";
 
+import { createAiBillingMiddleware } from "./billing";
 import type { ChatModel } from "./chat-models";
 import { chatModelSchema, resolveModelFallbacks } from "./chat-models";
 import { openRouterStreamMiddleware } from "./openrouter-stream";
@@ -41,23 +43,36 @@ export const readChatUsageCostUsd = (
     ?.usage?.cost;
 
 /**
- * Creates the language model for a chat model id with zero-data-retention
- * routing, big-provider failover, and OpenRouter usage accounting (token
- * costs) always enabled. Failover stays inside the provider constraints, so
- * every fallback serves under the same ZDR routing as the primary.
+ * Keeps zero-data-retention routing and usage accounting enabled. Latest
+ * family choices stay in that family; pinned configurations retain their
+ * provider-constrained failover order.
  */
 export const createChatModel = (
   model: ChatModel,
-  options?: { prioritizeLatency?: boolean }
+  options: {
+    billing: AiBillingContext;
+    onProviderStart?: () => void;
+    allowFallbacks?: boolean;
+    prioritizeLatency?: boolean;
+  }
 ) => {
   const parsedModel = chatModelSchema.parse(model);
+  const fallbacks =
+    options.allowFallbacks === false ? [] : resolveModelFallbacks(parsedModel);
   return wrapLanguageModel({
-    middleware: openRouterStreamMiddleware,
+    middleware: [
+      openRouterStreamMiddleware,
+      createAiBillingMiddleware(
+        options.billing,
+        readChatUsageCostUsd,
+        options.onProviderStart
+      ),
+    ],
     model: getOpenRouterProvider().chat(parsedModel, {
       extraBody: {
-        models: resolveModelFallbacks(parsedModel),
+        ...(fallbacks.length > 0 ? { models: fallbacks } : {}),
         provider: {
-          ...(options?.prioritizeLatency === true ? { sort: "latency" } : {}),
+          ...(options.prioritizeLatency === true ? { sort: "latency" } : {}),
           zdr: true,
         },
       },

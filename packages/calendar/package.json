@@ -1,0 +1,21 @@
+{
+  "name": "@quieter/calendar",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/contracts.ts",
+    "./time": "./src/time.ts",
+    "./recurrence": "./src/recurrence.ts"
+  },
+  "dependencies": {
+    "@js-temporal/polyfill": "^0.5.1",
+    "ical.js": "^2.2.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@quieter/config": "workspace:*",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

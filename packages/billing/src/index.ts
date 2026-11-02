@@ -7,6 +7,7 @@ import { reportError } from "@quieter/observability";
 import { eq } from "drizzle-orm";
 
 import { getAiUsageCostMicroCents } from "./ai-pricing.ts";
+import { hasAiCreditReservationGroup } from "./ai-reservation.ts";
 import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits.ts";
 import type { BillingUsageKind } from "./credits.ts";
 import {
@@ -436,6 +437,11 @@ const recordAiCreditUsage = async (input: {
   metadata: Record<string, number | string>;
   userId: string;
 }) => {
+  // Retain reporting of pre-rollout usage. New provider requests settle their
+  // own durable operations, including unlimited-account markers.
+  if (await hasAiCreditReservationGroup(input.externalId)) {
+    return;
+  }
   const mailboxId = input.mailboxId ?? "";
   if (mailboxId === "") {
     return;
@@ -484,7 +490,13 @@ export const reportAiUsage = async (input: {
   };
   usageKind: Extract<
     BillingUsageKind,
-    "aiChat" | "aiMemory" | "autoLabel" | "usefulDetails" | "verificationCode"
+    | "importance"
+    | "aiChat"
+    | "aiMemory"
+    | "mailAction"
+    | "autoLabel"
+    | "usefulDetails"
+    | "verificationCode"
   >;
   userId: string;
 }) => {

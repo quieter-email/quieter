@@ -1,0 +1,374 @@
+"use client";
+
+import {
+  Add01Icon,
+  Delete02Icon,
+  Loading03Icon,
+  Search01Icon,
+  SidebarLeftIcon,
+} from "@hugeicons/core-free-icons";
+import { SnippetFields } from "@quieter/app/features/compose/components/snippet-fields";
+import { toastError } from "@quieter/app/lib/error-toast";
+import { orpc } from "@quieter/app/lib/orpc";
+import {
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogCloseButton,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@quieter/ui/alert-dialog";
+import { Button } from "@quieter/ui/button";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Input } from "@quieter/ui/input";
+import { InputAddon, InputGroup } from "@quieter/ui/input-group";
+import { Text } from "@quieter/ui/text";
+import { toast } from "@quieter/ui/toast";
+import {
+  WorkspaceHeader,
+  WorkspaceSection,
+} from "@quieter/ui/workspace-section";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import type { ReactNode } from "react";
+
+type MailSnippetItem = {
+  bodyText: string;
+  id: string;
+  name: string;
+};
+
+export const SnippetWorkspace = ({
+  mailboxId,
+  onOpenSidebar,
+}: {
+  mailboxId: string;
+  onOpenSidebar: () => void;
+}) => {
+  const queryClient = useQueryClient();
+  const queryOptions = orpc.mailSnippets.list.queryOptions({
+    input: { mailboxId },
+  });
+  const {
+    data: snippetsData,
+    isError: isSnippetsError,
+    isPending: isSnippetsPending,
+  } = useQuery(queryOptions);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteSnippet, setDeleteSnippet] = useState<MailSnippetItem | null>(
+    null
+  );
+  const [search, setSearch] = useState("");
+  const [name, setName] = useState("");
+  const [bodyText, setBodyText] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const refreshSnippets = async () => {
+    await queryClient.invalidateQueries({ queryKey: queryOptions.queryKey });
+  };
+  const createMutation = useMutation({
+    ...orpc.mailSnippets.create.mutationOptions(),
+    onError: (error) => {
+      toastError(error, {
+        boundary: "mail-snippets",
+        fallback: "Could not save the snippet.",
+      });
+    },
+    onSuccess: async (snippet) => {
+      await refreshSnippets();
+      setEditingId(snippet.id);
+      setEditorOpen(false);
+      toast.success("Snippet saved.");
+    },
+  });
+  const updateMutation = useMutation({
+    ...orpc.mailSnippets.update.mutationOptions(),
+    onError: (error) => {
+      toastError(error, {
+        boundary: "mail-snippets",
+        fallback: "Could not update the snippet.",
+      });
+    },
+    onSuccess: async () => {
+      await refreshSnippets();
+      setEditorOpen(false);
+      toast.success("Snippet updated.");
+    },
+  });
+  const deleteMutation = useMutation({
+    ...orpc.mailSnippets.delete.mutationOptions(),
+    onError: (error) => {
+      toastError(error, {
+        boundary: "mail-snippets",
+        fallback: "Could not delete the snippet.",
+      });
+    },
+    onSuccess: async () => {
+      await refreshSnippets();
+      setDeleteSnippet(null);
+      setEditingId(null);
+      setEditorOpen(false);
+      setName("");
+      setBodyText("");
+      toast.success("Snippet deleted.");
+    },
+  });
+  const snippets = snippetsData?.snippets ?? [];
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredSnippets = normalizedSearch
+    ? snippets.filter((snippet) =>
+        `${snippet.name} ${snippet.bodyText}`
+          .toLowerCase()
+          .includes(normalizedSearch)
+      )
+    : snippets;
+  const currentSnippet =
+    snippets.find((snippet) => snippet.id === editingId) ?? null;
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+  let snippetQueryState: ReactNode = null;
+  if (isSnippetsPending) {
+    snippetQueryState = (
+      <div className="flex items-center justify-center gap-2 px-3 py-10 text-caption text-muted-fg">
+        <Icon size={14} animation="spin" icon={Loading03Icon} />
+        Loading snippets
+      </div>
+    );
+  } else if (isSnippetsError) {
+    snippetQueryState = (
+      <p className="px-3 py-10 text-center text-caption/5 text-destructive">
+        Could not load snippets.
+      </p>
+    );
+  } else if (filteredSnippets.length === 0) {
+    snippetQueryState = (
+      <div className="px-6 py-12 text-center">
+        <p className="text-body-sm font-medium text-fg">
+          {snippets.length === 0 ? "No snippets yet" : "No matches"}
+        </p>
+        <p className="mt-1 text-caption/5 text-muted-fg">
+          {snippets.length === 0
+            ? "Save text you use often in this mailbox."
+            : "Try a different search."}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <WorkspaceSection>
+        <WorkspaceHeader className="@container">
+          <div className="flex items-center gap-2">
+            <IconButtonTooltip label="Open sidebar">
+              <Button
+                chrome="toolbar"
+                aria-label="Open sidebar"
+                className="lg:hidden"
+                onClick={onOpenSidebar}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <Icon icon={SidebarLeftIcon} />
+              </Button>
+            </IconButtonTooltip>
+            <Text
+              as="h1"
+              className="min-w-0 flex-1"
+              size="lg"
+              truncate
+              weight="medium"
+            >
+              Snippets
+            </Text>
+            <Button
+              chrome="toolbar"
+              onClick={() => {
+                setEditingId(null);
+                setName("");
+                setBodyText("");
+                setEditorOpen(true);
+              }}
+              size="sm"
+              type="button"
+            >
+              <Icon icon={Add01Icon} />
+              New
+            </Button>
+          </div>
+          <label
+            className="relative mt-3 block"
+            htmlFor="snippet-workspace-search"
+          >
+            <span className="sr-only" id="snippet-workspace-search-label">
+              Search snippets
+            </span>
+            <InputGroup chrome="toolbar">
+              <InputAddon
+                aria-hidden
+                className="ml-3 flex shrink-0 items-center"
+              >
+                <Icon icon={Search01Icon} size={14} tone="muted" />
+              </InputAddon>
+              <Input
+                aria-labelledby="snippet-workspace-search-label"
+                chrome="attached"
+                id="snippet-workspace-search"
+                onChange={(event) => {
+                  setSearch(event.currentTarget.value);
+                }}
+                placeholder="Search snippets"
+                value={search}
+              />
+            </InputGroup>
+          </label>
+        </WorkspaceHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto p-0.5">
+          <div className="flex flex-col gap-0.5">
+            {filteredSnippets.map((snippet) => (
+              <Button
+                aria-label={`Edit snippet ${snippet.name}`}
+                aria-current={editingId === snippet.id ? "true" : undefined}
+                fullWidth
+                key={snippet.id}
+                onClick={() => {
+                  setEditingId(snippet.id);
+                  setName(snippet.name);
+                  setBodyText(snippet.bodyText);
+                  setEditorOpen(true);
+                }}
+                size="auto"
+                type="button"
+                variant="ghost"
+              >
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-4">
+                  <span className="block shrink-0 truncate text-body-sm font-medium sm:w-44">
+                    {snippet.name}
+                  </span>
+                  <span className="block min-w-0 flex-1 truncate text-caption text-muted-fg">
+                    {snippet.bodyText}
+                  </span>
+                </span>
+              </Button>
+            ))}
+            {snippetQueryState}
+          </div>
+        </div>
+      </WorkspaceSection>
+
+      <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
+        <DialogContent>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (isSaving) {
+                return;
+              }
+              if (!name.trim()) {
+                toast.error("Give this snippet a name.");
+                return;
+              }
+              if (!bodyText.trim()) {
+                toast.error("Add snippet text before saving.");
+                return;
+              }
+              const input = { bodyText, mailboxId, name: name.trim() };
+              if (editingId) {
+                updateMutation.mutate({ ...input, id: editingId });
+              } else {
+                createMutation.mutate(input);
+              }
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>
+                {editingId ? "Edit snippet" : "New snippet"}
+              </DialogTitle>
+            </DialogHeader>
+            <DialogBody spacing="3">
+              <SnippetFields
+                bodyText={bodyText}
+                name={name}
+                onBodyTextChange={setBodyText}
+                onNameChange={setName}
+              />
+            </DialogBody>
+            <DialogFooter>
+              <DialogCloseButton>Cancel</DialogCloseButton>
+              {currentSnippet ? (
+                <Button
+                  onClick={() => {
+                    setEditorOpen(false);
+                    setDeleteSnippet(currentSnippet);
+                  }}
+                  type="button"
+                  variant="destructive"
+                >
+                  <Icon icon={Delete02Icon} />
+                  Delete
+                </Button>
+              ) : null}
+              <Button
+                disabled={isSaving || !name.trim() || !bodyText.trim()}
+                type="submit"
+              >
+                {isSaving ? (
+                  <Icon animation="spin" icon={Loading03Icon} />
+                ) : null}
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setDeleteSnippet(null);
+          }
+        }}
+        open={!!deleteSnippet}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete “{deleteSnippet?.name}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the snippet from this mailbox.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogBody>
+            <Text tone="muted">
+              Messages that already used this snippet will not change.
+            </Text>
+          </AlertDialogBody>
+          <AlertDialogFooter>
+            <AlertDialogCloseButton>Cancel</AlertDialogCloseButton>
+            <AlertDialogCloseButton
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (deleteSnippet) {
+                  deleteMutation.mutate({ id: deleteSnippet.id, mailboxId });
+                }
+              }}
+              variant="destructive"
+            >
+              Delete
+            </AlertDialogCloseButton>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+};

@@ -34,7 +34,11 @@ describe("agent markdown content", () => {
 describe("llms.txt", () => {
   test("documents the deprecation policy and the MCP boundary", () => {
     const llmsTxt = buildLlmsTxt();
-    expect(llmsTxt).toContain("/api/v1");
+    expect(llmsTxt).toContain("Quieter-Version");
+    expect(llmsTxt).toContain("2026-10");
+    expect(llmsTxt).toContain("/api/send");
+    expect(llmsTxt).toContain("/api/o/{token}");
+    expect(llmsTxt).not.toContain("/api/v1");
     expect(llmsTxt).not.toContain("MCP server: coming soon");
   });
 });

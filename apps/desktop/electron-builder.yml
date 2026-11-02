@@ -1,0 +1,36 @@
+appId: com.quieter.desktop
+productName: quieter
+icon: resources/icon.png
+directories:
+  buildResources: resources
+  output: release
+files:
+  - out/**
+  - package.json
+  - resources/icon.png
+asar: true
+protocols:
+  - name: quieter sign in
+    schemes:
+      - com.quieter.desktop
+mac:
+  extendInfo:
+    NSMicrophoneUsageDescription: quieter uses your microphone to transcribe messages when you record audio.
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: quieter
+linux:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  category: Office
+  executableName: quieter
+  target:
+    - AppImage
+    - deb

@@ -370,7 +370,7 @@ export const processCampaignBatch = async (
         continue;
       }
       const unsubscribeUrl = new URL(
-        `/api/v1/unsubscribe/${recipient.unsubscribeToken}`,
+        `/api/unsubscribe/${recipient.unsubscribeToken}`,
         origin
       ).toString();
       try {

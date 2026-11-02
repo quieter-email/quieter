@@ -1,6 +1,5 @@
+import { TemplateDetail } from "@quieter/app/features/broadcasts/components/templates";
 import { createFileRoute } from "@tanstack/react-router";
-
-import { TemplateDetail } from "#/features/broadcasts/components/templates";
 
 export const Route = createFileRoute("/_app/templates/$templateId")({
   component: TemplateRoute,

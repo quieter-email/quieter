@@ -1,10 +1,13 @@
+import { clientEnv } from "@quieter/app/env";
+import { shouldDiscardClientError } from "@quieter/app/lib/client-error-reporting";
+
+import "./lib/app-runtime";
+
 import * as Sentry from "@sentry/react";
 import { createRouter, defaultStringifySearch } from "@tanstack/react-router";
 
 import { RootErrorComponent } from "./components/root/root-error-component";
 import { RootNotFoundComponent } from "./components/root/root-not-found-component";
-import { clientEnv } from "./env";
-import { shouldDiscardClientError } from "./lib/client-error-reporting";
 import { handleDeploymentPreloadError } from "./lib/stale-deployment";
 import { routeTree } from "./routeTree.gen";
 

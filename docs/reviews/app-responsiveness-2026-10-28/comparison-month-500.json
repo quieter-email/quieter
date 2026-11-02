@@ -1,0 +1,187 @@
+{
+  "baseline": {
+    "clicks": [
+      {
+        "commitMs": 1812.5,
+        "label": "Performance event 008, 09:00 to 09:30. Open event to edit.",
+        "paintMs": 1821.4000000357628,
+        "selectedBefore": false,
+        "started": 2095385
+      },
+      {
+        "commitMs": 1810.7999999523165,
+        "label": "Performance event 009, 09:00 to 09:30. Open event to edit.",
+        "paintMs": 1817.7999999523165,
+        "selectedBefore": false,
+        "started": 2098924.2000000477
+      },
+      {
+        "commitMs": 1732.399999976158,
+        "label": "Performance event 008, 09:00 to 09:30. Open event to edit.",
+        "paintMs": 1740,
+        "selectedBefore": false,
+        "started": 2103028.100000024
+      },
+      {
+        "commitMs": 1808.2999999523165,
+        "label": "Performance event 009, 09:00 to 09:30. Open event to edit.",
+        "paintMs": 1815.699999988079,
+        "selectedBefore": false,
+        "started": 2106496.7000000477
+      },
+      {
+        "commitMs": 1827.399999976158,
+        "label": "Performance event 008, 09:00 to 09:30. Open event to edit.",
+        "paintMs": 1834.5999999642372,
+        "selectedBefore": false,
+        "started": 2110095.400000036
+      },
+      {
+        "commitMs": 1753.5,
+        "label": "Performance event 009, 09:00 to 09:30. Open event to edit.",
+        "paintMs": 1760.5999999642372,
+        "selectedBefore": false,
+        "started": 2113653.900000036
+      }
+    ],
+    "devtools": "undefined",
+    "eventCount": 500,
+    "longTasks": [
+      {
+        "duration": 1820,
+        "start": 2095384.800000012
+      },
+      {
+        "duration": 1820,
+        "start": 2095384.800000012
+      },
+      {
+        "duration": 1820,
+        "start": 2095384.800000012
+      },
+      {
+        "duration": 1817,
+        "start": 2098924
+      },
+      {
+        "duration": 1817,
+        "start": 2098924
+      },
+      {
+        "duration": 1817,
+        "start": 2098924
+      },
+      {
+        "duration": 567,
+        "start": 2100755.400000036
+      },
+      {
+        "duration": 567,
+        "start": 2100755.400000036
+      },
+      {
+        "duration": 567,
+        "start": 2100755.400000036
+      },
+      {
+        "duration": 1739,
+        "start": 2103027.800000012
+      },
+      {
+        "duration": 1739,
+        "start": 2103027.800000012
+      },
+      {
+        "duration": 1739,
+        "start": 2103027.800000012
+      },
+      {
+        "duration": 1815,
+        "start": 2106496.300000012
+      },
+      {
+        "duration": 1815,
+        "start": 2106496.300000012
+      },
+      {
+        "duration": 1815,
+        "start": 2106496.300000012
+      },
+      {
+        "duration": 1834,
+        "start": 2110095.100000024
+      },
+      {
+        "duration": 1834,
+        "start": 2110095.100000024
+      },
+      {
+        "duration": 1834,
+        "start": 2110095.100000024
+      },
+      {
+        "duration": 1760,
+        "start": 2113653.7000000477
+      },
+      {
+        "duration": 1760,
+        "start": 2113653.7000000477
+      },
+      {
+        "duration": 1760,
+        "start": 2113653.7000000477
+      }
+    ],
+    "rendered": 126
+  },
+  "head": {
+    "clicks": [
+      {
+        "commitMs": 38.19999998807907,
+        "label": "Performance event 008, 09:00 to 09:30. Open event to edit.",
+        "paintMs": 43.69999998807907,
+        "selectedBefore": false,
+        "started": 132779.69999998808
+      },
+      {
+        "commitMs": 38,
+        "label": "Performance event 009, 09:00 to 09:30. Open event to edit.",
+        "paintMs": 43,
+        "selectedBefore": false,
+        "started": 136843.89999997616
+      },
+      {
+        "commitMs": 36.80000001192093,
+        "label": "Performance event 008, 09:00 to 09:30. Open event to edit.",
+        "paintMs": 41.69999998807907,
+        "selectedBefore": false,
+        "started": 140360.39999997616
+      },
+      {
+        "commitMs": 43.5,
+        "label": "Performance event 009, 09:00 to 09:30. Open event to edit.",
+        "paintMs": 48.39999997615814,
+        "selectedBefore": false,
+        "started": 143926.39999997616
+      },
+      {
+        "commitMs": 39.09999996423721,
+        "label": "Performance event 008, 09:00 to 09:30. Open event to edit.",
+        "paintMs": 45.19999998807907,
+        "selectedBefore": false,
+        "started": 147513.69999998808
+      },
+      {
+        "commitMs": 44.30000001192093,
+        "label": "Performance event 009, 09:00 to 09:30. Open event to edit.",
+        "paintMs": 49.39999997615814,
+        "selectedBefore": false,
+        "started": 151004.69999998808
+      }
+    ],
+    "devtools": "undefined",
+    "eventCount": 500,
+    "longTasks": [],
+    "rendered": 126
+  }
+}

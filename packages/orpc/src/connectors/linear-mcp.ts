@@ -188,6 +188,7 @@ const callTool = async (input: {
 };
 
 export const listLinearMcpToolsForUser = async (input: {
+  connectionId?: string;
   signal?: AbortSignal;
   userId: string;
 }): Promise<LinearMcpToolDescriptor[]> => {
@@ -211,6 +212,7 @@ export const listLinearMcpToolsForUser = async (input: {
 
 export const runLinearMcpToolCallsForUser = async (input: {
   calls: LinearMcpToolCallInput[];
+  connectionId?: string;
   maxCalls?: number;
   maxOutputBytes?: number;
   signal?: AbortSignal;

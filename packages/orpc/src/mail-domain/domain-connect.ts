@@ -15,12 +15,12 @@ export const DOMAIN_CONNECT_STATE_TTL_MS = 10 * 60 * 1000;
 const domainConnectServices = {
   send_and_receive: {
     id: "send-and-receive",
-    name: "Send and receive mail with Quieter",
+    name: "Send and receive mail with quieter",
     version: 1,
   },
   send_only: {
     id: "send-only",
-    name: "Send mail with Quieter",
+    name: "Send mail with quieter",
     version: 1,
   },
 } as const satisfies Record<
@@ -172,11 +172,11 @@ export const createDomainConnectTemplate = (mode: MailDomainMode) => {
   return {
     description:
       mode === "send_only"
-        ? "Authenticate this domain for outbound mail from Quieter."
-        : "Authenticate this domain and route incoming mail to Quieter.",
+        ? "Authenticate this domain for outbound mail from quieter."
+        : "Authenticate this domain and route incoming mail to quieter.",
     logoUrl: "https://quieter.email/icon.svg",
     providerId: DOMAIN_CONNECT_PROVIDER_ID,
-    providerName: "Quieter",
+    providerName: "quieter",
     records: [
       ...sharedTemplateRecords,
       ...(mode === "send_and_receive"

@@ -1,6 +1,6 @@
 # Responsive mail baseline
 
-Quieter's responsive web mail experience is the interaction baseline for future native or mobile shells. Mobile implementations should reuse the same mailbox-scoped navigation, search state, selection semantics, thread reading, and message actions rather than introduce a parallel workflow.
+quieter's responsive web mail experience is the interaction baseline for future native or mobile shells. Mobile implementations should reuse the same mailbox-scoped navigation, search state, selection semantics, thread reading, and message actions rather than introduce a parallel workflow.
 
 At narrow component widths:
 

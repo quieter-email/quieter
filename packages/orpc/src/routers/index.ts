@@ -1,6 +1,14 @@
 import { lazy } from "@orpc/server";
 
 export const appRouter = {
+  accountPreferences: lazy(
+    async () =>
+      await import("./account-preferences").then(
+        ({ accountPreferencesRouter }) => ({
+          default: accountPreferencesRouter,
+        })
+      )
+  ),
   ai: lazy(
     async () =>
       await import("./ai").then(({ aiRouter }) => ({ default: aiRouter }))
@@ -9,14 +17,16 @@ export const appRouter = {
     const { audiencesRouter } = await import("./audiences");
     return { default: audiencesRouter };
   }),
-  auth: lazy(
-    async () =>
-      await import("./auth").then(({ authRouter }) => ({ default: authRouter }))
-  ),
   billing: lazy(
     async () =>
       await import("./billing").then(({ billingRouter }) => ({
         default: billingRouter,
+      }))
+  ),
+  calendar: lazy(
+    async () =>
+      await import("./calendar").then(({ calendarRouter }) => ({
+        default: calendarRouter,
       }))
   ),
   campaigns: lazy(async () => {
@@ -33,15 +43,15 @@ export const appRouter = {
         default: connectorsRouter,
       }))
   ),
-  dailyBrief: lazy(
-    async () =>
-      await import("./daily-brief").then(({ dailyBriefRouter }) => ({
-        default: dailyBriefRouter,
-      }))
-  ),
   mail: lazy(
     async () =>
       await import("./mail").then(({ mailRouter }) => ({ default: mailRouter }))
+  ),
+  mailAgent: lazy(
+    async () =>
+      await import("./mail-agent").then(({ mailAgentRouter }) => ({
+        default: mailAgentRouter,
+      }))
   ),
   mailDomains: lazy(
     async () =>

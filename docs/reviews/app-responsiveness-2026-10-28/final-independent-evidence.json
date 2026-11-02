@@ -1,0 +1,1233 @@
+{
+  "verdict": "PASS+NOTES",
+  "sourceSHA": "978a603164a77243066fac9a0e67661497a9bbc7",
+  "comparisonSources": {
+    "baseline": "103e2b6e8453fb0fae1ab69fb4860cb5dd2f9fa9",
+    "calendarTimedHead": "85c61b154fc0e6588512eaeba5dcb750ac22d054",
+    "firstRevealAndTypingTimedHead": "8d2ff77d298f1419f712328d106c3783b5d95ecb",
+    "settleControl": "bf7d31c77ebc33b69f926b30a17b310518b19002"
+  },
+  "runtime": "Local compiled production React, Chromium156, supported preview persona. No device-FPS claim.",
+  "ports": {
+    "baseline": 3037,
+    "settleControl": 3038,
+    "final": 3044
+  },
+  "calendarSelection": {
+    "week-11": {
+      "baseline": {
+        "runs": 5,
+        "medianCommitMs": 56.90000003576279,
+        "rangeCommitMs": [51.5, 73.40000003576279],
+        "eventCount": 11,
+        "visibleCards": 11,
+        "matchedUniqueLongTasks": 5,
+        "longTaskDurations": [57, 60, 62, 75, 79],
+        "rawLongTaskEntries": 18,
+        "observerNote": "Retained baseline observers duplicate entries; unique start/duration pairs only. Timing claims use selected-attribute commits, not task counts."
+      },
+      "head": {
+        "runs": 5,
+        "medianCommitMs": 32.80000001192093,
+        "rangeCommitMs": [28.899999976158146, 36.39999997615814],
+        "eventCount": 11,
+        "visibleCards": 11,
+        "matchedUniqueLongTasks": 0,
+        "longTaskDurations": [],
+        "rawLongTaskEntries": 0,
+        "observerNote": "Retained baseline observers duplicate entries; unique start/duration pairs only. Timing claims use selected-attribute commits, not task counts."
+      }
+    },
+    "month-500": {
+      "baseline": {
+        "runs": 5,
+        "medianCommitMs": 1808.2999999523165,
+        "rangeCommitMs": [1732.399999976158, 1827.399999976158],
+        "eventCount": 500,
+        "visibleCards": 126,
+        "matchedUniqueLongTasks": 5,
+        "longTaskDurations": [1739, 1760, 1815, 1817, 1834],
+        "rawLongTaskEntries": 21,
+        "observerNote": "Retained baseline observers duplicate entries; unique start/duration pairs only. Timing claims use selected-attribute commits, not task counts."
+      },
+      "head": {
+        "runs": 5,
+        "medianCommitMs": 39.09999996423721,
+        "rangeCommitMs": [36.80000001192093, 44.30000001192093],
+        "eventCount": 500,
+        "visibleCards": 126,
+        "matchedUniqueLongTasks": 0,
+        "longTaskDurations": [],
+        "rawLongTaskEntries": 0,
+        "observerNote": "Retained baseline observers duplicate entries; unique start/duration pairs only. Timing claims use selected-attribute commits, not task counts."
+      }
+    }
+  },
+  "firstReveal": {
+    "compose": {
+      "baseline": {
+        "runs": 5,
+        "medianReadyMs": 372.699999988079,
+        "readyRangeMs": [364.800000011921, 388.199999988079],
+        "medianNextPaintMs": 944.0999999642372,
+        "nextPaintRangeMs": [923.5999999642372, 958.0999999642372]
+      },
+      "head": {
+        "runs": 5,
+        "medianReadyMs": 98,
+        "readyRangeMs": [95.80000001192091, 132],
+        "medianNextPaintMs": 99.60000002384186,
+        "nextPaintRangeMs": [97, 135]
+      }
+    },
+    "snippets": {
+      "baseline": {
+        "runs": 5,
+        "medianReadyMs": 335.19999998807907,
+        "readyRangeMs": [334.10000002384186, 344.5999999642372],
+        "medianNextPaintMs": 911,
+        "nextPaintRangeMs": [869.5, 940.4000000357628]
+      },
+      "head": {
+        "runs": 5,
+        "medianReadyMs": 48.39999997615814,
+        "readyRangeMs": [46.89999997615814, 75],
+        "medianNextPaintMs": 49.09999996423721,
+        "nextPaintRangeMs": [47.59999996423721, 76.90000003576279]
+      }
+    },
+    "sidebar": {
+      "baseline": {
+        "runs": 5,
+        "medianReadyMs": 338.5,
+        "readyRangeMs": [329.10000002384186, 344.69999998807907],
+        "medianNextPaintMs": 344.9000000357628,
+        "nextPaintRangeMs": [344.69999998807907, 361.5],
+        "ordinary": {
+          "bodyMs": 509,
+          "inputDisabled": true,
+          "paintMs": 511.800000011921,
+          "shellMs": 57.30000001192093,
+          "start": 2782.199999988079
+        },
+        "geometry": [
+          {
+            "mainWidths": 1,
+            "sidebarWidthRange": [374.3905029296875, 374.390625]
+          },
+          {
+            "mainWidths": 1,
+            "sidebarWidthRange": [374.3905029296875, 374.3907470703125]
+          },
+          {
+            "mainWidths": 1,
+            "sidebarWidthRange": [374.390625, 374.3907470703125]
+          },
+          {
+            "mainWidths": 1,
+            "sidebarWidthRange": [374.390625, 374.3907470703125]
+          },
+          {
+            "mainWidths": 1,
+            "sidebarWidthRange": [374.3905029296875, 374.390625]
+          }
+        ]
+      },
+      "head": {
+        "runs": 5,
+        "medianReadyMs": 100.70000004768372,
+        "readyRangeMs": [80.19999998807907, 145.5999999642372],
+        "medianNextPaintMs": 106.5,
+        "nextPaintRangeMs": [84.09999996423721, 149.89999997615814],
+        "ordinary": {
+          "bodyMs": 294,
+          "inputDisabled": true,
+          "paintMs": 298.89999997615814,
+          "shellMs": 39.59999996423721,
+          "start": 2759.400000035763
+        },
+        "geometry": [
+          {
+            "mainWidths": 15,
+            "sidebarWidthRange": [374.390625, 374.390625]
+          },
+          {
+            "mainWidths": 15,
+            "sidebarWidthRange": [374.390625, 374.390625]
+          },
+          {
+            "mainWidths": 14,
+            "sidebarWidthRange": [374.390625, 374.390625]
+          },
+          {
+            "mainWidths": 15,
+            "sidebarWidthRange": [374.390625, 374.390625]
+          },
+          {
+            "mainWidths": 15,
+            "sidebarWidthRange": [374.390625, 374.390625]
+          }
+        ]
+      }
+    }
+  },
+  "settling": {
+    "verdict": "Inconclusive elapsed result. Proven DOM getter-work reduction only. Dense one-panel settling bursts remain.",
+    "timing": {
+      "bf": {
+        "open": {
+          "runs": 5,
+          "maxTaskMedianMs": 72,
+          "maxTaskRangeMs": [0, 78],
+          "blockingMedianMs": 28,
+          "widthEndMedianMs": 285.89999997615814
+        },
+        "close": {
+          "runs": 5,
+          "maxTaskMedianMs": 85,
+          "maxTaskRangeMs": [83, 99],
+          "blockingMedianMs": 39,
+          "widthEndMedianMs": 286.4000000357628
+        },
+        "all": {
+          "maxTaskMedianMs": 80.5,
+          "maxTaskRangeMs": [0, 99],
+          "blockingMedianMs": 37.0
+        },
+        "metadata": {
+          "source": "bf7d31c77ebc33b69f926b30a17b310518b19002",
+          "fixture": {
+            "attachmentMessages": 196,
+            "key": ["messages", "demo:mailbox", "inbox", ""],
+            "metadataPreserved": [
+              "senderAvatarUrls",
+              "isUnread",
+              "isImportant",
+              "threadIsImportant",
+              "threadLabelIds",
+              "threadMessageCount",
+              "threadAttachmentCount",
+              "threadAttachmentNames",
+              "attachments",
+              "unsubscribeMailto"
+            ],
+            "nestedMessages": 426,
+            "optionalMetadata": 426,
+            "pages": 27,
+            "records": 393,
+            "supportedLocalDemoSourceSeeded": true,
+            "threadKeysMailboxScoped": true,
+            "threads": 360
+          },
+          "completeListHash": "1073971d8a8341913525259470fa1a1781ac9727142ce2f0602741d47be39949",
+          "bodyNodes": 3086,
+          "viewport": {
+            "h": 900,
+            "w": 1280
+          }
+        }
+      },
+      "candidate": {
+        "open": {
+          "runs": 5,
+          "maxTaskMedianMs": 80,
+          "maxTaskRangeMs": [70, 93],
+          "blockingMedianMs": 37,
+          "widthEndMedianMs": 294.4000000357628
+        },
+        "close": {
+          "runs": 5,
+          "maxTaskMedianMs": 83,
+          "maxTaskRangeMs": [76, 94],
+          "blockingMedianMs": 46,
+          "widthEndMedianMs": 295.69999998807907
+        },
+        "all": {
+          "maxTaskMedianMs": 81.5,
+          "maxTaskRangeMs": [70, 94],
+          "blockingMedianMs": 41.5
+        },
+        "metadata": {
+          "source": "978a603164a77243066fac9a0e67661497a9bbc7",
+          "fixture": {
+            "attachmentMessages": 196,
+            "key": ["messages", "demo:mailbox", "inbox", ""],
+            "metadataPreserved": [
+              "senderAvatarUrls",
+              "isUnread",
+              "isImportant",
+              "threadIsImportant",
+              "threadLabelIds",
+              "threadMessageCount",
+              "threadAttachmentCount",
+              "threadAttachmentNames",
+              "attachments",
+              "unsubscribeMailto"
+            ],
+            "nestedMessages": 426,
+            "optionalMetadata": 426,
+            "pages": 27,
+            "records": 393,
+            "supportedLocalDemoSourceSeeded": true,
+            "threadKeysMailboxScoped": true,
+            "threads": 360
+          },
+          "completeListHash": "1073971d8a8341913525259470fa1a1781ac9727142ce2f0602741d47be39949",
+          "bodyNodes": 3086,
+          "viewport": {
+            "h": 900,
+            "w": 1280
+          }
+        }
+      }
+    },
+    "instrumentedReads": {
+      "bf": [
+        {
+          "opening": true,
+          "height": 505,
+          "width": 174
+        },
+        {
+          "opening": false,
+          "height": 634,
+          "width": 195
+        }
+      ],
+      "candidate": [
+        {
+          "opening": true,
+          "height": 41,
+          "width": 28
+        },
+        {
+          "opening": false,
+          "height": 135,
+          "width": 26
+        }
+      ]
+    }
+  },
+  "finalWorkspaceMatrix": {
+    "mail-one-panel": [
+      {
+        "trusted": true,
+        "mainWidthSamples": 14,
+        "sidebarPositionSamples": 14,
+        "sidebarWidthRange": [332.79681396484375, 332.79693603515625],
+        "beforeMainWidth": 1024,
+        "afterMainWidth": 691.1875,
+        "anchorBefore": {
+          "id": "release-inbox-0150",
+          "index": 150,
+          "offset": 17
+        },
+        "anchorAfter": {
+          "id": "release-inbox-0150",
+          "index": 150,
+          "offset": 17
+        },
+        "selectionPreserved": true,
+        "completeWorkPreserved": true,
+        "rowHeightsBefore": [48],
+        "rowHeightsAfter": [68]
+      },
+      {
+        "trusted": true,
+        "mainWidthSamples": 12,
+        "sidebarPositionSamples": 12,
+        "sidebarWidthRange": [332.796875, 332.796875],
+        "beforeMainWidth": 691.1875,
+        "afterMainWidth": 1024,
+        "anchorBefore": {
+          "id": "release-inbox-0150",
+          "index": 150,
+          "offset": 17
+        },
+        "anchorAfter": {
+          "id": "release-inbox-0150",
+          "index": 150,
+          "offset": 17
+        },
+        "selectionPreserved": true,
+        "completeWorkPreserved": true,
+        "rowHeightsBefore": [68],
+        "rowHeightsAfter": [48]
+      }
+    ],
+    "mail-two-panels": [
+      {
+        "trusted": true,
+        "mainWidthSamples": 16,
+        "sidebarPositionSamples": 16,
+        "sidebarWidthRange": [332.79681396484375, 332.79693603515625],
+        "beforeMainWidth": 1024,
+        "afterMainWidth": 691.1875,
+        "anchorBefore": {
+          "id": "release-inbox-0150",
+          "index": 150,
+          "offset": 17
+        },
+        "anchorAfter": {
+          "id": "release-inbox-0150",
+          "index": 150,
+          "offset": 17
+        },
+        "selectionPreserved": true,
+        "completeWorkPreserved": true,
+        "rowHeightsBefore": [68],
+        "rowHeightsAfter": [68]
+      },
+      {
+        "trusted": true,
+        "mainWidthSamples": 16,
+        "sidebarPositionSamples": 16,
+        "sidebarWidthRange": [332.796875, 332.796875],
+        "beforeMainWidth": 691.1875,
+        "afterMainWidth": 1024,
+        "anchorBefore": {
+          "id": "release-inbox-0150",
+          "index": 150,
+          "offset": 17
+        },
+        "anchorAfter": {
+          "id": "release-inbox-0150",
+          "index": 150,
+          "offset": 17
+        },
+        "selectionPreserved": true,
+        "completeWorkPreserved": true,
+        "rowHeightsBefore": [68],
+        "rowHeightsAfter": [68]
+      }
+    ],
+    "mail-two-panel-detail": [
+      {
+        "trusted": true,
+        "mainWidthSamples": 14,
+        "sidebarPositionSamples": 14,
+        "sidebarWidthRange": [332.796875, 332.79693603515625],
+        "beforeMainWidth": 1024,
+        "afterMainWidth": 691.1875
+      },
+      {
+        "trusted": true,
+        "mainWidthSamples": 14,
+        "sidebarPositionSamples": 14,
+        "sidebarWidthRange": [332.796875, 332.796875],
+        "beforeMainWidth": 691.1875,
+        "afterMainWidth": 1024
+      }
+    ],
+    "mail-one-panel-detail": [
+      {
+        "trusted": true,
+        "mainWidthSamples": 16,
+        "sidebarPositionSamples": 16,
+        "sidebarWidthRange": [332.796875, 332.79693603515625],
+        "beforeMainWidth": 1024,
+        "afterMainWidth": 691.1875
+      },
+      {
+        "trusted": true,
+        "mainWidthSamples": 16,
+        "sidebarPositionSamples": 16,
+        "sidebarWidthRange": [332.796875, 332.796875],
+        "beforeMainWidth": 691.1875,
+        "afterMainWidth": 1024
+      }
+    ],
+    "compose": [
+      {
+        "trusted": true,
+        "mainWidthSamples": 16,
+        "sidebarPositionSamples": 16,
+        "sidebarWidthRange": [332.79681396484375, 332.79693603515625],
+        "beforeMainWidth": 1024,
+        "afterMainWidth": 691.1875,
+        "composeTextSubjectAndRangePreserved": true
+      },
+      {
+        "trusted": true,
+        "mainWidthSamples": 16,
+        "sidebarPositionSamples": 16,
+        "sidebarWidthRange": [332.796875, 332.796875],
+        "beforeMainWidth": 691.1875,
+        "afterMainWidth": 1024,
+        "composeTextSubjectAndRangePreserved": true
+      }
+    ],
+    "snippets": [
+      {
+        "trusted": true,
+        "mainWidthSamples": 16,
+        "sidebarPositionSamples": 16,
+        "sidebarWidthRange": [332.79681396484375, 332.79693603515625],
+        "beforeMainWidth": 1024,
+        "afterMainWidth": 691.1875
+      },
+      {
+        "trusted": true,
+        "mainWidthSamples": 16,
+        "sidebarPositionSamples": 16,
+        "sidebarWidthRange": [332.796875, 332.796875],
+        "beforeMainWidth": 691.1875,
+        "afterMainWidth": 1024
+      }
+    ],
+    "calendar": [
+      {
+        "trusted": true,
+        "mainWidthSamples": 16,
+        "sidebarPositionSamples": 16,
+        "sidebarWidthRange": [332.79681396484375, 332.79693603515625],
+        "beforeMainWidth": 1280,
+        "afterMainWidth": 947.1875
+      },
+      {
+        "trusted": true,
+        "mainWidthSamples": 15,
+        "sidebarPositionSamples": 15,
+        "sidebarWidthRange": [332.796875, 332.796875],
+        "beforeMainWidth": 947.1875,
+        "afterMainWidth": 1280
+      }
+    ],
+    "calendar-editor": [
+      {
+        "trusted": true,
+        "mainWidthSamples": 16,
+        "sidebarPositionSamples": 16,
+        "sidebarWidthRange": [374.390625, 374.390625],
+        "beforeMainWidth": 1440,
+        "afterMainWidth": 1065.59375
+      },
+      {
+        "trusted": true,
+        "mainWidthSamples": 16,
+        "sidebarPositionSamples": 16,
+        "sidebarWidthRange": [374.390625, 374.390625],
+        "beforeMainWidth": 1065.59375,
+        "afterMainWidth": 1440
+      }
+    ],
+    "reduced-motion-one-panel": [
+      {
+        "trusted": true,
+        "mainWidthSamples": 1,
+        "sidebarPositionSamples": 1,
+        "sidebarWidthRange": [332.796875, 332.796875],
+        "beforeMainWidth": 1024,
+        "afterMainWidth": 691.1875,
+        "anchorBefore": {
+          "id": "release-inbox-0150",
+          "index": 150,
+          "offset": 17
+        },
+        "anchorAfter": {
+          "id": "release-inbox-0150",
+          "index": 150,
+          "offset": 17
+        },
+        "selectionPreserved": true,
+        "completeWorkPreserved": true,
+        "rowHeightsBefore": [48],
+        "rowHeightsAfter": [68]
+      },
+      {
+        "trusted": true,
+        "mainWidthSamples": 1,
+        "sidebarPositionSamples": 1,
+        "sidebarWidthRange": [332.796875, 332.796875],
+        "beforeMainWidth": 691.1875,
+        "afterMainWidth": 1024,
+        "anchorBefore": {
+          "id": "release-inbox-0150",
+          "index": 150,
+          "offset": 17
+        },
+        "anchorAfter": {
+          "id": "release-inbox-0150",
+          "index": 150,
+          "offset": 17
+        },
+        "selectionPreserved": true,
+        "completeWorkPreserved": true,
+        "rowHeightsBefore": [68],
+        "rowHeightsAfter": [48]
+      }
+    ]
+  },
+  "rapidReversals": [
+    {
+      "anchorBefore": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "anchorAfter": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    },
+    {
+      "anchorBefore": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "anchorAfter": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    },
+    {
+      "anchorBefore": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "anchorAfter": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    },
+    {
+      "anchorBefore": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "anchorAfter": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    },
+    {
+      "anchorBefore": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "anchorAfter": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    }
+  ],
+  "activity": [
+    {
+      "case": "hidden-open-return",
+      "anchorBefore": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "anchorAfter": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    },
+    {
+      "case": "hidden-close-return",
+      "anchorBefore": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "anchorAfter": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    },
+    {
+      "case": "hide-during-open-close-hidden-return",
+      "anchorBefore": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "anchorAfter": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    },
+    {
+      "case": "return-during-close",
+      "anchorBefore": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "anchorAfter": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    }
+  ],
+  "userWheelDuringResize": [
+    {
+      "delta": 120,
+      "activeAtWheel": true,
+      "anchorBefore": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "anchorAfter": {
+        "id": "release-inbox-0152",
+        "index": 152,
+        "offset": 21
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    },
+    {
+      "delta": -120,
+      "activeAtWheel": true,
+      "anchorBefore": {
+        "id": "release-inbox-0152",
+        "index": 152,
+        "offset": 21
+      },
+      "anchorAfter": {
+        "id": "release-inbox-0149",
+        "index": 149,
+        "offset": 25
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    }
+  ],
+  "rowBoundaries": [
+    {
+      "viewportWidth": 1407,
+      "openListWidth": 767,
+      "openRowHeights": [68],
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    },
+    {
+      "viewportWidth": 1408,
+      "openListWidth": 768,
+      "openRowHeights": [68],
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    },
+    {
+      "viewportWidth": 1409,
+      "openListWidth": 769,
+      "openRowHeights": [48],
+      "anchor": {
+        "id": "release-inbox-0150",
+        "index": 150,
+        "offset": 17
+      },
+      "selectionPreserved": true,
+      "completeWorkPreserved": true
+    }
+  ],
+  "mobileReducedFocus": {
+    "mobileOpen": {
+      "focusedInSidebar": true,
+      "mainInert": true,
+      "sidebarWidth": 390,
+      "viewport": 390
+    },
+    "tabFocus": [
+      {
+        "documentFocused": true,
+        "inside": true,
+        "mainInert": true,
+        "tag": "BUTTON"
+      },
+      {
+        "documentFocused": true,
+        "inside": true,
+        "mainInert": true,
+        "tag": "BUTTON"
+      },
+      {
+        "documentFocused": true,
+        "inside": true,
+        "mainInert": true,
+        "tag": "BUTTON"
+      },
+      {
+        "documentFocused": false,
+        "inside": false,
+        "mainInert": true,
+        "tag": "BODY"
+      },
+      {
+        "documentFocused": true,
+        "inside": true,
+        "mainInert": true,
+        "tag": "BUTTON"
+      },
+      {
+        "documentFocused": true,
+        "inside": true,
+        "mainInert": true,
+        "tag": "BUTTON"
+      },
+      {
+        "documentFocused": true,
+        "inside": true,
+        "mainInert": true,
+        "tag": "BUTTON"
+      }
+    ],
+    "tabNote": "Background app remains inert; browser chrome stays reachable.",
+    "escapeClose": {
+      "focusVisible": true,
+      "mainInert": false,
+      "restored": true,
+      "sidebarInert": true
+    },
+    "reducedMotion": [
+      {
+        "mainWidthSamples": 1,
+        "sidebarPositionSamples": 1,
+        "reducedMotion": true
+      },
+      {
+        "mainWidthSamples": 1,
+        "sidebarPositionSamples": 1,
+        "reducedMotion": true
+      }
+    ]
+  },
+  "desktopPortal": {
+    "hit": true,
+    "mainIsolation": "isolate",
+    "option": "Use #7986cb",
+    "outsideMain": true,
+    "outsideSidebar": true,
+    "rect": {
+      "bottom": 812,
+      "height": 28,
+      "left": 767,
+      "right": 795,
+      "top": 784,
+      "width": 28,
+      "x": 767,
+      "y": 784
+    }
+  },
+  "nativeEnter": [
+    {
+      "case": "body-enter",
+      "expected": "release-inbox-0000",
+      "result": {
+        "thread": "release-inbox-0000",
+        "workspace": null
+      }
+    },
+    {
+      "case": "focused-row-enter",
+      "expected": "release-inbox-0001",
+      "result": {
+        "thread": "release-inbox-0001",
+        "workspace": null
+      }
+    },
+    {
+      "case": "j-k-row-enter",
+      "j": {
+        "focused": "release-inbox-0001",
+        "thread": null,
+        "workspace": null
+      },
+      "k": {
+        "focused": "release-inbox-0000",
+        "thread": null,
+        "workspace": null
+      },
+      "result": {
+        "thread": "release-inbox-0000",
+        "workspace": null
+      }
+    },
+    {
+      "case": "selection-button-enter",
+      "result": {
+        "selected": "true",
+        "thread": null
+      }
+    },
+    {
+      "case": "native-checkbox-enter-space",
+      "before": "mixed",
+      "afterEnter": {
+        "checked": "mixed",
+        "thread": null
+      },
+      "afterSpace": {
+        "checked": "true",
+        "thread": null
+      }
+    },
+    {
+      "case": "calendar-link-enter",
+      "result": {
+        "thread": null,
+        "workspace": "calendar"
+      }
+    }
+  ],
+  "directAndKeyboardLoading": [
+    {
+      "kind": "compose",
+      "mode": "direct",
+      "errors": 0,
+      "unhandled": 0,
+      "keyboard": null,
+      "input": "Ready.",
+      "focused": true,
+      "disabled": false,
+      "sidebarOpen": false
+    },
+    {
+      "kind": "compose",
+      "mode": "keyboard",
+      "errors": 0,
+      "unhandled": 0,
+      "keyboard": {
+        "trusted": true,
+        "detail": 0
+      },
+      "input": "Ready.",
+      "focused": true,
+      "disabled": false,
+      "sidebarOpen": false
+    },
+    {
+      "kind": "snippets",
+      "mode": "direct",
+      "errors": 0,
+      "unhandled": 0,
+      "keyboard": null,
+      "input": "Ready.",
+      "focused": true,
+      "disabled": false,
+      "sidebarOpen": false
+    },
+    {
+      "kind": "snippets",
+      "mode": "keyboard",
+      "errors": 0,
+      "unhandled": 0,
+      "keyboard": {
+        "trusted": true,
+        "detail": 0
+      },
+      "input": "Ready.",
+      "focused": true,
+      "disabled": false,
+      "sidebarOpen": false
+    },
+    {
+      "kind": "chat",
+      "mode": "keyboard",
+      "errors": 0,
+      "unhandled": 0,
+      "keyboard": {
+        "trusted": true,
+        "detail": 0
+      },
+      "input": "",
+      "focused": false,
+      "disabled": true,
+      "sidebarOpen": true
+    },
+    {
+      "kind": "chat",
+      "mode": "persisted-open",
+      "errors": 0,
+      "unhandled": 0,
+      "keyboard": null,
+      "input": "",
+      "focused": false,
+      "disabled": true,
+      "sidebarOpen": true
+    }
+  ],
+  "loaderFailureAndRace": [
+    {
+      "kind": "compose",
+      "hoverRequested": true,
+      "state": {
+        "retry": true,
+        "back": true,
+        "loading": false,
+        "unhandled": [],
+        "errors": []
+      },
+      "inboxRecovered": true
+    },
+    {
+      "kind": "snippets",
+      "hoverRequested": true,
+      "state": {
+        "retry": true,
+        "back": true,
+        "loading": false,
+        "unhandled": [],
+        "errors": []
+      },
+      "inboxRecovered": true
+    },
+    {
+      "kind": "interrupted-compose",
+      "hoverRequested": true,
+      "state": {
+        "mailbox": "snippets",
+        "snippetVisible": true,
+        "composeVisible": false,
+        "unhandled": [],
+        "errors": []
+      }
+    }
+  ],
+  "calendarPointer": {
+    "drag": {
+      "ghosts": 1,
+      "markers": 1,
+      "dragging": 1,
+      "mutations": 0,
+      "capture": true,
+      "events": 500
+    },
+    "escape": {
+      "ghosts": 0,
+      "markers": 0,
+      "dragging": 0,
+      "mutations": 0,
+      "capture": false,
+      "events": 500
+    },
+    "noop": {
+      "ghosts": 0,
+      "markers": 0,
+      "dragging": 0,
+      "mutations": 0,
+      "capture": false,
+      "events": 500
+    },
+    "lostCapture": {
+      "ghosts": 0,
+      "markers": 0,
+      "dragging": 0,
+      "mutations": 0,
+      "capture": false,
+      "events": 500
+    },
+    "outside": {
+      "ghosts": 0,
+      "markers": 0,
+      "dragging": 0,
+      "mutations": 0,
+      "capture": false,
+      "events": 500
+    },
+    "pending": {
+      "ghosts": 0,
+      "markers": 0,
+      "dragging": 0,
+      "mutations": 1,
+      "capture": false,
+      "events": 500,
+      "labels": ["Performance event 029, 10:00 to 10:30. Open event to edit."],
+      "mutation": {
+        "kind": "update",
+        "eventId": "release-perf-28",
+        "time": {
+          "end": "2026-10-25T10:30:00Z",
+          "kind": "timed",
+          "start": "2026-10-25T10:00:00Z",
+          "timeZone": "UTC"
+        }
+      }
+    },
+    "drop": {
+      "ghosts": 0,
+      "markers": 0,
+      "dragging": 0,
+      "mutations": 1,
+      "capture": false,
+      "events": 500,
+      "labels": ["Performance event 029, 10:00 to 10:30. Open event to edit."]
+    },
+    "trusted": true
+  },
+  "calendarDragScroll": {
+    "before": {
+      "top": 434,
+      "ghosts": 1,
+      "mutations": 1
+    },
+    "during": {
+      "top": 554,
+      "ghosts": 1,
+      "mutations": 1
+    },
+    "after": {
+      "top": 554,
+      "ghosts": 0,
+      "mutations": 1
+    }
+  },
+  "calendarNativeWheel": {
+    "geometry": {
+      "x": 668,
+      "y": 480,
+      "height": 822,
+      "scrollHeight": 1409,
+      "width": 822
+    },
+    "gestures": [
+      {
+        "deltaY": 120,
+        "before": {
+          "top": 200,
+          "events": 0
+        },
+        "after": {
+          "top": 320,
+          "events": 1
+        }
+      },
+      {
+        "deltaY": 120,
+        "before": {
+          "top": 320,
+          "events": 1
+        },
+        "after": {
+          "top": 440,
+          "events": 2
+        }
+      },
+      {
+        "deltaY": -120,
+        "before": {
+          "top": 440,
+          "events": 2
+        },
+        "after": {
+          "top": 320,
+          "events": 3
+        }
+      },
+      {
+        "deltaY": -120,
+        "before": {
+          "top": 320,
+          "events": 3
+        },
+        "after": {
+          "top": 200,
+          "events": 4
+        }
+      },
+      {
+        "deltaY": 120,
+        "before": {
+          "top": 200,
+          "events": 4
+        },
+        "after": {
+          "top": 320,
+          "events": 5
+        }
+      },
+      {
+        "deltaY": -120,
+        "before": {
+          "top": 320,
+          "events": 5
+        },
+        "after": {
+          "top": 200,
+          "events": 6
+        }
+      }
+    ],
+    "longTasks": [],
+    "eventCount": 6,
+    "note": "Native CDP mouse-wheel input targets the actual scroll viewport; timestamps are not physical display FPS."
+  },
+  "finalRuntimeHealth": {
+    "sourceSHA": "978a603164a77243066fac9a0e67661497a9bbc7",
+    "health": {
+      "documentId": "596fbb1b-a148-439e-ab64-4573ecb43ec8",
+      "errors": [],
+      "unhandled": []
+    },
+    "urlShape": {
+      "mailbox": "inbox",
+      "workspace": null
+    },
+    "query": {
+      "fetchStatus": "idle",
+      "hash": "[\"messages\",\"demo:mailbox\",\"inbox\",\"\"]",
+      "key": ["messages", "demo:mailbox", "inbox", ""],
+      "pageSizes": [
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 3
+      ],
+      "pages": 27,
+      "records": 393,
+      "threads": 360
+    }
+  },
+  "fixtureCorrections": [
+    "Initial CLI wheel at0,0 was discarded. Final native CDP wheels assert delivery and scroll change.",
+    "Initial8x50page mail fixtures did not match established15-record refetch. Identity-loss runs with changed work were discarded. Final27pages/393records/360threads preserve complete canonical source."
+  ],
+  "limitations": [
+    "Headless local browser measurements are not physical-device FPS.",
+    "Ordinary plan/provider/network waits remain.",
+    "Typing latency ranges overlap. Only reduced parsing work is claimed.",
+    "Dense one-panel post-motion settling still has roughly80to100ms tasks. No elapsed gain is claimed for final getter-read change.",
+    "Earlier calendar/first-reveal timing sources remain explicitly labelled. Final source receives fresh functional checks."
+  ]
+}

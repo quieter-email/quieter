@@ -15,6 +15,14 @@ import type {
   MessageDelivery,
   RecipientSuppression,
 } from "@quieter/mail/delivery";
+import {
+  API_COMPATIBILITY_DATE,
+  API_VERSION_HEADER,
+  CONTROL_API_PATH,
+  MESSAGES_API_PATH,
+  SEND_API_PATH,
+  SUPPRESSIONS_API_PATH,
+} from "@quieter/mail/public-api";
 import type {
   SendHeader,
   SendMessageRequest,
@@ -27,6 +35,7 @@ import { QuieterApiError } from "./api-error";
 export { QuieterApiError } from "./api-error";
 export type QuieterAddress = SendMessageRequest["to"];
 export type QuieterHeader = SendHeader;
+export type QuieterOtpToken = NonNullable<SendMessageRequest["otpToken"]>;
 export type QuieterTag = NonNullable<SendMessageRequest["tags"]>[number];
 export type QuieterSendResult = SendMessageResult;
 export type QuieterDeliveryStatus = DeliveryStatus;
@@ -254,7 +263,7 @@ export class Quieter {
 
   constructor(options: QuieterOptions) {
     if (!options.apiKey?.trim()) {
-      throw new Error("Quieter requires an apiKey.");
+      throw new Error("quieter requires an apiKey.");
     }
     this.#apiKey = options.apiKey;
     const baseUrl = new URL(options.baseUrl ?? "https://quieter.email");
@@ -264,7 +273,7 @@ export class Quieter {
     this.baseUrl = baseUrl.href;
     const fetchImpl = options.fetch ?? globalThis.fetch;
     if (fetchImpl === undefined) {
-      throw new Error("Quieter requires a fetch implementation.");
+      throw new Error("quieter requires a fetch implementation.");
     }
     this.#fetch = fetchImpl;
   }
@@ -277,6 +286,7 @@ export class Quieter {
     const headers = new Headers(init.headers);
     headers.set("accept", "application/json");
     headers.set("authorization", `Bearer ${this.#apiKey}`);
+    headers.set(API_VERSION_HEADER, API_COMPATIBILITY_DATE);
     const response = await this.#fetch(new URL(path, this.baseUrl), {
       method: "GET",
       ...init,
@@ -292,7 +302,7 @@ export class Quieter {
         .safeParse(json).data;
       throw new QuieterApiError({
         issues: error?.issues,
-        message: error?.error ?? `Quieter API returned ${response.status}.`,
+        message: error?.error ?? `quieter API returned ${response.status}.`,
         response: json,
         status: response.status,
       });
@@ -300,7 +310,7 @@ export class Quieter {
     const parsed = schema.safeParse(json);
     if (!parsed.success) {
       throw new QuieterApiError({
-        message: "Quieter API returned an unexpected response.",
+        message: "quieter API returned an unexpected response.",
         response: json,
         status: response.status,
       });
@@ -316,7 +326,7 @@ export class Quieter {
     const contract = controlOperations[operation];
     const parsed = contract.input.parse(input);
     return await this.#request<ControlOutput<K>>(
-      "api/v1/control",
+      CONTROL_API_PATH,
       z.custom<ControlOutput<K>>(
         (value) => contract.output.safeParse(value).success
       ),
@@ -335,10 +345,10 @@ export class Quieter {
   ): Promise<QuieterMessageDelivery> {
     const normalized = messageId.trim();
     if (!normalized) {
-      throw new Error("Quieter requires a messageId.");
+      throw new Error("quieter requires a messageId.");
     }
     return await this.#request(
-      `api/v1/messages/${encodeURIComponent(normalized)}`,
+      `${MESSAGES_API_PATH}/${encodeURIComponent(normalized)}`,
       messageDeliverySchema,
       options
     );
@@ -347,7 +357,7 @@ export class Quieter {
   async listSuppressions(
     options: QuieterListSuppressionsOptions = {}
   ): Promise<QuieterRecipientSuppression[]> {
-    const path = new URL("api/v1/suppressions", this.baseUrl);
+    const path = new URL(SUPPRESSIONS_API_PATH, this.baseUrl);
     if (options.limit !== undefined) {
       path.searchParams.set("limit", String(options.limit));
     }
@@ -388,7 +398,7 @@ export class Quieter {
       )
     );
     const idempotencyKey = input.idempotencyKey ?? options.idempotencyKey;
-    return await this.#request("api/v1/send", sendMessageResultSchema, {
+    return await this.#request(SEND_API_PATH, sendMessageResultSchema, {
       body: JSON.stringify({ ...input, attachments, idempotencyKey }),
       headers: {
         "content-type": "application/json",

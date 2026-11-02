@@ -1,3 +1,5 @@
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
+import { autoLabelSettingsSchema } from "@quieter/mail/auto-label";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
 import type { AiUsageReport } from "../src/chat-usage";
@@ -5,6 +7,15 @@ import {
   classifyMailMessage,
   detectMailVerificationCode,
 } from "../src/classify-gmail-message";
+
+const billing: AiBillingContext = {
+  account: null,
+  admittedAt: new Date(),
+  groupId: "test-operation",
+  kind: "team",
+  organizationId: "test-team",
+  usageKind: "aiChat",
+};
 
 vi.mock(import("@quieter/env/server"), async (importOriginal) => {
   const actual = await importOriginal();
@@ -46,6 +57,7 @@ describe("mail classification decisions", () => {
     vi.stubGlobal("fetch", fetchModel);
     const onUsage = vi.fn<(usage: AiUsageReport) => void>();
     const selected = await classifyMailMessage({
+      billing,
       labels,
       message: { id: "message" },
       onUsage,
@@ -80,6 +92,7 @@ describe("mail classification decisions", () => {
       )
     );
     const selected = await classifyMailMessage({
+      billing,
       labels,
       message: { id: "message" },
     });
@@ -107,6 +120,7 @@ describe("mail classification decisions", () => {
       )
     );
     const selected = await classifyMailMessage({
+      billing,
       labels: labels.slice(0, 2),
       message: { id: "message" },
     });
@@ -133,7 +147,11 @@ describe("mail classification decisions", () => {
       )
     );
     await expect(
-      classifyMailMessage({ labels, message: { id: "message" } })
+      classifyMailMessage({
+        billing,
+        labels,
+        message: { id: "message" },
+      })
     ).rejects.toThrow(/unknown label/u);
   });
 
@@ -148,7 +166,11 @@ describe("mail classification decisions", () => {
       )
     );
     await expect(
-      classifyMailMessage({ labels, message: { id: "message" } })
+      classifyMailMessage({
+        billing,
+        labels,
+        message: { id: "message" },
+      })
     ).rejects.toThrow(/incomplete/u);
   });
 
@@ -163,8 +185,84 @@ describe("mail classification decisions", () => {
       )
     );
     await expect(
-      classifyMailMessage({ labels, message: { id: "message" } })
+      classifyMailMessage({
+        billing,
+        labels,
+        message: { id: "message" },
+      })
     ).rejects.toThrow(/noul/u);
+  });
+
+  test("can reject every explicit prompt without forcing a closest category", async () => {
+    const fetchModel = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        answers: { label0: { noul: 0.1, type: "noul" } },
+        usage: { cost: 0.001, input_tokens: 100, output_tokens: 5 },
+      })
+    );
+    vi.stubGlobal("fetch", fetchModel);
+    const selected = await classifyMailMessage({
+      billing,
+      labels: [
+        {
+          ...labels[0],
+          autoLabel: autoLabelSettingsSchema.parse({
+            domains: [],
+            enabled: true,
+            keywordScope: "anywhere",
+            keywords: [],
+            matchMode: "all",
+            prompt: "Only failed production deployments",
+            senders: [],
+          }),
+        },
+      ],
+      message: { id: "message", subject: "Weekly product newsletter" },
+    });
+    expect(selected).toHaveLength(0);
+    expect(fetchModel).toHaveBeenCalledOnce();
+  });
+
+  test("keeps legacy category selection separate from explicit prompt decisions", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json({
+          answers: {
+            category: {
+              choice: "label1",
+              confidence: 0.5,
+              probabilities: { label1: 1 },
+              type: "choice",
+            },
+            label0: { noul: 0.1, type: "noul" },
+            label1: { noul: 0.2, type: "noul" },
+          },
+          usage: { cost: 0.001, input_tokens: 100, output_tokens: 5 },
+        })
+      )
+    );
+    const selected = await classifyMailMessage({
+      billing,
+      labels: [
+        {
+          ...labels[0],
+          autoLabel: autoLabelSettingsSchema.parse({
+            domains: [],
+            enabled: true,
+            keywordScope: "anywhere",
+            keywords: [],
+            matchMode: "all",
+            prompt: "Only failed production deployments",
+            senders: [],
+          }),
+        },
+        labels[1],
+      ],
+      message: { id: "message", subject: "Your flight booking" },
+    });
+    expect(selected).toContain("travel");
+    expect(selected).not.toContain("development");
   });
 
   test("does not silently reject mail when the screening decision is missing", async () => {
@@ -178,7 +276,23 @@ describe("mail classification decisions", () => {
       )
     );
     await expect(
-      detectMailVerificationCode({ message: { id: "message" } })
+      detectMailVerificationCode({
+        billing,
+        message: { id: "message" },
+      })
     ).rejects.toThrow(/no decision/u);
   });
 });
+
+vi.mock(import("@quieter/billing/ai-reservation"), () => ({
+  recordAiCreditProviderGeneration: async () => {
+    await Promise.resolve();
+  },
+  releaseAiCreditUsage: async () => {
+    await Promise.resolve();
+  },
+  reserveAiCreditUsage: async () => await Promise.resolve(null),
+  settleAiCreditUsage: async () => {
+    await Promise.resolve();
+  },
+}));

@@ -25,7 +25,7 @@ Permissions are independent: sending does not implicitly grant reading or editin
 | `campaigns:write` | `campaigns.create`, `update` |
 | `campaigns:send` | `campaigns.send`, `cancel`, `retry` |
 
-Each abbreviated operation in a row retains its `audiences.` or `campaigns.` prefix. Send JSON to `POST /api/v1/control` with `Authorization: Bearer <key>` and `Content-Type: application/json`:
+Each abbreviated operation in a row retains its `audiences.` or `campaigns.` prefix. Send JSON to `POST /api/control` with `Authorization: Bearer <key>` `Content-Type: application/json`, and `Quieter-Version: 2026-10`:
 
 ```json
 {
@@ -36,7 +36,7 @@ Each abbreviated operation in a row retains its `audiences.` or `campaigns.` pre
 
 The response is the operation result directly, without a result envelope. Audience lists use `cursor`/`nextCursor`; campaign lists and recipient reports use `offset`/`nextOffset`. Page sizes are capped at 100. `campaigns.get` accepts an optional recipient `status` filter and includes progress counts, delivery counts, recipient outcomes, and recent delivery events. Request bodies are bounded to 1 MiB.
 
-Connect a remote MCP client to `/api/v1/control/mcp` using the same bearer key. Discovery includes only authorized tools, named with underscores, such as `audiences_list` and `campaigns_preview`. MCP calls use the same validation, tenant checks, idempotency, and explicit send confirmation as the API. Tool results also include a structured `{ "result": ... }` value.
+Connect a remote MCP client to `/api/control/mcp` using the same bearer key and compatibility header. Discovery includes only authorized tools, named with underscores, such as `audiences_list` and `campaigns_preview`. MCP calls use the same validation, tenant checks, idempotency, and explicit send confirmation as the API. Tool results also include a structured `{ "result": ... }` value.
 
 ## SDK workflow
 
@@ -92,7 +92,7 @@ Registration and import never restore an unsubscribed or removed membership. Exp
 
 Audience subscription and organization safety suppression are separate. Resubscribing does not clear a bounce, complaint, manual block, or other safety suppression. `setSuppression` is a separate audited action. Campaign eligibility requires both an active subscription and no current suppression.
 
-Every broadcast includes a visible unsubscribe footer and RFC 8058 `List-Unsubscribe` / `List-Unsubscribe-Post` headers. `/api/v1/unsubscribe/:token` uses an opaque recipient capability. GET displays a confirmation form and never changes subscription. A form POST containing `List-Unsubscribe=One-Click` unsubscribes that audience without login or redirect. It records an audience event and delivery evidence without globally suppressing the address. Treat capability URLs as secrets and exclude them from logs and screenshots.
+Every broadcast includes a visible unsubscribe footer and RFC 8058 `List-Unsubscribe` / `List-Unsubscribe-Post` headers. `/api/unsubscribe/:token` uses an opaque recipient capability. GET displays a confirmation form and never changes subscription. A form POST containing `List-Unsubscribe=One-Click` unsubscribes that audience without login or redirect. It records an audience event and delivery evidence without globally suppressing the address. Treat capability URLs as secrets and exclude them from logs and screenshots.
 
 ## Delivery and recovery
 

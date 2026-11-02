@@ -1,9 +1,9 @@
+import { LoadingPage } from "@quieter/app/components/loading-page";
+import { BroadcastWorkspace } from "@quieter/app/features/broadcasts/components/broadcast-workspace";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
 
-import { LoadingPage } from "#/components/loading-page";
-import { BroadcastWorkspace } from "#/features/broadcasts/components/broadcast-workspace";
 import { getSessionUser } from "#/lib/auth.functions";
 
 export const Route = createFileRoute("/_app/audiences")({

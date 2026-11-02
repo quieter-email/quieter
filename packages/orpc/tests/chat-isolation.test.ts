@@ -47,7 +47,6 @@ const foreground = {
   exchangeId: "d6c6b64a-1d5f-4406-9b1b-53a73ff6f41b",
   expiresAt: Date.now() + 60_000,
   generation: 1,
-  policy: "ask",
   tabId: "tab-1",
 };
 

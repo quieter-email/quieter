@@ -1,4 +1,11 @@
-import { generateText, NoOutputGeneratedError, Output } from "ai";
+import type { AiBillingContext } from "@quieter/billing/ai-reservation";
+import {
+  generateText,
+  JSONParseError,
+  NoObjectGeneratedError,
+  NoOutputGeneratedError,
+  Output,
+} from "ai";
 import type { z } from "zod";
 
 import { defaultChatModel } from "./chat-models";
@@ -23,11 +30,12 @@ const reasoningProviderOptions = (
       };
 
 /**
- * Structured generation with one retry for empty output. The schema is enforced
- * through the AI SDK output parser, and usage across completed attempts is
- * reported once with OpenRouter cost accounting included.
+ * Structured generation with one retry for malformed JSON or eligible empty
+ * output. The SDK enforces the schema, and completed attempts contribute to one
+ * usage report with OpenRouter cost accounting included.
  */
 export const runStructuredGeneration = async <TOutput>(input: {
+  billing: AiBillingContext;
   abortSignal?: AbortSignal;
   maxOutputTokens: number;
   maxRetries?: number;
@@ -54,6 +62,7 @@ export const runStructuredGeneration = async <TOutput>(input: {
             ? {}
             : { maxRetries: input.maxRetries }),
           model: createChatModel(input.model ?? defaultChatModel, {
+            billing: input.billing,
             prioritizeLatency: input.prioritizeLatency,
           }),
           onEnd: ({ steps: attemptSteps }) => {
@@ -65,11 +74,18 @@ export const runStructuredGeneration = async <TOutput>(input: {
         });
         return result.output;
       } catch (error) {
+        const retryableOutput =
+          (NoOutputGeneratedError.isInstance(error) &&
+            input.retryEmptyOutput !== false) ||
+          (NoObjectGeneratedError.isInstance(error) &&
+            JSONParseError.isInstance(error.cause) &&
+            (input.retryEmptyOutput !== false ||
+              (error.text?.trim().length ?? 0) > 0) &&
+            (error.finishReason === "stop" || error.finishReason === "length"));
         if (
           attempt > 0 ||
-          input.retryEmptyOutput === false ||
           input.abortSignal?.aborted === true ||
-          !NoOutputGeneratedError.isInstance(error)
+          !retryableOutput
         ) {
           throw error;
         }
@@ -84,6 +100,7 @@ export const runStructuredGeneration = async <TOutput>(input: {
 
 /** Plain-text generation variant for prompts that return prose. */
 export const runTextGeneration = async (input: {
+  billing: AiBillingContext;
   abortSignal?: AbortSignal;
   maxOutputTokens: number;
   model?: ChatModel;
@@ -98,7 +115,9 @@ export const runTextGeneration = async (input: {
       : { abortSignal: input.abortSignal }),
     instructions: input.system,
     maxOutputTokens: input.maxOutputTokens,
-    model: createChatModel(input.model ?? defaultChatModel),
+    model: createChatModel(input.model ?? defaultChatModel, {
+      billing: input.billing,
+    }),
     ...reasoningProviderOptions(input.reasoningEffort),
     prompt: input.prompt,
   });

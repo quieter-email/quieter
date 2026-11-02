@@ -2,38 +2,48 @@
 
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { Loading03Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { createContext, useContext } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
+import { Icon } from "./icon";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "./icons";
+import {
+  anchoredPopupMotionClassName,
+  overlayBackdropClassName,
+} from "./overlay-chrome";
 
 type SelectDensity = "default" | "compact";
 
 const SelectDensityContext = createContext<SelectDensity>("default");
 
-const selectTriggerVariants = cva(
-  "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap select-none focus-visible:border-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/45 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+export const selectTriggerVariants = cva(
+  "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap select-none focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
+    compoundVariants: [{ chrome: "toolbar", className: "rounded-xl" }],
     defaultVariants: {
+      chrome: "default",
       size: "default",
       variant: "default",
     },
     variants: {
+      chrome: {
+        default: null,
+        toolbar: null,
+      },
       size: {
         default: "h-8 px-2.5 text-body-sm [&_svg]:size-4",
         sm: "h-7 px-2 text-body-sm [&_svg]:size-3.5",
       },
       variant: {
         attached:
-          "h-full w-auto rounded-l-none bg-transparent pr-2.5 pl-1.5 text-muted-fg shadow-none hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg",
+          "h-full w-auto rounded-l-none bg-transparent pr-2.5 pl-1.5 text-muted-fg shadow-none hover:bg-muted hover:text-fg active:bg-control-active active:text-fg",
         default:
-          "w-full border border-border bg-control text-fg hover:bg-control-hover active:bg-control-active",
+          "w-full border border-transparent bg-control text-fg hover:bg-control-hover active:bg-control-active",
         ghost:
-          "w-auto bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-muted/80 active:text-fg",
+          "w-auto bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:bg-control-active active:text-fg",
       },
     },
   }
@@ -47,10 +57,7 @@ export const SelectBackdrop = ({
   ...props
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Backdrop>) => (
   <SelectPrimitive.Backdrop
-    className={cn(
-      "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0",
-      className
-    )}
+    className={cn(overlayBackdropClassName, className)}
     {...props}
   />
 );
@@ -77,6 +84,7 @@ export type SelectTriggerProps = ComponentPropsWithoutRef<
 
 export const SelectTrigger = ({
   children,
+  chrome = "default",
   className,
   pending = false,
   size = "default",
@@ -86,17 +94,13 @@ export const SelectTrigger = ({
   <SelectPrimitive.Trigger
     {...props}
     aria-busy={pending || undefined}
-    className={cn(selectTriggerVariants({ size, variant }), className)}
+    className={cn(selectTriggerVariants({ chrome, size, variant }), className)}
     disabled={pending || props.disabled}
   >
     {children}
     <SelectPrimitive.Icon className="shrink-0 text-muted-fg">
       {pending ? (
-        <HugeiconsIcon
-          aria-hidden
-          className="size-3.5 animate-spin"
-          icon={Loading03Icon}
-        />
+        <Icon aria-hidden size={14} animation="spin" icon={Loading03Icon} />
       ) : (
         <ChevronDownIcon className="size-4" />
       )}
@@ -135,7 +139,8 @@ export const SelectContent = ({
       <SelectDensityContext.Provider value={size}>
         <SelectPrimitive.Popup
           className={cn(
-            "z-50 min-w-52 origin-(--transform-origin) overflow-hidden rounded-lg border bg-popover p-1 text-popover-fg shadow-md transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] data-ending-style:scale-95 data-ending-style:opacity-0 data-instant:transition-none data-starting-style:scale-95 data-starting-style:opacity-0 data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
+            anchoredPopupMotionClassName,
+            "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 overflow-y-auto overscroll-contain rounded-xl border border-transparent bg-section p-1 text-popover-fg shadow-md data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
             { "min-w-40 p-0.5 text-caption": size === "compact" },
             className
           )}
@@ -154,7 +159,7 @@ export const SelectScrollUpArrow = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollUpArrow>) => (
   <SelectPrimitive.ScrollUpArrow
     className={cn(
-      "flex h-7 items-center justify-center text-muted-fg transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-instant:transition-none data-starting-style:opacity-0",
+      "flex h-7 items-center justify-center text-muted-fg transition-opacity duration-150 ease-(--app-motion-ease-out) data-ending-style:opacity-0 data-ending-style:duration-100 data-instant:transition-none data-starting-style:opacity-0",
       className
     )}
     {...props}
@@ -169,7 +174,7 @@ export const SelectScrollDownArrow = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownArrow>) => (
   <SelectPrimitive.ScrollDownArrow
     className={cn(
-      "flex h-7 items-center justify-center text-muted-fg transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-instant:transition-none data-starting-style:opacity-0",
+      "flex h-7 items-center justify-center text-muted-fg transition-opacity duration-150 ease-(--app-motion-ease-out) data-ending-style:opacity-0 data-ending-style:duration-100 data-instant:transition-none data-starting-style:opacity-0",
       className
     )}
     {...props}
@@ -201,7 +206,7 @@ export const SelectItem = ({
   return (
     <SelectPrimitive.Item
       className={cn(
-        "relative flex min-h-7 cursor-default scroll-my-1 items-center gap-2 rounded-md py-1 pr-8 pl-2.5 text-body text-fg transition-transform duration-100 ease-out select-none squircle focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
+        "relative flex min-h-7 cursor-default scroll-my-1 items-center gap-2 rounded-md py-1 pr-8 pl-2.5 text-body text-fg transition-transform duration-100 ease-(--app-motion-ease-out) select-none squircle focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
         { "min-h-7 gap-1.5 py-1 pr-7 pl-2 text-caption": size === "compact" },
         className
       )}

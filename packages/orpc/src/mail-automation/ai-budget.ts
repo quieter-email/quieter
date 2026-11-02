@@ -1,4 +1,3 @@
-import { ORPCError } from "@orpc/server";
 import { getBillingCreditUsage } from "@quieter/billing/credits";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
@@ -105,15 +104,4 @@ export const getMailAutomationAiBudgetStatus = async (input: {
       ? await getBillingCreditUsage(entitlement.account)
       : undefined,
   });
-};
-
-export const assertMailAutomationAiBudget = async (input: {
-  organizationId: string | null | undefined;
-  userId: string;
-}) => {
-  const status = await getMailAutomationAiBudgetStatus(input);
-
-  if (!status.allowed) {
-    throw new ORPCError("FORBIDDEN", { message: status.message });
-  }
 };

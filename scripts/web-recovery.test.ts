@@ -35,6 +35,9 @@ describe("web recovery", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string, options?: RequestInit) => {
+        if (input.endsWith("/assets/deployment.json")) {
+          return new Response(null, { status: 404 });
+        }
         if (input.endsWith("/assets/build-id.txt")) {
           return new Response("healthy-build", {
             headers: { "content-type": "text/plain" },

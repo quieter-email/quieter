@@ -1,4 +1,4 @@
-# Quieter brand assets
+# quieter brand assets
 
 The final symbol is original 004, with its wider rounded bottom. The wordmark uses outlined Geist Regular with a curved q descender, a rotated 004 dot on the i, and adjusted spacing. No font installation is needed to use the SVGs.
 

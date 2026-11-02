@@ -33,6 +33,7 @@ type TokenFieldProps = {
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
   placeholder?: string;
   ref?: Ref<HTMLDivElement>;
+  size?: "default" | "prompt";
   suggestionsLabel?: string;
   suggestionsSide?: "bottom" | "top";
   tokens: TokenFieldToken[];
@@ -48,7 +49,15 @@ const getTokenClassName = (token: TokenFieldToken) =>
   );
 
 const getTokenSignature = (tokens: TokenFieldToken[]) =>
-  tokens.map((token) => token.text).join("\0");
+  JSON.stringify(
+    tokens.map((token) => [
+      token.text,
+      token.label,
+      token.tone,
+      token.iconSrc,
+      token.iconClassName,
+    ])
+  );
 
 const CARET_MOVE_KEYS = new Set([
   "ArrowDown",
@@ -87,7 +96,7 @@ const TokenFieldSuggestions = ({
   <div
     aria-label={label}
     className={cn(
-      "absolute right-0 left-0 z-50 max-h-56 overflow-y-auto overscroll-contain rounded-lg border border-border bg-popover p-1 text-popover-fg shadow-md squircle",
+      "absolute right-0 left-0 z-50 max-h-56 overflow-y-auto overscroll-contain rounded-xl border border-transparent bg-section p-1 text-popover-fg shadow-md squircle",
       { "bottom-full mb-1": side === "top", "top-full mt-1": !(side === "top") }
     )}
     id={listId}
@@ -150,6 +159,7 @@ export const TokenField = ({
   onKeyDown,
   placeholder,
   ref,
+  size = "default",
   suggestionsLabel = "Mentions",
   suggestionsSide = "bottom",
   tokens,
@@ -409,7 +419,10 @@ export const TokenField = ({
         className={cn(
           "w-full break-words whitespace-pre-wrap text-fg outline-none",
           "data-[empty=true]:before:pointer-events-none data-[empty=true]:before:text-muted-fg data-[empty=true]:before:content-[attr(data-placeholder)]",
-          { "cursor-not-allowed opacity-50": disabled },
+          {
+            "cursor-not-allowed opacity-50": disabled,
+            "max-h-72 min-h-32 overflow-y-auto": size === "prompt",
+          },
           className
         )}
         contentEditable={!disabled}

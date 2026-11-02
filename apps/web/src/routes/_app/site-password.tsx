@@ -1,8 +1,8 @@
+import { LoadingPage } from "@quieter/app/components/loading-page";
+import { getSafeAuthReturnTo } from "@quieter/app/lib/return-to";
 import { createFileRoute } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
-
-import { LoadingPage } from "#/components/loading-page";
 
 export const Route = createFileRoute("/_app/site-password")({
   pendingComponent: LoadingPage,
@@ -10,12 +10,7 @@ export const Route = createFileRoute("/_app/site-password")({
     z.object({
       returnTo: z
         .string()
-        .trim()
-        .transform((value) =>
-          value && value.startsWith("/") && !value.startsWith("//")
-            ? value
-            : "/"
-        )
+        .transform((value) => getSafeAuthReturnTo(value) ?? "/")
         .catch("/")
         .default("/"),
       sitePasswordError: z

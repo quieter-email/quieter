@@ -14,12 +14,17 @@ import {
 
 import type { auth as configuredAuth } from "../src/index";
 
-const { databaseUrl, sendMagicLinkEmail } = vi.hoisted(() => ({
-  databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
-  sendMagicLinkEmail: vi
-    .fn<(input: { email: string; url: string }) => Promise<void>>()
-    .mockResolvedValue(),
-}));
+const { databaseUrl, sendMagicLinkEmail, sendVerificationEmail } = vi.hoisted(
+  () => ({
+    databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
+    sendMagicLinkEmail: vi
+      .fn<(input: { email: string; url: string }) => Promise<void>>()
+      .mockResolvedValue(),
+    sendVerificationEmail: vi
+      .fn<(input: { email: string; url: string }) => Promise<void>>()
+      .mockResolvedValue(),
+  })
+);
 vi.mock(import("@quieter/env/server"), async (importOriginal) => {
   const original = await importOriginal();
   return {
@@ -34,7 +39,7 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => {
 });
 vi.mock(import("../src/email"), () => ({
   sendMagicLinkEmail,
-  sendVerificationEmail: vi.fn<() => Promise<void>>(),
+  sendVerificationEmail,
 }));
 
 describe.skipIf(databaseUrl === undefined)(
@@ -121,6 +126,76 @@ describe.skipIf(databaseUrl === undefined)(
       await expect(
         auth.api.getSession({ headers: new Headers({ cookie }) })
       ).resolves.toBeNull();
+    });
+
+    test("email change conceals target membership and completes only after verification", async () => {
+      const occupiedId = randomUUID();
+      const occupiedEmail = `${occupiedId}@example.com`;
+      const newEmail = `changed-${userId}@example.com`;
+      await db.insert(user).values({
+        createdAt: new Date(),
+        email: occupiedEmail,
+        emailVerified: true,
+        id: occupiedId,
+        name: "Occupied fixture",
+        updatedAt: new Date(),
+      });
+      try {
+        await auth.api.signInMagicLink({
+          body: { email },
+          headers: new Headers({ origin: "http://localhost:3000" }),
+        });
+        const link = sendMagicLinkEmail.mock.lastCall?.[0].url;
+        if (link === undefined) {
+          throw new Error("Authentication did not send a magic link.");
+        }
+        const authenticated = await auth.handler(new Request(link));
+        const cookie = authenticated.headers
+          .getSetCookie()
+          .map((value) => value.split(";")[0])
+          .join("; ");
+        const responses = [];
+        sendVerificationEmail.mockClear();
+        for (const target of [occupiedEmail, newEmail]) {
+          const response = await auth.handler(
+            new Request("http://localhost:3000/api/auth/change-email", {
+              body: JSON.stringify({
+                callbackURL: "/settings?tab=account",
+                newEmail: target,
+              }),
+              headers: {
+                "content-type": "application/json",
+                cookie,
+                origin: "http://localhost:3000",
+              },
+              method: "POST",
+            })
+          );
+          const body: unknown = await response.json();
+          responses.push({
+            body,
+            status: response.status,
+          });
+        }
+        expect(responses[0]).toStrictEqual(responses[1]);
+        expect(responses[1]).toMatchObject({ status: 200 });
+        await expect(
+          db.select({ email: user.email }).from(user).where(eq(user.id, userId))
+        ).resolves.toMatchObject([{ email }]);
+        expect(sendVerificationEmail).toHaveBeenCalledOnce();
+        const verification = sendVerificationEmail.mock.lastCall?.[0];
+        expect(verification?.email).toBe(newEmail);
+        if (verification === undefined) {
+          throw new Error("Email change did not send verification.");
+        }
+        const verified = await auth.handler(new Request(verification.url));
+        expect(verified.status).toBe(302);
+        await expect(
+          db.select({ email: user.email }).from(user).where(eq(user.id, userId))
+        ).resolves.toMatchObject([{ email: newEmail }]);
+      } finally {
+        await db.delete(user).where(eq(user.id, occupiedId));
+      }
     });
   }
 );

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import type { DatabaseExecutor } from "@quieter/database/client";
 import { db } from "@quieter/database/client";
 import {
   mailbox,
@@ -25,6 +26,7 @@ import {
   extractMailAddress,
   splitMailAddressList,
 } from "@quieter/mail/compose/schema";
+import { OPEN_TRACKING_PATH_PREFIX } from "@quieter/mail/public-api";
 import {
   appendOpenTrackingPixel,
   buildOpenTrackingToken,
@@ -33,7 +35,6 @@ import { reportError } from "@quieter/observability";
 import {
   and,
   count,
-  countDistinct,
   desc,
   eq,
   exists,
@@ -222,16 +223,19 @@ export const getSuppressionReason = (
   return null;
 };
 
-export const assertOrganizationMailRecipientsNotSuppressed = async (input: {
-  organizationId: string;
-  recipients: string[];
-}) => {
+export const assertOrganizationMailRecipientsNotSuppressed = async (
+  input: {
+    organizationId: string;
+    recipients: string[];
+  },
+  executor: DatabaseExecutor = db
+) => {
   const recipients = normalizeRecipients(input.recipients);
   if (recipients.length === 0) {
     return;
   }
 
-  const [suppression] = await db
+  const [suppression] = await executor
     .select({ recipient: organizationMailRecipientSuppression.recipient })
     .from(organizationMailRecipientSuppression)
     .where(
@@ -543,17 +547,21 @@ export const suppressOrganizationMailRecipient = async (input: {
   if (recipient === "") {
     throw new OrganizationMailSendError("A valid address is required.", 422);
   }
-  const changed = await db.transaction(
-    async (transaction) =>
-      await applySuppressionChange(transaction, {
-        actorUserId: input.actorUserId,
-        createdAt: new Date(),
-        organizationId: input.organizationId,
-        recipient,
-        sourceProviderMessageId: null,
-        suppressionReason: "manual",
-      })
-  );
+  const changed = await db.transaction(async (transaction) => {
+    await transaction
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, input.organizationId))
+      .for("update");
+    return await applySuppressionChange(transaction, {
+      actorUserId: input.actorUserId,
+      createdAt: new Date(),
+      organizationId: input.organizationId,
+      recipient,
+      sourceProviderMessageId: null,
+      suppressionReason: "manual",
+    });
+  });
   return { changed };
 };
 
@@ -566,8 +574,13 @@ export const unsuppressOrganizationMailRecipient = async (input: {
   if (recipient === "") {
     throw new OrganizationMailSendError("A valid address is required.", 422);
   }
-  const now = new Date();
   return await db.transaction(async (transaction) => {
+    await transaction
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, input.organizationId))
+      .for("update");
+    const now = new Date();
     const revoked = await transaction
       .update(organizationMailRecipientSuppression)
       .set({ revokedAt: now, updatedAt: now })
@@ -953,7 +966,10 @@ export const buildOpenTrackingHtmlTransform = (input: {
   });
   return {
     htmlTransform: (html: string) =>
-      appendOpenTrackingPixel(html, `${baseUrl}/api/v1/o/${token}`),
+      appendOpenTrackingPixel(
+        html,
+        `${baseUrl}${OPEN_TRACKING_PATH_PREFIX}/${token}`
+      ),
   };
 };
 
@@ -1079,7 +1095,7 @@ export const recordOrganizationMailOpenEvent = async (input: {
 };
 
 /**
- * Records an open-marker load addressed by the Quieter Message-ID header.
+ * Records an open-marker load addressed by the quieter Message-ID header.
  * Tokens never carry database ids, so this resolves the header to the stored
  * outbound message first.
  */
@@ -1127,6 +1143,10 @@ export const recordOrganizationMailMarkerLoad = async (input: {
 };
 
 export type OrganizationMailDeliveryMetrics = {
+  dailyEvents: {
+    date: string;
+    eventsByType: Partial<Record<OrganizationMailDeliveryEventType, number>>;
+  }[];
   eventsByType: Partial<Record<OrganizationMailDeliveryEventType, number>>;
   openedMessages: number;
 };
@@ -1166,17 +1186,32 @@ export const getOrganizationMailDeliveryMetrics = async (input: {
     );
   }
 
+  const distinctEvents = db
+    .select({
+      eventType: organizationMailDeliveryEvent.eventType,
+      occurredAt: sql`min(${organizationMailDeliveryEvent.occurredAt})`.as(
+        "occurredAt"
+      ),
+    })
+    .from(organizationMailDeliveryEvent)
+    .where(and(...conditions))
+    .groupBy(
+      organizationMailDeliveryEvent.eventType,
+      organizationMailDeliveryEvent.providerMessageId,
+      organizationMailDeliveryEvent.recipient
+    )
+    .as("distinctEvents");
+  const eventDate = sql<string>`to_char(${distinctEvents.occurredAt}, 'YYYY-MM-DD')`;
   const [eventRows, [openRow]] = await Promise.all([
     db
       .select({
-        count: countDistinct(
-          sql`(${organizationMailDeliveryEvent.providerMessageId}, ${organizationMailDeliveryEvent.recipient})`
-        ),
-        eventType: organizationMailDeliveryEvent.eventType,
+        count: count(),
+        date: eventDate,
+        eventType: distinctEvents.eventType,
       })
-      .from(organizationMailDeliveryEvent)
-      .where(and(...conditions))
-      .groupBy(organizationMailDeliveryEvent.eventType),
+      .from(distinctEvents)
+      .groupBy(eventDate, distinctEvents.eventType)
+      .orderBy(eventDate),
     db
       .select({
         openedMessages: count(),
@@ -1214,10 +1249,25 @@ export const getOrganizationMailDeliveryMetrics = async (input: {
       ),
   ]);
 
+  const eventsByType: OrganizationMailDeliveryMetrics["eventsByType"] = {};
+  const dailyEvents = new Map<
+    string,
+    OrganizationMailDeliveryMetrics["dailyEvents"][number]
+  >();
+  for (const row of eventRows) {
+    eventsByType[row.eventType] =
+      (eventsByType[row.eventType] ?? 0) + row.count;
+    const day = dailyEvents.get(row.date) ?? {
+      date: row.date,
+      eventsByType: {},
+    };
+    day.eventsByType[row.eventType] = row.count;
+    dailyEvents.set(row.date, day);
+  }
+
   return {
-    eventsByType: Object.fromEntries(
-      eventRows.map((row) => [row.eventType, row.count])
-    ),
+    dailyEvents: [...dailyEvents.values()],
+    eventsByType,
     openedMessages: openRow?.openedMessages ?? 0,
   } satisfies OrganizationMailDeliveryMetrics;
 };

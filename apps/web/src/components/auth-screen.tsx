@@ -1,30 +1,33 @@
 "use client";
 
 import { Key02Icon, Mail01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Brand } from "@quieter/ui/brand";
+import { AuthLayout } from "@quieter/app/components/auth-layout";
+import { GoogleLogo } from "@quieter/app/components/google-logo";
+import { setDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
+import { setManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
+import { authClient } from "@quieter/app/lib/auth";
+import { toastError } from "@quieter/app/lib/error-toast";
+import {
+  isPreviewPersonasAvailable,
+  setPreviewPersona,
+} from "@quieter/app/lib/preview-personas";
+import type { PreviewPersona } from "@quieter/app/lib/preview-personas";
+import { queryPersister } from "@quieter/app/lib/query-persister";
+import { appFetch } from "@quieter/app/runtime";
+import { desktopAuthQuerySchema } from "@quieter/auth/desktop";
+import type { DesktopAuthQuery } from "@quieter/auth/desktop";
 import { Button } from "@quieter/ui/button";
 import { FieldLabel } from "@quieter/ui/field";
+import { Icon } from "@quieter/ui/icon";
+import { Separator } from "@quieter/ui/separator";
 import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { getRouteApi, Link } from "@tanstack/react-router";
+import { getRouteApi } from "@tanstack/react-router";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { z } from "zod";
-
-import { AuthVisual } from "#/components/auth-visual";
-import { GoogleLogo } from "#/components/google-logo";
-import { setDemoModeEnabled } from "#/features/settings/domain/demo-mode-setting";
-import { setManagedDemoModeEnabled } from "#/features/settings/domain/managed-demo-mode-setting";
-import { authClient } from "#/lib/auth";
-import {
-  isPreviewPersonasAvailable,
-  setPreviewPersona,
-} from "#/lib/preview-personas";
-import type { PreviewPersona } from "#/lib/preview-personas";
-import { queryPersister } from "#/lib/query-persister";
 
 const authRouteApi = getRouteApi("/_app/auth");
 const AUTHENTICATION_ERROR_MESSAGE =
@@ -72,7 +75,7 @@ const AuthLastUsedHint = () => (
       />
       <span
         // oxlint-disable-next-line shadcn/no-arbitrary-values -- Inherits the parent badge radius by design.
-        className="relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium tracking-wide text-muted-fg squircle"
+        className="relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium text-muted-fg squircle"
       >
         Last used
       </span>
@@ -80,11 +83,11 @@ const AuthLastUsedHint = () => (
   </LazyMotion>
 );
 
-const AuthCredentials = ({
-  navigate,
+export const AuthCredentials = ({
+  electronQuery,
   returnTo,
 }: {
-  navigate: AuthNavigate;
+  electronQuery?: DesktopAuthQuery;
   returnTo?: string;
 }) => {
   const queryClient = useQueryClient();
@@ -120,7 +123,7 @@ const AuthCredentials = ({
       const response = await authClient.signIn.social({
         callbackURL: callbackUrl,
         errorCallbackURL: getErrorCallbackHref(),
-        fetchOptions: { timeout: 15_000 },
+        fetchOptions: { query: electronQuery, timeout: 15_000 },
         provider: "google",
         // Unified flow: an unknown Google account creates one here rather than
         // dead-ending on `signup_disabled`.
@@ -128,7 +131,8 @@ const AuthCredentials = ({
       });
       if (response.error) {
         throw new Error(
-          response.error.message ?? "Could not start Google sign-in."
+          response.error.message ?? "Could not start Google sign-in.",
+          { cause: response.error }
         );
       }
 
@@ -136,6 +140,10 @@ const AuthCredentials = ({
     },
     mutationKey: ["auth", "sign-in", "google"],
     onError: (error) => {
+      toastError(error, {
+        boundary: "auth-google-sign-in",
+        fallback: AUTHENTICATION_ERROR_MESSAGE,
+      });
       setErrors((prev) => ({
         ...prev,
         google: error.message || "Could not start Google sign-in.",
@@ -157,16 +165,23 @@ const AuthCredentials = ({
 
   const passkeyMutation = useMutation({
     mutationFn: async () => {
-      const response = await authClient.signIn.passkey();
+      const response = await authClient.signIn.passkey({
+        fetchOptions: { query: electronQuery },
+      });
       if (response.error) {
         throw new Error(
-          response.error.message ?? "Could not sign in with a passkey."
+          response.error.message ?? "Could not sign in with a passkey.",
+          { cause: response.error }
         );
       }
       return response;
     },
     mutationKey: ["auth", "sign-in", "passkey"],
     onError: (error) => {
+      toastError(error, {
+        boundary: "auth-passkey-sign-in",
+        fallback: AUTHENTICATION_ERROR_MESSAGE,
+      });
       setErrors((prev) => ({
         ...prev,
         passkey: error.message || "Could not sign in with a passkey.",
@@ -178,13 +193,6 @@ const AuthCredentials = ({
     onSuccess: async () => {
       queryClient.clear();
       await queryPersister.removeQueries();
-
-      if (callbackUrl === "/") {
-        await navigate({
-          to: "/",
-        });
-        return;
-      }
 
       globalThis.window.location.assign(callbackUrl);
     },
@@ -207,6 +215,7 @@ const AuthCredentials = ({
             callbackURL: callbackUrl,
             email: normalizedEmail,
             errorCallbackURL: getErrorCallbackHref(),
+            fetchOptions: { query: electronQuery },
             // Always allowed: the response is identical whether or not an
             // account exists, so the form never reveals which addresses are
             // registered. A display name is set later in Settings.
@@ -214,13 +223,21 @@ const AuthCredentials = ({
           });
 
           if (response.error) {
+            toastError(response.error, {
+              boundary: "auth-magic-link",
+              fallback: AUTHENTICATION_ERROR_MESSAGE,
+            });
             return {
               form: AUTHENTICATION_ERROR_MESSAGE,
             };
           }
 
           await clearCachedAccountData();
-        } catch {
+        } catch (error) {
+          toastError(error, {
+            boundary: "auth-magic-link",
+            fallback: AUTHENTICATION_ERROR_MESSAGE,
+          });
           return {
             form: AUTHENTICATION_ERROR_MESSAGE,
           };
@@ -282,7 +299,7 @@ const AuthCredentials = ({
           {({ canSubmit, email, isSubmitted, isSubmitting }) => {
             let submitContent: ReactNode = (
               <>
-                <HugeiconsIcon className="size-4 shrink-0" icon={Mail01Icon} />
+                <Icon icon={Mail01Icon} />
                 Continue with magic link
               </>
             );
@@ -291,17 +308,14 @@ const AuthCredentials = ({
             } else if (isSubmitted) {
               submitContent = (
                 <>
-                  <HugeiconsIcon
-                    className="size-4 shrink-0"
-                    icon={Mail01Icon}
-                  />
+                  <Icon icon={Mail01Icon} />
                   Magic link sent to {email.trim().toLowerCase()}
                 </>
               );
             }
 
             return (
-              <Button disabled={!canSubmit} size="block" type="submit">
+              <Button disabled={!canSubmit} fullWidth type="submit">
                 {authClient.isLastUsedLoginMethod("magic-link") && (
                   <AuthLastUsedHint />
                 )}
@@ -325,7 +339,7 @@ const AuthCredentials = ({
         </form.Subscribe>
       </form>
 
-      <div className="mt-6 mb-3 h-px w-full bg-border" />
+      <Separator className="mt-6 mb-3" />
 
       <Button
         className="mt-3"
@@ -333,9 +347,9 @@ const AuthCredentials = ({
         onClick={() => {
           googleMutation.mutate();
         }}
-        size="block"
+        fullWidth
         type="button"
-        variant="outline"
+        variant="secondary"
       >
         {authClient.isLastUsedLoginMethod("google") && <AuthLastUsedHint />}
         {googleMutation.isPending ? (
@@ -354,12 +368,12 @@ const AuthCredentials = ({
         onClick={() => {
           passkeyMutation.mutate();
         }}
-        size="block"
+        fullWidth
         type="button"
-        variant="outline"
+        variant="secondary"
       >
         {authClient.isLastUsedLoginMethod("passkey") && <AuthLastUsedHint />}
-        <HugeiconsIcon className="size-4 shrink-0" icon={Key02Icon} />
+        <Icon icon={Key02Icon} />
         Continue with passkey
       </Button>
 
@@ -384,6 +398,7 @@ const AuthCredentials = ({
 };
 
 const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
+  const session = authClient.useSession();
   const [error, setError] = useState<string | null>(null);
   const [pendingPersona, setPendingPersona] = useState<PreviewPersona | null>(
     null
@@ -402,7 +417,7 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
     };
 
     try {
-      const response = await fetch("/api/preview-persona", {
+      const response = await appFetch("/api/preview-persona", {
         body: JSON.stringify({ persona }),
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
@@ -418,6 +433,7 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
       setPreviewPersona(persona);
       setDemoModeEnabled(persona === "gmail");
       setManagedDemoModeEnabled(persona === "managed");
+      await session.refetch();
 
       await navigate({ to: "/" });
       complete();
@@ -438,12 +454,11 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
       <div className="flex flex-wrap gap-2">
         {previewPersonaOptions.map((option) => (
           <Button
-            className="justify-center text-center"
             disabled={pendingPersona !== null}
             key={option.persona}
             onClick={() => void startPreviewPersona(option.persona)}
             type="button"
-            variant="outline"
+            variant="secondary"
           >
             {pendingPersona === option.persona ? "Opening…" : option.label}
           </Button>
@@ -462,54 +477,32 @@ export const AuthScreen = () => {
   const { error, returnTo } = authRouteApi.useSearch();
   const navigate = authRouteApi.useNavigate();
   const authError = error ? AUTHENTICATION_ERROR_MESSAGE : null;
+  const returnUrl = new URL(returnTo ?? "/", "https://quieter.local");
+  const electronQuery =
+    returnUrl.pathname === "/desktop/auth"
+      ? desktopAuthQuerySchema.safeParse(
+          Object.fromEntries(returnUrl.searchParams)
+        ).data
+      : undefined;
 
   return (
-    <div className="auth-scene dark relative isolate grid h-dvh max-h-dvh w-full overflow-hidden md:grid-cols-[7fr_5fr]">
-      <div className="relative z-10 flex size-full min-h-0 flex-col items-center overflow-y-auto px-6 py-24">
-        <div className="absolute top-6 left-6">
-          <Brand
-            // oxlint-disable-next-line shadcn/no-restyle -- Auth header keeps its brand metrics.
-            className="h-6 w-24 text-fg"
-            variant="combination"
-          />
-        </div>
-        <div className="my-auto w-full max-w-[22rem]">
-          <h1 className="text-center text-title-md font-medium tracking-tight text-fg">
-            Continue to Quieter
-          </h1>
+    <AuthLayout title="Continue to quieter">
+      <AuthCredentials
+        electronQuery={electronQuery}
+        key={returnTo ?? ""}
+        returnTo={returnTo}
+      />
 
-          <AuthCredentials
-            key={returnTo ?? ""}
-            navigate={navigate}
-            returnTo={returnTo}
-          />
+      <PreviewPersonaPicker navigate={navigate} />
 
-          <PreviewPersonaPicker navigate={navigate} />
-
-          {authError ? (
-            <output
-              aria-live="assertive"
-              className="mt-4 text-body text-destructive"
-            >
-              {authError}
-            </output>
-          ) : null}
-          <nav
-            aria-label="Legal"
-            className="mt-10 flex justify-center gap-5 text-caption text-muted-fg"
-          >
-            <Link className="underline-offset-4 hover:underline" to="/terms">
-              Terms
-            </Link>
-            <Link className="underline-offset-4 hover:underline" to="/privacy">
-              Privacy
-            </Link>
-          </nav>
-        </div>
-      </div>
-      <div className="relative size-full min-h-0 border-l border-border/30 bg-auth-visual-bg max-md:hidden">
-        <AuthVisual />
-      </div>
-    </div>
+      {authError ? (
+        <output
+          aria-live="assertive"
+          className="mt-4 text-body text-destructive"
+        >
+          {authError}
+        </output>
+      ) : null}
+    </AuthLayout>
   );
 };

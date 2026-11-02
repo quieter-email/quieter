@@ -47,7 +47,7 @@ export const SliderTrack = ({
 }: ComponentPropsWithoutRef<typeof SliderPrimitive.Track>) => (
   <SliderPrimitive.Track
     className={cn(
-      "relative overflow-hidden rounded-full bg-muted data-[orientation=horizontal]:top-1/2 data-[orientation=horizontal]:h-2 data-[orientation=horizontal]:-translate-y-1/2 data-[orientation=vertical]:mx-auto data-[orientation=vertical]:h-full data-[orientation=vertical]:w-2",
+      "relative overflow-hidden rounded-full bg-muted not-squircle data-[orientation=horizontal]:top-1/2 data-[orientation=horizontal]:h-2 data-[orientation=horizontal]:-translate-y-1/2 data-[orientation=vertical]:mx-auto data-[orientation=vertical]:h-full data-[orientation=vertical]:w-2",
       className
     )}
     {...props}
@@ -60,7 +60,7 @@ export const SliderIndicator = ({
 }: ComponentPropsWithoutRef<typeof SliderPrimitive.Indicator>) => (
   <SliderPrimitive.Indicator
     className={cn(
-      "absolute rounded-full bg-primary data-[orientation=horizontal]:h-full data-[orientation=vertical]:w-full",
+      "absolute rounded-full bg-primary not-squircle data-[orientation=horizontal]:h-full data-[orientation=vertical]:w-full",
       className
     )}
     {...props}
@@ -73,7 +73,7 @@ export const SliderThumb = ({
 }: ComponentPropsWithoutRef<typeof SliderPrimitive.Thumb>) => (
   <SliderPrimitive.Thumb
     className={cn(
-      "block size-4 rounded-full border border-primary/20 bg-bg-raised shadow-sm transition-transform duration-150 ease-out focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 motion-safe:hover:scale-105",
+      "block size-4 rounded-full border border-border-strong bg-detail shadow-sm transition-transform duration-150 ease-out not-squircle focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50 motion-safe:hover:scale-105",
       className
     )}
     {...props}

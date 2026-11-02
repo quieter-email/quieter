@@ -1,6 +1,6 @@
 # quieter
 
-TypeScript SDK for the Quieter send API.
+TypeScript SDK for the quieter send API.
 
 ```ts
 import { Quieter } from "quieter";
@@ -22,6 +22,10 @@ console.log(delivery.recipients);
 
 const suppressedRecipients = await quieter.listSuppressions();
 ```
+
+## Compatibility date
+
+Every request sends `Quieter-Version: 2026-10`. quieter accepts only that date. A new date is published only when a breaking change replaces the current behavior. There is no request body version field.
 
 ## React Email
 
@@ -94,3 +98,17 @@ content: { kind: "visual", design }
 ```
 
 `createEmailDesign`, `renderEmailContent`, `exportEmailDesign`, and `importEmailTheme` are also exported for local workflows. Theme imports accept the documented flat theme or matching typed design tokens and reject unsupported values. Imported HTML must be bounded, static email markup with safe links and images. Arbitrary JSX, scripts, forms, and active CSS are rejected. Imported HTML stays source-editable; visual designs round-trip through their versioned JSON.
+
+## Verification codes
+
+Send an [experimental OTP-Token header](https://mikewest.github.io/otp-token/draft-goto-otp-token.html) with a verification email. Use the canonical origin of your site without a trailing slash. The React client accepts the same option.
+
+```ts
+await quieter.send({
+  from: "Example <login@example.com>",
+  to: "person@example.com",
+  subject: "Your verification code",
+  text: "Your verification code is 123456",
+  otpToken: { code: "123456", origin: "https://example.com" },
+});
+```

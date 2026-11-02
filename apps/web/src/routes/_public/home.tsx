@@ -12,7 +12,7 @@ export const Route = createFileRoute("/_public/home")({
       },
     ],
     meta: [
-      { title: "Quieter | Email, without the noise." },
+      { title: "quieter | Email, without the noise." },
       {
         content:
           "Your Gmail, your team's mailboxes and the mail your product sends, in one place.",

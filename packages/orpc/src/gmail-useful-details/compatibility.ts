@@ -9,8 +9,10 @@ import {
   mailboxAutomationSettings,
 } from "@quieter/database/schema";
 import type { GmailUsefulDetailFeedbackSignal } from "@quieter/database/schema";
+import { reportError } from "@quieter/observability";
 import { and, eq } from "drizzle-orm";
 
+import { learnAiMemoryFromFeedback } from "../ai-memory";
 import { assertOwnedGmailMailbox } from "../mailbox/access";
 import {
   assertAccessibleMailbox,
@@ -98,9 +100,27 @@ export const dismissGmailUsefulDetail = async (input: {
         eq(gmailUsefulDetail.mailboxId, input.mailboxId)
       )
     )
-    .returning({ id: gmailUsefulDetail.id });
+    .returning({
+      id: gmailUsefulDetail.id,
+      kind: gmailUsefulDetail.kind,
+      source: gmailUsefulDetail.source,
+    });
   if (dismissed === undefined) {
     throw new ORPCError("NOT_FOUND", { message: "Useful detail not found." });
+  }
+  try {
+    await learnAiMemoryFromFeedback({
+      kind: "useful_detail_feedback",
+      mailboxId: input.mailboxId,
+      metadata: {
+        detailType: dismissed.kind,
+        feedback: "dismiss",
+        source: dismissed.source,
+      },
+      userId: input.userId,
+    });
+  } catch (error) {
+    reportError(error, { operation: "useful-details:learn-from-dismissal" });
   }
   return { dismissed: true, id: dismissed.id };
 };
@@ -113,11 +133,12 @@ export const setGmailUsefulDetailFeedback = async (input: {
 }) => {
   await assertOwnedGmailMailbox(input);
   const now = new Date();
-  const detailId = await db.transaction(async (tx) => {
+  const ratedDetail = await db.transaction(async (tx) => {
     const [detail] = await tx
       .select({
         id: gmailUsefulDetail.id,
         kind: gmailUsefulDetail.kind,
+        relevanceSource: gmailUsefulDetail.relevanceSource,
         source: gmailUsefulDetail.source,
       })
       .from(gmailUsefulDetail)
@@ -171,8 +192,24 @@ export const setGmailUsefulDetailFeedback = async (input: {
           )
         );
     }
-    return detail.id;
+    return detail;
   });
 
-  return { feedback: input.feedback, id: detailId };
+  try {
+    await learnAiMemoryFromFeedback({
+      kind: "useful_detail_feedback",
+      mailboxId: input.mailboxId,
+      metadata: {
+        detailType: ratedDetail.kind,
+        feedback: input.feedback,
+        relevanceSource: ratedDetail.relevanceSource,
+        source: ratedDetail.source,
+      },
+      userId: input.userId,
+    });
+  } catch (error) {
+    reportError(error, { operation: "useful-details:learn-from-feedback" });
+  }
+
+  return { feedback: input.feedback, id: ratedDetail.id };
 };

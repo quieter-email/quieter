@@ -1,10 +1,10 @@
 [![badge](https://shieldcn.dev/npm/quieter.svg?variant=secondary&size=xs&font=geist&color=191a1c&valueColor=ffffff&labelTextColor=8f8f8f)](https://www.npmjs.com/package/quieter) [![badge](https://shieldcn.dev/github/quieter-email/quieter/license.svg?variant=secondary&size=xs&font=geist&color=191a1c&valueColor=ffffff&labelTextColor=8f8f8f)](https://github.com/quieter-email/quieter) [![badge](https://shieldcn.dev/x/mention/quieteremail.svg?variant=secondary&size=xs&font=geist&color=191a1c&valueColor=ffffff&labelTextColor=8f8f8f)](https://x.com/quieteremail)
 
-# Quieter
+# quieter
 
-Quieter is an experimental email client for Gmail accounts and organization-managed mailboxes. It combines a focused mail workspace, compose and search tools, mailbox-scoped AI assistance, managed mail delivery, and privacy controls in one application. Every account starts with a normal team; there is no separate personal workspace.
+quieter is an experimental email client for Gmail accounts and organization-managed mailboxes. It combines a focused mail workspace, compose and search tools, mailbox-scoped AI assistance, managed mail delivery, and privacy controls in one application. Every account starts with a normal team; there is no separate personal workspace.
 
-> Quieter is still under development. It is not ready for production users, important mail, or self-hosting without substantial operational work.
+> quieter is still under development. It is not ready for production users, important mail, or self-hosting without substantial operational work.
 
 ## Repository Policy
 

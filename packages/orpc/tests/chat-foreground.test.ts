@@ -10,6 +10,7 @@ import {
   normalizeExpiredChatParts,
 } from "../src/chat/continuation";
 import {
+  assertForegroundSendApproval,
   resolveForegroundComposeDraftForPersistence,
   toForegroundComposeMessage,
   validateChatRequest,
@@ -20,7 +21,6 @@ const foreground = foregroundSnapshotSchema.parse({
   exchangeId: "d6c6b64a-1d5f-4406-9b1b-53a73ff6f41b",
   expiresAt: Date.now() + 60_000,
   generation: 1,
-  policy: "ask" as const,
   tabId: "tab-1",
 });
 
@@ -58,7 +58,129 @@ const transcriptWithDraft = (draft: typeof richDraft) => [
   },
 ];
 
+const approvedSendTranscript = [
+  {
+    id: foreground.exchangeId,
+    parts: [
+      {
+        approval: { approved: true, id: "send-approval" },
+        input: { draft: richDraft },
+        state: "approval-responded" as const,
+        toolCallId: "send-1",
+        type: "tool-send_mail" as const,
+      },
+    ],
+    role: "assistant" as const,
+  },
+];
+
 describe("foreground chat requests", () => {
+  test("does not save a retained draft after the visible workspace moved to Calendar", () => {
+    const transcript = transcriptWithDraft(richDraft);
+    const [message] = transcript;
+    expect(() => {
+      resolveForegroundComposeDraftForPersistence({
+        draft: richDraft,
+        foreground,
+        mailboxId: "mailbox-1",
+        transcript: [
+          {
+            ...message,
+            id: foreground.exchangeId,
+            parts: [
+              ...(message?.parts ?? []),
+              {
+                input: { date: "2026-10-23" },
+                output: {
+                  calendar: {
+                    date: "2026-10-23",
+                    timeZone: "Europe/Berlin",
+                    view: "week",
+                    visibleCalendars: [],
+                  },
+                  generation: foreground.generation,
+                  mailboxId: "mailbox-1",
+                  view: "calendar",
+                  workspace: "calendar",
+                },
+                state: "output-available",
+                toolCallId: "calendar-nav",
+                type: "tool-navigate_calendar",
+              },
+            ],
+            role: "assistant",
+          },
+        ],
+      });
+    }).toThrow(/open mail/iu);
+  });
+
+  test("requires approval for the exact send call, exchange, and draft", () => {
+    const approved = {
+      draft: richDraft,
+      foreground,
+      toolCallId: "send-1",
+      transcript: approvedSendTranscript,
+    };
+    expect(() => {
+      assertForegroundSendApproval(approved);
+    }).not.toThrow();
+    expect(() => {
+      assertForegroundSendApproval({ ...approved, transcript: [] });
+    }).toThrow(/approve/iu);
+    expect(() => {
+      assertForegroundSendApproval({ ...approved, toolCallId: "send-2" });
+    }).toThrow(/approve/iu);
+    expect(() => {
+      assertForegroundSendApproval({
+        ...approved,
+        foreground: { ...foreground, exchangeId: crypto.randomUUID() },
+      });
+    }).toThrow(/approve/iu);
+    expect(() => {
+      assertForegroundSendApproval({
+        ...approved,
+        draft: { ...richDraft, to: "other@example.test" },
+      });
+    }).toThrow(/changed after approval/iu);
+  });
+
+  test("refuses pending and denied sends in stored conversations", () => {
+    for (const approved of [undefined, false]) {
+      const approval =
+        approved === undefined
+          ? ({
+              approval: { id: "send-approval" },
+              state: "approval-requested",
+            } as const)
+          : ({
+              approval: { approved, id: "send-approval" },
+              state: "approval-responded",
+            } as const);
+      expect(() => {
+        assertForegroundSendApproval({
+          draft: richDraft,
+          foreground,
+          toolCallId: "send-1",
+          transcript: [
+            {
+              id: foreground.exchangeId,
+              parts: [
+                {
+                  ...approval,
+                  input: { draft: richDraft },
+                  toolCallId: "send-1",
+                  type: "tool-send_mail",
+                },
+              ],
+              role: "assistant",
+            },
+          ],
+        });
+      }).toThrow(/approve/iu);
+    }
+  });
+
   test("preserves reviewed rich HTML in the mail compose contract", () => {
     expect(
       toForegroundComposeMessage(richDraft, "chat-local-id")
@@ -88,6 +210,31 @@ describe("foreground chat requests", () => {
         transcript: transcriptWithDraft(richDraft),
       })
     ).toThrow(/visible draft changed/u);
+  });
+
+  test("persists the reviewed sender name and rejects changes or omission", () => {
+    const draft = { ...richDraft, senderName: "Customer Support" };
+    const reviewedDraft = resolveForegroundComposeDraftForPersistence({
+      draft,
+      foreground,
+      mailboxId: "mailbox-1",
+      transcript: transcriptWithDraft(draft),
+    });
+
+    expect(
+      toForegroundComposeMessage(reviewedDraft, "chat-local-id")
+    ).toMatchObject({ senderName: draft.senderName });
+
+    for (const proposed of [richDraft, { ...draft, senderName: "Sales" }]) {
+      expect(() =>
+        resolveForegroundComposeDraftForPersistence({
+          draft: proposed,
+          foreground,
+          mailboxId: "mailbox-1",
+          transcript: transcriptWithDraft(draft),
+        })
+      ).toThrow(/visible draft changed/u);
+    }
   });
 
   test("does not fall back to an older workspace after a newer mismatched read", () => {

@@ -1,6 +1,5 @@
+import { CampaignPage } from "@quieter/app/features/broadcasts/components/campaign-editor";
 import { createFileRoute } from "@tanstack/react-router";
-
-import { CampaignPage } from "#/features/broadcasts/components/campaign-editor";
 
 export const Route = createFileRoute("/_app/campaigns/$campaignId/content")({
   component: CampaignContentRoute,

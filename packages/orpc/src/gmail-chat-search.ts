@@ -23,12 +23,18 @@ import {
 } from "@quieter/gmail";
 import type { MailboxCategory } from "@quieter/mail/messages";
 
+import {
+  captureMailboxMessageMemory,
+  queueMailboxMessageMemory,
+} from "./ai-memory-capture";
 import { syncGmailLabels } from "./gmail-labels";
 import {
   getAuthorizedGmailMailbox,
   markGmailMailboxNeedsReconnect,
   refreshAuthorizedGmailAccessToken,
 } from "./gmail-mailbox-access";
+import { writeGmailCapturedMessage } from "./mail-capture";
+import { learnAiMemoryFromMailAction } from "./mail/feedback";
 
 const isGmailAuthError = (error: unknown) =>
   isGmailServiceError(error) &&
@@ -163,9 +169,27 @@ export const readGmailThreadForUser = async (
     const thread = await getThreadWithDetails(
       accessToken,
       input.threadId,
-      input.signal
+      input.signal,
+      async (snapshot) => {
+        await writeGmailCapturedMessage({
+          mailboxId: input.mailboxId,
+          snapshot,
+          source: "on_demand",
+        });
+      }
     );
     const includedMessages = thread.messages.slice(-THREAD_MESSAGE_LIMIT);
+    await Promise.all(
+      includedMessages.map(
+        async (message) =>
+          await captureMailboxMessageMemory({
+            actorUserId: input.userId,
+            mailboxId: input.mailboxId,
+            message,
+            source: "ai_read",
+          })
+      )
+    );
 
     return {
       category: input.category,
@@ -205,6 +229,12 @@ export const readGmailMessageForUser = async (
       input.messageId,
       input.signal
     );
+    await captureMailboxMessageMemory({
+      actorUserId: input.userId,
+      mailboxId: input.mailboxId,
+      message,
+      source: "ai_read",
+    });
     const body = trimMessageBody(message.bodyText, message.snippet);
 
     return {
@@ -239,6 +269,12 @@ export const readGmailMessagesForUser = async (
           messageId,
           input.signal
         );
+        await captureMailboxMessageMemory({
+          actorUserId: input.userId,
+          mailboxId: input.mailboxId,
+          message,
+          source: "ai_read",
+        });
         const body = trimMessageBody(message.bodyText, message.snippet);
 
         return {
@@ -297,6 +333,12 @@ export const readGmailAttachmentForUser = async (
       input.messageId,
       input.signal
     );
+    await captureMailboxMessageMemory({
+      actorUserId: input.userId,
+      mailboxId: input.mailboxId,
+      message,
+      source: "ai_read",
+    });
     const metadata = message.attachments?.find(
       (attachment) => attachment.attachmentId === input.attachmentId
     );
@@ -397,7 +439,23 @@ export const modifyMailForUser = async (
     } satisfies Record<ModifyMailResult["action"], GmailMetadataChange>;
     const change = changes[action];
     const mutate = target === "thread" ? mutateGmailThread : mutateGmailMessage;
-    await mutate(accessToken, id, change, input.signal);
+    const result = await mutate(accessToken, id, change, input.signal);
+    const messageIds =
+      "messages" in result
+        ? (result.messages ?? []).map((message) => message.id)
+        : [id];
+    await queueMailboxMessageMemory({
+      mailboxId: input.mailboxId,
+      messageIds,
+      userId: input.userId,
+    });
+    await learnAiMemoryFromMailAction({
+      action,
+      mailboxId: input.mailboxId,
+      messageIds,
+      targetCount: messageIds.length,
+      userId: input.userId,
+    });
 
     return {
       action,

@@ -2,7 +2,7 @@
 
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
-import type { ComponentPropsWithoutRef } from "react";
+import type { ComponentPropsWithoutRef, CSSProperties } from "react";
 
 import { cn } from "../../lib/cn";
 
@@ -23,21 +23,17 @@ export const pillVariants = cva(
         xs: "px-2 py-1 text-micro/none",
       },
       tone: {
-        "access-manager": "bg-q-purple/15 text-q-purple",
-        "access-reader": "bg-q-gray/15 text-q-gray",
-        "access-responder": "bg-q-blue/15 text-q-blue",
         blue: "bg-q-blue/15 text-q-blue",
         cyan: "bg-q-cyan/15 text-q-cyan",
+        destructive: "bg-destructive/10 text-destructive",
         gray: "bg-q-gray/15 text-q-gray",
         green: "bg-q-green/15 text-q-green",
-        "mailbox-api": "bg-q-blue/15 text-q-blue",
-        "mailbox-attention": "bg-q-orange/15 text-q-orange",
-        "mailbox-ready": "bg-q-green/15 text-q-green",
-        "mailbox-reconnect": "bg-q-red/15 text-q-red",
+        neutral: "bg-muted text-muted-fg",
         orange: "bg-q-orange/15 text-q-orange",
         pink: "bg-q-pink/15 text-q-pink",
         purple: "bg-q-purple/15 text-q-purple",
         red: "bg-q-red/15 text-q-red",
+        success: "bg-success/15 text-success",
         yellow: "bg-q-yellow/15 text-q-yellow",
       },
     },
@@ -47,13 +43,27 @@ export const pillVariants = cva(
 export type PillTone = NonNullable<VariantProps<typeof pillVariants>["tone"]>;
 
 type PillProps = ComponentPropsWithoutRef<"span"> &
-  VariantProps<typeof pillVariants>;
+  VariantProps<typeof pillVariants> & { customColor?: string };
 
 export const Pill = ({
   className,
+  customColor,
   size = "sm",
   tone = "gray",
+  style,
   ...props
-}: PillProps) => (
-  <span className={cn(pillVariants({ size, tone }), className)} {...props} />
-);
+}: PillProps) => {
+  const pillStyle: CSSProperties & { "--selected-color": string | undefined } =
+    { "--selected-color": customColor, ...style };
+  return (
+    <span
+      className={cn(
+        pillVariants({ size, tone }),
+        { "q-custom-color-surface text-fg": !!customColor },
+        className
+      )}
+      style={pillStyle}
+      {...props}
+    />
+  );
+};

@@ -4,6 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./ai-credit-errors": "./src/ai-credit-errors.ts",
+    "./ai-reservation": "./src/ai-reservation.ts",
     "./ai-pricing": "./src/ai-pricing.ts",
     "./credits": "./src/credits.ts",
     "./mail-send-reservation": "./src/mail-send-reservation.ts",

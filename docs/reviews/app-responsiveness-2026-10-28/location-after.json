@@ -1,0 +1,18 @@
+{
+  "empty": {
+    "height": 0,
+    "paddingBottom": "0px",
+    "paddingTop": "0px",
+    "text": ""
+  },
+  "firstItem": {
+    "height": 32,
+    "offset": 5,
+    "top": 457
+  },
+  "listHeight": 40,
+  "popup": {
+    "height": 42,
+    "top": 452
+  }
+}

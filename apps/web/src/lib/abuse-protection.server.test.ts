@@ -53,7 +53,7 @@ describe("request rate limiting", () => {
 
   test("read-only requests have no fabricated quota result", async () => {
     const result = await getRequestRateLimit(
-      new Request("https://quieter.email/api/v1/messages/one")
+      new Request("https://quieter.email/api/messages/one")
     );
     expect(result).toBeNull();
     expect(consumeRateLimit).not.toHaveBeenCalled();

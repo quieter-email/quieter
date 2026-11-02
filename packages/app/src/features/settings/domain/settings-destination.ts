@@ -1,0 +1,44 @@
+import type { OrganizationSettingsView } from "@quieter/app/features/settings/domain/organization-settings-view";
+import type { SettingsTab } from "@quieter/app/features/settings/domain/settings-tab";
+
+export type SettingsDestination = {
+  tab: SettingsTab;
+  organizationView?: OrganizationSettingsView;
+  mailboxId?: string;
+  organizationId?: string;
+  section?: string;
+};
+
+export const TEAM_SETTINGS_NAV = [
+  { title: "General", view: "overview" },
+  { title: "Members & invitations", view: "members" },
+  { title: "Divisions", view: "divisions" },
+  { title: "Domains", view: "domains" },
+  { title: "Delivery", view: "delivery" },
+  { title: "Blocked recipients", view: "suppressions" },
+  { title: "Billing & usage", view: "billing" },
+  { title: "API keys", view: "api-keys" },
+] as const satisfies readonly {
+  title: string;
+  view: OrganizationSettingsView;
+}[];
+
+export const settingsTeamSection = (view: OrganizationSettingsView) => {
+  if (view === "danger") {
+    return "overview";
+  }
+  return view;
+};
+
+export const settingsDestinationSearch = (
+  destination: SettingsDestination,
+  teamId: string
+) => ({
+  domainId: "",
+  mailboxId: destination.mailboxId ?? "",
+  mailboxView: "list" as const,
+  organizationId: destination.organizationId ?? teamId,
+  organizationView: destination.organizationView ?? "overview",
+  section: destination.section ?? "",
+  tab: destination.tab,
+});

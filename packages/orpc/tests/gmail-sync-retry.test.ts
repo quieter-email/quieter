@@ -1,14 +1,20 @@
+import type { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
+import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
+import type { getMessageWithDetails, mutateGmailMessage } from "@quieter/gmail";
+import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 /* oxlint-disable eslint/require-await -- Async mock contracts resolve without network or database I/O. */
 import type * as drizzleOrm from "drizzle-orm";
 import { getTableName } from "drizzle-orm";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
+import * as aiMemory from "../src/ai-memory";
 import {
   listGmailPubSubMaintenanceJobs,
   retryPendingAutomationMessages,
 } from "../src/gmail-sync/service";
 import type { getMailAutomationAiBudgetStatus } from "../src/mail-automation/ai-budget";
 import { MAIL_AUTOMATION_AI_PAUSED_MESSAGE } from "../src/mail-automation/ai-budget";
+import type { loadMailAutoLabelHistory } from "../src/mail-automation/history";
 import type { processMailVerificationCode } from "../src/verification-codes";
 
 type Row = Record<string, unknown>;
@@ -17,8 +23,11 @@ type BudgetStatus = Awaited<ReturnType<typeof getMailAutomationAiBudgetStatus>>;
 
 const fixtures = vi.hoisted(() => ({
   budget: vi.fn<() => Promise<BudgetStatus>>(),
+  classify: vi.fn<typeof classifyMailMessage>(),
+  getMessage: vi.fn<typeof getMessageWithDetails>(),
+  history: vi.fn<typeof loadMailAutoLabelHistory>(),
   mailboxes: [] as Row[],
-  markUrgent: vi.fn<() => Promise<void>>(),
+  mutate: vi.fn<typeof mutateGmailMessage>(),
   pendingCodeMessageIds: [] as string[],
   processCode: vi.fn<typeof processMailVerificationCode>(),
   rows: [] as Row[],
@@ -27,6 +36,22 @@ const fixtures = vi.hoisted(() => ({
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The fake executes predicates against in-memory rows rather than producing SQL.
 vi.mock("drizzle-orm", async (importOriginal) => {
   const original = await importOriginal<typeof drizzleOrm>();
+  const sql = Object.assign(
+    (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const [column] = values;
+      const inequality = /^\s*<>\s*'(?<expected>[^']+)'/u.exec(
+        strings[1] ?? ""
+      );
+      if (
+        column instanceof original.Column &&
+        inequality?.groups?.expected !== undefined
+      ) {
+        return (row: Row) => row[column.name] !== inequality.groups?.expected;
+      }
+      return original.sql(strings, ...values);
+    },
+    original.sql
+  );
   return {
     ...original,
     and:
@@ -52,7 +77,7 @@ vi.mock("drizzle-orm", async (importOriginal) => {
     exists: (query: { matches: (outerRow: Row) => boolean }) => (row: Row) =>
       query.matches(row),
     isNotNull: (column: { name: string }) => (row: Row) =>
-      row[column.name] !== null,
+      row[column.name] !== null && row[column.name] !== undefined,
     isNull: (column: { name: string }) => (row: Row) =>
       row[column.name] === null,
     lte: (column: { name: string }, value: Date) => (row: Row) => {
@@ -63,6 +88,7 @@ vi.mock("drizzle-orm", async (importOriginal) => {
       (...predicates: Predicate[]) =>
       (row: Row, outerRow?: Row) =>
         predicates.some((predicate) => predicate(row, outerRow)),
+    sql,
   };
 });
 
@@ -127,12 +153,14 @@ vi.mock("@quieter/database/client", () => {
       },
       update: () => ({
         set: (values: Row) => ({
-          where: async (predicate: Predicate) => {
-            for (const row of fixtures.rows.filter((candidate) =>
+          where: (predicate: Predicate) => {
+            const updated = fixtures.rows.filter((candidate) =>
               predicate(candidate)
-            )) {
+            );
+            for (const row of updated) {
               Object.assign(row, values);
             }
+            return { returning: async () => updated };
           },
         }),
       }),
@@ -141,14 +169,37 @@ vi.mock("@quieter/database/client", () => {
   return client;
 });
 
+vi.mock(import("@quieter/gmail"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  getMessageWithDetails: fixtures.getMessage,
+  mutateGmailMessage: fixtures.mutate,
+}));
+vi.mock(
+  import("@quieter/ai/classify-gmail-message"),
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    classifyMailMessage: fixtures.classify,
+  })
+);
+vi.mock(import("@quieter/env/server"), async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    serverEnv: {
+      ...original.serverEnv,
+      QUIETER_LOCAL_PROVIDER_MODE: "write" as const,
+    },
+  };
+});
+vi.mock(import("../src/mail-automation/history"), () => ({
+  loadMailAutoLabelHistory: fixtures.history,
+}));
+
 vi.mock(import("../src/verification-codes"), () => ({
   listPendingMailboxVerificationCodeMessageIds: async () =>
     fixtures.pendingCodeMessageIds,
   processMailVerificationCode: fixtures.processCode,
   reportPendingMailboxVerificationCodeUsage: vi.fn<() => Promise<void>>(),
-}));
-vi.mock(import("../src/daily-brief"), () => ({
-  markDailyBriefUrgentPending: fixtures.markUrgent,
 }));
 
 const input = {
@@ -157,8 +208,12 @@ const input = {
   automationRuntime: {
     getAutoLabelContext: async () => ({
       availableLabelIds: new Set<string>(),
+      historyLabels: [],
       labels: [],
-      memoryCandidates: [],
+      memoryCandidates: {
+        mailboxId: "mailbox-1",
+        userId: "user-1",
+      },
       model: "fixture-model",
     }),
     getBudgetStatus: fixtures.budget,
@@ -170,10 +225,25 @@ const input = {
 
 describe("Gmail automation retry recovery", () => {
   beforeEach(() => {
+    fixtures.classify.mockReset();
+    fixtures.history.mockReset().mockResolvedValue(null);
+    vi.spyOn(aiMemory, "loadAiAgentContext")
+      .mockReset()
+      .mockResolvedValue({ instructions: null, memory: null });
+    fixtures.mutate.mockReset().mockResolvedValue({
+      id: "deferred-message",
+      isUnread: false,
+      labelIds: ["INBOX", "deterministic"],
+    });
+    fixtures.getMessage.mockReset().mockResolvedValue({
+      from: "Sender <mail@example.com>",
+      id: "deferred-message",
+      labelIds: ["INBOX"],
+      threadId: "thread-1",
+    });
     fixtures.rows.length = 0;
     fixtures.mailboxes.length = 0;
     fixtures.pendingCodeMessageIds.length = 0;
-    fixtures.markUrgent.mockReset().mockResolvedValue();
     fixtures.processCode.mockReset().mockResolvedValue();
     fixtures.budget.mockReset().mockResolvedValue({
       allowed: true,
@@ -194,9 +264,12 @@ describe("Gmail automation retry recovery", () => {
       emailAddress: "mailbox@example.test",
       historyPageToken: null,
       id: input.mailboxId,
+      lastCapturedAt: new Date(),
       lastErrorAt: null,
       lastReconciledAt: new Date(),
       mailboxId: input.mailboxId,
+      pendingHistoryPage: null,
+      phase: "history",
       provider: "gmail",
       recoveryAfter: null,
       recoveryPageToken: null,
@@ -242,7 +315,6 @@ describe("Gmail automation retry recovery", () => {
     expect(fixtures.processCode).toHaveBeenCalledWith(
       expect.objectContaining({ messageId: "previously-received-message" })
     );
-    expect(fixtures.markUrgent).not.toHaveBeenCalled();
   });
 
   test("keeps future deferrals pending while budget remains denied", async () => {
@@ -257,6 +329,74 @@ describe("Gmail automation retry recovery", () => {
     expect(fixtures.rows[0]?.appliedAt).toBeNull();
     fixtures.budget.mockResolvedValue({ allowed: true, reason: "allowed" });
     await retryPendingAutomationMessages(input);
+    expect(fixtures.rows[0]?.appliedAt).toBeInstanceOf(Date);
+  });
+
+  test("classifies with current sender history and the user's preferences", async () => {
+    fixtures.classify.mockResolvedValue(["work"]);
+    vi.mocked(aiMemory.loadAiAgentContext).mockResolvedValue({
+      instructions: null,
+      memory: "Keep launch announcements under Work.",
+    });
+    fixtures.history.mockResolvedValue({
+      sameDomain: [],
+      sameSender: [
+        {
+          currentLabels: [{ id: "work", name: "Work" }],
+          manualCorrections: [
+            {
+              labelId: "work",
+              labelName: "Work",
+              recordedAt: new Date().toISOString(),
+              signal: "added",
+            },
+          ],
+          messageId: "earlier-message",
+          priorAutomaticApplication: null,
+          sender: "mail@example.com",
+        },
+      ],
+    });
+    await retryPendingAutomationMessages({
+      ...input,
+      automationRuntime: {
+        ...input.automationRuntime,
+        getAutoLabelContext: async () => ({
+          ...(await input.automationRuntime.getAutoLabelContext()),
+          availableLabelIds: new Set(["work"]),
+          historyLabels: [
+            { id: "work", name: "Work" },
+            { id: "manual-only", name: "Manual only" },
+          ],
+          labels: [
+            {
+              description: null,
+              id: "work",
+              inclusionCriteria: null,
+              name: "Work",
+            },
+          ],
+        }),
+      },
+    });
+
+    const [classification] = fixtures.classify.mock.calls[0] ?? [];
+    expect(classification?.memoryContext).toContain("launch announcements");
+    expect(
+      classification?.labelHistory?.sameSender.map((entry) => entry.messageId)
+    ).toContain("earlier-message");
+    expect(
+      classification?.labelHistory?.sameSender.flatMap((entry) =>
+        entry.currentLabels.map((label) => label.id)
+      )
+    ).toContain("work");
+    const [historyRequest] = fixtures.history.mock.calls[0] ?? [];
+    expect(historyRequest?.mailboxId).toBe(input.mailboxId);
+    expect(historyRequest?.message.id).toBe("deferred-message");
+    expect(historyRequest?.userId).toBe(input.userId);
+    expect(historyRequest?.labels.map((label) => label.id)).toContain(
+      "manual-only"
+    );
     expect(fixtures.rows[0]?.appliedAt).toBeInstanceOf(Date);
   });
 
@@ -281,6 +421,76 @@ describe("Gmail automation retry recovery", () => {
     expect(fixtures.budget).not.toHaveBeenCalled();
   });
 
+  test.each([false, true])(
+    "applies deterministic matches while AI budget is exhausted, with mixed AI labels: %s",
+    async (mixed) => {
+      const [event] = fixtures.rows;
+      if (event === undefined) {
+        throw new Error("Missing retry fixture.");
+      }
+      event.nextAttemptAt = new Date(Date.now() - 60_000);
+      fixtures.budget.mockResolvedValue({
+        allowed: false,
+        message: MAIL_AUTOMATION_AI_PAUSED_MESSAGE,
+        reason: "credits_exhausted",
+      });
+      const autoLabel: AutoLabelSettings = {
+        domains: [],
+        enabled: true,
+        keywordScope: "anywhere",
+        keywords: [],
+        matchMode: "all",
+        prompt: "",
+        senders: ["mail@example.com"],
+      };
+      const candidate = {
+        autoLabel,
+        description: null,
+        id: "deterministic",
+        inclusionCriteria: null,
+        name: "Sender",
+      };
+      await retryPendingAutomationMessages({
+        ...input,
+        automationRuntime: {
+          ...input.automationRuntime,
+          getAutoLabelContext: async () => ({
+            availableLabelIds: new Set(["deterministic", "ai"]),
+            historyLabels: [],
+            labels: [
+              candidate,
+              ...(mixed
+                ? [
+                    {
+                      ...candidate,
+                      autoLabel: { ...autoLabel, prompt: "Only invoices" },
+                      id: "ai",
+                    },
+                  ]
+                : []),
+            ],
+            memoryCandidates: {
+              mailboxId: "mailbox-1",
+              userId: "user-1",
+            },
+            model: "fixture-model",
+          }),
+        },
+      });
+      expect(
+        fixtures.mutate.mock.calls.flatMap((call) =>
+          typeof call[2] === "string" ? [] : (call[2].addLabelIds ?? [])
+        )
+      ).toContain("deterministic");
+      expect(fixtures.classify).not.toHaveBeenCalled();
+      expect(event.appliedAt instanceof Date).toBe(!mixed);
+      expect(event.labelIds).toStrictEqual(mixed ? null : ["deterministic"]);
+      expect(event.nextAttemptAt instanceof Date).toBe(mixed);
+      expect(event.usageReportedAt instanceof Date).toBe(!mixed);
+      expect(fixtures.budget).toHaveBeenCalledTimes(Number(mixed));
+    }
+  );
+
   test("schedules an enabled mailbox's budget backlog even after a recent reconciliation", async () => {
     const jobs = await listGmailPubSubMaintenanceJobs();
 
@@ -301,4 +511,29 @@ describe("Gmail automation retry recovery", () => {
       expect(jobs).toHaveLength(0);
     }
   );
+
+  test("schedules unfinished capture independently of automation failure backoff", async () => {
+    Object.assign(fixtures.rows[0] ?? {}, { attemptCount: 1 });
+    Object.assign(fixtures.mailboxes[0] ?? {}, {
+      lastErrorAt: new Date(),
+      phase: "bootstrap",
+    });
+
+    const jobs = await listGmailPubSubMaintenanceJobs();
+
+    expect(jobs.some((job) => job.mailboxId === input.mailboxId)).toBeTruthy();
+  });
 });
+
+vi.mock(import("@quieter/billing/ai-reservation"), () => ({
+  createMailboxAiBillingContext: vi
+    .fn<typeof createMailboxAiBillingContext>()
+    .mockResolvedValue({
+      account: null,
+      admittedAt: new Date(),
+      groupId: "fixture",
+      kind: "team",
+      organizationId: "test-team",
+      usageKind: "aiChat",
+    }),
+}));

@@ -51,7 +51,7 @@ export const normalizeComposeBodyHtml = (
 export const buildMimeMessage = async (
   draft: ComposeDraftInput,
   options?: {
-    from?: string;
+    from?: string | { address: string; name: string };
     htmlTransform?: (html: string) => string;
     includeQuieterDraftHeaders?: boolean;
     messageId?: string;
@@ -139,16 +139,19 @@ export const buildMimeMessage = async (
 
 export const buildPlainTextMessage = async ({
   body,
+  messageId,
   subject,
   to,
 }: {
   body: string;
+  messageId?: string;
   subject: string;
   to: string;
 }): Promise<string> => {
   const raw = await new MailComposer({
     disableFileAccess: true,
     disableUrlAccess: true,
+    messageId,
     newline: "\r\n",
     subject,
     text: body,

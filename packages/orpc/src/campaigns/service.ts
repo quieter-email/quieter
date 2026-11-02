@@ -289,12 +289,12 @@ export const previewCampaign = async (
         ? undefined
         : appendEmailUnsubscribe(
             campaign.html,
-            `https://unsubscribe.example/api/v1/unsubscribe/${"x".repeat(43)}`
+            `https://unsubscribe.example/api/unsubscribe/${"x".repeat(43)}`
           ),
     subject: campaign.subject,
     text:
       `${campaign.text}\n\nUnsubscribe from this audience: ` +
-      `https://unsubscribe.example/api/v1/unsubscribe/${"x".repeat(43)}`,
+      `https://unsubscribe.example/api/unsubscribe/${"x".repeat(43)}`,
     to: ["estimate@example.com"],
   });
   return {

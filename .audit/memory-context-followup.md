@@ -1,0 +1,35 @@
+# Shared context and label-history follow-up
+
+The user's additions require the same personal context to serve future features, more direct memory management, and current sender/domain label evidence before automatic classification.
+
+The public context loader now supports user-only reads without a mailbox and typed category priorities with a bounded character budget. Existing task profiles remain defaults. Mailbox reads still recheck access; cached handles never cache authorization. Search returns category counts over the complete authorized search result before category filtering or pagination.
+
+Both mail providers send the classifier separate personal preferences and bounded label history. Each history example distinguishes current labels, confirmed prior automatic applications and recorded user corrections. Same-domain mail is separate from exact sender evidence. Disabled automatic labels remain visible in history through the complete current label dictionary. The previous sender-only string helper is removed.
+
+Independent review found a difference between managed SQL sender parsing and the shared address parser for quoted display names containing angle brackets. The SQL now follows the same quoted-name and folded-header rules. PostgreSQL regressions cover both formats, alongside display-name spoofing, lookalike domains, mailbox isolation, live Gmail labels and unapplied decisions.
+
+The settings browser is inline. It groups plain-text facts by category, shows search-wide category counts and correspondent tags, and keeps edits in the existing dialogs. The supplied reference informed the hierarchy only; no personal facts or branding were copied.
+
+The running local app verified editing a fact, searching and filtering with stable cross-category counts, adding through a category shortcut while automatic learning was paused, permanent deletion, and separate personal/mailbox additions and counts. All examples are synthetic. The updated screenshots in `docs/screenshots/memory-overhaul/` show light, dark and 390-pixel phone layouts. All three were inspected; the phone view has no horizontal overflow. The theme was changed through the actual preferences control. Temporary browser configuration was removed and this task's server/browser stopped afterward.
+
+Two later PR comments are also included in this batch: post-persistence Gmail memory setup must not reject a completed connection, and accepted managed sends must capture writing when projection completes through recovery.
+
+The Gmail regression first reproduced the false callback failure, then passed with credentials and consumed OAuth state intact. Managed-send regressions first reproduced missing recovered evidence and premature completion after a capture failure. Capture now belongs to accepted-send completion, retains the verified actor in the existing JSON snapshot, and uses a retry failure mode. The API still reports provider acceptance, while a transient memory write failure leaves the operation recoverable. Replays converge on one observation; generated writing and shared-mailbox ownership rules remain in effect. Independent review of the final source found no remaining actionable issue.
+
+An initial parallel validation attempt was interrupted under host memory pressure while other worktrees were running. It is not counted as a passing suite. The final suite uses limited workers and runs after this task's browser/server stop. No production writes, deployments, provider mutations or manual Actions dispatches are part of this follow-up.
+
+Final local PostgreSQL validation passed **1,232 tests across 177 files** with `vp test --maxWorkers=2`. Migration folder, drift and safety checks passed; the only schema-source change is an optional field in an existing JSON type, with no SQL change. Import boundaries passed for 761 files and manifests. All three AWS handlers and five Cloudflare Workers bundled after the new capture import.
+
+The final `vp check --fix` passed across 942 files with zero errors and the same three pre-existing React Compiler warnings in unchanged components. Environment isolation passed after browser configuration cleanup. Source and screenshot diffs passed whitespace review.
+
+The final web production build also passed. Two context assertions were then adjusted to check included and omitted fixture facts instead of locking omission-notice wording; their focused suites passed afterward.
+
+Before the final push, `origin/main` advanced to `65fa41ae` with the CI reuse improvements. It was merged without source conflicts. The unrelated environment and dependency edits were preserved separately. Dependencies were installed offline from the committed frozen lockfile so validation matches CI. The complete PostgreSQL suite passed again with **1,254 tests across 178 files**, including main's new release verification tests. The complete check passed across 943 files with the same three warnings, and the web production build passed again against that committed dependency state.
+
+PlanetScale Insights was reviewed again for managed-message access in both `quieter.public` and `quieter_dev.public`; existing scoped lookups use mailbox indexes. The connector still cannot connect to the development logical database. Its default read database does not contain the application relation, so the attempted read-only EXPLAIN did not produce a production plan. No production performance result is claimed for the new history lookup. Real behavior and isolation were checked with the disposable local PostgreSQL database.
+
+The fresh CodeRabbit review found two additional issues and one note outside the diff. The bootstrap scan could keep retrying disconnected mailboxes or former managed owners. Settings edits discarded feedback metadata needed to erase old correction evidence. Chat's selected-thread context read also omitted the existing request background scheduler, delaying generation for memory writes.
+
+All three findings were verified against source and fixed. The access-loss and deletion regressions reproduced their failures before the fixes. Bootstrap coverage uses real authorization and PostgreSQL to verify disconnection, access restoration, credential removal, competing ownership and genuine provider failures. Cancellation requires the original user, processing status and lease. Editing now preserves the feedback metadata, so forgetting a preference erases its old correction evidence and later unrelated feedback cannot restore it. Chat forwards the existing background scheduler; the deferred-read, authorship and continuation suites passed.
+
+The final combined PostgreSQL suite passed **1,266 tests across 178 files** with `vp test --maxWorkers=2`. The full `vp check --fix` passed across 943 files with zero errors and the same three existing warnings. These fixes change no schema, user interface or handler imports, so the already-passing migration, browser, bundle and production-build checks remain applicable. Main had no additional commits at the final fetch. The unrelated local environment and lockfile edits remain outside the review-fix commit.

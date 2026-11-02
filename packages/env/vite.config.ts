@@ -8,6 +8,8 @@ export default defineConfig({
     dts: false,
     entry: [
       "src/client.ts",
+      "src/deployment.ts",
+      "src/desktop.ts",
       "src/local-doctor.ts",
       "src/public.ts",
       "src/server.ts",

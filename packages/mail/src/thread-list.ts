@@ -105,11 +105,15 @@ export const parseSender = (from?: string): ParsedSender => {
   const rawNameSource =
     bracketMatch?.groups?.name ??
     (email ? display.replace(email, "") : display);
-  const rawName = rawNameSource
-    .replaceAll('"', "")
-    .replaceAll(/[<>]/gu, "")
-    .trim();
-  const name = rawName && rawName !== email ? rawName : "";
+  const rawName = rawNameSource.trim();
+  const decodedName = (
+    rawName.startsWith('"') && rawName.endsWith('"')
+      ? rawName
+          .slice(1, -1)
+          .replaceAll(/\\(?<character>["\\])/gu, "$<character>")
+      : rawName.replaceAll(/[<>]/gu, "")
+  ).trim();
+  const name = decodedName && decodedName !== email ? decodedName : "";
 
   return { display, email, name };
 };
@@ -123,6 +127,7 @@ export type ThreadParticipant = {
 };
 
 export type ThreadListEntry = {
+  isImportant: boolean;
   threadId: string;
   anchorMessage: MessageListItem;
   messages: MessageListItem[];
@@ -132,6 +137,7 @@ export type ThreadListEntry = {
   preview: string;
   messageCount: number;
   attachmentCount: number;
+  attachmentNames: string[];
   unreadCount: number;
 };
 
@@ -171,6 +177,11 @@ const createThreadEntry = (message: MessageListItem): ThreadListEntry => {
     anchorMessage: message,
     attachmentCount:
       message.threadAttachmentCount ?? message.attachments?.length ?? 0,
+    attachmentNames:
+      message.threadAttachmentNames ??
+      message.attachments?.map((attachment) => attachment.fileName) ??
+      [],
+    isImportant: message.threadIsImportant ?? message.isImportant ?? false,
     messageCount: Math.max(1, message.threadMessageCount ?? 0),
     messages: [message],
     participants: [participant],
@@ -187,15 +198,34 @@ const updateThreadEntry = (
   message: MessageListItem
 ) => {
   existingThread.messages.push(message);
+  existingThread.isImportant ||=
+    message.threadIsImportant ?? message.isImportant ?? false;
   existingThread.threadLabelIds = getThreadLabelIds(existingThread.messages);
   existingThread.messageCount = Math.max(
     existingThread.messageCount,
     existingThread.messages.length,
     message.threadMessageCount ?? 0
   );
+  const countSummary = existingThread.messages.find(
+    (threadMessage) => threadMessage.threadAttachmentCount !== undefined
+  );
   existingThread.attachmentCount =
-    message.threadAttachmentCount ??
-    existingThread.attachmentCount + (message.attachments?.length ?? 0);
+    countSummary?.threadAttachmentCount ??
+    existingThread.messages.reduce(
+      (count, threadMessage) =>
+        count + (threadMessage.attachments?.length ?? 0),
+      0
+    );
+  const attachmentSummary = existingThread.messages.find(
+    (threadMessage) => threadMessage.threadAttachmentNames !== undefined
+  );
+  existingThread.attachmentNames =
+    attachmentSummary?.threadAttachmentNames ??
+    existingThread.messages.flatMap(
+      (threadMessage) =>
+        threadMessage.attachments?.map((attachment) => attachment.fileName) ??
+        []
+    );
 
   const snippet = message.snippet?.trim();
   if (

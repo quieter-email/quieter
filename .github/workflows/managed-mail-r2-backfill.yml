@@ -21,6 +21,7 @@ concurrency:
 
 jobs:
   backfill:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     name: Backfill managed mail raw objects
     runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: production
@@ -35,6 +36,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Setup repository

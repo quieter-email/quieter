@@ -1,4 +1,5 @@
 import { apiKey } from "@better-auth/api-key";
+import { electron } from "@better-auth/electron";
 import { passkey } from "@better-auth/passkey";
 import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
@@ -26,6 +27,10 @@ import {
 } from "better-auth/plugins/organization/access";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 
+import {
+  DESKTOP_AUTH_CLIENT_ID,
+  DESKTOP_AUTH_PROTOCOL_SCHEME,
+} from "./desktop";
 import { GOOGLE_AUTH_SCOPES } from "./google-scopes";
 import { lazyAuth } from "./lazy-auth";
 import {
@@ -36,6 +41,7 @@ import {
   ensureUserOrganizationState,
 } from "./organization";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "./organization-api-key";
+import { regionalTimeFormat } from "./regional-time";
 import { readTermsAcceptedAtFromRequest } from "./terms-acceptance";
 
 const throwPlanRequiredError = (plan: string, description: string) => {
@@ -111,6 +117,7 @@ const memberRole = organizationAccessControl.newRole({
 const baseURL = serverEnv.BETTER_AUTH_URL ?? "http://localhost:3000";
 const trustedOrigins = [
   baseURL,
+  `${DESKTOP_AUTH_PROTOCOL_SCHEME}:/`,
   ...(serverEnv.BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
     .map((origin) => origin.trim())
     .filter(Boolean) ?? []),
@@ -161,6 +168,10 @@ export const auth = lazyAuth(() =>
               ...createdUser,
               termsAcceptedAt:
                 readTermsAcceptedAtFromRequest(context?.request) ?? null,
+              timeFormat: regionalTimeFormat(
+                context?.request?.headers.get("accept-language")
+              ),
+              weekStartsOn: 1,
             },
           }),
         },
@@ -233,6 +244,7 @@ export const auth = lazyAuth(() =>
       }),
     },
     plugins: [
+      electron({ clientID: DESKTOP_AUTH_CLIENT_ID }),
       passkey(),
       organization({
         ac: organizationAccessControl,
@@ -281,6 +293,11 @@ export const auth = lazyAuth(() =>
     trustedOrigins,
     user: {
       additionalFields: {
+        defaultOrganizationProvisioned: {
+          input: false,
+          required: false,
+          type: "boolean",
+        },
         onboardingCompletedAt: {
           input: false,
           required: false,
@@ -290,6 +307,13 @@ export const auth = lazyAuth(() =>
           input: false,
           required: false,
           type: "date",
+        },
+        timeFormat: { input: false, required: false, type: "string" },
+        weekStartsOn: {
+          defaultValue: 1,
+          input: false,
+          required: false,
+          type: "number",
         },
       },
       changeEmail: {

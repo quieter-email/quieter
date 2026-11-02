@@ -1,5 +1,6 @@
 import type { ComposeDraftAnchor } from "./compose/schema";
 import type { MailCategory } from "./data-plane";
+import type { OtpToken } from "./otp-token";
 
 export type { MailCategory as MailboxCategory } from "./data-plane";
 
@@ -27,12 +28,16 @@ export type MessagePart = {
 };
 
 export type MessageListItem = {
+  otpToken?: OtpToken;
+  isImportant?: boolean;
+  threadIsImportant?: boolean;
   receivedAt?: string;
   id: string;
   threadId: string;
   threadLabelIds?: string[];
   threadMessageCount?: number;
   threadAttachmentCount?: number;
+  threadAttachmentNames?: string[];
   draftId?: string;
   baseRevision?: string;
   draftAnchor?: ComposeDraftAnchor;
@@ -60,6 +65,8 @@ export type MessageListItem = {
     senderAddress: string;
     senderMailboxId: string | null;
   };
+  unsubscribeKey?: string;
+  unsubscribeStatus?: "requested" | "confirming";
   unsubscribeMailto?: string;
   unsubscribeUrl?: string;
   senderAvatarUrls?: { light: string; dark: string };
@@ -200,10 +207,22 @@ export const hasRenderableMessageBody = (message: {
   (message.bodyText?.trim() ?? "").length > 0;
 
 export const isMessageInMailbox = (
-  message: { labelIds?: string[] },
+  message: {
+    labelIds?: string[];
+    isImportant?: boolean;
+    threadIsImportant?: boolean;
+  },
   mailbox: MailCategory
 ): boolean => {
   const { labelIds } = message;
+  if (mailbox === "important") {
+    return (
+      (message.threadIsImportant ?? message.isImportant ?? false) &&
+      labelIds?.some((label) =>
+        ["SPAM", "TRASH", "DRAFT", "SENT"].includes(label)
+      ) !== true
+    );
+  }
   if (mailbox === "archive") {
     return isMessageArchived(labelIds);
   }

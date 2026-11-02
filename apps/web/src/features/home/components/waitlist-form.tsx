@@ -1,8 +1,10 @@
+import { appFetch } from "@quieter/app/runtime";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { InputGroup } from "@quieter/ui/input-group";
 import { toast } from "@quieter/ui/toast";
 import { useState } from "react";
 import type { SubmitEvent } from "react";
@@ -12,7 +14,7 @@ import type { WaitlistIconState } from "./waitlist-submit-icon";
 
 type WaitlistResponse = {
   email: string;
-  status: "created" | "existing";
+  status: "accepted";
 };
 
 const parseWaitlistResponse = (value: unknown): WaitlistResponse => {
@@ -21,7 +23,7 @@ const parseWaitlistResponse = (value: unknown): WaitlistResponse => {
     !("email" in value) ||
     !("status" in value) ||
     typeof value.email !== "string" ||
-    (value.status !== "created" && value.status !== "existing")
+    value.status !== "accepted"
   ) {
     throw new Error("Invalid waitlist response.");
   }
@@ -30,7 +32,7 @@ const parseWaitlistResponse = (value: unknown): WaitlistResponse => {
 };
 
 const addToWaitlist = async (formData: FormData): Promise<WaitlistResponse> => {
-  const response = await fetch("/api/waitlist", {
+  const response = await appFetch("/api/waitlist", {
     body: formData,
     headers: {
       accept: "application/json",
@@ -67,10 +69,7 @@ export const WaitlistForm = ({
     void toast.promise(request, {
       error: "Something went wrong. Try again.",
       loading: "Adding you to the waitlist…",
-      success: (response) =>
-        response.status === "existing"
-          ? "You're already on the waitlist."
-          : `Added ${response.email} to the waitlist.`,
+      success: (response) => `Added ${response.email} to the waitlist.`,
     });
 
     const updateIconState = async () => {
@@ -100,13 +99,13 @@ export const WaitlistForm = ({
     >
       <Field>
         <FieldLabel htmlFor={fieldId}>Join the waitlist</FieldLabel>
-        <div className="relative">
+        <InputGroup size="lg" surface="panel">
           <Input
             autoCapitalize="none"
             autoComplete="email"
             autoCorrect="off"
-            // oxlint-disable-next-line shadcn/no-restyle -- Email input leaves room for its trailing status icon.
-            className="bg-bg pr-11"
+            chrome="attached"
+            size="lg"
             disabled={iconState === "loading"}
             id={fieldId}
             inputMode="email"
@@ -118,16 +117,15 @@ export const WaitlistForm = ({
           <IconButtonTooltip label="Join waitlist">
             <Button
               aria-label="Join waitlist"
-              className="absolute top-1/2 right-1 -translate-y-1/2"
+              className="mr-0.5"
               disabled={iconState === "loading"}
-              size="icon-sm"
+              size="icon"
               type="submit"
-              variant="ghost"
             >
               <WaitlistSubmitIcon state={iconState} />
             </Button>
           </IconButtonTooltip>
-        </div>
+        </InputGroup>
       </Field>
     </form>
   );

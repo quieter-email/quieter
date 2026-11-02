@@ -1,9 +1,29 @@
-import { composeDraftAnchorSchema } from "@quieter/mail/compose/schema";
+import {
+  calendarAccountSchema,
+  calendarCreateInputSchema,
+  calendarDateSchema,
+  calendarDeleteInputSchema,
+  calendarEventSchema,
+  calendarRespondInputSchema,
+  calendarSummarySchema,
+  calendarTimeZoneSchema,
+  calendarUpdateInputSchema,
+  calendarViewSchema,
+  calendarWorkspaceSchema,
+} from "@quieter/calendar";
+import type {
+  CalendarAccount,
+  CalendarEvent,
+  CalendarEventTime,
+  CalendarSummary,
+} from "@quieter/calendar";
+import {
+  composeDraftAnchorSchema,
+  composeSenderNameSchema,
+} from "@quieter/mail/compose/schema";
 import { tool } from "ai";
-import type { ToolSet } from "ai";
+import type { ToolSet, UIMessage } from "ai";
 import { z } from "zod";
-
-export const assistantPolicySchema = z.enum(["ask", "automatic"]);
 
 export const assistantCapabilitySchema = z.enum([
   "navigate",
@@ -12,6 +32,7 @@ export const assistantCapabilitySchema = z.enum([
   "save_draft",
   "send_mail",
   "modify_mail",
+  "modify_calendar",
 ]);
 
 export const workspaceViewSchema = z.enum([
@@ -25,9 +46,11 @@ export const workspaceViewSchema = z.enum([
   "snippets",
   "labels",
   "compose",
+  "calendar",
 ]);
 export const navigableWorkspaceViewSchema = workspaceViewSchema.exclude([
   "compose",
+  "calendar",
 ]);
 
 const optionalText = z.string().trim().max(10_000).optional();
@@ -61,20 +84,21 @@ const foregroundComposeInlineImageSchema = foregroundComposeAssetSchema
 
 export const foregroundSnapshotSchema = z
   .object({
-    capabilities: z.array(assistantCapabilitySchema).max(6),
+    calendar: calendarWorkspaceSchema.optional(),
+    capabilities: z.array(assistantCapabilitySchema).max(7),
     draftId: optionalIdentifier,
     draftRevision: z.number().int().nonnegative().optional(),
     exchangeId: z.uuid(),
     expiresAt: z.number().int().positive(),
     generation: z.number().int().positive(),
-    policy: assistantPolicySchema,
     query: z.string().trim().max(500).optional(),
     selectedMessageId: optionalIdentifier,
     selectedThreadId: optionalIdentifier,
     tabId: z.string().trim().min(1).max(128),
     view: workspaceViewSchema.optional(),
+    workspace: z.enum(["mail", "calendar"]).optional(),
   })
-  .strict();
+  .strip();
 
 export type ForegroundSnapshot = z.infer<typeof foregroundSnapshotSchema>;
 
@@ -103,6 +127,7 @@ export const foregroundComposeDraftSchema = z
       .optional(),
     sendOperationId: z.uuid().optional(),
     sendUncertain: z.boolean().optional(),
+    senderName: composeSenderNameSchema.optional(),
     subject: optionalText,
     to: optionalText,
   })
@@ -110,6 +135,7 @@ export const foregroundComposeDraftSchema = z
 
 const workspaceResultSchema = z
   .object({
+    calendar: calendarWorkspaceSchema.optional(),
     draft: foregroundComposeDraftSchema.optional(),
     draftId: optionalIdentifier,
     draftRevision: z.number().int().nonnegative().optional(),
@@ -119,6 +145,7 @@ const workspaceResultSchema = z
     selectedMessageId: optionalIdentifier,
     selectedThreadId: optionalIdentifier,
     view: workspaceViewSchema.optional(),
+    workspace: z.enum(["mail", "calendar"]).optional(),
   })
   .strict();
 
@@ -132,16 +159,26 @@ export const navigateInputSchema = z
     threadId: optionalIdentifier,
     view: navigableWorkspaceViewSchema.optional(),
   })
+  .strict();
+export const navigateOutputSchema = workspaceResultSchema;
+
+export const navigateCalendarInputSchema = z
+  .object({
+    calendarId: optionalIdentifier,
+    connectionId: optionalIdentifier,
+    date: calendarDateSchema.optional(),
+    eventId: optionalIdentifier,
+    timeZone: calendarTimeZoneSchema.optional(),
+    view: calendarViewSchema.optional(),
+  })
   .strict()
   .refine(
     (input) =>
-      input.messageId !== undefined ||
-      input.query !== undefined ||
-      input.threadId !== undefined ||
-      input.view !== undefined,
-    "Provide a workspace destination."
+      input.eventId === undefined ||
+      (input.connectionId !== undefined && input.calendarId !== undefined),
+    "An event destination needs its account and calendar."
   );
-export const navigateOutputSchema = workspaceResultSchema;
+export const navigateCalendarOutputSchema = workspaceResultSchema;
 
 const composeFieldsSchema = foregroundComposeDraftSchema.pick({
   bcc: true,
@@ -197,6 +234,207 @@ export const sendMailOutputSchema = z
   })
   .strict();
 
+export const calendarToolErrorSchema = z.object({
+  error: z.string(),
+  status: z.literal("error"),
+});
+export const calendarListToolResultSchema = z.object({
+  accounts: z.array(calendarAccountSchema),
+  calendars: z.array(calendarSummarySchema),
+  fetchedAt: z.iso.datetime(),
+  status: z.literal("success"),
+});
+const calendarListReviewSchema = calendarListToolResultSchema.extend({
+  accounts: z.array(
+    calendarAccountSchema.options[0].pick({
+      email: true,
+      id: true,
+      name: true,
+    })
+  ),
+});
+export const calendarEventsToolResultSchema = z.object({
+  events: z.array(calendarEventSchema),
+  fetchedAt: z.iso.datetime(),
+  status: z.literal("success"),
+});
+export const calendarEventToolResultSchema = z.object({
+  event: calendarEventSchema,
+  fetchedAt: z.iso.datetime(),
+  status: z.literal("success"),
+});
+
+export const calendarWriteInputSchemas = {
+  create_calendar_event: calendarCreateInputSchema.omit({ operationId: true }),
+  delete_calendar_event: calendarDeleteInputSchema,
+  respond_to_calendar_event: calendarRespondInputSchema,
+  update_calendar_event: calendarUpdateInputSchema,
+} as const;
+export type CalendarWriteToolName = keyof typeof calendarWriteInputSchemas;
+export const calendarWriteToolNames = Object.keys(calendarWriteInputSchemas);
+export const approvalRequiredToolNames = [
+  "linear_write",
+  "modify_mail",
+  "save_compose_draft",
+  "send_mail",
+  ...calendarWriteToolNames,
+];
+
+const linearConnectionReviewSchema = z.object({
+  account: z.string().nullable(),
+  connectionId: z.string().min(1),
+  workspace: z.string().nullable(),
+});
+export type LinearWriteReview = z.infer<typeof linearConnectionReviewSchema>;
+
+export const resolveLinearWriteReview = (input: {
+  input: unknown;
+  transcript: readonly UIMessage[];
+}): LinearWriteReview | undefined => {
+  const proposed = z
+    .object({ connectionId: z.string(), toolName: z.string() })
+    .safeParse(input.input);
+  if (!proposed.success) {
+    return undefined;
+  }
+  for (const message of input.transcript.toReversed()) {
+    for (const part of message.parts.toReversed()) {
+      if (
+        part.type !== "tool-linear_list_tools" ||
+        part.state !== "output-available"
+      ) {
+        continue;
+      }
+      const result = z
+        .object({
+          connection: linearConnectionReviewSchema,
+          status: z.literal("success"),
+          tools: z.array(z.object({ name: z.string() })),
+        })
+        .safeParse(part.output);
+      if (
+        result.success &&
+        result.data.connection.connectionId === proposed.data.connectionId &&
+        result.data.tools.some(
+          (descriptor) => descriptor.name === proposed.data.toolName
+        )
+      ) {
+        return result.data.connection;
+      }
+    }
+  }
+  return undefined;
+};
+
+export const isCalendarWriteToolName = (
+  name: string
+): name is CalendarWriteToolName =>
+  Object.hasOwn(calendarWriteInputSchemas, name);
+
+export type CalendarWriteReview = {
+  account: Pick<CalendarAccount, "email" | "id" | "name">;
+  calendar: CalendarSummary;
+  previousEvent?: CalendarEvent;
+  scope: "event" | "occurrence" | "series";
+  time: CalendarEventTime;
+  title: string;
+};
+
+export const resolveCalendarWriteReview = ({
+  input,
+  toolName,
+  transcript,
+}: {
+  input: unknown;
+  toolName: CalendarWriteToolName;
+  transcript: readonly { parts: readonly unknown[] }[];
+}): CalendarWriteReview | undefined => {
+  const command = calendarWriteInputSchemas[toolName].safeParse(input);
+  if (!command.success) {
+    return undefined;
+  }
+  const parts = transcript.flatMap((message) => message.parts);
+  let account: CalendarWriteReview["account"] | undefined;
+  let calendar: CalendarSummary | undefined;
+  let previousEvent: CalendarEvent | undefined;
+  for (const part of parts) {
+    if (
+      typeof part !== "object" ||
+      part === null ||
+      Reflect.get(part, "state") !== "output-available"
+    ) {
+      continue;
+    }
+    if (Reflect.get(part, "type") === "tool-list_calendars") {
+      const listed = calendarListReviewSchema.safeParse(
+        Reflect.get(part, "output")
+      );
+      if (listed.success) {
+        account =
+          listed.data.accounts.find(
+            (candidate) => candidate.id === command.data.connectionId
+          ) ?? account;
+        calendar =
+          listed.data.calendars.find(
+            (candidate) =>
+              candidate.connectionId === command.data.connectionId &&
+              candidate.calendarId === command.data.calendarId
+          ) ?? calendar;
+      }
+    }
+    if (
+      Reflect.get(part, "type") === "tool-get_calendar_event" &&
+      "eventId" in command.data
+    ) {
+      const read = calendarEventToolResultSchema.safeParse(
+        Reflect.get(part, "output")
+      );
+      if (
+        read.success &&
+        read.data.event.connectionId === command.data.connectionId &&
+        read.data.event.calendarId === command.data.calendarId &&
+        read.data.event.eventId === command.data.eventId &&
+        read.data.event.version === command.data.version
+      ) {
+        previousEvent = read.data.event;
+      }
+    }
+  }
+  if (account === undefined || calendar === undefined) {
+    return undefined;
+  }
+  if ("event" in command.data) {
+    return {
+      account,
+      calendar,
+      scope: command.data.event.recurrence.length > 0 ? "series" : "event",
+      time: command.data.event.time,
+      title: command.data.event.title,
+    };
+  }
+  if (previousEvent === undefined) {
+    return undefined;
+  }
+  const changes =
+    toolName === "update_calendar_event"
+      ? calendarUpdateInputSchema.parse(input).changes
+      : undefined;
+  let scope: CalendarWriteReview["scope"] = "event";
+  if (previousEvent.recurringEventId !== undefined) {
+    scope = "occurrence";
+  } else if (previousEvent.recurrence.length > 0) {
+    scope = "series";
+  }
+  return {
+    account,
+    calendar,
+    previousEvent,
+    scope,
+    time: changes?.time ?? previousEvent.time,
+    title: changes?.title ?? previousEvent.title,
+  };
+};
+
 export type ForegroundServerToolsContext = {
   saveComposeDraft: (
     input: {
@@ -233,6 +471,12 @@ export const foregroundToolRegistry = {
     location: "client",
     risk: "workspace" as const,
   },
+  navigate_calendar: {
+    capability: "navigate",
+    label: "Navigate calendar",
+    location: "client",
+    risk: "workspace" as const,
+  },
   open_compose: {
     capability: "compose",
     label: "Open draft",
@@ -256,6 +500,7 @@ export const foregroundToolRegistry = {
 export const foregroundClientToolNames = [
   "get_workspace",
   "navigate",
+  "navigate_calendar",
   "open_compose",
   "edit_compose",
 ] as const;
@@ -277,15 +522,21 @@ export const createForegroundClientTools = (): ToolSet => ({
   }),
   get_workspace: tool({
     description:
-      "Read the current visible mailbox workspace, including its route, selection, and open draft revision.",
+      "Read the current visible workspace. Calendar includes its displayed date, view, time zone, visible calendars and selected event. Mail includes its route, selection and open draft revision.",
     inputSchema: getWorkspaceInputSchema,
     outputSchema: getWorkspaceOutputSchema,
   }),
   navigate: tool({
     description:
-      "Navigate the visible mailbox workspace using a route destination, not browser clicks. This does not change mail.",
+      "Open Mail and optionally navigate to a mailbox route destination. Pass an empty object to restore the retained Mail selection. This preserves Calendar's independent state and does not change mail.",
     inputSchema: navigateInputSchema,
     outputSchema: navigateOutputSchema,
+  }),
+  navigate_calendar: tool({
+    description:
+      "Open Calendar and optionally navigate its displayed date, view, time zone or a known event. Pass an empty object to restore the retained Calendar selection. Use account, calendar and event IDs from calendar tools. This preserves the retained Mail selection and never changes events.",
+    inputSchema: navigateCalendarInputSchema,
+    outputSchema: navigateCalendarOutputSchema,
   }),
   open_compose: tool({
     description:
@@ -300,7 +551,7 @@ export const createForegroundServerTools = (
 ): ToolSet => ({
   save_compose_draft: tool({
     description:
-      "Save this exact reviewed compose draft. The user must approve the payload before it is persisted. If it has attachments or inline images, ask the user to save it from the composer instead.",
+      "Save this exact visible compose draft. If it has attachments or inline images, ask the user to save it from the composer instead.",
     execute: async ({ draft }, { abortSignal, toolCallId }) =>
       await context.saveComposeDraft({ draft, toolCallId }, abortSignal),
     inputSchema: saveComposeDraftInputSchema,

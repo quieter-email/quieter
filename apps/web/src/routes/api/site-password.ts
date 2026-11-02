@@ -1,3 +1,4 @@
+import { getSafeAuthReturnTo } from "@quieter/app/lib/return-to";
 import { createFileRoute } from "@tanstack/react-router";
 
 import {
@@ -52,18 +53,7 @@ const getSafeReturnTo = (
       : null;
   }
 
-  if (
-    returnTo === null ||
-    returnTo === "" ||
-    !returnTo.startsWith("/") ||
-    returnTo.startsWith("//")
-  ) {
-    return "/";
-  }
-
-  const url = new URL(returnTo, request.url);
-
-  return `${url.pathname}${url.search}${url.hash}`;
+  return getSafeAuthReturnTo(returnTo) ?? "/";
 };
 
 const redirectWithPasswordError = (returnTo: string, requestUrl: string) => {

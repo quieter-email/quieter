@@ -22,6 +22,11 @@ const sessionAuth = lazyAuth(() =>
     secret: serverEnv.BETTER_AUTH_SECRET,
     user: {
       additionalFields: {
+        defaultOrganizationProvisioned: {
+          input: false,
+          required: false,
+          type: "boolean",
+        },
         onboardingCompletedAt: {
           input: false,
           required: false,

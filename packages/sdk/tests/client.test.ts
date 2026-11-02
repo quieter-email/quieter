@@ -1,3 +1,7 @@
+import { parseOtpTokenHeaders } from "@quieter/mail/otp-token";
+import { parseRawMailMessage } from "@quieter/mail/raw-message";
+import { sendMessageInputSchema } from "@quieter/mail/send";
+import { buildSendMimeMessage } from "@quieter/mail/send-mime";
 /* oxlint-disable require-await -- Fetch fixtures retain the async contract without external I/O. */
 import { jsx } from "react/jsx-runtime";
 import { describe, expect, test } from "vite-plus/test";
@@ -82,7 +86,7 @@ describe(Quieter, () => {
     });
   });
 
-  test("sends provider-style payloads to /api/v1/send", async () => {
+  test("sends provider-style payloads to /api/send", async () => {
     const calls: Request[] = [];
     const client = new Quieter({
       apiKey: "quieter_test",
@@ -104,8 +108,9 @@ describe(Quieter, () => {
     });
 
     expect(result).toStrictEqual({ messageId: "message-1", sent: true });
-    expect(calls[0]?.url).toBe("https://example.com/api/v1/send");
+    expect(calls[0]?.url).toBe("https://example.com/api/send");
     expect(calls[0]?.headers.get("authorization")).toBe("Bearer quieter_test");
+    expect(calls[0]?.headers.get("Quieter-Version")).toBe("2026-10");
     await expect(calls[0]?.json()).resolves.toMatchObject({
       from: "Demo <demo@example.com>",
       html: "<strong>It works</strong>",
@@ -183,9 +188,7 @@ describe(Quieter, () => {
 
     const delivery = await client.getMessage("message/1");
 
-    expect(requestedUrl).toBe(
-      "https://example.com/api/v1/messages/message%2F1"
-    );
+    expect(requestedUrl).toBe("https://example.com/api/messages/message%2F1");
     expect(delivery.recipients[0]?.status).toBe("delivered");
   });
 
@@ -213,9 +216,45 @@ describe(Quieter, () => {
 
     const suppressions = await client.listSuppressions({ limit: 25 });
 
-    expect(requestedUrl).toBe(
-      "https://example.com/api/v1/suppressions?limit=25"
-    );
+    expect(requestedUrl).toBe("https://example.com/api/suppressions?limit=25");
     expect(suppressions[0]?.reason).toBe("complaint");
   });
+});
+
+describe("OTP sending and extraction", () => {
+  test.each([false, true])(
+    "SDK sends OTP through real request validation and MIME, React=%s",
+    async (react) => {
+      const otpToken = { code: ' 12"34\\56 ', origin: "https://example.com" };
+      const options = {
+        apiKey: "quieter_test",
+        fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          const payload = sendMessageInputSchema.parse(await request.json());
+          const mime = await buildSendMimeMessage(payload);
+          const parsed = await parseRawMailMessage(mime.raw);
+          expect(parseOtpTokenHeaders(parsed.headers)).toStrictEqual(otpToken);
+          expect(react ? parsed.bodyHtml : parsed.bodyText).toContain(
+            "Sign in"
+          );
+          return Response.json({ messageId: "one", sent: true });
+        },
+      };
+      const input = {
+        from: "a@example.com",
+        otpToken,
+        subject: "Code",
+        text: "Sign in",
+        to: "b@example.com",
+      };
+      if (react) {
+        await new ReactQuieter(options).send({
+          ...input,
+          react: jsx("p", { children: "Sign in" }),
+        });
+      } else {
+        await new Quieter(options).send(input);
+      }
+    }
+  );
 });

@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vite-plus/test";
 
 import {
   extractListUnsubscribeTargets,
+  getMessageWithDetails,
   getGmailMessageCount,
   getMailboxSyncDelta,
   getGmailMessageThreadAssociations,
@@ -9,6 +10,7 @@ import {
   mutateGmailThread,
   listGmailMessageIds,
   listGmailAddedMessageHistoryPage,
+  listDraftsWithDetails,
   listMessagesWithDetails,
   stopGmailWatch,
   watchGmailMailbox,
@@ -61,6 +63,98 @@ const setFetch = (
 };
 
 describe(getMailboxSyncDelta, () => {
+  test("retains complete attachment names when a changed message is not the one with attachments", async () => {
+    const originalFetch = globalThis.fetch;
+    const changedMessage = {
+      id: "latest",
+      labelIds: ["INBOX"],
+      threadId: "conversation",
+    };
+    setFetch(async (input, init) => {
+      const url = getRequestUrl(input);
+      const body = getRequestBody(init?.body);
+      if (url.includes("/history?")) {
+        return await resolveJson({
+          history: [{ messagesAdded: [{ message: changedMessage }] }],
+          historyId: "20",
+        });
+      }
+      if (body.includes("/messages/latest")) {
+        return await resolveResponse(
+          new Response(
+            createIdentifiedBatchResponse("metadata", [
+              { body: changedMessage, contentId: "message-0" },
+            ]),
+            {
+              headers: { "content-type": "multipart/mixed; boundary=metadata" },
+            }
+          )
+        );
+      }
+      if (body.includes("/threads/conversation")) {
+        return await resolveResponse(
+          new Response(
+            createIdentifiedBatchResponse("thread_metadata", [
+              {
+                body: {
+                  id: "conversation",
+                  messages: [
+                    changedMessage,
+                    {
+                      id: "earlier",
+                      labelIds: ["SENT"],
+                      payload: {
+                        parts: [
+                          {
+                            body: { attachmentId: "invoice", size: 1200 },
+                            filename: "invoice.pdf",
+                            mimeType: "application/pdf",
+                          },
+                        ],
+                      },
+                      threadId: "conversation",
+                    },
+                    {
+                      id: "draft",
+                      labelIds: ["DRAFT"],
+                      payload: {
+                        body: { attachmentId: "unfinished", size: 600 },
+                        filename: "unfinished.txt",
+                        mimeType: "text/plain",
+                      },
+                      threadId: "conversation",
+                    },
+                  ],
+                },
+                contentId: "thread-0",
+              },
+            ]),
+            {
+              headers: {
+                "content-type": "multipart/mixed; boundary=thread_metadata",
+              },
+            }
+          )
+        );
+      }
+      throw new Error(`Unexpected Gmail request: ${url}`);
+    });
+    try {
+      const delta = await getMailboxSyncDelta("access-token", {
+        mailbox: "inbox",
+        startHistoryId: "10",
+      });
+      const [updated] = delta.updatedMessages;
+      expect(updated?.threadAttachmentNames).toContain("invoice.pdf");
+      expect(updated?.threadAttachmentNames).not.toContain("unfinished.txt");
+      expect(updated?.threadAttachmentCount).toBe(1);
+      expect(updated?.threadMessageCount).toBe(2);
+      expect(updated?.attachments).toBeUndefined();
+    } finally {
+      setFetch(originalFetch);
+    }
+  });
+
   test("preserves affected conversations when replies fall outside the active folder or messages are deleted", async () => {
     const originalFetch = globalThis.fetch;
     setFetch(async (input) => {
@@ -370,7 +464,7 @@ describe(listGmailMessageIds, () => {
 });
 
 describe(listMessagesWithDetails, () => {
-  test("exposes the union of labels from every message in a thread", async () => {
+  test("exposes labels and attachment names from every message in a thread", async () => {
     const originalFetch = globalThis.fetch;
 
     setFetch(async (input, init) => {
@@ -408,6 +502,12 @@ describe(listMessagesWithDetails, () => {
                       labelIds: ["INBOX", "Label_Latest"],
                       payload: {
                         headers: [{ name: "Subject", value: "Labels" }],
+                        parts: [
+                          {
+                            body: { attachmentId: "html-body", size: 600 },
+                            mimeType: "text/html",
+                          },
+                        ],
                       },
                       threadId: "thread-1",
                     },
@@ -417,6 +517,13 @@ describe(listMessagesWithDetails, () => {
                       labelIds: ["INBOX", "Label_Previous"],
                       payload: {
                         headers: [{ name: "Subject", value: "Labels" }],
+                        parts: [
+                          {
+                            body: { attachmentId: "proposal", size: 1200 },
+                            filename: "proposal.pdf",
+                            mimeType: "application/pdf",
+                          },
+                        ],
                       },
                       threadId: "thread-1",
                     },
@@ -446,6 +553,12 @@ describe(listMessagesWithDetails, () => {
         "Label_Latest",
         "Label_Previous",
       ]);
+      expect(result.messages[0]?.threadAttachmentNames).toContain(
+        "proposal.pdf"
+      );
+      expect(result.messages[0]?.threadAttachmentCount).toBe(1);
+      expect(result.messages[0]?.attachments).toBeUndefined();
+      expect(result.messages[0]?.bodyHtml).toBeUndefined();
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -659,6 +772,85 @@ describe(listMessagesWithDetails, () => {
   });
 });
 
+describe(listDraftsWithDetails, () => {
+  test("includes draft and earlier attachment names while keeping message attachments separate", async () => {
+    const originalFetch = globalThis.fetch;
+    const draftMessage = {
+      id: "draft-message",
+      labelIds: ["DRAFT"],
+      payload: {
+        body: { attachmentId: "draft-file", size: 1200 },
+        filename: "draft.pdf",
+        mimeType: "application/pdf",
+      },
+      threadId: "conversation",
+    };
+    setFetch(async (input, init) => {
+      const url = getRequestUrl(input);
+      const body = getRequestBody(init?.body);
+      if (url.includes("/drafts/draft-id")) {
+        return await resolveJson({ id: "draft-id", message: draftMessage });
+      }
+      if (url.includes("/drafts?")) {
+        return await resolveJson({
+          drafts: [
+            {
+              id: "draft-id",
+              message: { id: "draft-message", threadId: "conversation" },
+            },
+          ],
+        });
+      }
+      if (body.includes("/threads/conversation")) {
+        return await resolveResponse(
+          new Response(
+            createIdentifiedBatchResponse("thread_metadata", [
+              {
+                body: {
+                  id: "conversation",
+                  messages: [
+                    draftMessage,
+                    {
+                      id: "earlier",
+                      labelIds: ["INBOX"],
+                      payload: {
+                        body: { attachmentId: "earlier-file", size: 600 },
+                        filename: "notes.txt",
+                        mimeType: "text/plain",
+                      },
+                      threadId: "conversation",
+                    },
+                  ],
+                },
+                contentId: "thread-0",
+              },
+            ]),
+            {
+              headers: {
+                "content-type": "multipart/mixed; boundary=thread_metadata",
+              },
+            }
+          )
+        );
+      }
+      throw new Error(`Unexpected Gmail request: ${url}`);
+    });
+    try {
+      const result = await listDraftsWithDetails("access-token");
+      const [draft] = result.messages;
+      expect(draft?.threadAttachmentNames).toContain("draft.pdf");
+      expect(draft?.threadAttachmentNames).toContain("notes.txt");
+      expect(draft?.threadAttachmentCount).toBe(2);
+      expect(
+        draft?.attachments?.map((attachment) => attachment.fileName)
+      ).toContain("draft.pdf");
+      expect(draft?.attachments).toHaveLength(1);
+    } finally {
+      setFetch(originalFetch);
+    }
+  });
+});
+
 describe("Gmail watch and history", () => {
   test("starts and stops a mailbox watch", async () => {
     const originalFetch = globalThis.fetch;
@@ -791,4 +983,48 @@ describe("Gmail watch and history", () => {
       globalThis.fetch = originalFetch;
     }
   });
+});
+
+describe("OTP sending and extraction", () => {
+  test.each(["valid", "duplicate", "nested"] as const)(
+    "loads top-level OTP metadata only, %s",
+    async (kind) => {
+      const header = {
+        name: "OTP-Token",
+        value: '"123456"; origin="https://example.com"',
+      };
+      const headersByKind = {
+        duplicate: [header, { ...header, name: "otp-token" }],
+        nested: [],
+        valid: [header],
+      };
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async () => {
+          await Promise.resolve();
+          return Response.json({
+            id: "otp-message",
+            payload: {
+              headers: headersByKind[kind],
+              mimeType: "text/plain",
+              parts: [{ headers: [header], mimeType: "text/plain" }],
+            },
+            threadId: "otp-thread",
+          });
+        });
+      try {
+        const message = await getMessageWithDetails(
+          "test-token",
+          "otp-message"
+        );
+        expect(message.otpToken).toStrictEqual(
+          kind === "valid"
+            ? { code: "123456", origin: "https://example.com" }
+            : undefined
+        );
+      } finally {
+        fetchMock.mockRestore();
+      }
+    }
+  );
 });

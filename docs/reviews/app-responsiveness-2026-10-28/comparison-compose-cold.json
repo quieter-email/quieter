@@ -1,0 +1,329 @@
+{
+  "baseline": [
+    {
+      "activation": {
+        "editorMs": 379.0999999642372,
+        "paintMs": 958.0999999642372,
+        "shellMs": 40.59999996423721,
+        "start": 6437.5
+      },
+      "bodyLength": 0,
+      "fields": [0, 0],
+      "longTasks": [
+        {
+          "duration": 577,
+          "start": 6817.5
+        }
+      ],
+      "query": [
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 3
+      ],
+      "quotes": false,
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 9.400000035762789,
+          "name": "compose-workspace-xae3fOCb.js",
+          "start": 6426.799999952316
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "editorMs": 364.800000011921,
+        "paintMs": 926.5,
+        "shellMs": 40.40000003576279,
+        "start": 6601.299999952316
+      },
+      "bodyLength": 0,
+      "fields": [0, 0],
+      "longTasks": [
+        {
+          "duration": 560,
+          "start": 6966.599999964237
+        }
+      ],
+      "query": [
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 3
+      ],
+      "quotes": false,
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 8.400000035762787,
+          "name": "compose-workspace-xae3fOCb.js",
+          "start": 6595.799999952316
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "editorMs": 388.199999988079,
+        "paintMs": 923.5999999642372,
+        "shellMs": 40.80000001192093,
+        "start": 6468.900000035763
+      },
+      "bodyLength": 0,
+      "fields": [0, 0],
+      "longTasks": [
+        {
+          "duration": 53,
+          "start": 6804
+        },
+        {
+          "duration": 533,
+          "start": 6857.900000035763
+        }
+      ],
+      "query": [
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 3
+      ],
+      "quotes": false,
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 11.199999988079073,
+          "name": "compose-workspace-xae3fOCb.js",
+          "start": 6463.700000047684
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "editorMs": 368.699999988079,
+        "paintMs": 944.0999999642372,
+        "shellMs": 45.59999996423721,
+        "start": 6650.800000011921
+      },
+      "bodyLength": 0,
+      "fields": [0, 0],
+      "longTasks": [
+        {
+          "duration": 574,
+          "start": 7020
+        }
+      ],
+      "query": [
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 3
+      ],
+      "quotes": false,
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 7.600000023841858,
+          "name": "compose-workspace-xae3fOCb.js",
+          "start": 6644.5
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "editorMs": 372.699999988079,
+        "paintMs": 948.6999999880792,
+        "shellMs": 42.80000001192093,
+        "start": 6587.800000011921
+      },
+      "bodyLength": 0,
+      "fields": [0, 0],
+      "longTasks": [
+        {
+          "duration": 574,
+          "start": 6961
+        }
+      ],
+      "query": [
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 3
+      ],
+      "quotes": false,
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 7.699999988079071,
+          "name": "compose-workspace-xae3fOCb.js",
+          "start": 6578.200000047684
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    }
+  ],
+  "head": [
+    {
+      "activation": {
+        "editorMs": 132,
+        "paintMs": 135,
+        "shellMs": 52.80000001192093,
+        "start": 3943.699999988079
+      },
+      "bodyLength": 0,
+      "fields": [0, 0],
+      "longTasks": [
+        {
+          "duration": 54,
+          "start": 3942.800000011921
+        },
+        {
+          "duration": 51,
+          "start": 4026.600000023842
+        }
+      ],
+      "query": [
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 3
+      ],
+      "quotes": false,
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 8.800000011920929,
+          "name": "compose-workspace-BVdOL814.js",
+          "start": 3934.800000011921
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "editorMs": 98,
+        "paintMs": 99.60000002384186,
+        "shellMs": 42.90000003576279,
+        "start": 3972.5
+      },
+      "bodyLength": 0,
+      "fields": [0, 0],
+      "longTasks": [],
+      "query": [
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 3
+      ],
+      "quotes": false,
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 14.199999988079073,
+          "name": "compose-workspace-BVdOL814.js",
+          "start": 3960.600000023842
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "editorMs": 117.10000002384186,
+        "paintMs": 119.20000004768372,
+        "shellMs": 52.40000003576279,
+        "start": 4058.699999988079
+      },
+      "bodyLength": 0,
+      "fields": [0, 0],
+      "longTasks": [
+        {
+          "duration": 53,
+          "start": 4058.300000011921
+        }
+      ],
+      "query": [
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 3
+      ],
+      "quotes": false,
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 9.099999964237211,
+          "name": "compose-workspace-BVdOL814.js",
+          "start": 4051.600000023842
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "editorMs": 96.5999999642372,
+        "paintMs": 97.89999997615814,
+        "shellMs": 40.59999996423721,
+        "start": 3804.400000035763
+      },
+      "bodyLength": 0,
+      "fields": [0, 0],
+      "longTasks": [],
+      "query": [
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 3
+      ],
+      "quotes": false,
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 6.600000023841858,
+          "name": "compose-workspace-BVdOL814.js",
+          "start": 3798.800000011921
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    },
+    {
+      "activation": {
+        "editorMs": 95.80000001192091,
+        "paintMs": 97,
+        "shellMs": 42.20000004768371,
+        "start": 3940.199999988079
+      },
+      "bodyLength": 0,
+      "fields": [0, 0],
+      "longTasks": [],
+      "query": [
+        15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+        15, 15, 15, 15, 15, 15, 15, 15, 3
+      ],
+      "quotes": false,
+      "resources": [
+        {
+          "bytes": 300,
+          "duration": 11,
+          "name": "compose-workspace-BVdOL814.js",
+          "start": 3934.300000011921
+        }
+      ],
+      "firstInput": {
+        "focused": true,
+        "text": "Ready."
+      }
+    }
+  ]
+}

@@ -31,6 +31,7 @@ export const labelsMailOperations = {
     });
     if (selectedMailbox.provider === "managed") {
       return await createManagedLabel({
+        autoLabel: input.autoLabel,
         color: input.color ?? "gray",
         description: input.description,
         mailboxId: input.mailboxId,
@@ -46,7 +47,11 @@ export const labelsMailOperations = {
         const label = await upsertSyncedGmailLabel(
           input.mailboxId,
           await createLabel(accessToken, input.name, signal),
-          input.color
+          {
+            autoLabel: input.autoLabel,
+            color: input.color,
+            description: input.description,
+          }
         );
         return {
           ...label,
@@ -155,7 +160,7 @@ export const labelsMailOperations = {
         const label = await upsertSyncedGmailLabel(
           input.mailboxId,
           await updateLabel(accessToken, input.labelId, input.name, signal),
-          input.color
+          { color: input.color, description: input.description }
         );
         return {
           ...label,
@@ -180,6 +185,7 @@ export const labelsMailOperations = {
     });
     if (selectedMailbox.provider === "managed") {
       return await updateManagedLabel({
+        autoLabel: input.autoLabel,
         description: input.description,
         labelId: input.labelId,
         mailboxId: input.mailboxId,

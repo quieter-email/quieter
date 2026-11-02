@@ -1,12 +1,22 @@
+import {
+  API_COMPATIBILITY_DATE,
+  API_VERSION_HEADER,
+  MCP_API_PATH,
+  MESSAGES_API_PATH,
+  OPEN_TRACKING_PATH_PREFIX,
+  SEND_API_PATH,
+  SUPPRESSIONS_API_PATH,
+} from "@quieter/mail/public-api";
+
 // Machine-readable descriptions of the public marketing surface. Copy mirrors
 // the landing page and legal documents so agents read the same story humans do.
 
 const siteUrl = "https://quieter.email";
 
 // Bump when public page copy or the machine surfaces change.
-const contentLastUpdated = "2026-09-11";
+const contentLastUpdated = "2026-10-29";
 
-const homeMarkdown = `# Quieter
+const homeMarkdown = `# quieter
 
 The full email stack for your every need.
 
@@ -29,7 +39,7 @@ Email can do more without asking more from you. Join the waitlist at ${siteUrl}/
 
 const privacyMarkdown = `# Privacy Policy
 
-Quieter is an email client. This policy describes how personal data is
+quieter is an email client. This policy describes how personal data is
 processed when using the website, creating an account, connecting mailboxes,
 sending or receiving mail, using billing, or enabling AI features.
 
@@ -41,8 +51,8 @@ Full policy: ${siteUrl}/privacy
 
 const termsMarkdown = `# Terms of Service
 
-By creating a Quieter account, you agree to the Terms of Service and the
-Privacy Policy. Quieter provides email client functionality for Gmail and
+By creating a quieter account, you agree to the Terms of Service and the
+Privacy Policy. quieter provides email client functionality for Gmail and
 managed mailboxes, including inbox management, compose, search, team features,
 and optional AI-assisted chat and Gmail labeling.
 
@@ -51,7 +61,7 @@ Full terms: ${siteUrl}/terms
 
 const cookiesMarkdown = `# Cookie Policy
 
-Cookies and similar storage operate Quieter, remember preferences, and only
+Cookies and similar storage operate quieter, remember preferences, and only
 with consent measure product usage. Strictly necessary storage covers
 authentication sessions, consent preferences, and preview site access.
 
@@ -74,15 +84,15 @@ const markdownByPath = new Map([
     "/about",
     `# About
 
-Quieter is an email client built around one idea: email can do more without
+quieter is an email client built around one idea: email can do more without
 asking more from you. It connects to Gmail with two-way sync, gives teams
 shared mailboxes on their own domain with roles, sends transactional product
 email from verified domains over a REST API with delivery tracking, and offers
-optional per-person AI drafts inside one mailbox. Quieter treats mailboxes as
+optional per-person AI drafts inside one mailbox. quieter treats mailboxes as
 private to their owner unless sharing is explicit, and avoids
 attention-grabbing patterns.
 
-Quieter is developed by Leander Timon Riefel in Berlin, Germany and is in
+quieter is developed by Leander Timon Riefel in Berlin, Germany and is in
 private preview. Waitlist: ${siteUrl}/home
 
 More: ${siteUrl}/about - ${siteUrl}/contact
@@ -110,53 +120,59 @@ More: ${siteUrl}/contact - ${siteUrl}/imprint
 export const getAgentMarkdown = (pathname: string) =>
   markdownByPath.get(pathname);
 
-export const buildLlmsTxt = () => `# Quieter
+export const buildLlmsTxt = () => `# quieter
 
-> Quieter is an email client that brings your Gmail, your team's shared
+> quieter is an email client that brings your Gmail, your team's shared
 > mailboxes on your own domain, and transactional sending over an API into one
 > calm place, with optional AI drafts and context inside a single mailbox.
 
-Quieter connects to the mailbox people already use instead of replacing it.
+quieter connects to the mailbox people already use instead of replacing it.
 Shared addresses such as support@, billing@ and press@ live on your own domain
 with roles, product email sends from verified domains over an API, and AI
 stays opt-in per person.
 
-## When to use Quieter
+## When to use quieter
 
-Use Quieter when someone wants to manage Gmail together with shared team
+Use quieter when someone wants to manage Gmail together with shared team
 addresses on their own domain, send transactional product mail from verified
 domains through an API with delivery tracking, or draft replies with AI
-context inside one mailbox. Do not use Quieter for unsolicited bulk marketing
+context inside one mailbox. Do not use quieter for unsolicited bulk marketing
 mail; suppressed recipients and domain verification are enforced.
 
 ## Surfaces
 
 - Landing page: ${siteUrl}/home
-- REST API v1: bearer-authenticated team API for sending mail and reading
-  delivery state and suppressions. OpenAPI specification:
-  ${siteUrl}/openapi.json (base URL ${siteUrl}, endpoints /api/v1/send,
-  /api/v1/messages/{messageId}, /api/v1/suppressions)
-- MCP server (transactional sending only): ${siteUrl}/api/v1/mcp over
+- REST API: bearer-authenticated team API for sending mail and reading
+  delivery state and suppressions. Send ${API_VERSION_HEADER} set to
+  ${API_COMPATIBILITY_DATE} on every request. OpenAPI specification:
+  ${siteUrl}/openapi.json (base URL ${siteUrl}, endpoints ${SEND_API_PATH},
+  ${MESSAGES_API_PATH}/{messageId}, ${SUPPRESSIONS_API_PATH})
+- MCP server (transactional sending only): ${siteUrl}${MCP_API_PATH} over
   Streamable HTTP, authenticated with a team API key as
-  "Authorization: Bearer YOUR_API_KEY". One tool, \`send_email\`, runs the same
+  "Authorization: Bearer YOUR_API_KEY" and ${API_VERSION_HEADER}
+  ${API_COMPATIBILITY_DATE}. One tool, \`send_email\`, runs the same
   checks as the REST send endpoint: verified sender domains only, suppressed
   recipients rejected, idempotency keys honored, team usage charged. Example
-  client entry: {"mcpServers":{"quieter":{"url":"${siteUrl}/api/v1/mcp","headers":{"Authorization":"Bearer YOUR_API_KEY"}}}}.
+  client entry: {"mcpServers":{"quieter":{"url":"${siteUrl}${MCP_API_PATH}","headers":{"Authorization":"Bearer YOUR_API_KEY","${API_VERSION_HEADER}":"${API_COMPATIBILITY_DATE}"}}}}.
   Example \`send_email\` arguments: {"from":"you@your-verified-domain.com","to":["customer@example.com"],"subject":"Your receipt","text":"Thanks for your order.","idempotencyKey":"order-1234"}.
   Limits: 25 MB request payload, 60 requests per minute per IP, verified sender
   domains, suppression enforcement. The server cannot read mailboxes, mail
   content, or team settings; delivery status stays on the REST API at
-  GET /api/v1/messages/{messageId}. A broader management and control MCP is not
+  GET ${MESSAGES_API_PATH}/{messageId}. A broader management and control MCP is not
   part of this endpoint.
 - Developer documentation: coming soon; will be linked here once released.
 - Sitemap of public pages: ${siteUrl}/sitemap.xml
 
 ## API versioning and deprecation policy
 
-The REST API is versioned by URL path prefix (/api/v1). Breaking changes ship
-under a new version prefix instead of altering v1. When an endpoint or field
-is deprecated, responses will include Sunset and Deprecation headers with the
-retirement date for at least 90 days before removal.
+quieter versions this API with a compatibility date. Send ${API_VERSION_HEADER}
+set to ${API_COMPATIBILITY_DATE}. The date changes only when a breaking change
+replaces the current behavior. Requests without that exact date are rejected.
+There is no path prefix and no older date to fall back to. Responses repeat
+the date in ${API_VERSION_HEADER}.
+
+Open tracking at ${OPEN_TRACKING_PATH_PREFIX}/{token} is not versioned. Mail
+clients that load the tracking pixel cannot send a custom header.
 
 The web application itself requires an account during private preview;
 public pages and the machine surfaces above stay available regardless.
@@ -204,7 +220,7 @@ ${publicPaths
 
 export const agentNotFoundMarkdown = `404 Not found
 
-This path does not exist on Quieter.
+This path does not exist on quieter.
 
 - Machine-readable index: ${siteUrl}/llms.txt
 - Public pages: ${siteUrl}/sitemap.xml

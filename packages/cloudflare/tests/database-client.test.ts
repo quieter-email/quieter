@@ -2,13 +2,12 @@ import { db, withRequestDatabaseClient } from "@quieter/database/client";
 import { describe, expect, test, vi } from "vite-plus/test";
 
 vi.mock(import("@quieter/env/server"), async (original) => {
-  const { env } = await import("cloudflare:workers");
   const actual = await original();
   return {
     ...actual,
     serverEnv: {
       ...actual.serverEnv,
-      DATABASE_URL: env.AppDatabaseV2.connectionString,
+      DATABASE_URL: "postgresql://test:test@localhost:5432/quieter_dev",
       QUIETER_DEPLOYMENT_ENV: "local" as const,
     },
   };

@@ -94,6 +94,19 @@ const triggerSchema = z.discriminatedUnion("kind", [
 export const actionSpecificationSchema = z
   .strictObject({
     connectors: z.array(connectorReferenceSchema).max(16),
+    eligibility: z
+      .strictObject({
+        bodyIncludes: z.array(nonEmptyTextSchema.max(512)).max(16),
+        sender: z.discriminatedUnion("kind", [
+          z.strictObject({ kind: z.literal("any") }),
+          z.strictObject({
+            addresses: z.array(z.email().max(320)).min(1).max(64),
+            kind: z.literal("addresses"),
+          }),
+        ]),
+        subjectIncludes: z.array(nonEmptyTextSchema.max(512)).max(16),
+      })
+      .optional(),
     instructions: nonEmptyTextSchema.max(8192),
     mailboxId: nonEmptyTextSchema.max(128),
     permissions: z.array(permissionSchema).max(32),
@@ -106,6 +119,7 @@ export const actionSpecificationSchema = z
     toolGrants: z
       .array(
         z.strictObject({
+          argumentTemplate: nonEmptyTextSchema.max(16_384).optional(),
           confirmation: z.enum(["none", "required"]),
           permissionId: identifierSchema,
           toolId: identifierSchema,

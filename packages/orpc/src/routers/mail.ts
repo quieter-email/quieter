@@ -1,3 +1,4 @@
+import { getMailCaptureStatus } from "../mail-capture";
 import { withMailUpdate } from "../mail-updates";
 import { composeMailOperations } from "../mail/compose";
 import { mailInputSchemas } from "../mail/inputs";
@@ -39,6 +40,13 @@ export const mailRouter = {
     .route({ method: "GET" })
     .input(mailInputSchemas.getDraft)
     .handler(queriesMailOperations.getDraft),
+  getMailCaptureStatus: protectedProcedure
+    .route({ method: "GET" })
+    .input(mailInputSchemas.getMailCaptureStatus)
+    .handler(
+      async ({ context, input }) =>
+        await getMailCaptureStatus({ ...input, userId: context.userId })
+    ),
   getMessageDelivery: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.getMessageDelivery)

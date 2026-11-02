@@ -5,14 +5,17 @@ import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import { suggestReply } from "@quieter/ai/suggest-reply";
 import type { ReplySuggestion } from "@quieter/ai/suggest-reply";
 import { reportAiUsage } from "@quieter/billing";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import { compile } from "html-to-text";
 import { z } from "zod";
 
 import { assertCanUseAi } from "./ai-access";
+import { recordAiGeneratedMailBody } from "./ai-mail-authorship";
 import { loadAiAgentContext, serializeAiAgentContext } from "./ai-memory";
 import type { MailRequestContext } from "./gmail-request";
+import { learnAiMemoryFromMailAction } from "./mail/feedback";
 import { queriesMailOperations } from "./mail/queries";
 import { assertAccessibleMailbox } from "./mailbox/service";
 
@@ -32,7 +35,6 @@ export const requestReplySuggestion = async ({
   input: z.infer<typeof replySuggestionInputSchema>;
 }): Promise<ReplySuggestion> => {
   let usageReport: Promise<void> | undefined;
-  let generating = false;
   try {
     const mailbox = await assertAccessibleMailbox({
       mailboxId: input.mailboxId,
@@ -107,18 +109,22 @@ export const requestReplySuggestion = async ({
     const memory = await loadAiAgentContext({
       agent: "reply_suggestion",
       mailboxId: mailbox.id,
-      query: [target.from, target.subject, target.snippet]
+      query: [target.from, target.to, target.cc, target.subject, target.snippet]
         .filter(Boolean)
         .join(" ")
         .slice(0, 2000),
-      semantic: false,
       userId: context.userId,
     });
     const model = resolveBackgroundModel();
     const requestId = randomUUID();
-    generating = true;
-    return await suggestReply({
+    const suggestion = await suggestReply({
       abortSignal: context.signal,
+      billing: await createMailboxAiBillingContext({
+        externalId: `reply-suggestion:${requestId}`,
+        mailboxId: input.mailboxId,
+        usageKind: "aiChat",
+        userId: context.userId,
+      }),
       memoryContext: serializeAiAgentContext(memory),
       messages,
       model,
@@ -143,6 +149,28 @@ export const requestReplySuggestion = async ({
       },
       replyToMessageId: target.id,
     });
+    if (suggestion.status === "suggested") {
+      await recordAiGeneratedMailBody({
+        bodyText: suggestion.bodyText,
+        mailboxId: mailbox.id,
+        userId: context.userId,
+      });
+    }
+    await learnAiMemoryFromMailAction({
+      action: "reply_requested",
+      mailboxId: mailbox.id,
+      messageIds: [target.id],
+      metadata: {
+        senderDomain:
+          target.from
+            ?.match(/[A-Z0-9._%+-]+@(?<domain>[A-Z0-9.-]+\.[A-Z]{2,})/iu)
+            ?.groups?.domain?.toLowerCase() ?? null,
+        subject: target.subject ?? null,
+      },
+      targetCount: 1,
+      userId: context.userId,
+    });
+    return suggestion;
   } catch (error) {
     if (
       error instanceof ORPCError &&
@@ -151,10 +179,9 @@ export const requestReplySuggestion = async ({
     ) {
       throw error;
     }
-    reportError(
-      generating ? new Error("Reply suggestion generation failed.") : error,
-      { operation: "ai:suggest-reply" }
-    );
+    reportError(new Error("Reply suggestion generation failed."), {
+      operation: "ai:suggest-reply",
+    });
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
       message: "Could not suggest a reply right now. Please try again.",
     });

@@ -1,9 +1,12 @@
 import MailComposer from "nodemailer/lib/mail-composer";
 
+import { serializeOtpToken } from "./otp-token";
+import { assertRawMailSender } from "./raw-message";
 import {
-  getSendEnvelopeAddress,
   getSendEnvelopeAddressList,
   normalizeSendHeaders,
+  parseSendSender,
+  sendAttachmentListResourcesSchema,
 } from "./send";
 import type { SendHeader, SendMessageInput } from "./send";
 
@@ -35,11 +38,22 @@ export const buildSendMimeMessage = async (
     sentAt?: Date;
   }
 ): Promise<BuiltSendMimeMessage> => {
-  const fromAddress = getSendEnvelopeAddress(message.from);
+  sendAttachmentListResourcesSchema.parse(message.attachments);
+  const sender = parseSendSender(message.from);
+  if (sender === null) {
+    throw new Error("Enter a single sender email address.");
+  }
+  const fromAddress = sender.address;
   const domain = fromAddress.split("@").at(1) ?? "quieter.email";
   const messageHeaderId =
     options?.messageId ?? `<${crypto.randomUUID()}@${domain}>`;
   const headers = normalizeSendHeaders(message.headers);
+  if (message.otpToken) {
+    headers.push({
+      name: "OTP-Token",
+      value: serializeOtpToken(message.otpToken),
+    });
+  }
   const attachments = message.attachments.map((attachment) => ({
     bytes: Buffer.from(attachment.content, "base64"),
     contentId: attachment.contentId ?? null,
@@ -59,8 +73,14 @@ export const buildSendMimeMessage = async (
     date: options?.sentAt ?? new Date(),
     disableFileAccess: true,
     disableUrlAccess: true,
-    from: message.from,
-    headers: headers.map(({ name, value }) => ({ key: name, value })),
+    from: sender,
+    headers: headers.map(({ name, value }) => ({
+      key: name,
+      value:
+        name.toLowerCase() === "otp-token"
+          ? { foldLines: true, prepared: true, value }
+          : value,
+    })),
     html:
       options?.htmlTransform && message.html !== undefined
         ? options.htmlTransform(message.html)
@@ -74,6 +94,7 @@ export const buildSendMimeMessage = async (
   })
     .compile()
     .build();
+  await assertRawMailSender(raw, fromAddress);
   return {
     attachmentSizeBytes: attachments.reduce(
       (total, attachment) => total + attachment.bytes.byteLength,

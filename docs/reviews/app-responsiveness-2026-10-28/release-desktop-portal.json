@@ -1,0 +1,17 @@
+{
+  "hit": true,
+  "mainIsolation": "isolate",
+  "option": "Use #7986cb",
+  "outsideMain": true,
+  "outsideSidebar": true,
+  "rect": {
+    "bottom": 733,
+    "height": 28,
+    "left": 767,
+    "right": 795,
+    "top": 705,
+    "width": 28,
+    "x": 767,
+    "y": 705
+  }
+}

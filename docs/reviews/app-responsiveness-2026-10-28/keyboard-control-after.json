@@ -1,0 +1,23 @@
+{
+  "source": "bf7d31c7",
+  "method": "agent-browser native press Enter after focusing Compose",
+  "after": {
+    "compose": true,
+    "proof": {
+      "clicks": [
+        {
+          "text": "Compose",
+          "trusted": true
+        }
+      ],
+      "keys": [
+        {
+          "target": "BUTTON",
+          "text": "Compose",
+          "trusted": true
+        }
+      ]
+    },
+    "search": "?mailbox=compose&mailboxId=demo%3Amailbox&view=inbox"
+  }
+}

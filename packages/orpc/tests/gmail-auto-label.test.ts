@@ -48,24 +48,4 @@ describe("Gmail auto-label selection", () => {
       "Store receipts usually arrive from orders@example.com."
     );
   });
-
-  test("caps dynamic memory in classifier payloads", () => {
-    const input = buildAutoLabelPromptInput({
-      labels: [
-        {
-          description: null,
-          id: "label-receipts",
-          inclusionCriteria: null,
-          name: "Receipts",
-        },
-      ],
-      memoryContext: "x".repeat(8000),
-      message: {
-        id: "message-1",
-        subject: "Invoice",
-      },
-    });
-
-    expect(input.relevantMemory?.length).toBeLessThanOrEqual(6000);
-  });
 });

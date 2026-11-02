@@ -3,10 +3,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./daily-brief": "./src/daily-brief.ts",
+    "./compile-action-specification": "./src/compile-action-specification.ts",
     "./action-specification": "./src/action-specification.ts",
     "./ai-memory": "./src/ai-memory.ts",
     "./chat-agent": "./src/chat-agent.ts",
+    "./chat-context": "./src/chat-context.ts",
     "./chat-tools": "./src/chat-tools.ts",
     "./chat-models": "./src/chat-models.ts",
     "./chat-usage": "./src/chat-usage.ts",
@@ -15,7 +16,6 @@
     "./format-transcribed-email": "./src/format-transcribed-email.ts",
     "./generate-chat-title": "./src/generate-chat-title.ts",
     "./generation": "./src/generation.ts",
-    "./memory-embeddings": "./src/memory-embeddings.ts",
     "./openrouter": "./src/openrouter.ts",
     "./openrouter-transcription": "./src/openrouter-transcription.ts",
     "./parse-mail-search": "./src/parse-mail-search.ts",
@@ -23,10 +23,13 @@
     "./transcription-format": "./src/transcription-format.ts",
     "./chat-transcript": "./src/chat-transcript.ts",
     "./errors": "./src/errors.ts",
-    "./model-config": "./src/model-config.ts"
+    "./model-config": "./src/model-config.ts",
+    "./mail-importance": "./src/mail-importance.ts"
   },
   "dependencies": {
     "@openrouter/ai-sdk-provider": "catalog:",
+    "@quieter/billing": "workspace:*",
+    "@quieter/calendar": "workspace:*",
     "@quieter/env": "workspace:*",
     "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",

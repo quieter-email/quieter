@@ -1,10 +1,8 @@
+import { SettingsLoadingPage } from "@quieter/app/features/settings/components/settings-loading-page";
+import { settingsSearchSchema } from "@quieter/app/route-search";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
-import { z } from "zod";
 
-import { SettingsLoadingPage } from "#/features/settings/components/settings-loading-page";
-import { ORGANIZATION_SETTINGS_VIEWS } from "#/features/settings/domain/organization-settings-view";
-import { SETTINGS_TABS } from "#/features/settings/domain/settings-tab";
 import { getSessionUser } from "#/lib/auth.functions";
 import { getGmailCallbackError } from "#/lib/gmail-callback-result.functions";
 
@@ -14,44 +12,7 @@ const SettingsPendingPage = () => {
 };
 
 export const Route = createFileRoute("/_app/settings")({
-  validateSearch: zodValidator(
-    z.object({
-      billing: z.enum(["canceled", "success"]).optional(),
-      checkoutId: z.uuid().optional(),
-      connector: z.enum(["connected", "error"]).optional(),
-      domainConnect: z
-        .enum(["canceled", "error", "needs_dns", "verified"])
-        .optional(),
-      domainId: z.string().trim().catch("").default(""),
-      from: z
-        .string()
-        .trim()
-        .transform((value) =>
-          value && value.startsWith("/") && !value.startsWith("//")
-            ? value
-            : "/"
-        )
-        .catch("/")
-        .default("/"),
-      gmail: z.enum(["connected", "error"]).optional(),
-      mailboxId: z.string().trim().catch("").default(""),
-      mailboxView: z.enum(["add", "list"]).catch("list").default("list"),
-      organizationId: z.string().trim().catch("").default(""),
-      organizationView: z
-        .string()
-        .trim()
-        .pipe(z.enum(ORGANIZATION_SETTINGS_VIEWS))
-        .catch("overview")
-        .default("overview"),
-      section: z.string().trim().catch("").default(""),
-      tab: z
-        .string()
-        .trim()
-        .pipe(z.enum(SETTINGS_TABS))
-        .catch("overview")
-        .default("overview"),
-    })
-  ),
+  validateSearch: zodValidator(settingsSearchSchema),
   loaderDeps: ({ search }) => ({ gmail: search.gmail }),
   ssr: "data-only",
   loader: async ({ deps }) => {

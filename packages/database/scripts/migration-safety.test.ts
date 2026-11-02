@@ -121,6 +121,24 @@ describe("local development database boundary", () => {
     }).toThrow("port 5432");
   });
 
+  test.each([
+    "sslmode=verify-full&database=quieter",
+    "sslmode=verify-full&%64atabase=quieter",
+    "sslmode=verify-full&application_name=app%00database%00quieter",
+    "sslmode=verify-full&application_name%00app%00database=quieter",
+    "sslmode=verify-full&sslmode=disable",
+  ])("rejects query overrides of an allowlisted database URL %s", (query) => {
+    expect(() => {
+      assertLocalDevelopmentDatabaseUrls({
+        DATABASE_MIGRATION_URL:
+          "postgresql://migrator@test.pg.psdb.cloud:5432/quieter_dev?sslmode=verify-full",
+        DATABASE_URL: `postgresql://app@test.pg.psdb.cloud:6432/quieter_dev?${query}`,
+        QUIETER_DEPLOYMENT_ENV: "local",
+        QUIETER_LOCAL_PLANETSCALE_HOST: "test.pg.psdb.cloud",
+      });
+    }).toThrow("explicitly allowlisted");
+  });
+
   test("rejects a PlanetScale host outside the explicit allowlist", () => {
     expect(() => {
       assertLocalDevelopmentDatabaseUrls({
