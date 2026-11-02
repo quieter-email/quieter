@@ -350,6 +350,7 @@ const MailboxMenuItem = ({
       // oxlint-disable-next-line shadcn/no-restyle -- Compact full-row mailbox selection and drag surface.
       className="h-auto min-h-12 min-w-0 flex-1 touch-pan-y justify-start px-2.5 py-2 text-left hover:bg-transparent active:scale-100 aria-[current=page]:bg-transparent"
       data-mailbox-switcher-navigation-item
+      focusRing="inset"
       onClick={(event) => {
         if (!event.defaultPrevented) {
           onSelect();
@@ -959,37 +960,35 @@ export const MailboxSwitcherDropdown = ({
                                   <MailboxMenuItem
                                     handleRef={handleRef}
                                     action={
-                                      <div className="flex items-center gap-1">
-                                        {needsReconnect && (
-                                          <Button
-                                            aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
-                                            data-mailbox-switcher-navigation-action
-                                            disabled={isReconnecting}
-                                            onClick={(event) => {
-                                              event.stopPropagation();
-                                              onReconnectMailbox(mailbox);
-                                            }}
-                                            size="xs"
-                                            variant="destructive"
-                                          >
-                                            <Icon
-                                              aria-hidden
-                                              size={14}
-                                              animation={
-                                                isReconnecting
-                                                  ? "spin"
-                                                  : undefined
-                                              }
-                                              icon={
-                                                isReconnecting
-                                                  ? Loading03Icon
-                                                  : Mail01Icon
-                                              }
-                                            />
-                                            Reconnect
-                                          </Button>
-                                        )}
-                                      </div>
+                                      needsReconnect ? (
+                                        <Button
+                                          aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
+                                          data-mailbox-switcher-navigation-action
+                                          disabled={isReconnecting}
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            onReconnectMailbox(mailbox);
+                                          }}
+                                          size="xs"
+                                          variant="destructive"
+                                        >
+                                          <Icon
+                                            aria-hidden
+                                            size={14}
+                                            animation={
+                                              isReconnecting
+                                                ? "spin"
+                                                : undefined
+                                            }
+                                            icon={
+                                              isReconnecting
+                                                ? Loading03Icon
+                                                : Mail01Icon
+                                            }
+                                          />
+                                          Reconnect
+                                        </Button>
+                                      ) : undefined
                                     }
                                     isActive={isActive}
                                     onSelect={() => {

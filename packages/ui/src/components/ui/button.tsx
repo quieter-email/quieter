@@ -77,6 +77,9 @@ export const buttonVariants = cva(
         default: null,
         toolbar: null,
       },
+      focusRing: {
+        inset: "focus-visible:ring-inset",
+      },
       fullWidth: {
         true: "group relative w-full gap-3",
       },
@@ -142,6 +145,7 @@ export type ButtonProps = BaseUIButtonProps &
 export const Button = ({
   chrome = "default",
   className,
+  focusRing,
   fullWidth = false,
   onKeyDown,
   onPointerDown,
@@ -185,6 +189,7 @@ export const Button = ({
                 buttonVariants({
                   auxiliaryPress: isAuxiliaryPress,
                   chrome,
+                  focusRing,
                   fullWidth,
                   size,
                   variant,
@@ -195,6 +200,7 @@ export const Button = ({
               buttonVariants({
                 auxiliaryPress: isAuxiliaryPress,
                 chrome,
+                focusRing,
                 fullWidth,
                 size,
                 variant,
