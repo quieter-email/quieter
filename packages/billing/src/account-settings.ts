@@ -1,18 +1,12 @@
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
-  aiCreditReservation,
   billingAccountSettings,
-  billingCreditUsageEvent,
-  billingSubscription,
   organization,
-  organizationMailSendIdempotency,
+  member,
   user,
 } from "@quieter/database/schema";
-import { serverEnv } from "@quieter/env/server";
-import { and, asc, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
-
-import { isActiveBillingSubscription } from "./entitlements.ts";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 export const getAccountUsageSettings = async (
   userId: string,
@@ -60,205 +54,73 @@ export const updateAccountUsageSettings = async (input: {
   });
 };
 
-export const getLegacyAccountSubscriptions = async (userId: string) =>
-  await db
-    .select({
-      cancelAtPeriodEnd: billingSubscription.cancelAtPeriodEnd,
-      currentPeriodEnd: billingSubscription.currentPeriodEnd,
-      currentPeriodStart: billingSubscription.currentPeriodStart,
-      id: billingSubscription.id,
-      metadata: billingSubscription.metadata,
-      organizationId: organization.id,
-      organizationName: organization.name,
-      plan: billingSubscription.plan,
-      providerCustomerId: billingSubscription.providerCustomerId,
-      providerSubscriptionId: billingSubscription.providerSubscriptionId,
-      status: billingSubscription.status,
-    })
-    .from(billingSubscription)
-    .innerJoin(
-      organization,
-      eq(organization.id, billingSubscription.organizationId)
-    )
-    .where(
-      and(
-        eq(billingSubscription.userId, userId),
-        eq(organization.billingOwnerUserId, userId),
-        eq(billingSubscription.scope, "team"),
-        inArray(billingSubscription.plan, ["managed", "pro"]),
-        inArray(billingSubscription.status, [
-          "active",
-          "trialing",
-          "past_due",
-          "pending",
-        ]),
-        eq(
-          sql<string>`${billingSubscription.metadata}->>'quieterUserId'`,
-          userId
-        ),
-        eq(
-          sql<string>`${billingSubscription.metadata}->>'quieterOrganizationId'`,
-          organization.id
-        )
-      )
-    )
-    .orderBy(desc(billingSubscription.updatedAt));
-
-export const useAccountBillingPlan = async (input: {
-  subscriptionId: string;
+export const takeOverOrganizationBilling = async (input: {
+  organizationId: string;
   userId: string;
-}) => {
-  const subscriptions = await getLegacyAccountSubscriptions(input.userId);
-  const candidate = subscriptions.find(
-    (subscription) => subscription.id === input.subscriptionId
-  );
-  if (candidate === undefined) {
-    throw new ORPCError("NOT_FOUND", {
-      message: "This subscription is unavailable.",
-    });
-  }
-  const [{ getPolarClient }, { syncBillingSubscription }] = await Promise.all([
-    import("./polar.ts"),
-    import("./subscription-sync.ts"),
-  ]);
-  const polar = await getPolarClient();
-  const subscription = await polar.subscriptions.get(
-    candidate.providerSubscriptionId
-  );
-  if (
-    subscription.metadata.quieterUserId !== input.userId ||
-    subscription.metadata.quieterOrganizationId !== candidate.organizationId
-  ) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "This subscription belongs to a different billing account.",
-    });
-  }
-  const sync = await syncBillingSubscription(subscription);
-  if (!sync.synced || sync.ignored === true) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "We could not verify this subscription. Please try again.",
-    });
-  }
-  return await db.transaction(async (transaction) => {
-    await transaction
+}) =>
+  await db.transaction(async (transaction) => {
+    const [observed] = await transaction
+      .select({ billingOwnerUserId: organization.billingOwnerUserId })
+      .from(organization)
+      .where(eq(organization.id, input.organizationId));
+    const payerIds = [
+      ...new Set([
+        input.userId,
+        ...(observed?.billingOwnerUserId ? [observed.billingOwnerUserId] : []),
+      ]),
+    ].toSorted();
+    const payers = await transaction
       .select({ id: user.id })
       .from(user)
-      .where(eq(user.id, input.userId))
+      .where(inArray(user.id, payerIds))
+      .orderBy(asc(user.id))
       .for("update");
-    const [settings] = await transaction
+    if (!payers.some((payer) => payer.id === input.userId)) {
+      throw new ORPCError("FORBIDDEN");
+    }
+    const settings = await transaction
       .select()
       .from(billingAccountSettings)
-      .where(eq(billingAccountSettings.userId, input.userId));
-    if (settings?.selectedSubscriptionId === input.subscriptionId) {
-      return { activated: true };
-    }
-    if (settings !== undefined && settings.selectedSubscriptionId !== null) {
-      throw new ORPCError("BAD_REQUEST", {
-        message:
-          "Your account already uses a plan. Open Manage billing to change it.",
-      });
-    }
-    const ownedOrganizations = await transaction
-      .select({ id: organization.id })
-      .from(organization)
-      .where(eq(organization.billingOwnerUserId, input.userId))
-      .orderBy(asc(organization.id))
-      .for("update");
-    const [selected] = await transaction
+      .where(inArray(billingAccountSettings.userId, payerIds));
+    const [team] = await transaction
       .select()
-      .from(billingSubscription)
-      .where(
-        and(
-          eq(billingSubscription.id, input.subscriptionId),
-          eq(billingSubscription.userId, input.userId)
-        )
-      )
+      .from(organization)
+      .where(eq(organization.id, input.organizationId))
       .for("update");
     if (
-      selected === undefined ||
-      selected.organizationId === null ||
-      !ownedOrganizations.some((item) => item.id === selected.organizationId) ||
-      !isActiveBillingSubscription(selected)
+      team === undefined ||
+      team.billingOwnerUserId !== observed?.billingOwnerUserId
+    ) {
+      throw new ORPCError("CONFLICT", {
+        message: "Billing changed. Reload and try again.",
+      });
+    }
+    if (
+      team.billingDeletionRequestedAt !== null ||
+      settings.some((setting) => setting.deletionRequestedAt !== null)
     ) {
       throw new ORPCError("BAD_REQUEST", {
-        message: "Choose an active subscription for your account.",
+        message: "Billing cannot change while an account or team is closing.",
       });
     }
-    const legacyOrganizations = await transaction
-      .selectDistinct({ id: organization.id })
-      .from(organization)
-      .innerJoin(
-        billingSubscription,
-        eq(billingSubscription.organizationId, organization.id)
-      )
+    const [membership] = await transaction
+      .select({ id: member.id })
+      .from(member)
       .where(
         and(
-          eq(organization.billingOwnerUserId, input.userId),
-          eq(billingSubscription.userId, input.userId),
-          eq(billingSubscription.scope, "team")
+          eq(member.organizationId, input.organizationId),
+          eq(member.userId, input.userId),
+          sql`'owner' = any(string_to_array(${member.role}, ','))`
         )
       );
-    const ids = legacyOrganizations.map((item) => item.id);
-    if (ids.length > 0) {
-      await transaction
-        .update(billingCreditUsageEvent)
-        .set({
-          externalCustomerId: sql`coalesce(${billingCreditUsageEvent.externalCustomerId}, ${serverEnv.QUIETER_DEPLOYMENT_ENV === "local" ? "local:organization:" : "organization:"} || ${billingCreditUsageEvent.organizationId})`,
-          userId: input.userId,
-        })
-        .where(
-          and(
-            inArray(billingCreditUsageEvent.organizationId, ids),
-            isNull(billingCreditUsageEvent.userId),
-            gte(billingCreditUsageEvent.createdAt, selected.currentPeriodStart),
-            selected.currentPeriodEnd > new Date()
-              ? lt(billingCreditUsageEvent.createdAt, selected.currentPeriodEnd)
-              : undefined
-          )
-        );
-      await transaction
-        .update(aiCreditReservation)
-        .set({ billingUserId: input.userId })
-        .where(
-          and(
-            inArray(aiCreditReservation.organizationId, ids),
-            isNull(aiCreditReservation.billingUserId),
-            eq(aiCreditReservation.status, "reserved")
-          )
-        );
-      await transaction
-        .update(organizationMailSendIdempotency)
-        .set({ billingUserId: input.userId })
-        .where(
-          and(
-            inArray(organizationMailSendIdempotency.organizationId, ids),
-            isNull(organizationMailSendIdempotency.billingUserId),
-            inArray(organizationMailSendIdempotency.status, [
-              "prepared",
-              "submitting",
-              "accepted",
-              "unknown",
-            ])
-          )
-        );
-    }
-    const now = new Date();
-    await transaction
-      .insert(billingAccountSettings)
-      .values({
-        activatedAt: now,
-        selectedSubscriptionId: selected.id,
-        updatedAt: now,
-        userId: input.userId,
-      })
-      .onConflictDoUpdate({
-        set: {
-          activatedAt: now,
-          selectedSubscriptionId: selected.id,
-          updatedAt: now,
-        },
-        target: billingAccountSettings.userId,
+    if (membership === undefined) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "Only a team owner can take over billing.",
       });
-    return { activated: true };
+    }
+    await transaction
+      .update(organization)
+      .set({ billingOwnerUserId: input.userId, updatedAt: new Date() })
+      .where(eq(organization.id, input.organizationId));
+    return { transferred: true };
   });
-};

@@ -4,10 +4,12 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./account-settings": "./src/account-settings.ts",
     "./ai-credit-errors": "./src/ai-credit-errors.ts",
     "./ai-reservation": "./src/ai-reservation.ts",
     "./ai-pricing": "./src/ai-pricing.ts",
     "./credits": "./src/credits.ts",
+    "./lifecycle": "./src/lifecycle.ts",
     "./mail-send-reservation": "./src/mail-send-reservation.ts",
     "./entitlements": "./src/entitlements.ts",
     "./polar": "./src/polar.ts",

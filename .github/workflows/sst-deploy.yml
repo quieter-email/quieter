@@ -250,6 +250,23 @@ jobs:
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: vp run @quieter/database#db:deploy
 
+      - name: Bootstrap explicitly authorized account access
+        if: ${{ vars.BILLING_BOOTSTRAP_USER_ID != '' }}
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+          BILLING_BOOTSTRAP_USER_ID: ${{ vars.BILLING_BOOTSTRAP_USER_ID }}
+          BILLING_BOOTSTRAP_ACCEPT_FUNDING: ${{ vars.BILLING_BOOTSTRAP_ACCEPT_FUNDING }}
+        run: |
+          set -euo pipefail
+          args=(--action grant-unlimited --user-id "$BILLING_BOOTSTRAP_USER_ID" --permanent
+            --reason account-billing-cutover-authorized-permanent-access
+            --operator "github:$GITHUB_TRIGGERING_ACTOR:run:$GITHUB_RUN_ID")
+          if [[ "$BILLING_BOOTSTRAP_ACCEPT_FUNDING" == true ]]; then
+            args+=(--accept-unfunded-owned-organizations)
+          fi
+          vp exec node packages/database/scripts/billing-account-admin.ts "${args[@]}"
+
       - name: Inspect database connections before deployment
         continue-on-error: true
         timeout-minutes: 2

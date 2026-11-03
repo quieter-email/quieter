@@ -131,7 +131,6 @@ describe.skipIf(databaseUrl === undefined)(
         }))
       );
       await db.insert(organization).values({
-        billingOwnerUserId: ownerId,
         createdAt: now,
         id: organizationId,
         name: "Importance fixture",
@@ -142,10 +141,14 @@ describe.skipIf(databaseUrl === undefined)(
           createdAt: now,
           id: randomUUID(),
           organizationId,
-          role: "member",
+          role: userId === ownerId ? "owner" : "member",
           userId,
         }))
       );
+      await db
+        .update(organization)
+        .set({ billingOwnerUserId: ownerId })
+        .where(eq(organization.id, organizationId));
     });
 
     beforeEach(() => {

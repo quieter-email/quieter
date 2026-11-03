@@ -22,8 +22,11 @@ const toMicroCents = (cents: number | null) =>
     ? null
     : Math.round(cents * microCentsPerCent);
 
-const serializeOverview = async (organizationId: string) => {
-  const overview = await getOrganizationMailUsageOverview(organizationId);
+const serializeOverview = async (organizationId: string, userId: string) => {
+  const overview = await getOrganizationMailUsageOverview(
+    organizationId,
+    userId
+  );
 
   return {
     hasAccess: overview.hasAccess,
@@ -69,7 +72,7 @@ export const organizationMailUsageRouter = {
         userId: context.userId,
       });
 
-      return await serializeOverview(input.organizationId);
+      return await serializeOverview(input.organizationId, context.userId);
     }),
 
   updateSettings: protectedProcedure
@@ -99,6 +102,6 @@ export const organizationMailUsageRouter = {
         overageEnabled: input.overageEnabled,
       });
 
-      return await serializeOverview(input.organizationId);
+      return await serializeOverview(input.organizationId, context.userId);
     }),
 };

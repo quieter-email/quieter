@@ -68,20 +68,25 @@ describe.skipIf(databaseUrl === undefined)(
       });
       await db.insert(organization).values(
         [organizationId, otherOrganizationId].map((id) => ({
-          billingOwnerUserId: ownerId,
           createdAt: now,
           id,
           name: "Catch-all test",
           slug: id,
         }))
       );
-      await db.insert(member).values({
-        createdAt: now,
-        id: crypto.randomUUID(),
-        organizationId,
-        role: "owner",
-        userId: ownerId,
-      });
+      await db.insert(member).values(
+        [organizationId, otherOrganizationId].map((id) => ({
+          createdAt: now,
+          id: crypto.randomUUID(),
+          organizationId: id,
+          role: "owner",
+          userId: ownerId,
+        }))
+      );
+      await db
+        .update(organization)
+        .set({ billingOwnerUserId: ownerId })
+        .where(inArray(organization.id, [organizationId, otherOrganizationId]));
       await db.insert(billingSubscription).values(
         [organizationId, otherOrganizationId].map(
           (id) =>

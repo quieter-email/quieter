@@ -702,7 +702,7 @@ export const FirstRunManagedMailSetup = ({
               checkoutMutation.variables?.product === product
             }
             needsAccountBilling={
-              billing?.account.requiresPlanSelection === true ||
+              (billing?.account.subscription ?? null) !== null ||
               (teamBilling?.subscription ?? null) !== null
             }
             onCheckout={(product) => {

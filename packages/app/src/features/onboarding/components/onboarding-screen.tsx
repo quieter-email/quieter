@@ -646,7 +646,7 @@ export const OnboardingScreen = () => {
       return;
     }
     if (
-      billingOverview?.account.requiresPlanSelection === true ||
+      (billingOverview?.account.subscription ?? null) !== null ||
       (getTeamBilling(billingOverview, organizationId)?.subscription ??
         null) !== null
     ) {

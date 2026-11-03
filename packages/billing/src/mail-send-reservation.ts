@@ -1,27 +1,23 @@
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
-  billingCreditUsageEvent,
+  aiCreditReservation,
   organizationMailSendIdempotency,
 } from "@quieter/database/schema";
 import type {
   MailSendSnapshot,
   ManagedMailRawObjectProvider,
 } from "@quieter/database/schema";
-import { and, eq, gte, inArray, isNull, lt, ne, sql, sum } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
-import { getAccountUsageSettings } from "./account-settings.ts";
-import { getOutstandingAiCreditReservations } from "./ai-reservation.ts";
 import {
-  getBillingCreditUsage,
-  getBillingUsagePeriodEnd,
-  lockBillingAccount,
-} from "./credits.ts";
+  assertBillingMoney,
+  calculateBillingLiability,
+  getBillingBudget,
+} from "./budget.ts";
+import { lockBillingAccount } from "./credits.ts";
 import { getOrganizationBillingEntitlement } from "./entitlements.ts";
-import {
-  estimateOutboundOrganizationMailUsage,
-  getOrganizationMailUsageSettings,
-} from "./organization-mail-usage.ts";
+import { estimateOutboundOrganizationMailUsage } from "./organization-mail-usage.ts";
 import { applyManagedUsageMarkup } from "./ses-pricing.ts";
 
 export const reserveOrganizationMailSend = async (input: {
@@ -56,6 +52,7 @@ export const reserveOrganizationMailSend = async (input: {
   const estimatedCostMicroCents = applyManagedUsageMarkup({
     sesCostUsdMicroCents: estimate.sesCostMicroCents,
   });
+  assertBillingMoney(estimatedCostMicroCents);
   return await db.transaction(async (tx) => {
     await lockBillingAccount(
       entitlement.account ?? {
@@ -132,154 +129,43 @@ export const reserveOrganizationMailSend = async (input: {
           message: "The team's billing account is unavailable.",
         });
       }
-      const settings = await getOrganizationMailUsageSettings(
-        input.organizationId,
-        tx
-      );
-      const accountSettings =
-        account.scope === "account" && account.billingOwnerUserId !== undefined
-          ? await getAccountUsageSettings(account.billingOwnerUserId, tx)
-          : settings;
-      const usage = await getBillingCreditUsage(account, tx);
-      const [reserved] = await tx
-        .select({
-          cost: sql`coalesce(${sum(organizationMailSendIdempotency.estimatedCostMicroCents)}, 0)`.mapWith(
-            Number
-          ),
-          organizationCost:
-            sql`coalesce(sum(case when ${organizationMailSendIdempotency.organizationId} = ${input.organizationId}
-            then ${organizationMailSendIdempotency.estimatedCostMicroCents} else 0 end), 0)`.mapWith(
-              Number
-            ),
-        })
-        .from(organizationMailSendIdempotency)
-        .leftJoin(
-          billingCreditUsageEvent,
-          eq(
-            billingCreditUsageEvent.dedupeKey,
-            sql`'mail:outbound:' || ${organizationMailSendIdempotency.organizationId} || ':' || (${organizationMailSendIdempotency.response}->>'messageId')`
-          )
-        )
+      const budget = await getBillingBudget(account, tx, {
+        mailSendId: existing?.id,
+      });
+      const [openAi] = await tx
+        .select({ id: aiCreditReservation.id })
+        .from(aiCreditReservation)
         .where(
           and(
             account.scope === "account" &&
               account.billingOwnerUserId !== undefined
               ? eq(
-                  organizationMailSendIdempotency.billingUserId,
+                  aiCreditReservation.billingUserId,
                   account.billingOwnerUserId
                 )
-              : and(
-                  eq(
-                    organizationMailSendIdempotency.organizationId,
-                    input.organizationId
-                  ),
-                  sql`coalesce(${organizationMailSendIdempotency.snapshot}->'billingAccount'->>'scope', 'team') = 'team'`
-                ),
-            inArray(organizationMailSendIdempotency.status, [
-              "prepared",
-              "submitting",
-              "accepted",
-              "unknown",
-            ]),
-            gte(
-              organizationMailSendIdempotency.createdAt,
-              account.currentPeriodStart
-            ),
-            lt(
-              organizationMailSendIdempotency.createdAt,
-              getBillingUsagePeriodEnd(account, tx)
-            ),
-            isNull(billingCreditUsageEvent.id),
-            existing === undefined
-              ? undefined
-              : ne(organizationMailSendIdempotency.id, existing.id)
+              : eq(aiCreditReservation.organizationId, account.organizationId),
+            eq(aiCreditReservation.status, "reserved")
           )
-        );
-      const aiReserved = await getOutstandingAiCreditReservations(account, tx);
-      if (aiReserved > 0) {
+        )
+        .limit(1);
+      if (openAi !== undefined) {
         throw new ORPCError("FORBIDDEN", {
           message:
             "Wait for the current AI request to finish before sending team mail.",
         });
       }
-      const projectedOverage = Math.max(
-        0,
-        usage.costMicroCents +
-          (reserved?.cost ?? 0) +
-          estimatedCostMicroCents -
-          usage.creditAmountMicroCents
-      );
-      const alreadyOverage = Math.max(
-        0,
-        usage.costMicroCents - usage.creditAmountMicroCents
-      );
-      const projectedAccountOverage =
-        usage.billableCostMicroCents + projectedOverage - alreadyOverage;
-      if (projectedOverage > 0 && !accountSettings.overageEnabled) {
-        throw new ORPCError("FORBIDDEN", {
-          message: "Usage beyond the account's monthly balance is disabled.",
-        });
-      }
-      if (
-        accountSettings.monthlyOverageLimitMicroCents !== null &&
-        projectedAccountOverage > accountSettings.monthlyOverageLimitMicroCents
-      ) {
+      const liability = calculateBillingLiability({
+        ...budget,
+        costMicroCents: estimatedCostMicroCents,
+      });
+      if (liability.chargeableCostMicroCents < estimatedCostMicroCents) {
         throw new ORPCError("FORBIDDEN", {
           message:
-            "The account's usage limit has been reached for the billing period.",
-        });
-      }
-      const [organizationUsage] = await tx
-        .select({
-          billableCost:
-            sql`coalesce(${sum(billingCreditUsageEvent.billableCostMicroCents)}, 0)`.mapWith(
-              Number
-            ),
-        })
-        .from(billingCreditUsageEvent)
-        .where(
-          and(
-            eq(billingCreditUsageEvent.organizationId, input.organizationId),
-            account.scope === "account" &&
-              account.billingOwnerUserId !== undefined
-              ? eq(billingCreditUsageEvent.userId, account.billingOwnerUserId)
-              : eq(billingCreditUsageEvent.scope, "team"),
-            gte(billingCreditUsageEvent.createdAt, account.currentPeriodStart),
-            lt(
-              billingCreditUsageEvent.createdAt,
-              getBillingUsagePeriodEnd(account, tx)
-            )
-          )
-        );
-      const pendingOverage = Math.max(
-        0,
-        usage.costMicroCents +
-          (reserved?.cost ?? 0) -
-          usage.creditAmountMicroCents
-      );
-      const projectedOrganizationOverage =
-        (organizationUsage?.billableCost ?? 0) +
-        Math.min(
-          reserved?.organizationCost ?? 0,
-          Math.max(0, pendingOverage - alreadyOverage)
-        ) +
-        projectedOverage -
-        pendingOverage;
-      if (projectedOverage > pendingOverage && !settings.overageEnabled) {
-        throw new ORPCError("FORBIDDEN", {
-          message: "Usage beyond this team's monthly balance is disabled.",
-        });
-      }
-      if (
-        settings.monthlyOverageLimitMicroCents !== null &&
-        projectedOrganizationOverage > settings.monthlyOverageLimitMicroCents
-      ) {
-        throw new ORPCError("FORBIDDEN", {
-          message:
-            "This team's usage limit has been reached for the billing period.",
+            "The usage balance or spending limit has been reached for this billing period.",
         });
       }
     }
+
     const now = new Date();
     const snapshot = {
       ...(existing?.snapshot ?? input.snapshot),
@@ -288,6 +174,7 @@ export const reserveOrganizationMailSend = async (input: {
           ? null
           : {
               ...account,
+              authorizedCostMicroCents: estimatedCostMicroCents,
               currentPeriodEnd: account.currentPeriodEnd.toISOString(),
               currentPeriodStart: account.currentPeriodStart.toISOString(),
             },

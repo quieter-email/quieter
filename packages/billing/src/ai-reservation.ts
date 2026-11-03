@@ -1,35 +1,16 @@
 import { ORPCError } from "@orpc/server";
 import type { DatabaseTransaction } from "@quieter/database/client";
 import { db } from "@quieter/database/client";
-import {
-  aiCreditReservation,
-  billingCreditUsageEvent,
-  mailbox,
-  organizationMailSendIdempotency,
-} from "@quieter/database/schema";
+import { aiCreditReservation, mailbox } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
-import {
-  and,
-  eq,
-  gte,
-  inArray,
-  isNotNull,
-  isNull,
-  lt,
-  sql,
-  sum,
-} from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql, sum } from "drizzle-orm";
 import { z } from "zod";
 
 import { AiCreditAdmissionBusyError } from "./ai-credit-errors.ts";
 import { getAiUsageCostMicroCents } from "./ai-pricing.ts";
-import {
-  getBillingCreditUsage,
-  getBillingUsagePeriodEnd,
-  lockBillingAccount,
-  recordBillingCreditUsage,
-} from "./credits.ts";
+import { assertBillingMoney, getBillingBudget } from "./budget.ts";
+import { lockBillingAccount, recordBillingCreditUsage } from "./credits.ts";
 import type { BillingUsageKind } from "./credits.ts";
 import { hasUserBillingFeature } from "./entitlements.ts";
 import type { BillingAccount } from "./entitlements.ts";
@@ -106,6 +87,7 @@ export const getOutstandingAiCreditReservations = async (
         eq(aiCreditReservation.status, "reserved")
       )
     );
+  assertBillingMoney(reserved?.cost ?? 0);
   return reserved?.cost ?? 0;
 };
 
@@ -134,73 +116,33 @@ export const reserveAiCreditUsage = async (context: AiBillingContext) => {
   }
   return await db.transaction(async (tx) => {
     await lockBillingAccount(account, tx, { admission: true });
-    const usage = await getBillingCreditUsage(account, tx);
-    const aiReserved = await getOutstandingAiCreditReservations(account, tx);
-    const [mailReserved] = await tx
-      .select({
-        cost: sql`coalesce(${sum(organizationMailSendIdempotency.estimatedCostMicroCents)}, 0)`.mapWith(
-          Number
-        ),
-      })
-      .from(organizationMailSendIdempotency)
-      .leftJoin(
-        billingCreditUsageEvent,
-        eq(
-          billingCreditUsageEvent.dedupeKey,
-          sql`'mail:outbound:' || ${organizationMailSendIdempotency.organizationId} || ':' || (${organizationMailSendIdempotency.response}->>'messageId')`
-        )
-      )
+    const budget = await getBillingBudget(account, tx);
+    const [openReservation] = await tx
+      .select({ id: aiCreditReservation.id })
+      .from(aiCreditReservation)
       .where(
         and(
           account.scope === "account" &&
             account.billingOwnerUserId !== undefined
-            ? eq(
-                organizationMailSendIdempotency.billingUserId,
-                account.billingOwnerUserId
-              )
-            : and(
-                eq(
-                  organizationMailSendIdempotency.organizationId,
-                  account.organizationId
-                ),
-                sql`coalesce(${organizationMailSendIdempotency.snapshot}->'billingAccount'->>'scope', 'team') = 'team'`
-              ),
-          inArray(organizationMailSendIdempotency.status, [
-            "prepared",
-            "submitting",
-            "accepted",
-            "unknown",
-          ]),
-          gte(
-            organizationMailSendIdempotency.createdAt,
-            account.currentPeriodStart
-          ),
-          lt(
-            organizationMailSendIdempotency.createdAt,
-            getBillingUsagePeriodEnd(account, tx)
-          ),
-          isNull(billingCreditUsageEvent.id)
+            ? eq(aiCreditReservation.billingUserId, account.billingOwnerUserId)
+            : eq(aiCreditReservation.organizationId, account.organizationId),
+          eq(aiCreditReservation.status, "reserved")
         )
-      );
-    const available =
-      usage.creditAmountMicroCents -
-      usage.costMicroCents -
-      (mailReserved?.cost ?? 0);
-    // These endpoints have no monetary cap. Holding the remaining balance
-    // preserves single-call admission while preventing concurrent reuse.
-    if (available <= 0) {
-      throw new ORPCError("FORBIDDEN", {
-        message:
-          "AI features require available usage balance. Try again after the current request finishes.",
-      });
-    }
-    if (aiReserved > 0) {
+      )
+      .limit(1);
+    if (openReservation !== undefined) {
       throw new AiCreditAdmissionBusyError();
+    }
+    if (budget.authorizedCostMicroCents === 0) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "AI features require available usage balance.",
+      });
     }
     const id = crypto.randomUUID();
     await tx.insert(aiCreditReservation).values({
       account: {
         ...account,
+        authorizedCostMicroCents: budget.authorizedCostMicroCents,
         currentPeriodEnd: account.currentPeriodEnd.toISOString(),
         currentPeriodStart: account.currentPeriodStart.toISOString(),
       },
@@ -209,7 +151,9 @@ export const reserveAiCreditUsage = async (context: AiBillingContext) => {
       groupId: context.groupId,
       id,
       organizationId: account.organizationId,
-      reservedCostMicroCents: available,
+      reservedCostMicroCents:
+        budget.authorizedCostMicroCents ??
+        Number.MAX_SAFE_INTEGER - budget.pendingMicroCents,
       status: "reserved",
       usageKind: context.usageKind,
     });
@@ -349,14 +293,16 @@ export const reconcileAiCreditReservations = async (
           result.success &&
           result.data.data.id === row.providerGenerationId
         ) {
+          const actualCostMicroCents =
+            result.data.data.total_cost === 0
+              ? 0
+              : getAiUsageCostMicroCents(result.data.data.total_cost);
+          assertBillingMoney(actualCostMicroCents);
           await withLockedAiReservation(row.id, async (_current, tx) => {
             await tx
               .update(aiCreditReservation)
               .set({
-                actualCostMicroCents:
-                  result.data.data.total_cost === 0
-                    ? 0
-                    : getAiUsageCostMicroCents(result.data.data.total_cost),
+                actualCostMicroCents,
               })
               .where(
                 and(
@@ -428,6 +374,9 @@ export const settleAiCreditUsage = async (input: {
   if (!Number.isFinite(input.costUsd) || input.costUsd < 0) {
     throw new Error("AI provider cost must be finite and nonnegative.");
   }
+  const actualCostMicroCents =
+    input.costUsd === 0 ? 0 : getAiUsageCostMicroCents(input.costUsd);
+  assertBillingMoney(actualCostMicroCents);
   const { reservationId } = input;
   await withLockedAiReservation(reservationId, async (row, tx) => {
     if (row.status === "released") {
@@ -436,8 +385,7 @@ export const settleAiCreditUsage = async (input: {
     await tx
       .update(aiCreditReservation)
       .set({
-        actualCostMicroCents:
-          input.costUsd === 0 ? 0 : getAiUsageCostMicroCents(input.costUsd),
+        actualCostMicroCents,
       })
       .where(
         and(

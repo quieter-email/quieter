@@ -154,7 +154,7 @@ export const BillingCreditSummary = ({
   usage: {
     billableCostCents: number;
     costCents: number;
-    remainingCreditCents: number;
+    remainingCreditCents: number | null;
   } | null;
 }) => (
   <div
@@ -164,16 +164,17 @@ export const BillingCreditSummary = ({
     )}
   >
     <span>{formatBillingProduct(product)}</span>
-    {creditAmountCents !== null && creditAmountCents !== undefined && (
-      <span>
-        <span className="font-mono font-medium text-fg">
-          {moneyFormatter.format(
-            (usage?.remainingCreditCents ?? creditAmountCents) / 100
-          )}
-        </span>{" "}
-        usage balance remaining
-      </span>
-    )}
+    {creditAmountCents !== null &&
+      creditAmountCents !== undefined &&
+      usage?.remainingCreditCents !== null &&
+      usage?.remainingCreditCents !== undefined && (
+        <span>
+          <span className="font-mono font-medium text-fg">
+            {moneyFormatter.format(usage.remainingCreditCents / 100)}
+          </span>{" "}
+          usage balance remaining
+        </span>
+      )}
     {(usage?.billableCostCents ?? 0) > 0 && (
       <span>
         <span className="font-mono font-medium text-fg">

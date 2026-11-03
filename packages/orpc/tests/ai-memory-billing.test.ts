@@ -88,6 +88,7 @@ describe("interactive memory billing", () => {
     mocks.usage.mockResolvedValue({
       billableCostMicroCents: 0,
       breakdown: [],
+      chargeableCostMicroCents: 100,
       costMicroCents: 100,
       creditAmountMicroCents: 100,
       organizations: [],

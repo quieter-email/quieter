@@ -8,6 +8,7 @@ import {
 } from "@polar-sh/sdk";
 import type { models } from "@polar-sh/sdk/2026-04";
 import type * as DatabaseClientModule from "@quieter/database/client";
+import { organization } from "@quieter/database/schema";
 import type * as ServerEnvModule from "@quieter/env/server";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
@@ -48,11 +49,14 @@ const polarSubscriptionSchema = z.custom<Subscription>(
 
 const polarSubscription = (id: string) =>
   polarSubscriptionSchema.parse({
+    customer_id: "customer-a",
     id,
     metadata: {
-      quieterOrganizationId: "organization-a",
+      quieterProduct: "pro",
+      quieterScope: "account",
       quieterUserId: "user-a",
     },
+    product_id: "pro-product",
   });
 
 const polarState = vi.hoisted(() => ({
@@ -100,7 +104,30 @@ vi.mock("@quieter/database/client", async (importOriginal) => {
   return {
     assertDatabaseConfigured: actual.assertDatabaseConfigured,
     db: {
-      select: billingMocks.select,
+      select: () => ({
+        from: (table: unknown) =>
+          table === organization
+            ? {
+                innerJoin: () => ({
+                  innerJoin: () => ({
+                    leftJoin: () => ({
+                      where: (predicate: SQL) => ({
+                        limit: vi
+                          .fn<() => Promise<{ userId: string }[]>>()
+                          .mockResolvedValue(
+                            new PgDialect()
+                              .sqlToQuery(predicate)
+                              .params.includes("organization-a")
+                              ? [{ userId: "user-a" }]
+                              : []
+                          ),
+                      }),
+                    }),
+                  }),
+                }),
+              }
+            : billingMocks.from(),
+      }),
       update: billingMocks.update,
     },
     withRequestDatabaseClient: actual.withRequestDatabaseClient,
@@ -116,6 +143,7 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => {
       DATABASE_URL: "postgresql://postgres@127.0.0.1:5432/quieter",
       NODE_ENV: "test",
       POLAR_ACCESS_TOKEN: "test-token",
+      POLAR_PRODUCT_PRO_ID: "pro-product",
     }),
   };
 });
@@ -156,7 +184,7 @@ describe("billing entitlement statuses", () => {
     });
   });
 
-  test("keeps an active renewing subscription entitled while its period is stale", () => {
+  test("requires a confirmed current period for an active renewing subscription", () => {
     const now = new Date("2026-08-02T00:00:00.000Z");
 
     expect(
@@ -178,7 +206,7 @@ describe("billing entitlement statuses", () => {
         },
         now
       )
-    ).toBeTruthy();
+    ).toBeFalsy();
     expect(
       isActiveBillingSubscription(
         {
@@ -316,16 +344,18 @@ describe("organization subscription reconciliation", () => {
     id: "subscription-row-a",
     lastReconciliationFailureAt: null,
     metadata: {
-      quieterOrganizationId: "organization-a",
+      quieterProduct: "pro",
+      quieterScope: "account",
       quieterUserId: "user-a",
     },
-    organizationId: "organization-a",
+    organizationId: null,
     plan: "pro" as const,
     provider: "polar" as const,
     providerCustomerId: "customer-a",
     providerModifiedAt: null,
+    providerProductId: "pro-product",
     providerSubscriptionId: "polar-subscription-1",
-    scope: "team" as const,
+    scope: "account" as const,
     status: "active" as const,
     updatedAt: new Date("2026-07-23T00:00:00.000Z"),
     userId: "user-a",
@@ -397,7 +427,7 @@ describe("organization subscription reconciliation", () => {
     expect(billingMocks.loadRows).toHaveBeenCalledTimes(2);
   });
 
-  test("keeps the existing allowance when reconciliation confirms active billing with a stale period", async () => {
+  test("denies allowance when reconciliation cannot confirm a new period", async () => {
     billingMocks.loadRows.mockResolvedValue([staleRow]);
     billingMocks.getPolarSubscription.mockResolvedValue(
       polarSubscription("polar-subscription-1")
@@ -406,12 +436,7 @@ describe("organization subscription reconciliation", () => {
 
     await expect(
       getOrganizationSubscription("organization-a")
-    ).resolves.toMatchObject({
-      currentPeriodEnd: staleRow.currentPeriodEnd,
-      currentPeriodStart: staleRow.currentPeriodStart,
-      product: "pro",
-      providerSubscriptionId: staleRow.providerSubscriptionId,
-    });
+    ).resolves.toBeNull();
     expect(billingMocks.loadRows).toHaveBeenCalledTimes(2);
   });
 
@@ -725,14 +750,14 @@ describe("organization subscription reconciliation", () => {
     }
   );
 
-  test("denies current access when the provider subscription belongs to another team", async () => {
+  test("denies current access when the provider subscription belongs to another account", async () => {
     billingMocks.loadRows.mockResolvedValue([
       { ...refreshedRow, updatedAt: staleRow.updatedAt },
     ]);
     billingMocks.getPolarSubscription.mockResolvedValue(
       polarSubscriptionSchema.parse({
         id: "polar-subscription-1",
-        metadata: { quieterOrganizationId: "organization-b" },
+        metadata: { quieterScope: "account", quieterUserId: "user-b" },
       })
     );
 

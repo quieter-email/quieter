@@ -4,7 +4,7 @@ import {
   getBillingOverview,
   syncBillingCheckout,
   updateAccountUsageSettings,
-  useAccountBillingPlan,
+  takeOverOrganizationBilling,
 } from "@quieter/billing";
 import { billingProductIdSchema } from "@quieter/billing/plans";
 import { z } from "zod";
@@ -36,7 +36,6 @@ export const billingRouter = {
     .input(
       z.object({
         organizationId: z.string().trim().min(1).optional(),
-        subscriptionId: z.string().trim().min(1).optional(),
       })
     )
     .handler(
@@ -44,7 +43,6 @@ export const billingRouter = {
         await createBillingPortal({
           headers: getRequestHeaders(context),
           organizationId: input.organizationId,
-          subscriptionId: input.subscriptionId,
           userId: context.userId,
         })
     ),
@@ -66,6 +64,16 @@ export const billingRouter = {
       async ({ context, input }) =>
         await syncBillingCheckout({
           checkoutId: input.checkoutId,
+          userId: context.userId,
+        })
+    ),
+
+  takeOverBilling: protectedProcedure
+    .input(z.object({ organizationId: z.string().trim().min(1) }))
+    .handler(
+      async ({ context, input }) =>
+        await takeOverOrganizationBilling({
+          organizationId: input.organizationId,
           userId: context.userId,
         })
     ),
@@ -93,14 +101,4 @@ export const billingRouter = {
       });
       return { saved: true };
     }),
-
-  useAccountPlan: protectedProcedure
-    .input(z.object({ subscriptionId: z.string().trim().min(1) }))
-    .handler(
-      async ({ context, input }) =>
-        await useAccountBillingPlan({
-          subscriptionId: input.subscriptionId,
-          userId: context.userId,
-        })
-    ),
 };

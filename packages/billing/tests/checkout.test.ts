@@ -12,7 +12,6 @@ import {
 import { z } from "zod";
 
 import { createBillingCheckout } from "../src";
-import type * as AccountSettingsModule from "../src/account-settings";
 import type * as EntitlementsModule from "../src/entitlements";
 import type * as PolarModule from "../src/polar";
 import type * as SubscriptionSyncModule from "../src/subscription-sync";
@@ -82,13 +81,6 @@ vi.mock(import("../src/entitlements"), async (importOriginal) => {
   };
 });
 
-vi.mock(import("../src/account-settings"), async (importOriginal) => ({
-  ...(await importOriginal()),
-  getLegacyAccountSubscriptions: vi.fn<
-    typeof AccountSettingsModule.getLegacyAccountSubscriptions
-  >(async () => await Promise.resolve([])),
-}));
-
 // This fake implements only the database operations exercised by the test.
 // oxlint-disable-next-line vitest/prefer-import-in-mock
 vi.mock("@quieter/database/client", async (importOriginal) => {
@@ -108,9 +100,9 @@ vi.mock("@quieter/database/client", async (importOriginal) => {
     select: () => ({ from: () => ({ where: () => rows }) }),
     update: () => ({
       set: () => ({
-        where: async () => {
-          await Promise.resolve();
-        },
+        where: () => ({
+          returning: async () => await Promise.resolve([{ userId: "user-1" }]),
+        }),
       }),
     }),
   };
@@ -215,10 +207,12 @@ describe("Polar checkout creation", () => {
       lastReconciliationFailureAt: null,
       metadata: { quieterOrganizationId: "organization-1" },
       organizationId: null,
+      periodCreditAmountCents: 2000,
       plan: "pro",
       provider: "polar",
       providerCustomerId: "customer-1",
       providerModifiedAt: null,
+      providerProductId: "pro-product",
       providerSubscriptionId: "subscription-1",
       scope: "account",
       status: "canceled",
@@ -245,7 +239,7 @@ describe("Polar checkout creation", () => {
     });
   });
 
-  test("reuses an active renewing subscription when its provider period is stale", async () => {
+  test("does not duplicate an active subscription with an unconfirmed renewal", async () => {
     checkoutMocks.getSubscription.mockResolvedValue({
       cancelAtPeriodEnd: false,
       currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
@@ -254,10 +248,12 @@ describe("Polar checkout creation", () => {
       lastReconciliationFailureAt: null,
       metadata: { quieterOrganizationId: "organization-1" },
       organizationId: null,
+      periodCreditAmountCents: 2000,
       plan: "pro",
       provider: "polar",
       providerCustomerId: "customer-1",
       providerModifiedAt: null,
+      providerProductId: "pro-product",
       providerSubscriptionId: "subscription-1",
       scope: "account",
       status: "active",
@@ -265,18 +261,16 @@ describe("Polar checkout creation", () => {
       userId: "user-1",
     });
 
-    const result = await createBillingCheckout({
-      customerEmail: "owner@example.com",
-      customerName: "Owner",
-      headers: new Headers({ origin: "https://quieter.email" }),
-      organizationId: "organization-1",
-      product: "pro",
-      userId: "user-1",
-    });
-    const successUrl = new URL(result.checkoutUrl);
-    expect(successUrl.origin).toBe("https://quieter.email");
-    expect(successUrl.searchParams.get("billing")).toBe("success");
-    expect(successUrl.searchParams.get("tab")).toBe("billing");
+    await expect(
+      createBillingCheckout({
+        customerEmail: "owner@example.com",
+        customerName: "Owner",
+        headers: new Headers({ origin: "https://quieter.email" }),
+        organizationId: "organization-1",
+        product: "pro",
+        userId: "user-1",
+      })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(checkoutMocks.createCheckout).not.toHaveBeenCalled();
     expect(checkoutMocks.getExternalCustomer).not.toHaveBeenCalled();
   });
@@ -292,10 +286,12 @@ describe("Polar checkout creation", () => {
         lastReconciliationFailureAt: null,
         metadata: { quieterOrganizationId: "organization-1" },
         organizationId: null,
+        periodCreditAmountCents: 2000,
         plan: "pro",
         provider: "polar",
         providerCustomerId: "customer-1",
         providerModifiedAt: null,
+        providerProductId: "pro-product",
         providerSubscriptionId: "subscription-1",
         scope: "account",
         status,

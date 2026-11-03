@@ -154,7 +154,6 @@ describe.skipIf(state.databaseUrl === undefined)(
         updatedAt: now,
       });
       await db.insert(organization).values({
-        billingOwnerUserId: state.userId,
         createdAt: now,
         id: state.organizationId,
         name: "OAuth fixture",
@@ -167,6 +166,10 @@ describe.skipIf(state.databaseUrl === undefined)(
         role: "owner",
         userId: state.userId,
       });
+      await db
+        .update(organization)
+        .set({ billingOwnerUserId: state.userId })
+        .where(eq(organization.id, state.organizationId));
       await db.insert(gmailOAuthState).values({
         codeVerifier: crypto.randomUUID(),
         createdAt: now,

@@ -178,7 +178,6 @@ describe.skipIf(state.databaseUrl === undefined)(
         }))
       );
       await db.insert(organization).values({
-        billingOwnerUserId: userId,
         createdAt: now,
         id: organizationId,
         name: "Sharing test",
@@ -193,6 +192,10 @@ describe.skipIf(state.databaseUrl === undefined)(
           userId: id,
         }))
       );
+      await db
+        .update(organization)
+        .set({ billingOwnerUserId: userId })
+        .where(eq(organization.id, organizationId));
       await db.insert(billingSubscription).values({
         cancelAtPeriodEnd: true,
         createdAt: now,

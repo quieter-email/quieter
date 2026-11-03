@@ -81,6 +81,5 @@ export const hasOrganizationAiAccess = (
     (team) =>
       team.organizationId === organizationId &&
       team.product === "pro" &&
-      team.hasAccess &&
-      (team.hasUnlimitedAccess || (team.usage?.remainingCreditCents ?? 0) > 0)
+      team.hasAccess
   ) === true;

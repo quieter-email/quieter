@@ -1,6 +1,5 @@
 import { ORPCError } from "@orpc/server";
 import { PolarClientError } from "@polar-sh/sdk";
-import type { models } from "@polar-sh/sdk/2026-04";
 import { db } from "@quieter/database/client";
 import {
   billingAccountSettings,
@@ -11,15 +10,17 @@ import {
   user,
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
-import { reportError } from "@quieter/observability";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 
-import {
-  getAccountUsageSettings,
-  getLegacyAccountSubscriptions,
-} from "./account-settings.ts";
+import { getAccountUsageSettings } from "./account-settings.ts";
 import { getAiUsageCostMicroCents } from "./ai-pricing.ts";
 import { hasAiCreditReservationGroup } from "./ai-reservation.ts";
+import {
+  BILLING_CHECKOUT_ATTEMPT_METADATA,
+  BILLING_CHECKOUT_CLAIM_MS,
+  recoverBillingCheckout,
+  syncRecoveredBillingCheckout,
+} from "./checkout-recovery.ts";
 import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits.ts";
 import type { BillingUsageKind } from "./credits.ts";
 import {
@@ -43,18 +44,17 @@ import {
   syncBillingSubscription,
 } from "./subscription-sync.ts";
 
-type Subscription = models.Subscription;
-
 export {
   AI_COST_RECOVERY_BASIS_POINTS,
   applyAiCostRecoveryFee,
   getAiUsageCostMicroCents,
 } from "./ai-pricing.ts";
 
+export { recoverBillingCheckout } from "./checkout-recovery.ts";
 export { syncBillingSubscription } from "./subscription-sync.ts";
 export {
   updateAccountUsageSettings,
-  useAccountBillingPlan,
+  takeOverOrganizationBilling,
 } from "./account-settings.ts";
 
 export const createBillingCheckoutMetadata = (input: {
@@ -76,17 +76,10 @@ export const createBillingCheckoutMetadata = (input: {
 });
 
 export const createBillingPortalSession = (input: {
-  externalCustomerId?: string;
-  legacyTeamCustomer?: boolean;
   returnUrl: string;
   userId: string;
 }) => ({
-  externalCustomerId:
-    input.externalCustomerId ??
-    getBillingExternalIdentity("user", input.userId),
-  ...(input.legacyTeamCustomer === true
-    ? { externalMemberId: getBillingExternalIdentity("user", input.userId) }
-    : {}),
+  externalCustomerId: getBillingExternalIdentity("user", input.userId),
   returnUrl: input.returnUrl,
 });
 
@@ -203,6 +196,27 @@ export const createBillingCheckout = async (input: {
     };
   }
 
+  await db.transaction(async (transaction) => {
+    await transaction
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.id, input.userId))
+      .for("update");
+    const [settings] = await transaction
+      .select()
+      .from(billingAccountSettings)
+      .where(eq(billingAccountSettings.userId, input.userId))
+      .limit(1);
+    if (
+      settings?.deletionRequestedAt !== undefined &&
+      settings.deletionRequestedAt !== null
+    ) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This billing account is closing.",
+      });
+    }
+  });
+
   const providerProductId = getBillingProductId(input.product);
   const subscription = await getAccountSubscriptionRecord(input.userId, {
     forceReconcile: true,
@@ -249,16 +263,22 @@ export const createBillingCheckout = async (input: {
     return { checkoutUrl: successUrl };
   }
 
-  const legacySubscriptions = await getLegacyAccountSubscriptions(input.userId);
-  if (legacySubscriptions.length > 0) {
-    throw new ORPCError("BAD_REQUEST", {
+  const recovery = await recoverBillingCheckout({ userId: input.userId });
+  if (recovery.status === "completed") {
+    return { checkoutUrl: successUrl };
+  }
+  if (recovery.status === "open" && recovery.product === input.product) {
+    return { checkoutUrl: recovery.checkoutUrl };
+  }
+  if (recovery.status !== "none") {
+    throw new ORPCError("TOO_MANY_REQUESTS", {
       message:
-        "You already have a team subscription. Choose an existing plan in account Billing before starting another subscription.",
+        "A checkout is already open for your account. Complete it or wait for it to expire before choosing another plan.",
     });
   }
 
   const attemptId = crypto.randomUUID();
-  const pending = await db.transaction(async (transaction) => {
+  await db.transaction(async (transaction) => {
     await transaction
       .select({ id: user.id })
       .from(user)
@@ -292,16 +312,14 @@ export const createBillingCheckout = async (input: {
       .where(eq(billingAccountSettings.userId, input.userId))
       .limit(1);
     if (
-      settings !== undefined &&
-      settings.checkoutExpiresAt !== null &&
-      settings.checkoutExpiresAt > new Date()
+      settings?.deletionRequestedAt !== null &&
+      settings?.deletionRequestedAt !== undefined
     ) {
-      if (
-        settings.checkoutUrl !== null &&
-        settings.checkoutProduct === input.product
-      ) {
-        return settings.checkoutUrl;
-      }
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This billing account is closing.",
+      });
+    }
+    if (settings?.checkoutAttemptId) {
       throw new ORPCError("TOO_MANY_REQUESTS", {
         message:
           "A checkout is already open for your account. Complete it or wait for it to expire before choosing another plan.",
@@ -309,9 +327,10 @@ export const createBillingCheckout = async (input: {
     }
     const claim = {
       checkoutAttemptId: attemptId,
-      checkoutExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      checkoutExpiresAt: new Date(Date.now() + BILLING_CHECKOUT_CLAIM_MS),
       checkoutId: null,
       checkoutProduct: input.product,
+      checkoutProviderProductId: providerProductId,
       checkoutUrl: null,
       selectedSubscriptionId: null,
       updatedAt: new Date(),
@@ -323,11 +342,7 @@ export const createBillingCheckout = async (input: {
         set: claim,
         target: billingAccountSettings.userId,
       });
-    return null;
   });
-  if (pending !== null) {
-    return { checkoutUrl: pending };
-  }
 
   const checkoutMetadata = createBillingCheckoutMetadata({
     organizationId: input.organizationId,
@@ -336,19 +351,28 @@ export const createBillingCheckout = async (input: {
   });
   const polar = await getPolarClient();
   const checkout = await polar.checkouts
-    .create({
-      allow_discount_codes: true,
-      customer_email: input.customerEmail,
-      customer_metadata: checkoutMetadata.customerMetadata,
-      customer_name: input.customerName,
-      external_customer_id: getBillingExternalIdentity("user", input.userId),
-      metadata: checkoutMetadata.metadata,
-      products: [providerProductId],
-      return_url: cancelUrl,
-      success_url: withCheckoutIdPlaceholder(successUrl),
-    })
+    .create(
+      {
+        allow_discount_codes: true,
+        customer_email: input.customerEmail,
+        customer_metadata: checkoutMetadata.customerMetadata,
+        customer_name: input.customerName,
+        external_customer_id: getBillingExternalIdentity("user", input.userId),
+        metadata: {
+          ...checkoutMetadata.metadata,
+          [BILLING_CHECKOUT_ATTEMPT_METADATA]: attemptId,
+        },
+        products: [providerProductId],
+        return_url: cancelUrl,
+        success_url: withCheckoutIdPlaceholder(successUrl),
+      },
+      { timeout: 15 }
+    )
     .catch(async (error: unknown) => {
-      if (error instanceof PolarClientError && error.statusCode === 422) {
+      if (
+        error instanceof PolarClientError &&
+        [400, 401, 403, 404, 422].includes(error.statusCode)
+      ) {
         await db
           .update(billingAccountSettings)
           .set({
@@ -356,6 +380,7 @@ export const createBillingCheckout = async (input: {
             checkoutExpiresAt: null,
             checkoutId: null,
             checkoutProduct: null,
+            checkoutProviderProductId: null,
             checkoutUrl: null,
             updatedAt: new Date(),
           })
@@ -369,20 +394,44 @@ export const createBillingCheckout = async (input: {
       throw error;
     });
 
-  await db
-    .update(billingAccountSettings)
-    .set({
-      checkoutExpiresAt: new Date(checkout.expires_at),
-      checkoutId: checkout.id,
-      checkoutUrl: checkout.url,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(billingAccountSettings.userId, input.userId),
-        eq(billingAccountSettings.checkoutAttemptId, attemptId)
+  const persisted = await db.transaction(async (transaction) => {
+    await transaction
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.id, input.userId))
+      .for("update");
+    const [settings] = await transaction
+      .select()
+      .from(billingAccountSettings)
+      .where(eq(billingAccountSettings.userId, input.userId))
+      .limit(1);
+    const [updated] = await transaction
+      .update(billingAccountSettings)
+      .set({
+        checkoutExpiresAt: new Date(checkout.expires_at),
+        checkoutId: checkout.id,
+        checkoutUrl: checkout.url,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(billingAccountSettings.userId, input.userId),
+          eq(billingAccountSettings.checkoutAttemptId, attemptId)
+        )
       )
+      .returning({ userId: billingAccountSettings.userId });
+    return (
+      updated !== undefined &&
+      (settings?.deletionRequestedAt === undefined ||
+        settings.deletionRequestedAt === null)
     );
+  });
+  if (!persisted) {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "This billing account changed while opening checkout. Reload billing before continuing.",
+    });
+  }
 
   return { checkoutUrl: checkout.url };
 };
@@ -390,7 +439,6 @@ export const createBillingCheckout = async (input: {
 export const createBillingPortal = async (input: {
   headers: Headers;
   organizationId?: string;
-  subscriptionId?: string;
   userId: string;
 }) => {
   await assertBillingOwner(input);
@@ -403,36 +451,12 @@ export const createBillingPortal = async (input: {
   }
 
   const portalClient = await getPolarClient();
-  const legacySubscriptions =
-    input.subscriptionId === undefined
-      ? []
-      : await getLegacyAccountSubscriptions(input.userId);
-  const subscription =
-    input.subscriptionId === undefined
-      ? await getAccountSubscriptionRecord(input.userId)
-      : legacySubscriptions.find((item) => item.id === input.subscriptionId);
-  if (input.subscriptionId !== undefined && subscription === undefined) {
-    throw new ORPCError("NOT_FOUND", {
-      message: "This subscription is unavailable.",
-    });
-  }
-  const legacyOrganizationId = subscription?.metadata?.quieterOrganizationId;
   const portalSession = createBillingPortalSession({
-    ...(legacyOrganizationId === undefined
-      ? {}
-      : {
-          externalCustomerId: getBillingExternalIdentity(
-            "organization",
-            legacyOrganizationId
-          ),
-          legacyTeamCustomer: true,
-        }),
     returnUrl,
     userId: input.userId,
   });
   const session = await portalClient.customerSessions.create({
     external_customer_id: portalSession.externalCustomerId,
-    external_member_id: portalSession.externalMemberId,
     return_url: portalSession.returnUrl,
   });
 
@@ -441,6 +465,7 @@ export const createBillingPortal = async (input: {
 
 const serializeEntitlement = async (
   entitlement: Awaited<ReturnType<typeof getOrganizationBillingEntitlement>>,
+  requesterUserId: string,
   organizationId?: string
 ) => {
   const usage = entitlement.account
@@ -488,8 +513,12 @@ const serializeEntitlement = async (
             organizationName: item.organizationName,
           })),
           remainingCreditCents:
-            Math.max(0, usage.creditAmountMicroCents - usage.costMicroCents) /
-            1_000_000,
+            entitlement.account?.billingOwnerUserId === requesterUserId
+              ? Math.max(
+                  0,
+                  usage.creditAmountMicroCents - usage.chargeableCostMicroCents
+                ) / 1_000_000
+              : null,
         }
       : null,
   };
@@ -514,21 +543,24 @@ export const getBillingOverview = async (input: { userId: string }) => {
         membership.organizationId
       );
       const isBillingOwner = billingOwnerUserId === input.userId;
-      const subscription = isLocalDevelopmentBillingEntitlementEnabled()
+      const entitlement = await getOrganizationBillingEntitlement({
+        feature: "organizationMail",
+        organizationId: membership.organizationId,
+      });
+      const subscription = entitlement.hasUnlimitedAccess
         ? null
         : await getOrganizationSubscriptionRecord(membership.organizationId);
       return {
         billingOwnerIsCurrentUser: isBillingOwner,
         billingOwnerName: membership.billingOwnerName ?? "The team owner",
         canManageBilling: isBillingOwner,
+        canTakeOverBilling:
+          membership.role.split(",").includes("owner") && !isBillingOwner,
         organizationId: membership.organizationId,
         organizationName: membership.organizationName,
         ...(await serializeEntitlement(
-          await getOrganizationBillingEntitlement({
-            feature: "organizationMail",
-            organizationId: membership.organizationId,
-            subscription,
-          }),
+          entitlement,
+          input.userId,
           membership.organizationId
         )),
         subscription:
@@ -543,29 +575,37 @@ export const getBillingOverview = async (input: { userId: string }) => {
     })
   );
 
-  const subscription = isLocalDevelopmentBillingEntitlementEnabled()
+  const entitlement = await getAccountBillingEntitlement(input.userId);
+  const subscription = entitlement.hasUnlimitedAccess
     ? null
     : await getAccountSubscriptionRecord(input.userId);
-  const [legacySubscriptions, settings, entitlement] = await Promise.all([
-    getLegacyAccountSubscriptions(input.userId),
-    getAccountUsageSettings(input.userId),
-    getAccountBillingEntitlement(input.userId),
-  ]);
+  const settings = await getAccountUsageSettings(input.userId);
+  const [management] = await db
+    .select({
+      checkoutId: billingAccountSettings.checkoutId,
+      deletionRequestedAt: billingAccountSettings.deletionRequestedAt,
+    })
+    .from(billingAccountSettings)
+    .where(eq(billingAccountSettings.userId, input.userId))
+    .limit(1);
+  const [customer] = await db
+    .select({ id: billingSubscription.id })
+    .from(billingSubscription)
+    .where(
+      and(
+        eq(billingSubscription.userId, input.userId),
+        eq(billingSubscription.scope, "account"),
+        isNotNull(billingSubscription.providerCustomerId)
+      )
+    )
+    .limit(1);
   const account = {
-    ...(await serializeEntitlement(entitlement)),
+    ...(await serializeEntitlement(entitlement, input.userId)),
     canManageBilling: true,
-    legacySubscriptions: legacySubscriptions
-      .filter((item) => item.id !== subscription?.id)
-      .map((item) => ({
-        currentPeriodEnd: item.currentPeriodEnd,
-        id: item.id,
-        organizationName: item.organizationName,
-        product: item.plan,
-        status: item.status,
-      })),
+    hasBillingCustomer:
+      customer !== undefined || Boolean(management?.checkoutId),
+    isClosing: Boolean(management?.deletionRequestedAt),
     managedUsageRates: getManagedUsageRates(),
-    requiresPlanSelection:
-      subscription === null && legacySubscriptions.length > 0,
     settings,
     subscription:
       subscription === null
@@ -588,63 +628,7 @@ export const syncBillingCheckout = async (input: {
     return { synced: false };
   }
 
-  const polar = await getPolarClient();
-  const checkout = await polar.checkouts.get(input.checkoutId);
-  const checkoutUserId = checkout.metadata[BILLING_METADATA_USER_ID];
-
-  if (checkout.status !== "succeeded" || checkoutUserId !== input.userId) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "This checkout cannot be applied to your billing account.",
-    });
-  }
-
-  let subscription: Subscription | undefined;
-  if ((checkout.subscription_id ?? "") !== "") {
-    const subscriptionId = checkout.subscription_id;
-    if (typeof subscriptionId !== "string") {
-      throw new ORPCError("BAD_REQUEST", {
-        message: "This checkout cannot be applied to your billing account.",
-      });
-    }
-    subscription = await polar.subscriptions.get(subscriptionId);
-  } else if (
-    (checkout.customer_id ?? "") !== "" &&
-    (checkout.product_id ?? "") !== ""
-  ) {
-    const subscriptions = await polar.subscriptions.list({
-      customer_id: checkout.customer_id,
-      limit: 10,
-      product_id: checkout.product_id,
-      sorting: ["-started_at"],
-      status: ["active", "trialing"],
-    });
-    subscription = subscriptions.items.find(
-      (candidate) =>
-        candidate.metadata[BILLING_METADATA_USER_ID] === input.userId
-    );
-  }
-
-  if (subscription === undefined) {
-    reportError(
-      new Error(
-        "Could not resolve the subscription created by a completed checkout."
-      ),
-      { operation: "billing:resolve-checkout-subscription" }
-    );
-    throw new ORPCError("BAD_REQUEST", {
-      message: "We could not activate your plan. Please contact support.",
-    });
-  }
-
-  if (
-    subscription.metadata[BILLING_METADATA_USER_ID] !== input.userId ||
-    subscription.customer_id !== checkout.customer_id
-  ) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "This checkout cannot be applied to your billing account.",
-    });
-  }
-  return await syncBillingSubscription(subscription);
+  return await syncRecoveredBillingCheckout(input);
 };
 
 const recordAiCreditUsage = async (input: {
