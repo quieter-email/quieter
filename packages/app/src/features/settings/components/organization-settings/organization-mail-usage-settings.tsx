@@ -194,7 +194,7 @@ const UsageBreakdown = ({
     costCents: number;
     kind: (typeof usageBreakdownConfig)[number]["kind"];
   }[];
-  creditAmountCents: number;
+  creditAmountCents: number | null;
   organizations?: UsageOrganizations;
 }) => {
   const costs = new Map(breakdown.map((item) => [item.kind, item.costCents]));
@@ -206,9 +206,10 @@ const UsageBreakdown = ({
     (total, item) => total + item.costCents,
     0
   );
+  const barCapacityCents = creditAmountCents ?? totalCostCents;
   const usedPercent =
-    creditAmountCents > 0
-      ? Math.min(100, (totalCostCents / creditAmountCents) * 100)
+    barCapacityCents > 0
+      ? Math.min(100, (totalCostCents / barCapacityCents) * 100)
       : 0;
 
   return (
@@ -233,6 +234,7 @@ const UsageBreakdown = ({
               <Tooltip key={item.kind}>
                 <TooltipTrigger
                   aria-label={`${item.label}, ${formatMoney(item.costCents)}`}
+                  delay={0}
                   // oxlint-disable-next-line shadcn/no-arbitrary-values, shadcn/no-restyle -- Segments are measured per cost slice with a brightness hover.
                   className={`${item.className} min-w-1 transition-[filter] hover:brightness-110`}
                   // oxlint-disable-next-line shadcn/no-inline-styles -- Segment flex is measured from cost data.
@@ -312,7 +314,7 @@ export const ManagedUsageSummary = ({
   rates,
   usage,
 }: {
-  includedUsageCents: number;
+  includedUsageCents: number | null;
   organizations?: UsageOrganizations;
   rates?: Awaited<
     ReturnType<typeof rpc.organizationMailUsage.overview>
@@ -324,7 +326,7 @@ export const ManagedUsageSummary = ({
 }) => {
   const managedUsageCostCents = usage.managedUsageCostCents ?? 0;
   const usagePercent =
-    includedUsageCents > 0
+    includedUsageCents !== null && includedUsageCents > 0
       ? Math.min(
           100,
           Math.round((managedUsageCostCents / includedUsageCents) * 100)
@@ -344,11 +346,18 @@ export const ManagedUsageSummary = ({
             </Text>
             <p className="mt-1 text-caption text-muted-fg">used this period</p>
           </div>
-          <p className="text-right text-caption text-muted-fg">
-            {formatMoney(includedUsageCents)} monthly usage balance
-            <br />
-            {formatMoney(usage.billableCostCents)} overage
-          </p>
+          {includedUsageCents === null ? (
+            <div className="space-y-2 text-right">
+              <Pill tone="green">Unlimited</Pill>
+              <p className="text-caption text-muted-fg">No usage charges</p>
+            </div>
+          ) : (
+            <p className="text-right text-caption text-muted-fg">
+              {formatMoney(includedUsageCents)} monthly usage balance
+              <br />
+              {formatMoney(usage.billableCostCents)} overage
+            </p>
+          )}
         </div>
       </Surface>
 
@@ -358,11 +367,13 @@ export const ManagedUsageSummary = ({
         organizations={organizations}
       />
 
-      <Progress className="sr-only" max={100} value={usagePercent}>
-        <ProgressTrack>
-          <ProgressIndicator />
-        </ProgressTrack>
-      </Progress>
+      {includedUsageCents !== null && (
+        <Progress className="sr-only" max={100} value={usagePercent}>
+          <ProgressTrack>
+            <ProgressIndicator />
+          </ProgressTrack>
+        </Progress>
+      )}
       {organizations && organizations.length > 0 && (
         <Surface chrome="inset" variant="detail">
           <p className="mb-3 text-caption text-muted-fg">Usage by team</p>
@@ -370,6 +381,7 @@ export const ManagedUsageSummary = ({
             {organizations.map((organization) => (
               <Tooltip key={organization.organizationId ?? "deleted"}>
                 <TooltipTrigger
+                  delay={0}
                   // oxlint-disable-next-line shadcn/no-restyle -- The data row is the focusable tooltip target and owns no shared control treatment.
                   className="flex w-full items-start justify-between gap-4 text-body-sm"
                 >
@@ -766,7 +778,6 @@ const ManagedUsageSettingsForm = ({
     (hasDuplicateMilestone && "Each milestone must be unique.") ||
     null;
   const includedUsageCents = overview.includedManagedUsageCents ?? 0;
-  const managedUsageCostCents = overview.usage.managedUsageCostCents ?? 0;
   const limitCents =
     limitDollars === null ? null : Math.round(limitDollars * centsPerDollar);
   const periodStart = formatPeriodDate(overview.period.start);
@@ -829,22 +840,13 @@ const ManagedUsageSettingsForm = ({
     }
   };
 
-  if (overview.hasUnlimitedAccess) {
-    return (
-      <SettingsCard>
-        <SettingsInsetRow className="justify-between gap-4">
-          <SettingsRowText title="Usage">
-            {formatMoney(managedUsageCostCents)} tracked this period
-          </SettingsRowText>
-          <Pill tone="green">Unlimited</Pill>
-        </SettingsInsetRow>
-      </SettingsCard>
-    );
-  }
-
   return (
     <SettingsSection
-      title="Team usage & safety limits"
+      title={
+        overview.hasUnlimitedAccess
+          ? "Team usage"
+          : "Team usage & safety limits"
+      }
       description={
         periodStart !== null && periodEnd !== null
           ? `${periodStart} to ${periodEnd}`
@@ -852,34 +854,38 @@ const ManagedUsageSettingsForm = ({
       }
     >
       <ManagedUsageSummary
-        includedUsageCents={includedUsageCents}
+        includedUsageCents={
+          overview.hasUnlimitedAccess ? null : includedUsageCents
+        }
         rates={overview.managedUsageRates}
         usage={overview.usage}
       />
 
-      <ManagedUsageSettingsControls
-        canManageOrganizationMailUsage={canManageOrganizationMailUsage}
-        hasUnsavedChanges={hasUnsavedChanges}
-        includedUsageCents={includedUsageCents}
-        isSaving={updateMutation.isPending}
-        limitCents={limitCents}
-        limitDollars={limitDollars}
-        milestoneError={milestoneError}
-        milestones={milestones}
-        onAddMilestone={addMilestone}
-        onRemoveMilestone={(id) => {
-          setMilestones((current) =>
-            current.filter((candidate) => candidate.id !== id)
-          );
-        }}
-        onSave={() => void saveSettings()}
-        onUpdateMilestone={updateMilestone}
-        overageEnabled={overageEnabled}
-        setLimitDollars={setLimitDollars}
-        setOverageEnabled={setOverageEnabled}
-      />
+      {!overview.hasUnlimitedAccess && (
+        <ManagedUsageSettingsControls
+          canManageOrganizationMailUsage={canManageOrganizationMailUsage}
+          hasUnsavedChanges={hasUnsavedChanges}
+          includedUsageCents={includedUsageCents}
+          isSaving={updateMutation.isPending}
+          limitCents={limitCents}
+          limitDollars={limitDollars}
+          milestoneError={milestoneError}
+          milestones={milestones}
+          onAddMilestone={addMilestone}
+          onRemoveMilestone={(id) => {
+            setMilestones((current) =>
+              current.filter((candidate) => candidate.id !== id)
+            );
+          }}
+          onSave={() => void saveSettings()}
+          onUpdateMilestone={updateMilestone}
+          overageEnabled={overageEnabled}
+          setLimitDollars={setLimitDollars}
+          setOverageEnabled={setOverageEnabled}
+        />
+      )}
 
-      {!canManageOrganizationMailUsage && (
+      {!overview.hasUnlimitedAccess && !canManageOrganizationMailUsage && (
         <p className="px-4 pt-1 pb-3 text-caption text-muted-fg @md:px-6">
           Only admins and owners can change team credit settings.
         </p>

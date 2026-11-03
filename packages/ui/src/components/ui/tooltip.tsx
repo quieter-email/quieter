@@ -5,6 +5,7 @@ import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
 import { anchoredPopupMotionClassName } from "./overlay-chrome";
+import { popupSurfaceClassName } from "./popup-surface";
 
 export const TooltipGroup = TooltipPrimitive.Provider;
 export const Tooltip = TooltipPrimitive.Root;
@@ -35,7 +36,8 @@ export const TooltipContent = ({
       <TooltipPrimitive.Popup
         className={cn(
           anchoredPopupMotionClassName,
-          "z-50 max-w-xs rounded-md border border-transparent bg-detail px-3 py-1.5 text-caption text-popover-fg shadow-md",
+          popupSurfaceClassName,
+          "z-50 max-w-xs rounded-md px-3 py-1.5 text-caption",
           className
         )}
         {...props}

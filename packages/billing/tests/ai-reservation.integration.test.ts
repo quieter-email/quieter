@@ -1084,13 +1084,28 @@ describe.skipIf(state.databaseUrl === undefined)(
 
     test("unlimited accounts leave no funds held and no charge", async () => {
       const unlimited = { ...context, account: null };
-      await expect(reserveAiCreditUsage(unlimited)).resolves.toBeNull();
-      await expect(reserveAiCreditUsage(unlimited)).resolves.toBeNull();
+      const reservationId = z
+        .string()
+        .parse(await reserveAiCreditUsage(unlimited));
+      await settleAiCreditUsage({ costUsd: 0.01, reservationId });
+      await settleAiCreditUsage({ costUsd: 0.02, reservationId });
+      await releaseAiCreditUsage(reservationId);
+      await reserveAiCreditUsage(unlimited);
       const holds = await db
         .select()
         .from(aiCreditReservation)
         .where(eq(aiCreditReservation.organizationId, account.organizationId));
       expect(holds.every((hold) => hold.status === "settled")).toBeTruthy();
+      const settled = holds.find((hold) => hold.id === reservationId);
+      expect(settled?.actualCostMicroCents).toBeGreaterThan(0);
+      const charges = await db
+        .select()
+        .from(billingCreditUsageEvent)
+        .where(
+          eq(billingCreditUsageEvent.organizationId, account.organizationId)
+        );
+      expect(charges).toHaveLength(0);
+      expect(state.ingest).not.toHaveBeenCalled();
       await expect(getOutstandingAiCreditReservations(account)).resolves.toBe(
         0
       );

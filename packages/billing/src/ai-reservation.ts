@@ -102,17 +102,18 @@ export const reserveAiCreditUsage = async (context: AiBillingContext) => {
   }
   const { account } = context;
   if (account === null) {
+    const id = crypto.randomUUID();
     await db.insert(aiCreditReservation).values({
       account: null,
       createdAt: context.admittedAt,
       groupId: context.groupId,
-      id: crypto.randomUUID(),
+      id,
       organizationId: context.organizationId,
       reservedCostMicroCents: 0,
       status: "settled",
       usageKind: context.usageKind,
     });
-    return null;
+    return id;
   }
   return await db.transaction(async (tx) => {
     await lockBillingAccount(account, tx, { admission: true });
@@ -378,24 +379,33 @@ export const settleAiCreditUsage = async (input: {
     input.costUsd === 0 ? 0 : getAiUsageCostMicroCents(input.costUsd);
   assertBillingMoney(actualCostMicroCents);
   const { reservationId } = input;
-  await withLockedAiReservation(reservationId, async (row, tx) => {
-    if (row.status === "released") {
-      throw new Error("The AI billing reservation is unavailable.");
+  const hasBillingAccount = await withLockedAiReservation(
+    reservationId,
+    async (row, tx) => {
+      if (row.status === "released") {
+        throw new Error("The AI billing reservation is unavailable.");
+      }
+      await tx
+        .update(aiCreditReservation)
+        .set({
+          actualCostMicroCents,
+        })
+        .where(
+          and(
+            eq(aiCreditReservation.id, reservationId),
+            eq(
+              aiCreditReservation.status,
+              row.account === null ? "settled" : "reserved"
+            ),
+            isNull(aiCreditReservation.actualCostMicroCents)
+          )
+        );
+      return row.account !== null;
     }
-    await tx
-      .update(aiCreditReservation)
-      .set({
-        actualCostMicroCents,
-      })
-      .where(
-        and(
-          eq(aiCreditReservation.id, reservationId),
-          eq(aiCreditReservation.status, "reserved"),
-          isNull(aiCreditReservation.actualCostMicroCents)
-        )
-      );
-  });
-  await reconcileAiCreditReservations({ reservationId });
+  );
+  if (hasBillingAccount) {
+    await reconcileAiCreditReservations({ reservationId });
+  }
 };
 
 export const releaseAiCreditUsage = async (reservationId: string | null) => {

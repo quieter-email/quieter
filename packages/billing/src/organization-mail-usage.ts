@@ -24,6 +24,10 @@ import {
   SES_OUTBOUND_ATTACHMENT_DATA_MICROCENTS_PER_GB,
   SES_OUTBOUND_MESSAGE_MICROCENTS,
 } from "./ses-pricing.ts";
+import {
+  getCalendarUsagePeriod,
+  getRecordedUsageOverview,
+} from "./usage-overview.ts";
 
 type OrganizationMailUsageEstimate = {
   attachmentSizeBytes: number;
@@ -60,15 +64,7 @@ const getBillingPeriod = (start: Date | null, end: Date | null) => {
     return { end, start };
   }
 
-  const now = new Date();
-  const calendarStart = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
-  );
-  const calendarEnd = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
-  );
-
-  return { end: calendarEnd, start: calendarStart };
+  return getCalendarUsagePeriod();
 };
 
 const getManagedUsageCostMicroCents = (sesCostUsdMicroCents: number) =>
@@ -488,6 +484,9 @@ export const getOrganizationMailUsageOverview = async (
     entitlement.account?.currentPeriodStart ?? null,
     entitlement.account?.currentPeriodEnd ?? null
   );
+  const recordedUsage = entitlement.hasUnlimitedAccess
+    ? getRecordedUsageOverview({ organizationId }, period)
+    : null;
   const [settings, mailUsage, creditUsage] = await Promise.all([
     getOrganizationMailUsageSettings(organizationId),
     getPeriodUsageMicroCents({
@@ -495,9 +494,12 @@ export const getOrganizationMailUsageOverview = async (
       organizationId,
       start: period.start,
     }),
-    entitlement.account ? getBillingCreditUsage(entitlement.account) : null,
+    entitlement.account
+      ? getBillingCreditUsage(entitlement.account)
+      : recordedUsage,
   ]);
-  const creditAmountMicroCents = creditUsage?.creditAmountMicroCents ?? 0;
+  const creditAmountMicroCents =
+    (entitlement.account?.creditAmountCents ?? 0) * 1_000_000;
   const usedCreditMicroCents =
     creditUsage?.chargeableCostMicroCents ??
     getManagedUsageCostMicroCents(mailUsage.sesCostMicroCents);

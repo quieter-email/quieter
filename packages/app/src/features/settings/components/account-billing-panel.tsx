@@ -35,6 +35,7 @@ import {
   NumberFieldIncrement,
   NumberFieldInput,
 } from "@quieter/ui/number-field";
+import { Pill } from "@quieter/ui/pill";
 import { Surface } from "@quieter/ui/surface";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { toast } from "@quieter/ui/toast";
@@ -207,14 +208,21 @@ const AccountBillingContent = ({ account }: { account: AccountBilling }) => {
     <div className="@container space-y-6">
       <SettingsSection
         title="Your plan"
-        description="One plan and one monthly usage balance across the teams you pay for. Gmail account slots stay separate for each team."
+        description={
+          account.hasUnlimitedAccess
+            ? "Unlimited access across the teams you pay for. Usage is tracked without charges or spending limits."
+            : "One plan and one monthly usage balance across the teams you pay for. Gmail account slots stay separate for each team."
+        }
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <BillingCreditSummary
-            creditAmountCents={account.creditAmountCents}
-            product={currentProduct}
-            usage={account.usage}
-          />
+          <div className="flex flex-wrap items-center gap-3">
+            <BillingCreditSummary
+              creditAmountCents={account.creditAmountCents}
+              product={currentProduct}
+              usage={account.usage}
+            />
+            {account.hasUnlimitedAccess && <Pill tone="green">Unlimited</Pill>}
+          </div>
           {account.hasBillingCustomer && (
             <Button
               disabled={portalMutation.isPending}
@@ -276,7 +284,11 @@ const AccountBillingContent = ({ account }: { account: AccountBilling }) => {
           }
         >
           <ManagedUsageSummary
-            includedUsageCents={account.creditAmountCents ?? 0}
+            includedUsageCents={
+              account.hasUnlimitedAccess
+                ? null
+                : (account.creditAmountCents ?? 0)
+            }
             organizations={account.usage.organizations}
             rates={account.managedUsageRates}
             usage={{

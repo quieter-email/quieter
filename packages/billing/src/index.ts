@@ -43,6 +43,10 @@ import {
   BILLING_METADATA_USER_ID,
   syncBillingSubscription,
 } from "./subscription-sync.ts";
+import {
+  getCalendarUsagePeriod,
+  getRecordedUsageOverview,
+} from "./usage-overview.ts";
 
 export {
   AI_COST_RECOVERY_BASIS_POINTS,
@@ -468,9 +472,22 @@ const serializeEntitlement = async (
   requesterUserId: string,
   organizationId?: string
 ) => {
-  const usage = entitlement.account
-    ? await getBillingCreditUsage(entitlement.account)
-    : null;
+  let period = entitlement.hasUnlimitedAccess ? getCalendarUsagePeriod() : null;
+  let usage: Awaited<ReturnType<typeof getRecordedUsageOverview>> | null = null;
+  if (entitlement.account) {
+    period = {
+      end: entitlement.account.currentPeriodEnd,
+      start: entitlement.account.currentPeriodStart,
+    };
+    usage = await getBillingCreditUsage(entitlement.account);
+  } else if (entitlement.hasUnlimitedAccess && period !== null) {
+    usage = await getRecordedUsageOverview(
+      organizationId === undefined
+        ? { billingOwnerUserId: requesterUserId }
+        : { organizationId },
+      period
+    );
+  }
   const organizations =
     usage?.organizations.filter(
       (item) =>
@@ -487,8 +504,8 @@ const serializeEntitlement = async (
 
   return {
     creditAmountCents: entitlement.account?.creditAmountCents ?? null,
-    currentPeriodEnd: entitlement.account?.currentPeriodEnd ?? null,
-    currentPeriodStart: entitlement.account?.currentPeriodStart ?? null,
+    currentPeriodEnd: period?.end ?? null,
+    currentPeriodStart: period?.start ?? null,
     hasAccess: entitlement.hasAccess,
     hasUnlimitedAccess: entitlement.hasUnlimitedAccess,
     product: entitlement.product,
@@ -516,7 +533,8 @@ const serializeEntitlement = async (
             entitlement.account?.billingOwnerUserId === requesterUserId
               ? Math.max(
                   0,
-                  usage.creditAmountMicroCents - usage.chargeableCostMicroCents
+                  entitlement.account.creditAmountCents * 1_000_000 -
+                    usage.chargeableCostMicroCents
                 ) / 1_000_000
               : null,
         }
