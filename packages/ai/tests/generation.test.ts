@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 
 import type { AiUsageReport } from "../src/chat-usage";
+import { extractMailVerificationCode } from "../src/extract-verification-code";
 import { runStructuredGeneration } from "../src/generation";
 import { classifyMailImportance } from "../src/mail-importance";
 
@@ -196,7 +197,7 @@ describe("structured generation recovery", () => {
     }
   );
 
-  test("recovers a malformed importance decision without enabling empty-output retries", async () => {
+  test("recovers a malformed importance decision and accounts for both responses", async () => {
     const model = new MockLanguageModelV4({
       doGenerate: [
         response({
@@ -223,6 +224,43 @@ describe("structured generation recovery", () => {
     );
   });
 
+  test("recovers an importance decision after reasoning consumes the first response", async () => {
+    const reasoningResponse = response({ costUsd: 0.125, empty: true });
+    state.model.mockReturnValue(
+      new MockLanguageModelV4({
+        doGenerate: [
+          {
+            ...reasoningResponse,
+            content: [{ text: "Classify the message.", type: "reasoning" }],
+            usage: {
+              ...reasoningResponse.usage,
+              outputTokens: { reasoning: 5, text: 0, total: 5 },
+            },
+          },
+          response({ costUsd: 0.25, text: '{"important":false}' }),
+        ],
+      })
+    );
+    const onUsage = vi.fn<(usage: AiUsageReport) => void>();
+
+    await expect(
+      classifyMailImportance({
+        billing,
+        context: null,
+        message: { id: "synthetic-message", subject: "Routine update" },
+        onUsage,
+      })
+    ).resolves.toMatchObject({ important: false });
+
+    expect(onUsage).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        completionTokens: 10,
+        costUsd: 0.375,
+        promptTokens: 20,
+      })
+    );
+  });
+
   test("keeps persistent malformed JSON visible and accounts for both responses", async () => {
     const model = new MockLanguageModelV4({
       doGenerate: response({ costUsd: 0.125, text: "```json" }),
@@ -243,6 +281,60 @@ describe("structured generation recovery", () => {
       expect.objectContaining({ costUsd: 0.25, promptTokens: 20 })
     );
   });
+
+  test("rejects a login-link token as a verification code and accounts for the response", async () => {
+    const model = new MockLanguageModelV4({
+      doGenerate: response({
+        costUsd: 0.125,
+        text: JSON.stringify({
+          code: `signed.${"synthetic".repeat(20)}.token`,
+          expiresInSeconds: null,
+          service: "Example",
+        }),
+      }),
+    });
+    state.model.mockReturnValue(model);
+    const onUsage = vi.fn<(usage: AiUsageReport) => void>();
+
+    await expect(
+      extractMailVerificationCode({
+        billing,
+        message: { id: "synthetic-message", subject: "Sign in to Example" },
+        onUsage,
+      })
+    ).rejects.toThrow(NoObjectGeneratedError);
+
+    expect(onUsage).toHaveBeenCalledWith(
+      expect.objectContaining({ costUsd: 0.125 })
+    );
+  });
+
+  test.each(["123456", "𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠"])(
+    "accepts bounded numeric and Unicode verification codes",
+    async (code) => {
+      state.model.mockReturnValue(
+        new MockLanguageModelV4({
+          doGenerate: response({
+            text: JSON.stringify({
+              code,
+              expiresInSeconds: null,
+              service: "Example",
+            }),
+          }),
+        })
+      );
+
+      await expect(
+        extractMailVerificationCode({
+          billing,
+          message: {
+            bodyText: `Your sign-in code is ${code}.`,
+            id: "synthetic-message",
+          },
+        })
+      ).resolves.toMatchObject({ code });
+    }
+  );
 
   test.each(["content-filter", "error"] as const)(
     "does not retry %s output and retains its billed usage",
@@ -276,7 +368,7 @@ describe("structured generation recovery", () => {
     ["length", NoOutputGeneratedError],
     ["stop", NoObjectGeneratedError],
   ] as const)(
-    "does not retry empty importance output after %s and retains its billed usage",
+    "keeps persistent empty importance output visible after %s and retains billed usage",
     async (finishReason, errorType) => {
       const model = new MockLanguageModelV4({
         doGenerate: response({ costUsd: 0.125, empty: true, finishReason }),
@@ -293,9 +385,9 @@ describe("structured generation recovery", () => {
         })
       ).rejects.toThrow(errorType);
 
-      expect(model.doGenerateCalls).toHaveLength(1);
+      expect(model.doGenerateCalls).toHaveLength(2);
       expect(onUsage).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ costUsd: 0.125, promptTokens: 10 })
+        expect.objectContaining({ costUsd: 0.25, promptTokens: 20 })
       );
     }
   );
