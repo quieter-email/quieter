@@ -205,8 +205,25 @@
 }
 
 .theme-swatch {
-  background: var(--theme-base);
-  box-shadow: inset -0.3rem 0 0 var(--theme-primary);
+  background:
+    radial-gradient(
+      ellipse at 25% 15%,
+      color-mix(in oklch, var(--theme-primary) 85%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse at 90% 85%,
+      color-mix(in oklch, var(--theme-primary) 65%, transparent),
+      transparent 60%
+    ),
+    linear-gradient(
+      135deg,
+      var(--theme-base) 15%,
+      color-mix(in oklch, var(--theme-base) 75%, var(--theme-primary)) 65%,
+      var(--theme-base)
+    );
+  box-shadow: inset 0 0 0 1px
+    color-mix(in oklch, var(--theme-primary) 15%, transparent);
 }
 
 :root,

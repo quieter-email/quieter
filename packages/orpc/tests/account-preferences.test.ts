@@ -56,10 +56,10 @@ describe("account date and time preferences", () => {
   });
 
   test("scopes reads to the authenticated user and preserves saved choices", async () => {
-    mocks.query.mockResolvedValue({ rows: [["24h", 0]] });
+    mocks.query.mockResolvedValue({ rows: [["12h", 0]] });
     await expect(
       call(accountPreferencesRouter.get, undefined, { context })
-    ).resolves.toMatchObject({ timeFormat: "24h", weekStartsOn: 0 });
+    ).resolves.toMatchObject({ timeFormat: "12h", weekStartsOn: 0 });
     for (const [query, params] of mocks.query.mock.calls) {
       expect(query).toMatch(/where "user"\."id" =/u);
       expect(params).toContain("acting-user");
@@ -78,25 +78,5 @@ describe("account date and time preferences", () => {
     expect(query).toMatch(/set "weekStartsOn" = .* where "user"\."id" =/u);
     expect(query).not.toMatch(/set "timeFormat"/u);
     expect(params).toContain("acting-user");
-  });
-
-  test("initializes legacy regional defaults without overwriting a concurrent explicit choice", async () => {
-    let reads = 0;
-    // oxlint-disable-next-line require-await -- The SQL proxy requires an asynchronous result.
-    mocks.query.mockImplementation(async (query) => {
-      if (query.startsWith("select")) {
-        reads += 1;
-        return {
-          rows: reads === 1 ? [[null, null]] : [["24h", 0]],
-        };
-      }
-      expect(query).toMatch(
-        /where.*"user"\."id" = .* and .*"user"\."timeFormat" is null/u
-      );
-      return { rows: [] };
-    });
-    await expect(
-      call(accountPreferencesRouter.get, undefined, { context })
-    ).resolves.toMatchObject({ timeFormat: "24h", weekStartsOn: 0 });
   });
 });

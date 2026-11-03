@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  ComputerIcon,
-  Moon02Icon,
-  Sun03Icon,
-} from "@hugeicons/core-free-icons";
-
 import { COLOR_THEMES, useColorMode } from "./color-mode";
-import { Icon } from "./icon";
 import {
   Select,
   SelectContent,
@@ -32,7 +25,6 @@ export const ThemePicker = () => {
   const currentTheme =
     configColorMode === "system" ? "system" : themes[colorMode];
   const selectedTheme = isMounted ? currentTheme : null;
-  const modeIcon = colorMode === "dark" ? Moon02Icon : Sun03Icon;
 
   return (
     <Select
@@ -54,7 +46,13 @@ export const ThemePicker = () => {
     >
       <SelectTrigger aria-label="Theme" className="w-44" size="sm">
         {selectedTheme && (
-          <Icon icon={selectedTheme === "system" ? ComputerIcon : modeIcon} />
+          <span
+            aria-hidden="true"
+            className="theme-swatch size-4 shrink-0 rounded-full"
+            data-color-theme={
+              selectedTheme === "system" ? colorMode : selectedTheme
+            }
+          />
         )}
         <SelectValue placeholder="Theme" />
       </SelectTrigger>
@@ -69,7 +67,11 @@ export const ThemePicker = () => {
                 (theme) => (
                   <SelectItem key={theme.name} value={theme.name}>
                     <span className="flex items-center gap-2">
-                      <Icon icon={mode === "dark" ? Moon02Icon : Sun03Icon} />
+                      <span
+                        aria-hidden="true"
+                        className="theme-swatch size-4 shrink-0 rounded-full"
+                        data-color-theme={theme.name}
+                      />
                       {theme.label}
                     </span>
                   </SelectItem>
@@ -80,7 +82,11 @@ export const ThemePicker = () => {
           <SelectSeparator />
           <SelectItem value="system">
             <span className="flex items-center gap-2">
-              <Icon icon={ComputerIcon} />
+              <span
+                aria-hidden="true"
+                className="theme-swatch size-4 shrink-0 rounded-full"
+                data-color-theme={colorMode}
+              />
               System
             </span>
           </SelectItem>

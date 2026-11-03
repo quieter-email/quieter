@@ -54,9 +54,7 @@ export const PreferencesSettingsPanel = () => {
       <DateTimeSettings />
       <SettingsSection title="Appearance">
         <SettingsRows>
-          <SettingsRow action={<ThemePicker />} title="Theme">
-            Choose a look for your workspace, or follow your device.
-          </SettingsRow>
+          <SettingsRow action={<ThemePicker />} title="Theme" />
           <SettingsRow
             title="Mail layout"
             action={
@@ -109,9 +107,7 @@ export const PreferencesSettingsPanel = () => {
               </Button>
             }
             title="Keyboard shortcuts"
-          >
-            Review the shortcuts for composing, navigating, and triaging mail.
-          </SettingsRow>
+          />
         </SettingsRows>
       </SettingsSection>
       <SettingsSection title="Privacy and content">
