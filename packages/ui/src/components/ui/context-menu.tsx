@@ -11,7 +11,7 @@ import {
   menuSeparatorClassName,
 } from "./menu-chrome";
 import { menuFocusProps } from "./menu-focus";
-import { overlayTriggerClassName } from "./overlay-chrome";
+import { anchoredTriggerClassName } from "./overlay-chrome";
 
 export const ContextMenu = ({
   onItemHighlighted,
@@ -36,7 +36,7 @@ export const ContextMenuTrigger = ({
   ...props
 }: ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Trigger>) => (
   <ContextMenuPrimitive.Trigger
-    className={cn(overlayTriggerClassName, "squircle", className)}
+    className={cn(anchoredTriggerClassName, "squircle", className)}
     {...props}
   />
 );

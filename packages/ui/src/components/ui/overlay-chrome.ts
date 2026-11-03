@@ -1,6 +1,8 @@
 export const overlayTriggerClassName =
   "transition-transform duration-100 ease-(--app-motion-ease-out) focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100";
 
+export const anchoredTriggerClassName = `${overlayTriggerClassName} active:scale-100`;
+
 export const overlayBackdropClassName =
   "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-150 ease-(--app-motion-ease-out) data-ending-style:opacity-0 data-ending-style:duration-100 data-starting-style:opacity-0";
 
