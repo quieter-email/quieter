@@ -17,7 +17,7 @@ import {
   menuSeparatorClassName,
 } from "./menu-chrome";
 import { menuFocusProps } from "./menu-focus";
-import { overlayTriggerClassName } from "./overlay-chrome";
+import { anchoredTriggerClassName } from "./overlay-chrome";
 
 export const DropdownMenu = <Payload = unknown,>({
   onItemHighlighted,
@@ -58,7 +58,7 @@ type DropdownMenuDensity = "default" | "compact";
 const DropdownMenuDensityContext =
   createContext<DropdownMenuDensity>("default");
 
-const dropdownMenuTriggerVariants = cva(overlayTriggerClassName, {
+const dropdownMenuTriggerVariants = cva(anchoredTriggerClassName, {
   defaultVariants: { chrome: "default" },
   variants: {
     appearance: {
@@ -269,6 +269,7 @@ export const DropdownMenuSubmenuTrigger = ({
     <MenuPrimitive.SubmenuTrigger
       className={cn(
         menuItemClassName,
+        anchoredTriggerClassName,
         "squircle",
         { [menuCompactItemClassName]: size === "compact" },
         className

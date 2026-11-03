@@ -6,8 +6,8 @@ import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
 import {
   anchoredPopupMotionClassName,
+  anchoredTriggerClassName,
   overlayBackdropClassName,
-  overlayTriggerClassName,
 } from "./overlay-chrome";
 import { popupSurfaceClassName } from "./popup-surface";
 
@@ -19,7 +19,7 @@ export const PopoverTrigger = ({
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger>) => (
   <PopoverPrimitive.Trigger
-    className={cn("squircle", className, overlayTriggerClassName)}
+    className={cn("squircle", className, anchoredTriggerClassName)}
     {...props}
   />
 );
