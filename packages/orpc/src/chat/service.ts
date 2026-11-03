@@ -17,6 +17,7 @@ import {
   createForegroundServerTools,
   approvalRequiredToolNames,
   resolveLinearWriteReview,
+  resolveConnectorWriteReview,
   editComposeInputSchema,
   editComposeOutputSchema,
   foregroundComposeDraftSchema,
@@ -89,6 +90,10 @@ import {
 import { composeMailOperations } from "../mail/compose";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { createCalendarToolsContext } from "./calendar-tools";
+import {
+  connectorToolsPrompt,
+  createConnectorChatTools,
+} from "./connector-tools";
 import { replaceChatParts } from "./continuation";
 import { createLinearChatTools } from "./linear-tools";
 import { assertExactChatToolApproval } from "./tool-approval";
@@ -1545,6 +1550,7 @@ const createAiChatResponseInRequest = async (
       latestUserRequest,
       userId: input.userId,
     }),
+    ...createConnectorChatTools({ latestUserRequest, userId: input.userId }),
     ...createCalendarChatTools(
       createCalendarToolsContext({
         foreground: validated.foreground,
@@ -1631,8 +1637,10 @@ const createAiChatResponseInRequest = async (
         userId: input.userId,
       });
       if (
-        toolName === "linear_write" &&
-        resolveLinearWriteReview({
+        (toolName === "linear_write" || toolName === "connector_write") &&
+        (toolName === "linear_write"
+          ? resolveLinearWriteReview
+          : resolveConnectorWriteReview)({
           input: toolInput,
           transcript: transcript.filter(
             (message) => message.id === assistantMessageId
@@ -1698,6 +1706,7 @@ const createAiChatResponseInRequest = async (
       : []),
     calendarToolsPrompt,
     linearToolsPrompt,
+    connectorToolsPrompt,
   ].join("\n\n");
 
   const usageId = crypto.randomUUID();

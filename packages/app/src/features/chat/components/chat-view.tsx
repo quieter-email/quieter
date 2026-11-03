@@ -6,6 +6,7 @@ import type { ChatModel } from "@quieter/ai/chat-models";
 import {
   approvalRequiredToolNames,
   resolveLinearWriteReview,
+  resolveConnectorWriteReview,
   foregroundSnapshotSchema,
   isForegroundClientToolName,
   isCalendarWriteToolName,
@@ -422,8 +423,11 @@ const ChatSession = ({
                 return;
               }
               if (
-                toolName === "linear_write" &&
-                resolveLinearWriteReview({
+                (toolName === "linear_write" ||
+                  toolName === "connector_write") &&
+                (toolName === "linear_write"
+                  ? resolveLinearWriteReview
+                  : resolveConnectorWriteReview)({
                   input: part.input,
                   transcript: [message],
                 }) === undefined
@@ -477,6 +481,13 @@ const ChatSession = ({
                 transcript: [message],
               })
             : undefined,
+          connectorReview:
+            toolName === "connector_write"
+              ? resolveConnectorWriteReview({
+                  input: part.input,
+                  transcript: [message],
+                })
+              : undefined,
           deny: () => {
             if (
               foregroundRef.current &&

@@ -42,39 +42,11 @@ const ConnectorIcon = ({ provider }: { provider: ConnectorProvider }) => {
   );
 };
 
-type ConnectorSummary = NonNullable<
-  Awaited<
-    ReturnType<
-      NonNullable<ReturnType<typeof connectorsQueryOptions>["queryFn"]>
-    >
-  >
->["connectors"][number];
-
-const getConnectorDescription = (
-  connector: ConnectorSummary,
-  isConnected: boolean,
-  needsReconnect: boolean,
-  accountSummary: string
-) => {
-  if (isConnected) {
-    if (accountSummary !== "") {
-      return `Connected as ${accountSummary}.`;
-    }
-    return "Connected.";
-  }
-  if (needsReconnect) {
-    return "Reconnect this service to use it in chat.";
-  }
-  if (connector.isConfigured) {
-    return connector.description;
-  }
-  return "This connector is not available in this environment.";
-};
-
 export const ConnectorsSettingsPanel = () => {
   const queryClient = useQueryClient();
-  const [startingProvider, setStartingProvider] =
-    useState<ConnectorProvider | null>(null);
+  const [startingConnection, setStartingConnection] = useState<string | null>(
+    null
+  );
   const { data, error, isError, isLoading, refetch } = useQuery(
     connectorsQueryOptions()
   );
@@ -85,15 +57,22 @@ export const ConnectorsSettingsPanel = () => {
       toastError(disconnectError, { boundary: "connectors" });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: CONNECTORS_QUERY_KEY });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: CONNECTORS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ["calendar"] }),
+      ]);
       toast.success("Connector disconnected.");
     },
   });
 
-  const startConnection = async (provider: ConnectorProvider) => {
-    setStartingProvider(provider);
+  const startConnection = async (
+    provider: ConnectorProvider,
+    connectionId?: string
+  ) => {
+    setStartingConnection(connectionId ?? provider);
     try {
       await openConnectorLink({
+        connectionId,
         provider,
         returnTo: getSettingsReturnTo(),
       });
@@ -103,7 +82,7 @@ export const ConnectorsSettingsPanel = () => {
         fallback: "Could not start connector setup.",
       });
     } finally {
-      setStartingProvider(null);
+      setStartingConnection(null);
     }
   };
 
@@ -127,76 +106,111 @@ export const ConnectorsSettingsPanel = () => {
     }
     return (
       <SettingsRows>
-        {connectors.map((connector) => {
-          const isConnected = connector.status === "connected";
-          const needsReconnect = connector.status === "needs_reconnect";
-          const isStarting = startingProvider === connector.provider;
-          const accountSummary = connector.accounts
-            .map((account) => {
-              let workspace = "";
-              if ((account.providerWorkspaceName ?? "") !== "") {
-                workspace = `${account.providerWorkspaceName}: `;
-              }
-              return `${workspace}${account.accountEmail ?? account.displayName ?? "Connected"}`;
-            })
-            .join(", ");
-          const isDisconnecting =
-            disconnectConnectorMutation.isPending &&
-            disconnectConnectorMutation.variables?.provider ===
-              connector.provider;
-
-          const connectionAction = isConnected ? (
-            <Button
-              disabled={isDisconnecting}
-              onClick={() => {
-                disconnectConnectorMutation.mutate({
-                  provider: connector.provider,
-                });
-              }}
-              size="sm"
-              type="button"
-              variant="secondary"
-            >
-              {isDisconnecting ? (
-                <Icon aria-hidden animation="spin" icon={Loading03Icon} />
-              ) : null}
-              Disconnect
-            </Button>
-          ) : (
-            <Button
-              disabled={!connector.isConfigured || isStarting}
-              onClick={() => {
-                runDetached(async () => {
-                  await startConnection(connector.provider);
-                });
-              }}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              {isStarting ? (
-                <Icon aria-hidden animation="spin" icon={Loading03Icon} />
-              ) : null}
-              {needsReconnect ? "Reconnect" : "Connect"}
-            </Button>
-          );
-
-          return (
+        {connectors.map((connector) => (
+          <div key={connector.provider}>
             <SettingsRow
-              action={connectionAction}
+              action={
+                <Button
+                  disabled={
+                    !connector.isConfigured || startingConnection !== null
+                  }
+                  onClick={() => {
+                    runDetached(async () => {
+                      await startConnection(connector.provider);
+                    });
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {startingConnection === connector.provider ? (
+                    <Icon aria-hidden animation="spin" icon={Loading03Icon} />
+                  ) : null}
+                  {connector.accounts.length > 0 ? "Add account" : "Connect"}
+                </Button>
+              }
               icon={<ConnectorIcon provider={connector.provider} />}
-              key={connector.provider}
               title={connector.displayName}
             >
-              {getConnectorDescription(
-                connector,
-                isConnected,
-                needsReconnect,
-                accountSummary
-              )}
+              {connector.isConfigured
+                ? connector.description
+                : "This connector is not available in this environment."}
             </SettingsRow>
-          );
-        })}
+            {connector.accounts.map((account) => {
+              const isDisconnecting =
+                disconnectConnectorMutation.isPending &&
+                disconnectConnectorMutation.variables?.connectionId ===
+                  account.id;
+              const accountLabel =
+                [
+                  account.providerWorkspaceName,
+                  account.accountEmail ?? account.displayName,
+                ]
+                  .filter(Boolean)
+                  .join(": ") || "Connected account";
+              return (
+                <SettingsRow
+                  action={
+                    <div className="flex gap-2">
+                      <Button
+                        disabled={
+                          !connector.isConfigured || startingConnection !== null
+                        }
+                        onClick={() => {
+                          runDetached(async () => {
+                            await startConnection(
+                              connector.provider,
+                              account.id
+                            );
+                          });
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        {startingConnection === account.id ? (
+                          <Icon
+                            aria-hidden
+                            animation="spin"
+                            icon={Loading03Icon}
+                          />
+                        ) : null}
+                        Reconnect
+                      </Button>
+                      <Button
+                        disabled={isDisconnecting}
+                        onClick={() => {
+                          disconnectConnectorMutation.mutate({
+                            connectionId: account.id,
+                            provider: connector.provider,
+                          });
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="secondary"
+                      >
+                        {isDisconnecting ? (
+                          <Icon
+                            aria-hidden
+                            animation="spin"
+                            icon={Loading03Icon}
+                          />
+                        ) : null}
+                        Disconnect
+                      </Button>
+                    </div>
+                  }
+                  key={account.id}
+                  title={accountLabel}
+                >
+                  {account.status === "connected"
+                    ? "Connected."
+                    : "Reconnect this account to use it."}
+                </SettingsRow>
+              );
+            })}
+          </div>
+        ))}
       </SettingsRows>
     );
   };

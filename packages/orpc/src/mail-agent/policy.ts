@@ -39,11 +39,23 @@ export const matchesAgentEligibility = (
 
 const contentPaths: Partial<Record<string, string[]>> = {
   "calendar.create_event": ["event.title", "event.description"],
+  "clickup.create_task": ["name", "description"],
+  "clickup.update_task": ["name", "description"],
   "linear.create_comment": ["body"],
   "linear.create_issue": ["title", "description"],
   "linear.save_comment": ["body"],
   "linear.save_issue": ["title", "description"],
   "linear.update_issue": ["title", "description"],
+  "notion.notion_append_blocks": Array.from(
+    { length: 30 },
+    (_, index) => `blocks.${index}.text`
+  ),
+  "notion.notion_create_page": [
+    "title",
+    ...Array.from({ length: 30 }, (_, index) => `blocks.${index}.text`),
+  ],
+  "todoist.create_task": ["content", "description"],
+  "todoist.update_task": ["content", "description"],
 };
 
 export const resolveAgentEffectArguments = (input: {
@@ -110,6 +122,9 @@ export const resolveAgentEffectArguments = (input: {
     return value;
   };
   const args = z.record(z.string(), z.unknown()).parse(resolve(parsed, ""));
+  if (input.tool.toolId === "todoist.create_task") {
+    z.object({ projectId: z.string().min(1) }).parse(args);
+  }
   const schema = z.fromJSONSchema(
     z.record(z.string(), z.unknown()).parse(input.tool.inputSchema)
   );

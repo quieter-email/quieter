@@ -1,0 +1,64 @@
+# OAuth connectors
+
+Notion, Todoist, ClickUp, Outlook Calendar and OneDrive use each user's OAuth grant. Credentials stay encrypted and owned by that user. Connecting a service does not share it with the user's organization. Multiple accounts are supported, and reconnecting must select the same account.
+
+## Development setup
+
+Use a separate development OAuth application for each vendor. Outlook Calendar and OneDrive share a Microsoft client registration, but request and store separate grants. All five use this local callback:
+
+```text
+http://localhost:3000/api/connectors/callback
+```
+
+The callback follows `BETTER_AUTH_URL`. Register the exact deployed callback in a separate production app before enabling production. No production secrets or deployment are needed for local testing.
+
+| Provider | Registration | Minimum access used here | Development SST Secrets |
+| --- | --- | --- | --- |
+| Notion | [Connections](https://app.notion.com/developers/connections), OAuth, any workspace | Read content and insert content; no comments or user email required. Users choose pages during consent. Marketplace publication is separate. | `NotionClientId`, `NotionClientSecret` |
+| Todoist | [App management](https://app.todoist.com/app/settings/integrations/app-management) or [dynamic registration](https://developer.todoist.com/api/v1/#tag/Authorization/Overview/Dynamic-Client-Registration) | `data:read_write`, authorization code and refresh grants | `TodoistClientId`, `TodoistClientSecret` |
+| ClickUp | Workspace settings, ClickUp API, app settings | OAuth access to the workspaces selected by the user; no additional scope parameter | `ClickupClientId`, `ClickupClientSecret` |
+| Microsoft | [App registrations](https://portal.azure.com/), Web platform, organizational and personal accounts | Delegated `User.Read`, `Calendars.ReadWrite`, `Files.Read`, `offline_access`; each connection requests only its own resource scopes | `MicrosoftClientId`, `MicrosoftClientSecret` |
+
+Microsoft app registration requires a developer account in an Entra tenant. A personal Outlook account can authorize the finished connector, but a personal account without a directory cannot register its app. Tenant consent policies can also require a customer's administrator, even for delegated permissions. See [registration prerequisites](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app).
+
+Use the corresponding uppercase names in the ignored local cache, such as `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET`. `CONNECTOR_TOKEN_ENCRYPTION_KEY` must be a development secret. Store credentials in the development SST stage and refresh local bindings:
+
+```bash
+vp run secrets:dev pull local-leander
+vp run env:doctor
+# After adding development credentials to ignored .env.local:
+vp run secrets:dev push local-leander
+vp run dev:setup
+vp run dev:prepare
+vp run dev
+```
+
+Alternatively, `vp run dev:sst --stage local-leander` loads linked secrets and starts both local runtimes. These connectors do not require Gmail Pub/Sub or background processing. Keep Gmail ownership and telemetry at their existing safe defaults. Apply the committed migration to the verified development database with `vp run db:migrate` before starting the updated app.
+
+## Manual acceptance
+
+1. Sign in at `http://localhost:3000`, open Settings, Connectors, and connect each account. Deny one consent request and verify that settings shows a recoverable failure. Reconnect an existing account, then connect a second account where available.
+2. Open a private chat, choose an account with the `@` picker, and ask for its supported reads. The account mention contains an exact connection ID. A typed provider name alone does not select an account.
+3. Notion: share a disposable parent page, search for it, read its blocks, and follow a child block or cursor. Approve creating a page under that parent, then append a paragraph.
+4. Todoist: list projects, list tasks in a test project, then approve creating, updating and completing a disposable task. Completing a recurring task advances its occurrence.
+5. ClickUp: list workspaces, spaces and lists. Read tasks in a disposable list, then approve creating and updating a test task using one of that list's real statuses.
+6. Outlook Calendar: open Calendar, select the Outlook account, read a date range, then create, edit, move and delete a disposable event without guests. Check an all-day event and a recurring event across a daylight-saving transition. RSVP only to an explicitly selected test invitation.
+7. OneDrive: list files, search by name and read a small UTF-8 text file. Binary documents are listed but not extracted. No file write tools are exposed.
+8. Disconnect an account and verify that its old mention cannot read or write. An account owned by a second local user must also reject access. Verify that declining a proposed write leaves the provider unchanged.
+
+Local writes are blocked in observation mode. Only after selecting a dedicated test resource, add its exact provider identity to the ignored configuration:
+
+```text
+QUIETER_LOCAL_PROVIDER_MODE=write
+QUIETER_LOCAL_CONNECTOR_WRITE_ACCOUNTS=todoist:<providerAccountId>,clickup:<providerAccountId>,notion:<providerAccountId>,microsoft_calendar:<providerAccountId>
+```
+
+The account IDs are returned by the owned connection lookup. The allowlist is independent of the Gmail, Google Calendar and Linear gates. Return to observation mode after testing. Do not use live shared workspaces for automated write checks. Changes require the existing exact-action review in chat; reviewed mailbox Actions use fixed destinations and approved content bindings.
+
+## Current boundaries
+
+OneDrive reads small text files; it does not parse Office or PDF documents. Notion searches only content shared with the integration and exposes page creation and block append, rather than a complete database editor. ClickUp exposes task operations, rather than every workspace feature.
+
+Microsoft organizer meetings with guests are opened in Outlook for changes, because Graph sends invitations automatically and cannot honor the existing silent-update policy. RSVP explicitly sends a response. Calendar colors and `.ics` import remain Google-only. Outlook supports one notification reminder; unsupported recurrence rules fail explicitly instead of being approximated.
+
+OAuth state is single-use, hashed and bound to the current login session. Pending OAuth attempts from before the state-binding migration must be restarted. The migration adds nullable columns and widens provider checks while preserving existing credentials. Replacing checks can briefly lock the affected tables; use the protected production migration workflow before any production rollout.

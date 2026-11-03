@@ -148,19 +148,28 @@ export const calendarEventPatchSchema = z
     "Provide a change to save."
   );
 
-const calendarAccountBaseSchema = z.object({
+export const calendarAccountBaseSchema = z.object({
   email: z.string().nullable(),
   id: identifierSchema,
   name: z.string(),
 });
-export const calendarAccountSchema = z.discriminatedUnion("status", [
-  calendarAccountBaseSchema.extend({
-    mailboxId: identifierSchema,
-    status: z.enum(["connected", "needs-permission", "needs-reconnect"]),
-  }),
+export const calendarAccountSchema = z.union([
+  z.discriminatedUnion("status", [
+    calendarAccountBaseSchema.extend({
+      mailboxId: identifierSchema,
+      provider: z.literal("google_calendar").optional(),
+      status: z.enum(["connected", "needs-permission", "needs-reconnect"]),
+    }),
+    calendarAccountBaseSchema.extend({
+      mailboxId: z.null(),
+      provider: z.literal("google_calendar").optional(),
+      status: z.literal("needs-mailbox"),
+    }),
+  ]),
   calendarAccountBaseSchema.extend({
     mailboxId: z.null(),
-    status: z.literal("needs-mailbox"),
+    provider: z.literal("microsoft_calendar"),
+    status: z.enum(["connected", "needs-reconnect"]),
   }),
 ]);
 

@@ -1,6 +1,8 @@
 export const sstSecretNames = {
   APP_SITE_PASSWORD: "AppSitePassword",
   BETTER_AUTH_SECRET: "BetterAuthSecret",
+  CLICKUP_CLIENT_ID: "ClickupClientId",
+  CLICKUP_CLIENT_SECRET: "ClickupClientSecret",
   CLOUDFLARE_ACCOUNT_ID: "CloudflareAccountId",
   CONNECTOR_TOKEN_ENCRYPTION_KEY: "ConnectorTokenEncryptionKey",
   DATABASE_URL: "DatabaseUrl",
@@ -17,6 +19,10 @@ export const sstSecretNames = {
   LINEAR_CLIENT_ID: "LinearClientId",
   LINEAR_CLIENT_SECRET: "LinearClientSecret",
   MAIL_INGEST_TOKEN: "MailIngestToken",
+  MICROSOFT_CLIENT_ID: "MicrosoftClientId",
+  MICROSOFT_CLIENT_SECRET: "MicrosoftClientSecret",
+  NOTION_CLIENT_ID: "NotionClientId",
+  NOTION_CLIENT_SECRET: "NotionClientSecret",
   OPENROUTER_API_KEY: "OpenrouterApiKey",
   POLAR_ACCESS_TOKEN: "PolarAccessToken",
   POLAR_WEBHOOK_SECRET: "PolarWebhookSecret",
@@ -26,6 +32,8 @@ export const sstSecretNames = {
   R2_ACCESS_KEY_ID: "R2AccessKeyId",
   R2_SECRET_ACCESS_KEY: "R2SecretAccessKey",
   SENTRY_DSN: "SentryDsn",
+  TODOIST_CLIENT_ID: "TodoistClientId",
+  TODOIST_CLIENT_SECRET: "TodoistClientSecret",
 } as const;
 
 export type SstSecretName = keyof typeof sstSecretNames;

@@ -30,7 +30,11 @@ import type { ComponentProps, ReactNode } from "react";
 import { getCalendarRefKey } from "../domain/calendar-event-form";
 
 export type CalendarConnectionTarget =
-  | { kind: "add"; source: "sidebar" | "empty" }
+  | {
+      kind: "add";
+      provider: "google_calendar" | "microsoft_calendar";
+      source: "sidebar" | "empty";
+    }
   | { kind: "account"; accountId: string };
 
 const accountConnectionActions = {
@@ -55,6 +59,7 @@ type CalendarSidebarProps = {
   accounts: CalendarAccount[];
   calendars: CalendarSummary[];
   canCreate: boolean;
+  canConnectMicrosoft: boolean;
   date: string;
   hiddenCalendarKeys: string[];
   isConfigured: boolean;
@@ -75,6 +80,7 @@ type CalendarSidebarProps = {
 
 const CalendarColorControl = ({
   calendar,
+  canUpdate,
   children,
   disabled,
   onUpdateCalendarColor,
@@ -82,6 +88,7 @@ const CalendarColorControl = ({
   presets,
 }: Pick<CalendarSidebarProps, "onUpdateCalendarColor"> & {
   calendar: CalendarSummary;
+  canUpdate: boolean;
   children: ReactNode;
   disabled: boolean;
   pending: boolean;
@@ -99,14 +106,16 @@ const CalendarColorControl = ({
     <div className="space-y-2">
       <div className="flex min-w-0 items-center gap-2.5 py-1">
         {children}
-        <ColorPicker
-          disabled={disabled}
-          label={`Change ${calendar.name} color`}
-          onValueChange={setDraftColor}
-          presets={presets}
-          trigger="swatch"
-          value={draftColor ?? color}
-        />
+        {canUpdate ? (
+          <ColorPicker
+            disabled={disabled}
+            label={`Change ${calendar.name} color`}
+            onValueChange={setDraftColor}
+            presets={presets}
+            trigger="swatch"
+            value={draftColor ?? color}
+          />
+        ) : null}
       </div>
       {isChanged ? (
         <ActionFooter>
@@ -139,11 +148,11 @@ const CalendarColorControl = ({
 };
 
 const CalendarMailboxSettingsItem = ({
+  account,
   close,
-  mailboxId,
 }: {
+  account: CalendarAccount;
   close?: () => void;
-  mailboxId: CalendarAccount["mailboxId"];
 }) => {
   const returnTo = useLocation({ select: (location) => location.href });
   return (
@@ -153,14 +162,22 @@ const CalendarMailboxSettingsItem = ({
           onClick={close}
           search={{
             from: returnTo,
-            mailboxId: mailboxId ?? "",
-            tab: "mailboxes",
+            mailboxId:
+              account.provider === "microsoft_calendar"
+                ? undefined
+                : (account.mailboxId ?? ""),
+            tab:
+              account.provider === "microsoft_calendar"
+                ? "connectors"
+                : "mailboxes",
           }}
           to="/settings"
         />
       }
     >
-      Manage mailbox
+      {account.provider === "microsoft_calendar"
+        ? "Manage connection"
+        : "Manage mailbox"}
     </DropdownMenuItem>
   );
 };
@@ -168,6 +185,7 @@ const CalendarMailboxSettingsItem = ({
 const CalendarSidebarContent = ({
   accounts,
   calendars,
+  canConnectMicrosoft,
   canCreate,
   close,
   date,
@@ -297,8 +315,8 @@ const CalendarSidebarContent = ({
                         Reconnect account
                       </DropdownMenuItem>
                       <CalendarMailboxSettingsItem
+                        account={account}
                         close={close}
-                        mailboxId={account.mailboxId}
                       />
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -307,10 +325,16 @@ const CalendarSidebarContent = ({
               {account.status === "connected" ? null : (
                 <div className="space-y-2">
                   <p className="text-caption text-muted-fg">
-                    {accountConnectionActions[account.status].description}
+                    {account.provider === "microsoft_calendar"
+                      ? "Reconnect this Outlook account to refresh its calendars."
+                      : accountConnectionActions[account.status].description}
                   </p>
                   <Button
-                    disabled={!isConfigured || pendingConnection !== null}
+                    disabled={
+                      !(account.provider === "microsoft_calendar"
+                        ? canConnectMicrosoft
+                        : isConfigured) || pendingConnection !== null
+                    }
                     fullWidth
                     onClick={() => {
                       onConnect({ accountId: account.id, kind: "account" });
@@ -321,7 +345,9 @@ const CalendarSidebarContent = ({
                     }
                     size="sm"
                   >
-                    {accountConnectionActions[account.status].label}
+                    {account.provider === "microsoft_calendar"
+                      ? "Reconnect"
+                      : accountConnectionActions[account.status].label}
                   </Button>
                 </div>
               )}
@@ -330,6 +356,7 @@ const CalendarSidebarContent = ({
                 .map((calendar) => (
                   <CalendarColorControl
                     calendar={calendar}
+                    canUpdate={account.provider !== "microsoft_calendar"}
                     disabled={
                       account.status !== "connected" ||
                       pendingCalendarColorKey !== null
@@ -377,16 +404,43 @@ const CalendarSidebarContent = ({
               disabled={!isConfigured || pendingConnection !== null}
               fullWidth
               onClick={() => {
-                onConnect({ kind: "add", source: "sidebar" });
+                onConnect({
+                  kind: "add",
+                  provider: "google_calendar",
+                  source: "sidebar",
+                });
               }}
               pending={
                 pendingConnection?.kind === "add" &&
-                pendingConnection.source === "sidebar"
+                pendingConnection.source === "sidebar" &&
+                pendingConnection.provider === "google_calendar"
               }
               variant="ghost"
             >
               <Icon aria-hidden icon={Add01Icon} />
               Add Gmail mailbox
+            </Button>
+          )}
+          {preview ? null : (
+            <Button
+              disabled={!canConnectMicrosoft || pendingConnection !== null}
+              fullWidth
+              onClick={() => {
+                onConnect({
+                  kind: "add",
+                  provider: "microsoft_calendar",
+                  source: "sidebar",
+                });
+              }}
+              pending={
+                pendingConnection?.kind === "add" &&
+                pendingConnection.source === "sidebar" &&
+                pendingConnection.provider === "microsoft_calendar"
+              }
+              variant="ghost"
+            >
+              <Icon aria-hidden icon={Add01Icon} />
+              Add Outlook Calendar
             </Button>
           )}
         </div>

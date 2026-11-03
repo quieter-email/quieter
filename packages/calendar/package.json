@@ -5,10 +5,12 @@
   "exports": {
     ".": "./src/contracts.ts",
     "./time": "./src/time.ts",
+    "./time-zones": "./src/time-zones.ts",
     "./recurrence": "./src/recurrence.ts"
   },
   "dependencies": {
     "@js-temporal/polyfill": "^0.5.1",
+    "cldr-core": "49.0.0",
     "ical.js": "^2.2.1",
     "zod": "catalog:"
   },

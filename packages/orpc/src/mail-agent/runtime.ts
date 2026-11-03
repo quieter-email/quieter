@@ -34,6 +34,10 @@ import {
   listCalendarsForUser,
 } from "../calendar/service";
 import { runLinearMcpToolCallsForUser } from "../connectors/linear-mcp";
+import {
+  callRegisteredConnectorTool,
+  connectorToolRegistry,
+} from "../connectors/tool-registry";
 import type { MailRequestContext } from "../gmail-request";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { publishMailUpdate } from "../mail-updates";
@@ -515,6 +519,25 @@ const executeRun = async (run: ClaimedRun) => {
           }
           return boundAgentToolOutput(result.output);
         }
+        if (
+          tool.provider &&
+          tool.provider !== "google_calendar" &&
+          connectorToolRegistry[tool.provider] &&
+          tool.providerToolName &&
+          tool.connectionId
+        ) {
+          return boundAgentToolOutput(
+            await callRegisteredConnectorTool({
+              arguments: z.record(z.string(), z.unknown()).parse(args),
+              connectionId: tool.connectionId,
+              effect: "read",
+              provider: tool.provider,
+              signal,
+              toolName: tool.providerToolName,
+              userId: run.actorUserId,
+            })
+          );
+        }
         throw new Error("The reviewed lookup is unavailable.");
       }
       if (
@@ -564,6 +587,12 @@ const executeRun = async (run: ClaimedRun) => {
         tool.toolId === "calendar.create_event" ||
         tool.toolId === "linear.create_issue" ||
         tool.toolId === "linear.create_comment" ||
+        [
+          "todoist.create_task",
+          "clickup.create_task",
+          "notion.notion_create_page",
+          "notion.notion_append_blocks",
+        ].includes(tool.toolId) ||
         (["linear.save_issue", "linear.save_comment"].includes(tool.toolId) &&
           z.object({ id: z.string().optional() }).parse(effectiveArgs).id ===
             undefined);
@@ -714,6 +743,22 @@ const executeRun = async (run: ClaimedRun) => {
             );
           }
           result = called.output;
+        } else if (
+          tool.provider &&
+          tool.provider !== "google_calendar" &&
+          connectorToolRegistry[tool.provider] &&
+          tool.providerToolName &&
+          tool.connectionId
+        ) {
+          result = await callRegisteredConnectorTool({
+            arguments: z.record(z.string(), z.unknown()).parse(effectiveArgs),
+            connectionId: tool.connectionId,
+            effect: "write",
+            provider: tool.provider,
+            signal,
+            toolName: tool.providerToolName,
+            userId: run.actorUserId,
+          });
         } else {
           throw new Error("The reviewed change is unavailable.");
         }

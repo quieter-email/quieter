@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type * as DatabaseClientModule from "@quieter/database/client";
 import {
   afterEach,
@@ -74,7 +76,11 @@ describe("connector OAuth state ownership", () => {
     expect(query).toContain('delete from "connectorOAuthState"');
     expect(query).toContain('"connectorOAuthState"."userId" =');
     expect(query).toContain('"connectorOAuthState"."expiresAt" >');
-    expect(values).toContain("opaque-state");
+    expect(values).not.toContain("opaque-state");
+    expect(values).toContain(
+      createHash("sha256").update("opaque-state").digest("hex")
+    );
+    expect(query).toContain('"connectorOAuthState"."sessionHash" =');
     expect(values).toContain("owner-1");
   });
 
@@ -96,11 +102,13 @@ describe("connector OAuth state ownership", () => {
       rows: [
         [
           "verifier",
+          null,
           now,
           new Date(now.getTime() + 60_000),
           "opaque-state",
           "google_calendar",
           "/calendar",
+          createHash("sha256").update("session-1").digest("hex"),
           "owner-1",
         ],
       ],
@@ -127,14 +135,15 @@ describe("connector OAuth state ownership", () => {
 
   test("lists only currently supported connectors", async () => {
     const result = await listConnectors("owner-1");
-    expect(result.connectors).toMatchObject([
-      expect.objectContaining({ provider: "linear" }),
-    ]);
+    expect(result.connectors).toStrictEqual(
+      expect.arrayContaining([expect.objectContaining({ provider: "linear" })])
+    );
+    expect(
+      result.connectors.map((connector) => connector.provider)
+    ).not.toContain("google_calendar");
     const [query, params] = mocks.query.mock.calls[0] ?? [];
     expect(query).toContain('"connectorCredential"."userId" =');
-    expect(query).toContain('"connectorCredential"."provider" =');
     expect(params).toContain("owner-1");
-    expect(params).toContain("linear");
   });
 
   test.each([
@@ -145,6 +154,7 @@ describe("connector OAuth state ownership", () => {
     "/safe/..//attacker.example/calendar",
   ])("rejects an escaping return URL %j", async (returnTo) => {
     await startConnectorOAuth({
+      headers: new Headers(),
       provider: "linear",
       returnTo,
       userId: "owner-1",
@@ -158,6 +168,7 @@ describe("connector OAuth state ownership", () => {
 
   test("preserves safe return locations through the connection flow", async () => {
     await startConnectorOAuth({
+      headers: new Headers(),
       provider: "linear",
       returnTo: "/calendar?view=week#today",
       userId: "owner-1",
@@ -174,11 +185,13 @@ describe("connector OAuth state ownership", () => {
       rows: [
         [
           "verifier",
+          null,
           now,
           new Date(now.getTime() + 60_000),
           "opaque-state",
           "linear",
           "/\\attacker.example/calendar",
+          createHash("sha256").update("session-1").digest("hex"),
           "owner-1",
         ],
       ],

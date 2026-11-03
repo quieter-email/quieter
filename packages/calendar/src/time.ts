@@ -102,6 +102,12 @@ export const calendarWallTimeToInstant = ({
     .toInstant()
     .toString();
 
+export const calendarInstantToWallTime = (instant: string, timeZone: string) =>
+  Temporal.Instant.from(instant)
+    .toZonedDateTimeISO(timeZone)
+    .toPlainDateTime()
+    .toString({ smallestUnit: "second" });
+
 export const createCalendarEventTimeSplitter = ({
   dates,
   timeZone,

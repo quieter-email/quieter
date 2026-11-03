@@ -58,7 +58,14 @@ export type MailDomainConnectAttemptStatus =
   | "pending"
   | "returned";
 export type ConnectorConnectionStatus = "connected" | "needs_reconnect";
-export type ConnectorProvider = "google_calendar" | "linear";
+export type ConnectorProvider =
+  | "google_calendar"
+  | "linear"
+  | "notion"
+  | "todoist"
+  | "clickup"
+  | "microsoft_calendar"
+  | "microsoft_onedrive";
 export type MailboxConnectionStatus = "connected" | "needs_reconnect";
 export type MailboxGrantRole = "manager" | "reader" | "responder";
 export type MailboxAccessMode = "private" | "shared";
@@ -1174,7 +1181,7 @@ export const connectorCredential = pgTable(
   (table) => [
     check(
       "connector_credential_provider_check",
-      sql`${table.provider} in ('google_calendar', 'linear')`
+      sql`${table.provider} in ('google_calendar', 'linear', 'notion', 'todoist', 'clickup', 'microsoft_calendar', 'microsoft_onedrive')`
     ),
     check(
       "connector_credential_status_check",
@@ -2164,11 +2171,13 @@ export const connectorOAuthState = pgTable(
   "connectorOAuthState",
   {
     codeVerifier: text("codeVerifier").notNull(),
+    connectionId: text("connectionId"),
     createdAt: timestamp("createdAt").notNull(),
     expiresAt: timestamp("expiresAt").notNull(),
     id: text("id").primaryKey(),
     provider: text("provider").$type<ConnectorProvider>().notNull(),
     returnTo: text("returnTo").notNull(),
+    sessionHash: text("sessionHash"),
     userId: text("userId")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -2176,7 +2185,7 @@ export const connectorOAuthState = pgTable(
   (table) => [
     check(
       "connector_oauth_state_provider_check",
-      sql`${table.provider} in ('google_calendar', 'linear')`
+      sql`${table.provider} in ('google_calendar', 'linear', 'notion', 'todoist', 'clickup', 'microsoft_calendar', 'microsoft_onedrive')`
     ),
     index("connector_oauth_state_user_id_idx").on(table.userId),
     index("connector_oauth_state_expires_at_idx").on(table.expiresAt),

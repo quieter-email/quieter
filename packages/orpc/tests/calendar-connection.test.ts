@@ -71,6 +71,9 @@ describe("Gmail calendar account authorization", () => {
       if (!params.includes(input.userId)) {
         return await Promise.resolve({ rows: [] });
       }
+      if (params.includes("microsoft_calendar")) {
+        return await Promise.resolve({ rows: [] });
+      }
       if (query.includes('"accessTokenExpiresAt"')) {
         return await Promise.resolve({
           rows: [

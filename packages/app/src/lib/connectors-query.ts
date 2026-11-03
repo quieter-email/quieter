@@ -2,7 +2,9 @@ import { rpc } from "@quieter/app/lib/orpc";
 import { openExternalUrl } from "@quieter/app/runtime";
 import { queryOptions } from "@tanstack/react-query";
 
-export type ConnectorProvider = "linear";
+export type ConnectorProvider = Parameters<
+  typeof rpc.connectors.startConnection
+>[0]["provider"];
 
 export const CONNECTORS_QUERY_KEY = ["connectors"] as const;
 
@@ -15,6 +17,7 @@ export const connectorsQueryOptions = () =>
   });
 
 export const openConnectorLink = async (input: {
+  connectionId?: string;
   provider: ConnectorProvider;
   returnTo: string;
 }) => {
