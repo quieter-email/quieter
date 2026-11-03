@@ -2,6 +2,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import type { AgentCatalogTool } from "../src/mail-agent/catalog";
 import {
+  agentReadTemplateSchema,
   matchesAgentEligibility,
   resolveAgentEffectArguments,
 } from "../src/mail-agent/policy";
@@ -228,5 +229,29 @@ describe("approved connector argument mappings", () => {
       })
     ).toBeFalsy();
     expect(matchesAgentEligibility(eligibility)).toBeFalsy();
+  });
+});
+
+describe("literal connected lookup templates", () => {
+  test.each([
+    undefined,
+    "broken JSON",
+    "null",
+    "[]",
+    '{"query":"{{message.bodyText}}"}',
+    '{"nested":{"query":"{{memory}}"}}',
+  ])(
+    "rejects missing, malformed and dynamic lookup authority (%s)",
+    (template) => {
+      expect(agentReadTemplateSchema.safeParse(template).success).toBeFalsy();
+    }
+  );
+
+  test("keeps literal lookup arguments as JSON data", () => {
+    expect(
+      agentReadTemplateSchema.parse(
+        '{"query":"approved literal","filters":{"limit":3}}'
+      )
+    ).toMatchObject({ filters: { limit: 3 }, query: "approved literal" });
   });
 });

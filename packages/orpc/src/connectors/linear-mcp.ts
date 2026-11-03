@@ -3,9 +3,9 @@ import type { MCPClient } from "@ai-sdk/mcp";
 import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
 
+import { linearReadTools } from "./contracts";
 import { getLinearAccessTokenForUser, LINEAR_MCP_URL } from "./runtime";
 
-const LINEAR_MCP_READ_PREFIXES = ["get_", "list_", "search_"];
 const MCP_REQUEST_TIMEOUT_MS = 20_000;
 const DEFAULT_MAX_CALLS = 4;
 const DEFAULT_MAX_OUTPUT_BYTES = 8000;
@@ -24,14 +24,9 @@ const normalizeLinearMcpToolName = (name: string) =>
     .replace(/^linear[-_:]/u, "")
     .replace(/^linear_/u, "");
 
-/**
- * Linear names its tools by verb, so the prefix is what separates a lookup from a
- * change. Anything that is not plainly a read is treated as mutating, which routes it
- * through the write path and its approval instead of running unattended.
- */
 export const isMutatingLinearMcpTool = (tool: { name: string }) => {
   const name = normalizeLinearMcpToolName(tool.name);
-  return !LINEAR_MCP_READ_PREFIXES.some((prefix) => name.startsWith(prefix));
+  return !linearReadTools.has(name);
 };
 
 /**
@@ -222,11 +217,22 @@ export const runLinearMcpToolCallsForUser = async (input: {
   return await withLinearMcpClient(
     { ...input, accessToken },
     async (client) => {
+      const { tools } = await client.listTools();
       const results: LinearMcpToolCallResult[] = [];
       for (const call of input.calls.slice(
         0,
         input.maxCalls ?? DEFAULT_MAX_CALLS
       )) {
+        const descriptor = tools.find((tool) => tool.name === call.toolName);
+        if (!descriptor) {
+          throw new Error(
+            "The connected action is no longer available. Review it again."
+          );
+        }
+        const schema = z.fromJSONSchema(
+          z.record(z.string(), z.unknown()).parse(descriptor.inputSchema)
+        );
+        schema.parse(call.arguments ?? {});
         // oxlint-disable-next-line eslint/no-await-in-loop -- Tool calls may depend on earlier results or mutate the same workspace.
         const result = await callTool({
           call,

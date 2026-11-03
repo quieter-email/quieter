@@ -5,7 +5,7 @@ import type { ChatMailContext } from "@quieter/ai/chat-context";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import {
   approvalRequiredToolNames,
-  resolveLinearWriteReview,
+  resolveLinearToolReview,
   foregroundSnapshotSchema,
   isForegroundClientToolName,
   isCalendarWriteToolName,
@@ -422,8 +422,8 @@ const ChatSession = ({
                 return;
               }
               if (
-                toolName === "linear_write" &&
-                resolveLinearWriteReview({
+                (toolName === "linear_read" || toolName === "linear_write") &&
+                resolveLinearToolReview({
                   input: part.input,
                   transcript: [message],
                 }) === undefined
@@ -490,8 +490,8 @@ const ChatSession = ({
           },
           id: part.approval.id,
           linearReview:
-            toolName === "linear_write"
-              ? resolveLinearWriteReview({
+            toolName === "linear_read" || toolName === "linear_write"
+              ? resolveLinearToolReview({
                   input: part.input,
                   transcript: [message],
                 })

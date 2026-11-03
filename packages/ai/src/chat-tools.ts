@@ -273,9 +273,12 @@ export const calendarWriteInputSchemas = {
 export type CalendarWriteToolName = keyof typeof calendarWriteInputSchemas;
 export const calendarWriteToolNames = Object.keys(calendarWriteInputSchemas);
 export const approvalRequiredToolNames = [
+  "list_calendar_events",
+  "linear_read",
   "linear_write",
   "modify_mail",
   "save_compose_draft",
+  "search_gmail",
   "send_mail",
   ...calendarWriteToolNames,
 ];
@@ -285,12 +288,12 @@ const linearConnectionReviewSchema = z.object({
   connectionId: z.string().min(1),
   workspace: z.string().nullable(),
 });
-export type LinearWriteReview = z.infer<typeof linearConnectionReviewSchema>;
+export type LinearToolReview = z.infer<typeof linearConnectionReviewSchema>;
 
-export const resolveLinearWriteReview = (input: {
+export const resolveLinearToolReview = (input: {
   input: unknown;
   transcript: readonly UIMessage[];
-}): LinearWriteReview | undefined => {
+}): LinearToolReview | undefined => {
   const proposed = z
     .object({ connectionId: z.string(), toolName: z.string() })
     .safeParse(input.input);

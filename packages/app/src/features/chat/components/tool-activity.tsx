@@ -170,7 +170,10 @@ const ToolDetails = ({ input, draft }: { input: unknown; draft: boolean }) => {
     for (const [key, value] of Object.entries(payload)) {
       details.push({
         key,
-        label: key.replaceAll("_", " "),
+        label:
+          { arguments: "Inputs", connectionId: "Account", toolName: "Tool" }[
+            key
+          ] ?? key.replaceAll("_", " "),
         value:
           typeof value === "string" ? value : JSON.stringify(value, null, 2),
       });
@@ -202,10 +205,13 @@ export const ToolActivity = ({
     {
       create_calendar_event: "Create event",
       delete_calendar_event: "Delete",
+      linear_read: "Run query",
       linear_write: "Apply change",
+      list_calendar_events: "Run query",
       modify_mail: "Apply change",
       respond_to_calendar_event: "Send response",
       save_compose_draft: "Save draft",
+      search_gmail: "Run search",
       send_mail: "Send",
       update_calendar_event: "Save changes",
     }[name] ?? "Approve";
@@ -250,7 +256,11 @@ export const ToolActivity = ({
       {
         create_calendar_event: "Create this event?",
         delete_calendar_event: "Delete this event permanently?",
+        linear_read: "Run this connected-account query?",
+        linear_write: "Apply this connected-account change?",
+        list_calendar_events: "Run this calendar query?",
         respond_to_calendar_event: "Send this invitation response?",
+        search_gmail: "Run this mail search?",
         send_mail: "Send this email?",
         update_calendar_event: "Save these event changes?",
       }[name] ?? "Approve this action?";
@@ -311,7 +321,16 @@ export const ToolActivity = ({
           ) : null}
           {awaitingApproval && approval?.linearReview ? (
             <p className="mb-3 text-caption text-fg">
-              {approval.linearReview.account}, {approval.linearReview.workspace}
+              The tool and arguments below will be sent to your connected
+              account, {approval.linearReview.account}, in{" "}
+              {approval.linearReview.workspace}.
+            </p>
+          ) : null}
+          {awaitingApproval &&
+          (name === "search_gmail" || name === "list_calendar_events") ? (
+            <p className="mb-3 text-caption text-fg">
+              The search below will be sent to your selected mail or calendar
+              account. Review the full query before continuing.
             </p>
           ) : null}
           <ToolDetails draft={draft} input={part.input} />
