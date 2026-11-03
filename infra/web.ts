@@ -207,6 +207,31 @@ export const createWeb = (
       return plan;
     }
   }
+  $util.runtime.registerStackTransformation(({ name, opts, props, type }) =>
+    type === "command:local:Command" && name === "WebBuilder"
+      ? {
+          opts,
+          props: {
+            ...props,
+            // The command provider inherits runner credentials without tracking them.
+            environment: $util
+              .output(props.environment)
+              .apply((values: Record<string, string>) =>
+                Object.fromEntries(
+                  Object.entries(values).filter(
+                    ([key]) =>
+                      Object.hasOwn(environment, key) ||
+                      key === "SST" ||
+                      key === "SST_WRANGLER_PATH" ||
+                      key === "QUIETER_BUILD_ID" ||
+                      key.startsWith("SST_RESOURCE_")
+                  )
+                )
+              ),
+          },
+        }
+      : undefined
+  );
   return new RetainedWebTanStackStart("Web", {
     buildCommand: production
       ? `vp exec node ../../scripts/prepared-web-build.ts ${$cli.command}`
