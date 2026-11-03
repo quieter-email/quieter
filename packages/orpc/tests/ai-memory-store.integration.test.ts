@@ -540,6 +540,50 @@ describe.skipIf(state.databaseUrl === undefined)(
       }
     );
 
+    test("returns the final retry answer when a concurrent discovery makes the request a no-op", async () => {
+      const finalPlan = {
+        ...defaultPlan,
+        answer: "This preference is already recorded, so nothing changed.",
+        operations: [],
+      } satisfies AiMemoryUpdatePlan;
+      state.plan.mockImplementationOnce(async () => {
+        const now = new Date();
+        await db.insert(aiMemory).values({
+          content: "Prefers quiet mornings and cycling to work.",
+          createdAt: now,
+          id: crypto.randomUUID(),
+          importance: 3,
+          key: addition.key,
+          kind: "learned",
+          lastConfirmedAt: now,
+          metadata: { category: "preferences" },
+          scope: "user",
+          scopeKey: `user:${userId}`,
+          source: "inferred",
+          summary: "Morning routine",
+          updatedAt: now,
+          userId,
+        });
+        return defaultPlan;
+      });
+      state.plan.mockResolvedValueOnce(finalPlan);
+
+      const result = await requestAiMemoryUpdate({
+        mailboxId,
+        request: "Remember that I prefer quiet mornings.",
+        userId,
+      });
+
+      expect(result).toMatchObject({
+        answer: finalPlan.answer,
+        status: "no_change",
+      });
+      const personal = await searchAiMemory({ userId });
+      expect(personal.items).toHaveLength(1);
+      expect(personal.items[0]?.content).toContain("cycling to work");
+      expect(personal.items[0]?.version).toBe(1);
+    });
+
     test("replans an unseen concept into one updated record while preserving its durable detail", async () => {
       const now = new Date();
       const memoryId = crypto.randomUUID();

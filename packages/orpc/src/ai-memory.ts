@@ -1130,7 +1130,8 @@ const applyAiMemoryPlan = async (
   const prepared = { ...input };
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await applyAiMemoryPlanOnce(prepared);
+      const changeSet = await applyAiMemoryPlanOnce(prepared);
+      return { ...changeSet, answer: prepared.plan.answer };
     } catch (error) {
       if (
         !(error instanceof AiMemoryRecallRequiredError) ||
@@ -1387,7 +1388,7 @@ export const requestAiMemoryUpdate = async ({
     changeSetSource,
     source: "explicit",
   });
-  return { ...changeSet, answer: prepared.plan.answer };
+  return changeSet;
 };
 
 export const recordAiMemoryEvent = async (input: {
