@@ -45,7 +45,6 @@ import {
   prepareAccountDeletion,
 } from "./organization";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "./organization-api-key";
-import { regionalTimeFormat } from "./regional-time";
 import { readTermsAcceptedAtFromRequest } from "./terms-acceptance";
 
 const throwPlanRequiredError = (plan: string, description: string) => {
@@ -171,9 +170,7 @@ export const auth = lazyAuth(() =>
               ...createdUser,
               termsAcceptedAt:
                 readTermsAcceptedAtFromRequest(context?.request) ?? null,
-              timeFormat: regionalTimeFormat(
-                context?.request?.headers.get("accept-language")
-              ),
+              timeFormat: "24h",
               weekStartsOn: 1,
             },
           }),

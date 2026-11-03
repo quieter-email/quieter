@@ -23,8 +23,6 @@ import {
 } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
 import { appRuntime } from "@quieter/app/runtime";
 import { Button } from "@quieter/ui/button";
-import { useColorMode } from "@quieter/ui/color-mode";
-import type { ConfigColorMode } from "@quieter/ui/color-mode";
 import { Icon } from "@quieter/ui/icon";
 import {
   Select,
@@ -46,14 +44,7 @@ import {
   settingsSurfaceVariants,
 } from "./settings-layout";
 
-const COLOR_MODE_OPTIONS: { label: string; value: ConfigColorMode }[] = [
-  { label: "Light", value: "light" },
-  { label: "Dark", value: "dark" },
-  { label: "System", value: "system" },
-];
-
 export const PreferencesSettingsPanel = () => {
-  const { configColorMode, isMounted, setColorMode } = useColorMode();
   const mailLayout = useMailLayout();
   const externalImagesEnabled = useExternalImagesEnabled();
   const { openKeyboardShortcuts } = useKeyboardShortcuts();
@@ -63,48 +54,7 @@ export const PreferencesSettingsPanel = () => {
       <DateTimeSettings />
       <SettingsSection title="Appearance">
         <SettingsRows>
-          <SettingsRow
-            action={
-              <Select
-                items={COLOR_MODE_OPTIONS.map((option) => ({
-                  label: option.label,
-                  value: option.value,
-                }))}
-                onValueChange={(value) => {
-                  if (
-                    value === "light" ||
-                    value === "dark" ||
-                    value === "system"
-                  ) {
-                    setColorMode(value);
-                  }
-                }}
-                value={isMounted ? configColorMode : null}
-              >
-                <SelectTrigger
-                  aria-label="Color mode"
-                  className="w-36"
-                  size="sm"
-                >
-                  <SelectValue placeholder="Theme" />
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {COLOR_MODE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            }
-            title="Color mode"
-          >
-            Choose how quieter looks on this device.
-          </SettingsRow>
-          <SettingsRow action={<ThemePicker />} title="Theme">
-            Choose a look for your workspace. Your light and dark choices are
-            remembered on this device.
-          </SettingsRow>
+          <SettingsRow action={<ThemePicker />} title="Theme" />
           <SettingsRow
             title="Mail layout"
             action={
@@ -137,7 +87,8 @@ export const PreferencesSettingsPanel = () => {
               </Select>
             }
           >
-            Choose a layout for this device. Small screens use one panel.
+            Full view opens mail full width. Split view keeps your inbox beside
+            the message. Small screens use full view.
           </SettingsRow>
           <SettingsRow
             action={
@@ -156,9 +107,7 @@ export const PreferencesSettingsPanel = () => {
               </Button>
             }
             title="Keyboard shortcuts"
-          >
-            Review the shortcuts for composing, navigating, and triaging mail.
-          </SettingsRow>
+          />
         </SettingsRows>
       </SettingsSection>
       <SettingsSection title="Privacy and content">
