@@ -6,6 +6,7 @@ import {
 } from "@quieter/app/lib/mail-mutation-state";
 import { experimental_createQueryPersister } from "@tanstack/query-persist-client-core";
 import type { PersistedQuery } from "@tanstack/query-persist-client-core";
+import { notifyManager } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
@@ -137,6 +138,8 @@ const createPersister = (generation: number) => {
     },
     maxAge: MAIL_CACHE_MAX_AGE,
     prefix: "quieter-cache",
+    // The SDK's restore refresh leaves query.fetch() rejections unhandled.
+    refetchOnRestore: false,
     serialize: async (query) => {
       const mailboxId =
         query.queryKey[0] === "message-thread"
@@ -214,7 +217,30 @@ export const queryPersister: ReturnType<
       return await queryFn(context);
     }
     const delegate = currentPersister;
-    return await delegate.persisterFn(queryFn, context, query);
+    let restored = true;
+    const data = await delegate.persisterFn(
+      async (fetchContext) => {
+        restored = false;
+        return await queryFn(fetchContext);
+      },
+      context,
+      query
+    );
+    if (restored) {
+      notifyManager.schedule(() => {
+        if (
+          delegate === currentPersister &&
+          !context.signal.aborted &&
+          context.client.getQueryCache().get(query.queryHash) === query
+        ) {
+          void context.client.refetchQueries(
+            { exact: true, queryKey: query.queryKey, stale: true },
+            { cancelRefetch: false }
+          );
+        }
+      });
+    }
+    return data;
   },
   persisterGc: async (...args) => {
     await currentPersister.persisterGc(...args);
