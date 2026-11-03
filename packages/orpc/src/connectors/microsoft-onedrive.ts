@@ -171,8 +171,11 @@ export const callOneDriveTool = async (input: {
           download.port ||
           download.username ||
           download.password ||
-          ![".sharepoint.com", ".1drv.com", ".onedrive.com"].some((suffix) =>
-            download.hostname.endsWith(suffix)
+          !(
+            download.hostname === "my.microsoftpersonalcontent.com" ||
+            [".sharepoint.com", ".1drv.com", ".onedrive.com"].some((suffix) =>
+              download.hostname.endsWith(suffix)
+            )
           )
         ) {
           throw new ORPCError("BAD_REQUEST", {

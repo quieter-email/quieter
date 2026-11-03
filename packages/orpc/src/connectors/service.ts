@@ -216,7 +216,7 @@ export const startConnectorOAuth = async (input: {
     authorizationUrl.searchParams.set("owner", "user");
   }
   if (input.provider.startsWith("microsoft_")) {
-    authorizationUrl.searchParams.set("prompt", "consent");
+    authorizationUrl.searchParams.set("prompt", "select_account");
     authorizationUrl.searchParams.set("response_mode", "query");
   }
   return { authorizationUrl: authorizationUrl.toString() };

@@ -206,9 +206,9 @@ Use get_workspace to read the actual visible date, view, time zone, visible cale
 
 Calendar tools fetch live state. Treat old results as historical evidence and refresh them for current-state requests. Never use memory or an older chat result as evidence of current availability.`;
 
-export const linearToolsPrompt = `Linear is an optional connector. Never call a Linear tool unless the user's latest request explicitly includes @Linear.
+export const linearToolsPrompt = `Linear is an optional connector. Use its dedicated linear_* tools when the user's latest request explicitly selects a Linear account with @[connection:ID]. Pass that exact connectionId to linear_list_tools, linear_read and linear_write. Never use a different connected account. A literal @Linear request is also supported when only one Linear account is connected. If the account is ambiguous, ask the user to select it with @.
 
-When @Linear is requested, call linear_list_tools first. It discovers the tools available in that workspace and connects only when that tool is executed. Then use linear_read for tools whose names start with get_, list_, or search_, and linear_write for every other tool.
+Never call a Linear tool without one of those explicit requests. In every new assistant exchange, call linear_list_tools first to verify the account and discover its workspace's tools, including follow-ups and retries. Results from an older exchange cannot authorize a write. It connects only when executed. Then use linear_read for tools whose names start with get_, list_, or search_, and linear_write for every other tool. Every write requires approval of the exact discovered connection, tool and arguments.
 
 Look up teams, labels, workflow states and projects before creating or changing anything, so ids come from the workspace rather than from a guess. Do not claim anything was created or changed unless the tool reported success.`;
 

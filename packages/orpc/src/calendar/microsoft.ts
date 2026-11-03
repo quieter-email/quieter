@@ -228,7 +228,7 @@ const toEvent = (
       edit: writable && safeOrganizerWrite,
       respond: writable && !event.isOrganizer,
     },
-    recurrence: fromMicrosoftRecurrence(event.recurrence),
+    recurrence: fromMicrosoftRecurrence(event.recurrence, time),
     recurringEventId: event.seriesMasterId ?? undefined,
     reminders: {
       items:

@@ -10,7 +10,7 @@ Use a separate development OAuth application for each vendor. Outlook Calendar a
 http://localhost:3000/api/connectors/callback
 ```
 
-The callback follows `BETTER_AUTH_URL`. Register the exact deployed callback in a separate production app before enabling production. No production secrets or deployment are needed for local testing.
+The callback follows `BETTER_AUTH_URL`. Local testing uses development credentials and the `quieter_dev` database.
 
 | Provider | Registration | Minimum access used here | Development SST Secrets |
 | --- | --- | --- | --- |
@@ -19,7 +19,9 @@ The callback follows `BETTER_AUTH_URL`. Register the exact deployed callback in 
 | ClickUp | Workspace settings, ClickUp API, app settings | OAuth access to the workspaces selected by the user; no additional scope parameter | `ClickupClientId`, `ClickupClientSecret` |
 | Microsoft | [App registrations](https://portal.azure.com/), Web platform, organizational and personal accounts | Delegated `User.Read`, `Calendars.ReadWrite`, `Files.Read`, `offline_access`; each connection requests only its own resource scopes | `MicrosoftClientId`, `MicrosoftClientSecret` |
 
-Microsoft app registration requires a developer account in an Entra tenant. A personal Outlook account can authorize the finished connector, but a personal account without a directory cannot register its app. Tenant consent policies can also require a customer's administrator, even for delegated permissions. See [registration prerequisites](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app).
+Microsoft app registration requires a developer account in an Entra tenant. A personal Outlook account can authorize the finished connector, but a personal account without a directory cannot register its app. See [registration prerequisites](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app).
+
+ClickUp's settings normalize redirect entries to their host. After entering the full callback, move focus out of the field, save, and wait for **Saved** before leaving. The saved development entry is `localhost:3000`; production is `https://quieter.email`. The authorization request still sends the complete callback path. Reveal the client secret before copying it; the masked input value is not a usable secret.
 
 Use the corresponding uppercase names in the ignored local cache, such as `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET`. `CONNECTOR_TOKEN_ENCRYPTION_KEY` must be a development secret. Store credentials in the development SST stage and refresh local bindings:
 
@@ -34,6 +36,25 @@ vp run dev
 ```
 
 Alternatively, `vp run dev:sst --stage local-leander` loads linked secrets and starts both local runtimes. These connectors do not require Gmail Pub/Sub or background processing. Keep Gmail ownership and telemetry at their existing safe defaults. Apply the committed migration to the verified development database with `vp run db:migrate` before starting the updated app.
+
+## Production setup
+
+The following separate registrations exist as of November 3, 2026. Their client credentials are stored in their corresponding SST stage. Calendar and OneDrive share the Microsoft registration within each stage.
+
+| Vendor    | Development app, `local-leander` | Production app, `production` |
+| --------- | -------------------------------- | ---------------------------- |
+| Notion    | Quieter Development              | Quieter                      |
+| Todoist   | Quieter Development              | Quieter                      |
+| ClickUp   | Quieter Development              | Quieter                      |
+| Microsoft | Quieter Development              | Quieter Connected Apps       |
+
+Production registrations use `https://quieter.email/api/connectors/callback`. Microsoft registrations belong to the existing Quieter Entra directory and support organizational and personal accounts. The existing `quieter` identity-sign-in registration remains separate. Expired Azure trial credits do not require a new subscription for these registrations.
+
+Both Microsoft client secrets expire on **May 2, 2027**. Before that date, create a replacement in the corresponding registration, update that stage's `MicrosoftClientSecret`, deploy through the protected workflow, verify a connection, and remove the retired secret.
+
+Microsoft publisher verification is not complete. Personal Microsoft accounts can grant these delegated permissions themselves. Other organizations can require administrator consent or a verified publisher under their tenant policies. Do not describe Microsoft as universally approval-free. See [delegated access and consent](https://learn.microsoft.com/en-us/entra/identity-platform/delegated-access-primer) and [publisher verification](https://learn.microsoft.com/en-us/entra/identity-platform/publisher-verification-overview).
+
+OAuth registration and secret storage do not deploy the feature. Apply the committed migration and deploy the linked secret bindings through the protected production workflows, then perform production consent and read checks. Development tokens cannot be copied to production because the OAuth clients and encryption keys are separate.
 
 ## Manual acceptance
 
@@ -54,6 +75,16 @@ QUIETER_LOCAL_CONNECTOR_WRITE_ACCOUNTS=todoist:<providerAccountId>,clickup:<prov
 ```
 
 The account IDs are returned by the owned connection lookup. The allowlist is independent of the Gmail, Google Calendar and Linear gates. Return to observation mode after testing. Do not use live shared workspaces for automated write checks. Changes require the existing exact-action review in chat; reviewed mailbox Actions use fixed destinations and approved content bindings.
+
+### Verified development behavior
+
+Live manual checks on November 3, 2026 completed OAuth and API reads for all five connectors. Notion passed private-page search, reads, an approved child-page creation, and block append. Canceling its earlier review left the workspace unchanged. Todoist passed task creation, editing, reading, and completion. ClickUp passed workspace, space, list, and task reads, plus disposable task creation and editing.
+
+Outlook passed calendar reads, event creation and editing, all-day dates, a timed series across Berlin's spring daylight-saving change, rejection of a stale edit, token refresh, and deletion. The all-day event appeared in the shared calendar UI and was deleted there. Both test events were removed. OneDrive passed listing and reading an uploaded UTF-8 text fixture through Microsoft's signed download URL. Different-user access was rejected for each provider.
+
+The private Notion test page, completed Todoist task, ClickUp test task, and OneDrive text file remain available as development fixtures. No guests, invitations, mail sends, or background Gmail processing were used. These checks used personal Microsoft consent, not a separate customer's organizational tenant. Production consent and deployment remain separate rollout checks.
+
+![Outlook all-day test event in the shared calendar](./screenshots/outlook-calendar-verified.png)
 
 ## Current boundaries
 

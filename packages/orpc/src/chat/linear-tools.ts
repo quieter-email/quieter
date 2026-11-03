@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import { linearToolCallInputSchema } from "@quieter/ai/chat-agent";
 import { reportError } from "@quieter/observability";
 import { tool } from "ai";
@@ -9,10 +10,19 @@ import {
   listLinearMcpToolsForUser,
   runLinearMcpToolCallsForUser,
 } from "../connectors/linear-mcp";
-import { getLinearConnectionForUser } from "../connectors/runtime";
+import {
+  getConnectorConnectionForUser,
+  getLinearConnectionForUser,
+} from "../connectors/runtime";
+import { connectorMentionPattern } from "../mail-agent/contracts";
 
 const LINEAR_REQUEST_REQUIRED_ERROR =
-  "Linear tools require an explicit @Linear request.";
+  "Select the connected account with @ before using Linear tools.";
+
+const linearConnectionIdSchema = z.string().min(1).max(256).meta({
+  description:
+    "The exact connectionId in the user's @[connection:ID] mention, or returned by linear_list_tools for an unambiguous @Linear request.",
+});
 
 const LINEAR_MENTION_PATTERN =
   /(?:^|[^\p{L}\p{N}_])@linear(?:$|[^\p{L}\p{N}_])/iu;
@@ -49,6 +59,9 @@ const linearToolCallResultSchema = z.object({
 });
 
 const getLinearToolError = (operation: string, error: unknown) => {
+  if (error instanceof ORPCError && error.status < 500) {
+    return { error: error.message, status: "error" as const };
+  }
   reportError(error, { operation: `chat:linear-${operation}` });
   return {
     error:
@@ -61,7 +74,13 @@ export const createLinearChatTools = (input: {
   latestUserRequest: string;
   userId: string;
 }): ToolSet => {
-  const isRequested = hasLinearConnectorMention(input.latestUserRequest);
+  const connectionIds = new Set(
+    [...input.latestUserRequest.matchAll(connectorMentionPattern)].map(
+      (match) => match[1]
+    )
+  );
+  const hasLegacyMention = hasLinearConnectorMention(input.latestUserRequest);
+  const isRequested = connectionIds.size > 0 || hasLegacyMention;
   const requestGuard = () =>
     isRequested
       ? undefined
@@ -69,6 +88,32 @@ export const createLinearChatTools = (input: {
           error: LINEAR_REQUEST_REQUIRED_ERROR,
           status: "error" as const,
         };
+
+  const getConnection = async (connectionId?: string) => {
+    if (connectionId !== undefined && connectionIds.has(connectionId)) {
+      return await getConnectorConnectionForUser({
+        connectionId,
+        provider: "linear",
+        userId: input.userId,
+      });
+    }
+    if (!hasLegacyMention) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "Select this connected account with @ before using it.",
+      });
+    }
+
+    const connection = await getLinearConnectionForUser(input.userId);
+    if (
+      connectionId !== undefined &&
+      connectionId !== connection.connectionId
+    ) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "Select this connected account with @ before using it.",
+      });
+    }
+    return connection;
+  };
 
   const callTool = async (inputCall: {
     arguments: Record<string, unknown>;
@@ -104,6 +149,7 @@ export const createLinearChatTools = (input: {
     }
 
     try {
+      const connection = await getConnection(inputCall.connectionId);
       const [result] = await runLinearMcpToolCallsForUser({
         calls: [
           {
@@ -111,7 +157,7 @@ export const createLinearChatTools = (input: {
             toolName: inputCall.toolName,
           },
         ],
-        connectionId: inputCall.connectionId,
+        connectionId: connection.connectionId,
         maxCalls: 1,
         signal: inputCall.signal,
         userId: input.userId,
@@ -130,15 +176,15 @@ export const createLinearChatTools = (input: {
   const tools: ToolSet = {
     linear_list_tools: tool({
       description:
-        "Discover the tools available in the connected Linear workspace. Use only after the user explicitly mentions @Linear, and use this before any other Linear tool.",
-      execute: async (_input, { abortSignal }) => {
+        "Discover the verified account, workspace and available tools for an exact mentioned Linear connection. Use this before any other Linear tool. Omit connectionId only for an unambiguous @Linear request.",
+      execute: async ({ connectionId }, { abortSignal }) => {
         const guard = requestGuard();
         if (guard !== undefined) {
           return guard;
         }
 
         try {
-          const connection = await getLinearConnectionForUser(input.userId);
+          const connection = await getConnection(connectionId);
           return {
             connection,
             status: "success" as const,
@@ -152,21 +198,29 @@ export const createLinearChatTools = (input: {
           return getLinearToolError("list-tools", error);
         }
       },
-      inputSchema: z.object({}),
+      inputSchema: z.object({
+        connectionId: linearConnectionIdSchema.optional(),
+      }),
       outputSchema: linearListToolsResultSchema,
     }),
 
     linear_read: tool({
       description:
-        "Call a read-only Linear tool returned by linear_list_tools. Use this only for tool names beginning with get_, list_, or search_.",
-      execute: async ({ arguments: args, toolName }, { abortSignal }) =>
+        "Call a read-only Linear tool returned by linear_list_tools for the exact mentioned connectionId. Use this only for tool names beginning with get_, list_, or search_.",
+      execute: async (
+        { arguments: args, connectionId, toolName },
+        { abortSignal }
+      ) =>
         await callTool({
           arguments: args ?? {},
+          connectionId,
           mode: "read",
           signal: abortSignal,
           toolName,
         }),
-      inputSchema: linearToolCallInputSchema,
+      inputSchema: linearToolCallInputSchema.extend({
+        connectionId: linearConnectionIdSchema.optional(),
+      }),
       outputSchema: linearToolCallResultSchema,
     }),
   };
@@ -174,7 +228,7 @@ export const createLinearChatTools = (input: {
   if (isRequested) {
     tools.linear_write = tool({
       description:
-        "Call a mutating Linear tool returned by linear_list_tools. Use this for tool names that do not begin with get_, list_, or search_.",
+        "Request approval for and call a mutating Linear tool returned by linear_list_tools for this exact mentioned and reviewed connectionId. Use this for tool names that do not begin with get_, list_, or search_.",
       execute: async (
         { arguments: args, connectionId, toolName },
         { abortSignal }
@@ -187,10 +241,7 @@ export const createLinearChatTools = (input: {
           toolName,
         }),
       inputSchema: linearToolCallInputSchema.extend({
-        connectionId: z.string().min(1).max(256).meta({
-          description:
-            "The exact connectionId returned by linear_list_tools for the reviewed account and workspace.",
-        }),
+        connectionId: linearConnectionIdSchema,
       }),
       outputSchema: linearToolCallResultSchema,
     });

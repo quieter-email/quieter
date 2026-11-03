@@ -1,6 +1,9 @@
 import { ORPCError } from "@orpc/server";
 import type { CalendarEventTime } from "@quieter/calendar";
-import { calendarInstantToWallTime } from "@quieter/calendar/time";
+import {
+  calendarInstantToWallTime,
+  calendarWallTimeToInstant,
+} from "@quieter/calendar/time";
 import { z } from "zod";
 
 const weekdays = [
@@ -40,8 +43,28 @@ export const microsoftRecurrenceSchema = z.object({
   }),
 });
 
+const recurrenceUntil = (date: string, time: CalendarEventTime): string => {
+  z.iso.date().parse(date);
+  if (time.kind === "all-day") {
+    return date.replaceAll("-", "");
+  }
+  const next = new Date(`${date}T12:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  const midnight = calendarWallTimeToInstant({
+    date: next.toISOString().slice(0, 10),
+    disambiguation: "compatible",
+    time: "00:00",
+    timeZone: time.timeZone,
+  });
+  return new Date(new Date(midnight).getTime() - 1000)
+    .toISOString()
+    .replaceAll(/[-:]/gu, "")
+    .replace(".000", "");
+};
+
 export const fromMicrosoftRecurrence = (
-  recurrence: z.infer<typeof microsoftRecurrenceSchema> | null | undefined
+  recurrence: z.infer<typeof microsoftRecurrenceSchema> | null | undefined,
+  time: CalendarEventTime
 ): string[] => {
   if (!recurrence) {
     return [];
@@ -79,7 +102,7 @@ export const fromMicrosoftRecurrence = (
   if (range.type === "numbered") {
     parts.push(`COUNT=${range.numberOfOccurrences}`);
   } else if (range.type === "endDate" && range.endDate) {
-    parts.push(`UNTIL=${range.endDate.replaceAll("-", "")}`);
+    parts.push(`UNTIL=${recurrenceUntil(range.endDate, time)}`);
   }
   return [`RRULE:${parts.join(";")}`];
 };
@@ -257,16 +280,29 @@ export const toMicrosoftRecurrence = (
     }
   } else if (rule.has("UNTIL")) {
     const until = rule.get("UNTIL") ?? "";
-    if (!/^\d{8}$/u.test(until)) {
-      // Graph supports a final date, not RFC 5545's precise UTC cutoff.
+    if (
+      !(time.kind === "all-day" ? /^\d{8}$/u : /^\d{8}T\d{6}Z$/u).test(until)
+    ) {
       throw invalid;
     }
     range.type = "endDate";
-    range.endDate = `${until.slice(0, 4)}-${until.slice(4, 6)}-${until.slice(6, 8)}`;
-    if (
-      !z.iso.date().safeParse(range.endDate).success ||
-      range.endDate < startDate
-    ) {
+    const date = `${until.slice(0, 4)}-${until.slice(4, 6)}-${until.slice(6, 8)}`;
+    try {
+      range.endDate =
+        time.kind === "all-day"
+          ? date
+          : calendarInstantToWallTime(
+              `${date}T${until.slice(9, 11)}:${until.slice(11, 13)}:${until.slice(13, 15)}Z`,
+              time.timeZone
+            ).slice(0, 10);
+      // Preserve the shared editor's local-day cutoff without rounding.
+      if (recurrenceUntil(range.endDate, time) !== until) {
+        throw invalid;
+      }
+    } catch {
+      throw invalid;
+    }
+    if (range.endDate < startDate) {
       throw invalid;
     }
   }
