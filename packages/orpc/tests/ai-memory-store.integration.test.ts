@@ -449,7 +449,7 @@ describe.skipIf(state.databaseUrl === undefined)(
     });
 
     test.each(["explicit", "inferred"] as const)(
-      "adds a new fact without replacing an unseen %s fact with the same key",
+      "recalls an unseen %s collision before separating distinct concepts",
       async (source) => {
         const now = new Date();
         const unseenId = crypto.randomUUID();
@@ -488,10 +488,20 @@ describe.skipIf(state.databaseUrl === undefined)(
             userId,
           })),
         ]);
-        state.plan.mockResolvedValue({
-          ...defaultPlan,
-          operations: [{ ...addition, key }],
-        });
+        state.plan.mockImplementation(
+          async ({ currentMemories }) =>
+            await Promise.resolve({
+              ...defaultPlan,
+              operations: [
+                {
+                  ...addition,
+                  key: currentMemories.some(({ id }) => id === unseenId)
+                    ? "morning-routine"
+                    : key,
+                },
+              ],
+            })
+        );
 
         for (const eventKey of [
           "breakfast-evidence",
@@ -529,6 +539,142 @@ describe.skipIf(state.databaseUrl === undefined)(
         ).toHaveLength(1);
       }
     );
+
+    test("returns the final retry answer when a concurrent discovery makes the request a no-op", async () => {
+      const finalPlan = {
+        ...defaultPlan,
+        answer: "This preference is already recorded, so nothing changed.",
+        operations: [],
+      } satisfies AiMemoryUpdatePlan;
+      state.plan.mockImplementationOnce(async () => {
+        const now = new Date();
+        await db.insert(aiMemory).values({
+          content: "Prefers quiet mornings and cycling to work.",
+          createdAt: now,
+          id: crypto.randomUUID(),
+          importance: 3,
+          key: addition.key,
+          kind: "learned",
+          lastConfirmedAt: now,
+          metadata: { category: "preferences" },
+          scope: "user",
+          scopeKey: `user:${userId}`,
+          source: "inferred",
+          summary: "Morning routine",
+          updatedAt: now,
+          userId,
+        });
+        return defaultPlan;
+      });
+      state.plan.mockResolvedValueOnce(finalPlan);
+
+      const result = await requestAiMemoryUpdate({
+        mailboxId,
+        request: "Remember that I prefer quiet mornings.",
+        userId,
+      });
+
+      expect(result).toMatchObject({
+        answer: finalPlan.answer,
+        status: "no_change",
+      });
+      const personal = await searchAiMemory({ userId });
+      expect(personal.items).toHaveLength(1);
+      expect(personal.items[0]?.content).toContain("cycling to work");
+      expect(personal.items[0]?.version).toBe(1);
+    });
+
+    test("replans an unseen concept into one updated record while preserving its durable detail", async () => {
+      const now = new Date();
+      const memoryId = crypto.randomUUID();
+      await db.insert(aiMemory).values([
+        {
+          content: "Uses brief greetings with close colleagues.",
+          createdAt: now,
+          id: memoryId,
+          importance: 1,
+          key: "voice-pattern",
+          kind: "learned",
+          lastConfirmedAt: now,
+          metadata: { category: "writing_style" },
+          scope: "user",
+          scopeKey: `user:${userId}`,
+          source: "inferred",
+          summary: "Colleague greetings",
+          updatedAt: now,
+          userId,
+        },
+        ...Array.from({ length: 9 }, (_, index) => ({
+          content: `Distinct phrasing example ${index}.`,
+          createdAt: now,
+          id: crypto.randomUUID(),
+          importance: 5,
+          key: `other-voice-${index}`,
+          kind: "learned" as const,
+          lastConfirmedAt: now,
+          metadata: { category: "writing_style" as const },
+          scope: "user" as const,
+          scopeKey: `user:${userId}`,
+          source: "inferred" as const,
+          summary: "Another voice pattern",
+          updatedAt: now,
+          userId,
+        })),
+      ]);
+      let recalled = false;
+      state.plan.mockImplementation(async ({ currentMemories, onUsage }) => {
+        onUsage?.({
+          cacheWriteTokens: 2,
+          cachedTokens: 3,
+          completionTokens: 5,
+          costUsd: 0.001,
+          promptTokens: 11,
+        });
+        const target = currentMemories.find(({ id }) => id === memoryId);
+        recalled ||= target !== undefined;
+        return await Promise.resolve({
+          ...defaultPlan,
+          operations: [
+            {
+              ...addition,
+              action: target ? "update" : "add",
+              category: "writing_style",
+              content:
+                "Uses brief greetings with close colleagues and warm informal sign-offs.",
+              key: "voice-pattern",
+              targetId: target?.id ?? null,
+            },
+          ],
+        });
+      });
+      const event = await recordAiMemoryEvent({
+        kind: "mail_action",
+        mailboxId,
+        metadata: { bodyText: "A fresh sample.", memoryScope: "user" },
+        userId,
+      });
+      await expect(
+        refreshAiMemoryFromEvent({ eventId: event?.id ?? "" })
+      ).resolves.toMatchObject({ status: "refreshed" });
+      expect(recalled).toBeTruthy();
+      const records = await db
+        .select()
+        .from(aiMemory)
+        .where(eq(aiMemory.userId, userId));
+      expect(
+        records.filter(({ content }) => content.includes("close colleagues"))
+      ).toHaveLength(1);
+      const retained = records.find(({ id }) => id === memoryId);
+      expect(retained?.content).toContain("warm informal sign-offs");
+      expect(retained?.version).toBe(2);
+      expect(state.billed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          completionTokens: 10,
+          costUsd: 0.002,
+          promptTokens: 22,
+        })
+      );
+    });
 
     test("a reviewed fact still rejects a stale plan after another observation changes it", async () => {
       const original = await recordAiMemoryEvent({
@@ -629,6 +775,130 @@ describe.skipIf(state.databaseUrl === undefined)(
       expect(events.every(({ mergedAt }) => mergedAt !== null)).toBeTruthy();
     });
 
+    test("does not recall or overwrite a colliding concept belonging to another mailbox", async () => {
+      const otherMailboxId = await createManagedMailbox("reader");
+      const now = new Date();
+      const hiddenId = crypto.randomUUID();
+      await db.insert(aiMemory).values({
+        content: "Use a special project policy in this mailbox.",
+        createdAt: now,
+        id: hiddenId,
+        importance: 4,
+        key: addition.key,
+        kind: "learned",
+        lastConfirmedAt: now,
+        metadata: { category: "work", sourceMailboxId: otherMailboxId },
+        scope: "user",
+        scopeKey: `user:${userId}`,
+        source: "inferred",
+        summary: "Project handling",
+        updatedAt: now,
+        userId,
+      });
+      const event = await recordAiMemoryEvent({
+        kind: "mail_action",
+        mailboxId,
+        metadata: {
+          bodyText: "Morning routine evidence.",
+          memoryScope: "user",
+        },
+        userId,
+      });
+      await expect(
+        refreshAiMemoryFromEvent({ eventId: event?.id ?? "" })
+      ).resolves.toMatchObject({ status: "refreshed" });
+      expect(
+        state.plan.mock.calls
+          .flatMap(([input]) => input.currentMemories)
+          .some(({ id }) => id === hiddenId)
+      ).toBeFalsy();
+      const records = await db
+        .select()
+        .from(aiMemory)
+        .where(eq(aiMemory.userId, userId));
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({
+        id: hiddenId,
+        metadata: { sourceMailboxId: otherMailboxId },
+        version: 1,
+      });
+    });
+
+    test.each(["update", "archive"] as const)(
+      "protects deterministic label projections from a nonexplicit %s disguised as another category",
+      async (action) => {
+        const now = new Date();
+        const memoryId = crypto.randomUUID();
+        await db.insert(aiMemory).values({
+          content: "Quiet mornings label policy.",
+          createdAt: now,
+          id: memoryId,
+          importance: 4,
+          key: addition.key,
+          kind: "learned",
+          lastConfirmedAt: now,
+          metadata: { category: "labeling", sourceMailboxId: mailboxId },
+          scope: "user",
+          scopeKey: `user:${userId}`,
+          source: "feedback",
+          summary: "Quiet mornings",
+          updatedAt: now,
+          userId,
+        });
+        state.plan.mockResolvedValue({
+          ...defaultPlan,
+          operations: [
+            {
+              ...addition,
+              action,
+              category: "preferences",
+              targetId: memoryId,
+            },
+          ],
+        });
+        const event = await recordAiMemoryEvent({
+          kind: "mail_action",
+          mailboxId,
+          metadata: { bodyText: "Quiet mornings", memoryScope: "user" },
+          userId,
+        });
+        await expect(
+          refreshAiMemoryFromEvent({ eventId: event?.id ?? "" })
+        ).resolves.toMatchObject({ status: "refreshed" });
+        const [retained] = await db
+          .select()
+          .from(aiMemory)
+          .where(eq(aiMemory.id, memoryId));
+        expect(retained).toMatchObject({
+          metadata: { category: "labeling" },
+          status: "active",
+          version: 1,
+        });
+      }
+    );
+
+    test("skips old label feedback events without model admission or billing", async () => {
+      const event = await recordAiMemoryEvent({
+        kind: "auto_label_feedback",
+        mailboxId,
+        metadata: { addedLabels: "Project updates" },
+        userId,
+      });
+      state.entitlement.mockClear();
+      await expect(
+        refreshAiMemoryFromEvent({ eventId: event?.id ?? "" })
+      ).resolves.toMatchObject({ status: "skipped" });
+      expect(state.plan).not.toHaveBeenCalled();
+      expect(state.entitlement).not.toHaveBeenCalled();
+      expect(state.billed).not.toHaveBeenCalled();
+      const [stored] = await db
+        .select()
+        .from(userAiContextEvent)
+        .where(eq(userAiContextEvent.id, event?.id ?? ""));
+      expect(stored?.skippedAt).not.toBeNull();
+      expect(stored?.metadata).toStrictEqual({});
+    });
+
     test("keeps labeling concepts distinct across the user's mailboxes", async () => {
       const secondMailboxId = await createManagedMailbox("reader");
       state.plan.mockResolvedValue({
@@ -637,7 +907,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       });
       for (const evidenceMailboxId of [mailboxId, secondMailboxId]) {
         const event = await recordAiMemoryEvent({
-          kind: "auto_label_feedback",
+          kind: "explicit_preference",
           mailboxId: evidenceMailboxId,
           metadata: { addedLabels: "Project updates" },
           userId,

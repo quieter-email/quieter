@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { buildAutoLabelMemoryProfile } from "../src/mail-automation/memory";
+import {
+  buildAutoLabelMemoryProfile,
+  groupAutoLabelMemoryRules,
+} from "../src/mail-automation/memory";
 
 describe("mail automation memory profiles", () => {
   test("compresses auto-label corrections into durable policies", () => {
@@ -94,5 +97,76 @@ describe("mail automation memory profiles", () => {
 
     expect(profile.rules).toHaveLength(80);
     expect(profile.rules.every((rule) => rule.count === 5)).toBeTruthy();
+  });
+
+  test("groups exact sources by policy without dropping rules across content and contact boundaries", () => {
+    const sources = Array.from(
+      { length: 61 },
+      (_, index) =>
+        `${String(index).padStart(3, "0")}-${"sender".repeat(12)}@example.test`
+    );
+    const rules = sources.map((source) => ({
+      count: 2,
+      labelId: "work",
+      labelName: "Work",
+      policy: "prefer" as const,
+      source,
+    }));
+    const grouped = groupAutoLabelMemoryRules([
+      ...rules,
+      {
+        count: 3,
+        labelId: "work",
+        labelName: "Work",
+        policy: "suppress",
+        source: "unwanted@example.test",
+      },
+      {
+        count: 2,
+        labelId: "work",
+        labelName: "Work",
+        policy: "prefer",
+        source: null,
+      },
+      {
+        count: 1,
+        labelId: "work",
+        labelName: "Work",
+        policy: "prefer",
+        source: "special.example",
+      },
+    ]);
+    expect(grouped.length).toBeLessThan(rules.length);
+    expect(
+      grouped.every(
+        ({ content, metadata }) =>
+          content.length <= 2000 &&
+          (metadata?.correspondents?.length ?? 0) <= 20
+      )
+    ).toBeTruthy();
+    const members = grouped.flatMap(
+      ({ metadata }) => metadata?.feedbackMembers ?? []
+    );
+    expect(
+      members
+        .map(({ source }) => source)
+        .toSorted((left, right) => (left ?? "").localeCompare(right ?? ""))
+    ).toStrictEqual(
+      [...sources, "unwanted@example.test", null, "special.example"].toSorted(
+        (left, right) => (left ?? "").localeCompare(right ?? "")
+      )
+    );
+    for (const memory of grouped) {
+      const membersWithSource = (
+        memory.metadata?.feedbackMembers ?? []
+      ).flatMap(({ source }) => (source === null ? [] : [source]));
+      expect(
+        membersWithSource.every((source) => memory.content.includes(source))
+      ).toBeTruthy();
+      expect(
+        new Set(memory.metadata?.feedbackMembers?.map(({ policy }) => policy))
+          .size
+      ).toBe(1);
+    }
   });
 });
