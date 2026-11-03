@@ -58,6 +58,7 @@ vi.mock(import("@quieter/env/server"), async (original) => {
     serverEnv: {
       ...actual.serverEnv,
       DATABASE_URL: state.databaseUrl,
+      POLAR_PRODUCT_PRO_ID: "sharing-pro-product",
       R2_BUCKET: "test",
     },
   };
@@ -202,12 +203,19 @@ describe.skipIf(state.databaseUrl === undefined)(
         currentPeriodEnd: new Date(now.getTime() + 86_400_000),
         currentPeriodStart: now,
         id: crypto.randomUUID(),
-        metadata: { quieterOrganizationId: organizationId },
-        organizationId,
+        metadata: {
+          quieterProduct: "pro",
+          quieterScope: "account",
+          quieterUserId: userId,
+        },
+        organizationId: null,
+        periodCreditAmountCents: 2000,
         plan: "pro",
         provider: "polar",
-        providerProductId: crypto.randomUUID(),
+        providerCustomerId: crypto.randomUUID(),
+        providerProductId: "sharing-pro-product",
         providerSubscriptionId: crypto.randomUUID(),
+        scope: "account",
         status: "active",
         updatedAt: now,
         userId,
@@ -224,6 +232,9 @@ describe.skipIf(state.databaseUrl === undefined)(
     });
 
     afterAll(async () => {
+      await db
+        .delete(billingSubscription)
+        .where(eq(billingSubscription.userId, userId));
       await db.delete(organization).where(eq(organization.id, organizationId));
       await db.delete(user).where(inArray(user.id, [userId, readerId]));
       await db.$client.end();

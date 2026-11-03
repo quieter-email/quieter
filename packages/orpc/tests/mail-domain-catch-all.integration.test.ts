@@ -31,7 +31,11 @@ vi.mock(import("@quieter/env/server"), async (original) => {
   const actual = await original();
   return {
     ...actual,
-    serverEnv: { ...actual.serverEnv, DATABASE_URL: databaseUrl },
+    serverEnv: {
+      ...actual.serverEnv,
+      DATABASE_URL: databaseUrl,
+      POLAR_PRODUCT_MANAGED_ID: "catch-all-managed-product",
+    },
   };
 });
 
@@ -87,27 +91,29 @@ describe.skipIf(databaseUrl === undefined)(
         .update(organization)
         .set({ billingOwnerUserId: ownerId })
         .where(inArray(organization.id, [organizationId, otherOrganizationId]));
-      await db.insert(billingSubscription).values(
-        [organizationId, otherOrganizationId].map(
-          (id) =>
-            ({
-              cancelAtPeriodEnd: true,
-              createdAt: now,
-              currentPeriodEnd: new Date(Date.now() + 86_400_000),
-              currentPeriodStart: now,
-              id: id === organizationId ? subscriptionId : crypto.randomUUID(),
-              metadata: { quieterOrganizationId: id },
-              organizationId: id,
-              plan: "managed",
-              provider: "polar",
-              providerProductId: crypto.randomUUID(),
-              providerSubscriptionId: crypto.randomUUID(),
-              status: "active",
-              updatedAt: now,
-              userId: ownerId,
-            }) satisfies typeof billingSubscription.$inferInsert
-        )
-      );
+      await db.insert(billingSubscription).values({
+        cancelAtPeriodEnd: true,
+        createdAt: now,
+        currentPeriodEnd: new Date(Date.now() + 86_400_000),
+        currentPeriodStart: now,
+        id: subscriptionId,
+        metadata: {
+          quieterProduct: "managed",
+          quieterScope: "account",
+          quieterUserId: ownerId,
+        },
+        organizationId: null,
+        periodCreditAmountCents: 300,
+        plan: "managed",
+        provider: "polar",
+        providerCustomerId: crypto.randomUUID(),
+        providerProductId: "catch-all-managed-product",
+        providerSubscriptionId: crypto.randomUUID(),
+        scope: "account",
+        status: "active",
+        updatedAt: now,
+        userId: ownerId,
+      });
       await db.insert(mailbox).values(
         mailboxIds.map((id) => ({
           createdAt: now,
@@ -149,6 +155,9 @@ describe.skipIf(databaseUrl === undefined)(
     });
 
     afterAll(async () => {
+      await db
+        .delete(billingSubscription)
+        .where(eq(billingSubscription.userId, ownerId));
       await db
         .delete(organization)
         .where(inArray(organization.id, [organizationId, otherOrganizationId]));
