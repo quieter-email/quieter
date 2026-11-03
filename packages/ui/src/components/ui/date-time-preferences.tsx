@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useSyncExternalStore } from "react";
+import { createContext, useContext } from "react";
 import type { ReactNode } from "react";
 
 export type TimeFormat = "12h" | "24h";
@@ -13,10 +13,6 @@ export type DateTimePreferences = {
 const DateTimePreferencesContext = createContext<DateTimePreferences | null>(
   null
 );
-const subscribe = () => () => {
-  // Browser locale has no change event to unsubscribe from.
-};
-
 export const DateTimePreferencesProvider = ({
   children,
   value,
@@ -29,16 +25,8 @@ export const DateTimePreferencesProvider = ({
   </DateTimePreferencesContext.Provider>
 );
 
-export const useDateTimePreferences = (): DateTimePreferences => {
-  const preferences = useContext(DateTimePreferencesContext);
-  const regionalTimeFormat = useSyncExternalStore<TimeFormat>(
-    subscribe,
-    () =>
-      new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions()
-        .hour12 === true
-        ? "12h"
-        : "24h",
-    () => "24h"
-  );
-  return preferences ?? { timeFormat: regionalTimeFormat, weekStartsOn: 1 };
-};
+export const useDateTimePreferences = (): DateTimePreferences =>
+  useContext(DateTimePreferencesContext) ?? {
+    timeFormat: "24h",
+    weekStartsOn: 1,
+  };

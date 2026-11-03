@@ -90,10 +90,7 @@ export const DateTimeSettings = () => {
                 </SelectContent>
               </Select>
             }
-          >
-            Choose how times appear in calendars and time pickers. Your initial
-            choice follows your region.
-          </SettingsRow>
+          />
           <SettingsRow
             title="Start of week"
             action={
@@ -127,10 +124,7 @@ export const DateTimeSettings = () => {
                 </SelectContent>
               </Select>
             }
-          >
-            Choose the first day in your calendar. Weeks start on Monday by
-            default.
-          </SettingsRow>
+          />
         </SettingsRows>
       )}
     </SettingsSection>

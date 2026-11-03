@@ -721,7 +721,7 @@ export const MessageListScrollPane = ({
       {!isLoadingEmptyMessages &&
         !list.isError &&
         threadedMessages.length === 0 && (
-          <p className="px-2 py-8 text-body text-muted-fg">
+          <p className="px-2 py-8 text-center text-body text-muted-fg">
             {emptyMessageLabel}
           </p>
         )}
