@@ -45,7 +45,7 @@ flowchart TB
         FEED["Lambda MailOutboundFeedbackProcessor<br/>outbound-feedback.handler, 60s<br/>async retries 2"]
         FDLQ["SQS MailOutboundFeedbackDeadLetterQueue<br/>14-day retention, no consumer"]
         ALARM["CloudWatch DLQ alarm"]
-        IAM["IAM: MailReceiptRole, per-Lambda roles,<br/>WebAwsPermissions ses:SendEmail for Web"]
+        IAM["IAM: MailReceiptRole, per-Lambda roles,<br/>WebAwsPermissions for mail setup and sending"]
     end
 
     subgraph EXT["External services"]
@@ -114,7 +114,7 @@ flowchart TB
 
 | Resource | SST type | Entry point | Triggered by | Talks to | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `Web` | `sst.cloudflare.TanStackStart` | `apps/web` | Browser HTTPS | Hyperdrive, SESv2, Gmail API, OpenRouter, Polar, Sentry, R2 | Production domain `quieter.email` (+ `www` redirect), logs + traces on, linked scoped AWS credentials via `WebAwsPermissions` for `ses:SendEmail`/`SendRawEmail`. |
+| `Web` | `sst.cloudflare.TanStackStart` | `apps/web` | Browser HTTPS | Hyperdrive, SESv2, Gmail API, OpenRouter, Polar, Sentry, R2 | Production domain `quieter.email` (+ `www` redirect), logs + traces on, linked AWS credentials through `WebAwsPermissions` for sending, domain identity setup in the current account and region, regional receipt rules, and passing only `MailReceiptRole` to SES. |
 | `GmailRealtimeWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/worker.ts` | Google Pub/Sub push (POST `/gmail/pubsub`), browser WebSocket (`/mail/live`) | Hyperdrive, processing secrets, `MailLiveUser` | Processes authenticated notifications before acknowledging. Verifies Google OIDC JWT against JWKS, checks subscription name, body limit 64 KiB. Mail updates resolve current mailbox recipients before delivery. |
 | `GmailLiveSyncMailboxV2` | `sst.cloudflare.DurableObject` (SQLite, migration `v3`) | `packages/cloudflare/src/gmail-live-sync-mailbox.ts` | Retired transport | Existing legacy sockets only | Fail-closed tombstone closes retained sockets and rejects every request. Current subscriptions use `MailLiveUser`. |
 | `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | `*/15 * * * *` | Hyperdrive, Gmail API | Due mailboxes are processed directly with concurrency four, including pending code retries. |

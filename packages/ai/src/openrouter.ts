@@ -59,9 +59,34 @@ export const createChatModel = (
   const parsedModel = chatModelSchema.parse(model);
   const fallbacks =
     options.allowFallbacks === false ? [] : resolveModelFallbacks(parsedModel);
+  const providerRouting = {
+    ...(options.prioritizeLatency === true ? { sort: "latency" } : {}),
+    zdr: true,
+  };
   return wrapLanguageModel({
     middleware: [
       openRouterStreamMiddleware,
+      {
+        specificationVersion: "v4",
+        // oxlint-disable-next-line eslint/require-await -- The SDK requires a promise-returning transform without I/O.
+        transformParams: async ({ params }) =>
+          params.responseFormat?.type === "json" &&
+          params.responseFormat.schema !== undefined
+            ? {
+                ...params,
+                providerOptions: {
+                  ...params.providerOptions,
+                  openrouter: {
+                    ...params.providerOptions?.openrouter,
+                    provider: {
+                      ...providerRouting,
+                      require_parameters: true,
+                    },
+                  },
+                },
+              }
+            : params,
+      },
       createAiBillingMiddleware(
         options.billing,
         readChatUsageCostUsd,
@@ -71,10 +96,7 @@ export const createChatModel = (
     model: getOpenRouterProvider().chat(parsedModel, {
       extraBody: {
         ...(fallbacks.length > 0 ? { models: fallbacks } : {}),
-        provider: {
-          ...(options.prioritizeLatency === true ? { sort: "latency" } : {}),
-          zdr: true,
-        },
+        provider: providerRouting,
       },
       usage: { include: true },
     }),

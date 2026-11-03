@@ -35,8 +35,8 @@ import {
   getGmailOAuthConfig,
   GMAIL_SCOPES,
   REQUIRED_GMAIL_SCOPES,
-  runAuthorizedGmailMailbox,
 } from "../gmail-mailbox-access";
+import { callGmail } from "../gmail-request";
 import { getOrganizationApiMailboxId } from "../organization-api-mail";
 import {
   assertOwnedGmailMailbox,
@@ -225,14 +225,16 @@ const getGmailUnreadNonSpamCount = async (input: {
   mailboxId: string;
   userId: string;
 }) =>
-  (await runAuthorizedGmailMailbox(
+  (await callGmail(
     input,
-    async (accessToken) =>
+    input.mailboxId,
+    async (accessToken, signal) =>
       await getGmailMessageCount(accessToken, {
         accurateUpTo: 99,
         countBy: "threads",
         mailbox: "unread",
         query: "-in:spam -in:trash",
+        signal,
       })
   )) ?? 0;
 

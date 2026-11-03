@@ -37,7 +37,7 @@ export const callGmail = async <T>(
     context.resHeaders?.set("retry-after", String(retryAfter));
     throw new ORPCError("RATE_LIMITED", {
       data: { provider: "gmail", retryAfter },
-      message: error.message,
+      message: "Your mailbox is busy. Please try again shortly.",
       status: 429,
     });
   }

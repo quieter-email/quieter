@@ -8,7 +8,11 @@ import {
   managedMailMessage,
   managedMailMessageLabel,
 } from "@quieter/database/schema";
-import { listMessagesForAgent } from "@quieter/gmail";
+import {
+  isGmailRateLimitedError,
+  isGmailServiceError,
+  listMessagesForAgent,
+} from "@quieter/gmail";
 import type {
   MailAutoLabelHistory,
   MailAutoLabelHistoryExample,
@@ -52,51 +56,50 @@ const listGmailHistory = async (
   domain: string
 ) => {
   const quotedSender = sender.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
-  const lanes = await Promise.all(
-    [sender, `@${domain}`].map(async (queryValue, laneIndex) => {
-      const matches = new Map<string, HistoryMessage>();
-      let pageToken: string | undefined;
-      for (let page = 0; page < 2; page += 1) {
-        const quotedValue = queryValue
-          .replaceAll("\\", "\\\\")
-          .replaceAll('"', '\\"');
-        const result = await listMessagesForAgent(input.accessToken, {
-          maxResults: EXAMPLE_LIMIT * 3,
-          pageToken,
-          query: `from:"${quotedValue}"${laneIndex === 1 ? ` -from:"${quotedSender}"` : ""} -in:sent -in:drafts -in:spam -in:trash`,
-          signal: input.signal,
+  const lanes: HistoryMessage[][] = [];
+  for (const [laneIndex, queryValue] of [sender, `@${domain}`].entries()) {
+    const matches = new Map<string, HistoryMessage>();
+    let pageToken: string | undefined;
+    for (let page = 0; page < 2; page += 1) {
+      const quotedValue = queryValue
+        .replaceAll("\\", "\\\\")
+        .replaceAll('"', '\\"');
+      const result = await listMessagesForAgent(input.accessToken, {
+        maxResults: EXAMPLE_LIMIT * 3,
+        pageToken,
+        query: `from:"${quotedValue}"${laneIndex === 1 ? ` -from:"${quotedSender}"` : ""} -in:sent -in:drafts -in:spam -in:trash`,
+        signal: input.signal,
+      });
+      for (const message of result.messages) {
+        const source = extractMailAddress(message.from ?? "")
+          .trim()
+          .toLowerCase();
+        if (
+          message.id === input.message.id ||
+          !z.email().safeParse(source).success ||
+          message.labelIds?.some((id) => excludedGmailLabels.has(id)) ===
+            true ||
+          (laneIndex === 0
+            ? source !== sender
+            : source === sender || source.split("@")[1] !== domain)
+        ) {
+          continue;
+        }
+        matches.set(message.id, {
+          date: message.date?.slice(0, 100),
+          labelIds: message.labelIds ?? [],
+          messageId: message.id,
+          sender: source,
+          subject: message.subject?.slice(0, 300),
         });
-        for (const message of result.messages) {
-          const source = extractMailAddress(message.from ?? "")
-            .trim()
-            .toLowerCase();
-          if (
-            message.id === input.message.id ||
-            !z.email().safeParse(source).success ||
-            message.labelIds?.some((id) => excludedGmailLabels.has(id)) ===
-              true ||
-            (laneIndex === 0
-              ? source !== sender
-              : source === sender || source.split("@")[1] !== domain)
-          ) {
-            continue;
-          }
-          matches.set(message.id, {
-            date: message.date?.slice(0, 100),
-            labelIds: message.labelIds ?? [],
-            messageId: message.id,
-            sender: source,
-            subject: message.subject?.slice(0, 300),
-          });
-        }
-        if (matches.size >= EXAMPLE_LIMIT || !result.nextPageToken) {
-          break;
-        }
-        pageToken = result.nextPageToken;
       }
-      return [...matches.values()].slice(0, EXAMPLE_LIMIT);
-    })
-  );
+      if (matches.size >= EXAMPLE_LIMIT || !result.nextPageToken) {
+        break;
+      }
+      pageToken = result.nextPageToken;
+    }
+    lanes.push([...matches.values()].slice(0, EXAMPLE_LIMIT));
+  }
   return { sameDomain: lanes[1] ?? [], sameSender: lanes[0] ?? [] };
 };
 
@@ -331,6 +334,9 @@ const loadHistory = async (
     if (input.provider === "gmail") {
       input.signal?.throwIfAborted();
     }
+    if (isGmailRateLimitedError(error)) {
+      throw error;
+    }
     if (
       error instanceof ORPCError &&
       (error.code === "FORBIDDEN" ||
@@ -340,8 +346,10 @@ const loadHistory = async (
       throw error;
     }
     reportError(new Error("Mail label history could not be loaded."), {
+      errorType: error instanceof Error ? error.name : typeof error,
       operation: "mail-automation:load-label-history",
       provider: input.provider,
+      statusCode: isGmailServiceError(error) ? error.status : undefined,
     });
     return null;
   }

@@ -48,4 +48,69 @@ describe("reported event preparation", () => {
       "Unexpected provider failure"
     );
   });
+
+  test("removes model response content from parsing failures without losing diagnostics", () => {
+    const privateContent = "synthetic-private-access-code";
+    const event = prepareReportedEvent(
+      {
+        exception: {
+          values: [
+            { type: "SyntaxError", value: `Invalid JSON: ${privateContent}` },
+            {
+              type: "AI_JSONParseError",
+              value: `JSON parsing failed: ${privateContent}`,
+            },
+            {
+              stacktrace: {
+                frames: [{ filename: "generation.js", lineno: 42 }],
+              },
+              type: "AI_NoObjectGeneratedError",
+              value: "No object generated",
+            },
+          ],
+        },
+        message: `Generation failed: ${privateContent}`,
+      },
+      new Error("Generation failed")
+    );
+    const serialized = JSON.stringify(event);
+
+    expect(event).not.toBeNull();
+    expect(serialized).not.toContain(privateContent);
+    expect(serialized).toContain("AI_NoObjectGeneratedError");
+    expect(serialized).toContain("generation.js");
+  });
+
+  test.each([
+    "AI_NoObjectGeneratedError",
+    "AI_JSONParseError",
+    "AI_TypeValidationError",
+  ])("recognizes a wrapped %s when event metadata is generic", (name) => {
+    const privateContent = "synthetic-private-message";
+    const cause = Object.assign(new Error(privateContent), { name });
+    const error = new Error("Outer failure", { cause });
+    cause.cause = error;
+    const event = prepareReportedEvent(
+      {
+        exception: { values: [{ type: "Error", value: privateContent }] },
+        message: privateContent,
+      },
+      error
+    );
+
+    expect(event).not.toBeNull();
+    expect(JSON.stringify(event)).not.toContain(privateContent);
+  });
+
+  test("keeps unrelated parsing failures visible", () => {
+    const message = "Invalid syntax in an application fixture";
+    const event = prepareReportedEvent(
+      { exception: { values: [{ type: "SyntaxError", value: message }] } },
+      new SyntaxError(message)
+    );
+
+    expect(event?.exception?.values?.[0]?.value).toContain(
+      "application fixture"
+    );
+  });
 });

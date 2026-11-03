@@ -295,6 +295,48 @@ export const createMailResources = async (
         resources: ["*"],
         type: "aws.permission",
       },
+      {
+        actions: [
+          "ses:CreateEmailIdentity",
+          "ses:DeleteEmailIdentity",
+          "ses:GetEmailIdentity",
+          "ses:PutEmailIdentityMailFromAttributes",
+        ],
+        resources: [
+          `arn:aws:ses:${region.region}:${callerIdentity.accountId}:identity/*`,
+        ],
+        type: "aws.permission",
+      },
+      {
+        actions: [
+          "ses:CreateReceiptRule",
+          "ses:CreateReceiptRuleSet",
+          "ses:DeleteReceiptRule",
+          "ses:SetActiveReceiptRuleSet",
+          "ses:UpdateReceiptRule",
+        ],
+        conditions: [
+          {
+            test: "StringEquals",
+            values: [region.region],
+            variable: "aws:RequestedRegion",
+          },
+        ],
+        resources: ["*"],
+        type: "aws.permission",
+      },
+      {
+        actions: ["iam:PassRole"],
+        conditions: [
+          {
+            test: "StringEquals",
+            values: ["ses.amazonaws.com"],
+            variable: "iam:PassedToService",
+          },
+        ],
+        resources: [mailReceiptRole.arn],
+        type: "aws.permission",
+      },
     ],
     properties: {},
   });

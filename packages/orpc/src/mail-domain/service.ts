@@ -3,7 +3,7 @@ import { resolveCname, resolveMx, resolveTxt } from "node:dns/promises";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { SESClient } from "@aws-sdk/client-ses";
+import type { ReceiptRule, SESClient } from "@aws-sdk/client-ses";
 import type {
   SESv2Client,
   GetEmailIdentityCommandOutput,
@@ -333,7 +333,7 @@ export const ensureReceiptRule = async (domain: string) => {
       {
         S3Action: {
           BucketName: config.bucketName,
-          IAMRoleARN: config.roleArn,
+          IamRoleArn: config.roleArn,
           ObjectKeyPrefix: MAIL_OBJECT_KEY_PREFIX,
           TopicArn: config.topicArn,
         },
@@ -343,8 +343,8 @@ export const ensureReceiptRule = async (domain: string) => {
     Name: createReceiptRuleName(domain),
     Recipients: [domain],
     ScanEnabled: true,
-    TlsPolicy: "Optional" as const,
-  };
+    TlsPolicy: "Optional",
+  } satisfies ReceiptRule;
 
   const {
     CreateReceiptRuleSetCommand,

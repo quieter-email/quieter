@@ -1,0 +1,92 @@
+import { ORPCError } from "@orpc/server";
+import type { listMessagesForAgent } from "@quieter/gmail";
+import { getMailboxCapabilities } from "@quieter/mail/data-plane";
+import { configureErrorReporter } from "@quieter/observability";
+import type { ErrorReporter } from "@quieter/observability";
+import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
+
+import { loadMailAutoLabelHistory } from "../src/mail-automation/history";
+
+const fixtures = vi.hoisted(() => ({
+  list: vi.fn<typeof listMessagesForAgent>(),
+  reported: vi.fn<ErrorReporter>(),
+}));
+
+vi.mock(import("@quieter/gmail"), async (original) => ({
+  ...(await original()),
+  listMessagesForAgent: fixtures.list,
+}));
+vi.mock(import("../src/mailbox/service"), () => ({
+  assertAccessibleMailbox: async (request) =>
+    await Promise.resolve({
+      capabilities: getMailboxCapabilities({ provider: "gmail" }),
+      contentRevision: 1,
+      id: request.mailboxId,
+      organizationId: "fixture-team",
+      provider: "gmail" as const,
+    }),
+}));
+
+const input = {
+  accessToken: "fixture-token",
+  labels: [{ id: "work", name: "Work" }],
+  mailboxId: "fixture-mailbox",
+  message: { from: "sender@example.test", id: "target-message" },
+  provider: "gmail" as const,
+  userId: "fixture-user",
+};
+
+describe("automatic label history failures", () => {
+  beforeEach(() => {
+    fixtures.list.mockReset();
+    fixtures.reported.mockReset();
+    configureErrorReporter(fixtures.reported);
+  });
+
+  test("defers throttled history instead of classifying with missing context", async () => {
+    const failure = Object.assign(
+      new Error("Mailbox requests are temporarily limited."),
+      {
+        googleReason: "userratelimitexceeded",
+        status: 403,
+      }
+    );
+    fixtures.list.mockRejectedValue(failure);
+    await expect(loadMailAutoLabelHistory(input)).rejects.toBe(failure);
+    expect(fixtures.list).toHaveBeenCalledOnce();
+    expect(fixtures.reported).not.toHaveBeenCalled();
+  });
+
+  test("finishes one mailbox history search before starting the next", async () => {
+    let active = 0;
+    let overlapping = false;
+    fixtures.list.mockImplementation(async () => {
+      active += 1;
+      overlapping ||= active > 1;
+      await Promise.resolve();
+      active -= 1;
+      return { messages: [] };
+    });
+    await expect(loadMailAutoLabelHistory(input)).resolves.toBeNull();
+    expect(overlapping).toBeFalsy();
+    expect(fixtures.list).toHaveBeenCalledTimes(2);
+  });
+
+  test("keeps unexpected optional failures visible without leaking request context", async () => {
+    fixtures.list.mockRejectedValue(
+      new Error("Transport failed for fixture-token.")
+    );
+    await expect(loadMailAutoLabelHistory(input)).resolves.toBeNull();
+    expect(fixtures.reported).toHaveBeenCalledOnce();
+    const [report] = fixtures.reported.mock.calls;
+    expect(String(report?.[0])).not.toContain("fixture-token");
+    expect(JSON.stringify(report?.[1])).not.toContain(input.mailboxId);
+  });
+
+  test("continues to propagate authorization failures", async () => {
+    const failure = new ORPCError("FORBIDDEN");
+    fixtures.list.mockRejectedValue(failure);
+    await expect(loadMailAutoLabelHistory(input)).rejects.toBe(failure);
+    expect(fixtures.reported).not.toHaveBeenCalled();
+  });
+});

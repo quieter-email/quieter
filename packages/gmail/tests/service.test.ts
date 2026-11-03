@@ -3,7 +3,9 @@ import { describe, expect, test, vi } from "vite-plus/test";
 import {
   extractListUnsubscribeTargets,
   getMessageWithDetails,
+  getGmailMessageMetadata,
   getGmailMessageCount,
+  getGmailProfile,
   getMailboxSyncDelta,
   getGmailMessageThreadAssociations,
   mutateGmailMessage,
@@ -12,16 +14,22 @@ import {
   listGmailAddedMessageHistoryPage,
   listDraftsWithDetails,
   listMessagesWithDetails,
+  isGmailRateLimitedError,
   stopGmailWatch,
   watchGmailMailbox,
 } from "../src/service";
 
 const createIdentifiedBatchResponse = (
   boundary: string,
-  parts: readonly { body: unknown; contentId: string; status?: number }[]
+  parts: readonly {
+    body: unknown;
+    contentId: string;
+    headers?: Record<string, string>;
+    status?: number;
+  }[]
 ) =>
   [
-    ...parts.map(({ body, contentId, status = 200 }) =>
+    ...parts.map(({ body, contentId, headers = {}, status = 200 }) =>
       [
         `--${boundary}`,
         "Content-Type: application/http",
@@ -29,6 +37,7 @@ const createIdentifiedBatchResponse = (
         "",
         `HTTP/1.1 ${status} ${status === 200 ? "OK" : "Service Unavailable"}`,
         "Content-Type: application/json",
+        ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`),
         "",
         JSON.stringify(body),
       ].join("\r\n")
@@ -204,7 +213,183 @@ describe(getMailboxSyncDelta, () => {
   });
 });
 
+describe(getGmailProfile, () => {
+  test("preserves a provider's HTTP-date retry deadline", async () => {
+    const deadline = new Date(Date.now() + 60_000).toUTCString();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json(
+        {
+          error: {
+            message: "Mailbox is temporarily busy.",
+            status: "RESOURCE_EXHAUSTED",
+          },
+        },
+        { headers: { "Retry-After": deadline }, status: 429 }
+      )
+    );
+    const started = Date.now();
+    try {
+      const failure = await getGmailProfile("token").catch(
+        (error: unknown) => error
+      );
+      expect(isGmailRateLimitedError(failure)).toBeTruthy();
+      if (!isGmailRateLimitedError(failure)) {
+        throw new Error("Missing rate-limit error.");
+      }
+      const retryAt = started + (failure.retryAfterMs ?? 0);
+      expect(retryAt).toBeGreaterThan(Date.now());
+      expect(retryAt).toBeLessThanOrEqual(Date.parse(deadline));
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+});
+
 describe(getGmailMessageThreadAssociations, () => {
+  test.each(["single", "batch"])(
+    "returns a long %s retry deadline without waiting inside the request",
+    async (resource) => {
+      const controller = new AbortController();
+      const delaySeconds = 60 * 60;
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+        async () =>
+          await resolveResponse(
+            resource === "single"
+              ? Response.json(
+                  { error: { message: "Mailbox is temporarily busy." } },
+                  {
+                    headers: { "Retry-After": String(delaySeconds) },
+                    status: 429,
+                  }
+                )
+              : new Response(
+                  createIdentifiedBatchResponse("metadata", [
+                    {
+                      body: {
+                        error: { message: "Mailbox is temporarily busy." },
+                      },
+                      contentId: "message-0",
+                      headers: { "Retry-After": String(delaySeconds) },
+                      status: 429,
+                    },
+                  ]),
+                  {
+                    headers: {
+                      "content-type": "multipart/mixed; boundary=metadata",
+                    },
+                  }
+                )
+          )
+      );
+      vi.useFakeTimers();
+      let settled = false;
+      const pending = (async () => {
+        try {
+          await (resource === "single"
+            ? getGmailMessageMetadata("token", "a", controller.signal)
+            : getGmailMessageThreadAssociations(
+                "token",
+                ["a"],
+                controller.signal
+              ));
+          return null;
+        } catch (error) {
+          return error;
+        } finally {
+          settled = true;
+        }
+      })();
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toBeTruthy();
+        await expect(pending).resolves.toMatchObject({
+          retryAfterMs: delaySeconds * 1000,
+          status: 429,
+        });
+        expect(fetchMock).toHaveBeenCalledOnce();
+      } finally {
+        controller.abort();
+        await pending;
+        vi.useRealTimers();
+        fetchMock.mockRestore();
+      }
+    }
+  );
+
+  test("preserves structured throttling metadata from a failed batch request", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        createIdentifiedBatchResponse("metadata", [
+          {
+            body: {
+              error: {
+                errors: [{ reason: "userRateLimitExceeded" }],
+                message: "Mailbox requests are temporarily limited.",
+                status: "RESOURCE_EXHAUSTED",
+              },
+            },
+            contentId: "message-0",
+            headers: { "Retry-After": "7" },
+            status: 403,
+          },
+        ]),
+        { headers: { "content-type": "multipart/mixed; boundary=metadata" } }
+      )
+    );
+    try {
+      const failure = await getGmailMessageThreadAssociations("token", [
+        "a",
+      ]).catch((error: unknown) => error);
+      expect(isGmailRateLimitedError(failure)).toBeTruthy();
+      expect(failure).toMatchObject({
+        googleStatus: "RESOURCE_EXHAUSTED",
+        retryAfterMs: 7000,
+        status: 403,
+      });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  test("finishes each metadata batch before dispatching more requests", async () => {
+    const ids = Array.from({ length: 70 }, (_, index) => `message-${index}`);
+    let active = 0;
+    let overlapping = false;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (_url, init) => {
+        active += 1;
+        overlapping ||= active > 1;
+        const requestedIds = [
+          ...getRequestBody(init?.body).matchAll(
+            /GET \/gmail\/v1\/users\/me\/messages\/(?<id>[^?]+)\?/gu
+          ),
+        ].map((match) => match.groups?.id ?? "");
+        await Promise.resolve();
+        active -= 1;
+        return new Response(
+          createIdentifiedBatchResponse(
+            "metadata",
+            requestedIds.map((id, index) => ({
+              body: { id, threadId: `thread-${id}` },
+              contentId: `message-${index}`,
+            }))
+          ),
+          { headers: { "content-type": "multipart/mixed; boundary=metadata" } }
+        );
+      });
+    try {
+      const associations = await getGmailMessageThreadAssociations(
+        "token",
+        ids
+      );
+      expect(associations.map((item) => item.id)).toStrictEqual(ids);
+      expect(overlapping).toBeFalsy();
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   test("matches reordered responses and retries only transient failures, omitting missing messages", async () => {
     const originalFetch = globalThis.fetch;
     const requests: string[] = [];
