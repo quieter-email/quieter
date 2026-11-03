@@ -15,7 +15,7 @@ const microCentsPerCent = 1_000_000;
 const toCents = (microCents: number | null) =>
   microCents === null || microCents === undefined
     ? null
-    : Math.ceil(microCents / microCentsPerCent);
+    : microCents / microCentsPerCent;
 
 const toMicroCents = (cents: number | null) =>
   cents === null || cents === undefined
