@@ -17,7 +17,7 @@ import { billingCreditUsageEvent } from "../src/schema.ts";
 
 type CreditRepairRow = {
   id: string;
-  organizationId: string;
+  organizationId: string | null;
   costMicroCents: string;
   billableCostMicroCents: string;
   createdAt: Date;
@@ -37,6 +37,8 @@ export const repairBillingCreditOverage = async (
     const affected = await transaction
       .selectDistinct({
         organizationId: billingCreditUsageEvent.organizationId,
+        scope: billingCreditUsageEvent.scope,
+        userId: billingCreditUsageEvent.userId,
       })
       .from(billingCreditUsageEvent)
       .where(
@@ -48,7 +50,19 @@ export const repairBillingCreditOverage = async (
     if (affected.length === 0) {
       return { repaired: 0 };
     }
-    const organizationIds = affected.map((row) => row.organizationId);
+    const organizationIds: string[] = [];
+    for (const row of affected) {
+      if (
+        row.organizationId === null ||
+        row.scope !== "team" ||
+        row.userId !== null
+      ) {
+        throw new Error(
+          "This repair supports only unattributed legacy team usage."
+        );
+      }
+      organizationIds.push(row.organizationId);
+    }
     const unsafe = await transaction
       .select({ organizationId: billingCreditUsageEvent.organizationId })
       .from(billingCreditUsageEvent)

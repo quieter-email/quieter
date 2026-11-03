@@ -186,7 +186,8 @@ const PlaybookBillingAction = ({
         type="button"
         variant="secondary"
       >
-        Upgrade to {BILLING_FEATURES.organizationDomains.requirementLabel}
+        Set up {BILLING_FEATURES.organizationDomains.requirementLabel} account
+        billing
       </Button>
     );
   }
@@ -642,6 +643,14 @@ export const OnboardingScreen = () => {
   });
   const startManagedUpgrade = () => {
     if (organizationId === null) {
+      return;
+    }
+    if (
+      (billingOverview?.account.subscription ?? null) !== null ||
+      (getTeamBilling(billingOverview, organizationId)?.subscription ??
+        null) !== null
+    ) {
+      void navigate({ search: { tab: "billing" }, to: "/settings" });
       return;
     }
     checkoutMutation.mutate({ organizationId, product: "managed" });

@@ -22,13 +22,11 @@ describe("local billing isolation", () => {
   test("does not address an existing deployment's customer or member", () => {
     expect(
       createBillingPortalSession({
-        organizationId: "same-team",
         returnUrl: "http://localhost:3000/settings",
         userId: "same-user",
       })
     ).toMatchObject({
-      externalCustomerId: "local:organization:same-team",
-      externalMemberId: "local:user:same-user",
+      externalCustomerId: "local:user:same-user",
     });
     expect(
       createBillingCheckoutMetadata({

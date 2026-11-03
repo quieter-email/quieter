@@ -1,6 +1,7 @@
 import { apiKey } from "@better-auth/api-key";
 import { electron } from "@better-auth/electron";
 import { passkey } from "@better-auth/passkey";
+import { takeOverOrganizationBilling } from "@quieter/billing/account-settings";
 import { getOrganizationBillingEntitlement } from "@quieter/billing/entitlements";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import { db } from "@quieter/database/client";
@@ -34,11 +35,14 @@ import {
 import { GOOGLE_AUTH_SCOPES } from "./google-scopes";
 import { lazyAuth } from "./lazy-auth";
 import {
+  assertCanChangeFundingMembership,
   assertCanDeleteOrganization,
   assertCanLeaveOrganization,
+  assertOrganizationLifecycleOpen,
   cleanupMailboxesForDeletedOrganization,
   cleanupOrganizationsForDeletedUser,
   ensureUserOrganizationState,
+  prepareAccountDeletion,
 } from "./organization";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "./organization-api-key";
 import { regionalTimeFormat } from "./regional-time";
@@ -247,17 +251,59 @@ export const auth = lazyAuth(() =>
       passkey(),
       organization({
         ac: organizationAccessControl,
-        hooks: {
-          organization: {
-            beforeDelete: async ({
-              organization: deletedOrganization,
-            }: {
-              organization: { id: string };
-            }) => {
-              await cleanupMailboxesForDeletedOrganization(
-                deletedOrganization.id
-              );
-            },
+        organizationHooks: {
+          afterCreateOrganization: async ({
+            organization: createdTeam,
+            user: creator,
+          }) => {
+            await takeOverOrganizationBilling({
+              organizationId: createdTeam.id,
+              userId: creator.id,
+            });
+          },
+          beforeAcceptInvitation: async ({
+            invitation: acceptedInvitation,
+            user: joiningUser,
+          }) => {
+            await assertOrganizationLifecycleOpen({
+              organizationId: acceptedInvitation.organizationId,
+              userId: joiningUser.id,
+            });
+          },
+          beforeAddMember: async ({ member: addedMember }) => {
+            await assertOrganizationLifecycleOpen({
+              organizationId: addedMember.organizationId,
+              userId: addedMember.userId,
+            });
+          },
+          beforeCreateOrganization: async ({ user: creator }) => {
+            await assertOrganizationLifecycleOpen({ userId: creator.id });
+          },
+          beforeDeleteOrganization: async ({
+            organization: deletedOrganization,
+          }: {
+            organization: { id: string };
+          }) => {
+            await cleanupMailboxesForDeletedOrganization(
+              deletedOrganization.id
+            );
+          },
+          beforeRemoveMember: async ({ member: removedMember }) => {
+            await assertCanChangeFundingMembership({
+              organizationId: removedMember.organizationId,
+              userId: removedMember.userId,
+            });
+          },
+          beforeUpdateMemberRole: async ({
+            member: changedMember,
+            newRole,
+          }) => {
+            if (!newRole.split(",").includes("owner")) {
+              await assertCanChangeFundingMembership({
+                organizationId: changedMember.organizationId,
+                userId: changedMember.userId,
+              });
+            }
           },
         },
         roles: {
@@ -319,6 +365,9 @@ export const auth = lazyAuth(() =>
         enabled: true,
       },
       deleteUser: {
+        beforeDelete: async (deletedUser) => {
+          await prepareAccountDeletion(deletedUser.id);
+        },
         enabled: true,
       },
     },

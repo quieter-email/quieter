@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 
+import {
+  requestAccountDeletion,
+  requestOrganizationDeletion,
+} from "@quieter/billing/lifecycle";
 import { db } from "@quieter/database/client";
 import {
+  billingAccountSettings,
   invitation,
   mailObjectCleanup,
   mailbox,
@@ -23,6 +28,35 @@ type UserIdentity = Pick<AuthUser, "email" | "id" | "name">;
 
 type EnsureUserOrganizationStateResult = {
   organizationIds: string[];
+};
+
+export const assertOrganizationLifecycleOpen = async (input: {
+  organizationId?: string;
+  userId?: string;
+}) => {
+  if (input.userId !== undefined) {
+    const [settings] = await db
+      .select({ closing: billingAccountSettings.deletionRequestedAt })
+      .from(billingAccountSettings)
+      .where(eq(billingAccountSettings.userId, input.userId));
+    if (settings?.closing !== null && settings?.closing !== undefined) {
+      throw new APIError("BAD_REQUEST", {
+        message:
+          "Your account is closing. Finish deleting it before creating or joining a team.",
+      });
+    }
+  }
+  if (input.organizationId !== undefined) {
+    const [team] = await db
+      .select({ closing: organization.billingDeletionRequestedAt })
+      .from(organization)
+      .where(eq(organization.id, input.organizationId));
+    if (team?.closing !== null && team?.closing !== undefined) {
+      throw new APIError("BAD_REQUEST", {
+        message: "This team is closing and cannot accept new members.",
+      });
+    }
+  }
 };
 
 const getUserOrganizationIds = async (
@@ -94,7 +128,6 @@ export const ensureUserOrganizationState = async (
         const name = createDefaultOrganizationName(persistedUser);
         const organizationId = crypto.randomUUID();
         const values = {
-          billingOwnerUserId: persistedUser.id,
           createdAt: now,
           id: organizationId,
           name,
@@ -119,6 +152,10 @@ export const ensureUserOrganizationState = async (
           role: "owner",
           userId: persistedUser.id,
         });
+        await transaction
+          .update(organization)
+          .set({ billingOwnerUserId: persistedUser.id })
+          .where(eq(organization.id, organizationId));
         organizationIds = [organizationId];
       }
       await transaction
@@ -142,32 +179,61 @@ export const ensureUserOrganizationState = async (
     return { organizationIds };
   });
 
+export const assertCanDeleteAccount = async (userId: string) => {
+  const [ownedMailbox] = await db
+    .select({ id: mailbox.id })
+    .from(mailbox)
+    .leftJoin(organization, eq(organization.id, mailbox.organizationId))
+    .where(
+      and(
+        eq(mailbox.managedOwnerUserId, userId),
+        eq(mailbox.provider, "managed"),
+        or(
+          isNull(organization.billingOwnerUserId),
+          ne(organization.billingOwnerUserId, userId)
+        )
+      )
+    )
+    .limit(1);
+  if (ownedMailbox !== undefined) {
+    throw new APIError("FORBIDDEN", {
+      message:
+        "Ask a team admin to transfer your private mailboxes before deleting your account.",
+    });
+  }
+  const failure = await requestAccountDeletion(userId);
+  if (failure !== null) {
+    throw new APIError("BAD_REQUEST", { message: failure });
+  }
+};
+
 export const cleanupOrganizationsForDeletedUser = async (userId: string) => {
+  await assertCanDeleteAccount(userId);
   await db.transaction(async (tx) => {
     await tx
       .select({ id: user.id })
       .from(user)
       .where(eq(user.id, userId))
       .for("update");
-    const [ownedMailbox] = await tx
-      .select({ id: mailbox.id })
-      .from(mailbox)
-      .where(
-        and(
-          eq(mailbox.managedOwnerUserId, userId),
-          eq(mailbox.provider, "managed")
-        )
-      )
-      .limit(1);
-    if (ownedMailbox !== undefined) {
-      throw new APIError("FORBIDDEN", {
-        message:
-          "Ask a team admin to transfer your private mailboxes before deleting your account.",
-      });
-    }
     await tx.delete(invitation).where(eq(invitation.inviterId, userId));
     await tx.delete(member).where(eq(member.userId, userId));
   });
+};
+
+export const assertCanChangeFundingMembership = async (input: {
+  organizationId: string;
+  userId: string;
+}) => {
+  const [team] = await db
+    .select({ payerId: organization.billingOwnerUserId })
+    .from(organization)
+    .where(eq(organization.id, input.organizationId));
+  if (team?.payerId === input.userId) {
+    throw new APIError("BAD_REQUEST", {
+      message:
+        "Another team owner must accept taking over billing before the current payer can leave, be removed, or lose the owner role.",
+    });
+  }
 };
 
 type RawMailObjectProvider = "r2" | "s3";
@@ -229,8 +295,13 @@ const deleteUntrackedManagedMailObject = async (input: {
 };
 
 export const cleanupMailboxesForDeletedOrganization = async (
-  organizationId: string
+  organizationId: string,
+  options: { deletingUserId?: string } = {}
 ) => {
+  const failure = await requestOrganizationDeletion(organizationId);
+  if (failure !== null) {
+    throw new APIError("BAD_REQUEST", { message: failure });
+  }
   const objects = await db.transaction(async (transaction) => {
     const [lockedOrganization] = await transaction
       .select({ id: organization.id })
@@ -239,6 +310,24 @@ export const cleanupMailboxesForDeletedOrganization = async (
       .for("update");
     if (lockedOrganization === undefined) {
       return [];
+    }
+    if (options.deletingUserId !== undefined) {
+      const [otherMember] = await transaction
+        .select({ id: member.id })
+        .from(member)
+        .where(
+          and(
+            eq(member.organizationId, organizationId),
+            ne(member.userId, options.deletingUserId)
+          )
+        )
+        .limit(1);
+      if (otherMember !== undefined) {
+        throw new APIError("BAD_REQUEST", {
+          message:
+            "Transfer billing for shared teams to another owner before deleting your account.",
+        });
+      }
     }
 
     const managedMessages = await transaction
@@ -313,6 +402,12 @@ export const cleanupMailboxesForDeletedOrganization = async (
       .for("update");
 
     for (const gmailMailbox of gmailMailboxes) {
+      if (gmailMailbox.ownerUserId === options.deletingUserId) {
+        await transaction
+          .delete(mailbox)
+          .where(eq(mailbox.id, gmailMailbox.id));
+        continue;
+      }
       if (
         gmailMailbox.ownerUserId === null ||
         gmailMailbox.ownerUserId === undefined ||
@@ -379,6 +474,17 @@ export const cleanupMailboxesForDeletedOrganization = async (
           eq(mailbox.provider, "managed")
         )
       );
+
+    if (options.deletingUserId !== undefined) {
+      await transaction
+        .delete(organization)
+        .where(
+          and(
+            eq(organization.id, organizationId),
+            eq(organization.billingOwnerUserId, options.deletingUserId)
+          )
+        );
+    }
 
     return [...objectsByKey.values()];
   });
@@ -464,9 +570,23 @@ export const cleanupMailboxesForDeletedOrganization = async (
   );
 };
 
+export const prepareAccountDeletion = async (userId: string) => {
+  await assertCanDeleteAccount(userId);
+  const fundedTeams = await db
+    .select({ id: organization.id })
+    .from(organization)
+    .where(eq(organization.billingOwnerUserId, userId));
+  for (const team of fundedTeams) {
+    await cleanupMailboxesForDeletedOrganization(team.id, {
+      deletingUserId: userId,
+    });
+  }
+};
+
 export const assertCanLeaveOrganization = async (
   currentUser: UserIdentity,
-  organizationId: string
+  organizationId: string,
+  options: { deleting?: boolean } = {}
 ) => {
   const organizationState = await ensureUserOrganizationState(currentUser);
 
@@ -481,13 +601,21 @@ export const assertCanLeaveOrganization = async (
       message: "Create another team before leaving your only team.",
     });
   }
+  if (options.deleting !== true) {
+    await assertCanChangeFundingMembership({
+      organizationId,
+      userId: currentUser.id,
+    });
+  }
 };
 
 export const assertCanDeleteOrganization = async (
   currentUser: UserIdentity,
   organizationId: string
 ) => {
-  await assertCanLeaveOrganization(currentUser, organizationId);
+  await assertCanLeaveOrganization(currentUser, organizationId, {
+    deleting: true,
+  });
 
   const organizationMembers = await db
     .select({ userId: member.userId })

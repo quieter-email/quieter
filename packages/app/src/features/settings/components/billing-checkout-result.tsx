@@ -1,6 +1,7 @@
 "use client";
 
 import { USER_BILLING_QUERY_KEY } from "@quieter/app/features/settings/domain/billing";
+import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
 import { settingsRouteApi } from "@quieter/app/lib/route-apis";
 import { toast } from "@quieter/ui/toast";
@@ -14,12 +15,18 @@ export const BillingCheckoutResult = () => {
   const { billing, checkoutId } = settingsRouteApi.useSearch();
   const { mutate: syncCheckout } = useMutation({
     ...orpc.billing.syncCheckout.mutationOptions(),
-    onError: () => {
-      toast.error("We could not activate your plan. Please contact support.");
+    onError: (error) => {
+      toastError(error, {
+        boundary: "billing",
+        fallback: "Could not activate your plan.",
+      });
     },
     onSuccess: () => {
       toast.success("Your plan is active.");
       void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
+      void queryClient.invalidateQueries({
+        queryKey: ["organization-mail-usage"],
+      });
     },
   });
 
@@ -34,6 +41,9 @@ export const BillingCheckoutResult = () => {
         void queryClient.invalidateQueries({
           queryKey: USER_BILLING_QUERY_KEY,
         });
+        void queryClient.invalidateQueries({
+          queryKey: ["organization-mail-usage"],
+        });
       } else {
         syncCheckout({ checkoutId });
       }
@@ -43,11 +53,11 @@ export const BillingCheckoutResult = () => {
 
     void navigate({
       replace: true,
-      search: (previous) => ({
-        ...previous,
-        billing: undefined,
-        checkoutId: undefined,
-      }),
+      search: (previous) => {
+        const next = { ...previous, billing: undefined, checkoutId: undefined };
+        Reflect.deleteProperty(next, "customer_session_token");
+        return next;
+      },
       to: ".",
     });
   }, [billing, checkoutId, navigate, queryClient, syncCheckout]);

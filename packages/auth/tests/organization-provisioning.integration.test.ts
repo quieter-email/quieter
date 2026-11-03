@@ -176,6 +176,12 @@ describe.skipIf(databaseUrl === undefined)(
         const identity = await createUser();
         const initial = await ensureUserOrganizationState(identity);
         organizationIds.push(...initial.organizationIds);
+        if (revoked) {
+          await db
+            .update(organization)
+            .set({ billingOwnerUserId: null })
+            .where(inArray(organization.id, initial.organizationIds));
+        }
         await db
           .delete(member)
           .where(and(eq(member.userId, identity.id), sql`${revoked}`));
@@ -233,6 +239,10 @@ describe.skipIf(databaseUrl === undefined)(
       });
       const activeSession = await login(identity.email);
       const ownerSession = await login(secondOwner.email);
+      await db
+        .update(organization)
+        .set({ billingOwnerUserId: secondOwner.id })
+        .where(eq(organization.id, organizationId));
       await auth.api.removeMember({
         body: { memberIdOrEmail: identity.email, organizationId },
         headers: ownerSession,
@@ -377,6 +387,10 @@ describe.skipIf(databaseUrl === undefined)(
         role: "owner",
         userId: remainingOwner.id,
       });
+      await db
+        .update(organization)
+        .set({ billingOwnerUserId: remainingOwner.id })
+        .where(eq(organization.id, created.id));
       await auth.api.leaveOrganization({
         body: { organizationId: created.id },
         headers,
@@ -443,6 +457,10 @@ describe.skipIf(databaseUrl === undefined)(
       const identity = await createUser();
       const state = await ensureUserOrganizationState(identity);
       organizationIds.push(...state.organizationIds);
+      await db
+        .update(organization)
+        .set({ billingOwnerUserId: null })
+        .where(inArray(organization.id, state.organizationIds));
       await db.delete(member).where(eq(member.userId, identity.id));
       await ensureUserOrganizationState(identity);
       await ensureUserOrganizationState({

@@ -1,0 +1,127 @@
+name: Administer account billing access
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Inspect first, mutate only with recorded authorization
+        type: choice
+        default: inspect
+        options:
+          - inspect
+          - grant-unlimited
+          - write-off-deferred
+      user_id:
+        description: Exact internal user ID, never an email or display name
+        required: true
+        type: string
+      event_id:
+        description: Exact deferred ledger event ID, required for write-off
+        type: string
+      reason:
+        description: Restricted incident or authorization reference, required for mutations
+        type: string
+      permanent:
+        description: Explicit permanent grant, mutually exclusive with expires_at
+        type: boolean
+        default: false
+      expires_at:
+        description: Future ISO timestamp for temporary grants
+        type: string
+      accept_unfunded_owned_organizations:
+        description: Explicitly accept funding NULL-funded teams where target is an owner
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: quieter-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  administer:
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require administrator and current protected main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_REF_PROTECTED" = true
+          test "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$GITHUB_ACTOR/permission" --jq '.permission')" = admin
+          test "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$GITHUB_TRIGGERING_ACTOR/permission" --jq '.permission')" = admin
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA"
+      - name: Require fully deployed reporting guards before write-off
+        if: inputs.action == 'write-off-deferred'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/workflows/sst-deploy.yml/runs?status=success&branch=main&per_page=100" > deploy-runs.json
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/workflows/web-recovery.yml/runs?status=success&per_page=100" > recovery-runs.json
+          jq -e --arg sha "$GITHUB_SHA" '
+            [.[].workflow_runs[] | select(
+              .path == ".github/workflows/sst-deploy.yml" and
+              .head_branch == "main" and .status == "completed" and
+              .conclusion == "success" and
+              (.event == "push" or .event == "workflow_dispatch")
+            )] | max_by(.updated_at) |
+            select(.head_sha == $sha and (.updated_at | type == "string"))
+          ' deploy-runs.json > deployed-run.json || {
+            echo "::error::Write-off requires a successful full production deployment of current main. Run a full production redeploy before retrying."
+            exit 1
+          }
+          deployed_run_id="$(jq -r .id deployed-run.json)"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$deployed_run_id/jobs?per_page=100" > deployed-jobs.json
+          jq -e '[.[].jobs[] | select(.name == "Deploy production")] |
+            length == 1 and all(.[]; .status == "completed" and .conclusion == "success")
+          ' deployed-jobs.json > /dev/null || {
+            echo "::error::The successful run does not prove a complete production deployment. Run a full production redeploy before retrying write-off."
+            exit 1
+          }
+          deployed_at="$(jq -r .updated_at deployed-run.json)"
+          jq -e --arg deployed_at "$deployed_at" '
+            [.[].workflow_runs[] | select(
+              .path == ".github/workflows/web-recovery.yml" and
+              .status == "completed" and .conclusion == "success"
+            )] | all(.[]; (.updated_at | type == "string") and .updated_at < $deployed_at)
+          ' recovery-runs.json > /dev/null || {
+            echo "::error::A recovery may have replaced the deployed reporting guards. Run a full production redeploy before retrying write-off."
+            exit 1
+          }
+      - uses: ./.github/actions/setup
+      - name: Build environment configuration
+        run: vp run @quieter/env#build
+      - name: Inspect or administer exact account billing
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+          BILLING_ACTION: ${{ inputs.action }}
+          BILLING_USER_ID: ${{ inputs.user_id }}
+          BILLING_EVENT_ID: ${{ inputs.event_id }}
+          BILLING_REASON: ${{ inputs.reason }}
+          BILLING_PERMANENT: ${{ inputs.permanent }}
+          BILLING_EXPIRES_AT: ${{ inputs.expires_at }}
+          BILLING_ACCEPT_FUNDING: ${{ inputs.accept_unfunded_owned_organizations }}
+        run: |
+          set -euo pipefail
+          args=(--action "$BILLING_ACTION" --user-id "$BILLING_USER_ID")
+          if [[ "$BILLING_ACTION" == grant-unlimited || "$BILLING_ACTION" == write-off-deferred ]]; then
+            args+=(--reason "$BILLING_REASON" --operator "github:$GITHUB_TRIGGERING_ACTOR:run:$GITHUB_RUN_ID")
+          fi
+          if [[ -n "$BILLING_EVENT_ID" ]]; then args+=(--event-id "$BILLING_EVENT_ID"); fi
+          if [[ "$BILLING_PERMANENT" == true ]]; then args+=(--permanent); fi
+          if [[ -n "$BILLING_EXPIRES_AT" ]]; then args+=(--expires-at "$BILLING_EXPIRES_AT"); fi
+          if [[ "$BILLING_ACCEPT_FUNDING" == true ]]; then args+=(--accept-unfunded-owned-organizations); fi
+          vp exec node packages/database/scripts/billing-account-admin.ts "${args[@]}"

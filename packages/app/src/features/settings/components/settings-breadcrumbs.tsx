@@ -133,7 +133,7 @@ export const SettingsBreadcrumbs = () => {
               ? "Blocked recipients"
               : "Tracking & metrics";
         } else if (view === "billing") {
-          subsection = section === "usage" ? "Mail usage" : "Plan & credits";
+          subsection = section === "usage" ? "Team safety limits" : "";
         } else if (view === "domains" && domainId !== "") {
           subsection = domain?.domain.domain ?? "Domain";
         }

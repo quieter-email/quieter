@@ -7,6 +7,7 @@ export const SETTINGS_TABS = [
   "privacy",
   "development",
   "account",
+  "billing",
   "organization",
   "mailboxes",
   "connectors",

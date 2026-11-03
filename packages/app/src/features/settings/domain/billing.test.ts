@@ -3,7 +3,10 @@ import type { UserBillingOverview } from "@quieter/app/features/settings/domain/
 import { describe, expect, test } from "vite-plus/test";
 
 const billing: UserBillingOverview["teams"][number] = {
+  billingOwnerIsCurrentUser: true,
+  billingOwnerName: "Owner",
   canManageBilling: true,
+  canTakeOverBilling: false,
   creditAmountCents: 1000,
   currentPeriodEnd: new Date("2026-10-01T00:00:00.000Z"),
   currentPeriodStart: new Date("2026-09-01T00:00:00.000Z"),

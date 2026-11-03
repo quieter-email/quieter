@@ -1,34 +1,16 @@
 import { ORPCError } from "@orpc/server";
+import type { DatabaseTransaction } from "@quieter/database/client";
 import { db } from "@quieter/database/client";
-import {
-  aiCreditReservation,
-  billingCreditUsageEvent,
-  mailbox,
-  organization,
-  organizationMailSendIdempotency,
-} from "@quieter/database/schema";
+import { aiCreditReservation, mailbox } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
-import {
-  and,
-  eq,
-  gte,
-  inArray,
-  isNotNull,
-  isNull,
-  lt,
-  sql,
-  sum,
-} from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql, sum } from "drizzle-orm";
 import { z } from "zod";
 
-import { AiCreditAdmissionBusyError } from "./ai-credit-errors";
+import { AiCreditAdmissionBusyError } from "./ai-credit-errors.ts";
 import { getAiUsageCostMicroCents } from "./ai-pricing.ts";
-import {
-  getBillingCreditUsage,
-  getBillingUsagePeriodEnd,
-  recordBillingCreditUsage,
-} from "./credits.ts";
+import { assertBillingMoney, getBillingBudget } from "./budget.ts";
+import { lockBillingAccount, recordBillingCreditUsage } from "./credits.ts";
 import type { BillingUsageKind } from "./credits.ts";
 import { hasUserBillingFeature } from "./entitlements.ts";
 import type { BillingAccount } from "./entitlements.ts";
@@ -96,10 +78,16 @@ export const getOutstandingAiCreditReservations = async (
     .from(aiCreditReservation)
     .where(
       and(
-        eq(aiCreditReservation.organizationId, account.organizationId),
+        account.scope === "account" && account.billingOwnerUserId !== undefined
+          ? eq(aiCreditReservation.billingUserId, account.billingOwnerUserId)
+          : and(
+              eq(aiCreditReservation.organizationId, account.organizationId),
+              sql`coalesce(${aiCreditReservation.account}->>'scope', 'team') = 'team'`
+            ),
         eq(aiCreditReservation.status, "reserved")
       )
     );
+  assertBillingMoney(reserved?.cost ?? 0);
   return reserved?.cost ?? 0;
 };
 
@@ -127,81 +115,92 @@ export const reserveAiCreditUsage = async (context: AiBillingContext) => {
     return null;
   }
   return await db.transaction(async (tx) => {
-    await tx
-      .select({ id: organization.id })
-      .from(organization)
-      .where(eq(organization.id, account.organizationId))
-      .for("update");
-    const usage = await getBillingCreditUsage(account, tx);
-    const aiReserved = await getOutstandingAiCreditReservations(account, tx);
-    const [mailReserved] = await tx
-      .select({
-        cost: sql`coalesce(${sum(organizationMailSendIdempotency.estimatedCostMicroCents)}, 0)`.mapWith(
-          Number
-        ),
-      })
-      .from(organizationMailSendIdempotency)
-      .leftJoin(
-        billingCreditUsageEvent,
-        eq(
-          billingCreditUsageEvent.dedupeKey,
-          sql`'mail:outbound:' || ${organizationMailSendIdempotency.organizationId} || ':' || (${organizationMailSendIdempotency.response}->>'messageId')`
-        )
-      )
+    await lockBillingAccount(account, tx, { admission: true });
+    const budget = await getBillingBudget(account, tx);
+    const [openReservation] = await tx
+      .select({ id: aiCreditReservation.id })
+      .from(aiCreditReservation)
       .where(
         and(
-          eq(
-            organizationMailSendIdempotency.organizationId,
-            account.organizationId
-          ),
-          inArray(organizationMailSendIdempotency.status, [
-            "prepared",
-            "submitting",
-            "accepted",
-            "unknown",
-          ]),
-          gte(
-            organizationMailSendIdempotency.createdAt,
-            account.currentPeriodStart
-          ),
-          lt(
-            organizationMailSendIdempotency.createdAt,
-            getBillingUsagePeriodEnd(account, tx)
-          ),
-          isNull(billingCreditUsageEvent.id)
+          account.scope === "account" &&
+            account.billingOwnerUserId !== undefined
+            ? eq(aiCreditReservation.billingUserId, account.billingOwnerUserId)
+            : eq(aiCreditReservation.organizationId, account.organizationId),
+          eq(aiCreditReservation.status, "reserved")
         )
-      );
-    const available =
-      usage.creditAmountMicroCents -
-      usage.costMicroCents -
-      (mailReserved?.cost ?? 0);
-    // These endpoints have no monetary cap. Holding the remaining balance
-    // preserves single-call admission while preventing concurrent reuse.
-    if (available <= 0) {
-      throw new ORPCError("FORBIDDEN", {
-        message:
-          "AI features require available usage balance. Try again after the current request finishes.",
-      });
-    }
-    if (aiReserved > 0) {
+      )
+      .limit(1);
+    if (openReservation !== undefined) {
       throw new AiCreditAdmissionBusyError();
+    }
+    if (budget.authorizedCostMicroCents === 0) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "AI features require available usage balance.",
+      });
     }
     const id = crypto.randomUUID();
     await tx.insert(aiCreditReservation).values({
       account: {
         ...account,
+        authorizedCostMicroCents: budget.authorizedCostMicroCents,
         currentPeriodEnd: account.currentPeriodEnd.toISOString(),
         currentPeriodStart: account.currentPeriodStart.toISOString(),
       },
+      billingUserId: account.billingOwnerUserId ?? null,
       createdAt: context.admittedAt,
       groupId: context.groupId,
       id,
       organizationId: account.organizationId,
-      reservedCostMicroCents: available,
+      reservedCostMicroCents:
+        budget.authorizedCostMicroCents ??
+        Number.MAX_SAFE_INTEGER - budget.pendingMicroCents,
       status: "reserved",
       usageKind: context.usageKind,
     });
     return id;
+  });
+};
+
+const withLockedAiReservation = async <T>(
+  reservationId: string,
+  action: (
+    row: typeof aiCreditReservation.$inferSelect,
+    tx: DatabaseTransaction
+  ) => Promise<T>
+) => {
+  const [identity] = await db
+    .select()
+    .from(aiCreditReservation)
+    .where(eq(aiCreditReservation.id, reservationId))
+    .limit(1);
+  if (identity === undefined) {
+    throw new Error("The AI billing reservation is unavailable.");
+  }
+  return await db.transaction(async (tx) => {
+    await lockBillingAccount(
+      {
+        billingOwnerUserId:
+          identity.account?.billingOwnerUserId ??
+          identity.billingUserId ??
+          undefined,
+        organizationId: identity.organizationId,
+        scope: identity.account?.scope,
+      },
+      tx
+    );
+    const [row] = await tx
+      .select()
+      .from(aiCreditReservation)
+      .where(eq(aiCreditReservation.id, reservationId))
+      .for("update");
+    if (
+      row === undefined ||
+      (row.account?.billingOwnerUserId ?? row.billingUserId) !==
+        (identity.account?.billingOwnerUserId ?? identity.billingUserId)
+    ) {
+      throw new Error("The AI billing reservation changed. Please try again.");
+    }
+    return await action(row, tx);
   });
 };
 
@@ -212,15 +211,18 @@ export const recordAiCreditProviderGeneration = async (input: {
   if (input.reservationId === null || input.generationId === undefined) {
     return;
   }
-  await db
-    .update(aiCreditReservation)
-    .set({ providerGenerationId: input.generationId })
-    .where(
-      and(
-        eq(aiCreditReservation.id, input.reservationId),
-        isNull(aiCreditReservation.providerGenerationId)
-      )
-    );
+  const { reservationId } = input;
+  await withLockedAiReservation(reservationId, async (_row, tx) => {
+    await tx
+      .update(aiCreditReservation)
+      .set({ providerGenerationId: input.generationId })
+      .where(
+        and(
+          eq(aiCreditReservation.id, reservationId),
+          isNull(aiCreditReservation.providerGenerationId)
+        )
+      );
+  });
 };
 
 const generationCostSchema = z.object({
@@ -236,42 +238,47 @@ export const reconcileAiCreditReservations = async (
 ) => {
   const apiKey = serverEnv.OPENROUTER_API_KEY;
   if (apiKey && input.reservationId === undefined) {
-    const unknown = await db.transaction(async (transaction) => {
-      const rows = await transaction
-        .select()
-        .from(aiCreditReservation)
-        .where(
-          and(
-            eq(aiCreditReservation.status, "reserved"),
-            isNull(aiCreditReservation.actualCostMicroCents),
-            isNotNull(aiCreditReservation.providerGenerationId)
-          )
+    const unknown = await db
+      .select()
+      .from(aiCreditReservation)
+      .where(
+        and(
+          eq(aiCreditReservation.status, "reserved"),
+          isNull(aiCreditReservation.actualCostMicroCents),
+          isNotNull(aiCreditReservation.providerGenerationId)
         )
-        .orderBy(
-          sql`${aiCreditReservation.lastReconciledAt} asc nulls first`,
-          aiCreditReservation.id
-        )
-        .limit(input.limit ?? 100)
-        .for("update", { skipLocked: true });
-      if (rows.length > 0) {
-        // Commit retry order before provider I/O, including unavailable outcomes.
-        await transaction
-          .update(aiCreditReservation)
-          .set({ lastReconciledAt: sql`clock_timestamp()` })
-          .where(
-            inArray(
-              aiCreditReservation.id,
-              rows.map((row) => row.id)
-            )
-          );
-      }
-      return rows;
-    });
+      )
+      .orderBy(
+        sql`${aiCreditReservation.lastReconciledAt} asc nulls first`,
+        aiCreditReservation.id
+      )
+      .limit(input.limit ?? 100);
     for (const row of unknown) {
       if (row.providerGenerationId === null) {
         continue;
       }
       try {
+        const eligible = await withLockedAiReservation(
+          row.id,
+          async (current, tx) => {
+            if (
+              current.status !== "reserved" ||
+              current.actualCostMicroCents !== null ||
+              current.lastReconciledAt?.getTime() !==
+                row.lastReconciledAt?.getTime()
+            ) {
+              return false;
+            }
+            await tx
+              .update(aiCreditReservation)
+              .set({ lastReconciledAt: sql`clock_timestamp()` })
+              .where(eq(aiCreditReservation.id, row.id));
+            return true;
+          }
+        );
+        if (!eligible) {
+          continue;
+        }
         const url = new URL("https://openrouter.ai/api/v1/generation");
         url.searchParams.set("id", row.providerGenerationId);
         const response = await fetch(url, {
@@ -286,21 +293,25 @@ export const reconcileAiCreditReservations = async (
           result.success &&
           result.data.data.id === row.providerGenerationId
         ) {
-          await db
-            .update(aiCreditReservation)
-            .set({
-              actualCostMicroCents:
-                result.data.data.total_cost === 0
-                  ? 0
-                  : getAiUsageCostMicroCents(result.data.data.total_cost),
-            })
-            .where(
-              and(
-                eq(aiCreditReservation.id, row.id),
-                eq(aiCreditReservation.status, "reserved"),
-                isNull(aiCreditReservation.actualCostMicroCents)
-              )
-            );
+          const actualCostMicroCents =
+            result.data.data.total_cost === 0
+              ? 0
+              : getAiUsageCostMicroCents(result.data.data.total_cost);
+          assertBillingMoney(actualCostMicroCents);
+          await withLockedAiReservation(row.id, async (_current, tx) => {
+            await tx
+              .update(aiCreditReservation)
+              .set({
+                actualCostMicroCents,
+              })
+              .where(
+                and(
+                  eq(aiCreditReservation.id, row.id),
+                  eq(aiCreditReservation.status, "reserved"),
+                  isNull(aiCreditReservation.actualCostMicroCents)
+                )
+              );
+          });
         }
       } catch (error) {
         reportError(error, { operation: "billing:reconcile-ai-generation" });
@@ -326,6 +337,8 @@ export const reconcileAiCreditReservations = async (
     }
     const account: BillingAccount = {
       ...row.account,
+      billingOwnerUserId:
+        row.account.billingOwnerUserId ?? row.billingUserId ?? undefined,
       currentPeriodEnd: new Date(row.account.currentPeriodEnd),
       currentPeriodStart: new Date(row.account.currentPeriodStart),
     };
@@ -361,28 +374,27 @@ export const settleAiCreditUsage = async (input: {
   if (!Number.isFinite(input.costUsd) || input.costUsd < 0) {
     throw new Error("AI provider cost must be finite and nonnegative.");
   }
+  const actualCostMicroCents =
+    input.costUsd === 0 ? 0 : getAiUsageCostMicroCents(input.costUsd);
+  assertBillingMoney(actualCostMicroCents);
   const { reservationId } = input;
-  await db
-    .update(aiCreditReservation)
-    .set({
-      actualCostMicroCents:
-        input.costUsd === 0 ? 0 : getAiUsageCostMicroCents(input.costUsd),
-    })
-    .where(
-      and(
-        eq(aiCreditReservation.id, reservationId),
-        eq(aiCreditReservation.status, "reserved"),
-        isNull(aiCreditReservation.actualCostMicroCents)
-      )
-    );
-  const [row] = await db
-    .select({ status: aiCreditReservation.status })
-    .from(aiCreditReservation)
-    .where(eq(aiCreditReservation.id, reservationId))
-    .limit(1);
-  if (row === undefined || row.status === "released") {
-    throw new Error("The AI billing reservation is unavailable.");
-  }
+  await withLockedAiReservation(reservationId, async (row, tx) => {
+    if (row.status === "released") {
+      throw new Error("The AI billing reservation is unavailable.");
+    }
+    await tx
+      .update(aiCreditReservation)
+      .set({
+        actualCostMicroCents,
+      })
+      .where(
+        and(
+          eq(aiCreditReservation.id, reservationId),
+          eq(aiCreditReservation.status, "reserved"),
+          isNull(aiCreditReservation.actualCostMicroCents)
+        )
+      );
+  });
   await reconcileAiCreditReservations({ reservationId });
 };
 
@@ -390,20 +402,7 @@ export const releaseAiCreditUsage = async (reservationId: string | null) => {
   if (reservationId === null) {
     return;
   }
-  const [row] = await db
-    .select({ organizationId: aiCreditReservation.organizationId })
-    .from(aiCreditReservation)
-    .where(eq(aiCreditReservation.id, reservationId))
-    .limit(1);
-  if (row === undefined) {
-    throw new Error("The AI billing reservation is unavailable.");
-  }
-  await db.transaction(async (tx) => {
-    await tx
-      .select({ id: organization.id })
-      .from(organization)
-      .where(eq(organization.id, row.organizationId))
-      .for("update");
+  await withLockedAiReservation(reservationId, async (_row, tx) => {
     await tx
       .update(aiCreditReservation)
       .set({ status: "released" })

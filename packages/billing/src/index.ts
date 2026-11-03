@@ -1,17 +1,33 @@
 import { ORPCError } from "@orpc/server";
-import type { models } from "@polar-sh/sdk/2026-04";
+import { PolarClientError } from "@polar-sh/sdk";
 import { db } from "@quieter/database/client";
-import { mailbox, member, organization } from "@quieter/database/schema";
+import {
+  billingAccountSettings,
+  billingSubscription,
+  mailbox,
+  member,
+  organization,
+  user,
+} from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
-import { reportError } from "@quieter/observability";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 
+import { getAccountUsageSettings } from "./account-settings.ts";
 import { getAiUsageCostMicroCents } from "./ai-pricing.ts";
 import { hasAiCreditReservationGroup } from "./ai-reservation.ts";
+import {
+  BILLING_CHECKOUT_ATTEMPT_METADATA,
+  BILLING_CHECKOUT_CLAIM_MS,
+  recoverBillingCheckout,
+  syncRecoveredBillingCheckout,
+} from "./checkout-recovery.ts";
 import { getBillingCreditUsage, recordBillingCreditUsage } from "./credits.ts";
 import type { BillingUsageKind } from "./credits.ts";
 import {
   getOrganizationBillingEntitlement,
+  getAccountBillingEntitlement,
+  getAccountSubscriptionRecord,
+  getOrganizationBillingOwnerId,
   getOrganizationSubscriptionRecord,
   hasUserBillingFeature,
   isActiveBillingSubscription,
@@ -19,15 +35,14 @@ import {
 } from "./entitlements.ts";
 import type { BillingProductId } from "./plans.ts";
 import { getBillingExternalIdentity } from "./polar-config.ts";
-import { getPolarApiOrganizationId, getPolarClient } from "./polar.ts";
+import { getPolarClient } from "./polar.ts";
+import { getManagedUsageRates } from "./ses-pricing.ts";
 import {
-  BILLING_METADATA_ORGANIZATION_ID,
   BILLING_METADATA_PRODUCT,
+  BILLING_METADATA_SCOPE,
   BILLING_METADATA_USER_ID,
   syncBillingSubscription,
 } from "./subscription-sync.ts";
-
-type Subscription = models.Subscription;
 
 export {
   AI_COST_RECOVERY_BASIS_POINTS,
@@ -35,36 +50,36 @@ export {
   getAiUsageCostMicroCents,
 } from "./ai-pricing.ts";
 
+export { recoverBillingCheckout } from "./checkout-recovery.ts";
 export { syncBillingSubscription } from "./subscription-sync.ts";
+export {
+  updateAccountUsageSettings,
+  takeOverOrganizationBilling,
+} from "./account-settings.ts";
 
 export const createBillingCheckoutMetadata = (input: {
-  organizationId: string;
+  organizationId?: string;
   product: BillingProductId;
   userId: string;
 }) => ({
   customerMetadata: {
     quieterEnvironment: serverEnv.QUIETER_DEPLOYMENT_ENV,
-    [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId,
+    [BILLING_METADATA_SCOPE]: "account",
     [BILLING_METADATA_USER_ID]: input.userId,
   },
   metadata: {
     quieterEnvironment: serverEnv.QUIETER_DEPLOYMENT_ENV,
-    [BILLING_METADATA_ORGANIZATION_ID]: input.organizationId,
+    [BILLING_METADATA_SCOPE]: "account",
     [BILLING_METADATA_PRODUCT]: input.product,
     [BILLING_METADATA_USER_ID]: input.userId,
   },
 });
 
 export const createBillingPortalSession = (input: {
-  organizationId: string;
   returnUrl: string;
   userId: string;
 }) => ({
-  externalCustomerId: getBillingExternalIdentity(
-    "organization",
-    input.organizationId
-  ),
-  externalMemberId: getBillingExternalIdentity("user", input.userId),
+  externalCustomerId: getBillingExternalIdentity("user", input.userId),
   returnUrl: input.returnUrl,
 });
 
@@ -113,13 +128,11 @@ const getSettingsUrl = (
   headers: Headers,
   input: {
     billing?: "canceled" | "success";
-    organizationId: string;
+    organizationId?: string;
   }
 ) => {
   const url = new URL("/settings", getBaseUrl(headers));
-  url.searchParams.set("tab", "organization");
-  url.searchParams.set("organizationId", input.organizationId);
-  url.searchParams.set("organizationView", "overview");
+  url.searchParams.set("tab", "billing");
 
   if (input.billing) {
     url.searchParams.set("billing", input.billing);
@@ -132,14 +145,40 @@ const withCheckoutIdPlaceholder = (url: string) => {
   return `${url}${separator}checkoutId={CHECKOUT_ID}`;
 };
 
+const assertBillingOwner = async (input: {
+  organizationId?: string;
+  userId: string;
+}) => {
+  if (input.organizationId === undefined) {
+    return;
+  }
+  const ownerId = await getOrganizationBillingOwnerId(input.organizationId);
+  const [membership] = await db
+    .select({ id: member.id })
+    .from(member)
+    .where(
+      and(
+        eq(member.userId, input.userId),
+        eq(member.organizationId, input.organizationId)
+      )
+    )
+    .limit(1);
+  if (ownerId !== input.userId || membership === undefined) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "Only this team's billing owner can manage the account plan.",
+    });
+  }
+};
+
 export const createBillingCheckout = async (input: {
   customerEmail: string;
   customerName: string;
   headers: Headers;
-  organizationId: string;
+  organizationId?: string;
   product: BillingProductId;
   userId: string;
 }) => {
+  await assertBillingOwner(input);
   const successUrl = getSettingsUrl(input.headers, {
     billing: "success",
     organizationId: input.organizationId,
@@ -148,19 +187,6 @@ export const createBillingCheckout = async (input: {
     billing: "canceled",
     organizationId: input.organizationId,
   });
-  const [organizationRecord] = await db
-    .select({ name: organization.name })
-    .from(organization)
-    .where(eq(organization.id, input.organizationId))
-    .limit(1);
-
-  if (organizationRecord === undefined) {
-    throw new ORPCError("NOT_FOUND", {
-      message: "Team not found.",
-    });
-  }
-  const customerName = organizationRecord.name;
-
   if (isLocalDevelopmentBillingEntitlementEnabled()) {
     return {
       checkoutUrl: getSettingsUrl(input.headers, {
@@ -170,11 +196,31 @@ export const createBillingCheckout = async (input: {
     };
   }
 
+  await db.transaction(async (transaction) => {
+    await transaction
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.id, input.userId))
+      .for("update");
+    const [settings] = await transaction
+      .select()
+      .from(billingAccountSettings)
+      .where(eq(billingAccountSettings.userId, input.userId))
+      .limit(1);
+    if (
+      settings?.deletionRequestedAt !== undefined &&
+      settings.deletionRequestedAt !== null
+    ) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This billing account is closing.",
+      });
+    }
+  });
+
   const providerProductId = getBillingProductId(input.product);
-  const subscription = await getOrganizationSubscriptionRecord(
-    input.organizationId,
-    { forceReconcile: true }
-  );
+  const subscription = await getAccountSubscriptionRecord(input.userId, {
+    forceReconcile: true,
+  });
   const activeSubscription =
     subscription !== null && isActiveBillingSubscription(subscription)
       ? subscription
@@ -217,61 +263,185 @@ export const createBillingCheckout = async (input: {
     return { checkoutUrl: successUrl };
   }
 
+  const recovery = await recoverBillingCheckout({ userId: input.userId });
+  if (recovery.status === "completed") {
+    return { checkoutUrl: successUrl };
+  }
+  if (recovery.status === "open" && recovery.product === input.product) {
+    return { checkoutUrl: recovery.checkoutUrl };
+  }
+  if (recovery.status !== "none") {
+    throw new ORPCError("TOO_MANY_REQUESTS", {
+      message:
+        "A checkout is already open for your account. Complete it or wait for it to expire before choosing another plan.",
+    });
+  }
+
+  const attemptId = crypto.randomUUID();
+  await db.transaction(async (transaction) => {
+    await transaction
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.id, input.userId))
+      .for("update");
+    const [activated] = await transaction
+      .select({ id: billingSubscription.id })
+      .from(billingSubscription)
+      .where(
+        and(
+          eq(billingSubscription.userId, input.userId),
+          eq(billingSubscription.scope, "account"),
+          inArray(billingSubscription.status, [
+            "active",
+            "trialing",
+            "past_due",
+            "pending",
+          ])
+        )
+      )
+      .limit(1);
+    if (activated !== undefined) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Your account already has a subscription. Reload billing to manage it.",
+      });
+    }
+    const [settings] = await transaction
+      .select()
+      .from(billingAccountSettings)
+      .where(eq(billingAccountSettings.userId, input.userId))
+      .limit(1);
+    if (
+      settings?.deletionRequestedAt !== null &&
+      settings?.deletionRequestedAt !== undefined
+    ) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This billing account is closing.",
+      });
+    }
+    if (settings?.checkoutAttemptId) {
+      throw new ORPCError("TOO_MANY_REQUESTS", {
+        message:
+          "A checkout is already open for your account. Complete it or wait for it to expire before choosing another plan.",
+      });
+    }
+    const claim = {
+      checkoutAttemptId: attemptId,
+      checkoutExpiresAt: new Date(Date.now() + BILLING_CHECKOUT_CLAIM_MS),
+      checkoutId: null,
+      checkoutProduct: input.product,
+      checkoutProviderProductId: providerProductId,
+      checkoutUrl: null,
+      selectedSubscriptionId: null,
+      updatedAt: new Date(),
+    };
+    await transaction
+      .insert(billingAccountSettings)
+      .values({ ...claim, userId: input.userId })
+      .onConflictDoUpdate({
+        set: claim,
+        target: billingAccountSettings.userId,
+      });
+  });
+
   const checkoutMetadata = createBillingCheckoutMetadata({
     organizationId: input.organizationId,
     product: input.product,
     userId: input.userId,
   });
   const polar = await getPolarClient();
-  const externalCustomerId = getBillingExternalIdentity(
-    "organization",
-    input.organizationId
-  );
-  let teamCustomerId: string | undefined;
-
-  try {
-    const externalCustomer =
-      await polar.customers.getExternal(externalCustomerId);
-    teamCustomerId = externalCustomer.id;
-  } catch (error) {
-    // Resolved from the module cache: the call above already loaded the SDK.
-    const { errors } = await import("@polar-sh/sdk/2026-04");
-    if (!(error instanceof errors.ResourceNotFound)) {
-      throw error;
-    }
-
-    const createdCustomer = await polar.customers.create({
-      external_id: externalCustomerId,
-      metadata: checkoutMetadata.customerMetadata,
-      name: customerName,
-      organization_id: getPolarApiOrganizationId(),
-      owner: {
-        email: input.customerEmail,
-        external_id: getBillingExternalIdentity("user", input.userId),
-        name: input.customerName,
+  const checkout = await polar.checkouts
+    .create(
+      {
+        allow_discount_codes: true,
+        customer_email: input.customerEmail,
+        customer_metadata: checkoutMetadata.customerMetadata,
+        customer_name: input.customerName,
+        external_customer_id: getBillingExternalIdentity("user", input.userId),
+        metadata: {
+          ...checkoutMetadata.metadata,
+          [BILLING_CHECKOUT_ATTEMPT_METADATA]: attemptId,
+        },
+        products: [providerProductId],
+        return_url: cancelUrl,
+        success_url: withCheckoutIdPlaceholder(successUrl),
       },
-      type: "team",
+      { timeout: 15 }
+    )
+    .catch(async (error: unknown) => {
+      if (
+        error instanceof PolarClientError &&
+        [400, 401, 403, 404, 422].includes(error.statusCode)
+      ) {
+        await db
+          .update(billingAccountSettings)
+          .set({
+            checkoutAttemptId: null,
+            checkoutExpiresAt: null,
+            checkoutId: null,
+            checkoutProduct: null,
+            checkoutProviderProductId: null,
+            checkoutUrl: null,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(billingAccountSettings.userId, input.userId),
+              eq(billingAccountSettings.checkoutAttemptId, attemptId)
+            )
+          );
+      }
+      throw error;
     });
-    teamCustomerId = createdCustomer.id;
-  }
 
-  const checkout = await polar.checkouts.create({
-    allow_discount_codes: true,
-    customer_id: teamCustomerId,
-    metadata: checkoutMetadata.metadata,
-    products: [providerProductId],
-    return_url: cancelUrl,
-    success_url: withCheckoutIdPlaceholder(successUrl),
+  const persisted = await db.transaction(async (transaction) => {
+    await transaction
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.id, input.userId))
+      .for("update");
+    const [settings] = await transaction
+      .select()
+      .from(billingAccountSettings)
+      .where(eq(billingAccountSettings.userId, input.userId))
+      .limit(1);
+    const [updated] = await transaction
+      .update(billingAccountSettings)
+      .set({
+        checkoutExpiresAt: new Date(checkout.expires_at),
+        checkoutId: checkout.id,
+        checkoutUrl: checkout.url,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(billingAccountSettings.userId, input.userId),
+          eq(billingAccountSettings.checkoutAttemptId, attemptId)
+        )
+      )
+      .returning({ userId: billingAccountSettings.userId });
+    return (
+      updated !== undefined &&
+      (settings?.deletionRequestedAt === undefined ||
+        settings.deletionRequestedAt === null)
+    );
   });
+  if (!persisted) {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "This billing account changed while opening checkout. Reload billing before continuing.",
+    });
+  }
 
   return { checkoutUrl: checkout.url };
 };
 
 export const createBillingPortal = async (input: {
   headers: Headers;
-  organizationId: string;
+  organizationId?: string;
   userId: string;
 }) => {
+  await assertBillingOwner(input);
   const returnUrl = getSettingsUrl(input.headers, {
     organizationId: input.organizationId,
   });
@@ -282,13 +452,11 @@ export const createBillingPortal = async (input: {
 
   const portalClient = await getPolarClient();
   const portalSession = createBillingPortalSession({
-    organizationId: input.organizationId,
     returnUrl,
     userId: input.userId,
   });
   const session = await portalClient.customerSessions.create({
     external_customer_id: portalSession.externalCustomerId,
-    external_member_id: portalSession.externalMemberId,
     return_url: portalSession.returnUrl,
   });
 
@@ -296,11 +464,26 @@ export const createBillingPortal = async (input: {
 };
 
 const serializeEntitlement = async (
-  entitlement: Awaited<ReturnType<typeof getOrganizationBillingEntitlement>>
+  entitlement: Awaited<ReturnType<typeof getOrganizationBillingEntitlement>>,
+  requesterUserId: string,
+  organizationId?: string
 ) => {
   const usage = entitlement.account
     ? await getBillingCreditUsage(entitlement.account)
     : null;
+  const organizations =
+    usage?.organizations.filter(
+      (item) =>
+        organizationId === undefined || item.organizationId === organizationId
+    ) ?? [];
+  const breakdown =
+    organizationId === undefined
+      ? (usage?.breakdown ?? [])
+      : (organizations[0]?.breakdown ?? []);
+  const costMicroCents =
+    organizationId === undefined
+      ? (usage?.costMicroCents ?? 0)
+      : (organizations[0]?.costMicroCents ?? 0);
 
   return {
     creditAmountCents: entitlement.account?.creditAmountCents ?? null,
@@ -311,15 +494,31 @@ const serializeEntitlement = async (
     product: entitlement.product,
     usage: usage
       ? {
-          billableCostCents: usage.billableCostMicroCents / 1_000_000,
-          breakdown: usage.breakdown.map((item) => ({
+          billableCostCents:
+            (organizationId === undefined
+              ? usage.billableCostMicroCents
+              : (organizations[0]?.billableCostMicroCents ?? 0)) / 1_000_000,
+          breakdown: breakdown.map((item) => ({
             costCents: item.costMicroCents / 1_000_000,
             kind: item.kind,
           })),
-          costCents: usage.costMicroCents / 1_000_000,
+          costCents: costMicroCents / 1_000_000,
+          organizations: organizations.map((item) => ({
+            breakdown: item.breakdown.map((entry) => ({
+              costCents: entry.costMicroCents / 1_000_000,
+              kind: entry.kind,
+            })),
+            costCents: item.costMicroCents / 1_000_000,
+            organizationId: item.organizationId,
+            organizationName: item.organizationName,
+          })),
           remainingCreditCents:
-            Math.max(0, usage.creditAmountMicroCents - usage.costMicroCents) /
-            1_000_000,
+            entitlement.account?.billingOwnerUserId === requesterUserId
+              ? Math.max(
+                  0,
+                  usage.creditAmountMicroCents - usage.chargeableCostMicroCents
+                ) / 1_000_000
+              : null,
         }
       : null,
   };
@@ -328,32 +527,41 @@ const serializeEntitlement = async (
 export const getBillingOverview = async (input: { userId: string }) => {
   const memberships = await db
     .select({
+      billingOwnerName: user.name,
       organizationId: organization.id,
       organizationName: organization.name,
       role: member.role,
     })
     .from(member)
     .innerJoin(organization, eq(member.organizationId, organization.id))
+    .leftJoin(user, eq(user.id, organization.billingOwnerUserId))
     .where(eq(member.userId, input.userId))
     .orderBy(organization.name);
   const teams = await Promise.all(
     memberships.map(async (membership) => {
-      const subscription = isLocalDevelopmentBillingEntitlementEnabled()
+      const billingOwnerUserId = await getOrganizationBillingOwnerId(
+        membership.organizationId
+      );
+      const isBillingOwner = billingOwnerUserId === input.userId;
+      const entitlement = await getOrganizationBillingEntitlement({
+        feature: "organizationMail",
+        organizationId: membership.organizationId,
+      });
+      const subscription = entitlement.hasUnlimitedAccess
         ? null
         : await getOrganizationSubscriptionRecord(membership.organizationId);
       return {
-        canManageBilling: membership.role
-          .split(",")
-          .map((role) => role.trim().toLowerCase())
-          .some((role) => role === "admin" || role === "owner"),
+        billingOwnerIsCurrentUser: isBillingOwner,
+        billingOwnerName: membership.billingOwnerName ?? "The team owner",
+        canManageBilling: isBillingOwner,
+        canTakeOverBilling:
+          membership.role.split(",").includes("owner") && !isBillingOwner,
         organizationId: membership.organizationId,
         organizationName: membership.organizationName,
         ...(await serializeEntitlement(
-          await getOrganizationBillingEntitlement({
-            feature: "organizationMail",
-            organizationId: membership.organizationId,
-            subscription,
-          })
+          entitlement,
+          input.userId,
+          membership.organizationId
         )),
         subscription:
           subscription === null
@@ -367,7 +575,49 @@ export const getBillingOverview = async (input: { userId: string }) => {
     })
   );
 
-  return { teams };
+  const entitlement = await getAccountBillingEntitlement(input.userId);
+  const subscription = entitlement.hasUnlimitedAccess
+    ? null
+    : await getAccountSubscriptionRecord(input.userId);
+  const settings = await getAccountUsageSettings(input.userId);
+  const [management] = await db
+    .select({
+      checkoutId: billingAccountSettings.checkoutId,
+      deletionRequestedAt: billingAccountSettings.deletionRequestedAt,
+    })
+    .from(billingAccountSettings)
+    .where(eq(billingAccountSettings.userId, input.userId))
+    .limit(1);
+  const [customer] = await db
+    .select({ id: billingSubscription.id })
+    .from(billingSubscription)
+    .where(
+      and(
+        eq(billingSubscription.userId, input.userId),
+        eq(billingSubscription.scope, "account"),
+        isNotNull(billingSubscription.providerCustomerId)
+      )
+    )
+    .limit(1);
+  const account = {
+    ...(await serializeEntitlement(entitlement, input.userId)),
+    canManageBilling: true,
+    hasBillingCustomer:
+      customer !== undefined || Boolean(management?.checkoutId),
+    isClosing: Boolean(management?.deletionRequestedAt),
+    managedUsageRates: getManagedUsageRates(),
+    settings,
+    subscription:
+      subscription === null
+        ? null
+        : {
+            cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+            currentPeriodEnd: subscription.currentPeriodEnd,
+            status: subscription.status,
+          },
+  };
+
+  return { account, teams };
 };
 
 export const syncBillingCheckout = async (input: {
@@ -378,55 +628,7 @@ export const syncBillingCheckout = async (input: {
     return { synced: false };
   }
 
-  const polar = await getPolarClient();
-  const checkout = await polar.checkouts.get(input.checkoutId);
-  const checkoutUserId = checkout.metadata[BILLING_METADATA_USER_ID];
-
-  if (checkout.status !== "succeeded" || checkoutUserId !== input.userId) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "This checkout cannot be applied to your billing account.",
-    });
-  }
-
-  let subscription: Subscription | undefined;
-  if ((checkout.subscription_id ?? "") !== "") {
-    const subscriptionId = checkout.subscription_id;
-    if (typeof subscriptionId !== "string") {
-      throw new ORPCError("BAD_REQUEST", {
-        message: "This checkout cannot be applied to your billing account.",
-      });
-    }
-    subscription = await polar.subscriptions.get(subscriptionId);
-  } else if (
-    (checkout.customer_id ?? "") !== "" &&
-    (checkout.product_id ?? "") !== ""
-  ) {
-    const subscriptions = await polar.subscriptions.list({
-      customer_id: checkout.customer_id,
-      limit: 10,
-      product_id: checkout.product_id,
-      sorting: ["-started_at"],
-      status: ["active", "trialing"],
-    });
-    subscription = subscriptions.items.find(
-      (candidate) =>
-        candidate.metadata[BILLING_METADATA_USER_ID] === input.userId
-    );
-  }
-
-  if (subscription === undefined) {
-    reportError(
-      new Error(
-        "Could not resolve the subscription created by a completed checkout."
-      ),
-      { operation: "billing:resolve-checkout-subscription" }
-    );
-    throw new ORPCError("BAD_REQUEST", {
-      message: "We could not activate your plan. Please contact support.",
-    });
-  }
-
-  return await syncBillingSubscription(subscription);
+  return await syncRecoveredBillingCheckout(input);
 };
 
 const recordAiCreditUsage = async (input: {

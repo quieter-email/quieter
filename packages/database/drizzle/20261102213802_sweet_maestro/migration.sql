@@ -1,0 +1,2 @@
+-- quieter:contract
+ALTER TABLE "billingCreditUsageEvent" DROP CONSTRAINT "billing_credit_usage_event_target_check", ADD CONSTRAINT "billing_credit_usage_event_target_check" CHECK ("scope" = 'team' or ("scope" = 'account' and "userId" is not null));

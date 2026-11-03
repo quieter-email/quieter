@@ -38,7 +38,12 @@ const polarCheckoutSchema = z.custom<Checkout>(
 
 const polarCustomer = (id: string) => polarCustomerSchema.parse({ id });
 
-const polarCheckout = (url: string) => polarCheckoutSchema.parse({ url });
+const polarCheckout = (url: string) =>
+  polarCheckoutSchema.parse({
+    expires_at: "2027-01-01T00:00:00Z",
+    id: "checkout-1",
+    url,
+  });
 
 const polarState = vi.hoisted(() => ({
   getPolarClient: null as typeof PolarModule.getPolarClient | null,
@@ -55,7 +60,7 @@ const checkoutMocks = vi.hoisted(() => {
     from,
     getExternalCustomer: vi.fn<PolarClient["customers"]["getExternal"]>(),
     getSubscription:
-      vi.fn<typeof EntitlementsModule.getOrganizationSubscriptionRecord>(),
+      vi.fn<typeof EntitlementsModule.getAccountSubscriptionRecord>(),
     limit,
     loadOrganization: vi.fn<() => Promise<{ name: string }[]>>(),
     select,
@@ -69,7 +74,10 @@ vi.mock(import("../src/entitlements"), async (importOriginal) => {
   const actual = await importOriginal<typeof EntitlementsModule>();
   return {
     ...actual,
-    getOrganizationSubscriptionRecord: checkoutMocks.getSubscription,
+    getAccountSubscriptionRecord: checkoutMocks.getSubscription,
+    getOrganizationBillingOwnerId: vi.fn<
+      typeof EntitlementsModule.getOrganizationBillingOwnerId
+    >(async () => await Promise.resolve("user-1")),
   };
 });
 
@@ -77,9 +85,36 @@ vi.mock(import("../src/entitlements"), async (importOriginal) => {
 // oxlint-disable-next-line vitest/prefer-import-in-mock
 vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
+  const rows = {
+    for: async () => await Promise.resolve([]),
+    limit: async () => await Promise.resolve([]),
+  };
+  const transaction = {
+    insert: () => ({
+      values: () => ({
+        onConflictDoUpdate: async () => {
+          await Promise.resolve();
+        },
+      }),
+    }),
+    select: () => ({ from: () => ({ where: () => rows }) }),
+    update: () => ({
+      set: () => ({
+        where: () => ({
+          returning: async () => await Promise.resolve([{ userId: "user-1" }]),
+        }),
+      }),
+    }),
+  };
   return {
     assertDatabaseConfigured: actual.assertDatabaseConfigured,
-    db: { select: checkoutMocks.select },
+    db: {
+      select: checkoutMocks.select,
+      transaction: async (
+        run: (client: typeof transaction) => Promise<unknown>
+      ) => await run(transaction),
+      update: transaction.update,
+    },
     withRequestDatabaseClient: actual.withRequestDatabaseClient,
   };
 });
@@ -168,14 +203,21 @@ describe("Polar checkout creation", () => {
       cancelAtPeriodEnd: false,
       currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
       currentPeriodStart: new Date("2026-06-23T00:00:00.000Z"),
+      id: "subscription-row-1",
       lastReconciliationFailureAt: null,
       metadata: { quieterOrganizationId: "organization-1" },
+      organizationId: null,
+      periodCreditAmountCents: 2000,
       plan: "pro",
       provider: "polar",
+      providerCustomerId: "customer-1",
       providerModifiedAt: null,
+      providerProductId: "pro-product",
       providerSubscriptionId: "subscription-1",
+      scope: "account",
       status: "canceled",
       updatedAt: new Date("2026-07-23T00:00:00.000Z"),
+      userId: "user-1",
     });
 
     await expect(
@@ -192,41 +234,43 @@ describe("Polar checkout creation", () => {
     });
     const checkoutRequest = checkoutMocks.createCheckout.mock.calls.at(0)?.[0];
     expect(checkoutRequest?.success_url).toContain("checkoutId={CHECKOUT_ID}");
-    expect(checkoutMocks.getSubscription).toHaveBeenCalledWith(
-      "organization-1",
-      { forceReconcile: true }
-    );
+    expect(checkoutMocks.getSubscription).toHaveBeenCalledWith("user-1", {
+      forceReconcile: true,
+    });
   });
 
-  test("reuses an active renewing subscription when its provider period is stale", async () => {
+  test("does not duplicate an active subscription with an unconfirmed renewal", async () => {
     checkoutMocks.getSubscription.mockResolvedValue({
       cancelAtPeriodEnd: false,
       currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
       currentPeriodStart: new Date("2026-06-23T00:00:00.000Z"),
+      id: "subscription-row-1",
       lastReconciliationFailureAt: null,
       metadata: { quieterOrganizationId: "organization-1" },
+      organizationId: null,
+      periodCreditAmountCents: 2000,
       plan: "pro",
       provider: "polar",
+      providerCustomerId: "customer-1",
       providerModifiedAt: null,
+      providerProductId: "pro-product",
       providerSubscriptionId: "subscription-1",
+      scope: "account",
       status: "active",
       updatedAt: new Date(),
-    });
-
-    const result = await createBillingCheckout({
-      customerEmail: "owner@example.com",
-      customerName: "Owner",
-      headers: new Headers({ origin: "https://quieter.email" }),
-      organizationId: "organization-1",
-      product: "pro",
       userId: "user-1",
     });
-    const successUrl = new URL(result.checkoutUrl);
-    expect(successUrl.origin).toBe("https://quieter.email");
-    expect(successUrl.searchParams.get("billing")).toBe("success");
-    expect(successUrl.searchParams.get("organizationId")).toBe(
-      "organization-1"
-    );
+
+    await expect(
+      createBillingCheckout({
+        customerEmail: "owner@example.com",
+        customerName: "Owner",
+        headers: new Headers({ origin: "https://quieter.email" }),
+        organizationId: "organization-1",
+        product: "pro",
+        userId: "user-1",
+      })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(checkoutMocks.createCheckout).not.toHaveBeenCalled();
     expect(checkoutMocks.getExternalCustomer).not.toHaveBeenCalled();
   });
@@ -238,14 +282,21 @@ describe("Polar checkout creation", () => {
         cancelAtPeriodEnd: false,
         currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
         currentPeriodStart: new Date("2026-06-23T00:00:00.000Z"),
+        id: "subscription-row-1",
         lastReconciliationFailureAt: null,
         metadata: { quieterOrganizationId: "organization-1" },
+        organizationId: null,
+        periodCreditAmountCents: 2000,
         plan: "pro",
         provider: "polar",
+        providerCustomerId: "customer-1",
         providerModifiedAt: null,
+        providerProductId: "pro-product",
         providerSubscriptionId: "subscription-1",
+        scope: "account",
         status,
         updatedAt: new Date(),
+        userId: "user-1",
       });
       await expect(
         createBillingCheckout({

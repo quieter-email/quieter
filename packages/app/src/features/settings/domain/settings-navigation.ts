@@ -4,6 +4,7 @@ export const SETTINGS_TITLES = {
   account: "Account",
   ai: "Memories",
   appearance: "Preferences",
+  billing: "Billing",
   connectors: "Connected apps",
   development: "Development",
   mailboxes: "Mailboxes",

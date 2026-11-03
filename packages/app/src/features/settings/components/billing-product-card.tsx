@@ -56,12 +56,12 @@ export const BillingProductCard = ({
       )}
       {(() => {
         if (isCurrent) {
-          return "Current billing";
+          return "Current plan";
         }
         if (canChoose) {
           return "Choose";
         }
-        return "Owner or admin required";
+        return "Manage billing first";
       })()}
     </Button>
   );
@@ -85,7 +85,8 @@ export const BillingProductCard = ({
           </div>
           <p className="mt-0.5 text-caption text-muted-fg">
             {moneyFormatter.format(product.creditAmountCents / 100)} monthly
-            balance, {GMAIL_MAILBOX_LIMITS[productId]} Gmail accounts
+            shared balance, {GMAIL_MAILBOX_LIMITS[productId]} Gmail accounts per
+            team
             {productId === "pro" ? ", includes AI" : ", domains & API keys"}
           </p>
         </div>
@@ -153,7 +154,7 @@ export const BillingCreditSummary = ({
   usage: {
     billableCostCents: number;
     costCents: number;
-    remainingCreditCents: number;
+    remainingCreditCents: number | null;
   } | null;
 }) => (
   <div
@@ -163,16 +164,17 @@ export const BillingCreditSummary = ({
     )}
   >
     <span>{formatBillingProduct(product)}</span>
-    {creditAmountCents !== null && creditAmountCents !== undefined && (
-      <span>
-        <span className="font-mono font-medium text-fg">
-          {moneyFormatter.format(
-            (usage?.remainingCreditCents ?? creditAmountCents) / 100
-          )}
-        </span>{" "}
-        usage balance remaining
-      </span>
-    )}
+    {creditAmountCents !== null &&
+      creditAmountCents !== undefined &&
+      usage?.remainingCreditCents !== null &&
+      usage?.remainingCreditCents !== undefined && (
+        <span>
+          <span className="font-mono font-medium text-fg">
+            {moneyFormatter.format(usage.remainingCreditCents / 100)}
+          </span>{" "}
+          usage balance remaining
+        </span>
+      )}
     {(usage?.billableCostCents ?? 0) > 0 && (
       <span>
         <span className="font-mono font-medium text-fg">

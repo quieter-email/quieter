@@ -19,6 +19,7 @@ import {
   SettingsSection,
   settingsSurfaceVariants,
 } from "@quieter/app/features/settings/components/settings-layout";
+import type { UserBillingOverview } from "@quieter/app/features/settings/domain/billing";
 import { toastError } from "@quieter/app/lib/error-toast";
 import type { rpc } from "@quieter/app/lib/orpc";
 import { orpc } from "@quieter/app/lib/orpc";
@@ -180,15 +181,21 @@ const usageBreakdownConfig = [
   },
 ] as const;
 
+type UsageOrganizations = NonNullable<
+  UserBillingOverview["account"]["usage"]
+>["organizations"];
+
 const UsageBreakdown = ({
   breakdown,
   creditAmountCents,
+  organizations,
 }: {
   breakdown: {
     costCents: number;
     kind: (typeof usageBreakdownConfig)[number]["kind"];
   }[];
   creditAmountCents: number;
+  organizations?: UsageOrganizations;
 }) => {
   const costs = new Map(breakdown.map((item) => [item.kind, item.costCents]));
   const items = usageBreakdownConfig.map((item) => ({
@@ -225,9 +232,9 @@ const UsageBreakdown = ({
             return [
               <Tooltip key={item.kind}>
                 <TooltipTrigger
+                  aria-label={`${item.label}, ${formatMoney(item.costCents)}`}
                   // oxlint-disable-next-line shadcn/no-arbitrary-values, shadcn/no-restyle -- Segments are measured per cost slice with a brightness hover.
                   className={`${item.className} min-w-1 transition-[filter] hover:brightness-110`}
-                  render={<span />}
                   // oxlint-disable-next-line shadcn/no-inline-styles -- Segment flex is measured from cost data.
                   style={{ flexBasis: 0, flexGrow: item.costCents }}
                 />
@@ -242,6 +249,34 @@ const UsageBreakdown = ({
                     </span>
                   </div>
                   <p className="mt-0.5 text-muted-fg">{percentage}% of usage</p>
+                  {organizations && (
+                    <div className="mt-2 space-y-1">
+                      {organizations.map((organization) => {
+                        const contribution =
+                          organization.breakdown.find(
+                            (entry) => entry.kind === item.kind
+                          )?.costCents ?? 0;
+                        return (
+                          <div
+                            className="flex items-start justify-between gap-5"
+                            key={organization.organizationId ?? "deleted"}
+                          >
+                            <span className="min-w-0 break-words">
+                              {organization.organizationName}
+                            </span>
+                            <div className="shrink-0 text-right">
+                              <p className="font-mono">
+                                {formatMoney(contribution)}
+                              </p>
+                              <p className="text-muted-fg">
+                                {formatMoney(organization.costCents)} team total
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </TooltipContent>
               </Tooltip>,
             ];
@@ -273,11 +308,13 @@ const UsageBreakdown = ({
 
 export const ManagedUsageSummary = ({
   includedUsageCents,
+  organizations,
   rates,
   usage,
 }: {
   includedUsageCents: number;
-  rates: Awaited<
+  organizations?: UsageOrganizations;
+  rates?: Awaited<
     ReturnType<typeof rpc.organizationMailUsage.overview>
   >["managedUsageRates"];
   usage: Pick<
@@ -318,6 +355,7 @@ export const ManagedUsageSummary = ({
       <UsageBreakdown
         breakdown={usage.breakdown}
         creditAmountCents={includedUsageCents}
+        organizations={organizations}
       />
 
       <Progress className="sr-only" max={100} value={usagePercent}>
@@ -325,25 +363,77 @@ export const ManagedUsageSummary = ({
           <ProgressIndicator />
         </ProgressTrack>
       </Progress>
-      <Surface chrome="inset" variant="detail">
-        <div className="grid gap-4 @md:grid-cols-3">
-          <Price
-            label="Messages"
-            suffix="/ 1K"
-            value={rates.messagesPerThousandUsd}
-          />
-          <Price
-            label="Attachment data"
-            suffix="/ GB"
-            value={rates.attachmentDataPerGbUsd}
-          />
-          <Price
-            label="Incoming mail processing"
-            suffix="/ 1K units"
-            value={rates.inboundProcessingPerThousandUsd}
-          />
-        </div>
-      </Surface>
+      {organizations && organizations.length > 0 && (
+        <Surface chrome="inset" variant="detail">
+          <p className="mb-3 text-caption text-muted-fg">Usage by team</p>
+          <div className="space-y-2">
+            {organizations.map((organization) => (
+              <Tooltip key={organization.organizationId ?? "deleted"}>
+                <TooltipTrigger
+                  // oxlint-disable-next-line shadcn/no-restyle -- The data row is the focusable tooltip target and owns no shared control treatment.
+                  className="flex w-full items-start justify-between gap-4 text-body-sm"
+                >
+                  <span className="min-w-0 break-words">
+                    {organization.organizationName}
+                  </span>
+                  <span className="shrink-0 font-mono">
+                    {formatMoney(organization.costCents)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="mb-2 font-medium">
+                    {organization.organizationName}
+                  </p>
+                  <div className="space-y-1">
+                    {usageBreakdownConfig.map((category) => {
+                      const cost =
+                        organization.breakdown.find(
+                          (item) => item.kind === category.kind
+                        )?.costCents ?? 0;
+                      return cost > 0 ? (
+                        <div
+                          className="flex justify-between gap-5"
+                          key={category.kind}
+                        >
+                          <span>{category.label}</span>
+                          <span className="font-mono">{formatMoney(cost)}</span>
+                        </div>
+                      ) : null;
+                    })}
+                    <div className="flex justify-between gap-5 font-medium">
+                      <span>Total</span>
+                      <span className="font-mono">
+                        {formatMoney(organization.costCents)}
+                      </span>
+                    </div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </Surface>
+      )}
+      {rates && (
+        <Surface chrome="inset" variant="detail">
+          <div className="grid gap-4 @md:grid-cols-3">
+            <Price
+              label="Messages"
+              suffix="/ 1K"
+              value={rates.messagesPerThousandUsd}
+            />
+            <Price
+              label="Attachment data"
+              suffix="/ GB"
+              value={rates.attachmentDataPerGbUsd}
+            />
+            <Price
+              label="Incoming mail processing"
+              suffix="/ 1K units"
+              value={rates.inboundProcessingPerThousandUsd}
+            />
+          </div>
+        </Surface>
+      )}
     </Surface>
   );
 };
@@ -479,10 +569,15 @@ const ManagedUsageSettingsControls = ({
             <SettingsRowText
               className="max-w-xl"
               title={
-                <label htmlFor="managed-overage-toggle">Allow overage</label>
+                <label htmlFor="managed-overage-toggle">
+                  Allow team overage
+                </label>
               }
             >
-              <span>Continue paid usage after the balance runs out.</span>
+              <span>
+                Let this team use paid overage when the billing account allows
+                it.
+              </span>
             </SettingsRowText>
             <Switch
               checked={overageEnabled}
@@ -496,8 +591,14 @@ const ManagedUsageSettingsControls = ({
           </SettingsInsetRow>
 
           <SettingsInsetFieldRow>
-            <SettingsRowText className="max-w-xl" title="Monthly overage limit">
-              <span>Maximum extra spend per month.</span>
+            <SettingsRowText
+              className="max-w-xl"
+              title="Team monthly overage limit"
+            >
+              <span>
+                An additional safety limit for this team. The account limit
+                still applies.
+              </span>
             </SettingsRowText>
 
             <div className="flex items-center gap-2">
@@ -743,7 +844,7 @@ const ManagedUsageSettingsForm = ({
 
   return (
     <SettingsSection
-      title="Usage"
+      title="Team usage & safety limits"
       description={
         periodStart !== null && periodEnd !== null
           ? `${periodStart} to ${periodEnd}`

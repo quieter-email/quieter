@@ -8,6 +8,7 @@ import type { BillingPolarSubscription } from "../src/subscription-sync";
 
 const mocks = vi.hoisted(() => ({
   deploymentEnvironment: "production" as "production" | "local",
+  emptyRows: vi.fn<() => Promise<never[]>>(),
   upsert: vi.fn<() => Promise<void>>(),
   values: vi.fn<
     (input: typeof billingSubscription.$inferInsert) => {
@@ -35,7 +36,32 @@ vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
   return {
     ...actual,
-    db: { insert: () => ({ values: mocks.values }) },
+    db: {
+      transaction: async (
+        run: (transaction: {
+          insert: () => { values: typeof mocks.values };
+          select: () => {
+            from: () => {
+              where: () => {
+                limit: () => Promise<never[]>;
+                for: () => Promise<never[]>;
+              };
+            };
+          };
+        }) => Promise<unknown>
+      ) =>
+        await run({
+          insert: () => ({ values: mocks.values }),
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: mocks.emptyRows,
+                limit: mocks.emptyRows,
+              }),
+            }),
+          }),
+        }),
+    },
   };
 });
 
@@ -66,6 +92,7 @@ describe("subscription synchronization", () => {
   beforeEach(() => {
     mocks.deploymentEnvironment = "production";
     vi.clearAllMocks();
+    mocks.emptyRows.mockResolvedValue([]);
     mocks.values.mockReturnValue({ onConflictDoUpdate: mocks.upsert });
   });
 

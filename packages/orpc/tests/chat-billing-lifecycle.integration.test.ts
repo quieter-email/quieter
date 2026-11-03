@@ -538,7 +538,8 @@ describe.skipIf(state.databaseUrl === undefined)(
         await foregroundStarted.promise;
         terminal.resolve(outcome);
         await text;
-        await Promise.all(scheduled);
+        const background = await backgroundTaskScheduled.promise;
+        await background.task;
         const reservations = await db
           .select()
           .from(aiCreditReservation)

@@ -436,7 +436,8 @@ export const recordOrganizationMailUsage = async (
       billableCostMicroCents,
       includedSesCostMicroCents: Math.max(
         0,
-        customerCostMicroCents - billableCostMicroCents
+        (creditUsage?.chargeableCostMicroCents ?? customerCostMicroCents) -
+          billableCostMicroCents
       ),
       polarEventReportedAt: creditUsage?.polarEventReportedAt ?? null,
     })
@@ -446,14 +447,17 @@ export const recordOrganizationMailUsage = async (
     const creditUsageOverview = await getBillingCreditUsage(
       entitlement.account
     );
+    const organizationUsage = creditUsageOverview.organizations.find(
+      (item) => item.organizationId === input.organizationId
+    );
     await recordOrganizationMailUsageAlerts({
       creditAmountMicroCents: creditUsageOverview.creditAmountMicroCents,
       organizationId: input.organizationId,
       period,
       settings,
       usage: {
-        billableCostMicroCents: creditUsageOverview.billableCostMicroCents,
-        sesCostMicroCents: creditUsageOverview.costMicroCents,
+        billableCostMicroCents: organizationUsage?.billableCostMicroCents ?? 0,
+        sesCostMicroCents: organizationUsage?.costMicroCents ?? 0,
       },
     });
   }
@@ -461,7 +465,8 @@ export const recordOrganizationMailUsage = async (
   if (
     input.billingAccount !== undefined &&
     creditUsage !== null &&
-    creditUsage.costMicroCents > 0 &&
+    creditUsage.billableCostMicroCents > 0 &&
+    creditUsage.polarEventDeferredReason === null &&
     creditUsage.polarEventReportedAt === null
   ) {
     throw new Error(
@@ -472,7 +477,8 @@ export const recordOrganizationMailUsage = async (
 };
 
 export const getOrganizationMailUsageOverview = async (
-  organizationId: string
+  organizationId: string,
+  requesterUserId: string
 ) => {
   const entitlement = await getOrganizationBillingEntitlement({
     feature: "organizationMail",
@@ -493,8 +499,11 @@ export const getOrganizationMailUsageOverview = async (
   ]);
   const creditAmountMicroCents = creditUsage?.creditAmountMicroCents ?? 0;
   const usedCreditMicroCents =
-    creditUsage?.costMicroCents ??
+    creditUsage?.chargeableCostMicroCents ??
     getManagedUsageCostMicroCents(mailUsage.sesCostMicroCents);
+  const organizationUsage = creditUsage?.organizations.find(
+    (item) => item.organizationId === organizationId
+  );
 
   return {
     hasAccess: entitlement.hasAccess,
@@ -502,14 +511,18 @@ export const getOrganizationMailUsageOverview = async (
     includedSesUsageMicroCents: creditAmountMicroCents,
     managedUsageRates: getManagedUsageRates(),
     period,
-    remainingIncludedSesUsageMicroCents: entitlement.hasUnlimitedAccess
-      ? null
-      : Math.max(0, creditAmountMicroCents - usedCreditMicroCents),
+    remainingIncludedSesUsageMicroCents:
+      !entitlement.hasUnlimitedAccess &&
+      entitlement.account?.billingOwnerUserId === requesterUserId
+        ? Math.max(0, creditAmountMicroCents - usedCreditMicroCents)
+        : null,
     settings,
     usage: {
-      billableCostMicroCents: creditUsage?.billableCostMicroCents ?? 0,
-      breakdown: creditUsage?.breakdown ?? [],
-      sesCostMicroCents: usedCreditMicroCents,
+      billableCostMicroCents: organizationUsage?.billableCostMicroCents ?? 0,
+      breakdown: organizationUsage?.breakdown ?? [],
+      sesCostMicroCents:
+        organizationUsage?.costMicroCents ??
+        getManagedUsageCostMicroCents(mailUsage.sesCostMicroCents),
     },
   };
 };

@@ -17,12 +17,15 @@ const creditUsageFixture = pgTable("billingCreditUsageEvent", {
     .defaultNow(),
   id: text("id").primaryKey(),
   organizationId: text("organizationId").notNull(),
+  scope: text("scope").notNull().default("team"),
+  userId: text("userId"),
 });
 
 export const testBillingCreditRepair = async (sql: postgres.Sql) => {
   const database = drizzle({ client: sql });
   await sql`CREATE TEMPORARY TABLE "billingCreditUsageEvent" (
     id text PRIMARY KEY, "organizationId" text NOT NULL,
+    scope text NOT NULL DEFAULT 'team', "userId" text,
     "costMicroCents" bigint NOT NULL, "billableCostMicroCents" bigint NOT NULL,
     "createdAt" timestamptz NOT NULL DEFAULT now()
   )`;

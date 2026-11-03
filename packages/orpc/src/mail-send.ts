@@ -98,6 +98,10 @@ const completeMailSend = async (operation: MailSend) => {
           ? storedAccount
           : {
               ...storedAccount,
+              billingOwnerUserId:
+                storedAccount.billingOwnerUserId ??
+                operation.billingUserId ??
+                undefined,
               currentPeriodEnd: new Date(storedAccount.currentPeriodEnd),
               currentPeriodStart: new Date(storedAccount.currentPeriodStart),
             },

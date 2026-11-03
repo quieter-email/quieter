@@ -35,7 +35,10 @@ export const formatBillingProduct = (product: BillingProductId | null) =>
   product === null ? "No paid billing" : BILLING_PRODUCTS[product].name;
 
 export const getBillingStatusMessage = (
-  billing: UserBillingOverview["teams"][number]
+  billing: Pick<
+    UserBillingOverview["teams"][number],
+    "hasUnlimitedAccess" | "hasAccess" | "subscription"
+  >
 ) => {
   if (billing.hasUnlimitedAccess || billing.subscription === null) {
     return null;
@@ -78,6 +81,5 @@ export const hasOrganizationAiAccess = (
     (team) =>
       team.organizationId === organizationId &&
       team.product === "pro" &&
-      team.hasAccess &&
-      (team.hasUnlimitedAccess || (team.usage?.remainingCreditCents ?? 0) > 0)
+      team.hasAccess
   ) === true;

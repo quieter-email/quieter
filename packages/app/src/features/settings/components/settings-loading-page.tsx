@@ -14,13 +14,17 @@ export const SettingsLoadingPage = ({
       <p className="text-caption text-muted-fg">Back to mail</p>
       <div className="space-y-3">
         <p className="text-caption text-muted-fg">Personal</p>
-        {["Account", "Preferences", "Memories", "Connected apps"].map(
-          (label) => (
-            <p className="text-body-sm" key={label}>
-              {label}
-            </p>
-          )
-        )}
+        {[
+          "Account",
+          "Billing",
+          "Preferences",
+          "Memories",
+          "Connected apps",
+        ].map((label) => (
+          <p className="text-body-sm" key={label}>
+            {label}
+          </p>
+        ))}
       </div>
       <div className="space-y-3">
         <p className="text-caption text-muted-fg">Team settings</p>
@@ -32,7 +36,7 @@ export const SettingsLoadingPage = ({
           "Divisions",
           "Domains",
           "Delivery",
-          "Billing & usage",
+          "Usage & limits",
           "API keys",
         ].map((label) => (
           <p className="text-body-sm" key={label}>

@@ -8,9 +8,10 @@ import {
   mailbox,
   organization,
   organizationMailSendIdempotency,
+  organizationMailUsageSettings,
   user,
 } from "@quieter/database/schema";
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, or, sql } from "drizzle-orm";
 import {
   afterAll,
   afterEach,
@@ -113,6 +114,20 @@ describe.skipIf(state.databaseUrl === undefined)(
     beforeEach(async () => {
       vi.clearAllMocks();
       await db
+        .delete(billingCreditUsageEvent)
+        .where(
+          or(
+            inArray(billingCreditUsageEvent.organizationId, organizationIds),
+            inArray(
+              billingCreditUsageEvent.sourceOrganizationId,
+              organizationIds
+            )
+          )
+        );
+      await db
+        .delete(billingSubscription)
+        .where(eq(billingSubscription.userId, "g04-user"));
+      await db
         .delete(organization)
         .where(inArray(organization.id, organizationIds));
       await db.insert(organization).values(
@@ -132,6 +147,14 @@ describe.skipIf(state.databaseUrl === undefined)(
         provider: "gmail",
         updatedAt: new Date(),
       });
+      await db.insert(organizationMailUsageSettings).values(
+        organizationIds.map((organizationId) => ({
+          createdAt: new Date(),
+          organizationId,
+          overageEnabled: false,
+          updatedAt: new Date(),
+        }))
+      );
       state.entitlement.mockResolvedValue({
         account,
         hasAccess: true,
@@ -149,6 +172,20 @@ describe.skipIf(state.databaseUrl === undefined)(
     afterEach(() => vi.unstubAllGlobals());
 
     afterAll(async () => {
+      await db
+        .delete(billingCreditUsageEvent)
+        .where(
+          or(
+            inArray(billingCreditUsageEvent.organizationId, organizationIds),
+            inArray(
+              billingCreditUsageEvent.sourceOrganizationId,
+              organizationIds
+            )
+          )
+        );
+      await db
+        .delete(billingSubscription)
+        .where(eq(billingSubscription.userId, "g04-user"));
       await db
         .delete(organization)
         .where(inArray(organization.id, organizationIds));
@@ -274,7 +311,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       const input = await recoveryDecision();
       await expect(
         runAiCreditRecovery({ ...input, organizationId: "g04-destination" })
-      ).rejects.toThrow(/identity|confirmation|changed/u);
+      ).rejects.toThrow(/identity|confirmation|changed|unavailable/u);
       await expect(
         runAiCreditRecovery({ ...input, confirmation: "yes" })
       ).rejects.toThrow(/identity|confirmation|changed/u);
@@ -612,9 +649,20 @@ describe.skipIf(state.databaseUrl === undefined)(
       await expect(reserveAiCreditUsage(context)).rejects.toBeInstanceOf(
         AiCreditAdmissionBusyError
       );
+      await expect(
+        reserveAiCreditUsage({
+          ...context,
+          account: { ...account, creditAmountCents: 0 },
+        })
+      ).rejects.toBeInstanceOf(AiCreditAdmissionBusyError);
       const exhausted = await reserveAiCreditUsage({
         ...context,
-        account: { ...account, creditAmountCents: 0 },
+        account: {
+          ...account,
+          creditAmountCents: 0,
+          organizationId: "g04-destination",
+        },
+        organizationId: "g04-destination",
       }).catch((error: unknown) => error);
       expect(exhausted).toMatchObject({ code: "FORBIDDEN" });
       expect(exhausted).not.toBeInstanceOf(AiCreditAdmissionBusyError);
@@ -944,7 +992,7 @@ describe.skipIf(state.databaseUrl === undefined)(
           polarEventReportedAt: null,
         });
         const result = await syncUnreportedBillingCreditUsage();
-        const eligible = period === "current" || period === "expired-renewing";
+        const eligible = period === "current";
         expect(result.synced).toBe(eligible ? 1 : 0);
         expect(state.ingest).toHaveBeenCalledTimes(eligible ? 1 : 0);
         await expect(getOutstandingAiCreditReservations(account)).resolves.toBe(

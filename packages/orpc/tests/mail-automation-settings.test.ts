@@ -97,8 +97,10 @@ describe("mail automation settings", () => {
     fixtures.credits.mockReset().mockResolvedValue({
       billableCostMicroCents: 10,
       breakdown: [],
+      chargeableCostMicroCents: 10,
       costMicroCents: 10,
       creditAmountMicroCents: 10,
+      organizations: [],
     });
   });
 

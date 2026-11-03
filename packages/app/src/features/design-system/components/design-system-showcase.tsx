@@ -691,10 +691,38 @@ export const DesignSystemShowcase = () => {
 
         <Section
           title="Usage summary"
-          description="Sample usage rendered by the same summary as Billing & usage."
+          description="Sample shared account usage. Hover or focus a category for each team's contribution, or a team for its breakdown."
         >
           <ManagedUsageSummary
             includedUsageCents={2000}
+            organizations={[
+              {
+                breakdown: [
+                  { costCents: 365, kind: "aiChat" },
+                  { costCents: 95, kind: "aiMemory" },
+                  { costCents: 48, kind: "importance" },
+                  { costCents: 62, kind: "autoLabel" },
+                  { costCents: 56, kind: "inboundMail" },
+                  { costCents: 84, kind: "outboundMail" },
+                ],
+                costCents: 710,
+                organizationId: "sample-studio",
+                organizationName: "Design studio",
+              },
+              {
+                breakdown: [
+                  { costCents: 200, kind: "aiChat" },
+                  { costCents: 50, kind: "aiMemory" },
+                  { costCents: 40, kind: "importance" },
+                  { costCents: 50, kind: "autoLabel" },
+                  { costCents: 40, kind: "inboundMail" },
+                  { costCents: 94, kind: "outboundMail" },
+                ],
+                costCents: 474,
+                organizationId: "sample-project",
+                organizationName: "Side project",
+              },
+            ]}
             rates={{
               attachmentDataPerGbUsd: 0.24,
               inboundProcessingPerThousandUsd: 0.18,
