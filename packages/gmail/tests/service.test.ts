@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vite-plus/test";
 import {
   extractListUnsubscribeTargets,
   getMessageWithDetails,
+  getGmailMessageMetadata,
   getGmailMessageCount,
   getGmailProfile,
   getMailboxSyncDelta,
@@ -245,6 +246,76 @@ describe(getGmailProfile, () => {
 });
 
 describe(getGmailMessageThreadAssociations, () => {
+  test.each(["single", "batch"])(
+    "returns a long %s retry deadline without waiting inside the request",
+    async (resource) => {
+      const controller = new AbortController();
+      const delaySeconds = 60 * 60;
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+        async () =>
+          await resolveResponse(
+            resource === "single"
+              ? Response.json(
+                  { error: { message: "Mailbox is temporarily busy." } },
+                  {
+                    headers: { "Retry-After": String(delaySeconds) },
+                    status: 429,
+                  }
+                )
+              : new Response(
+                  createIdentifiedBatchResponse("metadata", [
+                    {
+                      body: {
+                        error: { message: "Mailbox is temporarily busy." },
+                      },
+                      contentId: "message-0",
+                      headers: { "Retry-After": String(delaySeconds) },
+                      status: 429,
+                    },
+                  ]),
+                  {
+                    headers: {
+                      "content-type": "multipart/mixed; boundary=metadata",
+                    },
+                  }
+                )
+          )
+      );
+      vi.useFakeTimers();
+      let settled = false;
+      const pending = (async () => {
+        try {
+          await (resource === "single"
+            ? getGmailMessageMetadata("token", "a", controller.signal)
+            : getGmailMessageThreadAssociations(
+                "token",
+                ["a"],
+                controller.signal
+              ));
+          return null;
+        } catch (error) {
+          return error;
+        } finally {
+          settled = true;
+        }
+      })();
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toBeTruthy();
+        await expect(pending).resolves.toMatchObject({
+          retryAfterMs: delaySeconds * 1000,
+          status: 429,
+        });
+        expect(fetchMock).toHaveBeenCalledOnce();
+      } finally {
+        controller.abort();
+        await pending;
+        vi.useRealTimers();
+        fetchMock.mockRestore();
+      }
+    }
+  );
+
   test("preserves structured throttling metadata from a failed batch request", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(

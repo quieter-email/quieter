@@ -1,4 +1,8 @@
+import { setImmediate } from "node:timers/promises";
+
+import { ORPCError } from "@orpc/server";
 import type { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
+import { AiCreditAdmissionBusyError } from "@quieter/billing/ai-credit-errors";
 import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import type {
   getMessageWithDetails,
@@ -14,6 +18,7 @@ import { getTableName } from "drizzle-orm";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import * as aiMemory from "../src/ai-memory";
+import * as aiMemoryCapture from "../src/ai-memory-capture";
 import type { runAuthorizedGmailMailbox } from "../src/gmail-mailbox-access";
 import {
   listGmailPubSubMaintenanceJobs,
@@ -24,7 +29,10 @@ import type { getMailAutomationAiBudgetStatus } from "../src/mail-automation/ai-
 import { MAIL_AUTOMATION_AI_PAUSED_MESSAGE } from "../src/mail-automation/ai-budget";
 import type { loadMailAutoLabelHistory } from "../src/mail-automation/history";
 import type { processGmailMailCapture } from "../src/mail-capture";
-import type { processMailVerificationCode } from "../src/verification-codes";
+import type {
+  listPendingMailboxVerificationCodeMessageIds,
+  processMailVerificationCode,
+} from "../src/verification-codes";
 
 type Row = Record<string, unknown>;
 type Predicate = (row: Row, outerRow?: Row) => boolean;
@@ -34,12 +42,14 @@ const fixtures = vi.hoisted(() => ({
   budget: vi.fn<() => Promise<BudgetStatus>>(),
   capture: vi.fn<typeof processGmailMailCapture>(),
   classify: vi.fn<typeof classifyMailMessage>(),
+  eventReadFailure: null as Error | null,
   getMessage: vi.fn<typeof getMessageWithDetails>(),
   history: vi.fn<typeof loadMailAutoLabelHistory>(),
   listHistory: vi.fn<typeof listGmailAddedMessageHistoryPage>(),
   mailboxes: [] as Row[],
   mutate: vi.fn<typeof mutateGmailMessage>(),
   pendingCodeMessageIds: [] as string[],
+  pendingCodeRead: vi.fn<typeof listPendingMailboxVerificationCodeMessageIds>(),
   processCode: vi.fn<typeof processMailVerificationCode>(),
   reported: vi.fn<ErrorReporter>(),
   rows: [] as Row[],
@@ -118,9 +128,11 @@ vi.mock("@quieter/database/client", () => {
       }),
       select: (fields?: Record<string, { name: string }>) => {
         let rows: Row[] = [];
+        let tableName: string | undefined;
         const predicates: Predicate[] = [];
         const query = {
           from: (table: Parameters<typeof getTableName>[0]) => {
+            tableName = getTableName(table);
             if (getTableName(table) === "gmailAutoLabelEvent") {
               ({ rows } = fixtures);
             } else if (getTableName(table) === "gmailWatchState") {
@@ -137,8 +149,14 @@ vi.mock("@quieter/database/client", () => {
             return query;
           },
           leftJoin: () => query,
-          limit: async (limit: number) =>
-            rows
+          limit: async (limit: number) => {
+            if (
+              tableName === "gmailAutoLabelEvent" &&
+              fixtures.eventReadFailure !== null
+            ) {
+              throw fixtures.eventReadFailure;
+            }
+            return rows
               .filter((row) => predicates.every((predicate) => predicate(row)))
               .slice(0, limit)
               .map((row) =>
@@ -150,7 +168,8 @@ vi.mock("@quieter/database/client", () => {
                       ])
                     )
                   : row
-              ),
+              );
+          },
           matches: (outerRow: Row) =>
             rows.some((row) =>
               predicates.every((predicate) => predicate(row, outerRow))
@@ -228,8 +247,7 @@ vi.mock(import("../src/mail-automation/history"), () => ({
 }));
 
 vi.mock(import("../src/verification-codes"), () => ({
-  listPendingMailboxVerificationCodeMessageIds: async () =>
-    fixtures.pendingCodeMessageIds,
+  listPendingMailboxVerificationCodeMessageIds: fixtures.pendingCodeRead,
   processMailVerificationCode: fixtures.processCode,
   reportPendingMailboxVerificationCodeUsage: vi.fn<() => Promise<void>>(),
 }));
@@ -299,6 +317,10 @@ describe("Gmail automation retry recovery", () => {
       recoveryPageToken: null,
     });
     fixtures.pendingCodeMessageIds.length = 0;
+    fixtures.pendingCodeRead
+      .mockReset()
+      .mockResolvedValue(fixtures.pendingCodeMessageIds);
+    fixtures.eventReadFailure = null;
     fixtures.processCode.mockReset().mockResolvedValue();
     fixtures.budget.mockReset().mockResolvedValue({
       allowed: true,
@@ -379,6 +401,127 @@ describe("Gmail automation retry recovery", () => {
     expect(event.appliedAt).toBeNull();
     expect(Number(event.nextAttemptAt)).toBeGreaterThanOrEqual(retryAfter);
     expect(fixtures.reported).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    {
+      description: "unexpected",
+      failure: new Error("Synthetic memory store failure."),
+      longerMemory: false,
+      report: true,
+    },
+    {
+      description: "shorter throttle",
+      failure: Object.assign(new Error("Mailbox is temporarily busy."), {
+        retryAfterMs: 30_000,
+        status: 429,
+      }),
+      longerMemory: false,
+      report: false,
+    },
+    {
+      description: "longer throttle",
+      failure: Object.assign(new Error("Mailbox is temporarily busy."), {
+        retryAfterMs: 120_000,
+        status: 429,
+      }),
+      longerMemory: true,
+      report: false,
+    },
+    {
+      description: "authorization",
+      failure: new ORPCError("FORBIDDEN"),
+      longerMemory: false,
+      report: false,
+    },
+    {
+      description: "credit contention",
+      failure: new AiCreditAdmissionBusyError(),
+      longerMemory: false,
+      report: false,
+    },
+  ])(
+    "preserves the longest cooldown alongside a $description sibling failure",
+    async ({ failure: memoryFailure, longerMemory, report }) => {
+      const historyFailure = Object.assign(
+        new Error("Mailbox is temporarily busy."),
+        {
+          retryAfterMs: 60_000,
+          status: 429,
+        }
+      );
+      const memoryCapture = vi
+        .spyOn(aiMemoryCapture, "captureMailboxMessageMemory")
+        .mockRejectedValue(memoryFailure);
+      fixtures.history.mockRejectedValue(historyFailure);
+      try {
+        await expect(
+          retryPendingAutomationMessages({
+            ...input,
+            automationRuntime: {
+              ...input.automationRuntime,
+              getAutoLabelContext: async () => ({
+                ...(await input.automationRuntime.getAutoLabelContext()),
+                availableLabelIds: new Set(["work"]),
+                labels: [
+                  {
+                    description: null,
+                    id: "work",
+                    inclusionCriteria: null,
+                    name: "Work",
+                  },
+                ],
+              }),
+            },
+          })
+        ).rejects.toBe(longerMemory ? memoryFailure : historyFailure);
+        const reportedErrors = fixtures.reported.mock.calls.map(
+          ([error]) => error
+        );
+        expect(reportedErrors).not.toContain(historyFailure);
+        expect(
+          reportedErrors.filter((error) => error === memoryFailure)
+        ).toHaveLength(report ? 1 : 0);
+      } finally {
+        memoryCapture.mockRestore();
+      }
+    }
+  );
+
+  test("leaves no pending code read active when the event read fails", async () => {
+    const codeRead = Promise.withResolvers<string[]>();
+    const failure = new Error("Synthetic pending-event read failure.");
+    fixtures.eventReadFailure = failure;
+    let codeReadStarted = false;
+    let codeReadFinished = false;
+    fixtures.pendingCodeRead.mockImplementation(async () => {
+      codeReadStarted = true;
+      try {
+        return await codeRead.promise;
+      } finally {
+        codeReadFinished = true;
+      }
+    });
+    let settled = false;
+    const pending = (async () => {
+      try {
+        await retryPendingAutomationMessages(input);
+        return null;
+      } catch (error) {
+        return error;
+      } finally {
+        settled = true;
+      }
+    })();
+    try {
+      await setImmediate();
+      expect(settled && codeReadStarted && !codeReadFinished).toBeFalsy();
+    } finally {
+      codeRead.resolve([]);
+      await pending;
+    }
+    await expect(pending).resolves.toBe(failure);
+    expect(codeReadStarted && !codeReadFinished).toBeFalsy();
   });
 
   test("leaves no memory lookup active when history throttling returns", async () => {

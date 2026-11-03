@@ -262,6 +262,8 @@ type ThreadListSummary = {
 const GMAIL_BATCH_MESSAGE_CHUNK_SIZE = 25;
 const GMAIL_METADATA_RETRY_LIMIT = 2;
 const GMAIL_METADATA_RETRY_BASE_DELAY_MS = 250;
+const GMAIL_METADATA_MAX_INLINE_DELAY_MS =
+  GMAIL_METADATA_RETRY_BASE_DELAY_MS * 2 ** GMAIL_METADATA_RETRY_LIMIT;
 const GMAIL_SERVICE_UNAVAILABLE_RETRY_AFTER_MS = 1000 * 5;
 const GMAIL_RATE_LIMIT_REASONS = new Set([
   "dailylimitexceeded",
@@ -1351,6 +1353,7 @@ export const getGmailMessageMetadata = async (
         isErrorWithStatus(error) &&
         error.status === 429 &&
         attempt < GMAIL_METADATA_RETRY_LIMIT &&
+        (error.retryAfterMs ?? 0) <= GMAIL_METADATA_MAX_INLINE_DELAY_MS &&
         !isAborted(signal);
 
       if (!shouldRetry) {
@@ -1454,15 +1457,17 @@ const getGmailMetadataBatch = async <T>(
           status: part.status,
         })
       );
+      const providerRetryAfterMs = part.headers.has("retry-after")
+        ? error.retryAfterMs
+        : undefined;
       if (
         (part.status === 429 || part.status === 503) &&
         attempt === 0 &&
+        (providerRetryAfterMs ?? 0) <= GMAIL_METADATA_MAX_INLINE_DELAY_MS &&
         !isAborted(signal)
       ) {
         retryIndexes.push(index);
-        if (part.headers.has("retry-after")) {
-          retryAfterMs = Math.max(retryAfterMs, error.retryAfterMs ?? 0);
-        }
+        retryAfterMs = Math.max(retryAfterMs, providerRetryAfterMs ?? 0);
         results.push(null);
         continue;
       }
@@ -1474,7 +1479,8 @@ const getGmailMetadataBatch = async <T>(
   }
   if (retryIndexes.length > 0) {
     await sleep(
-      Math.max(1000, retryAfterMs) + Math.floor(Math.random() * 100),
+      Math.max(GMAIL_METADATA_MAX_INLINE_DELAY_MS, retryAfterMs) +
+        Math.floor(Math.random() * 100),
       signal
     );
     const retried = await getGmailMetadataBatch(

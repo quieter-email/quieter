@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { ORPCError } from "@orpc/server";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
 import type { MailAutoLabelCandidate } from "@quieter/ai/classify-gmail-message";
@@ -30,6 +31,7 @@ import {
   mutateGmailMessage,
   watchGmailMailbox,
 } from "@quieter/gmail";
+import type { GmailServiceError } from "@quieter/gmail";
 import { partitionAutoLabelCandidates } from "@quieter/mail/auto-label-matching";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
@@ -80,6 +82,7 @@ import {
 const WATCH_RENEWAL_INTERVAL_MS = 1000 * 60 * 60 * 20;
 const WATCH_EXPIRATION_BUFFER_MS = 1000 * 60 * 60 * 48;
 const PROCESSING_LEASE_MS = 1000 * 60 * 14;
+const MAILBOX_RATE_LIMIT_RETRY_MS = 60_000;
 const HISTORY_RECOVERY_LOOKBACK_MS = 1000 * 60 * 60 * 24 * 7;
 const HISTORY_RECOVERY_OVERLAP_MS = 1000 * 60 * 60;
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
@@ -621,9 +624,37 @@ const processMessageIds = async ({
           })
         : undefined,
     ]);
-    const failed = outcomes.find((outcome) => outcome.status === "rejected");
-    if (failed?.status === "rejected") {
-      throw failed.reason;
+    const failures = new Set<unknown>();
+    let throttled: GmailServiceError | undefined;
+    for (const outcome of outcomes) {
+      if (outcome.status === "rejected") {
+        const error: unknown = outcome.reason;
+        failures.add(error);
+        if (
+          isGmailRateLimitedError(error) &&
+          (throttled === undefined ||
+            (error.retryAfterMs ?? MAILBOX_RATE_LIMIT_RETRY_MS) >
+              (throttled.retryAfterMs ?? MAILBOX_RATE_LIMIT_RETRY_MS))
+        ) {
+          throttled = error;
+        }
+      }
+    }
+    if (throttled !== undefined) {
+      for (const failure of failures) {
+        if (
+          !isGmailRateLimitedError(failure) &&
+          !isAiCreditAdmissionBusy(failure) &&
+          !(failure instanceof ORPCError && failure.status < 500)
+        ) {
+          reportError(failure, { operation: "gmail-sync:message-work" });
+        }
+      }
+      throw throttled;
+    }
+    if (failures.size > 0) {
+      const [failure] = failures;
+      throw failure;
     }
   }
 };
@@ -644,33 +675,32 @@ export const retryPendingAutomationMessages = async ({
   userId: string;
 }) => {
   const now = new Date();
-  const [autoLabelEvents, pendingCodeMessageIds] = await Promise.all([
-    autoLabelEnabled
-      ? db
-          .select({
-            gmailMessageId: gmailAutoLabelEvent.gmailMessageId,
-            nextAttemptAt: gmailAutoLabelEvent.nextAttemptAt,
-          })
-          .from(gmailAutoLabelEvent)
-          .where(
-            and(
-              eq(gmailAutoLabelEvent.mailboxId, mailboxId),
-              isNull(gmailAutoLabelEvent.appliedAt),
-              or(
-                isNull(gmailAutoLabelEvent.nextAttemptAt),
-                lte(gmailAutoLabelEvent.nextAttemptAt, now),
-                autoLabelBudgetDeferred
-              )
+  const autoLabelEvents = autoLabelEnabled
+    ? await db
+        .select({
+          gmailMessageId: gmailAutoLabelEvent.gmailMessageId,
+          nextAttemptAt: gmailAutoLabelEvent.nextAttemptAt,
+        })
+        .from(gmailAutoLabelEvent)
+        .where(
+          and(
+            eq(gmailAutoLabelEvent.mailboxId, mailboxId),
+            isNull(gmailAutoLabelEvent.appliedAt),
+            or(
+              isNull(gmailAutoLabelEvent.nextAttemptAt),
+              lte(gmailAutoLabelEvent.nextAttemptAt, now),
+              autoLabelBudgetDeferred
             )
           )
-          .orderBy(
-            desc(isNull(gmailAutoLabelEvent.nextAttemptAt)),
-            asc(gmailAutoLabelEvent.nextAttemptAt)
-          )
-          .limit(20)
-      : [],
-    listPendingMailboxVerificationCodeMessageIds(mailboxId, 20),
-  ]);
+        )
+        .orderBy(
+          desc(isNull(gmailAutoLabelEvent.nextAttemptAt)),
+          asc(gmailAutoLabelEvent.nextAttemptAt)
+        )
+        .limit(20)
+    : [];
+  const pendingCodeMessageIds =
+    await listPendingMailboxVerificationCodeMessageIds(mailboxId, 20);
   const budgetStatus = autoLabelEvents.some(
     (event) => event.nextAttemptAt !== null && event.nextAttemptAt > now
   )
@@ -1021,7 +1051,8 @@ const processMailboxHistory = async ({
     await recordWatchError(mailboxId, error);
     if (isGmailRateLimitedError(error)) {
       retryAt = new Date(
-        Date.now() + Math.max(1000, error.retryAfterMs ?? 60_000)
+        Date.now() +
+          Math.max(1000, error.retryAfterMs ?? MAILBOX_RATE_LIMIT_RETRY_MS)
       );
       return { busy: true, needsContinuation: true };
     }
