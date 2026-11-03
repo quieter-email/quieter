@@ -125,7 +125,7 @@ const colorModeScript = (
   initialColorMode: ConfigColorMode,
   forcedTheme?: ColorMode
 ) =>
-  `try{const stored=localStorage.getItem("${COLOR_MODE_STORAGE_KEY}");const configured=stored==="light"||stored==="dark"||stored==="system"?stored:"${initialColorMode}";const mode=${forcedTheme === undefined ? "false" : "true"}?"${forcedTheme ?? "light"}":configured==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):configured;document.documentElement.classList.add(mode);document.documentElement.style.colorScheme=mode;const themes=${JSON.stringify(COLOR_THEMES.map(({ name, colorMode }) => ({ colorMode, name })))};const saved=localStorage.getItem("quieter-theme-"+mode);const theme=themes.find(t=>t.name===saved&&t.colorMode===mode)?.name||mode;if(${forcedTheme !== undefined}||theme===mode)delete document.documentElement.dataset.colorTheme;else document.documentElement.dataset.colorTheme=theme}catch{}`;
+  `try{const stored=localStorage.getItem("${COLOR_MODE_STORAGE_KEY}");const configured=stored==="light"||stored==="dark"||stored==="system"?stored:"${initialColorMode}";const mode=${forcedTheme === undefined ? "false" : "true"}?"${forcedTheme ?? "light"}":configured==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):configured;document.documentElement.classList.add(mode);document.documentElement.style.colorScheme=mode;const themes=${JSON.stringify(COLOR_THEMES.map(({ name, colorMode }) => ({ colorMode, name })))};const saved=localStorage.getItem("quieter-theme-"+mode);const theme=themes.find(t=>t.name===saved&&t.colorMode===mode)?.name||mode;if(${forcedTheme !== undefined}||configured==="system"||theme===mode)delete document.documentElement.dataset.colorTheme;else document.documentElement.dataset.colorTheme=theme}catch{}`;
 
 export const ColorModeProvider = ({
   children,
@@ -181,12 +181,16 @@ export const ColorModeProvider = ({
     document.documentElement.classList.remove("light", "dark");
     document.documentElement.classList.add(colorMode);
     document.documentElement.style.colorScheme = colorMode;
-    if (forcedTheme || themes[colorMode] === colorMode) {
+    if (
+      forcedTheme ||
+      configColorMode === "system" ||
+      themes[colorMode] === colorMode
+    ) {
       delete document.documentElement.dataset.colorTheme;
     } else {
       document.documentElement.dataset.colorTheme = themes[colorMode];
     }
-  }, [colorMode, forcedTheme, themes]);
+  }, [colorMode, configColorMode, forcedTheme, themes]);
 
   const setColorMode = useCallback((value: ConfigColorMode) => {
     try {
@@ -209,11 +213,9 @@ export const ColorModeProvider = ({
         /* The preference remains available for this session. */
       }
       setThemes((current) => ({ ...current, [theme.colorMode]: name }));
-      if (configColorMode !== "system" || theme.colorMode !== colorMode) {
-        setColorMode(theme.colorMode);
-      }
+      setColorMode(theme.colorMode);
     },
-    [colorMode, configColorMode, setColorMode]
+    [setColorMode]
   );
 
   const cycleColorMode = useCallback(() => {

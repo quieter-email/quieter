@@ -8,22 +8,37 @@ import {
   SelectGroupLabel,
   SelectItem,
   SelectList,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "./select";
 
 export const ThemePicker = () => {
-  const { colorMode, isMounted, setTheme, themes } = useColorMode();
-  const selectedTheme = isMounted ? themes[colorMode] : null;
+  const {
+    colorMode,
+    configColorMode,
+    isMounted,
+    setColorMode,
+    setTheme,
+    themes,
+  } = useColorMode();
+  const currentTheme =
+    configColorMode === "system" ? "system" : themes[colorMode];
+  const selectedTheme = isMounted ? currentTheme : null;
 
   return (
     <Select
-      items={COLOR_THEMES.map((theme) => ({
-        label: theme.label,
-        value: theme.name,
-      }))}
+      items={[
+        ...COLOR_THEMES.map((theme) => ({
+          label: theme.label,
+          value: theme.name,
+        })),
+        { label: "System", value: "system" },
+      ]}
       onValueChange={(value) => {
-        if (typeof value === "string") {
+        if (value === "system") {
+          setColorMode("system");
+        } else if (typeof value === "string") {
           setTheme(value);
         }
       }}
@@ -33,8 +48,10 @@ export const ThemePicker = () => {
         {selectedTheme && (
           <span
             aria-hidden="true"
-            className="theme-swatch size-4 shrink-0 rounded-sm border border-border"
-            data-color-theme={selectedTheme}
+            className="theme-swatch size-4 shrink-0 rounded-full"
+            data-color-theme={
+              selectedTheme === "system" ? colorMode : selectedTheme
+            }
           />
         )}
         <SelectValue placeholder="Theme" />
@@ -52,7 +69,7 @@ export const ThemePicker = () => {
                     <span className="flex items-center gap-2">
                       <span
                         aria-hidden="true"
-                        className="theme-swatch size-4 shrink-0 rounded-sm border border-border"
+                        className="theme-swatch size-4 shrink-0 rounded-full"
                         data-color-theme={theme.name}
                       />
                       {theme.label}
@@ -62,6 +79,17 @@ export const ThemePicker = () => {
               )}
             </SelectGroup>
           ))}
+          <SelectSeparator />
+          <SelectItem value="system">
+            <span className="flex items-center gap-2">
+              <span
+                aria-hidden="true"
+                className="theme-swatch size-4 shrink-0 rounded-full"
+                data-color-theme={colorMode}
+              />
+              System
+            </span>
+          </SelectItem>
         </SelectList>
       </SelectContent>
     </Select>
