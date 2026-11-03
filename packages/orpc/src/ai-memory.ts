@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 import { ORPCError } from "@orpc/server";
 import {
@@ -354,6 +355,7 @@ const toEditorMemory = (record: MemoryRow): AiMemoryEditorMemory => ({
   importance: record.importance,
   key: record.key,
   kind: record.kind,
+  source: record.source,
   status: record.status,
   summary: record.summary,
   topics: record.metadata.topics ?? [],
@@ -452,7 +454,7 @@ const listConsolidationMemories = async ({
   } else if (events.some(({ kind }) => kind === "auto_label_feedback")) {
     categories = ["labeling", "preferences", "activity"];
   }
-  const document = sql`to_tsvector('simple', ${aiMemory.content} || ' ' || ${aiMemory.summary})`;
+  const document = sql`to_tsvector('simple', ${aiMemory.content} || ' ' || ${aiMemory.summary} || ' ' || ${aiMemory.key} || ' ' || coalesce(${aiMemory.metadata}->'topics', '[]'::jsonb)::text)`;
   const textQuery = sql`to_tsquery('simple', ${tokens.join(" | ") || "quieter_empty_observation"})`;
   const contactMatch =
     contacts.length === 0
@@ -521,7 +523,7 @@ const listConsolidationMemories = async ({
   ]);
   return [
     ...new Map(
-      [...matchingContacts, ...matchingText, ...general].map((memory) => [
+      [...general, ...matchingContacts, ...matchingText].map((memory) => [
         memory.id,
         memory,
       ])
@@ -555,6 +557,18 @@ const buildMemoryValues = ({
   summary: operation.summary,
 });
 
+const getMemoryFeedbackMembers = (metadata: AiMemoryMetadata) => {
+  if (metadata.feedbackMembers) {
+    return metadata.feedbackMembers;
+  }
+  return typeof metadata.labelId === "string" &&
+    "feedbackSource" in metadata &&
+    (typeof metadata.feedbackSource === "string" ||
+      metadata.feedbackSource === null)
+    ? [{ labelId: metadata.labelId, source: metadata.feedbackSource }]
+    : [];
+};
+
 const eraseAiMemoryRecords = async ({
   executor,
   memories,
@@ -567,38 +581,109 @@ const eraseAiMemoryRecords = async ({
   if (memories.length === 0) {
     return;
   }
-  const ids = memories.map(({ id }) => id);
+  const requestedFeedback = memories.flatMap(({ metadata }) => {
+    const { sourceMailboxId } = metadata;
+    return typeof sourceMailboxId === "string"
+      ? getMemoryFeedbackMembers(metadata).map((member) => ({
+          ...member,
+          mailboxId: sourceMailboxId,
+        }))
+      : [];
+  });
+  const archived =
+    requestedFeedback.length === 0
+      ? []
+      : await executor
+          .select(memoryColumns)
+          .from(aiMemory)
+          .where(
+            and(
+              eq(aiMemory.scopeKey, scope.scopeKey),
+              eq(aiMemory.userId, scope.userId),
+              eq(aiMemory.status, "archived"),
+              eq(aiMemory.kind, "learned"),
+              eq(aiMemory.source, "feedback"),
+              like(aiMemory.key, "feedback:auto_label:%"),
+              eq(sql`${aiMemory.metadata}->>'category'`, "labeling")
+            )
+          );
+  const erased = [
+    ...new Map(
+      [
+        ...memories,
+        ...archived.filter(({ metadata }) =>
+          requestedFeedback.some(
+            (member) =>
+              member.mailboxId === metadata.sourceMailboxId &&
+              getMemoryFeedbackMembers(metadata).some(
+                (candidate) =>
+                  candidate.labelId === member.labelId &&
+                  candidate.source === member.source
+              )
+          )
+        ),
+      ].map((memory) => [memory.id, memory])
+    ).values(),
+  ];
+  const ids = erased.map(({ id }) => id);
   const historyCondition = and(
     eq(aiMemoryChangeSet.userId, scope.userId),
-    sql`exists (
+    or(
+      sql`exists (
       select 1 from jsonb_array_elements(${aiMemoryChangeSet.changes}) as change
       where change->>'memoryId' in (${sql.join(
         ids.map((id) => sql`${id}`),
         sql`, `
       )})
-    )`
+    )`,
+      ...requestedFeedback.map((member) =>
+        and(
+          eq(aiMemoryChangeSet.source, "feedback"),
+          eq(aiMemoryChangeSet.mailboxId, member.mailboxId),
+          sql`exists (
+            select 1
+            from jsonb_array_elements(${aiMemoryChangeSet.changes}) as change,
+              lateral (values (change->'before'), (change->'after')) as snapshots(snapshot)
+            where snapshot->>'kind' = 'learned'
+              and starts_with(snapshot->>'key', 'feedback:auto_label:')
+              and snapshot->'metadata' @> ${JSON.stringify({
+                category: "labeling",
+                sourceMailboxId: member.mailboxId,
+              } satisfies AiMemoryMetadata)}::jsonb
+              and (
+                snapshot->'metadata' @> ${JSON.stringify({
+                  feedbackMembers: [
+                    { labelId: member.labelId, source: member.source },
+                  ],
+                })}::jsonb
+                or (
+                  not (snapshot->'metadata' ? 'feedbackMembers')
+                  and snapshot->'metadata' @> ${JSON.stringify({
+                    feedbackSource: member.source,
+                    labelId: member.labelId,
+                  } satisfies AiMemoryMetadata)}::jsonb
+                )
+              )
+          )`
+        )
+      )
+    )
   );
-  for (const memory of memories) {
-    const { labelId, sourceMailboxId, feedbackSource } = memory.metadata;
-    if (
-      "feedbackSource" in memory.metadata &&
-      typeof labelId === "string" &&
-      typeof sourceMailboxId === "string"
-    ) {
-      await executor
-        .delete(mailAutoLabelFeedback)
-        .where(
-          and(
-            eq(mailAutoLabelFeedback.createdByUserId, scope.userId),
-            eq(mailAutoLabelFeedback.mailboxId, sourceMailboxId),
-            eq(mailAutoLabelFeedback.labelId, labelId),
-            typeof feedbackSource === "string"
-              ? eq(mailAutoLabelFeedback.source, feedbackSource)
-              : isNull(mailAutoLabelFeedback.source)
-          )
-        );
-    }
+  for (const member of requestedFeedback) {
+    await executor
+      .delete(mailAutoLabelFeedback)
+      .where(
+        and(
+          eq(mailAutoLabelFeedback.createdByUserId, scope.userId),
+          eq(mailAutoLabelFeedback.mailboxId, member.mailboxId),
+          eq(mailAutoLabelFeedback.labelId, member.labelId),
+          member.source === null
+            ? isNull(mailAutoLabelFeedback.source)
+            : eq(mailAutoLabelFeedback.source, member.source)
+        )
+      );
   }
+
   const history = await executor
     .select({ sourceEventId: aiMemoryChangeSet.sourceEventId })
     .from(aiMemoryChangeSet)
@@ -606,7 +691,7 @@ const eraseAiMemoryRecords = async ({
   const sourceIds = [
     ...new Set(
       [
-        ...memories.map(({ sourceReference }) => sourceReference),
+        ...erased.map(({ sourceReference }) => sourceReference),
         ...history.map(({ sourceEventId }) => sourceEventId),
       ].filter((id): id is string => id !== null)
     ),
@@ -642,7 +727,19 @@ const eraseAiMemoryRecords = async ({
     );
 };
 
-const applyAiMemoryPlan = async ({
+class AiMemoryRecallRequiredError extends ORPCError<"CONFLICT", undefined> {
+  readonly memories: MemoryRow[];
+
+  constructor(memories: MemoryRow[]) {
+    super("CONFLICT", {
+      message: "Recall the existing concepts before updating memory.",
+    });
+    this.name = "AiMemoryRecallRequiredError";
+    this.memories = memories;
+  }
+}
+
+const applyAiMemoryPlanOnce = async ({
   actorUserId,
   allowDirectUserFactUpdates = false,
   changeSetSource,
@@ -677,21 +774,25 @@ const applyAiMemoryPlan = async ({
     sourceEventMailboxId === undefined
       ? null
       : `labeling:${createHash("sha256").update(sourceEventMailboxId).digest("hex")}:`;
-  const operations = plan.operations.map((operation) => {
-    if (
-      mailboxKeyPrefix === null ||
-      operation.category !== "labeling" ||
-      operation.action !== "add" ||
-      operation.targetId !== null ||
-      operation.key.startsWith(mailboxKeyPrefix)
-    ) {
-      return operation;
-    }
-    return {
-      ...operation,
-      key: `${mailboxKeyPrefix}${createHash("sha256").update(operation.key).digest("hex")}`,
-    };
-  });
+  const operations = plan.operations
+    .filter(
+      (operation) => source === "explicit" || operation.category !== "labeling"
+    )
+    .map((operation) => {
+      if (
+        mailboxKeyPrefix === null ||
+        operation.category !== "labeling" ||
+        operation.action !== "add" ||
+        operation.targetId !== null ||
+        operation.key.startsWith(mailboxKeyPrefix)
+      ) {
+        return operation;
+      }
+      return {
+        ...operation,
+        key: `${mailboxKeyPrefix}${createHash("sha256").update(operation.key).digest("hex")}`,
+      };
+    });
   const appliedChangeSet = await (executor ?? db).transaction(async (tx) => {
     const config = await lockAiMemoryScope(tx, scope);
     if (config.revision !== expectedRevision) {
@@ -790,13 +891,53 @@ const applyAiMemoryPlan = async ({
       });
     }
 
+    const unseen = current.filter(
+      (record) =>
+        expectedVersions !== undefined &&
+        !expectedVersions.has(record.id) &&
+        (source === "explicit" || record.metadata.category !== "labeling") &&
+        (source === "explicit" ||
+          typeof record.metadata.sourceMailboxId !== "string" ||
+          record.metadata.sourceMailboxId === sourceEventMailboxId) &&
+        operations.some(
+          (operation) =>
+            operation.action === "add" &&
+            operation.targetId === null &&
+            operation.key === record.key &&
+            JSON.stringify([
+              operation.content,
+              operation.kind,
+              operation.category ?? "preferences",
+              operation.correspondents ?? [],
+            ]) !==
+              JSON.stringify([
+                record.content,
+                record.kind,
+                record.metadata.category ?? "preferences",
+                record.metadata.correspondents ?? [],
+              ])
+        )
+    );
+    if (unseen.length > 0) {
+      throw new AiMemoryRecallRequiredError(unseen);
+    }
+
     const forgotten: MemoryRow[] = [];
     const seenTargets = new Set<string>();
-    for (const proposedOperation of operations) {
-      let operation = proposedOperation;
-      let target = operation.targetId
+    for (const operation of operations) {
+      const target = operation.targetId
         ? recordsById.get(operation.targetId)
         : recordsByKey.get(operation.key);
+      if (source !== "explicit" && target?.metadata.category === "labeling") {
+        continue;
+      }
+      if (
+        source !== "explicit" &&
+        typeof target?.metadata.sourceMailboxId === "string" &&
+        target.metadata.sourceMailboxId !== sourceEventMailboxId
+      ) {
+        continue;
+      }
       const targetKey = target?.id ?? `new:${operation.key}`;
       if (seenTargets.has(targetKey)) {
         throw new ORPCError("CONFLICT", {
@@ -811,43 +952,7 @@ const applyAiMemoryPlan = async ({
         expectedVersions !== undefined &&
         !expectedVersions.has(target.id)
       ) {
-        const fact = JSON.stringify([
-          operation.content,
-          operation.kind,
-          operation.category ?? "preferences",
-          operation.correspondents ?? [],
-        ]);
-        if (
-          fact ===
-          JSON.stringify([
-            target.content,
-            target.kind,
-            target.metadata.category ?? "preferences",
-            target.metadata.correspondents ?? [],
-          ])
-        ) {
-          continue;
-        }
-        const suffix = `:add:${createHash("sha256").update(operation.key).update(fact).digest("hex")}`;
-        operation = {
-          ...operation,
-          key: `${operation.key.slice(0, 200 - suffix.length)}${suffix}`,
-        };
-        const [existing] = await tx
-          .select({ id: aiMemory.id })
-          .from(aiMemory)
-          .where(
-            and(
-              eq(aiMemory.scopeKey, scope.scopeKey),
-              eq(aiMemory.userId, scope.userId),
-              eq(aiMemory.key, operation.key)
-            )
-          )
-          .limit(1);
-        if (existing !== undefined) {
-          continue;
-        }
-        target = undefined;
+        continue;
       }
       if (
         existingEditsOnly &&
@@ -1047,11 +1152,51 @@ const applyAiMemoryPlan = async ({
   return appliedChangeSet.changeSet;
 };
 
+const applyAiMemoryPlan = async (
+  input: Parameters<typeof applyAiMemoryPlanOnce>[0] & {
+    recallAndReplan?: (memories: MemoryRow[]) => Promise<{
+      expectedVersions: ReadonlyMap<string, number>;
+      plan: AiMemoryUpdatePlan;
+    }>;
+  }
+) => {
+  const prepared = { ...input };
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const changeSet = await applyAiMemoryPlanOnce(prepared);
+      return { ...changeSet, answer: prepared.plan.answer };
+    } catch (error) {
+      if (
+        !(error instanceof AiMemoryRecallRequiredError) ||
+        !input.recallAndReplan ||
+        attempt >= 2
+      ) {
+        throw error;
+      }
+      Object.assign(prepared, await input.recallAndReplan(error.memories));
+    }
+  }
+};
+
 const createUsageCollector = () => {
   let collected: AiUsageReport | undefined;
   return {
     collect: (usage: AiUsageReport) => {
-      collected = usage;
+      collected =
+        collected === undefined
+          ? usage
+          : {
+              cacheWriteTokens:
+                collected.cacheWriteTokens + usage.cacheWriteTokens,
+              cachedTokens: collected.cachedTokens + usage.cachedTokens,
+              completionTokens:
+                collected.completionTokens + usage.completionTokens,
+              costUsd:
+                collected.costUsd === undefined || usage.costUsd === undefined
+                  ? undefined
+                  : collected.costUsd + usage.costUsd,
+              promptTokens: collected.promptTokens + usage.promptTokens,
+            };
     },
     usage: () => collected,
   };
@@ -1096,6 +1241,7 @@ const planRequestedAiMemoryUpdate = async ({
   billingOrganizationId,
   mailboxId,
   mode,
+  recalledMemories = [],
   request,
   scope,
   userId,
@@ -1105,11 +1251,21 @@ const planRequestedAiMemoryUpdate = async ({
   billingOrganizationId: string;
   mailboxId: string;
   mode: "request" | "remember";
+  recalledMemories?: MemoryRow[];
   request: string;
   scope: UserMemoryOwner;
   userId: string;
   userMessage?: string | null;
-}) => {
+}): Promise<{
+  expectedRevision: number;
+  expectedVersions: ReadonlyMap<string, number>;
+  plan: AiMemoryUpdatePlan;
+  recallAndReplan: (memories: MemoryRow[]) => Promise<{
+    expectedVersions: ReadonlyMap<string, number>;
+    plan: AiMemoryUpdatePlan;
+  }>;
+  scope: UserMemoryOwner;
+}> => {
   await assertCanUseAi({
     organizationId: billingOrganizationId,
     userId,
@@ -1128,6 +1284,14 @@ const planRequestedAiMemoryUpdate = async ({
           scope,
         })
       : await listScopeMemories(scope.userId);
+  for (const memory of recalledMemories) {
+    const index = current.findIndex(({ id }) => id === memory.id);
+    if (index === -1) {
+      current.push(memory);
+    } else {
+      current[index] = memory;
+    }
+  }
   const plans: AiMemoryUpdatePlan[] = [];
   const requestId = randomUUID();
   const pageSize =
@@ -1189,6 +1353,27 @@ const planRequestedAiMemoryUpdate = async ({
     expectedRevision: config.revision,
     expectedVersions: new Map(current.map(({ id, version }) => [id, version])),
     plan,
+    recallAndReplan: async (memories) => {
+      recalledMemories.push(...memories);
+      const next = await planRequestedAiMemoryUpdate({
+        allowMutations,
+        billingOrganizationId,
+        mailboxId,
+        mode,
+        recalledMemories,
+        request,
+        scope,
+        userId,
+        userMessage,
+      });
+      if (next.expectedRevision !== config.revision) {
+        throw new ORPCError("CONFLICT", {
+          message:
+            "Memory changed while this update was being prepared. Try again.",
+        });
+      }
+      return next;
+    },
     scope,
   };
 };
@@ -1236,7 +1421,7 @@ export const requestAiMemoryUpdate = async ({
     changeSetSource,
     source: "explicit",
   });
-  return { ...changeSet, answer: prepared.plan.answer };
+  return changeSet;
 };
 
 export const recordAiMemoryEvent = async (input: {
@@ -1720,6 +1905,29 @@ export const refreshAiMemoryFromEvent = async ({
   ) {
     return { status: "skipped" as const };
   }
+  if (candidate.kind === "auto_label_feedback") {
+    await db
+      .update(userAiContextEvent)
+      .set({
+        lastError: null,
+        metadata: {},
+        processingAt: null,
+        skippedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(userAiContextEvent.id, candidate.id),
+          isNull(userAiContextEvent.mergedAt),
+          isNull(userAiContextEvent.skippedAt),
+          or(
+            isNull(userAiContextEvent.processingAt),
+            lt(userAiContextEvent.processingAt, new Date(Date.now() - 120_000))
+          )
+        )
+      );
+    return { status: "skipped" as const };
+  }
   const claimedAt = new Date();
   const [event] = await db
     .update(userAiContextEvent)
@@ -2023,22 +2231,41 @@ export const refreshAiMemoryFromEvent = async ({
       mailboxId: event.mailboxId,
       scope,
     });
-    const plan = await planAiMemoryUpdate({
-      billing: await createMailboxAiBillingContext({
-        externalId: `ai-memory-event:${event.id}`,
-        mailboxId: event.mailboxId,
-        usageKind: "aiMemory",
-        userId: event.userId,
-      }),
-      currentMemories: current.map(toEditorMemory),
-      learningGuidance: config.learningPrompt,
+    let planningAttempt = 0;
+    const recallAndReplan = async (memories: MemoryRow[]) => {
+      for (const memory of memories) {
+        const index = current.findIndex(({ id }) => id === memory.id);
+        if (index === -1) {
+          current.push(memory);
+        } else {
+          current[index] = memory;
+        }
+      }
+      planningAttempt += 1;
+      const plan = await planAiMemoryUpdate({
+        billing: await createMailboxAiBillingContext({
+          externalId: `ai-memory-event:${event.id}:plan:${planningAttempt}`,
+          mailboxId: event.mailboxId,
+          usageKind: "aiMemory",
+          userId: event.userId,
+        }),
+        currentMemories: current.map(toEditorMemory),
+        learningGuidance: config.learningPrompt,
 
-      observations,
-      onUsage: usage.collect,
-      request,
-      source: memorySource,
-      userMessages,
-    });
+        observations,
+        onUsage: usage.collect,
+        request,
+        source: memorySource,
+        userMessages,
+      });
+      return {
+        expectedVersions: new Map(
+          current.map(({ id, version }) => [id, version])
+        ),
+        plan,
+      };
+    };
+    const prepared = await recallAndReplan([]);
     const changeSet = await applyAiMemoryPlan({
       actorUserId: event.userId,
       allowDirectUserFactUpdates: events.every(
@@ -2050,10 +2277,8 @@ export const refreshAiMemoryFromEvent = async ({
       ),
       changeSetSource: resolveChangeSetSource(event.kind),
       expectedRevision: config.revision,
-      expectedVersions: new Map(
-        current.map(({ id, version }) => [id, version])
-      ),
-      plan,
+      ...prepared,
+      recallAndReplan,
       scope,
       source: memorySource,
       sourceClaimedAt: claimedAt,
@@ -2302,15 +2527,29 @@ export const replaceAiMemoryFeedback = async ({
         and(
           eq(aiMemory.scopeKey, scope.scopeKey),
           eq(aiMemory.userId, scope.userId),
-          like(aiMemory.key, `${prefix}%`)
+          or(
+            like(aiMemory.key, `${prefix}%`),
+            and(
+              eq(aiMemory.kind, "learned"),
+              ne(aiMemory.source, "explicit"),
+              eq(sql`${aiMemory.metadata}->>'category'`, "labeling"),
+              eq(sql`${aiMemory.metadata}->>'sourceMailboxId'`, mailboxId)
+            )
+          )
         )
       );
     const byKey = new Map(current.map((memory) => [memory.key, memory]));
-    const nextKeys = new Set(feedbackMemories.map((memory) => memory.key));
+    const nextKeys = new Set<string>();
     const applied: AiMemoryChange[] = [];
 
     for (const memory of feedbackMemories) {
-      const { key } = memory;
+      let { key } = memory;
+      let generation = 0;
+      while (byKey.get(key)?.source === "explicit") {
+        generation += 1;
+        key = `${prefix}${createHash("sha256").update(memory.key).update(`:automatic:${generation}`).digest("hex")}`;
+      }
+      nextKeys.add(key);
       const existing = byKey.get(key);
       const values = {
         confidence: memory.confidence,
@@ -2334,9 +2573,6 @@ export const replaceAiMemoryFeedback = async ({
         summary: memory.summary.slice(0, 300),
         updatedAt: now,
       };
-      if (existing?.source === "explicit") {
-        continue;
-      }
       if (existing) {
         const unchanged =
           existing.content === values.content &&
@@ -2344,8 +2580,7 @@ export const replaceAiMemoryFeedback = async ({
           existing.confidence === values.confidence &&
           existing.importance === values.importance &&
           existing.reinforcementCount === values.reinforcementCount &&
-          JSON.stringify(existing.metadata) ===
-            JSON.stringify(values.metadata) &&
+          isDeepStrictEqual(existing.metadata, values.metadata) &&
           existing.status === "active";
         if (unchanged) {
           continue;
