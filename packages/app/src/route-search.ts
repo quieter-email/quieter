@@ -3,6 +3,7 @@ import {
   calendarTimeZoneSchema,
   calendarViewSchema,
 } from "@quieter/calendar";
+import { connectorProviderSchema } from "@quieter/orpc/connector-contracts";
 import { z } from "zod";
 
 import { MAILBOX_WORKSPACE_VIEWS } from "./features/mailbox/domain/mailbox-workspace-view";
@@ -112,6 +113,8 @@ export const settingsSearchSchema = z.object({
   billing: z.enum(["canceled", "success"]).optional(),
   checkoutId: z.uuid().optional(),
   connector: z.enum(["connected", "error"]).optional(),
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- Invalid provider links open the connected apps overview.
+  connectorProvider: connectorProviderSchema.optional().catch(undefined),
   domainConnect: z
     .enum(["canceled", "error", "needs_dns", "verified"])
     .optional(),

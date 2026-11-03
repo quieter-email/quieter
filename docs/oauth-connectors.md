@@ -58,14 +58,14 @@ OAuth registration and secret storage do not deploy the feature. Apply the commi
 
 ## Manual acceptance
 
-1. Sign in at `http://localhost:3000`, open Settings, Connectors, and connect each account. Deny one consent request and verify that settings shows a recoverable failure. Reconnect an existing account, then connect a second account where available.
+1. Sign in at `http://localhost:3000` and open **Settings**, **Connected apps**. Select an app to view its accounts and access information, then select **Connect account**. Deny one consent request and verify that settings shows a recoverable failure. On the app's detail page, reconnect an existing account from its menu, then select **Add account** to connect a second account where available. Verify that the **Connected apps** breadcrumb and browser Back return to the overview.
 2. Open a private chat, choose an account with the `@` picker, and ask for its supported reads. The account mention contains an exact connection ID. A typed provider name alone does not select an account.
 3. Notion: share a disposable parent page, search for it, read its blocks, and follow a child block or cursor. Approve creating a page under that parent, then append a paragraph.
 4. Todoist: list projects, list tasks in a test project, then approve creating, updating and completing a disposable task. Completing a recurring task advances its occurrence.
 5. ClickUp: list workspaces, spaces and lists. Read tasks in a disposable list, then approve creating and updating a test task using one of that list's real statuses.
 6. Outlook Calendar: open Calendar, select the Outlook account, read a date range, then create, edit, move and delete a disposable event without guests. Check an all-day event and a recurring event across a daylight-saving transition. RSVP only to an explicitly selected test invitation.
 7. OneDrive: list files, search by name and read a small UTF-8 text file. Binary documents are listed but not extracted. No file write tools are exposed.
-8. Disconnect an account and verify that its old mention cannot read or write. An account owned by a second local user must also reject access. Verify that declining a proposed write leaves the provider unchanged.
+8. Open an account's menu on its app's detail page and select **Disconnect account**. Cancel the confirmation and verify that the account stays connected. Confirm disconnection and verify that its old mention cannot read or write. An account owned by a second local user must also reject access. Verify that declining a proposed write leaves the provider unchanged.
 
 Local writes are blocked in observation mode. Only after selecting a dedicated test resource, add its exact provider identity to the ignored configuration:
 
