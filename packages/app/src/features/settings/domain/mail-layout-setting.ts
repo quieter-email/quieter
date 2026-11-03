@@ -3,8 +3,8 @@
 import { useSyncExternalStore } from "react";
 
 export const MAIL_LAYOUT_OPTIONS = [
-  { label: "Two panels", value: "two-panels" },
-  { label: "One panel", value: "one-panel" },
+  { label: "Split view", value: "two-panels" },
+  { label: "Full view", value: "one-panel" },
 ] as const;
 
 export type MailLayout = (typeof MAIL_LAYOUT_OPTIONS)[number]["value"];

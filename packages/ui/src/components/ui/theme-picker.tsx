@@ -1,6 +1,13 @@
 "use client";
 
+import {
+  ComputerIcon,
+  Moon02Icon,
+  Sun03Icon,
+} from "@hugeicons/core-free-icons";
+
 import { COLOR_THEMES, useColorMode } from "./color-mode";
+import { Icon } from "./icon";
 import {
   Select,
   SelectContent,
@@ -8,22 +15,38 @@ import {
   SelectGroupLabel,
   SelectItem,
   SelectList,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "./select";
 
 export const ThemePicker = () => {
-  const { colorMode, isMounted, setTheme, themes } = useColorMode();
-  const selectedTheme = isMounted ? themes[colorMode] : null;
+  const {
+    colorMode,
+    configColorMode,
+    isMounted,
+    setColorMode,
+    setTheme,
+    themes,
+  } = useColorMode();
+  const currentTheme =
+    configColorMode === "system" ? "system" : themes[colorMode];
+  const selectedTheme = isMounted ? currentTheme : null;
+  const modeIcon = colorMode === "dark" ? Moon02Icon : Sun03Icon;
 
   return (
     <Select
-      items={COLOR_THEMES.map((theme) => ({
-        label: theme.label,
-        value: theme.name,
-      }))}
+      items={[
+        ...COLOR_THEMES.map((theme) => ({
+          label: theme.label,
+          value: theme.name,
+        })),
+        { label: "System", value: "system" },
+      ]}
       onValueChange={(value) => {
-        if (typeof value === "string") {
+        if (value === "system") {
+          setColorMode("system");
+        } else if (typeof value === "string") {
           setTheme(value);
         }
       }}
@@ -31,11 +54,7 @@ export const ThemePicker = () => {
     >
       <SelectTrigger aria-label="Theme" className="w-44" size="sm">
         {selectedTheme && (
-          <span
-            aria-hidden="true"
-            className="theme-swatch size-4 shrink-0 rounded-sm border border-border"
-            data-color-theme={selectedTheme}
-          />
+          <Icon icon={selectedTheme === "system" ? ComputerIcon : modeIcon} />
         )}
         <SelectValue placeholder="Theme" />
       </SelectTrigger>
@@ -50,11 +69,7 @@ export const ThemePicker = () => {
                 (theme) => (
                   <SelectItem key={theme.name} value={theme.name}>
                     <span className="flex items-center gap-2">
-                      <span
-                        aria-hidden="true"
-                        className="theme-swatch size-4 shrink-0 rounded-sm border border-border"
-                        data-color-theme={theme.name}
-                      />
+                      <Icon icon={mode === "dark" ? Moon02Icon : Sun03Icon} />
                       {theme.label}
                     </span>
                   </SelectItem>
@@ -62,6 +77,13 @@ export const ThemePicker = () => {
               )}
             </SelectGroup>
           ))}
+          <SelectSeparator />
+          <SelectItem value="system">
+            <span className="flex items-center gap-2">
+              <Icon icon={ComputerIcon} />
+              System
+            </span>
+          </SelectItem>
         </SelectList>
       </SelectContent>
     </Select>
