@@ -628,13 +628,46 @@ const eraseAiMemoryRecords = async ({
   const ids = erased.map(({ id }) => id);
   const historyCondition = and(
     eq(aiMemoryChangeSet.userId, scope.userId),
-    sql`exists (
+    or(
+      sql`exists (
       select 1 from jsonb_array_elements(${aiMemoryChangeSet.changes}) as change
       where change->>'memoryId' in (${sql.join(
         ids.map((id) => sql`${id}`),
         sql`, `
       )})
-    )`
+    )`,
+      ...requestedFeedback.map((member) =>
+        and(
+          eq(aiMemoryChangeSet.source, "feedback"),
+          eq(aiMemoryChangeSet.mailboxId, member.mailboxId),
+          sql`exists (
+            select 1
+            from jsonb_array_elements(${aiMemoryChangeSet.changes}) as change,
+              lateral (values (change->'before'), (change->'after')) as snapshots(snapshot)
+            where snapshot->>'kind' = 'learned'
+              and starts_with(snapshot->>'key', 'feedback:auto_label:')
+              and snapshot->'metadata' @> ${JSON.stringify({
+                category: "labeling",
+                sourceMailboxId: member.mailboxId,
+              } satisfies AiMemoryMetadata)}::jsonb
+              and (
+                snapshot->'metadata' @> ${JSON.stringify({
+                  feedbackMembers: [
+                    { labelId: member.labelId, source: member.source },
+                  ],
+                })}::jsonb
+                or (
+                  not (snapshot->'metadata' ? 'feedbackMembers')
+                  and snapshot->'metadata' @> ${JSON.stringify({
+                    feedbackSource: member.source,
+                    labelId: member.labelId,
+                  } satisfies AiMemoryMetadata)}::jsonb
+                )
+              )
+          )`
+        )
+      )
+    )
   );
   for (const member of requestedFeedback) {
     await executor

@@ -457,6 +457,146 @@ describe.skipIf(state.databaseUrl === undefined)(
       ).toBeTruthy();
     });
 
+    test("forgetting a shifted sender erases snapshots from a still-active group", async () => {
+      const sources = Object.fromEntries(
+        Array.from({ length: 20 }, (_, index) => [
+          `message-${index}`,
+          `sender-${String(index).padStart(2, "0")}@example.test`,
+        ])
+      );
+      const forgottenSource = "sender-19@example.test";
+      await recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        messageSources: sources,
+        providerMessageIds: Object.keys(sources),
+        userId,
+      });
+      const original = await aiMemory.searchAiMemory({ userId });
+      const [originalGroup] = original.items;
+      if (originalGroup === undefined) {
+        throw new Error("Expected original sender group.");
+      }
+      const [originalHistory] = await db
+        .select()
+        .from(aiMemoryChangeSet)
+        .where(eq(aiMemoryChangeSet.userId, userId));
+      const snapshot = originalHistory?.changes[0]?.after;
+      if (
+        originalHistory === undefined ||
+        snapshot === null ||
+        snapshot === undefined
+      ) {
+        throw new Error("Expected original projection history.");
+      }
+      await recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        messageSources: { earlier: "aaa@example.test" },
+        providerMessageIds: ["earlier"],
+        userId,
+      });
+      const shifted = await aiMemory.searchAiMemory({ userId });
+      const forgotten = shifted.items.find(({ content }) =>
+        content.includes(forgottenSource)
+      );
+      if (forgotten === undefined) {
+        throw new Error("Expected shifted sender group.");
+      }
+      expect(forgotten.id).not.toBe(originalGroup.id);
+      expect(shifted.items).toContainEqual(
+        expect.objectContaining({ id: originalGroup.id })
+      );
+      const preservedHistory = [
+        { source: "settings" as const },
+        { userId: nextOwnerId },
+        {
+          metadata: {
+            ...snapshot.metadata,
+            sourceMailboxId: crypto.randomUUID(),
+          },
+        },
+        {
+          metadata: {
+            ...snapshot.metadata,
+            feedbackMembers: [
+              {
+                labelId: "other-label",
+                policy: "prefer" as const,
+                source: forgottenSource,
+              },
+            ],
+          },
+        },
+        {
+          metadata: {
+            ...snapshot.metadata,
+            feedbackMembers: [
+              {
+                labelId,
+                policy: "prefer" as const,
+                source: "other@example.test",
+              },
+            ],
+          },
+        },
+      ].map(({ metadata = snapshot.metadata, ...overrides }) => ({
+        ...originalHistory,
+        changes: [
+          {
+            after: { ...snapshot, metadata },
+            before: null,
+            memoryId: crypto.randomUUID(),
+            operation: "add" as const,
+          },
+        ],
+        id: crypto.randomUUID(),
+        ...overrides,
+      }));
+      await db.insert(aiMemoryChangeSet).values(preservedHistory);
+      await aiMemory.forgetAiMemory({ memoryId: forgotten.id, userId });
+      const history = await db
+        .select()
+        .from(aiMemoryChangeSet)
+        .where(eq(aiMemoryChangeSet.userId, userId));
+      expect(
+        JSON.stringify(
+          history.filter(
+            ({ id }) => !preservedHistory.some((entry) => entry.id === id)
+          )
+        )
+      ).not.toContain(forgottenSource);
+      const preserved = await db
+        .select()
+        .from(aiMemoryChangeSet)
+        .where(
+          inArray(
+            aiMemoryChangeSet.id,
+            preservedHistory.map(({ id }) => id)
+          )
+        );
+      expect(preserved).toHaveLength(preservedHistory.length);
+      const remaining = await aiMemory.searchAiMemory({ userId });
+      expect(remaining.items).toContainEqual(
+        expect.objectContaining({ id: originalGroup.id })
+      );
+      const evidence = await db
+        .select()
+        .from(mailAutoLabelFeedback)
+        .where(eq(mailAutoLabelFeedback.createdByUserId, userId));
+      expect(evidence.map(({ source }) => source)).not.toContain(
+        forgottenSource
+      );
+      expect(evidence.map(({ source }) => source)).toContain(
+        "sender-00@example.test"
+      );
+      await refreshAutoLabelMemoryProfile(mailboxId, userId);
+      const refreshed = await aiMemory.searchAiMemory({ userId });
+      expect(
+        refreshed.items.some(({ content }) => content.includes(forgottenSource))
+      ).toBeFalsy();
+    });
+
     test("keeps domain rules available alongside exact-address rules", async () => {
       await recordMailAutoLabelFeedback({
         addLabelIds: [labelId],
