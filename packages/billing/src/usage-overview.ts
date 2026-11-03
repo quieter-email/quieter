@@ -67,6 +67,13 @@ export const getRecordedUsageOverview = async (
   }
   const organizationIds = teams.map((team) => team.id);
   const sourceOrganizationId = sql<string>`coalesce(${billingCreditUsageEvent.sourceOrganizationId}, ${billingCreditUsageEvent.organizationId})`;
+  const historicalOrganizationId = sql<string>`coalesce((
+    select ${aiCreditReservation.organizationId}
+    from ${aiCreditReservation}
+    where ${aiCreditReservation.groupId} = source.group_id
+    order by ${aiCreditReservation.createdAt}, ${aiCreditReservation.id}
+    limit 1
+  ), source.organization_id)`;
   const [ledger, mailUsage, aiUsage, historicalAiUsage] = await Promise.all([
     client
       .select({
@@ -166,12 +173,11 @@ export const getRecordedUsageOverview = async (
       .select({
         costUsd: sql<number>`sum(source.cost_usd)`.mapWith(Number),
         kind: sql<BillingUsageKind>`source.kind`,
-        organizationId: sql<string>`source.organization_id`,
+        organizationId: historicalOrganizationId,
         recordedCostMicroCents: sql<number>`coalesce((
           select sum(${aiCreditReservation.actualCostMicroCents})
           from ${aiCreditReservation}
-          where ${aiCreditReservation.organizationId} = source.organization_id
-            and ${aiCreditReservation.groupId} = source.group_id
+          where ${aiCreditReservation.groupId} = source.group_id
             and ${aiCreditReservation.status} = 'settled'
             and ${aiCreditReservation.account} is null
         ), 0)`.mapWith(Number),
@@ -197,16 +203,16 @@ export const getRecordedUsageOverview = async (
       ) as source`)
       .where(
         and(
-          inArray(sql`source.organization_id`, organizationIds),
+          inArray(historicalOrganizationId, organizationIds),
           gte(sql`source.created_at`, period.start.toISOString()),
           lt(sql`source.created_at`, period.end.toISOString()),
           sql`source.cost_usd > 0`,
           sql`not exists (select 1 from ${billingCreditUsageEvent} where ${billingCreditUsageEvent.dedupeKey} = 'ai:' || source.external_id)`,
-          sql`not exists (select 1 from ${aiCreditReservation} where ${aiCreditReservation.organizationId} = source.organization_id and ${aiCreditReservation.groupId} = source.group_id and ${aiCreditReservation.account} is not null)`
+          sql`not exists (select 1 from ${aiCreditReservation} where ${aiCreditReservation.groupId} = source.group_id and ${aiCreditReservation.account} is not null)`
         )
       )
       .groupBy(
-        sql`source.organization_id`,
+        historicalOrganizationId,
         sql`source.kind`,
         sql`source.group_id`
       ),
