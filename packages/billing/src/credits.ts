@@ -202,15 +202,7 @@ export const lockBillingAccount = async (
   return team;
 };
 
-export const getBillingCreditUsage = async (
-  account: BillingAccount,
-  client: Pick<typeof db, "select"> = db
-) => {
-  if (account.scope === "account" && account.billingOwnerUserId === undefined) {
-    throw new Error("The billing account payer is unavailable.");
-  }
-  const periodFilter = getBillingLedgerPeriodFilter(account);
-  const usageKind = sql<BillingUsageKind>`case
+export const billingCreditUsageKind = sql<BillingUsageKind>`case
     when ${and(eq(billingCreditUsageEvent.category, "mail"), eq(sql`${billingCreditUsageEvent.metadata}->>'direction'`, "inbound"))} then 'inboundMail'
     when ${and(eq(billingCreditUsageEvent.category, "mail"), eq(sql`${billingCreditUsageEvent.metadata}->>'direction'`, "outbound"))} then 'outboundMail'
     when ${and(eq(billingCreditUsageEvent.category, "ai"), eq(sql`${billingCreditUsageEvent.metadata}->>'usageKind'`, "importance"))} then 'importance'
@@ -222,6 +214,15 @@ export const getBillingCreditUsage = async (
     when ${eq(billingCreditUsageEvent.category, "ai")} then 'aiChat'
     else 'other'
   end`;
+
+export const getBillingCreditUsage = async (
+  account: BillingAccount,
+  client: Pick<typeof db, "select"> = db
+) => {
+  if (account.scope === "account" && account.billingOwnerUserId === undefined) {
+    throw new Error("The billing account payer is unavailable.");
+  }
+  const periodFilter = getBillingLedgerPeriodFilter(account);
   const [[usage], breakdown, organizationBreakdown] = await Promise.all([
     client
       .select({
@@ -247,7 +248,7 @@ export const getBillingCreditUsage = async (
           sql`coalesce(${sum(billingCreditUsageEvent.costMicroCents)}, 0)`.mapWith(
             Number
           ),
-        kind: usageKind.as("usage_kind"),
+        kind: billingCreditUsageKind.as("usage_kind"),
       })
       .from(billingCreditUsageEvent)
       .where(periodFilter)
@@ -262,7 +263,7 @@ export const getBillingCreditUsage = async (
           sql`coalesce(${sum(billingCreditUsageEvent.costMicroCents)}, 0)`.mapWith(
             Number
           ),
-        kind: usageKind.as("usage_kind"),
+        kind: billingCreditUsageKind.as("usage_kind"),
         organizationId: sql<
           string | null
         >`coalesce(${billingCreditUsageEvent.sourceOrganizationId}, ${billingCreditUsageEvent.organizationId})`,

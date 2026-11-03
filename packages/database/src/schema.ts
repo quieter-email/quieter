@@ -1404,6 +1404,10 @@ export const mailImportanceAttempt = pgTable(
   },
   (table) => [
     index("mail_importance_attempt_unreported_idx").on(table.usageReportedAt),
+    index("mail_importance_attempt_organization_created_idx").on(
+      table.organizationId,
+      table.createdAt
+    ),
   ]
 );
 
@@ -1766,6 +1770,10 @@ export const mailboxAgentRun = pgTable(
       table.leaseExpiresAt
     ),
     index("mailbox_agent_run_thread_idx").on(table.mailboxId, table.threadId),
+    index("mailbox_agent_run_mailbox_created_idx").on(
+      table.mailboxId,
+      table.createdAt
+    ),
     check(
       "mailbox_agent_run_status_check",
       sql`${table.status} in ('queued', 'running', 'succeeded', 'skipped', 'needs_attention')`

@@ -1,0 +1,2 @@
+CREATE INDEX "mail_importance_attempt_organization_created_idx" ON "mailImportanceAttempt" ("organizationId","createdAt");--> statement-breakpoint
+CREATE INDEX "mailbox_agent_run_mailbox_created_idx" ON "mailboxAgentRun" ("mailboxId","createdAt");

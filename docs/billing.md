@@ -24,6 +24,8 @@ Drain or preserve outstanding provider calls, mail submissions, and reporting ob
 
 Gmail connection slots remain per team and inherit the funding payer's plan. Monetary usage is pooled across the account.
 
+Unlimited accounts retain the full usage overview for UTC calendar months. Their recorded costs have no usage cap or new usage charges. Settled, nonfinancial AI request records retain each actual cost once without creating a billing ledger event or reporting it to the payment provider. The overview combines recorded costs with historical source records and removes overlapping measurements. Historical chat and memory costs that were never persisted remain unavailable.
+
 ## Gmail connections and live updates
 
 All plans receive Gmail live updates. Free teams can connect 5 Gmail accounts, Managed teams 25, and Pro teams 100. The allowance is shared across team members; each Gmail mailbox remains private to its owner. Managed mailboxes do not consume Gmail slots. Limits are defined in `packages/billing/src/plans.ts` and enforced at OAuth start, transactionally at OAuth completion, and when moving a mailbox into a team.
