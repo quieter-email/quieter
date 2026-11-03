@@ -4,8 +4,8 @@
   --theme-base: rgb(230 231 233);
   --theme-accent: rgb(154 169 186);
   --theme-ink: #0e0f10;
-  --theme-raised: rgb(245 246 248);
-  --theme-surface: rgb(253 253 254);
+  --theme-raised: rgb(250 251 253);
+  --theme-surface: rgb(231 235 242);
   --theme-primary: #4e5877;
   --theme-primary-fg: #ffffff;
   --theme-glow: none;
@@ -21,8 +21,8 @@
   --theme-base: rgb(224 222 233);
   --theme-accent: rgb(160 149 187);
   --theme-ink: #0e0f10;
-  --theme-raised: rgb(239 234 247);
-  --theme-surface: rgb(249 245 253);
+  --theme-raised: rgb(250 247 255);
+  --theme-surface: rgb(235 228 244);
   --theme-primary: #65517d;
   --theme-primary-fg: #fffaff;
   --theme-glow: radial-gradient(ellipse at 6% 110%, color-mix(in srgb, var(--theme-accent) 28%, transparent), transparent 70%);
@@ -38,8 +38,8 @@
   --theme-base: rgb(229 222 210);
   --theme-accent: rgb(177 153 130);
   --theme-ink: #28231f;
-  --theme-raised: rgb(243 237 226);
-  --theme-surface: rgb(252 248 240);
+  --theme-raised: rgb(255 252 246);
+  --theme-surface: rgb(240 231 216);
   --theme-primary: #71543b;
   --theme-primary-fg: #fffbf4;
   --theme-glow: none;
@@ -123,8 +123,8 @@
   --theme-base: rgb(222 228 218);
   --theme-accent: rgb(140 157 132);
   --theme-ink: #25312b;
-  --theme-raised: rgb(237 241 233);
-  --theme-surface: rgb(246 249 243);
+  --theme-raised: rgb(249 252 246);
+  --theme-surface: rgb(229 238 224);
   --theme-primary: #4d6252;
   --theme-primary-fg: #f7faf4;
   --theme-glow: none;
