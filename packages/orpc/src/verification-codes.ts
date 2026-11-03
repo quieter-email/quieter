@@ -390,8 +390,10 @@ export const processMailVerificationCode = async ({
   let screenUsage: AiUsageReport | undefined;
   let extractionUsage: AiUsageReport | undefined;
   let extractionAttempted = false;
+  let phase: "load" | "extract" = "load";
   try {
     const message = await loadMessage();
+    phase = "extract";
     if (message && message.id !== messageId) {
       throw new Error("Verification code message identity mismatch.");
     }
@@ -570,7 +572,7 @@ export const processMailVerificationCode = async ({
       }
     }
   } catch (error) {
-    if (!isAiCreditAdmissionBusy(error)) {
+    if (phase === "extract" && !isAiCreditAdmissionBusy(error)) {
       reportError(error, {
         operation: "verification-code:extract",
       });
@@ -613,5 +615,8 @@ export const processMailVerificationCode = async ({
           eq(mailboxVerificationCode.leaseToken, leaseToken)
         )
       );
+    if (phase === "load") {
+      throw error;
+    }
   }
 };

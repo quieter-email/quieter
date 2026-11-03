@@ -1,20 +1,29 @@
 import type { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
 import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
-import type { getMessageWithDetails, mutateGmailMessage } from "@quieter/gmail";
+import type {
+  getMessageWithDetails,
+  listGmailAddedMessageHistoryPage,
+  mutateGmailMessage,
+} from "@quieter/gmail";
 import type { AutoLabelSettings } from "@quieter/mail/auto-label";
+import { configureErrorReporter } from "@quieter/observability";
+import type { ErrorReporter } from "@quieter/observability";
 /* oxlint-disable eslint/require-await -- Async mock contracts resolve without network or database I/O. */
 import type * as drizzleOrm from "drizzle-orm";
 import { getTableName } from "drizzle-orm";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import * as aiMemory from "../src/ai-memory";
+import type { runAuthorizedGmailMailbox } from "../src/gmail-mailbox-access";
 import {
   listGmailPubSubMaintenanceJobs,
+  processGmailPubSubNotification,
   retryPendingAutomationMessages,
 } from "../src/gmail-sync/service";
 import type { getMailAutomationAiBudgetStatus } from "../src/mail-automation/ai-budget";
 import { MAIL_AUTOMATION_AI_PAUSED_MESSAGE } from "../src/mail-automation/ai-budget";
 import type { loadMailAutoLabelHistory } from "../src/mail-automation/history";
+import type { processGmailMailCapture } from "../src/mail-capture";
 import type { processMailVerificationCode } from "../src/verification-codes";
 
 type Row = Record<string, unknown>;
@@ -23,14 +32,18 @@ type BudgetStatus = Awaited<ReturnType<typeof getMailAutomationAiBudgetStatus>>;
 
 const fixtures = vi.hoisted(() => ({
   budget: vi.fn<() => Promise<BudgetStatus>>(),
+  capture: vi.fn<typeof processGmailMailCapture>(),
   classify: vi.fn<typeof classifyMailMessage>(),
   getMessage: vi.fn<typeof getMessageWithDetails>(),
   history: vi.fn<typeof loadMailAutoLabelHistory>(),
+  listHistory: vi.fn<typeof listGmailAddedMessageHistoryPage>(),
   mailboxes: [] as Row[],
   mutate: vi.fn<typeof mutateGmailMessage>(),
   pendingCodeMessageIds: [] as string[],
   processCode: vi.fn<typeof processMailVerificationCode>(),
+  reported: vi.fn<ErrorReporter>(),
   rows: [] as Row[],
+  watchStates: [] as Row[],
 }));
 
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The fake executes predicates against in-memory rows rather than producing SQL.
@@ -80,6 +93,10 @@ vi.mock("drizzle-orm", async (importOriginal) => {
       row[column.name] !== null && row[column.name] !== undefined,
     isNull: (column: { name: string }) => (row: Row) =>
       row[column.name] === null,
+    lt: (column: { name: string }, value: Date) => (row: Row) => {
+      const current = row[column.name];
+      return current instanceof Date && current < value;
+    },
     lte: (column: { name: string }, value: Date) => (row: Row) => {
       const current = row[column.name];
       return current instanceof Date && current <= value;
@@ -106,6 +123,8 @@ vi.mock("@quieter/database/client", () => {
           from: (table: Parameters<typeof getTableName>[0]) => {
             if (getTableName(table) === "gmailAutoLabelEvent") {
               ({ rows } = fixtures);
+            } else if (getTableName(table) === "gmailWatchState") {
+              rows = fixtures.watchStates;
             } else if (getTableName(table) === "mailbox") {
               rows = fixtures.mailboxes;
             } else {
@@ -151,12 +170,14 @@ vi.mock("@quieter/database/client", () => {
         };
         return query;
       },
-      update: () => ({
+      update: (table: Parameters<typeof getTableName>[0]) => ({
         set: (values: Row) => ({
           where: (predicate: Predicate) => {
-            const updated = fixtures.rows.filter((candidate) =>
-              predicate(candidate)
-            );
+            const rows =
+              getTableName(table) === "gmailWatchState"
+                ? fixtures.watchStates
+                : fixtures.rows;
+            const updated = rows.filter((candidate) => predicate(candidate));
             for (const row of updated) {
               Object.assign(row, values);
             }
@@ -172,6 +193,7 @@ vi.mock("@quieter/database/client", () => {
 vi.mock(import("@quieter/gmail"), async (importOriginal) => ({
   ...(await importOriginal()),
   getMessageWithDetails: fixtures.getMessage,
+  listGmailAddedMessageHistoryPage: fixtures.listHistory,
   mutateGmailMessage: fixtures.mutate,
 }));
 vi.mock(
@@ -191,6 +213,16 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => {
     },
   };
 });
+vi.mock(import("../src/mail-capture"), () => ({
+  processGmailMailCapture: fixtures.capture,
+}));
+vi.mock(import("../src/gmail-mailbox-access"), () => ({
+  runAuthorizedGmailMailbox: async <T>(
+    _input: Parameters<typeof runAuthorizedGmailMailbox>[0],
+    operation: (accessToken: string) => Promise<T>
+  ) => await operation("fixture-token"),
+}));
+
 vi.mock(import("../src/mail-automation/history"), () => ({
   loadMailAutoLabelHistory: fixtures.history,
 }));
@@ -243,6 +275,29 @@ describe("Gmail automation retry recovery", () => {
     });
     fixtures.rows.length = 0;
     fixtures.mailboxes.length = 0;
+    fixtures.watchStates.length = 0;
+    fixtures.reported.mockReset();
+    configureErrorReporter(fixtures.reported);
+    fixtures.capture
+      .mockReset()
+      .mockResolvedValue({ busy: false, needsContinuation: false });
+    fixtures.listHistory.mockReset().mockResolvedValue({
+      hasMore: false,
+      historyExpired: false,
+      historyId: "100",
+      messageIds: [],
+    });
+    fixtures.watchStates.push({
+      historyId: "99",
+      historyPageToken: null,
+      lastError: null,
+      lastErrorAt: null,
+      mailboxId: input.mailboxId,
+      processingLeaseExpiresAt: null,
+      processingLeaseId: null,
+      recoveryAfter: null,
+      recoveryPageToken: null,
+    });
     fixtures.pendingCodeMessageIds.length = 0;
     fixtures.processCode.mockReset().mockResolvedValue();
     fixtures.budget.mockReset().mockResolvedValue({
@@ -268,6 +323,8 @@ describe("Gmail automation retry recovery", () => {
       lastErrorAt: null,
       lastReconciledAt: new Date(),
       mailboxId: input.mailboxId,
+      organizationId: null,
+      ownerUserId: input.userId,
       pendingHistoryPage: null,
       phase: "history",
       provider: "gmail",
@@ -277,6 +334,184 @@ describe("Gmail automation retry recovery", () => {
       watchExpirationAt: new Date(Date.now() + 7 * 24 * 60 * 60_000),
       watchRenewedAt: new Date(),
     });
+  });
+
+  test("stops dispatching mail after throttling and retains the provider retry deadline", async () => {
+    const [event] = fixtures.rows;
+    if (event === undefined) {
+      throw new Error("Missing fixture.");
+    }
+    fixtures.rows.push({
+      ...event,
+      gmailMessageId: "later-message",
+      id: "later-event",
+    });
+    const delay = 60 * 60_000;
+    const retryAfter = Date.now() + delay;
+    const failure = Object.assign(new Error("Mailbox is temporarily busy."), {
+      retryAfterMs: delay,
+      status: 429,
+    });
+    fixtures.getMessage.mockRejectedValue(failure);
+    await expect(
+      retryPendingAutomationMessages({
+        ...input,
+        automationRuntime: {
+          ...input.automationRuntime,
+          getAutoLabelContext: async () => ({
+            ...(await input.automationRuntime.getAutoLabelContext()),
+            availableLabelIds: new Set(["work"]),
+            labels: [
+              {
+                description: null,
+                id: "work",
+                inclusionCriteria: null,
+                name: "Work",
+              },
+            ],
+          }),
+        },
+      })
+    ).rejects.toBe(failure);
+    expect(
+      fixtures.getMessage.mock.calls.some((call) => call[1] === "later-message")
+    ).toBeFalsy();
+    expect(event.appliedAt).toBeNull();
+    expect(Number(event.nextAttemptAt)).toBeGreaterThanOrEqual(retryAfter);
+    expect(fixtures.reported).not.toHaveBeenCalled();
+  });
+
+  test("leaves no memory lookup active when history throttling returns", async () => {
+    const memory =
+      Promise.withResolvers<
+        Awaited<ReturnType<typeof aiMemory.loadAiAgentContext>>
+      >();
+    let memoryStarted = false;
+    let memoryFinished = false;
+    vi.mocked(aiMemory.loadAiAgentContext).mockImplementation(async () => {
+      memoryStarted = true;
+      try {
+        return await memory.promise;
+      } finally {
+        memoryFinished = true;
+      }
+    });
+    const failure = Object.assign(new Error("Mailbox is temporarily busy."), {
+      status: 429,
+    });
+    fixtures.history.mockRejectedValue(failure);
+    try {
+      await expect(
+        retryPendingAutomationMessages({
+          ...input,
+          automationRuntime: {
+            ...input.automationRuntime,
+            getAutoLabelContext: async () => ({
+              ...(await input.automationRuntime.getAutoLabelContext()),
+              availableLabelIds: new Set(["work"]),
+              labels: [
+                {
+                  description: null,
+                  id: "work",
+                  inclusionCriteria: null,
+                  name: "Work",
+                },
+              ],
+            }),
+          },
+        })
+      ).rejects.toBe(failure);
+      expect(memoryStarted && !memoryFinished).toBeFalsy();
+    } finally {
+      memory.resolve({ instructions: null, memory: null });
+      await memory.promise;
+      vi.mocked(aiMemory.loadAiAgentContext).mockResolvedValue({
+        instructions: null,
+        memory: null,
+      });
+    }
+  });
+
+  test("waits for sibling message work before releasing a failed operation", async () => {
+    const work = Promise.withResolvers<true>();
+    const failure = Object.assign(new Error("Mailbox is temporarily busy."), {
+      status: 429,
+    });
+    fixtures.pendingCodeMessageIds.push("received-message");
+    fixtures.getMessage.mockRejectedValue(failure);
+    fixtures.processCode.mockImplementation(async () => {
+      await work.promise;
+    });
+    let settled = false;
+    const pending = (async () => {
+      try {
+        await retryPendingAutomationMessages({
+          ...input,
+          autoLabelEnabled: false,
+        });
+        return null;
+      } catch (error) {
+        return error;
+      } finally {
+        settled = true;
+      }
+    })();
+    try {
+      await vi.waitFor(() => {
+        expect(fixtures.processCode.mock.calls.length).toBeGreaterThan(0);
+      });
+      expect(settled).toBeFalsy();
+    } finally {
+      work.resolve(true);
+    }
+    await expect(pending).resolves.toBe(failure);
+  });
+
+  test("holds mailbox retry ownership until the provider deadline and resumes pending history afterward", async () => {
+    fixtures.rows.length = 0;
+    const [state] = fixtures.watchStates;
+    if (state === undefined) {
+      throw new Error("Missing watch fixture.");
+    }
+    state.historyPageToken = "pending-page";
+    const failure = Object.assign(new Error("Mailbox is temporarily busy."), {
+      retryAfterMs: 30_000,
+      status: 429,
+    });
+    let captureOwnedLease = false;
+    fixtures.capture.mockImplementationOnce(async () => {
+      captureOwnedLease = typeof state.processingLeaseId === "string";
+      return await Promise.reject(failure);
+    });
+    const notification = {
+      emailAddress: "mailbox@example.test",
+      historyId: "100",
+      pubSubMessageId: "notification",
+    };
+    vi.useFakeTimers();
+    try {
+      const first = await processGmailPubSubNotification(notification);
+      expect(first).toMatchObject({ busy: true, needsContinuation: true });
+      expect(captureOwnedLease).toBeTruthy();
+      expect(state.historyPageToken).toBe("pending-page");
+      expect(state.processingLeaseExpiresAt).toBeInstanceOf(Date);
+      const nextOwnerAt = Number(state.processingLeaseExpiresAt);
+      expect(nextOwnerAt).toBeGreaterThan(Date.now());
+      await expect(
+        processGmailPubSubNotification(notification)
+      ).resolves.toMatchObject({ busy: true });
+      expect(fixtures.capture).toHaveBeenCalledOnce();
+      vi.setSystemTime(nextOwnerAt + 1);
+      await expect(
+        processGmailPubSubNotification(notification)
+      ).resolves.toMatchObject({ busy: false, needsContinuation: false });
+      expect(fixtures.capture).toHaveBeenCalledTimes(2);
+      expect(state.historyPageToken).toBeNull();
+      expect(state.processingLeaseExpiresAt).toBeNull();
+      expect(fixtures.reported).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("resumes budget deferrals while preserving real failure backoff and mailbox isolation", async () => {

@@ -592,6 +592,51 @@ describe("verification code processing", () => {
     }
   );
 
+  test.each([
+    Object.assign(new Error("Mailbox is temporarily busy."), { status: 429 }),
+    new Error("Unexpected message load failure."),
+  ])(
+    "preserves retry state and propagates a message load failure to its caller: %s",
+    async (failure) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const loadMessage = vi
+        .fn<Parameters<typeof processMailVerificationCode>[0]["loadMessage"]>(
+          async () =>
+            await Promise.resolve({
+              id: "message-1",
+              internalDate: String(Date.now()),
+              otpToken: { code: "482193", origin: "https://example.test" },
+              threadId: "thread-1",
+            })
+        )
+        .mockRejectedValueOnce(failure);
+      const input = {
+        loadMessage,
+        mailboxId: "mailbox-1",
+        messageId: "message-1",
+        userId: "user-1",
+      };
+      await expect(processMailVerificationCode(input)).rejects.toBe(failure);
+      const row = fixtures.rows.get("message-1");
+      expect(row).toMatchObject({ leaseToken: null, processedAt: null });
+      const retryAt = row?.nextAttemptAt;
+      expect(retryAt).toBeInstanceOf(Date);
+      expect(fixtures.screened).not.toHaveBeenCalled();
+      expect(fixtures.extracted).not.toHaveBeenCalled();
+      expect(fixtures.billed).not.toHaveBeenCalled();
+      expect(fixtures.reported).not.toHaveBeenCalled();
+      await processMailVerificationCode(input);
+      expect(loadMessage).toHaveBeenCalledOnce();
+      if (retryAt === undefined || retryAt === null) {
+        throw new Error("Missing retry.");
+      }
+      vi.setSystemTime(retryAt.getTime() + 1);
+      await processMailVerificationCode(input);
+      expect(row?.processedAt).toBeInstanceOf(Date);
+      expect(fixtures.published).toHaveBeenCalledOnce();
+    }
+  );
+
   test("failed attempts wait longer before each retry", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const messageTime = Date.now();
