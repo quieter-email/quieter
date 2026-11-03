@@ -19,7 +19,7 @@ describe("dynamic AI memory", () => {
           agents: ["Chat Agent", "chat-agent"],
           confidence: 0.9,
           content: `  ${"Preference ".repeat(400)}  `,
-          expiresAt: "not-a-date",
+          expiresAt: null,
           importance: 4,
           key: " Reply Style / Concise ",
           kind: "instruction",
@@ -110,7 +110,7 @@ describe("dynamic AI memory", () => {
     });
   });
 
-  test("keeps future expirations and clears already-expired timestamps", () => {
+  test("rejects malformed and expired intentions without making them permanent", () => {
     const operation = {
       action: "add" as const,
       agents: ["all"],
@@ -127,13 +127,16 @@ describe("dynamic AI memory", () => {
       operations: [
         { ...operation, expiresAt: "2000-01-01T00:00:00.000Z", key: "expired" },
         { ...operation, expiresAt: "2999-01-01T00:00:00.000Z", key: "future" },
+        { ...operation, expiresAt: "invalid", key: "malformed" },
+        { ...operation, expiresAt: "", key: "empty" },
+        { ...operation, expiresAt: null, key: "durable" },
       ],
       summary: "Updated memory.",
     });
 
     expect(result.operations.map(({ expiresAt }) => expiresAt)).toStrictEqual([
-      null,
       "2999-01-01T00:00:00.000Z",
+      null,
     ]);
   });
 

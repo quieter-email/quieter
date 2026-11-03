@@ -297,6 +297,11 @@ export type AiMemoryCategory =
   | "activity"
   | "labeling";
 export type AiMemoryMetadata = {
+  feedbackMembers?: {
+    labelId: string;
+    policy: "prefer" | "suppress";
+    source: string | null;
+  }[];
   agents?: string[];
   category?: AiMemoryCategory;
   correspondents?: string[];

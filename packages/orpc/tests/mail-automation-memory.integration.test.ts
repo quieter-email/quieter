@@ -1,6 +1,7 @@
 import { db } from "@quieter/database/client";
 import {
   aiMemory as memoryRecord,
+  aiMemoryChangeSet,
   gmailCapturedMessage,
   gmailLabel,
   mailAutoLabelFeedback,
@@ -232,11 +233,423 @@ describe.skipIf(state.databaseUrl === undefined)(
         .from(memoryRecord)
         .where(eq(memoryRecord.userId, userId));
       expect(
-        policies.find(
-          ({ metadata }) => metadata.feedbackSource === "team@example.test"
+        policies.find(({ metadata }) =>
+          (metadata.feedbackMembers ?? []).some(
+            ({ source, policy }) =>
+              source === "team@example.test" && policy === "suppress"
+          )
         )?.metadata.policy
       ).toBe("suppress");
       expect(state.getMessage).not.toHaveBeenCalled();
+    });
+
+    test("refreshes grouped rules idempotently and forgetting removes every source without resurrection", async () => {
+      const sources = {
+        first: "first@example.test",
+        second: "second@example.test",
+        third: "third@other.test",
+      };
+      await recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        messageSources: sources,
+        providerMessageIds: Object.keys(sources),
+        userId,
+      });
+      const before = await aiMemory.searchAiMemory({ userId });
+      expect(before.items).toHaveLength(1);
+      const [learned] = before.items;
+      if (learned === undefined) {
+        throw new Error("Expected grouped feedback.");
+      }
+      expect(
+        Object.values(sources).every((source) =>
+          learned.content.includes(source)
+        )
+      ).toBeTruthy();
+      await refreshAutoLabelMemoryProfile(mailboxId, userId);
+      const refreshed = await aiMemory.searchAiMemory({ userId });
+      expect(refreshed.items[0]).toMatchObject({
+        id: learned.id,
+        version: learned.version,
+      });
+      await aiMemory.forgetAiMemory({ memoryId: learned.id, userId });
+      await refreshAutoLabelMemoryProfile(mailboxId, userId);
+      const forgotten = await aiMemory.searchAiMemory({ userId });
+      expect(forgotten.items).toHaveLength(0);
+      await expect(
+        db
+          .select()
+          .from(mailAutoLabelFeedback)
+          .where(eq(mailAutoLabelFeedback.createdByUserId, userId))
+      ).resolves.toHaveLength(0);
+    });
+
+    test("forgetting a group erases archived overlapping projections and history while retaining unrelated evidence", async () => {
+      const forgottenSource = "forgotten@example.test";
+      const retainedSource = "retained@example.test";
+      const { revision } =
+        await aiMemory.getPersonalAiMemoryScopeConfig(userId);
+      await aiMemory.replaceAiMemoryFeedback({
+        agent: "auto_label",
+        expectedRevision: revision,
+        mailboxId,
+        memories: [
+          {
+            confidence: 0.8,
+            content: forgottenSource,
+            importance: 4,
+            key: "legacy-singleton",
+            metadata: { feedbackSource: forgottenSource, labelId },
+            reinforcementCount: 1,
+            summary: "Legacy singleton",
+            topics: [],
+          },
+          {
+            confidence: 0.8,
+            content: `${forgottenSource}, ${retainedSource}`,
+            importance: 4,
+            key: "previous-chunk",
+            metadata: {
+              feedbackMembers: [forgottenSource, retainedSource].map(
+                (source) => ({
+                  labelId,
+                  policy: "prefer",
+                  source,
+                })
+              ),
+            },
+            reinforcementCount: 2,
+            summary: "Previous chunk",
+            topics: [],
+          },
+        ],
+        userId,
+      });
+      await recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        messageSources: { forgotten: forgottenSource },
+        providerMessageIds: ["forgotten"],
+        userId,
+      });
+      await recordMailAutoLabelFeedback({
+        mailboxId,
+        messageSources: { retained: retainedSource },
+        providerMessageIds: ["retained"],
+        removeLabelIds: [labelId],
+        userId,
+      });
+      const current = await aiMemory.searchAiMemory({ userId });
+      const grouped = current.items.find(({ content }) =>
+        content.includes(forgottenSource)
+      );
+      if (grouped === undefined) {
+        throw new Error("Expected current grouped feedback.");
+      }
+      const [template] = await db
+        .select()
+        .from(memoryRecord)
+        .where(eq(memoryRecord.id, grouped.id));
+      if (template === undefined) {
+        throw new Error("Expected feedback fixture.");
+      }
+      const preserved = [
+        {
+          ...template,
+          id: crypto.randomUUID(),
+          key: `${template.key}:unrelated-active`,
+        },
+        {
+          ...template,
+          id: crypto.randomUUID(),
+          key: `${template.key}:explicit-copy`,
+          source: "explicit" as const,
+          status: "archived" as const,
+        },
+        {
+          ...template,
+          id: crypto.randomUUID(),
+          key: `${template.key}:other-mailbox`,
+          metadata: {
+            ...template.metadata,
+            sourceMailboxId: crypto.randomUUID(),
+          },
+          status: "archived" as const,
+        },
+        {
+          ...template,
+          content: "Unrelated sender",
+          id: crypto.randomUUID(),
+          key: `${template.key}:other-source`,
+          metadata: {
+            ...template.metadata,
+            feedbackMembers: [
+              {
+                labelId,
+                policy: "prefer" as const,
+                source: "other@example.test",
+              },
+            ],
+          },
+          status: "archived" as const,
+        },
+        {
+          ...template,
+          content: "Unrelated label",
+          id: crypto.randomUUID(),
+          key: `${template.key}:other-label`,
+          metadata: {
+            ...template.metadata,
+            feedbackMembers: [
+              {
+                labelId: "other-label",
+                policy: "prefer" as const,
+                source: forgottenSource,
+              },
+            ],
+          },
+          status: "archived" as const,
+        },
+        {
+          ...template,
+          id: crypto.randomUUID(),
+          key: `${template.key}:other-owner`,
+          scopeKey: `user:${nextOwnerId}`,
+          status: "archived" as const,
+          userId: nextOwnerId,
+        },
+      ];
+      await db.insert(memoryRecord).values(preserved);
+      await aiMemory.forgetAiMemory({ memoryId: grouped.id, userId });
+      const exported = await aiMemory.exportPersonalAiMemory(userId);
+      expect(
+        exported.memories.filter(({ content }) =>
+          content.includes(forgottenSource)
+        )
+      ).toHaveLength(3);
+      const history = await db
+        .select()
+        .from(aiMemoryChangeSet)
+        .where(eq(aiMemoryChangeSet.userId, userId));
+      expect(JSON.stringify(history)).not.toContain(forgottenSource);
+      const remaining = await db
+        .select()
+        .from(memoryRecord)
+        .where(
+          inArray(
+            memoryRecord.id,
+            preserved.map(({ id }) => id)
+          )
+        );
+      expect(remaining).toHaveLength(preserved.length);
+      const evidence = await db
+        .select()
+        .from(mailAutoLabelFeedback)
+        .where(eq(mailAutoLabelFeedback.createdByUserId, userId));
+      expect(evidence.map(({ source }) => source)).toStrictEqual([
+        retainedSource,
+      ]);
+      await refreshAutoLabelMemoryProfile(mailboxId, userId);
+      const refreshed = await aiMemory.searchAiMemory({ userId });
+      expect(
+        refreshed.items.some(({ content }) => content.includes(retainedSource))
+      ).toBeTruthy();
+    });
+
+    test("keeps domain rules available alongside exact-address rules", async () => {
+      await recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        messageSources: {
+          domain: "special.example",
+          person: "alice@other.test",
+        },
+        providerMessageIds: ["domain", "person"],
+        userId,
+      });
+
+      const domainContext = await loadAiAgentContext({
+        agent: "auto_label",
+        mailboxId,
+        query: "A project update from bob@special.example",
+        userId,
+      });
+      expect(domainContext.memory).toStrictEqual(
+        expect.stringContaining("special.example")
+      );
+      expect(domainContext.memory).not.toContain("alice@other.test");
+
+      const personContext = await loadAiAgentContext({
+        agent: "auto_label",
+        mailboxId,
+        query: "A project update from alice@other.test",
+        userId,
+      });
+      expect(personContext.memory).toContain("alice@other.test");
+    });
+
+    test("updates an existing group when a new sender fits and preserves its explicit edits on later evidence", async () => {
+      await recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        messageSources: { first: "first@example.test" },
+        providerMessageIds: ["first"],
+        userId,
+      });
+      const initial = await aiMemory.searchAiMemory({ userId });
+      const [original] = initial.items;
+      if (original === undefined) {
+        throw new Error("Expected initial group.");
+      }
+      await recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        messageSources: { second: "second@example.test" },
+        providerMessageIds: ["second"],
+        userId,
+      });
+      const expanded = await aiMemory.searchAiMemory({ userId });
+      expect(expanded.items).toHaveLength(1);
+      const [grouped] = expanded.items;
+      if (grouped === undefined) {
+        throw new Error("Expected expanded group.");
+      }
+      expect(grouped.id).toBe(original.id);
+      expect(grouped.content).toContain("second@example.test");
+      await aiMemory.saveAiMemory({
+        category: "labeling",
+        content: "My edited rule.",
+        memoryId: grouped.id,
+        userId,
+        version: grouped.version,
+      });
+      await recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        messageSources: { third: "third@example.test" },
+        providerMessageIds: ["third"],
+        userId,
+      });
+      const after = await aiMemory.searchAiMemory({ userId });
+      expect(after.items).toHaveLength(2);
+      const automatic = after.items.find(({ source }) => source === "feedback");
+      expect(automatic?.content).toContain("third@example.test");
+      expect(automatic?.content).not.toContain("first@example.test");
+      expect(automatic?.content).not.toContain("second@example.test");
+      await refreshAutoLabelMemoryProfile(mailboxId, userId);
+      const repeated = await aiMemory.searchAiMemory({ userId });
+      expect(
+        repeated.items.find(({ source }) => source === "feedback")?.id
+      ).toBe(automatic?.id);
+    });
+
+    test("retires old automatic label summaries only within the refreshed mailbox", async () => {
+      const now = new Date();
+      const ids = [
+        crypto.randomUUID(),
+        crypto.randomUUID(),
+        crypto.randomUUID(),
+      ];
+      await db.insert(memoryRecord).values(
+        ids.map((id, index) => ({
+          content: "A historical label summary.",
+          createdAt: now,
+          id,
+          importance: 3,
+          key: id,
+          kind: "learned" as const,
+          lastConfirmedAt: now,
+          metadata: {
+            category: "labeling" as const,
+            sourceMailboxId: index === 2 ? "other-mailbox" : mailboxId,
+          },
+          scope: "user" as const,
+          scopeKey: `user:${userId}`,
+          source: index === 1 ? ("explicit" as const) : ("feedback" as const),
+          summary: "Historical label handling",
+          updatedAt: now,
+          userId,
+        }))
+      );
+      await refreshAutoLabelMemoryProfile(mailboxId, userId);
+      const records = await db
+        .select()
+        .from(memoryRecord)
+        .where(eq(memoryRecord.userId, userId));
+      expect(records.find(({ id }) => id === ids[0])?.status).toBe("archived");
+      expect(records.find(({ id }) => id === ids[1])?.status).toBe("active");
+      expect(records.find(({ id }) => id === ids[2])?.status).toBe("active");
+    });
+
+    test("preserves edited legacy projection evidence while archiving its unedited siblings", async () => {
+      const config = await aiMemory.getPersonalAiMemoryScopeConfig(userId);
+      await aiMemory.replaceAiMemoryFeedback({
+        agent: "auto_label",
+        expectedRevision: config.revision,
+        mailboxId,
+        memories: ["first@example.test", "second@example.test"].map(
+          (source) => ({
+            confidence: 0.8,
+            content: `Prefer Launch planning for ${source}.`,
+            importance: 4,
+            key: source,
+            metadata: {
+              correspondents: [source],
+              feedbackSource: source,
+              labelId,
+              policy: "prefer",
+            },
+            reinforcementCount: 1,
+            summary: "Launch planning",
+            topics: ["labeling"],
+          })
+        ),
+        userId,
+      });
+      const old = await aiMemory.searchAiMemory({ userId });
+      const first = old.items.find(({ content }) =>
+        content.includes("first@example.test")
+      );
+      const second = old.items.find(({ content }) =>
+        content.includes("second@example.test")
+      );
+      if (!first || !second) {
+        throw new Error("Expected legacy projections.");
+      }
+      await aiMemory.saveAiMemory({
+        category: "labeling",
+        content: "Keep my carefully edited rule.",
+        memoryId: first.id,
+        userId,
+        version: first.version,
+      });
+      await recordMailAutoLabelFeedback({
+        addLabelIds: [labelId],
+        mailboxId,
+        messageSources: {
+          first: "first@example.test",
+          second: "second@example.test",
+        },
+        providerMessageIds: ["first", "second"],
+        userId,
+      });
+      const after = await aiMemory.searchAiMemory({ userId });
+      expect(after.items).toHaveLength(2);
+      expect(after.items.find(({ id }) => id === first.id)?.content).toContain(
+        "carefully edited"
+      );
+      const automatic = after.items.filter(
+        ({ source }) => source !== "explicit"
+      );
+      expect(automatic).toHaveLength(1);
+      expect(automatic[0]?.content).toContain("second@example.test");
+      expect(automatic[0]?.content).not.toContain("first@example.test");
+      const [archived] = await db
+        .select()
+        .from(memoryRecord)
+        .where(eq(memoryRecord.id, second.id));
+      expect(archived?.status).toBe("archived");
     });
 
     test("excludes deleted and foreign captures with the same message ID from sender feedback", async () => {
