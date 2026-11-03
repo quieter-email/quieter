@@ -204,7 +204,9 @@ export default defineConfig(({ command, mode }) => {
       }),
       ...(isDev ? [validateLocalDevelopment()] : []),
       preferNodeAwsSdkResolution(),
-      tanstackStart(),
+      tanstackStart({
+        router: { routeFileIgnorePattern: "\\.(test|spec)\\.[jt]sx?$" },
+      }),
       viteReact(),
       babel({
         presets: [reactCompilerPreset()],

@@ -262,6 +262,8 @@ type ThreadListSummary = {
 const GMAIL_BATCH_MESSAGE_CHUNK_SIZE = 25;
 const GMAIL_METADATA_RETRY_LIMIT = 2;
 const GMAIL_METADATA_RETRY_BASE_DELAY_MS = 250;
+const GMAIL_METADATA_MAX_INLINE_DELAY_MS =
+  GMAIL_METADATA_RETRY_BASE_DELAY_MS * 2 ** GMAIL_METADATA_RETRY_LIMIT;
 const GMAIL_SERVICE_UNAVAILABLE_RETRY_AFTER_MS = 1000 * 5;
 const GMAIL_RATE_LIMIT_REASONS = new Set([
   "dailylimitexceeded",
@@ -354,17 +356,6 @@ const createServiceError = (
   }
 ): GmailServiceError =>
   Object.assign(new Error(message), { status, ...extras });
-
-const createBatchSubrequestError = (
-  body: string,
-  status: number
-): GmailServiceError =>
-  createServiceError(
-    body.trim() === ""
-      ? `Gmail batch subrequest failed with status ${status}.`
-      : body,
-    status
-  );
 
 const appendGmailQueryTerms = (
   query: string | undefined,
@@ -524,6 +515,11 @@ const applyRetryAfterHeader = (
   const retryAfterSeconds = Number(retryAfterHeader);
   if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
     error.retryAfterMs = retryAfterSeconds * 1000;
+    return;
+  }
+  const retryAt = Date.parse(retryAfterHeader);
+  if (Number.isFinite(retryAt)) {
+    error.retryAfterMs = Math.max(0, retryAt - Date.now());
   }
 };
 
@@ -742,9 +738,20 @@ const parseBatchResponseParts = (response: Response, text: string) => {
         );
       }
 
+      const headers = new Headers();
+      for (const line of responseHead.split("\n").slice(1)) {
+        const separator = line.indexOf(":");
+        if (separator > 0) {
+          headers.append(
+            line.slice(0, separator).trim(),
+            line.slice(separator + 1).trim()
+          );
+        }
+      }
       return {
         body: responseBody,
         contentId,
+        headers,
         status,
       };
     });
@@ -1346,6 +1353,7 @@ export const getGmailMessageMetadata = async (
         isErrorWithStatus(error) &&
         error.status === 429 &&
         attempt < GMAIL_METADATA_RETRY_LIMIT &&
+        (error.retryAfterMs ?? 0) <= GMAIL_METADATA_MAX_INLINE_DELAY_MS &&
         !isAborted(signal);
 
       if (!shouldRetry) {
@@ -1431,6 +1439,7 @@ const getGmailMetadataBatch = async <T>(
   );
   const results: (T | null)[] = [];
   const retryIndexes: number[] = [];
+  let retryAfterMs = 0;
   for (const [index] of ids.entries()) {
     const part = partsById.get(`${resource}-${index}`);
     if (!part) {
@@ -1442,23 +1451,38 @@ const getGmailMetadataBatch = async <T>(
     }
 
     if (part.status < 200 || part.status >= 300) {
+      const error = await createGoogleApiError(
+        new Response(part.body, {
+          headers: part.headers,
+          status: part.status,
+        })
+      );
+      const providerRetryAfterMs = part.headers.has("retry-after")
+        ? error.retryAfterMs
+        : undefined;
       if (
         (part.status === 429 || part.status === 503) &&
         attempt === 0 &&
+        (providerRetryAfterMs ?? 0) <= GMAIL_METADATA_MAX_INLINE_DELAY_MS &&
         !isAborted(signal)
       ) {
         retryIndexes.push(index);
+        retryAfterMs = Math.max(retryAfterMs, providerRetryAfterMs ?? 0);
         results.push(null);
         continue;
       }
-      throw createBatchSubrequestError(part.body, part.status);
+      throw error;
     }
 
     const parsed = parseBatchJsonBody(part.body);
     results.push(schema.parse(parsed));
   }
   if (retryIndexes.length > 0) {
-    await sleep(1000 + Math.floor(Math.random() * 100), signal);
+    await sleep(
+      Math.max(GMAIL_METADATA_MAX_INLINE_DELAY_MS, retryAfterMs) +
+        Math.floor(Math.random() * 100),
+      signal
+    );
     const retried = await getGmailMetadataBatch(
       resource,
       schema,
@@ -1573,20 +1597,23 @@ const getGmailMessagesMetadata = async (
   messageIds: readonly string[],
   signal?: AbortSignal
 ) => {
-  const batches = await Promise.all(
-    chunkArray(messageIds, GMAIL_BATCH_MESSAGE_CHUNK_SIZE).map(
-      async (batchMessageIds) =>
-        await getGmailMetadataBatch(
-          "message",
-          gmailMessageSchema,
-          GMAIL_MESSAGE_METADATA_FIELDS,
-          accessToken,
-          batchMessageIds,
-          signal
-        )
-    )
-  );
-  return batches.flat();
+  const messages: (GmailMessage | null)[] = [];
+  for (const batchMessageIds of chunkArray(
+    messageIds,
+    GMAIL_BATCH_MESSAGE_CHUNK_SIZE
+  )) {
+    messages.push(
+      ...(await getGmailMetadataBatch(
+        "message",
+        gmailMessageSchema,
+        GMAIL_MESSAGE_METADATA_FIELDS,
+        accessToken,
+        batchMessageIds,
+        signal
+      ))
+    );
+  }
+  return messages;
 };
 
 export const getGmailMessageThreadAssociations = async (
@@ -1610,20 +1637,23 @@ const getGmailThreadsListMetadata = async (
   signal?: AbortSignal
 ) => {
   const uniqueThreadIds = [...new Set(threadIds)];
-  const batches = await Promise.all(
-    chunkArray(uniqueThreadIds, GMAIL_BATCH_MESSAGE_CHUNK_SIZE).map(
-      async (batchThreadIds) =>
-        await getGmailMetadataBatch(
-          "thread",
-          gmailThreadSchema,
-          GMAIL_THREAD_LIST_METADATA_FIELDS,
-          accessToken,
-          batchThreadIds,
-          signal
-        )
-    )
-  );
-  return batches.flat();
+  const threads: (z.infer<typeof gmailThreadSchema> | null)[] = [];
+  for (const batchThreadIds of chunkArray(
+    uniqueThreadIds,
+    GMAIL_BATCH_MESSAGE_CHUNK_SIZE
+  )) {
+    threads.push(
+      ...(await getGmailMetadataBatch(
+        "thread",
+        gmailThreadSchema,
+        GMAIL_THREAD_LIST_METADATA_FIELDS,
+        accessToken,
+        batchThreadIds,
+        signal
+      ))
+    );
+  }
+  return threads;
 };
 
 const getThreadListSummaries = async (

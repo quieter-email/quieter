@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { ORPCError } from "@orpc/server";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
 import type { MailAutoLabelCandidate } from "@quieter/ai/classify-gmail-message";
@@ -23,12 +24,14 @@ import {
   getGmailProfile,
   getMessageWithDetails,
   isGmailServiceError,
+  isGmailRateLimitedError,
   listGmailAddedMessageHistoryPage,
   listGmailMessageIds,
   listLabels,
   mutateGmailMessage,
   watchGmailMailbox,
 } from "@quieter/gmail";
+import type { GmailServiceError } from "@quieter/gmail";
 import { partitionAutoLabelCandidates } from "@quieter/mail/auto-label-matching";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
@@ -79,6 +82,7 @@ import {
 const WATCH_RENEWAL_INTERVAL_MS = 1000 * 60 * 60 * 20;
 const WATCH_EXPIRATION_BUFFER_MS = 1000 * 60 * 60 * 48;
 const PROCESSING_LEASE_MS = 1000 * 60 * 14;
+const MAILBOX_RATE_LIMIT_RETRY_MS = 60_000;
 const HISTORY_RECOVERY_LOOKBACK_MS = 1000 * 60 * 60 * 24 * 7;
 const HISTORY_RECOVERY_OVERLAP_MS = 1000 * 60 * 60;
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
@@ -187,13 +191,14 @@ const extendMailboxProcessingLease = async (
 
 const releaseMailboxProcessingLease = async (
   mailboxId: string,
-  leaseId: string
+  leaseId: string,
+  retryAt: Date | null
 ) => {
   await db
     .update(gmailWatchState)
     .set({
-      processingLeaseExpiresAt: null,
-      processingLeaseId: null,
+      processingLeaseExpiresAt: retryAt,
+      processingLeaseId: retryAt === null ? null : leaseId,
       updatedAt: new Date(),
     })
     .where(
@@ -377,27 +382,27 @@ const processAutoLabelMessage = async ({
         }
       }
 
-      const [memoryContext, labelHistory] = await Promise.all([
-        aiLabels.length === 0 || autoLabelContext.memoryCandidates === null
-          ? null
-          : loadAiAgentContext({
-              agent: "auto_label",
-              candidates: autoLabelContext.memoryCandidates,
-              mailboxId,
-              query: buildMailMemoryQuery(message),
-              userId: autoLabelContext.memoryCandidates.userId,
-            }),
+      const labelHistory =
         aiLabels.length === 0
           ? null
-          : loadMailAutoLabelHistory({
+          : await loadMailAutoLabelHistory({
               accessToken,
               labels: autoLabelContext.historyLabels,
               mailboxId,
               message,
               provider: "gmail",
               userId,
-            }),
-      ]);
+            });
+      const memoryContext =
+        aiLabels.length === 0 || autoLabelContext.memoryCandidates === null
+          ? null
+          : await loadAiAgentContext({
+              agent: "auto_label",
+              candidates: autoLabelContext.memoryCandidates,
+              mailboxId,
+              query: buildMailMemoryQuery(message),
+              userId: autoLabelContext.memoryCandidates.userId,
+            });
       const aiLabelIds =
         aiLabels.length === 0
           ? []
@@ -504,14 +509,20 @@ const processAutoLabelMessage = async ({
         lastError: getErrorMessage(error),
         nextAttemptAt: new Date(
           now.getTime() +
-            Math.min(
-              AUTO_LABEL_RETRY_MAX_MS,
-              AUTO_LABEL_RETRY_BASE_MS * 2 ** (attemptCount - 1)
+            Math.max(
+              Math.min(
+                AUTO_LABEL_RETRY_MAX_MS,
+                AUTO_LABEL_RETRY_BASE_MS * 2 ** (attemptCount - 1)
+              ),
+              isGmailRateLimitedError(error) ? (error.retryAfterMs ?? 0) : 0
             )
         ),
         updatedAt: now,
       })
       .where(eq(gmailAutoLabelEvent.id, event.id));
+    if (isGmailRateLimitedError(error)) {
+      throw error;
+    }
     if (shouldReportAiTaskFailure(error, attemptCount)) {
       reportError(error, { operation: "gmail-sync:auto-label-message" });
     }
@@ -544,97 +555,108 @@ const processMessageIds = async ({
   }
 
   const uniqueMessageIds = [...new Set(messageIds)];
-  const eligibleInboxMessageIds = new Set<string>();
-  let nextIndex = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(4, uniqueMessageIds.length) }, async () => {
-      while (nextIndex < uniqueMessageIds.length) {
-        const messageId = uniqueMessageIds[nextIndex];
-        nextIndex += 1;
-        if (messageId === undefined) {
-          break;
+  for (const messageId of uniqueMessageIds) {
+    let messagePromise: ReturnType<typeof getMessageWithDetails> | null = null;
+    const loadMessage = async () => {
+      messagePromise ??= getMessageWithDetails(accessToken, messageId);
+      try {
+        const message = await messagePromise;
+        return message;
+      } catch (error) {
+        if (isGmailServiceError(error) && error.status === 404) {
+          return null;
         }
-        let messagePromise: ReturnType<typeof getMessageWithDetails> | null =
-          null;
-        const loadMessage = async () => {
-          messagePromise ??= getMessageWithDetails(accessToken, messageId);
-          try {
-            const message = await messagePromise;
-            if (
-              !message.draftId &&
-              message.labelIds?.includes(MAILBOX_LABELS.inbox) === true &&
-              !message.labelIds.some((label) =>
-                AUTO_LABEL_EXCLUDED_LABELS.has(label)
-              )
-            ) {
-              eligibleInboxMessageIds.add(message.id);
-            }
-            return message;
-          } catch (error) {
-            if (isGmailServiceError(error) && error.status === 404) {
-              return null;
-            }
-            throw error;
-          }
-        };
-
-        if (triggerActions) {
-          const message = await loadMessage();
-          if (
-            message !== null &&
-            !message.draftId &&
-            message.labelIds?.some((label) =>
-              AUTO_LABEL_EXCLUDED_LABELS.has(label)
-            ) !== true
-          ) {
-            const receivedAt = Number(message.internalDate);
-            if (!Number.isFinite(receivedAt) || receivedAt <= 0) {
-              throw new Error("Gmail message is missing its arrival time.");
-            }
-            await enqueueMailAgentMessage({
-              mailboxId,
-              messageId: message.id,
-              receivedAt: new Date(receivedAt),
-              threadId: message.threadId,
-            });
-          }
-        }
-
-        await Promise.all([
-          loadMessage().then(async (message) => {
-            if (message) {
-              await captureMailboxMessageMemory({
-                actorUserId: userId,
-                mailboxId,
-                message,
-                source: "sync",
-              });
-            }
-          }),
-          autoLabelEnabled
-            ? processAutoLabelMessage({
-                accessToken,
-                getAutoLabelContext: automationRuntime.getAutoLabelContext,
-                getBudgetStatus: automationRuntime.getBudgetStatus,
-                gmailMessageId: messageId,
-                loadMessage,
-                mailboxId,
-                userId,
-              })
-            : undefined,
-          extractCodes
-            ? processMailVerificationCode({
-                loadMessage,
-                mailboxId,
-                messageId,
-                organizationId,
-                userId,
-              })
-            : undefined,
-        ]);
+        throw error;
       }
-    })
-  );
+    };
+
+    if (triggerActions) {
+      const message = await loadMessage();
+      if (
+        message !== null &&
+        !message.draftId &&
+        message.labelIds?.some((label) =>
+          AUTO_LABEL_EXCLUDED_LABELS.has(label)
+        ) !== true
+      ) {
+        const receivedAt = Number(message.internalDate);
+        if (!Number.isFinite(receivedAt) || receivedAt <= 0) {
+          throw new Error("Gmail message is missing its arrival time.");
+        }
+        await enqueueMailAgentMessage({
+          mailboxId,
+          messageId: message.id,
+          receivedAt: new Date(receivedAt),
+          threadId: message.threadId,
+        });
+      }
+    }
+
+    const outcomes = await Promise.allSettled([
+      loadMessage().then(async (message) => {
+        if (message) {
+          await captureMailboxMessageMemory({
+            actorUserId: userId,
+            mailboxId,
+            message,
+            source: "sync",
+          });
+        }
+      }),
+      autoLabelEnabled
+        ? processAutoLabelMessage({
+            accessToken,
+            getAutoLabelContext: automationRuntime.getAutoLabelContext,
+            getBudgetStatus: automationRuntime.getBudgetStatus,
+            gmailMessageId: messageId,
+            loadMessage,
+            mailboxId,
+            userId,
+          })
+        : undefined,
+      extractCodes
+        ? processMailVerificationCode({
+            loadMessage,
+            mailboxId,
+            messageId,
+            organizationId,
+            userId,
+          })
+        : undefined,
+    ]);
+    const failures = new Set<unknown>();
+    let throttled: GmailServiceError | undefined;
+    for (const outcome of outcomes) {
+      if (outcome.status === "rejected") {
+        const error: unknown = outcome.reason;
+        failures.add(error);
+        if (
+          isGmailRateLimitedError(error) &&
+          (throttled === undefined ||
+            (error.retryAfterMs ?? MAILBOX_RATE_LIMIT_RETRY_MS) >
+              (throttled.retryAfterMs ?? MAILBOX_RATE_LIMIT_RETRY_MS))
+        ) {
+          throttled = error;
+        }
+      }
+    }
+    if (throttled !== undefined) {
+      for (const failure of failures) {
+        if (
+          !isGmailRateLimitedError(failure) &&
+          !isAiCreditAdmissionBusy(failure) &&
+          !(failure instanceof ORPCError && failure.status < 500)
+        ) {
+          reportError(failure, { operation: "gmail-sync:message-work" });
+        }
+      }
+      throw throttled;
+    }
+    if (failures.size > 0) {
+      const [failure] = failures;
+      throw failure;
+    }
+  }
 };
 
 export const retryPendingAutomationMessages = async ({
@@ -653,33 +675,32 @@ export const retryPendingAutomationMessages = async ({
   userId: string;
 }) => {
   const now = new Date();
-  const [autoLabelEvents, pendingCodeMessageIds] = await Promise.all([
-    autoLabelEnabled
-      ? db
-          .select({
-            gmailMessageId: gmailAutoLabelEvent.gmailMessageId,
-            nextAttemptAt: gmailAutoLabelEvent.nextAttemptAt,
-          })
-          .from(gmailAutoLabelEvent)
-          .where(
-            and(
-              eq(gmailAutoLabelEvent.mailboxId, mailboxId),
-              isNull(gmailAutoLabelEvent.appliedAt),
-              or(
-                isNull(gmailAutoLabelEvent.nextAttemptAt),
-                lte(gmailAutoLabelEvent.nextAttemptAt, now),
-                autoLabelBudgetDeferred
-              )
+  const autoLabelEvents = autoLabelEnabled
+    ? await db
+        .select({
+          gmailMessageId: gmailAutoLabelEvent.gmailMessageId,
+          nextAttemptAt: gmailAutoLabelEvent.nextAttemptAt,
+        })
+        .from(gmailAutoLabelEvent)
+        .where(
+          and(
+            eq(gmailAutoLabelEvent.mailboxId, mailboxId),
+            isNull(gmailAutoLabelEvent.appliedAt),
+            or(
+              isNull(gmailAutoLabelEvent.nextAttemptAt),
+              lte(gmailAutoLabelEvent.nextAttemptAt, now),
+              autoLabelBudgetDeferred
             )
           )
-          .orderBy(
-            desc(isNull(gmailAutoLabelEvent.nextAttemptAt)),
-            asc(gmailAutoLabelEvent.nextAttemptAt)
-          )
-          .limit(20)
-      : [],
-    listPendingMailboxVerificationCodeMessageIds(mailboxId, 20),
-  ]);
+        )
+        .orderBy(
+          desc(isNull(gmailAutoLabelEvent.nextAttemptAt)),
+          asc(gmailAutoLabelEvent.nextAttemptAt)
+        )
+        .limit(20)
+    : [];
+  const pendingCodeMessageIds =
+    await listPendingMailboxVerificationCodeMessageIds(mailboxId, 20);
   const budgetStatus = autoLabelEvents.some(
     (event) => event.nextAttemptAt !== null && event.nextAttemptAt > now
   )
@@ -820,23 +841,26 @@ const processMailboxHistory = async ({
   organizationId: string | null;
   userId: string;
 }) => {
-  let captureNeedsContinuation = false;
-  try {
-    const capture = await runAuthorizedGmailMailbox(
-      { mailboxId, userId },
-      async (accessToken) =>
-        await processGmailMailCapture({ accessToken, mailboxId })
-    );
-    captureNeedsContinuation = capture.needsContinuation;
-  } catch (error) {
-    reportError(error, { operation: "gmail-sync:mail-capture" });
-  }
   const leaseId = await claimMailboxProcessingLease(mailboxId);
   if (!leaseId) {
-    return { busy: true, needsContinuation: captureNeedsContinuation };
+    return { busy: true, needsContinuation: false };
   }
-
+  let captureNeedsContinuation = false;
+  let retryAt: Date | null = null;
   try {
+    try {
+      const capture = await runAuthorizedGmailMailbox(
+        { mailboxId, userId },
+        async (accessToken) =>
+          await processGmailMailCapture({ accessToken, mailboxId })
+      );
+      captureNeedsContinuation = capture.needsContinuation;
+    } catch (error) {
+      if (isGmailRateLimitedError(error)) {
+        throw error;
+      }
+      reportError(error, { operation: "gmail-sync:mail-capture" });
+    }
     const needsContinuation = await runAuthorizedGmailMailbox(
       { mailboxId, userId },
       async (accessToken) => {
@@ -867,34 +891,35 @@ const processMailboxHistory = async ({
         };
         let autoLabelContextPromise: Promise<AutoLabelContext> | null = null;
         const getAutoLabelContext = async () => {
-          autoLabelContextPromise ??= Promise.all([
-            listLabels(accessToken).then(
-              async (labels) => await syncGmailLabels(mailboxId, labels)
-            ),
-            getMailAutomationContext(),
-          ]).then(([gmailLabels, automationContext]) => {
-            const labels = gmailLabels
-              .filter(
-                (label) =>
-                  label.type === "user" && label.autoLabel?.enabled !== false
-              )
-              .map((label) => ({
-                autoLabel: label.autoLabel,
-                description: label.description,
-                id: label.id,
-                inclusionCriteria: label.inclusionCriteria,
-                name: label.name,
-              }));
-            return {
-              availableLabelIds: new Set(labels.map((label) => label.id)),
-              historyLabels: gmailLabels
-                .filter((label) => label.type === "user")
-                .map(({ id, name }) => ({ id, name })),
-              labels,
-              memoryCandidates: automationContext.memoryCandidates,
-              model: automationContext.configuration.autoLabelModel,
-            };
-          });
+          autoLabelContextPromise ??= getMailAutomationContext().then(
+            async (automationContext) => {
+              const gmailLabels = await syncGmailLabels(
+                mailboxId,
+                await listLabels(accessToken)
+              );
+              const labels = gmailLabels
+                .filter(
+                  (label) =>
+                    label.type === "user" && label.autoLabel?.enabled !== false
+                )
+                .map((label) => ({
+                  autoLabel: label.autoLabel,
+                  description: label.description,
+                  id: label.id,
+                  inclusionCriteria: label.inclusionCriteria,
+                  name: label.name,
+                }));
+              return {
+                availableLabelIds: new Set(labels.map((label) => label.id)),
+                historyLabels: gmailLabels
+                  .filter((label) => label.type === "user")
+                  .map(({ id, name }) => ({ id, name })),
+                labels,
+                memoryCandidates: automationContext.memoryCandidates,
+                model: automationContext.configuration.autoLabelModel,
+              };
+            }
+          );
 
           return await autoLabelContextPromise;
         };
@@ -1024,9 +1049,16 @@ const processMailboxHistory = async ({
     };
   } catch (error) {
     await recordWatchError(mailboxId, error);
+    if (isGmailRateLimitedError(error)) {
+      retryAt = new Date(
+        Date.now() +
+          Math.max(1000, error.retryAfterMs ?? MAILBOX_RATE_LIMIT_RETRY_MS)
+      );
+      return { busy: true, needsContinuation: true };
+    }
     throw error;
   } finally {
-    await releaseMailboxProcessingLease(mailboxId, leaseId);
+    await releaseMailboxProcessingLease(mailboxId, leaseId, retryAt);
   }
 };
 
