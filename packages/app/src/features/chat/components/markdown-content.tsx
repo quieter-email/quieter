@@ -14,7 +14,7 @@ const markdownLink = ({
   if (reference !== null) {
     return <MailReference reference={reference}>{children}</MailReference>;
   }
-  if (href?.startsWith("/mail-reference") === true) {
+  if (!href || !/^(?:https?:\/\/|mailto:)/iu.test(href)) {
     return <span>{children}</span>;
   }
   return (
@@ -24,13 +24,25 @@ const markdownLink = ({
   );
 };
 
+const markdownImage = ({ alt }: ComponentPropsWithoutRef<"img">) => (
+  <span>{alt || "Image omitted"}</span>
+);
+
 type MarkdownContentProps = {
   markdown: string;
 };
 
 export const MarkdownContent = ({ markdown }: MarkdownContentProps) => (
   <div className="typeset typeset-docs max-w-[37em]">
-    <Remark rehypeReactOptions={{ components: { a: markdownLink } }}>
+    <Remark
+      rehypeReactOptions={{
+        components: {
+          a: markdownLink,
+          img: markdownImage,
+        },
+      }}
+      remarkToRehypeOptions={{ allowDangerousHtml: false }}
+    >
       {markdown}
     </Remark>
   </div>

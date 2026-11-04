@@ -18,43 +18,14 @@ import {
   getCalendarAccountForUser,
   listCalendarAccountsForUser,
 } from "../calendar/service";
-import { connectorDisplayNames } from "../connectors/contracts";
+import {
+  connectorDisplayNames,
+  linearReadTools,
+} from "../connectors/contracts";
 import { listLinearMcpToolsForUser } from "../connectors/linear-mcp";
 import { hasRequiredConnectorScopes } from "../connectors/runtime";
 import { connectorMentionPattern } from "./contracts";
 
-const linearReadTools = new Set([
-  "get_issue",
-  "list_issues",
-  "search_issues",
-  "get_comment",
-  "list_comments",
-  "get_project",
-  "list_projects",
-  "get_document",
-  "list_documents",
-  "get_team",
-  "list_teams",
-  "get_user",
-  "list_users",
-  "get_viewer",
-  "get_cycle",
-  "list_cycles",
-  "get_issue_status",
-  "list_issue_statuses",
-  "list_issue_labels",
-  "get_issue_label",
-  "list_project_labels",
-  "get_project_label",
-  "get_initiative",
-  "list_initiatives",
-  "get_initiative_update",
-  "list_initiative_updates",
-  "get_project_update",
-  "list_project_updates",
-  "search",
-  "search_documentation",
-]);
 const linearWriteTools = new Set([
   "create_issue",
   "update_issue",

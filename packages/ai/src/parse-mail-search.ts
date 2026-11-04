@@ -117,5 +117,61 @@ export const parseMailSearchWithAi = async ({
     system: buildSystemPrompt(todayValue, allowedIsValues),
   });
 
+  for (const filter of result.filters) {
+    let valid = true;
+    switch (filter.type) {
+      case "label": {
+        valid = availableLabels.includes(filter.value);
+        break;
+      }
+      case "is": {
+        valid = (allowedIsValues ?? DEFAULT_IS_VALUES).includes(filter.value);
+        break;
+      }
+      case "has": {
+        valid = filter.value === "attachment";
+        break;
+      }
+      case "newer_than":
+      case "older_than": {
+        valid = /^[1-9]\d*[dmy]$/u.test(filter.value);
+        break;
+      }
+      case "after":
+      case "before": {
+        const date =
+          /^(?<year>\d{4})\/(?<month>\d{1,2})\/(?<day>\d{1,2})$/u.exec(
+            filter.value
+          );
+        valid =
+          date !== null &&
+          z.iso.date().safeParse(
+            date
+              .slice(1)
+              .map((part) => part.padStart(2, "0"))
+              .join("-")
+          ).success;
+        break;
+      }
+      case "bcc":
+      case "cc":
+      case "content":
+      case "filename":
+      case "from":
+      case "subject":
+      case "to": {
+        break;
+      }
+      default: {
+        const unhandled: never = filter.type;
+        throw new Error("Unsupported search filter type.", {
+          cause: unhandled,
+        });
+      }
+    }
+    if (!valid) {
+      throw new Error("The generated search contains an unsupported filter.");
+    }
+  }
   return result;
 };

@@ -13,6 +13,7 @@ import type { ChatModel } from "./chat-models";
 import type { AiUsageReport } from "./chat-usage";
 import { summarizeAiUsage } from "./chat-usage";
 import { createChatModel } from "./openrouter";
+import { AI_PROMPT_SECURITY_POLICY } from "./prompt-security";
 
 const reasoningProviderOptions = (
   effort: "minimal" | "low" | "medium" | "high" | undefined
@@ -56,7 +57,7 @@ export const runStructuredGeneration = async <TOutput>(input: {
           ...(input.abortSignal === undefined
             ? {}
             : { abortSignal: input.abortSignal }),
-          instructions: input.system,
+          instructions: `${AI_PROMPT_SECURITY_POLICY}\n\n${input.system}`,
           maxOutputTokens: input.maxOutputTokens,
           ...(input.maxRetries === undefined
             ? {}
@@ -113,7 +114,7 @@ export const runTextGeneration = async (input: {
     ...(input.abortSignal === undefined
       ? {}
       : { abortSignal: input.abortSignal }),
-    instructions: input.system,
+    instructions: `${AI_PROMPT_SECURITY_POLICY}\n\n${input.system}`,
     maxOutputTokens: input.maxOutputTokens,
     model: createChatModel(input.model ?? defaultChatModel, {
       billing: input.billing,

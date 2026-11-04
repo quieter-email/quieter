@@ -4,6 +4,7 @@
 - [Electron desktop](desktop.md)
 - [Development integration plan](development-integrations.md)
 - [Architecture](architecture.md)
+- [AI trust boundaries](ai-security.md)
 - [Design system](design-system.md)
 - [Responsive mail baseline](responsive-mail.md)
 - [Live mail and browser caching](mail-live-updates.md)

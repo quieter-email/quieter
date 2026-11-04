@@ -75,8 +75,8 @@ export const generateChatTitle = async ({
     // title mid-word, which is how titles end up as broken fragments.
     reasoningEffort: "minimal",
     ...(onUsage === undefined ? {} : { onUsage }),
-    prompt: `<chat_request>\n${prompt}\n</chat_request>`,
-    system: `Generate a concise 2 to 5 word title that describes the user's request inside <chat_request>.
+    prompt: JSON.stringify({ request: prompt }),
+    system: `Generate a concise 2 to 5 word title that describes the request field in the supplied JSON.
 
 Write the title in the same language the request is written in. When the request has no clear language — a greeting, a single word, punctuation, or anything else ambiguous — write the title in English. Never mix scripts or languages within one title.
 

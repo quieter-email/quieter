@@ -272,7 +272,7 @@ export const calendarWriteInputSchemas = {
 } as const;
 export type CalendarWriteToolName = keyof typeof calendarWriteInputSchemas;
 export const calendarWriteToolNames = Object.keys(calendarWriteInputSchemas);
-export const approvalRequiredToolNames = [
+export const mutatingChatToolNames = [
   "linear_write",
   "modify_mail",
   "save_compose_draft",
@@ -280,17 +280,41 @@ export const approvalRequiredToolNames = [
   ...calendarWriteToolNames,
 ];
 
+export const approvalRequiredToolNames = [
+  "delete_calendar_event",
+  "linear_write",
+];
+
+export const requiresChatToolApproval = (input: {
+  toolName: string;
+  input: unknown;
+}) => {
+  if (input.toolName === "delete_calendar_event") {
+    return true;
+  }
+  if (input.toolName !== "linear_write") {
+    return false;
+  }
+  const command = z.object({ toolName: z.string() }).safeParse(input.input);
+  return (
+    command.success &&
+    /(?:^|[_:-])(?:delete|destroy|drop|purge|wipe|reset|remove)(?:[_:-]|$)/iu.test(
+      command.data.toolName
+    )
+  );
+};
+
 const linearConnectionReviewSchema = z.object({
   account: z.string().nullable(),
   connectionId: z.string().min(1),
   workspace: z.string().nullable(),
 });
-export type LinearWriteReview = z.infer<typeof linearConnectionReviewSchema>;
+export type LinearToolReview = z.infer<typeof linearConnectionReviewSchema>;
 
-export const resolveLinearWriteReview = (input: {
+export const resolveLinearToolReview = (input: {
   input: unknown;
   transcript: readonly UIMessage[];
-}): LinearWriteReview | undefined => {
+}): LinearToolReview | undefined => {
   const proposed = z
     .object({ connectionId: z.string(), toolName: z.string() })
     .safeParse(input.input);
@@ -559,7 +583,7 @@ export const createForegroundServerTools = (
   }),
   send_mail: tool({
     description:
-      "Send this exact reviewed compose draft. The user must always approve the final recipients, subject, body, and revision before sending. If it has attachments or inline images, ask the user to send it from the composer instead.",
+      "Send the requested email using the exact current visible draft and revision. Read the workspace first. If it has attachments or inline images, ask the user to send it from the composer instead.",
     execute: async ({ draft }, { abortSignal, toolCallId }) =>
       await context.sendMail({ draft, toolCallId }, abortSignal),
     inputSchema: sendMailInputSchema,
