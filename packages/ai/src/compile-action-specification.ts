@@ -7,6 +7,7 @@ import type { ChatModel } from "./chat-models";
 import { summarizeAiUsage } from "./chat-usage";
 import type { AiUsageReport } from "./chat-usage";
 import { createChatModel } from "./openrouter";
+import { AI_PROMPT_SECURITY_POLICY } from "./prompt-security";
 
 const replaceExclusiveUnions = (value: unknown) => {
   if (typeof value !== "object" || value === null) {
@@ -49,7 +50,7 @@ export const compileActionSpecification = async (input: {
 }) => {
   const result = await generateText({
     abortSignal: input.abortSignal,
-    instructions: input.system,
+    instructions: `${AI_PROMPT_SECURITY_POLICY}\n\n${input.system}`,
     maxOutputTokens: 6000,
     maxRetries: 0,
     model: createChatModel(input.model, { billing: input.billing }),

@@ -288,6 +288,13 @@ describe.skipIf(state.databaseUrl === undefined)(
         connectors: connected
           ? [{ connectionId: connectorId, referenceId: "tasks" }]
           : [],
+        eligibility: connected
+          ? {
+              bodyIncludes: [],
+              sender: { addresses: ["sender@example.test"], kind: "addresses" },
+              subjectIncludes: [],
+            }
+          : undefined,
         instructions: "Prepare a reply.",
         mailboxId,
         permissions: [
@@ -334,6 +341,7 @@ describe.skipIf(state.databaseUrl === undefined)(
           ...(connected
             ? [
                 {
+                  argumentTemplate: JSON.stringify({ id: "issue" }),
                   confirmation: "none",
                   permissionId: "tasks",
                   toolId: "linear.get_issue",

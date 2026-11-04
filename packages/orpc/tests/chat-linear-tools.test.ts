@@ -146,6 +146,7 @@ describe("chat Linear tools", () => {
 
     const result = await invokeTool(tools, "linear_read", {
       arguments: {},
+      connectionId: "connection-1",
       toolName: "create_issue",
     });
 
@@ -157,5 +158,18 @@ describe("chat Linear tools", () => {
     expect(isMutatingLinearMcpTool).toHaveBeenCalledWith({
       name: "create_issue",
     });
+  });
+
+  test("does not dispatch an unbound read carrying private text", async () => {
+    const tools = createLinearChatTools({
+      latestUserRequest: "Use @Linear to find an issue.",
+      userId: "user-1",
+    });
+    const result = await invokeTool(tools, "linear_read", {
+      arguments: { query: "PRIVATE_MAIL_SENTINEL" },
+      toolName: "search_issues",
+    });
+    expect(result).toMatchObject({ status: "error" });
+    expect(runLinearMcpToolCallsForUser).not.toHaveBeenCalled();
   });
 });

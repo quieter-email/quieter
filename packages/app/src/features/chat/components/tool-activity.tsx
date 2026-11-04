@@ -5,7 +5,7 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import {
-  approvalRequiredToolNames,
+  requiresChatToolApproval,
   isCalendarWriteToolName,
 } from "@quieter/ai/chat-tools";
 import { getToolName } from "@quieter/app/features/chat/domain/chat-tools";
@@ -178,11 +178,17 @@ const ToolDetails = ({ input, draft }: { input: unknown; draft: boolean }) => {
         ? [{ key, label, value }]
         : [];
     });
-  if (details.length === 0) {
+  if (!draft) {
     for (const [key, value] of Object.entries(payload)) {
+      if (details.some((detail) => detail.key === key)) {
+        continue;
+      }
       details.push({
         key,
-        label: key.replaceAll("_", " "),
+        label:
+          { arguments: "Inputs", connectionId: "Account", toolName: "Tool" }[
+            key
+          ] ?? key.replaceAll("_", " "),
         value:
           typeof value === "string" ? value : JSON.stringify(value, null, 2),
       });
@@ -211,19 +217,9 @@ export const ToolActivity = ({
 }) => {
   const name = getToolName(part.type);
   const approvalAction =
-    {
-      connector_write: "Apply change",
-      create_calendar_event: "Create event",
-      delete_calendar_event: "Delete",
-      linear_write: "Apply change",
-      modify_mail: "Apply change",
-      respond_to_calendar_event: "Send response",
-      save_compose_draft: "Save draft",
-      send_mail: "Send",
-      update_calendar_event: "Save changes",
-    }[name] ?? "Approve";
+    name === "delete_calendar_event" ? "Delete" : "Confirm destructive action";
   const awaitingApproval =
-    approvalRequiredToolNames.includes(name) &&
+    requiresChatToolApproval({ input: part.input, toolName: name }) &&
     part.state === "approval-requested";
   const output = part.state === "output-available" ? part.output : undefined;
   const returnedError =
@@ -260,13 +256,9 @@ export const ToolActivity = ({
   }
   if (awaitingApproval) {
     label =
-      {
-        create_calendar_event: "Create this event?",
-        delete_calendar_event: "Delete this event permanently?",
-        respond_to_calendar_event: "Send this invitation response?",
-        send_mail: "Send this email?",
-        update_calendar_event: "Save these event changes?",
-      }[name] ?? "Approve this action?";
+      name === "delete_calendar_event"
+        ? "Delete this event permanently?"
+        : "Confirm this destructive action?";
   }
   let errorText = "The action could not be completed. Try again.";
   if (part.state === "output-error") {
@@ -324,7 +316,9 @@ export const ToolActivity = ({
           ) : null}
           {awaitingApproval && approval?.linearReview ? (
             <p className="mb-3 text-caption text-fg">
-              {approval.linearReview.account}, {approval.linearReview.workspace}
+              The tool and arguments below will be sent to your connected
+              account, {approval.linearReview.account}, in{" "}
+              {approval.linearReview.workspace}.
             </p>
           ) : null}
           {awaitingApproval && approval?.connectorReview ? (
@@ -358,24 +352,7 @@ export const ToolActivity = ({
                 }}
                 size="compact"
                 type="button"
-                variant={
-                  name === "delete_calendar_event" ||
-                  (name === "linear_write" &&
-                    typeof part.input === "object" &&
-                    part.input !== null &&
-                    "toolName" in part.input &&
-                    typeof part.input.toolName === "string" &&
-                    /(?:^|[_:-])(?:delete|destroy|remove|reset)(?:[_:-]|$)/iu.test(
-                      part.input.toolName
-                    )) ||
-                  (name === "modify_mail" &&
-                    typeof part.input === "object" &&
-                    part.input !== null &&
-                    "action" in part.input &&
-                    part.input.action === "trash")
-                    ? "destructive"
-                    : "default"
-                }
+                variant="destructive"
               >
                 {approvalAction}
               </Button>

@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/server";
 import type { CalendarToolsContext } from "@quieter/ai/chat-agent";
 import {
   calendarWriteInputSchemas,
+  requiresChatToolApproval,
   resolveCalendarWriteReview,
 } from "@quieter/ai/chat-tools";
 import type {
@@ -23,51 +24,68 @@ import {
   updateCalendarEventForUser,
 } from "../calendar/service";
 
-export const assertCalendarToolApproval = ({
+export const assertCalendarToolExecution = ({
   foreground,
   input,
+  observedParts = [],
   toolCallId,
   toolName,
   transcript,
 }: {
   foreground: ForegroundSnapshot;
   input: unknown;
+  observedParts?: UIMessage["parts"];
   toolCallId: string;
   toolName: CalendarWriteToolName;
   transcript: readonly UIMessage[];
 }) => {
-  const message = transcript.findLast(
+  const persistedMessage = transcript.findLast(
     (candidate) =>
       candidate.id === foreground.exchangeId && candidate.role === "assistant"
   );
-  const approvedCall = message?.parts.find(
-    (part) =>
-      isToolUIPart(part) &&
-      part.type === `tool-${toolName}` &&
-      part.toolCallId === toolCallId
-  );
-  if (
-    approvedCall === undefined ||
-    !isToolUIPart(approvedCall) ||
-    approvedCall.state !== "approval-responded" ||
-    !approvedCall.approval.approved
-  ) {
-    throw new ORPCError("CONFLICT", {
-      message: "Approve the exact calendar change before continuing.",
-    });
-  }
+  const message: UIMessage | undefined =
+    persistedMessage === undefined && observedParts.length === 0
+      ? undefined
+      : {
+          id: foreground.exchangeId,
+          parts: [...(persistedMessage?.parts ?? []), ...observedParts],
+          role: "assistant",
+        };
   const schema = calendarWriteInputSchemas[toolName];
-  const approved = schema.safeParse(approvedCall.input);
   const proposed = schema.safeParse(input);
-  if (
-    !approved.success ||
-    !proposed.success ||
-    JSON.stringify(approved.data) !== JSON.stringify(proposed.data)
-  ) {
+  if (!proposed.success) {
     throw new ORPCError("CONFLICT", {
       message:
-        "The calendar change differs from the approved action. Review it again.",
+        "The calendar change is invalid. Read the calendar and try again.",
     });
+  }
+  if (requiresChatToolApproval({ input: proposed.data, toolName })) {
+    const approvedCall = message?.parts.find(
+      (part) =>
+        isToolUIPart(part) &&
+        part.type === `tool-${toolName}` &&
+        part.toolCallId === toolCallId
+    );
+    if (
+      approvedCall === undefined ||
+      !isToolUIPart(approvedCall) ||
+      approvedCall.state !== "approval-responded" ||
+      !approvedCall.approval.approved
+    ) {
+      throw new ORPCError("CONFLICT", {
+        message: "Approve the exact calendar change before continuing.",
+      });
+    }
+    const approved = schema.safeParse(approvedCall.input);
+    if (
+      !approved.success ||
+      JSON.stringify(approved.data) !== JSON.stringify(proposed.data)
+    ) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "The calendar change differs from the approved action. Review it again.",
+      });
+    }
   }
   if (
     message === undefined ||
@@ -79,7 +97,7 @@ export const assertCalendarToolApproval = ({
   ) {
     throw new ORPCError("CONFLICT", {
       message:
-        "Read the destination calendar and current event before requesting approval again.",
+        "Read the destination calendar and current event before making this change.",
     });
   }
 };
@@ -143,115 +161,139 @@ export const createCalendarToolsContext = ({
   foreground: ForegroundSnapshot;
   transcript: readonly UIMessage[];
   userId: string;
-}): CalendarToolsContext => ({
-  createEvent: async (input, { signal, toolCallId }) =>
-    await runCalendarTool(async (runSignal) => {
-      assertCalendarToolApproval({
-        foreground,
-        input,
-        toolCallId,
-        toolName: "create_calendar_event",
-        transcript,
-      });
-      const operationId = await deriveCalendarToolOperationId({
-        exchangeId: foreground.exchangeId,
-        toolCallId,
-        userId,
-      });
-      return await createCalendarEventForUser({
-        ...input,
-        operationId,
-        signal: runSignal,
-        userId,
-      });
-    }, signal),
-  deleteEvent: async (input, { signal, toolCallId }) =>
-    await runCalendarTool(async (runSignal) => {
-      assertCalendarToolApproval({
-        foreground,
-        input,
-        toolCallId,
-        toolName: "delete_calendar_event",
-        transcript,
-      });
-      return await deleteCalendarEventForUser({
-        ...input,
-        signal: runSignal,
-        userId,
-      });
-    }, signal),
-  getEvent: async (input, signal) =>
-    await runCalendarTool(
-      async (runSignal) => ({
-        event: await getCalendarEventForUser({
+}): CalendarToolsContext => {
+  const observedParts: UIMessage["parts"] = [];
+  return {
+    createEvent: async (input, { signal, toolCallId }) =>
+      await runCalendarTool(async (runSignal) => {
+        assertCalendarToolExecution({
+          foreground,
+          input,
+          observedParts,
+          toolCallId,
+          toolName: "create_calendar_event",
+          transcript,
+        });
+        const operationId = await deriveCalendarToolOperationId({
+          exchangeId: foreground.exchangeId,
+          toolCallId,
+          userId,
+        });
+        return await createCalendarEventForUser({
+          ...input,
+          operationId,
+          signal: runSignal,
+          userId,
+        });
+      }, signal),
+    deleteEvent: async (input, { signal, toolCallId }) =>
+      await runCalendarTool(async (runSignal) => {
+        assertCalendarToolExecution({
+          foreground,
+          input,
+          observedParts,
+          toolCallId,
+          toolName: "delete_calendar_event",
+          transcript,
+        });
+        return await deleteCalendarEventForUser({
           ...input,
           signal: runSignal,
           userId,
-        }),
-        fetchedAt: new Date().toISOString(),
-        status: "success" as const,
-      }),
-      signal
-    ),
-  listCalendars: async ({ connectionId }, signal) =>
-    await runCalendarTool(async (runSignal) => {
-      const accounts = await listCalendarAccountsForUser({ userId });
-      const listed =
-        connectionId === undefined
-          ? { calendars: [] }
-          : await listCalendarsForUser({
-              connectionId,
-              signal: runSignal,
-              userId,
-            });
-      return {
-        accounts: accounts.accounts,
-        calendars: listed.calendars,
-        fetchedAt: new Date().toISOString(),
-        status: "success" as const,
-      };
-    }, signal),
-  listEvents: async (input, signal) =>
-    await runCalendarTool(async (runSignal) => {
-      const result = await listCalendarEventsForUser({
-        ...input,
-        signal: runSignal,
-        userId,
-      });
-      return {
-        events: result.events,
-        fetchedAt: new Date().toISOString(),
-        status: "success" as const,
-      };
-    }, signal),
-  respondToEvent: async (input, { signal, toolCallId }) =>
-    await runCalendarTool(async (runSignal) => {
-      assertCalendarToolApproval({
-        foreground,
-        input,
-        toolCallId,
-        toolName: "respond_to_calendar_event",
-        transcript,
-      });
-      return await respondToCalendarEventForUser({
-        ...input,
-        signal: runSignal,
-        userId,
-      });
-    }, signal),
-  updateEvent: async (input, { signal, toolCallId }) =>
-    await runCalendarTool(async (runSignal) => {
-      assertCalendarToolApproval({
-        foreground,
-        input,
-        toolCallId,
-        toolName: "update_calendar_event",
-        transcript,
-      });
-      return await updateCalendarEventForUser({
-        ...input,
-        signal: runSignal,
-        userId,
-      });
-    }, signal),
-});
+        });
+      }, signal),
+    getEvent: async (input, signal) =>
+      await runCalendarTool(async (runSignal) => {
+        const output = {
+          event: await getCalendarEventForUser({
+            ...input,
+            signal: runSignal,
+            userId,
+          }),
+          fetchedAt: new Date().toISOString(),
+          status: "success" as const,
+        };
+        runSignal.throwIfAborted();
+        observedParts.push({
+          input,
+          output,
+          state: "output-available",
+          toolCallId: crypto.randomUUID(),
+          type: "tool-get_calendar_event",
+        });
+        return output;
+      }, signal),
+    listCalendars: async ({ connectionId }, signal) =>
+      await runCalendarTool(async (runSignal) => {
+        const accounts = await listCalendarAccountsForUser({ userId });
+        const listed =
+          connectionId === undefined
+            ? { calendars: [] }
+            : await listCalendarsForUser({
+                connectionId,
+                signal: runSignal,
+                userId,
+              });
+        const output = {
+          accounts: accounts.accounts,
+          calendars: listed.calendars,
+          fetchedAt: new Date().toISOString(),
+          status: "success" as const,
+        };
+        runSignal.throwIfAborted();
+        observedParts.push({
+          input: { connectionId },
+          output,
+          state: "output-available",
+          toolCallId: crypto.randomUUID(),
+          type: "tool-list_calendars",
+        });
+        return output;
+      }, signal),
+    listEvents: async (input, signal) =>
+      await runCalendarTool(async (runSignal) => {
+        const result = await listCalendarEventsForUser({
+          ...input,
+          signal: runSignal,
+          userId,
+        });
+        return {
+          events: result.events,
+          fetchedAt: new Date().toISOString(),
+          status: "success" as const,
+        };
+      }, signal),
+    respondToEvent: async (input, { signal, toolCallId }) =>
+      await runCalendarTool(async (runSignal) => {
+        assertCalendarToolExecution({
+          foreground,
+          input,
+          observedParts,
+          toolCallId,
+          toolName: "respond_to_calendar_event",
+          transcript,
+        });
+        return await respondToCalendarEventForUser({
+          ...input,
+          signal: runSignal,
+          userId,
+        });
+      }, signal),
+    updateEvent: async (input, { signal, toolCallId }) =>
+      await runCalendarTool(async (runSignal) => {
+        assertCalendarToolExecution({
+          foreground,
+          input,
+          observedParts,
+          toolCallId,
+          toolName: "update_calendar_event",
+          transcript,
+        });
+        return await updateCalendarEventForUser({
+          ...input,
+          signal: runSignal,
+          userId,
+        });
+      }, signal),
+  };
+};

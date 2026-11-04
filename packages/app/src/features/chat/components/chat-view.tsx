@@ -4,8 +4,8 @@ import { useChat } from "@ai-sdk/react";
 import type { ChatMailContext } from "@quieter/ai/chat-context";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import {
-  approvalRequiredToolNames,
-  resolveLinearWriteReview,
+  requiresChatToolApproval,
+  resolveLinearToolReview,
   resolveConnectorWriteReview,
   foregroundSnapshotSchema,
   isForegroundClientToolName,
@@ -387,7 +387,10 @@ const ChatSession = ({
     message.parts.flatMap((part) => {
       if (
         !isToolUIPart(part) ||
-        !approvalRequiredToolNames.includes(part.type.replace("tool-", "")) ||
+        !requiresChatToolApproval({
+          input: part.input,
+          toolName: part.type.replace("tool-", ""),
+        }) ||
         part.state !== "approval-requested"
       ) {
         return [];
@@ -426,7 +429,7 @@ const ChatSession = ({
                 (toolName === "linear_write" ||
                   toolName === "connector_write") &&
                 (toolName === "linear_write"
-                  ? resolveLinearWriteReview
+                  ? resolveLinearToolReview
                   : resolveConnectorWriteReview)({
                   input: part.input,
                   transcript: [message],
@@ -435,36 +438,6 @@ const ChatSession = ({
                 void chat.addToolApprovalResponse({
                   approved: false,
                   id: part.approval.id,
-                });
-                return;
-              }
-              if (
-                toolName !== "send_mail" &&
-                toolName !== "save_compose_draft"
-              ) {
-                void chat.addToolApprovalResponse({
-                  approved: true,
-                  id: part.approval.id,
-                });
-                return;
-              }
-              const proposed = saveComposeDraftInputSchema.safeParse(
-                part.input
-              );
-              const currentDraft = saveComposeDraftInputSchema.safeParse({
-                draft: workspace.read().draft,
-              });
-              const matches =
-                proposed.success &&
-                currentDraft.success &&
-                JSON.stringify(proposed.data) ===
-                  JSON.stringify(currentDraft.data);
-              if (!matches) {
-                void chat.addToolApprovalResponse({
-                  approved: false,
-                  id: part.approval.id,
-                  reason:
-                    "The visible draft changed. Read the current draft and request approval again.",
                 });
                 return;
               }
@@ -502,7 +475,7 @@ const ChatSession = ({
           id: part.approval.id,
           linearReview:
             toolName === "linear_write"
-              ? resolveLinearWriteReview({
+              ? resolveLinearToolReview({
                   input: part.input,
                   transcript: [message],
                 })
