@@ -17,7 +17,7 @@ import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import type * as CalendarService from "../src/calendar/service";
 import {
-  assertCalendarToolApproval,
+  assertCalendarToolExecution,
   createCalendarToolsContext,
   deriveCalendarToolOperationId,
 } from "../src/chat/calendar-tools";
@@ -115,6 +115,13 @@ const updateInput = {
   version: event.version,
 };
 
+const deleteInput = {
+  calendarId: calendar.calendarId,
+  connectionId: account.id,
+  eventId: event.eventId,
+  version: event.version,
+};
+
 const approvedTranscript = ({
   input,
   sourceAccount = account,
@@ -168,7 +175,7 @@ const approvedTranscript = ({
   },
 ];
 
-describe("calendar tool approvals", () => {
+describe("calendar tool execution", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.create.mockResolvedValue({
@@ -182,40 +189,39 @@ describe("calendar tool approvals", () => {
   });
 
   test.each(accountSnapshots)(
-    "binds $label writes to their approved exchange, tool call, target and changes",
+    "binds $label deletions to their approved exchange, tool call, target and changes",
     ({ account: sourceAccount }) => {
       const approved = {
         foreground,
-        input: updateInput,
+        input: deleteInput,
         toolCallId: "change-1",
-        toolName: "update_calendar_event" as const,
+        toolName: "delete_calendar_event" as const,
         transcript: approvedTranscript({
-          input: updateInput,
+          input: deleteInput,
           sourceAccount,
-          toolName: "update_calendar_event",
+          toolName: "delete_calendar_event",
         }),
       };
       expect(() => {
-        assertCalendarToolApproval(approved);
+        assertCalendarToolExecution(approved);
       }).not.toThrow();
       for (const patch of [
-        { input: { ...updateInput, connectionId: "another-account" } },
-        { input: { ...updateInput, calendarId: "another-calendar" } },
-        { input: { ...updateInput, eventId: "series-1" } },
-        { input: { ...updateInput, version: "another-version" } },
-        { input: { ...updateInput, changes: { title: "Unreviewed change" } } },
+        { input: { ...deleteInput, connectionId: "another-account" } },
+        { input: { ...deleteInput, calendarId: "another-calendar" } },
+        { input: { ...deleteInput, eventId: "series-1" } },
+        { input: { ...deleteInput, version: "another-version" } },
         { toolCallId: "another-call" },
         { foreground: { ...foreground, exchangeId: crypto.randomUUID() } },
       ]) {
         expect(() => {
-          assertCalendarToolApproval({ ...approved, ...patch });
+          assertCalendarToolExecution({ ...approved, ...patch });
         }).toThrow(/approve|differs/iu);
       }
     }
   );
 
   test.each(accountSnapshots)(
-    "requires $label read evidence at the approved version before an event write",
+    "requires $label read evidence at the current version before an event write",
     ({ account: sourceAccount }) => {
       const transcript = approvedTranscript({
         input: updateInput,
@@ -224,7 +230,7 @@ describe("calendar tool approvals", () => {
         toolName: "update_calendar_event",
       });
       expect(() => {
-        assertCalendarToolApproval({
+        assertCalendarToolExecution({
           foreground,
           input: updateInput,
           toolCallId: "change-1",
@@ -234,6 +240,174 @@ describe("calendar tool approvals", () => {
       }).toThrow(/read/iu);
     }
   );
+
+  test("runs routine writes with discovery and no approval", async () => {
+    const transcript = approvedTranscript({
+      input: createInput,
+      toolName: "create_calendar_event",
+    }).map((message) => ({ ...message, parts: message.parts.slice(0, 2) }));
+    const context = createCalendarToolsContext({
+      foreground,
+      transcript,
+      userId: "signed-in-user",
+    });
+    await expect(
+      context.createEvent(createInput, { toolCallId: "create-1" })
+    ).resolves.toMatchObject({ status: "success" });
+    await context.updateEvent(updateInput, { toolCallId: "update-1" });
+    await context.respondToEvent(
+      { ...deleteInput, response: "accepted" },
+      { toolCallId: "respond-1" }
+    );
+    expect(mocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({ ...updateInput, userId: "signed-in-user" })
+    );
+    expect(mocks.respond).toHaveBeenCalledWith(
+      expect.objectContaining({
+        response: "accepted",
+        userId: "signed-in-user",
+      })
+    );
+    await expect(
+      context.deleteEvent(deleteInput, { toolCallId: "delete-1" })
+    ).resolves.toMatchObject({ status: "error" });
+    expect(mocks.delete).not.toHaveBeenCalled();
+  });
+
+  test("uses successful reads from the same context before routine writes", async () => {
+    mocks.accounts.mockResolvedValue({
+      accounts: [{ ...account, mailboxId: "mailbox-1" }],
+      isConfigured: true,
+    });
+    mocks.calendars.mockResolvedValue({ calendars: [calendar] });
+    mocks.event.mockResolvedValue(event);
+    const context = createCalendarToolsContext({
+      foreground,
+      transcript: [],
+      userId: "signed-in-user",
+    });
+    await context.listCalendars({ connectionId: account.id });
+    await expect(
+      context.createEvent(createInput, { toolCallId: "create-live" })
+    ).resolves.toMatchObject({ status: "success" });
+    await context.getEvent(deleteInput);
+    await context.updateEvent(updateInput, { toolCallId: "update-live" });
+    await context.respondToEvent(
+      { ...deleteInput, response: "accepted" },
+      { toolCallId: "respond-live" }
+    );
+    expect(mocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({ ...updateInput, userId: "signed-in-user" })
+    );
+    expect(mocks.respond).toHaveBeenCalledWith(
+      expect.objectContaining({
+        response: "accepted",
+        userId: "signed-in-user",
+      })
+    );
+    await expect(
+      context.deleteEvent(deleteInput, { toolCallId: "delete-live" })
+    ).resolves.toMatchObject({ status: "error" });
+    expect(mocks.delete).not.toHaveBeenCalled();
+  });
+
+  test("preserves exact persisted deletion approval alongside fresh reads", async () => {
+    mocks.accounts.mockResolvedValue({
+      accounts: [{ ...account, mailboxId: "mailbox-1" }],
+      isConfigured: true,
+    });
+    mocks.calendars.mockResolvedValue({ calendars: [calendar] });
+    mocks.event.mockResolvedValue(event);
+    const transcript = approvedTranscript({
+      input: deleteInput,
+      toolName: "delete_calendar_event",
+    }).map((message) => ({ ...message, parts: message.parts.slice(2) }));
+    const context = createCalendarToolsContext({
+      foreground,
+      transcript,
+      userId: "signed-in-user",
+    });
+    await context.listCalendars({ connectionId: account.id });
+    await context.getEvent(deleteInput);
+    await context.deleteEvent(deleteInput, { toolCallId: "another-call" });
+    expect(mocks.delete).not.toHaveBeenCalled();
+    await context.deleteEvent(deleteInput, { toolCallId: "change-1" });
+    expect(mocks.delete).toHaveBeenCalledWith(
+      expect.objectContaining({ ...deleteInput, userId: "signed-in-user" })
+    );
+    const separateContext = createCalendarToolsContext({
+      foreground,
+      transcript: [],
+      userId: "another-user",
+    });
+    await expect(
+      separateContext.createEvent(createInput, { toolCallId: "create-other" })
+    ).resolves.toMatchObject({ status: "error" });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  test("requires current event discovery even for approved deletion", () => {
+    expect(() => {
+      assertCalendarToolExecution({
+        foreground,
+        input: deleteInput,
+        toolCallId: "change-1",
+        toolName: "delete_calendar_event",
+        transcript: approvedTranscript({
+          input: deleteInput,
+          sourceEvent: { ...event, version: "old-version" },
+          toolName: "delete_calendar_event",
+        }),
+      });
+    }).toThrow(/read/iu);
+  });
+
+  test("rejects denied deletion approval before reaching the provider", async () => {
+    const transcript = approvedTranscript({
+      input: deleteInput,
+      toolName: "delete_calendar_event",
+    });
+    transcript[0]?.parts.splice(2, 1, {
+      approval: { approved: false, id: "approval-1" },
+      input: deleteInput,
+      state: "approval-responded",
+      toolCallId: "change-1",
+      type: "tool-delete_calendar_event",
+    });
+    const context = createCalendarToolsContext({
+      foreground,
+      transcript,
+      userId: "signed-in-user",
+    });
+    await expect(
+      context.deleteEvent(deleteInput, { toolCallId: "change-1" })
+    ).resolves.toMatchObject({ status: "error" });
+    expect(mocks.delete).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    { connectionId: "another-account" },
+    { calendarId: "another-calendar" },
+    { eventId: "another-event" },
+    { version: "another-version" },
+  ])("blocks routine writes outside discovered context %j", async (patch) => {
+    const transcript = approvedTranscript({
+      input: updateInput,
+      toolName: "update_calendar_event",
+    }).map((message) => ({ ...message, parts: message.parts.slice(0, 2) }));
+    const context = createCalendarToolsContext({
+      foreground,
+      transcript,
+      userId: "signed-in-user",
+    });
+    await expect(
+      context.updateEvent(
+        { ...updateInput, ...patch },
+        { toolCallId: "update-1" }
+      )
+    ).resolves.toMatchObject({ status: "error" });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
 
   test("shows the fetched occurrence or series as the actual recurrence target", () => {
     const occurrence = resolveCalendarWriteReview({
@@ -275,7 +449,7 @@ describe("calendar tool approvals", () => {
     ).toMatchObject({ scope: "series" });
   });
 
-  test("never calls the provider without a persisted approval or after cancellation", async () => {
+  test("never calls the provider without discovery or after cancellation", async () => {
     const context = createCalendarToolsContext({
       foreground,
       transcript: [],

@@ -1,6 +1,7 @@
 import {
   approvalRequiredToolNames,
   foregroundSnapshotSchema,
+  requiresChatToolApproval,
 } from "@quieter/ai/chat-tools";
 import type { ChatMessagePart } from "@quieter/database/schema";
 import { describe, expect, test } from "vite-plus/test";
@@ -18,7 +19,7 @@ const proposed = {
   input: {
     arguments: { labels: ["a", "b"], target: "item-1" },
     connectionId: "account-1",
-    toolName: "update_issue",
+    toolName: "delete_issue",
   },
   toolCallId: "call-1",
   type: "tool-linear_write",
@@ -30,7 +31,52 @@ const approved: ChatMessagePart = {
   state: "approval-responded",
 };
 
-describe("exact chat mutation approval", () => {
+describe("destructive-only chat approval", () => {
+  test.each([
+    { input: { query: "project update" }, toolName: "search_gmail" },
+    { input: { query: "project update" }, toolName: "list_calendar_events" },
+    { input: { toolName: "search_issues" }, toolName: "linear_read" },
+    {
+      input: {
+        arguments: { title: "Delete the old heading" },
+        toolName: "create_issue",
+      },
+      toolName: "linear_write",
+    },
+    { input: { toolName: "update_issue" }, toolName: "linear_write" },
+    { input: { action: "archive" }, toolName: "modify_mail" },
+    { input: { action: "trash" }, toolName: "modify_mail" },
+    { input: {}, toolName: "save_compose_draft" },
+    { input: {}, toolName: "send_mail" },
+    { input: {}, toolName: "create_calendar_event" },
+    { input: {}, toolName: "update_calendar_event" },
+    { input: {}, toolName: "respond_to_calendar_event" },
+  ])("does not interrupt ordinary $toolName actions", (call) => {
+    expect(requiresChatToolApproval(call)).toBeFalsy();
+  });
+
+  test.each([
+    "delete_issue",
+    "linear_delete_project",
+    "purge_workspace",
+    "reset_workspace",
+    "remove_member",
+    "destroy_project",
+  ])("requires confirmation for %s", (toolName) => {
+    expect(
+      requiresChatToolApproval({
+        input: { toolName },
+        toolName: "linear_write",
+      })
+    ).toBeTruthy();
+  });
+
+  test("requires confirmation before deleting a calendar event", () => {
+    expect(
+      requiresChatToolApproval({ input: {}, toolName: "delete_calendar_event" })
+    ).toBeTruthy();
+  });
+
   test.each(approvalRequiredToolNames)(
     "blocks %s without a server-stored approval",
     (toolName) => {
@@ -67,7 +113,7 @@ describe("exact chat mutation approval", () => {
 
   test.each([
     { ...proposed.input, connectionId: "another-account" },
-    { ...proposed.input, toolName: "delete_issue" },
+    { ...proposed.input, toolName: "delete_project" },
     {
       ...proposed.input,
       arguments: { labels: ["a", "b"], target: "another-item" },
@@ -90,7 +136,7 @@ describe("exact chat mutation approval", () => {
 
   test("accepts the reviewed action independent of object key order", () => {
     const reorderedInput: unknown = JSON.parse(
-      '{"toolName":"update_issue","connectionId":"account-1","arguments":{"target":"item-1","labels":["a","b"]}}'
+      '{"toolName":"delete_issue","connectionId":"account-1","arguments":{"target":"item-1","labels":["a","b"]}}'
     );
     expect(() => {
       assertExactChatToolApproval({

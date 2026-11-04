@@ -10,7 +10,6 @@ import {
   normalizeExpiredChatParts,
 } from "../src/chat/continuation";
 import {
-  assertForegroundSendApproval,
   resolveForegroundComposeDraftForPersistence,
   toForegroundComposeMessage,
   validateChatRequest,
@@ -58,22 +57,6 @@ const transcriptWithDraft = (draft: typeof richDraft) => [
   },
 ];
 
-const approvedSendTranscript = [
-  {
-    id: foreground.exchangeId,
-    parts: [
-      {
-        approval: { approved: true, id: "send-approval" },
-        input: { draft: richDraft },
-        state: "approval-responded" as const,
-        toolCallId: "send-1",
-        type: "tool-send_mail" as const,
-      },
-    ],
-    role: "assistant" as const,
-  },
-];
-
 describe("foreground chat requests", () => {
   test("does not save a retained draft after the visible workspace moved to Calendar", () => {
     const transcript = transcriptWithDraft(richDraft);
@@ -113,72 +96,6 @@ describe("foreground chat requests", () => {
         ],
       });
     }).toThrow(/open mail/iu);
-  });
-
-  test("requires approval for the exact send call, exchange, and draft", () => {
-    const approved = {
-      draft: richDraft,
-      foreground,
-      toolCallId: "send-1",
-      transcript: approvedSendTranscript,
-    };
-    expect(() => {
-      assertForegroundSendApproval(approved);
-    }).not.toThrow();
-    expect(() => {
-      assertForegroundSendApproval({ ...approved, transcript: [] });
-    }).toThrow(/approve/iu);
-    expect(() => {
-      assertForegroundSendApproval({ ...approved, toolCallId: "send-2" });
-    }).toThrow(/approve/iu);
-    expect(() => {
-      assertForegroundSendApproval({
-        ...approved,
-        foreground: { ...foreground, exchangeId: crypto.randomUUID() },
-      });
-    }).toThrow(/approve/iu);
-    expect(() => {
-      assertForegroundSendApproval({
-        ...approved,
-        draft: { ...richDraft, to: "other@example.test" },
-      });
-    }).toThrow(/changed after approval/iu);
-  });
-
-  test("refuses pending and denied sends in stored conversations", () => {
-    for (const approved of [undefined, false]) {
-      const approval =
-        approved === undefined
-          ? ({
-              approval: { id: "send-approval" },
-              state: "approval-requested",
-            } as const)
-          : ({
-              approval: { approved, id: "send-approval" },
-              state: "approval-responded",
-            } as const);
-      expect(() => {
-        assertForegroundSendApproval({
-          draft: richDraft,
-          foreground,
-          toolCallId: "send-1",
-          transcript: [
-            {
-              id: foreground.exchangeId,
-              parts: [
-                {
-                  ...approval,
-                  input: { draft: richDraft },
-                  toolCallId: "send-1",
-                  type: "tool-send_mail",
-                },
-              ],
-              role: "assistant",
-            },
-          ],
-        });
-      }).toThrow(/approve/iu);
-    }
   });
 
   test("preserves reviewed rich HTML in the mail compose contract", () => {
@@ -262,7 +179,7 @@ describe("foreground chat requests", () => {
     ).toThrow(/Read the visible draft again/u);
   });
 
-  test("refuses to drop attachment content at the JSON approval boundary", () => {
+  test("refuses to drop attachment content at the JSON persistence boundary", () => {
     const attachedDraft = {
       ...richDraft,
       attachments: [

@@ -15,7 +15,8 @@ import { chatModelSchema } from "@quieter/ai/chat-models";
 import {
   createForegroundClientTools,
   createForegroundServerTools,
-  approvalRequiredToolNames,
+  mutatingChatToolNames,
+  requiresChatToolApproval,
   resolveLinearToolReview,
   editComposeInputSchema,
   editComposeOutputSchema,
@@ -28,7 +29,6 @@ import {
   openComposeInputSchema,
   openComposeOutputSchema,
   saveComposeDraftOutputSchema,
-  sendMailInputSchema,
   sendMailOutputSchema,
 } from "@quieter/ai/chat-tools";
 import type { ForegroundSnapshot } from "@quieter/ai/chat-tools";
@@ -101,7 +101,7 @@ const CHAT_MAX_COMPLETION_TOKENS = 2048;
 const CHAT_MAX_STEPS = 6;
 const MAIL_TOOL_TIMEOUT_MS = 25_000;
 const FOREGROUND_EXCHANGE_MAX_MS = 5 * 60_000;
-const APPROVAL_REQUIRED_CHAT_TOOLS = new Set(approvalRequiredToolNames);
+const MUTATING_CHAT_TOOLS = new Set(mutatingChatToolNames);
 const UNCERTAIN_ACTION_ERROR =
   "The action could not be confirmed. Check the affected item before trying again.";
 
@@ -736,48 +736,6 @@ export const resolveForegroundComposeDraftForPersistence = (input: {
   }
 
   return workspaceDraft;
-};
-
-export const assertForegroundSendApproval = (input: {
-  draft: z.infer<typeof foregroundComposeDraftSchema>;
-  foreground: ForegroundSnapshot;
-  toolCallId: string;
-  transcript: readonly UIMessage[];
-}) => {
-  const approvedCall = input.transcript
-    .findLast(
-      (message) =>
-        message.id === input.foreground.exchangeId &&
-        message.role === "assistant"
-    )
-    ?.parts.find(
-      (part) =>
-        isToolUIPart(part) &&
-        part.type === "tool-send_mail" &&
-        part.toolCallId === input.toolCallId
-    );
-  if (
-    approvedCall === undefined ||
-    !isToolUIPart(approvedCall) ||
-    approvedCall.state !== "approval-responded" ||
-    !approvedCall.approval.approved
-  ) {
-    throw new ChatRequestError(
-      409,
-      "Approve the exact email before sending it."
-    );
-  }
-  const approvedInput = sendMailInputSchema.safeParse(approvedCall.input);
-  if (
-    !approvedInput.success ||
-    JSON.stringify(approvedInput.data.draft) !==
-      JSON.stringify(foregroundComposeDraftSchema.parse(input.draft))
-  ) {
-    throw new ChatRequestError(
-      409,
-      "The email changed after approval. Review it again before sending it."
-    );
-  }
 };
 
 /**
@@ -1465,13 +1423,7 @@ const createAiChatResponseInRequest = async (
           status: "draft_saved" as const,
         });
       },
-      sendMail: async ({ draft, toolCallId }, signal) => {
-        assertForegroundSendApproval({
-          draft,
-          foreground: validated.foreground,
-          toolCallId,
-          transcript,
-        });
+      sendMail: async ({ draft }, signal) => {
         await assertForegroundExchangeActive({
           assistantMessageId,
           chatId: threadId,
@@ -1535,7 +1487,7 @@ const createAiChatResponseInRequest = async (
   let toolPersistence = Promise.resolve();
   let hasUncertainWrite = persistedAssistantParts.some(
     (part) =>
-      APPROVAL_REQUIRED_CHAT_TOOLS.has(part.type.slice("tool-".length)) &&
+      MUTATING_CHAT_TOOLS.has(part.type.slice("tool-".length)) &&
       (part.state === "output-error" ||
         (typeof part.output === "object" &&
           part.output !== null &&
@@ -1563,7 +1515,13 @@ const createAiChatResponseInRequest = async (
       ) {
         throw new ChatRequestError(409, UNCERTAIN_ACTION_ERROR);
       }
-      if (claimWrite) {
+      if (
+        claimWrite &&
+        requiresChatToolApproval({
+          input: outcome.input,
+          toolName: outcome.type.slice("tool-".length),
+        })
+      ) {
         assertExactChatToolApproval({
           approvedPart: existingPart,
           exchangeId: assistantMessageId,
@@ -1594,7 +1552,7 @@ const createAiChatResponseInRequest = async (
     await pending;
   };
   for (const [toolName, definition] of Object.entries(tools)) {
-    if (!APPROVAL_REQUIRED_CHAT_TOOLS.has(toolName) || !definition.execute) {
+    if (!MUTATING_CHAT_TOOLS.has(toolName) || !definition.execute) {
       continue;
     }
     const { execute } = definition;
@@ -1607,7 +1565,8 @@ const createAiChatResponseInRequest = async (
         userId: input.userId,
       });
       if (
-        (toolName === "linear_read" || toolName === "linear_write") &&
+        toolName === "linear_write" &&
+        requiresChatToolApproval({ input: toolInput, toolName }) &&
         resolveLinearToolReview({
           input: toolInput,
           transcript: transcript.filter(
@@ -1770,9 +1729,13 @@ const createAiChatResponseInRequest = async (
       },
     },
     stopWhen: isStepCount(CHAT_MAX_STEPS),
-    toolApproval: Object.fromEntries(
-      approvalRequiredToolNames.map((name) => [name, "user-approval" as const])
-    ),
+    toolApproval: ({ toolCall }) =>
+      requiresChatToolApproval({
+        input: toolCall.input,
+        toolName: toolCall.toolName,
+      })
+        ? "user-approval"
+        : "not-applicable",
     tools,
   });
 
@@ -1825,7 +1788,7 @@ const createAiChatResponseInRequest = async (
         await toolPersistence;
         for (const part of persistedAssistantParts ?? []) {
           if (
-            APPROVAL_REQUIRED_CHAT_TOOLS.has(part.type.slice("tool-".length)) &&
+            MUTATING_CHAT_TOOLS.has(part.type.slice("tool-".length)) &&
             (part.state === "output-available" || part.state === "output-error")
           ) {
             const streamedPart = parts.find(
@@ -1937,7 +1900,7 @@ const createAiChatResponseInRequest = async (
               chunk.type === "tool-output-denied")
           ) {
             if (
-              APPROVAL_REQUIRED_CHAT_TOOLS.has(chunk.toolName) &&
+              MUTATING_CHAT_TOOLS.has(chunk.toolName) &&
               persistedAssistantParts.some(
                 (part) =>
                   part.toolCallId === chunk.toolCallId &&

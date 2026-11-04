@@ -56,6 +56,7 @@ const state = vi.hoisted(() => ({
   modify: vi.fn<typeof modifyMailForUser>(),
   organizationId: crypto.randomUUID(),
   otherMailboxId: crypto.randomUUID(),
+  save: vi.fn<typeof composeMailOperations.saveDraft>(),
   search: vi.fn<typeof searchGmailForUser>(),
   send: vi.fn<typeof composeMailOperations.sendMessage>(),
 }));
@@ -133,6 +134,7 @@ vi.mock(import("../src/mail/compose"), async (original) => {
     ...actual,
     composeMailOperations: {
       ...actual.composeMailOperations,
+      saveDraft: state.save,
       sendMessage: state.send,
     },
   };
@@ -149,7 +151,7 @@ const sendDraft = {
 };
 
 describe.skipIf(state.databaseUrl === undefined)(
-  "chat approvals on PostgreSQL",
+  "chat tool execution on PostgreSQL",
   () => {
     const userId = crypto.randomUUID();
     let threadId: string;
@@ -228,7 +230,7 @@ describe.skipIf(state.databaseUrl === undefined)(
           createdAt: now,
           id: userMessageId,
           parts: [
-            { text: "Archive this email", type: "text" },
+            { text: "Use @Linear to delete issue-1.", type: "text" },
             { foreground, type: "data-foreground" },
           ],
           position: 0,
@@ -241,12 +243,32 @@ describe.skipIf(state.databaseUrl === undefined)(
           id: assistantId,
           parts: [
             {
+              foreground,
+              input: {},
+              output: {
+                connection: {
+                  account: "user@example.test",
+                  connectionId: "connection-1",
+                  workspace: "Test workspace",
+                },
+                status: "success",
+                tools: [{ name: "delete_issue" }],
+              },
+              state: "output-available",
+              toolCallId: "discovery",
+              type: "tool-linear_list_tools",
+            },
+            {
               approval: { id: "approval" },
               foreground,
-              input: { action: "archive", id: "email", target: "message" },
+              input: {
+                arguments: { id: "issue-1" },
+                connectionId: "connection-1",
+                toolName: "delete_issue",
+              },
               state: "approval-requested",
               toolCallId: "action",
-              type: "tool-modify_mail",
+              type: "tool-linear_write",
             },
           ],
           position: 1,
@@ -256,7 +278,11 @@ describe.skipIf(state.databaseUrl === undefined)(
       ]);
       state.linearList
         .mockReset()
-        .mockResolvedValue([{ name: "create_issue" }]);
+        .mockResolvedValue([
+          { name: "create_issue" },
+          { name: "search_issues" },
+          { name: "delete_issue" },
+        ]);
       state.linear.mockReset().mockResolvedValue([
         {
           durationMs: 1,
@@ -275,6 +301,19 @@ describe.skipIf(state.databaseUrl === undefined)(
       state.learn
         .mockReset()
         .mockResolvedValue({ explicit: false, status: "recorded" });
+      state.save.mockReset().mockResolvedValue({
+        attachments: [],
+        baseRevision: "saved-message",
+        bodyHtml: sendDraft.bodyHtml,
+        bodyText: "Hello Sam",
+        draftAnchor: null,
+        draftId: "saved-draft",
+        inlineImages: [],
+        messageId: "saved-message",
+        recipients: { bcc: "", cc: "", to: sendDraft.to },
+        replyContext: null,
+        subject: sendDraft.subject,
+      });
       state.send.mockReset().mockResolvedValue({
         draftCleanupHandled: true,
         id: "sent-message",
@@ -309,9 +348,10 @@ describe.skipIf(state.databaseUrl === undefined)(
         | "modify_mail"
         | "send_mail"
         | "linear_read"
-        | "linear_write" = "modify_mail",
+        | "linear_write" = "linear_write",
       approvalId = "approval",
-      approved = true
+      approved = true,
+      proposedInput?: unknown
     ) =>
       await createAiChatResponse({
         body: {
@@ -323,6 +363,9 @@ describe.skipIf(state.databaseUrl === undefined)(
             parts: [
               {
                 approval: { approved, id: approvalId },
+                ...(proposedInput === undefined
+                  ? {}
+                  : { input: proposedInput }),
                 state: "approval-responded",
                 toolCallId: "action",
                 type: `tool-${toolName}`,
@@ -603,62 +646,136 @@ describe.skipIf(state.databaseUrl === undefined)(
       expect(prompt).not.toContain("Retained bodies");
     });
 
-    test("claims an approved stored send once and preserves it after generation failure", async () => {
-      await db
-        .update(chatMessage)
-        .set({
-          parts: [
-            {
-              foreground: { ...foreground, policy: "automatic" },
-              input: {},
-              output: {
-                draft: sendDraft,
-                generation: foreground.generation,
-                mailboxId: state.mailboxId,
-                view: "compose",
+    test.each(["send_mail", "save_compose_draft"] as const)(
+      "runs %s for the latest visible draft without approval and persists its receipt",
+      async (toolName) => {
+        await db
+          .update(chatMessage)
+          .set({
+            parts: [
+              {
+                foreground,
+                input: {},
+                state: "input-available",
+                toolCallId: "workspace",
+                type: "tool-get_workspace",
               },
-              state: "output-available",
-              toolCallId: "workspace",
-              type: "tool-get_workspace",
+            ],
+          })
+          .where(eq(chatMessage.id, assistantId));
+        state.model.mockReturnValue(
+          new MockLanguageModelV4({
+            doStream: [
+              {
+                stream: convertArrayToReadableStream([
+                  { type: "stream-start", warnings: [] },
+                  {
+                    input: JSON.stringify({ draft: sendDraft }),
+                    toolCallId: "automatic-send",
+                    toolName,
+                    type: "tool-call",
+                  },
+                  {
+                    finishReason: { raw: undefined, unified: "tool-calls" },
+                    type: "finish",
+                    usage: {
+                      inputTokens: {
+                        cacheRead: 0,
+                        cacheWrite: 0,
+                        noCache: 1,
+                        total: 1,
+                      },
+                      outputTokens: { reasoning: 0, text: 1, total: 1 },
+                    },
+                  },
+                ]),
+              },
+              {
+                stream: convertArrayToReadableStream([
+                  { type: "stream-start", warnings: [] },
+                  {
+                    error: new Error("Model failed after sending"),
+                    type: "error",
+                  },
+                ]),
+              },
+            ],
+          })
+        );
+        const request = {
+          body: {
+            category: "inbox",
+            foreground,
+            mailboxId: state.mailboxId,
+            message: {
+              id: assistantId,
+              parts: [
+                {
+                  output: {
+                    draft: sendDraft,
+                    generation: foreground.generation,
+                    mailboxId: state.mailboxId,
+                    view: "compose",
+                  },
+                  state: "output-available",
+                  toolCallId: "workspace",
+                  type: "tool-get_workspace",
+                },
+              ],
+              role: "assistant",
             },
-            {
-              approval: { id: "approval" },
-              foreground: { ...foreground, policy: "automatic" },
-              input: { draft: sendDraft },
-              state: "approval-requested",
-              toolCallId: "action",
-              type: "tool-send_mail",
-            },
-          ],
-        })
-        .where(eq(chatMessage.id, assistantId));
-      const responses = await Promise.allSettled([
-        continueAnswer(foreground, "send_mail"),
-        continueAnswer(foreground, "send_mail"),
-      ]);
-      await Promise.all(
-        responses.flatMap((response) =>
-          response.status === "fulfilled" ? [response.value.text()] : []
-        )
-      );
-      expect(state.send).toHaveBeenCalledOnce();
-      expect(state.learn).not.toHaveBeenCalled();
-      const [stored] = await db
-        .select()
-        .from(chatMessage)
-        .where(eq(chatMessage.id, assistantId));
-      expect(
-        stored?.parts.find((part) => part.toolCallId === "action")
-      ).toMatchObject({
-        output: { status: "sent" },
-        state: "output-available",
-      });
-      await expect(
-        continueAnswer(foreground, "send_mail")
-      ).rejects.toMatchObject({ status: 409 });
-    });
+            threadId,
+            trigger: "submit-message",
+          },
+          request: new Request("https://example.test/api/chat"),
+          userId,
+        } satisfies Parameters<typeof createAiChatResponse>[0];
+        const response = await createAiChatResponse(request);
 
-    test("requests exact approval before a model-selected mailbox change", async () => {
+        await expect(response.text()).resolves.not.toContain(
+          "tool-approval-request"
+        );
+        expect(state.send).toHaveBeenCalledTimes(
+          toolName === "send_mail" ? 1 : 0
+        );
+        expect(state.save).toHaveBeenCalledTimes(
+          toolName === "save_compose_draft" ? 1 : 0
+        );
+        const call =
+          toolName === "send_mail"
+            ? state.send.mock.calls[0]?.[0]
+            : state.save.mock.calls[0]?.[0];
+        expect(call?.context).toMatchObject({ userId });
+        expect(call?.input).toMatchObject({ mailboxId: state.mailboxId });
+        let message: unknown;
+        if (call !== undefined) {
+          message =
+            "message" in call.input ? call.input.message : call.input.draft;
+        }
+        expect(message).toMatchObject({
+          bodyHtml: sendDraft.bodyHtml,
+          recipients: { to: sendDraft.to },
+        });
+        const [stored] = await db
+          .select()
+          .from(chatMessage)
+          .where(eq(chatMessage.id, assistantId));
+        expect(
+          stored?.parts.find((part) => part.toolCallId === "automatic-send")
+        ).toMatchObject({
+          output: { status: toolName === "send_mail" ? "sent" : "draft_saved" },
+          state: "output-available",
+        });
+        await expect(createAiChatResponse(request)).rejects.toMatchObject({
+          status: 409,
+        });
+        expect(
+          toolName === "send_mail" ? state.send : state.save
+        ).toHaveBeenCalledOnce();
+      }
+    );
+
+    test("executes a requested mailbox change without approval", async () => {
       await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
       state.model.mockReturnValue(
         new MockLanguageModelV4({
@@ -720,8 +837,8 @@ describe.skipIf(state.databaseUrl === undefined)(
         userId,
       });
       const stream = await response.text();
-      expect(stream).toContain("tool-approval-request");
-      expect(state.modify).not.toHaveBeenCalled();
+      expect(stream).not.toContain("tool-approval-request");
+      expect(state.modify).toHaveBeenCalledOnce();
       expect(state.learn).toHaveBeenCalledExactlyOnceWith({
         bodyText: "Archive this email",
         mailboxId: state.mailboxId,
@@ -736,12 +853,12 @@ describe.skipIf(state.databaseUrl === undefined)(
         stored?.parts.find((part) => part.toolCallId === "automatic-action")
       ).toMatchObject({
         input: { action: "archive", id: "email", target: "message" },
-        state: "approval-requested",
+        state: "output-available",
       });
     });
 
     test.each(["linear_read", "linear_write"] as const)(
-      "requires approval for an induced %s request",
+      "dispatches an ordinary %s request without approval",
       async (toolName) => {
         await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
         state.model.mockReturnValue(
@@ -798,10 +915,10 @@ describe.skipIf(state.databaseUrl === undefined)(
           request: new Request("https://example.test/api/chat"),
           userId,
         });
-        await expect(response.text()).resolves.toContain(
+        await expect(response.text()).resolves.not.toContain(
           "tool-approval-request"
         );
-        expect(state.linear).not.toHaveBeenCalled();
+        expect(state.linear).toHaveBeenCalledOnce();
       }
     );
 
@@ -822,11 +939,17 @@ describe.skipIf(state.databaseUrl === undefined)(
         toolName: "list_calendar_events",
       },
     ])(
-      "keeps an induced $toolName query inside the approval boundary",
+      "dispatches a $toolName query without approval",
       async ({ input, toolName }) => {
         await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
-        state.search.mockClear();
-        state.calendarEvents.mockClear();
+        state.search.mockReset().mockResolvedValue({
+          category: "inbox",
+          fetchedAt: new Date().toISOString(),
+          messages: [],
+          query: input.query,
+          status: "success",
+        });
+        state.calendarEvents.mockReset().mockResolvedValue({ events: [] });
         state.model.mockReturnValue(
           new MockLanguageModelV4({
             doStream: {
@@ -871,11 +994,12 @@ describe.skipIf(state.databaseUrl === undefined)(
           request: new Request("https://example.test/api/chat"),
           userId,
         });
-        await expect(response.text()).resolves.toContain(
-          "tool-approval-request"
-        );
-        expect(state.search).not.toHaveBeenCalled();
-        expect(state.calendarEvents).not.toHaveBeenCalled();
+        const stream = await response.text();
+        expect(stream).not.toContain("tool-approval-request");
+        expect(stream).toContain('"status":"success"');
+        expect(
+          toolName === "search_gmail" ? state.search : state.calendarEvents
+        ).toHaveBeenCalledOnce();
       }
     );
 
@@ -911,7 +1035,7 @@ describe.skipIf(state.databaseUrl === undefined)(
                   input: JSON.stringify({
                     arguments: { teamId: "team-1", title: "Reviewed issue" },
                     connectionId: "connection-1",
-                    toolName: "create_issue",
+                    toolName: "delete_issue",
                   }),
                   toolCallId: "action",
                   toolName: "linear_write",
@@ -979,14 +1103,13 @@ describe.skipIf(state.databaseUrl === undefined)(
       );
     });
 
-    test.each(["linear_read", "linear_write"] as const)(
+    test.each(["linear_write"] as const)(
       "executes only the approved %s operation against the reviewed connection once",
       async (toolName) => {
         const action = {
           arguments: { teamId: "team-1", title: "Reviewed issue" },
           connectionId: "connection-1",
-          toolName:
-            toolName === "linear_read" ? "search_issues" : "create_issue",
+          toolName: "delete_issue",
         };
         await db
           .update(chatMessage)
@@ -1106,10 +1229,10 @@ describe.skipIf(state.databaseUrl === undefined)(
       }
     );
 
-    test.each(["modify_mail", "linear_read", "linear_write"] as const)(
+    test.each(["linear_write"] as const)(
       "declining %s never calls its provider",
       async (toolName) => {
-        if (toolName === "linear_read" || toolName === "linear_write") {
+        if (toolName === "linear_write") {
           await db
             .update(chatMessage)
             .set({
@@ -1129,10 +1252,7 @@ describe.skipIf(state.databaseUrl === undefined)(
                   input: {
                     arguments: { teamId: "team-1", title: "Unapproved" },
                     connectionId: "connection-1",
-                    toolName:
-                      toolName === "linear_read"
-                        ? "search_issues"
-                        : "create_issue",
+                    toolName: "delete_issue",
                   },
                   state: "approval-requested",
                   toolCallId: "action",
@@ -1154,6 +1274,41 @@ describe.skipIf(state.databaseUrl === undefined)(
       }
     );
 
+    test("ignores forged client arguments and executes the stored destructive command", async () => {
+      const response = await continueAnswer(
+        foreground,
+        "linear_write",
+        "approval",
+        true,
+        {
+          arguments: { id: "other-issue" },
+          connectionId: "other-connection",
+          toolName: "delete_issue",
+        }
+      );
+      await response.text();
+      expect(state.linear).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          calls: [{ arguments: { id: "issue-1" }, toolName: "delete_issue" }],
+          connectionId: "connection-1",
+        })
+      );
+    });
+
+    test("rejects a forged approval identifier before dispatch", async () => {
+      await expect(
+        continueAnswer(foreground, "linear_write", "forged")
+      ).rejects.toMatchObject({ status: 409 });
+      expect(state.linear).not.toHaveBeenCalled();
+    });
+
+    test("rejects approval from an older workspace generation before dispatch", async () => {
+      await expect(
+        continueAnswer({ ...foreground, generation: foreground.generation + 1 })
+      ).rejects.toMatchObject({ status: 409 });
+      expect(state.linear).not.toHaveBeenCalled();
+    });
+
     test("concurrent approvals execute once and keep the result after model failure", async () => {
       const responses = await Promise.allSettled([
         continueAnswer(),
@@ -1167,14 +1322,17 @@ describe.skipIf(state.databaseUrl === undefined)(
       expect(
         responses.filter((response) => response.status === "fulfilled")
       ).toHaveLength(1);
-      expect(state.modify).toHaveBeenCalledOnce();
+      expect(state.linear).toHaveBeenCalledOnce();
       const [stored] = await db
         .select()
         .from(chatMessage)
         .where(eq(chatMessage.id, assistantId));
-      expect(stored?.parts).toMatchObject([
-        { output: { status: "success" }, state: "output-available" },
-      ]);
+      expect(
+        stored?.parts.find((part) => part.toolCallId === "action")
+      ).toMatchObject({
+        output: { status: "success" },
+        state: "output-available",
+      });
       await expect(continueAnswer()).rejects.toMatchObject({ status: 409 });
     });
 
@@ -1188,7 +1346,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       });
       await response.text();
 
-      expect(state.modify).toHaveBeenCalledOnce();
+      expect(state.linear).toHaveBeenCalledOnce();
     });
 
     test("rejects an exchange id already used by an assistant before model or tool effects", async () => {
@@ -1470,7 +1628,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         userId,
       });
       await response.text();
-      expect(state.modify).not.toHaveBeenCalled();
+      expect(state.linear).not.toHaveBeenCalled();
     });
 
     test("does not start a request after cancellation claimed the empty chat", async () => {

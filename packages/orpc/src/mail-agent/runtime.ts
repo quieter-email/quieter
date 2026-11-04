@@ -57,12 +57,69 @@ import {
 import type { AgentCatalogTool } from "./catalog";
 import {
   getAgentConnectorEffects,
-  getAgentConnectorReads,
   matchesAgentEligibility,
   resolveAgentEffectArguments,
 } from "./policy";
 import { boundAgentToolOutput } from "./results";
 import { reportAgentUsage } from "./usage";
+
+const modelInputSchema = (value: unknown): unknown => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  const schema = z.record(z.string(), z.unknown()).parse(value);
+  const annotations = new Set([
+    "title",
+    "description",
+    "examples",
+    "default",
+    "$comment",
+  ]);
+  const schemaMaps = new Set([
+    "properties",
+    "patternProperties",
+    "$defs",
+    "definitions",
+    "dependentSchemas",
+  ]);
+  const schemaLists = new Set(["allOf", "anyOf", "oneOf", "prefixItems"]);
+  const schemaValues = new Set([
+    "items",
+    "additionalProperties",
+    "unevaluatedProperties",
+    "contains",
+    "propertyNames",
+    "not",
+    "if",
+    "then",
+    "else",
+    "unevaluatedItems",
+    "additionalItems",
+  ]);
+  return Object.fromEntries(
+    Object.entries(schema).flatMap(([key, child]) => {
+      if (annotations.has(key)) {
+        return [];
+      }
+      if (schemaMaps.has(key)) {
+        return [
+          [
+            key,
+            Object.fromEntries(
+              Object.entries(
+                z.record(z.string(), z.unknown()).parse(child)
+              ).map(([name, nested]) => [name, modelInputSchema(nested)])
+            ),
+          ],
+        ];
+      }
+      if (schemaLists.has(key) || (key === "items" && Array.isArray(child))) {
+        return [[key, z.array(z.unknown()).parse(child).map(modelInputSchema)]];
+      }
+      return [[key, schemaValues.has(key) ? modelInputSchema(child) : child]];
+    })
+  );
+};
 
 type ClaimedRun = typeof mailboxAgentRun.$inferSelect & { leaseToken: string };
 type CompletedEffect = Pick<
@@ -287,10 +344,6 @@ const executeRun = async (run: ClaimedRun) => {
       specification,
       compiled.tools
     );
-    const connectorReads = getAgentConnectorReads(
-      specification,
-      compiled.tools
-    );
     let personalContextUsed = false;
     const assertContextAuthority = async () => {
       const access = await assertRunAuthority(run);
@@ -463,28 +516,11 @@ const executeRun = async (run: ClaimedRun) => {
         });
       }
       if (tool.operation === "read") {
-        let readArgs = args;
-        if (tool.scope === "connector") {
-          const approved = getAgentConnectorReads(
-            specification,
-            compileAgentManifest(specification, liveCatalog).tools
-          ).find(
-            (candidate) =>
-              candidate.tool.connectionId === tool.connectionId &&
-              candidate.tool.toolId === tool.toolId
-          );
-          if (
-            !approved ||
-            (specification.eligibility &&
-              !matchesAgentEligibility(specification.eligibility, target))
-          ) {
-            throw new ORPCError("FORBIDDEN", {
-              message:
-                "This connected lookup does not meet the approved action conditions.",
-            });
-          }
-          readArgs = approved.arguments;
-        }
+        const readArgs = z
+          .fromJSONSchema(
+            z.record(z.string(), z.unknown()).parse(tool.inputSchema)
+          )
+          .parse(args);
         if (tool.toolId === "mail.read_thread") {
           return await getThread();
         }
@@ -849,15 +885,14 @@ const executeRun = async (run: ClaimedRun) => {
       tools[`capability_${index}`] = dynamicTool({
         description:
           tool.scope === "connector"
-            ? "Run the reviewed connected lookup with its fixed approved arguments. Supply an empty object."
+            ? "Look up information using the approved connected account."
             : tool.description,
         execute: executeTool(tool),
-        inputSchema:
-          tool.scope === "connector"
-            ? z.object({})
-            : z.fromJSONSchema(
-                z.record(z.string(), z.unknown()).parse(tool.inputSchema)
-              ),
+        inputSchema: z.fromJSONSchema(
+          z
+            .record(z.string(), z.unknown())
+            .parse(modelInputSchema(tool.inputSchema))
+        ),
       });
     }
     const model = resolveBackgroundModel();
@@ -909,8 +944,6 @@ const executeRun = async (run: ClaimedRun) => {
       prompt: JSON.stringify({
         capabilities: compiled.tools.map((tool, index) => ({
           accountLabel: tool.accountLabel,
-          approvedArguments: connectorReads.find((read) => read.tool === tool)
-            ?.arguments,
           capability: `capability_${index}`,
           description: tool.description,
           toolId: tool.toolId,

@@ -14,13 +14,15 @@ This separation protects message roles and source provenance. JSON encoding does
 
 ## Approval and disclosure
 
-Interactive changes still require exact persisted approval, a current foreground lease, and authenticated mailbox access. The server compares the final tool, input, account, and exchange before execution. Canonical replay cannot restore unresolved approvals, and consumed actions cannot execute again.
+Routine chat tools run autonomously within the signed-in user's authorized task and active foreground session. Searches, reads, draft saves, email sending, and ordinary calendar or connected-account creates and updates do not ask for tool approval.
 
-In chat, mail searches, calendar event queries, and Linear lookups also require approval. Their arguments leave quieter even when they only search or read. The approval shows the complete query or tool arguments. Linear approvals also show the account and workspace. A mention enables discovery; it does not approve a query. Linear read classification uses the same explicit supported-tool set as background automation. Unknown names cannot acquire unattended read permission merely by starting with `get_`, `list_`, or `search_`. Execution checks current discovery and validates the original arguments against its schema without replacing the approved payload with schema transformations.
+Confirmations are limited to destructive operations, including calendar event deletion and connected-account delete, remove, reset, purge, or destroy methods. These actions require exact persisted approval, a current foreground lease, and authenticated mailbox access. The server compares the final tool, input, account, and exchange before execution. Canonical replay cannot restore unresolved destructive approvals, and consumed actions cannot execute again.
 
-Background connector reads use literal `argumentTemplate` objects from the reviewed specification. The model cannot supply or interpolate their arguments. These reads require approved literal sender conditions and valid provider arguments. The argument-free calendar discovery tool uses only the approved account. Existing dynamic connector-read revisions fail closed and need review again before running. This tightening uses the existing specification and manifest digest; it requires no database migration.
+Destructive confirmations show the complete tool arguments. Calendar deletion also identifies the event, account, calendar, time, recurrence scope, and guest notification. Connected-account confirmations identify the account and workspace. Execution checks current discovery and validates the original arguments against its schema without replacing the approved payload with schema transformations. Provider metadata and tool results cannot authorize an action.
 
-Background connector writes retain their existing fixed templates and message bindings. Only approved content fields may copy the triggering message's subject or body. Destinations and resource identifiers remain fixed. A model's match decision can suppress an approved effect; it cannot choose new arguments. Reply drafts must retain the triggering message's Reply-To recipients, falling back to From. The server validates and supplies those addresses before recording or saving a draft. Drafts still require user review before sending.
+Background connector reads remain bounded by the reviewed specification and the connected account's authorization. Supported read methods are explicitly classified; a method name beginning with `get_`, `list_`, or `search_` does not itself grant unattended permission.
+
+Background connector writes retain their existing fixed templates and message bindings. Only approved content fields may copy the triggering message's subject or body. Destinations and resource identifiers remain fixed. A model's match decision can suppress an approved effect; it cannot choose new arguments. Reply drafts must retain the triggering message's Reply-To recipients, falling back to From. The server validates and supplies those addresses before recording or saving a draft. Background actions prepare drafts without sending; sending follows an explicit user request.
 
 ## Output boundaries
 
@@ -30,7 +32,7 @@ Search parsing validates generated labels, provider-supported `is` values, attac
 
 ## Verification and remaining limits
 
-The regression tests exercise real SDK model requests with fake providers, exact approval and replay against disposable PostgreSQL, fixed connector arguments, recipient checks, and the actual Markdown renderer. Browser verification observes resource requests using synthetic content. No production mailbox, database, or model credentials are needed for these tests.
+The regression tests exercise real SDK model requests with fake providers, autonomous routine actions, exact destructive approval and replay against disposable PostgreSQL, fixed connector write arguments, recipient checks, and the actual Markdown renderer. Browser verification observes resource requests using synthetic content. No production mailbox, database, or model credentials are needed for these tests.
 
 These controls constrain what model output can do. They do not prove universal prompt injection resistance or factual accuracy. A model can still misclassify mail, produce misleading prose, or retain an incorrect learned observation. Explicitly reviewed workflows can intentionally disclose data, and sender-address matching alone does not authenticate the sender. Mail, calendar, and personal-context reads remain bounded by the signed-in user's existing authorization. Real-model adversarial evaluations require separate development credentials and a budget; deterministic tests do not substitute for them.
 
