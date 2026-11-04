@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import {
   DEPLOYMENT_BUILD_HEADER,
   DEPLOYMENT_STATUS_PATH,
+  PERSONAL_ACTION_PROTOCOL,
   deploymentManifestSchema,
   deploymentStatusSchema,
 } from "@quieter/env/deployment";
@@ -175,6 +176,11 @@ export const recoverWeb = async (input: {
         "Account, domain or current version changed. Inspect production before retrying recovery."
       );
     }
+    if (record.deployment?.current.protocol !== PERSONAL_ACTION_PROTOCOL) {
+      throw new Error(
+        "This recovery release predates the personal Action protocol. Use a reviewed forward fix."
+      );
+    }
     const statusResponse = await fetch(
       `https://quieter.email${DEPLOYMENT_STATUS_PATH}`,
       {
@@ -214,7 +220,13 @@ export const recoverWeb = async (input: {
       ) {
         retained = current.previous;
       }
-      if (retained === null || retained.slot !== target.slot) {
+      if (
+        retained === null ||
+        retained.slot !== target.slot ||
+        retained.protocol !== PERSONAL_ACTION_PROTOCOL ||
+        (record.deployment?.previous !== null &&
+          record.deployment?.previous?.protocol !== PERSONAL_ACTION_PROTOCOL)
+      ) {
         throw new Error(
           "The recovery release expired or its slot was reused. Use a reviewed forward fix."
         );

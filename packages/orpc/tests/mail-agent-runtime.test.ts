@@ -29,6 +29,7 @@ type Row = Record<string, unknown>;
 type Predicate = (row: Row) => boolean;
 const state = vi.hoisted(() => ({
   authorized: true,
+  blockedMutation: null as "claim" | "effect" | null,
   calendar: vi.fn<typeof createCalendarEventForUser>(),
   calendarAccount: vi.fn<typeof getCalendarAccountForUser>(),
   linear: vi.fn<typeof runLinearMcpToolCallsForUser>(),
@@ -106,8 +107,27 @@ vi.mock("@quieter/database/client", async () => {
       orderBy: () => query,
       returning: () => query,
       // oxlint-disable-next-line unicorn/no-thenable -- Drizzle executes a query when its builder is awaited.
-      then: async (fulfilled: (rows: Row[]) => unknown) => {
+      then: (fulfilled: (rows: Row[]) => unknown) => {
         const name = getTableName(table);
+        if (
+          (state.blockedMutation === "claim" &&
+            name === "mailboxAgentRun" &&
+            operation === "update" &&
+            values?.status === "running") ||
+          (state.blockedMutation === "effect" &&
+            name === "mailboxAgentEffect" &&
+            operation === "insert")
+        ) {
+          throw new Error("Action write was fenced", {
+            cause: Object.assign(
+              new Error("An update is in progress. Retry shortly."),
+              {
+                code: "55000",
+                constraint_name: "quieter_action_cutover",
+              }
+            ),
+          });
+        }
         const rows = state.tables.get(name) ?? [];
         state.tables.set(name, rows);
         if (
@@ -128,7 +148,7 @@ vi.mock("@quieter/database/client", async () => {
             Object.assign(row, values);
           }
         }
-        return await fulfilled(selected);
+        return fulfilled(selected);
       },
       where: (next: Predicate) => {
         predicate = next;
@@ -138,6 +158,7 @@ vi.mock("@quieter/database/client", async () => {
     return query;
   };
   const operations = {
+    execute: async () => [],
     insert: (table: Table) => ({
       values: (values: Row) => build(table, "insert", values),
     }),
@@ -391,6 +412,7 @@ describe("durable background action execution", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     state.authorized = true;
+    state.blockedMutation = null;
     state.shared = false;
     state.memory.mockReset();
     state.memory.mockResolvedValue({ instructions: null, memory: null });
@@ -490,6 +512,26 @@ describe("durable background action execution", () => {
       draftId: "draft",
       messageId: "draft-message",
     });
+  });
+
+  test("propagates a fenced claim before loading mail or starting a provider", async () => {
+    state.blockedMutation = "claim";
+    await expect(drainMailAgentRuns({ limit: 1 })).rejects.toThrow("fenced");
+    expect(state.read).not.toHaveBeenCalled();
+    expect(state.model).not.toHaveBeenCalled();
+    expect(state.save).not.toHaveBeenCalled();
+    expect(runRow()).toMatchObject({ status: "queued" });
+  });
+
+  test("does not call a provider when the effect transaction is fenced", async () => {
+    state.blockedMutation = "effect";
+    await grantLinearWrites(["save_issue"]);
+    state.model.mockReturnValue(modelWithConnectorCall(true));
+    await drainMailAgentRuns({ limit: 1 });
+    expect(state.linear).not.toHaveBeenCalled();
+    expect(state.save).not.toHaveBeenCalled();
+    expect(state.tables.get("mailboxAgentEffect") ?? []).toHaveLength(0);
+    expect(runRow()).toMatchObject({ status: "needs_attention" });
   });
 
   test("reuses a confirmed identical effect but allows distinct intended inputs", async () => {

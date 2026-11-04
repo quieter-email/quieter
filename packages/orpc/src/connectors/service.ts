@@ -7,7 +7,7 @@ import {
   connectorOAuthState,
 } from "@quieter/database/schema";
 import { requireServerEnv } from "@quieter/env/server";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, eq, gt, lt, sql } from "drizzle-orm";
 
 import { pausePersonalAgentConnections } from "../mail-agent/authority";
 import {
@@ -355,6 +355,9 @@ export const disconnectConnector = async (input: {
   userId: string;
 }) => {
   const deleted = await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     const owned = await tx
       .select({ id: connectorCredential.id })
       .from(connectorCredential)

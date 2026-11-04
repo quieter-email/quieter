@@ -20,7 +20,7 @@ import {
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
 import { APIError } from "better-auth/api";
-import { and, eq, isNull, ne, or } from "drizzle-orm";
+import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
 
 type AuthUser = typeof user.$inferSelect;
 
@@ -93,6 +93,9 @@ export const ensureUserOrganizationState = async (
   currentUser: UserIdentity
 ): Promise<EnsureUserOrganizationStateResult> =>
   await db.transaction(async (transaction) => {
+    await transaction.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     const [provisioningState] = await transaction
       .select({
         defaultOrganizationProvisioned: user.defaultOrganizationProvisioned,
@@ -303,6 +306,9 @@ export const cleanupMailboxesForDeletedOrganization = async (
     throw new APIError("BAD_REQUEST", { message: failure });
   }
   const objects = await db.transaction(async (transaction) => {
+    await transaction.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     const [lockedOrganization] = await transaction
       .select({ id: organization.id })
       .from(organization)

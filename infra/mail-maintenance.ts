@@ -28,6 +28,7 @@ export const createMailMaintenanceResources = (
       },
       environment: {
         ...context.billingEnvironment,
+        ...context.releaseEnvironment,
         MAIL_UPDATES_URL: updatesUrl,
         QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
         R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",

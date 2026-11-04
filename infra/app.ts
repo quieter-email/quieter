@@ -24,7 +24,7 @@ export const createInfrastructure = async (input: {
     secretResources,
     appDatabase
   );
-  createMailMaintenanceResources(
+  const mailMaintenance = createMailMaintenanceResources(
     context,
     secretBindings,
     appDatabase,
@@ -49,6 +49,7 @@ export const createInfrastructure = async (input: {
       MAIL_RECEIPT_TOPIC_ARN: mail.mailReceiptTopic.arn,
       MAIL_UPDATES_URL: updates.url,
       ...context.billingEnvironment,
+      ...context.releaseEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
       R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",
       R2_BUCKET: context.env.R2_BUCKET ?? "",
@@ -60,6 +61,18 @@ export const createInfrastructure = async (input: {
   );
 
   return {
+    actionDeploymentTargets: {
+      lambdas: {
+        mailInbound: mail.mailIngress.arn,
+        mailReceipt: mail.mailReceiptProcessor.apply(
+          (subscriber) => subscriber.nodes.function.arn
+        ),
+      },
+      workers: {
+        ...gmail.actionWorkers,
+        mailMaintenance: mailMaintenance.nodes.worker.scriptName,
+      },
+    },
     gmailLiveSyncTokenSecretName: requireSecretResource(
       secretResources,
       "GMAIL_LIVE_SYNC_TOKEN_SECRET"

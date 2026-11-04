@@ -54,6 +54,7 @@ import {
   memoryLookupSchema,
 } from "./catalog";
 import type { AgentCatalogTool } from "./catalog";
+import { getPersonalActionCutoverError } from "./cutover";
 import {
   getAgentConnectorEffects,
   matchesAgentEligibility,
@@ -76,6 +77,9 @@ const runResultSchema = z.strictObject({
 
 const claimNextRun = async (): Promise<ClaimedRun | null> =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     const now = new Date();
     const [candidate] = await tx
       .select()
@@ -578,6 +582,9 @@ const executeRun = async (run: ClaimedRun) => {
         inputDigest,
       ]);
       const effectClaim = await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+        );
         const admitted = await assertMailAgentRunAuthority(run, tx, true);
         if (tool.toolId === "mail.save_draft") {
           await assertAgentMailboxAccess(
@@ -902,6 +909,7 @@ const executeRun = async (run: ClaimedRun) => {
         )
       );
   } catch (error) {
+    const cutoverError = getPersonalActionCutoverError(error);
     if (
       isAiCreditAdmissionBusy(error) &&
       !providerStarted &&
@@ -930,7 +938,11 @@ const executeRun = async (run: ClaimedRun) => {
         );
       return;
     }
-    if (!(error instanceof ORPCError) && !isAiCreditAdmissionBusy(error)) {
+    if (
+      !(error instanceof ORPCError) &&
+      cutoverError === null &&
+      !isAiCreditAdmissionBusy(error)
+    ) {
       reportError(
         new Error(
           `Inbox action execution failed (${error instanceof Error ? error.name : "unknown"}).`
@@ -938,9 +950,10 @@ const executeRun = async (run: ClaimedRun) => {
         { operation: "mail-agent:run" }
       );
     }
+    const failure = cutoverError ?? error;
     const errorMessage =
-      error instanceof ORPCError
-        ? error.message
+      failure instanceof ORPCError
+        ? failure.message
         : "This action could not finish. Please try again after reviewing any partial results.";
     await db
       .update(mailboxAgentRun)

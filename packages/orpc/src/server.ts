@@ -6,6 +6,7 @@ import {
 import { reportError as reportRuntimeError } from "@quieter/observability";
 
 import type { OrpcContext } from "./context";
+import { getPersonalActionCutoverError } from "./mail-agent/cutover";
 import { appRouter } from "./routers/index";
 
 export { appRouter } from "./routers/index";
@@ -31,6 +32,10 @@ export const createOrpcHandler = (options?: {
         try {
           return await interceptorOptions.next();
         } catch (error) {
+          const cutoverError = getPersonalActionCutoverError(error);
+          if (cutoverError !== null) {
+            throw cutoverError;
+          }
           logOrpcError(error, options?.reportError);
           throw error;
         }

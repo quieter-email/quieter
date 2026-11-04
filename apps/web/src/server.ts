@@ -2,6 +2,7 @@ import {
   DEPLOYMENT_BUILD_HEADER,
   DEPLOYMENT_RELOAD_HEADER,
   DEPLOYMENT_STATUS_PATH,
+  PERSONAL_ACTION_PROTOCOL,
 } from "@quieter/env/deployment";
 import * as Sentry from "@sentry/cloudflare";
 import handler, { createServerEntry } from "@tanstack/react-start/server-entry";
@@ -47,7 +48,11 @@ const serverEntry = {
         request.method === "HEAD"
           ? null
           : JSON.stringify({
-              current: { buildId: __QUIETER_BUILD_ID__, slot: "a" },
+              current: {
+                buildId: __QUIETER_BUILD_ID__,
+                protocol: PERSONAL_ACTION_PROTOCOL,
+                slot: "a",
+              },
               previous: null,
               serverTime: Date.now(),
             }),

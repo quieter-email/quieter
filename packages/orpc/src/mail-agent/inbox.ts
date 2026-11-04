@@ -9,7 +9,7 @@ import {
   mailboxAgentRun,
   mailboxPersonalAgentSetting,
 } from "@quieter/database/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { publishMailUpdate } from "../mail-updates";
 import { assertPersonalAgentSettingAccess } from "./authority";
@@ -33,6 +33,9 @@ export const enqueueMailAgentMessage = async (
   for (const { userId } of settings) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- Limit database concurrency while durably enqueueing each owner's independent action.
     const queued = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+      );
       await tx
         .select({ id: mailbox.id })
         .from(mailbox)

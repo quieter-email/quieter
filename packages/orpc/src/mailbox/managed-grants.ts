@@ -16,7 +16,7 @@ import {
   organizationDivision,
   user,
 } from "@quieter/database/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { assertDomainBillingAccess } from "../mail-domain/billing";
 import { assertOrganizationManager } from "../organization/divisions";
@@ -146,6 +146,9 @@ export const createManagedMailbox = async (input: {
   const mailboxId = randomUUID();
   const now = new Date();
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     const [receivingDomain] = await tx
       .select({ id: mailDomain.id })
       .from(mailDomain)
@@ -543,6 +546,9 @@ export const updateManagedMailbox = async (input: {
   userId: string;
 }) =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -594,6 +600,9 @@ export const setManagedMailboxAccessMode = async (input: {
   userId: string;
 }) =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -715,6 +724,9 @@ export const setManagedMailboxGrant = async (input: {
   userId: string;
 }) =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -782,6 +794,9 @@ export const removeManagedMailboxGrant = async (input: {
   userId: string;
 }) =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -862,6 +877,9 @@ export const setManagedMailboxDivisionGrant = async (input: {
   userId: string;
 }) =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -913,6 +931,9 @@ export const removeManagedMailboxDivisionGrant = async (input: {
   userId: string;
 }) =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)

@@ -27,7 +27,7 @@ import {
 import { getGmailMessageCount, getGmailProfile } from "@quieter/gmail";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import { reportError } from "@quieter/observability";
-import { and, asc, count, eq, gt, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -1281,6 +1281,9 @@ export const disconnectGmailMailbox = async (input: {
   userId: string;
 }) => {
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await pausePersonalAgentConnections(
       { connectionIds: [input.mailboxId], userId: input.userId },
       tx

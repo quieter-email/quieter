@@ -3,6 +3,7 @@ import path from "node:path";
 
 import {
   DEPLOYMENT_STATUS_PATH,
+  PERSONAL_ACTION_PROTOCOL,
   deploymentStatusSchema,
   webReleasePlanSchema,
 } from "@quieter/env/deployment";
@@ -69,9 +70,14 @@ export const prepareWebRelease = async (input: {
     updateSlot === null && previous !== null
       ? { current: previous.current, previous: previous.previous }
       : {
-          current: { buildId, slot: updateSlot },
+          current: {
+            buildId,
+            protocol: PERSONAL_ACTION_PROTOCOL,
+            slot: updateSlot,
+          },
           previous:
-            previous === null
+            previous === null ||
+            previous.current.protocol !== PERSONAL_ACTION_PROTOCOL
               ? null
               : {
                   ...previous.current,
@@ -81,6 +87,7 @@ export const prepareWebRelease = async (input: {
   const plan = webReleasePlanSchema.parse({
     manifest,
     sourceBuildId,
+    sourceDeployment: previous?.current ?? null,
     updateSlot,
   });
   await mkdir(path.dirname(planFile), { recursive: true });
@@ -103,7 +110,9 @@ export const verifyWebRelease = async (input: {
   }
   const { deployment, sourceBuildId } = await readWebRelease(input.origin);
   const expected =
-    plan.updateSlot === null ? plan.manifest.current : plan.manifest.previous;
+    plan.updateSlot === null
+      ? plan.manifest.current
+      : (plan.sourceDeployment ?? plan.manifest.previous);
   if (
     sourceBuildId !== plan.sourceBuildId ||
     (deployment === null

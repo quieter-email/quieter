@@ -16,7 +16,7 @@ import {
 } from "@quieter/database/schema";
 import type { MailboxAgentUsage } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
@@ -309,6 +309,9 @@ export const reviewMailAgent = async (input: {
     }
     const now = new Date();
     await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+      );
       await tx
         .select({ id: mailbox.id })
         .from(mailbox)
@@ -464,6 +467,9 @@ export const activateMailAgent = async (input: {
     });
   }
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -543,6 +549,9 @@ export const pauseMailAgent = async (input: {
 }) => {
   await assertAgentMailboxAccess(input);
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -720,6 +729,9 @@ export const enqueueManualMailAgentRun = async (input: {
   const now = new Date();
   const invocationKey = `manual:${input.userId}:${input.invocationId}`;
   const run = await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)

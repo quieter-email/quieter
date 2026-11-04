@@ -397,6 +397,23 @@ const eventChanges = (
           : calendarInstantToWallTime(time.end, zone),
       timeZone: zone,
     };
+    if (
+      changes.recurrence === undefined &&
+      current?.recurrence &&
+      !current.seriesMasterId
+    ) {
+      body.recurrence = {
+        ...current.recurrence,
+        range: {
+          ...current.recurrence.range,
+          recurrenceTimeZone: zone,
+          startDate:
+            time.kind === "all-day"
+              ? time.startDate
+              : calendarInstantToWallTime(time.start, zone).slice(0, 10),
+        },
+      };
+    }
   }
   if (changes.recurrence !== undefined) {
     if (current?.seriesMasterId) {
@@ -442,11 +459,6 @@ const eventChanges = (
       recurrence.range.recurrenceTimeZone = current.originalStartTimeZone;
     }
     body.recurrence = recurrence;
-  } else if (changes.time && current?.recurrence) {
-    throw new ORPCError("BAD_REQUEST", {
-      message:
-        "Include the repeat rule when changing the time of a whole series.",
-    });
   }
   if (changes.reminders?.kind === "custom") {
     if (

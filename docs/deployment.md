@@ -50,6 +50,8 @@ Open tabs check `/assets/deployment.json` on focus and while visible. This nonca
 
 ### Web recovery
 
+The personal Action release adds a protocol boundary to every web release manifest. The first `personal-actions-v1` release retires its incompatible predecessor immediately and rebuilds both private slots. Existing pinned tabs receive the normal HTTP 409 reload response. Later releases with the same protocol keep the usual 12-hour retention window. Recovery rejects a record whose current or retained previous build predates this protocol, even if its artifact and Cloudflare version still exist.
+
 Before changing production, the workflow records the currently healthy web Worker version in the private `previous-web` GitHub artifact, retained for 90 days. The first deployment introducing build markers and health checks has no verified predecessor and therefore no recovery record. Later deployments fail before mutation if the existing marked release is unhealthy; repair the release or recover it before continuing.
 
 For a compatible web-only failure, run **Recover Web Release** on `main`:
@@ -116,5 +118,27 @@ Existing accounts without memberships remain without a team. Current data cannot
 The historical migration chain includes vector columns, so a fresh database still needs the `vector` extension before that migration. The current memory runtime uses categorized plain text and SQL recall. It requires no embedding service or embedding credential. Retired vector columns stay inert until a separately reviewed contract migration can remove them after older workers have been replaced.
 
 ## Failure behavior
+
+### Deploy the personal Action cutover
+
+The first personal Action deployment requires a protected manual run on `main`:
+
+```sh
+gh workflow run sst-deploy.yml --ref main -f execute_personal_action_cutover=true
+```
+
+Review the exact `main` commit and approve the production environment. This command authorizes the workflow's production changes. Do not run the database cutover CLI locally against production.
+
+The workflow captures the web predecessor, then installs the database fence before migrations. The durable record uses the source commit SHA so rerunning that commit can resume after a partial deployment. The fence blocks old setting, authority, enqueue, claim, and effect writes. Preparation invalidates running leases and preserves potentially completed effects for reconciliation. A provider request whose effect committed before the fence can still complete afterward.
+
+The migration runner verifies the actual fence and migration ledger. SST then publishes the prepared web build and all background consumers. Before release, the workflow checks public health and signed updates, disables direct and preview `workers.dev` URLs on both private slots, and verifies deployed identities through provider configuration APIs. Cloudflare active version bindings must match the prepared build for Gmail realtime, Gmail maintenance, MailMaintenance, and each callable web slot. AWS receipt and inbound functions must report the same build, the expected protocol, `Active`, and `Successful` through `get-function-configuration`. A retained compatible web predecessor keeps its own build ID. SST outputs identify the expected resources but do not count as deployment evidence.
+
+The first successful consumer verification starts a 16-minute drain with Actions still fenced. An old Gmail job can skip enqueue entirely when its legacy setting is absent, so rejecting old inserts alone cannot preserve new personal Actions. The drain exceeds the [15-minute scheduled Worker wall limit](https://developers.cloudflare.com/workers/platform/limits/#wall-time-limits-by-invocation-type), the [600-second Pub/Sub push request timeout](https://docs.cloud.google.com/pubsub/docs/reference/rest/v1/projects.subscriptions#Subscription), and the configured 60-second mail Lambda timeout. Gmail push processing is awaited by its authenticated request; web requests do not trigger this incoming-Action path. Schedules remain unchanged. A retry repeats the full drain after verifying its deployed consumers.
+
+The workflow verifies all consumer identities again after the drain and writes `action-deployment-evidence.json`. The final database transaction releases the same fenced source commit. The private `action-cutover` artifact retains the before/after state, captured web plan, and both sets of nonsecret provider evidence for 90 days. The verifier does not print linked secrets or full function environments. Its Cloudflare API contract is documented in [Worker script versions](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/get/). The AWS status contract is documented in [get-function-configuration](https://docs.aws.amazon.com/cli/latest/reference/lambda/get-function-configuration.html).
+
+If any step fails or the run is canceled after preparation, the database stays fenced. Read the job summary and retained evidence, fix the failing check, and rerun the same commit with the command above. A reviewed newer forward fix must explicitly identify the prior fenced source commit before taking ownership. Ordinary pushes fail closed while preparation is required. After the first successful release, ordinary pushes verify the permanent protocol guards and use the normal deployment path.
+
+Do not restore a pre-cutover router or legacy Action settings after migration. Web recovery refuses incompatible records. Use a reviewed compatible forward fix after a partial deploy, and reconcile uncertain provider effects separately. The workflow never releases from a failure handler or `finally` block.
 
 A preview preparation failure prevents migrations and runtime updates. A deployment-time web build failure can leave migrations and other resources updated. A migration failure stops SST deployment, but earlier migrations may already have committed. An SST failure can leave some resources updated. Smoke checks detect a broken published web release but cannot undo its effects. Keep adjacent releases compatible and use the recovery procedure above where applicable. This workflow does not make the entire AWS/Cloudflare stack transactional.

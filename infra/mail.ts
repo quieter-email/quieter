@@ -230,31 +230,35 @@ export const createMailResources = async (
   void mailOutboundFeedbackEventDestination;
   void mailOutboundFeedbackDeadLetterAlarm;
 
-  mailReceiptTopic.subscribe("MailReceiptProcessor", {
-    environment: {
-      DATABASE_URL: context.databaseUrl,
-      MAIL_UPDATES_URL: liveSyncUrl,
-      ...context.billingEnvironment,
-      QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
-      ...context.r2Environment,
-      ...context.sentryEnvironment,
-    },
-    handler: "packages/aws/src/receipt.handler",
-    link: [
-      mailBucket,
-      requireSecretResource(secretResources, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
-      ...(
-        [
-          "GMAIL_TOKEN_ENCRYPTION_KEY",
-          "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
-          "OPENROUTER_API_KEY",
-          "POLAR_ACCESS_TOKEN",
-          "QUIETER_BACKGROUND_MODEL",
-        ] as const
-      ).map((name) => requireSecretResource(secretResources, name)),
-    ],
-    timeout: "60 seconds",
-  });
+  const mailReceiptProcessor = mailReceiptTopic.subscribe(
+    "MailReceiptProcessor",
+    {
+      environment: {
+        DATABASE_URL: context.databaseUrl,
+        MAIL_UPDATES_URL: liveSyncUrl,
+        ...context.billingEnvironment,
+        ...context.releaseEnvironment,
+        QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
+        ...context.r2Environment,
+        ...context.sentryEnvironment,
+      },
+      handler: "packages/aws/src/receipt.handler",
+      link: [
+        mailBucket,
+        requireSecretResource(secretResources, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
+        ...(
+          [
+            "GMAIL_TOKEN_ENCRYPTION_KEY",
+            "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
+            "OPENROUTER_API_KEY",
+            "POLAR_ACCESS_TOKEN",
+            "QUIETER_BACKGROUND_MODEL",
+          ] as const
+        ).map((name) => requireSecretResource(secretResources, name)),
+      ],
+      timeout: "60 seconds",
+    }
+  );
 
   const mailIngressToken = requireSecretResource(
     secretResources,
@@ -265,6 +269,7 @@ export const createMailResources = async (
       DATABASE_URL: context.databaseUrl,
       MAIL_UPDATES_URL: liveSyncUrl,
       ...context.billingEnvironment,
+      ...context.releaseEnvironment,
       QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
       ...context.r2Environment,
@@ -348,6 +353,7 @@ export const createMailResources = async (
     mailOutboundConfigurationSet,
     mailOutboundFeedbackDeadLetterQueue,
     mailOutboundFeedbackTopic,
+    mailReceiptProcessor,
     mailReceiptRole,
     mailReceiptTopic,
     webAwsPermissions,
