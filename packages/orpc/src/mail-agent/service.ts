@@ -8,19 +8,21 @@ import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import {
   mailboxAction,
+  mailbox,
   mailboxAgentEffect,
   mailboxAgentRevision,
   mailboxAgentRun,
-  mailboxAgentSetting,
+  mailboxPersonalAgentSetting,
 } from "@quieter/database/schema";
 import type { MailboxAgentUsage } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { publishMailUpdate } from "../mail-updates";
 import { assertAgentMailboxAccess } from "./access";
+import { assertPersonalAgentSettingAccess } from "./authority";
 import {
   compileAgentManifest,
   getAgentAccounts,
@@ -44,11 +46,19 @@ const savedManifestSchema = z.object({
 
 export const getAgentRevisionView = (
   revision: typeof mailboxAgentRevision.$inferSelect,
-  input: { shared: boolean; userId: string }
+  input: { canSaveDraft?: boolean; shared: boolean; userId: string }
 ) => {
   const specification = actionSpecificationSchema.parse(revision.specification);
   const manifest = savedManifestSchema.parse(revision.manifest);
   const blockingReasons = [...specification.review.questions];
+  if (
+    input.canSaveDraft === false &&
+    specification.toolGrants.some((grant) => grant.toolId === "mail.save_draft")
+  ) {
+    blockingReasons.push(
+      "You need permission to reply in this inbox before an action can save drafts."
+    );
+  }
   if (
     specification.trigger.kind !== "mail_received" &&
     specification.trigger.kind !== "manual"
@@ -114,25 +124,26 @@ export const getMailAgentSettings = async (input: {
   userId: string;
 }) => {
   const authorized = await assertAgentMailboxAccess(input);
-  let canManage = true;
-  try {
-    await assertAgentMailboxAccess({ ...input, manage: true });
-  } catch (error) {
-    if (!(error instanceof ORPCError)) {
-      throw error;
-    }
-    canManage = false;
-  }
   const [settings, legacyActions, accounts] = await Promise.all([
     db
       .select()
-      .from(mailboxAgentSetting)
-      .where(eq(mailboxAgentSetting.mailboxId, input.mailboxId))
+      .from(mailboxPersonalAgentSetting)
+      .where(
+        and(
+          eq(mailboxPersonalAgentSetting.mailboxId, input.mailboxId),
+          eq(mailboxPersonalAgentSetting.userId, input.userId)
+        )
+      )
       .limit(1),
     db
       .select({ id: mailboxAction.id, name: mailboxAction.name })
       .from(mailboxAction)
-      .where(eq(mailboxAction.mailboxId, input.mailboxId)),
+      .where(
+        and(
+          eq(mailboxAction.mailboxId, input.mailboxId),
+          eq(mailboxAction.createdByUserId, input.userId)
+        )
+      ),
     getAgentAccounts(input.userId),
   ]);
   const [setting] = settings;
@@ -149,6 +160,7 @@ export const getMailAgentSettings = async (input: {
           .where(
             and(
               eq(mailboxAgentRevision.mailboxId, input.mailboxId),
+              eq(mailboxAgentRevision.createdByUserId, input.userId),
               inArray(mailboxAgentRevision.id, revisionIds)
             )
           );
@@ -158,29 +170,53 @@ export const getMailAgentSettings = async (input: {
   const draft = revisions.find(
     (revision) => revision.id === setting?.draftRevisionId
   );
+  const activeView = active
+    ? getAgentRevisionView(active, { ...authorized, userId: input.userId })
+    : null;
+  let runBlockedReason: string | null = null;
+  if (!setting?.enabled || activeView === null) {
+    runBlockedReason = "Enable your reviewed action before running it.";
+  } else if (setting.memberId === authorized.memberId) {
+    runBlockedReason = activeView.blockingReasons[0] ?? null;
+    if (
+      runBlockedReason === null &&
+      activeView.specification.connectors.some(
+        (connector) =>
+          !accounts.some(
+            (account) =>
+              account.connectionId === connector.connectionId &&
+              account.status === "connected"
+          )
+      )
+    ) {
+      runBlockedReason =
+        "One of your connected accounts needs attention. Reconnect it or review your action using another account.";
+    }
+  } else {
+    runBlockedReason = "Your inbox access changed. Review your action again.";
+  }
   return {
     accounts,
-    active: active
-      ? getAgentRevisionView(active, {
-          shared: authorized.shared,
-          userId: input.userId,
-        })
-      : null,
-    canManage,
+    active: activeView,
+    canRun: runBlockedReason === null,
+    canSaveDraft: authorized.canSaveDraft,
     draft: draft
       ? getAgentRevisionView(draft, {
+          canSaveDraft: authorized.canSaveDraft,
           shared: authorized.shared,
           userId: input.userId,
         })
       : null,
     legacyActions,
+    runBlockedReason,
     setting: {
       activatedAt: setting?.activatedAt ?? null,
-      activeRevisionId: setting?.activeRevisionId ?? null,
-      draftRevisionId: setting?.draftRevisionId ?? null,
+      activeRevisionId: active?.id ?? null,
+      draftRevisionId: draft?.id ?? null,
       enabled: setting?.enabled ?? false,
       version: setting?.version ?? 0,
     },
+    shared: authorized.shared,
   };
 };
 
@@ -188,7 +224,7 @@ const assertAgentBudget = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
-  const authorized = await assertAgentMailboxAccess({ ...input, manage: true });
+  const authorized = await assertAgentMailboxAccess(input);
   const budget = await getMailAutomationAiBudgetStatus({
     organizationId: authorized.organizationId,
     userId: input.userId,
@@ -274,28 +310,38 @@ export const reviewMailAgent = async (input: {
     const now = new Date();
     await db.transaction(async (tx) => {
       await tx
-        .insert(mailboxAgentSetting)
+        .select({ id: mailbox.id })
+        .from(mailbox)
+        .where(eq(mailbox.id, input.mailboxId))
+        .for("update");
+      const access = await assertAgentMailboxAccess(input, tx);
+      await tx
+        .insert(mailboxPersonalAgentSetting)
         .values({
           createdAt: now,
           mailboxId: input.mailboxId,
+          memberId: access.memberId,
           updatedAt: now,
+          userId: input.userId,
           version: 0,
         })
         .onConflictDoNothing();
       const [changed] = await tx
-        .update(mailboxAgentSetting)
+        .update(mailboxPersonalAgentSetting)
         .set({
           draftRevisionId: revisionId,
+          memberId: access.memberId,
           updatedAt: now,
           version: input.version + 1,
         })
         .where(
           and(
-            eq(mailboxAgentSetting.mailboxId, input.mailboxId),
-            eq(mailboxAgentSetting.version, input.version)
+            eq(mailboxPersonalAgentSetting.mailboxId, input.mailboxId),
+            eq(mailboxPersonalAgentSetting.userId, input.userId),
+            eq(mailboxPersonalAgentSetting.version, input.version)
           )
         )
-        .returning({ id: mailboxAgentSetting.mailboxId });
+        .returning({ id: mailboxPersonalAgentSetting.mailboxId });
       if (changed === undefined) {
         throw new ORPCError("CONFLICT", {
           message:
@@ -377,7 +423,8 @@ export const activateMailAgent = async (input: {
     .where(
       and(
         eq(mailboxAgentRevision.mailboxId, input.mailboxId),
-        eq(mailboxAgentRevision.id, input.revisionId)
+        eq(mailboxAgentRevision.id, input.revisionId),
+        eq(mailboxAgentRevision.createdByUserId, input.userId)
       )
     )
     .limit(1);
@@ -387,6 +434,7 @@ export const activateMailAgent = async (input: {
     });
   }
   const view = getAgentRevisionView(revision, {
+    canSaveDraft: authorized.canSaveDraft,
     shared: authorized.shared,
     userId: input.userId,
   });
@@ -415,30 +463,76 @@ export const activateMailAgent = async (input: {
         "The connected tools changed since review. Review your prompt again.",
     });
   }
-  const [changed] = await db
-    .update(mailboxAgentSetting)
-    .set({
-      activatedAt: new Date(),
-      activatedByUserId: input.userId,
-      activationVersion: input.version + 1,
-      activeRevisionId: revision.id,
-      enabled: true,
-      updatedAt: new Date(),
-      version: input.version + 1,
-    })
-    .where(
-      and(
-        eq(mailboxAgentSetting.mailboxId, input.mailboxId),
-        eq(mailboxAgentSetting.version, input.version)
+  await db.transaction(async (tx) => {
+    await tx
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(eq(mailbox.id, input.mailboxId))
+      .for("update");
+    const access = await assertAgentMailboxAccess(
+      {
+        ...input,
+        saveDraft: view.specification.toolGrants.some(
+          (grant) => grant.toolId === "mail.save_draft"
+        ),
+      },
+      tx
+    );
+    const [current] = await tx
+      .select()
+      .from(mailboxPersonalAgentSetting)
+      .where(
+        and(
+          eq(mailboxPersonalAgentSetting.mailboxId, input.mailboxId),
+          eq(mailboxPersonalAgentSetting.userId, input.userId)
+        )
       )
-    )
-    .returning({ id: mailboxAgentSetting.mailboxId });
-  if (changed === undefined) {
-    throw new ORPCError("CONFLICT", {
-      message:
-        "These actions changed in another window. Reload before enabling them.",
+      .limit(1)
+      .for("update");
+    if (
+      current === undefined ||
+      (current.draftRevisionId !== revision.id &&
+        current.activeRevisionId !== revision.id)
+    ) {
+      throw new ORPCError("CONFLICT", {
+        message: "This review is no longer current. Review your action again.",
+      });
+    }
+    await assertPersonalAgentSettingAccess(current, tx);
+    const liveView = getAgentRevisionView(revision, {
+      ...access,
+      userId: input.userId,
     });
-  }
+    if (!liveView.canActivate) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: liveView.blockingReasons[0],
+      });
+    }
+    const [changed] = await tx
+      .update(mailboxPersonalAgentSetting)
+      .set({
+        activatedAt: new Date(),
+        activationVersion: input.version + 1,
+        activeRevisionId: revision.id,
+        enabled: true,
+        updatedAt: new Date(),
+        version: input.version + 1,
+      })
+      .where(
+        and(
+          eq(mailboxPersonalAgentSetting.mailboxId, input.mailboxId),
+          eq(mailboxPersonalAgentSetting.userId, input.userId),
+          eq(mailboxPersonalAgentSetting.version, input.version)
+        )
+      )
+      .returning({ id: mailboxPersonalAgentSetting.mailboxId });
+    if (changed === undefined) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "These actions changed in another window. Reload before enabling them.",
+      });
+    }
+  });
   return await getMailAgentSettings(input);
 };
 
@@ -447,23 +541,37 @@ export const pauseMailAgent = async (input: {
   userId: string;
   version: number;
 }) => {
-  await assertAgentMailboxAccess({ ...input, manage: true });
-  const [changed] = await db
-    .update(mailboxAgentSetting)
-    .set({ enabled: false, updatedAt: new Date(), version: input.version + 1 })
-    .where(
-      and(
-        eq(mailboxAgentSetting.mailboxId, input.mailboxId),
-        eq(mailboxAgentSetting.version, input.version)
+  await assertAgentMailboxAccess(input);
+  await db.transaction(async (tx) => {
+    await tx
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(eq(mailbox.id, input.mailboxId))
+      .for("update");
+    await assertAgentMailboxAccess(input, tx);
+    const [changed] = await tx
+      .update(mailboxPersonalAgentSetting)
+      .set({
+        activationVersion: input.version + 1,
+        enabled: false,
+        updatedAt: new Date(),
+        version: input.version + 1,
+      })
+      .where(
+        and(
+          eq(mailboxPersonalAgentSetting.mailboxId, input.mailboxId),
+          eq(mailboxPersonalAgentSetting.userId, input.userId),
+          eq(mailboxPersonalAgentSetting.version, input.version)
+        )
       )
-    )
-    .returning({ id: mailboxAgentSetting.mailboxId });
-  if (changed === undefined) {
-    throw new ORPCError("CONFLICT", {
-      message:
-        "These actions changed in another window. Reload before pausing them.",
-    });
-  }
+      .returning({ id: mailboxPersonalAgentSetting.mailboxId });
+    if (changed === undefined) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "These actions changed in another window. Reload before pausing them.",
+      });
+    }
+  });
   return await getMailAgentSettings(input);
 };
 
@@ -518,36 +626,16 @@ export const getMailAgentThreadResults = async (input: {
           .where(
             and(
               eq(mailboxAgentRevision.mailboxId, input.mailboxId),
+              eq(mailboxAgentRevision.createdByUserId, input.userId),
               inArray(
                 mailboxAgentRevision.id,
                 runs.map((run) => run.revisionId)
               )
             )
           );
-  const [privateRun] = await db
-    .select({ id: mailboxAgentRun.id })
-    .from(mailboxAgentRun)
-    .where(
-      and(
-        eq(mailboxAgentRun.mailboxId, input.mailboxId),
-        eq(mailboxAgentRun.threadId, input.threadId),
-        ne(mailboxAgentRun.actorUserId, input.userId)
-      )
-    )
-    .limit(1);
   return {
-    canRun:
-      state.canManage &&
-      state.setting.enabled &&
-      state.active !== null &&
-      state.active.specification.connectors.every((connector) =>
-        state.accounts.some(
-          (account) =>
-            account.connectionId === connector.connectionId &&
-            account.status === "connected"
-        )
-      ),
-    hasPrivateResults: privateRun !== undefined,
+    canRun: state.canRun,
+    runBlockedReason: state.runBlockedReason,
     runs: runs.map(({ revisionId, ...run }) => {
       const revision = revisions.find(
         (candidate) => candidate.id === revisionId
@@ -577,11 +665,12 @@ export const enqueueManualMailAgentRun = async (input: {
   await assertAgentBudget(input);
   const [setting] = await db
     .select()
-    .from(mailboxAgentSetting)
+    .from(mailboxPersonalAgentSetting)
     .where(
       and(
-        eq(mailboxAgentSetting.mailboxId, input.mailboxId),
-        eq(mailboxAgentSetting.enabled, true)
+        eq(mailboxPersonalAgentSetting.mailboxId, input.mailboxId),
+        eq(mailboxPersonalAgentSetting.userId, input.userId),
+        eq(mailboxPersonalAgentSetting.enabled, true)
       )
     )
     .limit(1);
@@ -596,54 +685,118 @@ export const enqueueManualMailAgentRun = async (input: {
     .where(
       and(
         eq(mailboxAgentRevision.id, setting.activeRevisionId),
-        eq(mailboxAgentRevision.mailboxId, input.mailboxId)
+        eq(mailboxAgentRevision.mailboxId, input.mailboxId),
+        eq(mailboxAgentRevision.createdByUserId, input.userId)
       )
     )
     .limit(1);
-  const specification = actionSpecificationSchema.parse(
-    revision?.specification
-  );
+  if (revision === undefined) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Review your own action before running it.",
+    });
+  }
+  const access = await assertPersonalAgentSettingAccess(setting);
+  const view = getAgentRevisionView(revision, {
+    ...access,
+    userId: input.userId,
+  });
+  if (!view.canActivate) {
+    throw new ORPCError("BAD_REQUEST", { message: view.blockingReasons[0] });
+  }
+  const { specification } = view;
   const catalog = await loadAgentCatalog({
     connectionIds: specification.connectors.map(
       (connector) => connector.connectionId
     ),
     userId: input.userId,
   });
-  compileAgentManifest(specification, catalog);
+  const compiled = compileAgentManifest(specification, catalog);
+  getAgentConnectorEffects(specification, compiled.tools);
+  if (compiled.digest !== revision.manifestDigest) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "The connected tools changed. Review your action again.",
+    });
+  }
   const now = new Date();
   const invocationKey = `manual:${input.userId}:${input.invocationId}`;
-  await db
-    .insert(mailboxAgentRun)
-    .values({
-      actorUserId: input.userId,
-      createdAt: now,
-      id: randomUUID(),
-      invocationKey,
-      mailboxId: input.mailboxId,
-      privateResult: true,
-      revisionId: setting.activeRevisionId,
-      settingVersion: setting.activationVersion,
-      status: "queued",
-      threadId: input.threadId,
-      triggerKind: "manual",
-      updatedAt: now,
-    })
-    .onConflictDoNothing({
-      target: [mailboxAgentRun.mailboxId, mailboxAgentRun.invocationKey],
-    });
-  const [run] = await db
-    .select({ runId: mailboxAgentRun.id })
-    .from(mailboxAgentRun)
-    .where(
-      and(
-        eq(mailboxAgentRun.mailboxId, input.mailboxId),
-        eq(mailboxAgentRun.invocationKey, invocationKey)
+  const run = await db.transaction(async (tx) => {
+    await tx
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(eq(mailbox.id, input.mailboxId))
+      .for("update");
+    const [current] = await tx
+      .select()
+      .from(mailboxPersonalAgentSetting)
+      .where(
+        and(
+          eq(mailboxPersonalAgentSetting.mailboxId, input.mailboxId),
+          eq(mailboxPersonalAgentSetting.userId, input.userId),
+          eq(mailboxPersonalAgentSetting.activeRevisionId, revision.id),
+          eq(
+            mailboxPersonalAgentSetting.activationVersion,
+            setting.activationVersion
+          ),
+          eq(mailboxPersonalAgentSetting.enabled, true)
+        )
       )
-    )
-    .limit(1);
-  if (run === undefined) {
-    throw new Error("The action could not be queued.");
-  }
+      .for("update")
+      .limit(1);
+    if (current === undefined) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "Your action changed before it could run. Reload and try again.",
+      });
+    }
+    const currentAccess = await assertPersonalAgentSettingAccess(
+      current,
+      tx,
+      compiled.tools.some((tool) => tool.toolId === "mail.save_draft")
+    );
+    const currentView = getAgentRevisionView(revision, {
+      ...currentAccess,
+      userId: input.userId,
+    });
+    if (!currentView.canActivate) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: currentView.blockingReasons[0],
+      });
+    }
+    await tx
+      .insert(mailboxAgentRun)
+      .values({
+        actorUserId: input.userId,
+        createdAt: now,
+        id: randomUUID(),
+        invocationKey,
+        mailboxId: input.mailboxId,
+        privateResult: true,
+        revisionId: revision.id,
+        settingVersion: setting.activationVersion,
+        status: "queued",
+        threadId: input.threadId,
+        triggerKind: "manual",
+        updatedAt: now,
+      })
+      .onConflictDoNothing({
+        target: [mailboxAgentRun.mailboxId, mailboxAgentRun.invocationKey],
+      });
+    const [queued] = await tx
+      .select({ runId: mailboxAgentRun.id })
+      .from(mailboxAgentRun)
+      .where(
+        and(
+          eq(mailboxAgentRun.mailboxId, input.mailboxId),
+          eq(mailboxAgentRun.actorUserId, input.userId),
+          eq(mailboxAgentRun.invocationKey, invocationKey)
+        )
+      )
+      .limit(1);
+    if (queued === undefined) {
+      throw new Error("The action could not be queued.");
+    }
+    return queued;
+  });
   await publishMailUpdate(
     {
       mailboxId: input.mailboxId,

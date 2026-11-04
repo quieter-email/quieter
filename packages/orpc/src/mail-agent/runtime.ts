@@ -12,7 +12,6 @@ import {
   mailboxAgentEffect,
   mailboxAgentRevision,
   mailboxAgentRun,
-  mailboxAgentSetting,
 } from "@quieter/database/schema";
 import type { MailboxAgentUsage } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
@@ -44,6 +43,7 @@ import { publishMailUpdate } from "../mail-updates";
 import { composeMailOperations } from "../mail/compose";
 import { queriesMailOperations } from "../mail/queries";
 import { assertAgentMailboxAccess } from "./access";
+import { assertMailAgentRunAuthority } from "./authority";
 import {
   agentDigest,
   calendarEventSchema,
@@ -147,53 +147,6 @@ const claimNextRun = async (): Promise<ClaimedRun | null> =>
     return claimed === undefined ? null : { ...claimed, leaseToken };
   });
 
-const assertRunAuthority = async (run: ClaimedRun) => {
-  const [lease] = await db
-    .select({ id: mailboxAgentRun.id })
-    .from(mailboxAgentRun)
-    .where(
-      and(
-        eq(mailboxAgentRun.id, run.id),
-        eq(mailboxAgentRun.mailboxId, run.mailboxId),
-        eq(mailboxAgentRun.leaseToken, run.leaseToken),
-        eq(mailboxAgentRun.status, "running"),
-        gt(mailboxAgentRun.leaseExpiresAt, new Date())
-      )
-    )
-    .limit(1);
-  if (lease === undefined) {
-    throw new ORPCError("CONFLICT", {
-      message: "This action no longer owns its run.",
-    });
-  }
-  const [setting] = await db
-    .select()
-    .from(mailboxAgentSetting)
-    .where(
-      and(
-        eq(mailboxAgentSetting.mailboxId, run.mailboxId),
-        eq(mailboxAgentSetting.activeRevisionId, run.revisionId),
-        eq(mailboxAgentSetting.enabled, true),
-        eq(mailboxAgentSetting.activationVersion, run.settingVersion)
-      )
-    )
-    .limit(1);
-  if (
-    setting === undefined ||
-    (run.triggerKind === "mail_received" &&
-      setting.activatedByUserId !== run.actorUserId)
-  ) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "This action was paused or replaced before it finished.",
-    });
-  }
-  return await assertAgentMailboxAccess({
-    mailboxId: run.mailboxId,
-    manage: true,
-    userId: run.actorUserId,
-  });
-};
-
 const reportRunUsage = async (run: typeof mailboxAgentRun.$inferSelect) => {
   if (run.usageReportedAt || run.usage === null || run.usage.length === 0) {
     if (run.usageReportedAt === null) {
@@ -230,7 +183,7 @@ const executeRun = async (run: ClaimedRun) => {
   let writes = 0;
   const usage: MailboxAgentUsage[] = run.usage ?? [];
   try {
-    const authorized = await assertRunAuthority(run);
+    const authorized = await assertMailAgentRunAuthority(run);
     const budget = await getMailAutomationAiBudgetStatus({
       organizationId: authorized.organizationId,
       userId: run.actorUserId,
@@ -244,7 +197,8 @@ const executeRun = async (run: ClaimedRun) => {
       .where(
         and(
           eq(mailboxAgentRevision.id, run.revisionId),
-          eq(mailboxAgentRevision.mailboxId, run.mailboxId)
+          eq(mailboxAgentRevision.mailboxId, run.mailboxId),
+          eq(mailboxAgentRevision.createdByUserId, run.actorUserId)
         )
       )
       .limit(1);
@@ -256,6 +210,17 @@ const executeRun = async (run: ClaimedRun) => {
     );
     if (specification.mailboxId !== run.mailboxId) {
       throw new Error("Reviewed action mailbox does not match its run.");
+    }
+    if (
+      specification.toolGrants.some(
+        (grant) => grant.toolId === "mail.save_draft"
+      )
+    ) {
+      await assertAgentMailboxAccess({
+        mailboxId: run.mailboxId,
+        saveDraft: true,
+        userId: run.actorUserId,
+      });
     }
     const catalog = await loadAgentCatalog({
       connectionIds: specification.connectors.map(
@@ -287,7 +252,17 @@ const executeRun = async (run: ClaimedRun) => {
     );
     let personalContextUsed = false;
     const assertContextAuthority = async () => {
-      const access = await assertRunAuthority(run);
+      const access = await assertMailAgentRunAuthority(run);
+      if (
+        access.shared &&
+        specification.connectors.length > 0 &&
+        compiled.tools.some((tool) => tool.toolId === "mail.save_draft")
+      ) {
+        throw new ORPCError("FORBIDDEN", {
+          message:
+            "Connected account information cannot be saved into a draft visible to other inbox members. Review this prompt again.",
+        });
+      }
       if (access.shared && personalContextUsed) {
         throw new ORPCError("FORBIDDEN", {
           message:
@@ -440,7 +415,7 @@ const executeRun = async (run: ClaimedRun) => {
             "An earlier change needs review before this action can continue.",
         });
       }
-      const liveAccess = await assertContextAuthority();
+      await assertContextAuthority();
       const liveCatalog = await loadAgentCatalog({
         connectionIds: specification.connectors.map(
           (connection) => connection.connectionId
@@ -456,6 +431,7 @@ const executeRun = async (run: ClaimedRun) => {
           message: "The connected tools changed while the action was running.",
         });
       }
+      const liveAccess = await assertContextAuthority();
       if (tool.operation === "read") {
         if (tool.toolId === "mail.read_thread") {
           return await getThread();
@@ -602,21 +578,26 @@ const executeRun = async (run: ClaimedRun) => {
         inputDigest,
       ]);
       const effectClaim = await db.transaction(async (tx) => {
-        const [lease] = await tx
-          .select({ id: mailboxAgentRun.id })
-          .from(mailboxAgentRun)
-          .where(
-            and(
-              eq(mailboxAgentRun.id, run.id),
-              eq(mailboxAgentRun.leaseToken, run.leaseToken),
-              eq(mailboxAgentRun.status, "running"),
-              gt(mailboxAgentRun.leaseExpiresAt, new Date())
-            )
-          )
-          .for("update");
-        if (lease === undefined) {
-          throw new ORPCError("CONFLICT", {
-            message: "This action no longer owns its run.",
+        const admitted = await assertMailAgentRunAuthority(run, tx, true);
+        if (tool.toolId === "mail.save_draft") {
+          await assertAgentMailboxAccess(
+            {
+              mailboxId: run.mailboxId,
+              saveDraft: true,
+              userId: run.actorUserId,
+            },
+            tx
+          );
+        }
+        if (
+          admitted.shared &&
+          (personalContextUsed ||
+            (tool.toolId === "mail.save_draft" &&
+              specification.connectors.length > 0))
+        ) {
+          throw new ORPCError("FORBIDDEN", {
+            message:
+              "Personal context and connected account information cannot be saved into a shared inbox draft.",
           });
         }
         const previous = createsResource

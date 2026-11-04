@@ -124,6 +124,8 @@ export const getAuthorizedManagedMailbox = async (
     .innerJoin(
       member,
       and(
+        eq(member.id, mailboxGrant.memberId),
+        eq(member.userId, mailboxGrant.userId),
         eq(member.userId, input.userId),
         eq(member.organizationId, mailbox.organizationId)
       )

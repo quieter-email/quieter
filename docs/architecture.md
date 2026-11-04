@@ -22,6 +22,12 @@ Behavior-producing AI agents share the scoped dynamic knowledge boundary in [`do
 
 `apps/web` owns routing, rendering, browser state, server functions, and HTTP API handlers. Database-backed business logic crosses through `packages/orpc`. Shared packages own provider and domain-specific behavior.
 
+## Ownership
+
+An inbox can be shared while each person's connected apps, Action instructions, and Action results stay private. Each user has their own Action configuration for each inbox. Incoming mail can independently trigger each user's Action with that user's exact connected account. Inbox membership never grants access to another person's connections, chat, memory, or Action configuration. A reply draft saved into a shared inbox is shared mail content, so Actions retain the separate draft-access and private-context checks.
+
+Team and organization name the same administrative group. The group controls membership and inbox access. Direct inbox grants bind to the current membership record, so leaving and rejoining does not restore old grants. Billing belongs to the designated payer account and covers the organizations it explicitly funds. Funding does not grant access to private content. See [Action specifications](./action-specifications.md) and [billing](./billing.md).
+
 ## Workspace Boundaries
 
 ### `apps/web`
@@ -194,7 +200,7 @@ c15t runs in offline mode. Consent preferences stay in the browser and do not re
 
 ## Billing
 
-Billing subscriptions belong to teams. Paid plans are `managed` and `pro`. A subscription grants access only while active or trialing and before its current period ends.
+Billing subscriptions belong to the payer's account. Each organization names the owner account that funds it, and that account's plan and allowance cover its explicitly funded organizations. Paid plans are `managed` and `pro`. A subscription grants access only while active or trialing and before its current period ends.
 
 Polar handles checkout, renewals, and subscription events. Signed webhooks synchronize subscription status, period dates, and scheduled cancellation. Billing reads reconcile stale records after five minutes, including active and past-due subscriptions, to recover from missed events. Equal provider timestamps can refresh the reconciliation time; older timestamps cannot overwrite newer subscription state. A failed reconciliation returns an unavailable state and retries after five minutes. Checkout refreshes the existing subscription before deciding whether a new checkout is allowed, preventing duplicate subscriptions after a missed renewal.
 

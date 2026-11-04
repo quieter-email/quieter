@@ -194,7 +194,10 @@ const ConnectorDetail = ({ connector }: { connector: Connector }) => {
       >
         {connector.description}
       </SettingsPageHeader>
-      <SettingsSection title="Accounts">
+      <SettingsSection
+        description="Your connected accounts are private to you."
+        title="Accounts"
+      >
         <SettingsRows>
           {connector.accounts.length === 0 ? (
             <SettingsRow action={connectButton} title="No accounts connected">
@@ -304,7 +307,8 @@ const ConnectorDetail = ({ connector }: { connector: Connector }) => {
         </SettingsRows>
       </SettingsSection>
       <Text size="sm" tone="muted">
-        Type @ in chat to choose a connected {connector.displayName} account.
+        Type @ in chat or action instructions to choose a connected{" "}
+        {connector.displayName} account.
         {connector.provider === "microsoft_calendar" &&
           " Your events also appear in Calendar."}
       </Text>
@@ -379,7 +383,8 @@ export const ConnectorsSettingsPanel = () => {
     <div className="space-y-6">
       {!selectedConnector && (
         <SettingsPageHeader title="Connected apps">
-          Manage the apps you use with Quieter.
+          Manage the apps you use with Quieter. Your connected accounts are
+          private to you.
         </SettingsPageHeader>
       )}
       {isError && (

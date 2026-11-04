@@ -179,7 +179,12 @@ vi.mock("../src/mail-agent/access", () => ({
     if (!state.authorized) {
       throw new ORPCError("FORBIDDEN", { message: "Access was revoked." });
     }
-    return { organizationId: "organization", shared: state.shared };
+    return {
+      canSaveDraft: true,
+      memberId: null,
+      organizationId: "organization",
+      shared: state.shared,
+    };
   },
 }));
 vi.mock(import("../src/mail-automation/ai-budget"), async (original) => ({
@@ -432,13 +437,14 @@ describe("durable background action execution", () => {
         usage: null,
       },
     ]);
-    state.tables.set("mailboxAgentSetting", [
+    state.tables.set("mailboxPersonalAgentSetting", [
       {
-        activatedByUserId: "actor",
         activationVersion: 1,
         activeRevisionId: "revision",
         enabled: true,
         mailboxId: "mailbox",
+        memberId: null,
+        userId: "actor",
       },
     ]);
     state.tables.set("mailboxAgentRun", [
@@ -454,6 +460,7 @@ describe("durable background action execution", () => {
         leaseToken: null,
         mailboxId: "mailbox",
         messageId: "message",
+        privateResult: true,
         revisionId: "revision",
         settingVersion: 1,
         status: "queued",
@@ -712,7 +719,7 @@ describe("durable background action execution", () => {
       permissionId: "calendar-write",
       toolId: "calendar.create_event",
     });
-    const setting = state.tables.get("mailboxAgentSetting")?.[0];
+    const setting = state.tables.get("mailboxPersonalAgentSetting")?.[0];
     Object.assign(setting ?? {}, { activeRevisionId: null, version: 0 });
     state.model.mockReturnValueOnce(
       new MockLanguageModelV4({

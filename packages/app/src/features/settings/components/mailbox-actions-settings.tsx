@@ -9,6 +9,7 @@ import {
   SettingsErrorState,
   SettingsLoadingState,
   SettingsRow,
+  SettingsRowText,
   SettingsSection,
   settingsSurfaceVariants,
 } from "@quieter/app/features/settings/components/settings-layout";
@@ -37,6 +38,9 @@ const MailboxActionsForm = ({
   mailboxId: string;
   onUpdate: (data: ActionsSettings) => void;
 }) => {
+  const [view, setView] = useState<"overview" | "editing" | "review">(
+    data.active ? "overview" : "editing"
+  );
   const [sourceText, setSourceText] = useState(
     data.draft?.specification.sourceText ??
       data.active?.specification.sourceText ??
@@ -53,6 +57,7 @@ const MailboxActionsForm = ({
     },
     onSuccess: (updated) => {
       setAcknowledgedRevisionId(null);
+      setView("review");
       onUpdate(updated);
     },
   });
@@ -61,7 +66,10 @@ const MailboxActionsForm = ({
     onError: (error) => {
       toastError(error, { boundary: "mailbox-actions-activate" });
     },
-    onSuccess: onUpdate,
+    onSuccess: (updated) => {
+      setView("overview");
+      onUpdate(updated);
+    },
   });
   const pause = useMutation({
     ...orpc.mailAgent.pause.mutationOptions(),
@@ -108,6 +116,9 @@ const MailboxActionsForm = ({
   if (data.active) {
     statusLabel = data.setting.enabled ? "Active" : "Paused";
   }
+  if (data.setting.enabled && !data.canRun) {
+    statusLabel = "Needs attention";
+  }
   let activationLabel = "Activate action";
   if (isCurrentActive) {
     activationLabel = data.setting.enabled ? "Activated" : "Resume action";
@@ -115,29 +126,35 @@ const MailboxActionsForm = ({
 
   return (
     <div className="space-y-4">
-      <SettingsCard>
-        <SettingsRow
-          action={
-            <Pill tone={data.setting.enabled ? "success" : "neutral"}>
-              {statusLabel}
-            </Pill>
-          }
-          title="Mailbox action"
-        >
-          {data.active
-            ? data.active.specification.review.summary
-            : "Describe what you want done, then review it before activation."}
-        </SettingsRow>
-        {data.active ? (
+      {view === "overview" && data.active ? (
+        <SettingsCard>
+          <SettingsRow
+            action={
+              <Pill tone={data.canRun ? "success" : "neutral"}>
+                {statusLabel}
+              </Pill>
+            }
+            title="Your action"
+          >
+            {data.active.specification.review.summary}
+          </SettingsRow>
           <div className={settingsSurfaceVariants({ variant: "body" })}>
             <p className="text-body-sm text-muted-fg">
               {getActionsTriggerLabel(data.active.specification.trigger)}
             </p>
-            {data.setting.enabled && (!isCurrentActive || reviewed === null) ? (
-              <p className="text-caption text-muted-fg">
-                The current action keeps running until you activate a
-                replacement or pause it.
-              </p>
+            {data.active.specification.connectors.length > 0 ? (
+              <SettingsRowText title="Your connected accounts">
+                <ul className="space-y-1">
+                  {data.active.specification.connectors.map((connector) => (
+                    <li className="break-words" key={connector.referenceId}>
+                      {data.accounts.find(
+                        (account) =>
+                          account.connectionId === connector.connectionId
+                      )?.label ?? "Unavailable account"}
+                    </li>
+                  ))}
+                </ul>
+              </SettingsRowText>
             ) : null}
             <details className="text-body-sm text-muted-fg">
               <summary className="cursor-pointer">Current instructions</summary>
@@ -145,29 +162,64 @@ const MailboxActionsForm = ({
                 {data.active.specification.instructions}
               </p>
             </details>
-            {data.canManage && data.setting.enabled ? (
-              <ActionFooter>
-                <Button
-                  disabled={pending}
-                  onClick={() => {
-                    pause.mutate({
+            {data.runBlockedReason && data.setting.enabled ? (
+              <p className="text-caption text-warning">
+                {data.runBlockedReason}
+              </p>
+            ) : null}
+            {data.active.blockingReasons.length > 0 && !data.setting.enabled ? (
+              <p className="text-caption text-warning">
+                {data.active.blockingReasons[0]}
+              </p>
+            ) : null}
+            <ActionFooter>
+              <Button
+                disabled={
+                  pending || (!data.setting.enabled && !data.active.canActivate)
+                }
+                onClick={() => {
+                  if (data.setting.enabled) {
+                    pause.mutate({ mailboxId, version: data.setting.version });
+                  } else if (data.active) {
+                    activate.mutate({
+                      acknowledgeAssumptions: true,
                       mailboxId,
+                      revisionId: data.active.id,
                       version: data.setting.version,
                     });
-                  }}
-                  pending={pause.isPending}
-                  pendingLabel="Pausing…"
-                  size="sm"
-                  type="button"
-                  variant="secondary"
-                >
-                  Pause action
-                </Button>
-              </ActionFooter>
-            ) : null}
+                  }
+                }}
+                pending={pause.isPending || activate.isPending}
+                pendingLabel={data.setting.enabled ? "Pausing…" : "Resuming…"}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                {data.setting.enabled ? "Pause action" : "Resume action"}
+              </Button>
+              <Button
+                disabled={pending}
+                onClick={() => {
+                  setView("editing");
+                }}
+                size="sm"
+                type="button"
+              >
+                {data.draft && data.draft.id !== data.active.id
+                  ? "Continue editing"
+                  : "Edit action"}
+              </Button>
+            </ActionFooter>
           </div>
-        ) : null}
-      </SettingsCard>
+        </SettingsCard>
+      ) : null}
+      {view === "overview" &&
+      data.active &&
+      data.active.specification.connectors.length > 0 ? (
+        <p className="text-caption text-muted-fg">
+          Destination access follows the permissions of your connected app.
+        </p>
+      ) : null}
 
       {data.legacyActions.length > 0 ? (
         <SettingsCard>
@@ -186,11 +238,14 @@ const MailboxActionsForm = ({
         </SettingsCard>
       ) : null}
 
-      {data.canManage ? (
+      {view === "overview" ? null : (
         <form
           className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
+            if (view !== "editing") {
+              return;
+            }
             review.mutate({
               mailboxId,
               sourceText,
@@ -198,54 +253,71 @@ const MailboxActionsForm = ({
             });
           }}
         >
-          <div className="space-y-2">
-            <p className="text-body-sm font-medium text-fg">Instructions</p>
-            <PromptComposerFrame>
-              <TokenField
-                aria-label="Action instructions"
-                disabled={pending}
-                emptyMessage="No matching connected accounts"
-                onChange={(value) => {
-                  setSourceText(value);
-                  setAcknowledgedRevisionId(null);
-                }}
-                placeholder="When new mail arrives, summarize the request and prepare a reply draft. Type @ to choose a connected account."
-                size="prompt"
-                suggestionsLabel="Connected accounts"
-                tokens={tokens}
-                value={sourceText}
-              />
-            </PromptComposerFrame>
+          {data.active && data.setting.enabled ? (
             <p className="text-caption text-muted-fg">
-              Type @ to choose an exact account. Sending and deleting stay under
-              your control. Prepared replies open as drafts for review.
+              Your current action keeps running until you activate these changes
+              or pause it.
             </p>
-            {hasUnavailableMentions ? (
-              <output className="block text-caption text-warning">
-                A mentioned account is unavailable. Reconnect it or replace its
-                mention before activation.
-              </output>
-            ) : null}
-            {sourceText.length > 16_384 ? (
-              <p className="text-caption text-destructive" role="alert">
-                Keep instructions under 16,384 characters.
+          ) : null}
+          {view === "editing" ? (
+            <div className="space-y-2">
+              <p className="text-body-sm font-medium text-fg">Instructions</p>
+              <PromptComposerFrame>
+                <TokenField
+                  aria-label="Action instructions"
+                  disabled={pending}
+                  emptyMessage="No matching connected accounts"
+                  onChange={(value) => {
+                    setSourceText(value);
+                    setAcknowledgedRevisionId(null);
+                  }}
+                  placeholder="When new mail arrives, summarize the request and prepare a reply draft. Type @ to choose a connected account."
+                  size="prompt"
+                  suggestionsLabel="Connected accounts"
+                  tokens={tokens}
+                  value={sourceText}
+                />
+              </PromptComposerFrame>
+              <p className="text-caption text-muted-fg">
+                Type @ to choose one of your exact connected accounts. Sending
+                and deleting stay under your control.
               </p>
-            ) : null}
-            {reviewed === null && data.draft !== null ? (
-              <output className="block text-caption text-muted-fg">
-                Your edits need a new review before activation.
-              </output>
-            ) : null}
-          </div>
+              {data.canSaveDraft ? null : (
+                <p className="text-caption text-muted-fg">
+                  You can use mail you can read. Saving reply drafts requires
+                  permission to reply in this inbox.
+                </p>
+              )}
+              {hasUnavailableMentions ? (
+                <output className="block text-caption text-warning">
+                  A mentioned account is unavailable. Reconnect it or replace
+                  its mention before activation.
+                </output>
+              ) : null}
+              {sourceText.length > 16_384 ? (
+                <p className="text-caption text-destructive" role="alert">
+                  Keep instructions under 16,384 characters.
+                </p>
+              ) : null}
+              {reviewed === null && data.draft !== null ? (
+                <output className="block text-caption text-muted-fg">
+                  Your edits need a new review before activation.
+                </output>
+              ) : null}
+            </div>
+          ) : null}
 
-          {reviewed ? (
+          {reviewed && view === "review" ? (
             <MailboxActionsReview
               accounts={data.accounts}
               revision={reviewed}
+              shared={data.shared}
             />
           ) : null}
 
-          {reviewed && reviewed.specification.review.assumptions.length > 0 ? (
+          {view === "review" &&
+          reviewed &&
+          reviewed.specification.review.assumptions.length > 0 ? (
             <label
               className="flex items-start gap-2 text-body-sm text-fg"
               htmlFor={acknowledgementId}
@@ -265,21 +337,48 @@ const MailboxActionsForm = ({
           ) : null}
 
           <ActionFooter>
-            <Button
-              disabled={
-                pending ||
-                sourceText.trim().length === 0 ||
-                sourceText.length > 16_384
-              }
-              pending={review.isPending}
-              pendingLabel="Reviewing…"
-              size="sm"
-              type="submit"
-              variant={reviewed ? "secondary" : "default"}
-            >
-              {reviewed ? "Review again" : "Review instructions"}
-            </Button>
-            {reviewed ? (
+            {view === "review" ? (
+              <Button
+                disabled={pending}
+                onClick={() => {
+                  setView("editing");
+                }}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                Back to edit
+              </Button>
+            ) : null}
+            {view === "editing" && data.active ? (
+              <Button
+                disabled={pending}
+                onClick={() => {
+                  setView("overview");
+                }}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                Cancel
+              </Button>
+            ) : null}
+            {view === "editing" ? (
+              <Button
+                disabled={
+                  pending ||
+                  sourceText.trim().length === 0 ||
+                  sourceText.length > 16_384
+                }
+                pending={review.isPending}
+                pendingLabel="Reviewing…"
+                size="sm"
+                type="submit"
+              >
+                {reviewed ? "Review again" : "Review instructions"}
+              </Button>
+            ) : null}
+            {reviewed && view === "review" ? (
               <Button
                 disabled={pending || !canActivate}
                 onClick={() => {
@@ -301,10 +400,6 @@ const MailboxActionsForm = ({
             ) : null}
           </ActionFooter>
         </form>
-      ) : (
-        <p className="text-body-sm text-muted-fg">
-          A mailbox manager can review, activate, or pause this action.
-        </p>
       )}
     </div>
   );
@@ -323,8 +418,8 @@ export const MailboxActionsSettings = ({
 
   return (
     <SettingsSection
-      description="Tell quieter what to do with mail in this mailbox. Review the instructions and account access before turning it on."
-      title="Actions"
+      description="Only you can see these instructions, connected accounts, and results."
+      title="Your action"
     >
       {query.isPending ? (
         <SettingsLoadingState label="Loading actions" />
@@ -344,6 +439,11 @@ export const MailboxActionsSettings = ({
           mailboxId={mailboxId}
           onUpdate={(data) => {
             queryClient.setQueryData(queryOptions.queryKey, data);
+            void queryClient.invalidateQueries({
+              queryKey: orpc.mailAgent.threadResults.key({
+                input: { mailboxId },
+              }),
+            });
           }}
         />
       ) : null}

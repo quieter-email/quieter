@@ -9,6 +9,7 @@ import {
 import { requireServerEnv } from "@quieter/env/server";
 import { and, eq, gt, lt } from "drizzle-orm";
 
+import { pausePersonalAgentConnections } from "../mail-agent/authority";
 import {
   CONNECTOR_PROVIDERS,
   connectorDisplayNames,
@@ -353,17 +354,38 @@ export const disconnectConnector = async (input: {
   provider: ConnectorProvider;
   userId: string;
 }) => {
-  const [deleted] = await db
-    .delete(connectorCredential)
-    .where(
-      and(
-        eq(connectorCredential.userId, input.userId),
-        eq(connectorCredential.provider, input.provider),
-        input.connectionId === undefined
-          ? undefined
-          : eq(connectorCredential.id, input.connectionId)
+  const deleted = await db.transaction(async (tx) => {
+    const owned = await tx
+      .select({ id: connectorCredential.id })
+      .from(connectorCredential)
+      .where(
+        and(
+          eq(connectorCredential.userId, input.userId),
+          eq(connectorCredential.provider, input.provider),
+          input.connectionId === undefined
+            ? undefined
+            : eq(connectorCredential.id, input.connectionId)
+        )
+      );
+    await pausePersonalAgentConnections(
+      {
+        connectionIds: owned.map((connection) => connection.id),
+        userId: input.userId,
+      },
+      tx
+    );
+    return await tx
+      .delete(connectorCredential)
+      .where(
+        and(
+          eq(connectorCredential.userId, input.userId),
+          eq(connectorCredential.provider, input.provider),
+          input.connectionId === undefined
+            ? undefined
+            : eq(connectorCredential.id, input.connectionId)
+        )
       )
-    )
-    .returning({ id: connectorCredential.id });
-  return { disconnected: Boolean(deleted), provider: input.provider };
+      .returning({ id: connectorCredential.id });
+  });
+  return { disconnected: deleted.length > 0, provider: input.provider };
 };

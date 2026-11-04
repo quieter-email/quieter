@@ -153,7 +153,7 @@ export const getAgentAccounts = async (userId: string) => {
         : [
             {
               connectionId: account.id,
-              label: `${connectorDisplayNames[account.provider]}, ${account.displayName ?? account.providerWorkspaceName ?? account.accountEmail ?? account.providerAccountId}`,
+              label: `${connectorDisplayNames[account.provider]}, ${[...new Set([account.displayName, account.providerWorkspaceName, account.accountEmail].filter((part): part is string => Boolean(part)))].join(", ") || account.providerAccountId}`,
               provider: account.provider,
               status: account.status,
             },
@@ -161,7 +161,7 @@ export const getAgentAccounts = async (userId: string) => {
     ),
     ...calendarAccounts.map((account) => ({
       connectionId: account.id,
-      label: `${account.provider === "microsoft_calendar" ? "Outlook Calendar" : "Google Calendar"}, ${account.name}`,
+      label: `${account.provider === "microsoft_calendar" ? "Outlook Calendar" : "Google Calendar"}, ${[...new Set([account.name, account.email].filter(Boolean))].join(", ")}`,
       provider: account.provider ?? "google_calendar",
       status:
         account.status === "connected"

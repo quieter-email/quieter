@@ -10,7 +10,7 @@ import {
   mailbox,
   mailboxAgentRevision,
   mailboxAgentRun,
-  mailboxAgentSetting,
+  mailboxPersonalAgentSetting,
   managedMailMessage,
   member,
   organization,
@@ -156,6 +156,8 @@ describe.skipIf(state.databaseUrl === undefined)(
     const organizationId = crypto.randomUUID();
     const userId = crypto.randomUUID();
     const readerId = crypto.randomUUID();
+    const ownerMemberId = crypto.randomUUID();
+    const readerMemberId = crypto.randomUUID();
     const connectorId = crypto.randomUUID();
     beforeAll(async () => {
       const url = new URL(state.databaseUrl ?? "");
@@ -187,7 +189,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       await db.insert(member).values(
         [userId, readerId].map((id) => ({
           createdAt: now,
-          id: crypto.randomUUID(),
+          id: id === userId ? ownerMemberId : readerMemberId,
           organizationId,
           role: "owner",
           userId: id,
@@ -358,14 +360,15 @@ describe.skipIf(state.databaseUrl === undefined)(
         manifestDigest: manifest.digest,
         specification,
       });
-      await db.insert(mailboxAgentSetting).values({
-        activatedByUserId: userId,
+      await db.insert(mailboxPersonalAgentSetting).values({
         activationVersion: 1,
         activeRevisionId: revisionId,
         createdAt: now,
         enabled: true,
         mailboxId,
+        memberId: ownerMemberId,
         updatedAt: now,
+        userId,
       });
       await db.insert(managedMailMessage).values({
         bodyText: "Please prepare a reply.",
@@ -487,6 +490,7 @@ describe.skipIf(state.databaseUrl === undefined)(
                 createdAt: now,
                 id: crypto.randomUUID(),
                 mailboxId,
+                memberId: readerMemberId,
                 role: "reader",
                 updatedAt: now,
                 userId: readerId,

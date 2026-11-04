@@ -6,6 +6,11 @@ on:
       - main
   workflow_dispatch:
     inputs:
+      personal_action_cutover_acknowledged:
+        description: Confirm old Action and mailbox-grant writes stay blocked through rollout, health and read endpoints remain available, and old Action workers are stopped or drained
+        required: false
+        default: false
+        type: boolean
       refresh_state:
         description: Run sst refresh before planning (auto skips it unless an emergency web recovery ran since the last deploy)
         required: false
@@ -248,6 +253,7 @@ jobs:
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+          QUIETER_PERSONAL_ACTION_CUTOVER_ACKNOWLEDGED: ${{ github.event_name == 'workflow_dispatch' && inputs.personal_action_cutover_acknowledged == true && 'true' || 'false' }}
         run: vp run @quieter/database#db:deploy
 
       - name: Bootstrap explicitly authorized account access

@@ -2,6 +2,7 @@
 
 import { toastError } from "@quieter/app/lib/error-toast";
 import type { MessageListItem } from "@quieter/app/lib/mail";
+import { getMessagesQueryKey } from "@quieter/app/lib/mail/inbox-query/index";
 import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { orpc } from "@quieter/app/lib/orpc";
 import type { RouterOutputs } from "@quieter/orpc";
@@ -94,12 +95,15 @@ export const ThreadActionResults = ({
       void queryClient.invalidateQueries({
         queryKey: getThreadQueryKey(mailboxId, threadId),
       });
+      void queryClient.invalidateQueries({
+        queryKey: getMessagesQueryKey(mailboxId, "drafts").slice(0, 3),
+      });
     }
   }, [completedRuns, mailboxId, queryClient, threadId]);
 
   if (query.isError && query.data === undefined) {
     return (
-      <section aria-label="Thread actions" className="m-3 @sm:mx-5 @sm:my-4">
+      <section aria-label="Your action" className="m-3 @sm:mx-5 @sm:my-4">
         <SettingsCard variant="error">
           <p className="text-body-sm text-fg" role="alert">
             Could not load actions for this thread.
@@ -118,12 +122,7 @@ export const ThreadActionResults = ({
     );
   }
 
-  if (
-    !query.data ||
-    (!query.data.canRun &&
-      !query.data.hasPrivateResults &&
-      query.data.runs.length === 0)
-  ) {
+  if (!query.data || (!query.data.canRun && query.data.runs.length === 0)) {
     return null;
   }
   const pending = query.data.runs.some(
@@ -131,11 +130,11 @@ export const ThreadActionResults = ({
   );
 
   return (
-    <section aria-label="Thread actions" className="m-3 @sm:mx-5 @sm:my-4">
+    <section aria-label="Your action" className="m-3 @sm:mx-5 @sm:my-4">
       <SettingsCard>
         <div className={settingsSurfaceVariants({ variant: "body" })}>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-body-sm font-medium text-fg">Actions</h2>
+            <h2 className="text-body-sm font-medium text-fg">Your action</h2>
             <Button
               disabled={!query.data.canRun || run.isPending || pending}
               onClick={() => {
@@ -153,22 +152,21 @@ export const ThreadActionResults = ({
               Run action
             </Button>
           </div>
-          {query.data.hasPrivateResults ? (
-            <p className="text-caption text-muted-fg">
-              Some results are private to the person whose connected accounts
-              were used.
-            </p>
-          ) : null}
           {query.data.canRun ? null : (
             <p className="text-caption text-muted-fg">
-              Running is unavailable. A mailbox manager can review whether this
-              action is active and has the required account access.
+              {query.data.runBlockedReason ??
+                "Review your action settings before running it again."}
             </p>
           )}
-          {query.data.runs.length === 0 && !query.data.hasPrivateResults ? (
+          {query.data.runs.length === 0 ? (
             <p className="text-body-sm text-muted-fg">
-              Run the active mailbox instructions on this thread. Results appear
-              here, and prepared replies stay in drafts for review.
+              Run your active instructions on this thread. Only you can see the
+              results here.
+            </p>
+          ) : null}
+          {query.data.runs.length > 0 ? (
+            <p className="text-caption text-muted-fg">
+              Only you can see these action results here.
             </p>
           ) : null}
           <div aria-live="polite" className="space-y-4">

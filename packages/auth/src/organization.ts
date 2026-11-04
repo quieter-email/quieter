@@ -583,6 +583,30 @@ export const prepareAccountDeletion = async (userId: string) => {
   }
 };
 
+export const assertCanRemoveOrganizationMember = async (input: {
+  organizationId: string;
+  userId: string;
+}) => {
+  const [ownedMailbox] = await db
+    .select({ id: mailbox.id })
+    .from(mailbox)
+    .where(
+      and(
+        eq(mailbox.organizationId, input.organizationId),
+        eq(mailbox.provider, "managed"),
+        eq(mailbox.accessMode, "private"),
+        eq(mailbox.managedOwnerUserId, input.userId)
+      )
+    )
+    .limit(1);
+  if (ownedMailbox !== undefined) {
+    throw new APIError("BAD_REQUEST", {
+      message:
+        "Transfer private inboxes or make them shared before removing their owner from the team.",
+    });
+  }
+};
+
 export const assertCanLeaveOrganization = async (
   currentUser: UserIdentity,
   organizationId: string,
@@ -603,6 +627,10 @@ export const assertCanLeaveOrganization = async (
   }
   if (options.deleting !== true) {
     await assertCanChangeFundingMembership({
+      organizationId,
+      userId: currentUser.id,
+    });
+    await assertCanRemoveOrganizationMember({
       organizationId,
       userId: currentUser.id,
     });

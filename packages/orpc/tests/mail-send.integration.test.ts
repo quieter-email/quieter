@@ -312,7 +312,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       });
       await db.insert(member).values({
         createdAt: now,
-        id: crypto.randomUUID(),
+        id: `member-${userId}`,
         organizationId,
         role: "member",
         userId,
@@ -321,6 +321,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         createdAt: now,
         id: crypto.randomUUID(),
         mailboxId,
+        memberId: `member-${userId}`,
         role,
         updatedAt: now,
         userId,

@@ -16,9 +16,14 @@ import { bigint, pgSchema, serial, text } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
+import { assertMigrationExecutionAllowed } from "./database-url.ts";
 import { runKitMigrate } from "./drizzle-kit.ts";
 
 const NON_TRANSACTIONAL_MARKER = /^-- quieter:no-transaction(?:\r?\n|$)/u;
+const PERSONAL_ACTION_CUTOVER_MIGRATIONS = new Set([
+  "20261104164249_stale_maggott",
+  "20261104170538_invalidate_pre_membership_authority",
+]);
 const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
 
 export const migrationLedger = pgSchema("drizzle").table(
@@ -106,11 +111,18 @@ const applyNonTransactionalMigration = async ({
     });
 };
 
-export const runForwardMigrations = async (input: {
-  databaseUrl: string;
-  migrationsDirectory: string;
-  packageDirectory: string;
-}) => {
+export const runForwardMigrations = async (
+  input: {
+    databaseUrl: string;
+    migrationsDirectory: string;
+    packageDirectory: string;
+  },
+  environment: Record<string, string | undefined> = process.env
+) => {
+  const target = assertMigrationExecutionAllowed(
+    input.databaseUrl,
+    environment
+  );
   const migrations = readdirSync(input.migrationsDirectory, {
     withFileTypes: true,
   })
@@ -128,11 +140,6 @@ export const runForwardMigrations = async (input: {
   const nonTransactionalMigrations = migrationSources.filter((migration) =>
     NON_TRANSACTIONAL_MARKER.test(migration.sql)
   );
-
-  if (nonTransactionalMigrations.length === 0) {
-    runKitMigrate();
-    return;
-  }
 
   const sql = postgres(input.databaseUrl, { max: 1 });
   const database = drizzle({ client: sql });
@@ -154,6 +161,22 @@ export const runForwardMigrations = async (input: {
         name !== null && name !== undefined && name !== "" ? [name] : []
       )
     );
+    if (
+      target === "production" &&
+      migrations.some(
+        ({ name }) =>
+          PERSONAL_ACTION_CUTOVER_MIGRATIONS.has(name) &&
+          !appliedNames.has(name)
+      ) &&
+      !(
+        environment.GITHUB_EVENT_NAME === "workflow_dispatch" &&
+        environment.QUIETER_PERSONAL_ACTION_CUTOVER_ACKNOWLEDGED === "true"
+      )
+    ) {
+      throw new Error(
+        "Personal Action cutover is pending. Block old Action and mailbox-grant writes while preserving health and read endpoints, stop or drain old Action workers, then run the protected production workflow manually with personal_action_cutover_acknowledged enabled. Keep the writer block through migration and deployment. No migrations have been applied."
+      );
+    }
     const pendingNonTransactionalMigrations = nonTransactionalMigrations.filter(
       ({ name }) => !appliedNames.has(name)
     );
