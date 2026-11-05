@@ -141,6 +141,7 @@ import { useCallback, useState } from "react";
 import type { ReactNode } from "react";
 
 import { CalendarTimeZonePicker } from "../../calendar/components/calendar-time-zone-picker";
+import { ThreadRailShowcase } from "./thread-rail-showcase";
 
 // Sample data only. Real mentions come from the user's connected apps.
 const showcaseTokens: TokenFieldToken[] = [
@@ -610,6 +611,13 @@ export const DesignSystemShowcase = () => {
             <ThemePicker />
           </div>
         </header>
+
+        <Section
+          description="A quiet map for long threads. Move toward the marks to feel the pull, then get closer to preview a message."
+          title="Thread navigator"
+        >
+          <ThreadRailShowcase />
+        </Section>
 
         <Section
           description="Canvas, Panel, Section and Detail establish the same hierarchy across every view. Semantic action and state roles remain independent."
