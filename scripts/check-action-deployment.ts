@@ -61,7 +61,7 @@ export const checkActionDeployment = async (input: {
       .object({
         deployments: z.array(
           z.object({
-            created_on: z.string(),
+            created_on: z.iso.datetime({ offset: true }),
             versions: z.array(
               z.object({ percentage: z.number(), version_id: z.uuid() })
             ),
@@ -80,7 +80,10 @@ export const checkActionDeployment = async (input: {
         `Action consumer ${script} must have one active version at 100%.`
       );
     }
-    return active.versions[0].version_id;
+    return {
+      deployedAt: active.created_on,
+      version: active.versions[0].version_id,
+    };
   };
   const response = await fetch(
     `https://quieter.email${DEPLOYMENT_STATUS_PATH}`,
@@ -123,7 +126,7 @@ export const checkActionDeployment = async (input: {
   ];
   const workers = await Promise.all(
     workerTargets.map(async (target) => {
-      const version = await activeVersion(target.script);
+      const { deployedAt, version } = await activeVersion(target.script);
       const deployed = z
         .object({
           id: z.uuid(),
@@ -166,13 +169,15 @@ export const checkActionDeployment = async (input: {
           );
         }
       }
-      if ((await activeVersion(target.script)) !== version) {
+      const current = await activeVersion(target.script);
+      if (current.version !== version || current.deployedAt !== deployedAt) {
         throw new Error(
           `Action consumer ${target.role} changed during verification.`
         );
       }
       return {
         buildId: stamp.QUIETER_BUILD_ID,
+        deployedAt,
         role: target.role,
         script: target.script,
         version,
@@ -237,6 +242,7 @@ export const checkActionDeployment = async (input: {
   process.stdout.write(
     `Verified all Action producers, executor, and private web slots for ${input.buildId}.\n`
   );
+  return evidence;
 };
 
 export const disablePrivateReleaseUrls = async (input: {
