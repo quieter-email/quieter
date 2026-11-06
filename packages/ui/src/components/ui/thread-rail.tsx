@@ -60,11 +60,11 @@ const RailMark = ({
     const near = Math.exp(-(distance ** 2) / 5);
     return (
       1 +
-      broad * motion.approach.get() * 0.65 +
-      near * (motion.capture.get() === "captured" ? 3.5 : 0)
+      broad * motion.approach.get() * 1.8 +
+      near * (motion.capture.get() === "captured" ? 2.35 : 0)
     );
   });
-  const scale = useSpring(target, { bounce: 0.25, duration: 0.24 });
+  const scale = useSpring(target, { damping: 26, mass: 0.5, stiffness: 600 });
   const transform = useTransform(scale, (value) => `scaleX(${value})`);
   const opacity = useTransform(scale, (value) =>
     Math.max(active ? 0.65 : 0.22, Math.min(1, 0.22 + (value - 1) * 0.24))
