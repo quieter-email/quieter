@@ -44,7 +44,10 @@ import {
 } from "@quieter/app/features/motion/app-motion";
 import { USER_BILLING_QUERY_KEY } from "@quieter/app/features/settings/domain/billing";
 import { useAudioRecorder } from "@quieter/app/lib/audio-recorder";
-import { prepareTranscriptionRecording } from "@quieter/app/lib/audio-transcription";
+import {
+  MAX_TRANSCRIPTION_AUDIO_DURATION_MS,
+  prepareTranscriptionRecording,
+} from "@quieter/app/lib/audio-transcription";
 import { authClient } from "@quieter/app/lib/auth";
 import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import { toastError } from "@quieter/app/lib/error-toast";
@@ -54,6 +57,7 @@ import { deleteManagedDemoDraft } from "@quieter/app/lib/managed-mail/demo-manag
 import { orpc, rpc } from "@quieter/app/lib/orpc";
 import { resolveMailSender } from "@quieter/mail/compose/sender";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
+import type { RouterInputs } from "@quieter/orpc";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -95,6 +99,7 @@ import {
 import {
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -315,15 +320,35 @@ const ReadyComposeSurface = ({
     toggleRecipientVisibility,
   } = compose;
   const audioRecorder = useAudioRecorder();
+  const audioSessionRef = useRef<AbortController | null>(null);
   const transcribeAudioMutation = useMutation({
-    ...orpc.chat.transcribeAudio.mutationOptions(),
+    mutationFn: async ({
+      input,
+      signal,
+    }: {
+      input: RouterInputs["chat"]["transcribeAudio"];
+      signal: AbortSignal;
+    }) => await rpc.chat.transcribeAudio(input, { signal }),
+    mutationKey: [
+      ...orpc.chat.transcribeAudio.mutationKey(),
+      mailboxId,
+      state.draft.localId,
+    ],
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
     },
   });
-  const [isPreparingAudio, setIsPreparingAudio] = useState(false);
-  const isTranscribingAudio =
-    isPreparingAudio || transcribeAudioMutation.isPending;
+  const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
+  const cancelAudioRecording = audioRecorder.cancel;
+  useLayoutEffect(
+    () => () => {
+      audioSessionRef.current?.abort();
+      audioSessionRef.current = null;
+      cancelAudioRecording();
+      setIsTranscribingAudio(false);
+    },
+    [cancelAudioRecording, mailboxId, state.draft.localId, state.open]
+  );
 
   const canEditBody =
     state.open &&
@@ -447,25 +472,44 @@ const ReadyComposeSurface = ({
       return;
     }
 
+    audioSessionRef.current?.abort();
+    const session = new AbortController();
+    audioSessionRef.current = session;
     void (async () => {
       try {
         await audioRecorder.start();
       } catch (error) {
-        if (mountedRef.current) {
+        if (mountedRef.current && !session.signal.aborted) {
           toastError(error, { boundary: "compose-microphone" });
+        }
+        if (audioSessionRef.current === session) {
+          audioSessionRef.current = null;
         }
       }
     })();
   };
 
+  const handleRecordingCancel = () => {
+    audioSessionRef.current?.abort();
+    audioSessionRef.current = null;
+    audioRecorder.cancel();
+    setIsTranscribingAudio(false);
+  };
+
   const handleRecordingStop = () => {
-    setIsPreparingAudio(true);
+    const session = audioSessionRef.current;
+    if (session === null || !audioRecorder.isRecording || isTranscribingAudio) {
+      return;
+    }
+    setIsTranscribingAudio(true);
     void (async () => {
       try {
-        const recording = await prepareTranscriptionRecording(
-          await audioRecorder.stop()
-        );
-        if (!mountedRef.current) {
+        const clip = await audioRecorder.stop();
+        if (!mountedRef.current || session.signal.aborted) {
+          return;
+        }
+        const recording = await prepareTranscriptionRecording(clip);
+        if (!mountedRef.current || session.signal.aborted) {
           return;
         }
         if (mailboxId === null || mailboxId === undefined || mailboxId === "") {
@@ -474,11 +518,10 @@ const ReadyComposeSurface = ({
         }
 
         const result = await transcribeAudioMutation.mutateAsync({
-          ...recording,
-          mailboxId,
-          mode: "email",
+          input: { ...recording, mailboxId, mode: "email" },
+          signal: session.signal,
         });
-        if (!mountedRef.current) {
+        if (!mountedRef.current || session.signal.aborted) {
           return;
         }
         const currentHtml = normalizeComposeBodyHtml(
@@ -494,7 +537,7 @@ const ReadyComposeSurface = ({
         form.setFieldValue("bodyHtml", nextHtml);
         form.setFieldValue("bodyText", nextText);
       } catch (error) {
-        if (!mountedRef.current) {
+        if (!mountedRef.current || session.signal.aborted) {
           return;
         }
         toastError(error, {
@@ -505,12 +548,29 @@ const ReadyComposeSurface = ({
           "Could not transcribe recording. Please try again."
         );
       } finally {
-        if (mountedRef.current) {
-          setIsPreparingAudio(false);
+        if (audioSessionRef.current === session) {
+          audioSessionRef.current = null;
+          if (mountedRef.current) {
+            setIsTranscribingAudio(false);
+          }
         }
       }
     })();
   };
+
+  const finishRecording = useEffectEvent(handleRecordingStop);
+  useEffect(() => {
+    const timer = audioRecorder.isRecording
+      ? window.setTimeout(() => {
+          finishRecording();
+        }, MAX_TRANSCRIPTION_AUDIO_DURATION_MS - 500)
+      : undefined;
+    return () => {
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [audioRecorder.isRecording]);
 
   useHotkey(
     "Mod+Enter",
@@ -665,7 +725,9 @@ const ReadyComposeSurface = ({
                   }
                   onRecordingStart={handleRecordingStart}
                   onRecordingStop={handleRecordingStop}
+                  onRecordingCancel={handleRecordingCancel}
                   recording={audioRecorder.isRecording}
+                  recordingAnalyser={audioRecorder.analyser}
                   recordingStarting={audioRecorder.isStarting}
                   recordingSupported={audioRecorder.isSupported}
                   ref={composeEditorRef}

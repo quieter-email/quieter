@@ -368,74 +368,83 @@ export const chatRouter = {
         });
       }
 
-      const responseText =
-        input.mode === "email"
-          ? await (async () => {
-              const { formatTranscribedEmail } =
-                await import("@quieter/ai/format-transcribed-email");
-              let formatted: string;
-              try {
-                const memoryContext = await loadAiAgentContext({
+      const responseText = await (async () => {
+        const { formatTranscribedText } =
+          await import("@quieter/ai/format-transcribed-text");
+        let formatted: string;
+        try {
+          const memoryContext =
+            input.mode === "email"
+              ? await loadAiAgentContext({
                   agent: "compose",
                   mailboxId: input.mailboxId,
                   query: text,
                   semantic: { billingMailboxId: input.mailboxId },
                   userId: context.userId,
+                })
+              : null;
+          const formatUsageId = `chat-transcription-format:${crypto.randomUUID()}`;
+          formatted = await formatTranscribedText({
+            billing: { ...transcriptionBilling, groupId: formatUsageId },
+            memoryContext:
+              memoryContext === null
+                ? null
+                : serializeAiAgentContext(memoryContext),
+            mode: input.mode,
+            onUsage: (usage) => {
+              void reportAiUsage({
+                chatId: input.chatId ?? null,
+                completionTokens: usage.completionTokens,
+                costUsd: usage.costUsd,
+                externalId: formatUsageId,
+                mailboxId: input.mailboxId,
+                model: resolveBackgroundModel(),
+                promptTokens: usage.promptTokens,
+                promptTokensDetails: {
+                  cacheWriteTokens: usage.cacheWriteTokens,
+                  cachedTokens: usage.cachedTokens,
+                },
+                usageKind: "aiChat",
+                userId: context.userId,
+              }).catch((error: unknown) => {
+                reportError(error, {
+                  operation: "chat:report-transcription-usage",
                 });
-                const formatUsageId = `chat-transcription-format:${crypto.randomUUID()}`;
-                formatted = await formatTranscribedEmail({
-                  billing: { ...transcriptionBilling, groupId: formatUsageId },
-                  memoryContext: serializeAiAgentContext(memoryContext),
-                  onUsage: (usage) => {
-                    void reportAiUsage({
-                      chatId: input.chatId ?? null,
-                      completionTokens: usage.completionTokens,
-                      costUsd: usage.costUsd,
-                      externalId: formatUsageId,
-                      mailboxId: input.mailboxId,
-                      model: resolveBackgroundModel(),
-                      promptTokens: usage.promptTokens,
-                      promptTokensDetails: {
-                        cacheWriteTokens: usage.cacheWriteTokens,
-                        cachedTokens: usage.cachedTokens,
-                      },
-                      usageKind: "aiChat",
-                      userId: context.userId,
-                    }).catch((error: unknown) => {
-                      reportError(error, {
-                        operation: "chat:report-transcription-usage",
-                      });
-                    });
-                  },
-                  transcript: text,
-                });
-              } catch (error) {
-                if (
-                  error instanceof ORPCError &&
-                  error.status >= 400 &&
-                  error.status < 500
-                ) {
-                  throw error;
-                }
-                reportError(new Error("Dictated email formatting failed."), {
-                  operation: "chat:format-transcribed-email",
-                });
-                return text;
-              }
-              try {
-                await recordAiGeneratedMailBody({
-                  bodyText: formatted,
-                  mailboxId: input.mailboxId,
-                  userId: context.userId,
-                });
-              } catch {
-                throw new ORPCError("INTERNAL_SERVER_ERROR", {
-                  message: "Could not prepare that email. Please try again.",
-                });
-              }
-              return formatted;
-            })()
-          : text;
+              });
+            },
+            transcript: text,
+          });
+        } catch (error) {
+          if (
+            error instanceof ORPCError &&
+            error.status >= 400 &&
+            error.status < 500
+          ) {
+            throw error;
+          }
+          reportError(new Error("Dictation cleanup failed."), {
+            operation: "chat:format-transcribed-text",
+          });
+          return text;
+        }
+        if (!formatted.trim()) {
+          return text;
+        }
+        if (input.mode === "email") {
+          try {
+            await recordAiGeneratedMailBody({
+              bodyText: formatted,
+              mailboxId: input.mailboxId,
+              userId: context.userId,
+            });
+          } catch {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: "Could not prepare that email. Please try again.",
+            });
+          }
+        }
+        return formatted;
+      })();
 
       const { cost } = result.usage;
       if (typeof cost === "number" && Number.isFinite(cost) && cost > 0) {
