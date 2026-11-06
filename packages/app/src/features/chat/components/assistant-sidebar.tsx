@@ -28,6 +28,8 @@ import {
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode, SubmitEvent } from "react";
 
+import { SemanticHistorySearch } from "./semantic-history-search";
+
 export type AssistantSidebarChat = { id: string; title: string | null };
 
 type AssistantSidebarProps = {
@@ -36,6 +38,7 @@ type AssistantSidebarProps = {
   children: ReactNode;
   focusRequest: number;
   id: string;
+  mailboxId: string;
   onChatSelect: (chatId: string) => void;
   onDeleteChat: (chatId: string) => void;
   onMinimize: () => void;
@@ -50,6 +53,7 @@ export const AssistantSidebar = ({
   children,
   focusRequest,
   id,
+  mailboxId,
   onChatSelect,
   onDeleteChat,
   onMinimize,
@@ -64,6 +68,7 @@ export const AssistantSidebar = ({
     null
   );
   const [renameTitle, setRenameTitle] = useState("");
+  const [historySearchOpen, setHistorySearchOpen] = useState(false);
 
   const startRename = () => {
     if (activeChat === undefined) {
@@ -125,6 +130,13 @@ export const AssistantSidebar = ({
       id={id}
       inert={!open}
     >
+      <SemanticHistorySearch
+        key={mailboxId}
+        mailboxId={mailboxId}
+        onChatSelect={onChatSelect}
+        onOpenChange={setHistorySearchOpen}
+        open={open && historySearchOpen}
+      />
       <div
         className="absolute inset-0 p-(--workspace-gutter) xl:pl-0"
         data-assistant-surface
@@ -173,6 +185,14 @@ export const AssistantSidebar = ({
                   sideOffset={8}
                   data-assistant-panel
                 >
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      setHistorySearchOpen(true);
+                    }}
+                  >
+                    Search conversations and mail
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <p className="px-2 py-1.5 text-caption text-muted-fg">
                     Conversations
                   </p>

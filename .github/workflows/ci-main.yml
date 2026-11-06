@@ -127,17 +127,6 @@ jobs:
     name: Migration integration tests
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
-    services:
-      postgres:
-        image: pgvector/pgvector:0.8.6-pg16
-        env:
-          POSTGRES_DB: quieter_migration_test
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_USER: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d quieter_migration_test" --health-interval 10s --health-timeout 5s --health-retries 5
     env:
       ACTION_CUTOVER_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/quieter_cutover_test
       DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/quieter_migration_test
@@ -150,6 +139,12 @@ jobs:
       - name: Setup repository
         uses: ./.github/actions/setup
 
+      - name: Start PostgreSQL with native search compatibility
+        run: |
+          docker build -f infra/docker/semantic-search-postgres.Dockerfile -t quieter-search-test infra/docker
+          docker run -d --name quieter-search-test -e POSTGRES_DB=quieter_migration_test -e POSTGRES_PASSWORD=postgres -p 5432:5432 --health-cmd 'pg_isready -U postgres -d quieter_migration_test' --health-interval 2s --health-timeout 5s --health-retries 30 quieter-search-test
+          timeout 70 bash -c 'until [ "$(docker inspect -f {{.State.Health.Status}} quieter-search-test)" = healthy ]; do sleep 2; done'
+
       - name: Check committed migrations match the schema
         run: vp run @quieter/database#db:check
 
@@ -160,7 +155,7 @@ jobs:
         run: vp run @quieter/observability#build
 
       - name: Create isolated Action cutover test database
-        run: docker exec "${{ job.services.postgres.id }}" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE quieter_cutover_test'
+        run: docker exec quieter-search-test psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE quieter_cutover_test'
 
       - name: Test database behavior against migrated PostgreSQL
         run: vp test integration.test.ts credit-accounting.test.ts

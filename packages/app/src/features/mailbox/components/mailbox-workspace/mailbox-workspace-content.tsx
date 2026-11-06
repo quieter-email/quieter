@@ -907,6 +907,7 @@ const MailboxWorkspaceContentInner = ({
               sidebar={
                 selectedMailboxId && selectedMailboxProvider !== "api" ? (
                   <AssistantSidebar
+                    mailboxId={selectedMailboxId}
                     id={assistantPanelId}
                     focusRequest={assistantFocusRequest}
                     open={assistantOpen}

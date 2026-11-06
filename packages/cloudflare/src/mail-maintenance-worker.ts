@@ -10,6 +10,7 @@ import { recoverMailSends } from "@quieter/orpc/mail-send";
 import { retryPendingManagedVerificationCodes } from "@quieter/orpc/managed-mail/ingestion";
 import { processManagedRuleBackfills } from "@quieter/orpc/managed-mail/rule-backfills";
 import { cleanupMailObjects } from "@quieter/orpc/managed-mail/storage";
+import { processPendingSemanticIndexes } from "@quieter/orpc/semantic-index";
 import { cleanupMailboxVerificationCodes } from "@quieter/orpc/verification-codes";
 
 import { reportWorkerError, withSentryReporting } from "./worker-runtime";
@@ -21,6 +22,7 @@ export default withSentryReporting({
         const results = await Promise.allSettled([
           recoverMailSends(),
           processPendingAiMemoryEvents(),
+          processPendingSemanticIndexes(),
           processPendingMailMemoryBootstrap(),
           purgeExpiredAiGeneratedMailBodies(),
           cleanupGmailComposeOperations(),

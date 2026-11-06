@@ -7,16 +7,9 @@ import type {
   AiMemoryCategory,
   AiMemoryProvenance,
 } from "@quieter/ai/ai-memory";
-import { expandMemoryRecallQuery } from "@quieter/ai/ai-memory-recall";
-import type { AiUsageReport } from "@quieter/ai/chat-usage";
-import { isAiCreditAdmissionBusy } from "@quieter/ai/errors";
-import { resolveBackgroundModel } from "@quieter/ai/model-config";
-import { reportAiUsage } from "@quieter/billing";
-import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import { aiMemory } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
-import { RetryError } from "ai";
 import {
   and,
   asc,
@@ -34,6 +27,8 @@ import { z } from "zod";
 
 import { serializeAiMemoryProvenance } from "./ai-memory-provenance";
 import { assertAccessibleMailbox } from "./mailbox/service";
+import { requestSemanticIndex } from "./semantic-index-request";
+import { prepareSemanticSearch } from "./semantic-search";
 
 type MemoryRow = Omit<typeof aiMemory.$inferSelect, "embedding" | "embeddedAt">;
 export type AiAgentMemoryCandidates = {
@@ -273,21 +268,21 @@ export const rankAiMemoryCandidates = ({
   candidates,
   now = new Date(),
   query,
-  recallTerms = [],
+  semanticMatches = [],
   selection,
 }: {
   agent: string;
   candidates: MemoryRow[];
   now?: Date;
   query: string;
-  recallTerms?: string[];
+  semanticMatches?: { id: string; similarity: number; version: number }[];
   selection?: AiMemoryContextSelection;
 }) => {
   const policy = selection ?? CONTEXT_POLICIES[agent] ?? CONTEXT_POLICIES.chat;
-  const tokens = new Set([
-    ...searchTokens(query),
-    ...searchTokens(recallTerms.join(" ")),
-  ]);
+  const tokens = searchTokens(query);
+  const semanticById = new Map(
+    semanticMatches.map((match) => [match.id, match])
+  );
   const contacts = new Set(queryContacts(query));
   return candidates
     .flatMap((memory) => {
@@ -314,9 +309,9 @@ export const rankAiMemoryCandidates = ({
       const overlap = [...tokens].filter((token) =>
         contentTokens.has(token)
       ).length;
-      const originalOverlap = [...searchTokens(query)].filter((token) =>
-        contentTokens.has(token)
-      ).length;
+      const semantic = semanticById.get(memory.id);
+      const similarity =
+        semantic?.version === memory.version ? semantic.similarity : 0;
       const personFact =
         memory.kind === "learned" &&
         ["identity", "relationships", "work", "interests", "activity"].includes(
@@ -328,7 +323,7 @@ export const rankAiMemoryCandidates = ({
         correspondents.length > 0 &&
         !contactMatch &&
         !corePersonFact &&
-        !(personFact && originalOverlap > 0)
+        !(personFact && overlap > 0)
       ) {
         return [];
       }
@@ -340,6 +335,7 @@ export const rankAiMemoryCandidates = ({
         !categoryMatch &&
         !contactMatch &&
         overlap === 0 &&
+        similarity <= 0 &&
         !domainMatch
       ) {
         return [];
@@ -349,6 +345,7 @@ export const rankAiMemoryCandidates = ({
         (contactMatch ? 12 : 0) +
         (domainMatch ? 3 : 0) +
         Math.min(4, overlap * 0.3) +
+        Math.max(0, similarity) * 4 +
         (categoryMatch ? 2 : 0) +
         calculateAiMemorySalience(memory, now) +
         memory.importance * 0.12;
@@ -366,14 +363,14 @@ export const selectAiMemoryContext = ({
   agent,
   candidates,
   query,
-  recallTerms = [],
+  semanticMatches = [],
   now = new Date(),
   selection,
 }: {
   agent: string;
   candidates: MemoryRow[];
   query: string;
-  recallTerms?: string[];
+  semanticMatches?: { id: string; similarity: number; version: number }[];
   now?: Date;
   selection?: AiMemoryContextSelection;
 }): AiAgentMemoryContext => {
@@ -383,8 +380,8 @@ export const selectAiMemoryContext = ({
     candidates,
     now,
     query,
-    recallTerms,
     selection: policy,
+    semanticMatches,
   }).map(({ memory }) => ({
     memory,
     serialized: JSON.stringify({
@@ -491,12 +488,12 @@ const loadTaskCandidates = async ({
   mailboxId,
   userId,
   query,
-  recallTerms = [],
+  semanticMatches = [],
   selection,
 }: AiAgentMemoryAccess & {
   agent: string;
   query: string;
-  recallTerms?: string[];
+  semanticMatches?: { id: string; similarity: number; version: number }[];
   selection: AiMemoryContextSelection;
   userId: string;
 }) => {
@@ -563,12 +560,7 @@ const loadTaskCandidates = async ({
       )
     )
     .as("balanced_memory");
-  const tokenQuery = [
-    ...new Set([
-      ...searchTokens(query),
-      ...searchTokens(recallTerms.join(" ")),
-    ]),
-  ]
+  const tokenQuery = [...searchTokens(query)]
     .map((token) => `'${token.replaceAll("'", "''")}':*`)
     .join(" | ");
   const lexical = tokenQuery
@@ -600,6 +592,25 @@ const loadTaskCandidates = async ({
           .where(and(active, applies, contactMatch))
           .orderBy(desc(aiMemory.importance), desc(aiMemory.lastConfirmedAt))
           .limit(60)
+      : Promise.resolve([]),
+    semanticMatches.length > 0
+      ? db
+          .select(memoryColumns)
+          .from(aiMemory)
+          .where(
+            and(
+              active,
+              applies,
+              or(
+                ...semanticMatches.map((match) =>
+                  and(
+                    eq(aiMemory.id, match.id),
+                    eq(aiMemory.version, match.version)
+                  )
+                )
+              )
+            )
+          )
       : Promise.resolve([]),
     lexical
       ? db
@@ -706,83 +717,25 @@ export async function loadAiAgentContext(
       });
     }
     const policy = resolveContextSelection(input.agent, input.selection);
-    let recallTerms: string[] = [];
+    let semanticMatches: { id: string; similarity: number; version: number }[] =
+      [];
     if (input.semantic !== undefined && input.query.trim()) {
-      const { billingMailboxId, signal } = input.semantic;
-      signal?.throwIfAborted();
-      await assertAccessibleMailbox({
-        mailboxId: billingMailboxId,
+      await requestSemanticIndex({
+        kind: "memory",
+        mailboxId: input.semantic.billingMailboxId,
         userId: input.userId,
       });
-      const externalId = `memory-recall:${crypto.randomUUID()}`;
-      const billing = await createMailboxAiBillingContext({
-        externalId,
-        mailboxId: billingMailboxId,
-        usageKind: "aiMemory",
+      const prepared = await prepareSemanticSearch({
+        kind: "memory",
+        mailboxId: input.semantic.billingMailboxId,
+        query: input.query,
+        signal: input.semantic.signal,
         userId: input.userId,
       });
-      let usage: AiUsageReport | undefined;
-      try {
-        recallTerms = await expandMemoryRecallQuery({
-          billing,
-          onUsage: (value) => {
-            usage = value;
-          },
-          query: input.query,
-          signal,
-        });
-      } catch (error) {
-        signal?.throwIfAborted();
-        let cause: unknown = error;
-        const visited = new Set<unknown>();
-        while (cause instanceof Error && !visited.has(cause)) {
-          visited.add(cause);
-          if (cause instanceof ORPCError) {
-            throw cause;
-          }
-          cause = RetryError.isInstance(cause) ? cause.lastError : cause.cause;
-        }
-        if (isAiCreditAdmissionBusy(error)) {
-          throw error;
-        }
-        reportError(new Error("Personal context search expansion failed."), {
-          operation: "ai-memory:expand-recall",
-        });
-        throw new ORPCError("INTERNAL_SERVER_ERROR", {
-          message: "Personal context could not be loaded. Try again.",
-        });
-      } finally {
-        if (usage !== undefined) {
-          try {
-            await reportAiUsage({
-              completionTokens: usage.completionTokens,
-              costUsd: usage.costUsd,
-              externalId,
-              mailboxId: billingMailboxId,
-              model: resolveBackgroundModel(),
-              promptTokens: usage.promptTokens,
-              promptTokensDetails: {
-                cacheWriteTokens: usage.cacheWriteTokens,
-                cachedTokens: usage.cachedTokens,
-              },
-              usageKind: "aiMemory",
-              userId: input.userId,
-            });
-          } catch {
-            reportError(
-              new Error("Personal context search usage could not be recorded."),
-              { operation: "ai-memory:recall-usage" }
-            );
-          }
-        }
-      }
-      await assertAccessibleMailbox({
-        mailboxId: billingMailboxId,
-        userId: input.userId,
-      });
+      semanticMatches = prepared.memoryMatches;
       if (
         input.mailboxId !== undefined &&
-        input.mailboxId !== billingMailboxId
+        input.mailboxId !== input.semantic.billingMailboxId
       ) {
         await assertAccessibleMailbox({
           mailboxId: input.mailboxId,
@@ -797,13 +750,13 @@ export async function loadAiAgentContext(
           agent: input.agent,
           mailboxId: input.mailboxId,
           query: input.query,
-          recallTerms,
           selection: policy,
+          semanticMatches,
           userId: input.userId,
         }),
         query: input.query,
-        recallTerms,
         selection: policy,
+        semanticMatches,
       });
     } catch (error) {
       reportError(error, { operation: "ai-memory:load-context" });

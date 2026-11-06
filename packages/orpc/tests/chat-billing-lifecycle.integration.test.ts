@@ -1,3 +1,4 @@
+import type { embedSearchTexts } from "@quieter/ai/search-embeddings";
 import {
   createMailboxAiBillingContext,
   reserveAiCreditUsage,
@@ -8,6 +9,7 @@ import type { ingestPolarEvents } from "@quieter/billing/polar";
 import { db } from "@quieter/database/client";
 import {
   aiCreditReservation,
+  aiMemory,
   billingCreditUsageEvent,
   chat,
   mailbox,
@@ -31,7 +33,10 @@ import {
   vi,
 } from "vite-plus/test";
 
-import { createAiBillingMiddleware } from "../../ai/src/billing";
+import {
+  createAiBillingMiddleware,
+  runBilledAiRequest,
+} from "../../ai/src/billing";
 import {
   learnAiMemoryFromChatMessage,
   refreshAiMemoryFromEvent,
@@ -74,6 +79,32 @@ vi.mock(import("@quieter/observability"), async (original) => ({
 vi.mock(import("@quieter/ai/openrouter"), async (original) => ({
   ...(await original()),
   createChatModel: (_model, options) => state.model(options.billing),
+}));
+
+vi.mock(import("@quieter/ai/search-embeddings"), async (original) => ({
+  ...(await original()),
+  embedSearchTexts: vi.fn<typeof embedSearchTexts>(
+    async ({ billing, values, onUsage }) => {
+      const vectors = await runBilledAiRequest({
+        billing,
+        // oxlint-disable-next-line eslint/require-await -- The provider fixture implements an asynchronous request without external I/O.
+        run: async () => ({
+          costUsd: 0.01,
+          result: values.map(() =>
+            Array.from({ length: 1024 }, (_, index) => Number(index === 0))
+          ),
+        }),
+      });
+      onUsage?.({
+        cacheWriteTokens: 0,
+        cachedTokens: 0,
+        completionTokens: 0,
+        costUsd: 0.01,
+        promptTokens: values.length,
+      });
+      return vectors;
+    }
+  ),
 }));
 
 const usage = {
@@ -185,12 +216,27 @@ describe.skipIf(state.databaseUrl === undefined)(
         updatedAt: new Date(),
         userId: actor.userId,
       });
+      await db.insert(aiMemory).values({
+        confidence: 1,
+        content: "Prefers a clear daily plan with one priority at a time.",
+        createdAt: new Date(),
+        id: crypto.randomUUID(),
+        key: `daily-planning:${threadId}`,
+        kind: "learned",
+        lastConfirmedAt: new Date(),
+        metadata: { category: "preferences" },
+        scope: "user",
+        scopeKey: `user:${actor.userId}`,
+        source: "explicit",
+        summary: "Daily planning preference",
+        updatedAt: new Date(),
+        userId: actor.userId,
+      });
       state.model.mockImplementation((billing) => {
         if (billing.kind !== "team") {
           throw new Error("Fixture must exercise paid team admission.");
         }
         const ambient = billing.groupId.startsWith("ai-memory-event:");
-        const recall = billing.groupId.startsWith("memory-recall:");
         const model = wrapLanguageModel({
           middleware: createAiBillingMiddleware(billing, () => 0.01),
           model: new MockLanguageModelV4({
@@ -203,7 +249,6 @@ describe.skipIf(state.databaseUrl === undefined)(
                 ambientStarted.resolve(true);
                 await ambientRelease.promise;
               }
-              const immediate = recall ? { terms: [] } : { intent: "none" };
               return {
                 content: [
                   {
@@ -214,7 +259,7 @@ describe.skipIf(state.databaseUrl === undefined)(
                             operations: [],
                             summary: "No lasting facts.",
                           }
-                        : immediate
+                        : { intent: "none" }
                     ),
                     type: "text",
                   },
@@ -320,6 +365,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       ambientRelease.resolve(true);
       await Promise.allSettled(scheduled);
       await db.delete(chat).where(eq(chat.id, threadId));
+      await db.delete(aiMemory).where(eq(aiMemory.userId, actor.userId));
       await db
         .delete(userAiContextEvent)
         .where(eq(userAiContextEvent.userId, actor.userId));

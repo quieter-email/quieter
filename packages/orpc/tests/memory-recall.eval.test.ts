@@ -1,7 +1,6 @@
 import { writeFile } from "node:fs/promises";
 
-import type { expandMemoryRecallQuery } from "@quieter/ai/ai-memory-recall";
-import { resolveBackgroundModel } from "@quieter/ai/model-config";
+import { SEARCH_EMBEDDING_MODEL_KEY } from "@quieter/ai/search-embeddings";
 import type { reportAiUsage } from "@quieter/billing";
 import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
@@ -28,11 +27,12 @@ import { z } from "zod";
 import { memoryRecallScenarios as scenarios } from "../evals/memory-recall-scenarios";
 import type { Scenario } from "../evals/memory-recall-scenarios";
 import { loadAiAgentContext, saveAiMemory } from "../src/ai-memory";
+import { indexSemanticSources } from "../src/semantic-search";
+import type { SemanticSearchCoverage } from "../src/semantic-search";
 
 const state = vi.hoisted(() => ({
   caseId: process.env.MEMORY_EVAL_CASE,
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
-  expansions: new Map<string, string[]>(),
   organizationId: crypto.randomUUID(),
   reportPath: process.env.MEMORY_EVAL_REPORT,
   semantic: process.env.MEMORY_EVAL_SEMANTIC === "true",
@@ -85,19 +85,6 @@ vi.mock(import("@quieter/billing"), async (original) => ({
   reportAiUsage: vi.fn<typeof reportAiUsage>(),
 }));
 
-vi.mock(import("@quieter/ai/ai-memory-recall"), async (original) => {
-  const actual = await original();
-  return {
-    ...actual,
-    expandMemoryRecallQuery: vi.fn<typeof expandMemoryRecallQuery>(
-      async (input) => {
-        const terms = await actual.expandMemoryRecallQuery(input);
-        state.expansions.set(input.query, terms);
-        return terms;
-      }
-    ),
-  };
-});
 const selectedScenarios = scenarios.filter(
   (scenario) => !state.caseId || scenario.id === state.caseId
 );
@@ -111,7 +98,7 @@ const results: {
   missing: string[];
   forbidden: string[];
   returnedCharacters: number;
-  expansionTerms?: string[];
+  indexCoverage?: SemanticSearchCoverage;
 }[] = [];
 
 describe.skipIf(state.databaseUrl === undefined)(
@@ -217,8 +204,8 @@ describe.skipIf(state.databaseUrl === undefined)(
           JSON.stringify(
             {
               cases: results,
-              configuredExpansionModel: state.semantic
-                ? resolveBackgroundModel()
+              configuredEmbeddingModel: state.semantic
+                ? SEARCH_EMBEDDING_MODEL_KEY
                 : null,
               layer: "canonical-sql-recall",
               measured: [
@@ -228,6 +215,7 @@ describe.skipIf(state.databaseUrl === undefined)(
               ],
               mode: state.semantic ? "semantic-live" : "lexical",
               provider: "quieter",
+              retrieval: state.semantic ? "hybrid-embedding" : "lexical",
               status:
                 results.length === selectedScenarios.length + 1
                   ? "complete"
@@ -241,7 +229,7 @@ describe.skipIf(state.databaseUrl === undefined)(
                 "latency",
                 "supermemory",
               ],
-              version: 1,
+              version: 2,
             },
             null,
             2
@@ -303,6 +291,22 @@ describe.skipIf(state.databaseUrl === undefined)(
             updatedAt: now,
           }))
         );
+        let indexCoverage: SemanticSearchCoverage | undefined;
+        if (state.semantic) {
+          for (let attempt = 0; attempt <= facts.length; attempt += 1) {
+            indexCoverage = await indexSemanticSources({
+              kind: "memory",
+              mailboxId: mailboxes[scenario.mailbox],
+              userId,
+            });
+            if (indexCoverage.complete) {
+              break;
+            }
+          }
+          if (indexCoverage?.complete !== true) {
+            throw new Error("Synthetic memory indexing did not complete.");
+          }
+        }
         if (scenario.edit) {
           const fact = facts.find(({ key }) => key === scenario.edit?.key);
           if (!fact) {
@@ -372,9 +376,7 @@ describe.skipIf(state.databaseUrl === undefined)(
             ? { failure: "miss" as const, success: "hit" as const }
             : { failure: "fail" as const, success: "pass" as const };
         results.push({
-          ...(state.semantic
-            ? { expansionTerms: state.expansions.get(scenario.query) }
-            : {}),
+          ...(indexCoverage === undefined ? {} : { indexCoverage }),
           forbidden,
           id: scenario.id,
           kind: scenario.kind,
@@ -392,7 +394,7 @@ describe.skipIf(state.databaseUrl === undefined)(
           });
         }
       },
-      state.semantic ? 60_000 : 15_000
+      state.semantic ? 120_000 : 15_000
     );
   }
 );

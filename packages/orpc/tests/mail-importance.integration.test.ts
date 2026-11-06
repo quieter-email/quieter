@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { setImmediate } from "node:timers/promises";
 
-import type { expandMemoryRecallQuery } from "@quieter/ai/ai-memory-recall";
 import { classifyMailImportance } from "@quieter/ai/mail-importance";
+import type { embedSearchTexts } from "@quieter/ai/search-embeddings";
 import { reportAiUsage } from "@quieter/billing";
 import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
@@ -78,10 +78,14 @@ vi.mock(import("@quieter/env/public"), async (importOriginal) => {
 vi.mock(import("@quieter/ai/mail-importance"), () => ({
   classifyMailImportance: vi.fn<typeof classifyMailImportance>(),
 }));
-vi.mock(import("@quieter/ai/ai-memory-recall"), () => ({
-  expandMemoryRecallQuery: vi
-    .fn<typeof expandMemoryRecallQuery>()
-    .mockResolvedValue([]),
+vi.mock(import("@quieter/ai/search-embeddings"), async (original) => ({
+  ...(await original()),
+  // oxlint-disable-next-line eslint/require-await -- The embedding fixture implements the asynchronous provider boundary without external I/O.
+  embedSearchTexts: vi.fn<typeof embedSearchTexts>(async ({ values }) =>
+    values.map(() =>
+      Array.from({ length: 1024 }, (_, index) => Number(index === 0))
+    )
+  ),
 }));
 vi.mock(import("@quieter/billing"), () => ({
   reportAiUsage: vi.fn<typeof reportAiUsage>(),

@@ -11,7 +11,7 @@ This document records the development architecture and ownership rules. Startup 
 | SST | Development-stage Secrets, linked bindings, and native development process management | No cloud mail resources; Lambda Live is not local-only |
 | Managed mail | Private fixture mailbox, native on-disk R2 storage, MIME ingestion and attachment downloads; fixture tests for routing, API validation and feedback | Real SES/MX delivery requires a deployment and is excluded from this setup |
 | Gmail/Pub/Sub | Shared-account observation mode, own development subscription, one watch owner | Dedicated mailbox or exclusive ownership handoff for provider writes |
-| AI | Separate OpenRouter development key with a small spending cap; development Workers AI credentials for embeddings | Native AI SDK fixtures for repeatable failure/stream tests |
+| AI | Separate capped OpenRouter development key for generation and embeddings, managed through development SST Secrets | Native AI SDK and transport fixtures for repeatable failure, billing and stream tests |
 | Polar | Existing sandbox, with sandbox credentials, products, and local webhook forwarding | Turn billing bypass off for entitlement and checkout acceptance tests |
 | Sentry/PostHog | Disabled by default; useful local logs remain enabled | Explicit development-project opt-in and privacy/network assertions |
 | c15t | Existing offline consent behavior | Test accept, reject, revoke, persistence, and script gating |
@@ -20,7 +20,7 @@ This document records the development architecture and ownership rules. Startup 
 
 An additional paid PlanetScale branch/cluster and a permanently running local PostgreSQL server are outside this plan. Share the current cluster deliberately: modest connection pools and worker concurrency, bounded queries, and no load testing or cluster-wide changes as part of routine development. A logical database separates application data, but a runaway development query can still consume shared capacity.
 
-The development database needs the current committed schema, including pgvector for semantic AI memory. Reconcile the existing migration ledger before applying changes. Do not rewrite migration checksums or reset the shared database to bypass a mismatch. Existing destructive integration tests require a disposable target; keep them in CI when no disposable local target is available, and report them as unrun locally rather than claiming coverage.
+The development database needs the current committed schema, including pgvector and TIN for shared hybrid search. Search migrations include explicitly marked contract steps for the extension, source invalidation triggers and required columns; review those steps before applying them through the protected workflow. Local and CI replay use the pinned Lead plus pgvector image, not an ordinary PostgreSQL image without TIN support. Reconcile the existing migration ledger before applying changes. Do not rewrite migration checksums or reset the shared database to bypass a mismatch. Existing destructive integration tests require a disposable target; keep them in CI when no disposable local target is available, and report them as unrun locally rather than claiming coverage.
 
 ## Shared Gmail accounts
 
@@ -94,7 +94,7 @@ The database has all 59 committed migrations and pgvector 0.8.5. It was backed u
 
 Direct Gmail notification processing, Durable Objects, signed realtime connections, manual scheduler triggers and the separate Pub/Sub pull bridge are implemented. The bridge uses `quieter-gmail-local-leander`; production retains its existing watch and subscription. Gmail/Calendar/Linear provider writes default to blocked. Gmail writes additionally require resolving the access token's mailbox against the explicit account allowlist.
 
-The `local-leander` SST store contains development secrets for the app, database, OAuth, encryption, AI and Polar. Real OpenRouter generation, Workers AI embeddings and native Polar CLI webhook delivery have passed connected smoke tests. Polar uses a non-expiring sandbox token. Telemetry has an explicit local opt-in and remains disabled by default.
+The `local-leander` SST store contains development secrets for the app, database, OAuth, encryption, AI and Polar. The September audit verified OpenRouter generation, the former Workers AI embedding adapter and native Polar CLI webhook delivery. The Workers AI result is historical; current embeddings use the same OpenRouter development binding as generation. Use fresh credentials when an old development key has been revoked. Polar uses a non-expiring sandbox token. Telemetry has an explicit local opt-in and remains disabled by default.
 
 The user clarified that unsupported local behavior must remain a documented limitation, rather than trigger a cloud deployment. The attempted cloud mail setup was rolled back, including its bucket, credentials, SES identity, Lambda/SNS/IAM resources and regional bootstrap. No DNS records were added. The legacy cloud mail startup commands are removed. `vp run test:mail` runs the fixture suites. Real SES/MX delivery, cloud concurrency and IAM acceptance are outside this local setup.
 
@@ -107,3 +107,11 @@ The custom graph editor and runtime remain removed. Mailbox Actions now use one 
 Existing graph action tables remain untouched for expand/contract deployment. New specifications use four additive `mailboxAgent*` tables and never reuse graph records. Legacy names require fresh review. Any old dispatchers must stay paused; their remaining retries must be accounted for before retiring old infrastructure. This change does not deploy or mutate production resources.
 
 Seven unpublished migrations were consolidated into `20260907233131_melodic_blacklash` after a read-only development-ledger check found none of the seven applied. Main history is unchanged. Preserve normal Drizzle SQL/snapshot pairs and consolidate only unapplied feature migrations; see [migration workflow](architecture.md#migration-workflow). Earlier setup and verification counts in this document describe their dated revision.
+
+## Semantic search preparation
+
+Semantic history search and opted-in personal recall use the shared PostgreSQL chunk store. A source kind, actor and authorized billing mailbox identify each durable preparation request. The maintenance Worker resumes incomplete batches and periodically discovers new or edited sources. Failure backoff and leases survive repeated requests. Manual memory saves remain model-free. The UI reports partial coverage and lets the user stop background preparation; a submitted search can register that scope again.
+
+Gmail initially contributes only retained messages. The user must explicitly choose **Prepare older mail** before a historical scan starts. The UI explains that preparing search uses AI balance. The importer uses canonical authorized Gmail reads and snapshot writes. Search imports do not enqueue importance analysis or memory learning, and never change Gmail labels, read state or drafts. Existing shared-mailbox ownership rules still govern any other processing.
+
+Local indexing remains disabled by default. After starting the supported web and Worker runtimes, use `vp run dev:trigger semantic-index <user-id> <mailbox-id> <memory|chat|mail>` for one authorized scope. A mail trigger advances older-mail capture only after that import has been requested. Status polling performs no AI calls. See [memory and search operation](ai-memory.md#shared-semantic-history-search) and [verification evidence](reviews/semantic-search/README.md).

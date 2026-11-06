@@ -9,6 +9,7 @@ import { z } from "zod";
 const { values } = parseArgs({
   options: {
     case: { type: "string" },
+    "max-key-limit": { default: "5", type: "string" },
     output: { type: "string" },
     semantic: { default: false, type: "boolean" },
   },
@@ -47,9 +48,14 @@ try {
     const response = await fetch("https://openrouter.ai/api/v1/auth/key", {
       headers: { Authorization: `Bearer ${serverEnv.OPENROUTER_API_KEY}` },
     });
+    const maximumKeyLimit = z.coerce
+      .number()
+      .positive()
+      .max(50)
+      .parse(values["max-key-limit"]);
     z.object({
       data: z.object({
-        limit: z.number().positive().max(5),
+        limit: z.number().positive().max(maximumKeyLimit),
         limit_remaining: z.number().min(0.01),
       }),
     }).parse(await response.json());

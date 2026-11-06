@@ -43,9 +43,11 @@ const quieterCaseSchema = z.object({
 });
 const quieterReportSchema = z.object({
   cases: z.array(quieterCaseSchema),
+  configuredEmbeddingModel: z.string().nullable().optional(),
   configuredExpansionModel: z.string().nullable().optional(),
   layer: z.string(),
   mode: z.string().optional(),
+  retrieval: z.string().optional(),
   status: z.literal("complete"),
 });
 type QuieterPairing =
@@ -339,9 +341,11 @@ export const runSupermemoryComparison = async ({
     ],
     quieterBaseline: baseline
       ? {
+          configuredEmbeddingModel: baseline.configuredEmbeddingModel ?? null,
           configuredExpansionModel: baseline.configuredExpansionModel ?? null,
           layer: baseline.layer,
           mode: baseline.mode ?? "unspecified",
+          retrieval: baseline.retrieval ?? "unspecified",
           status: baseline.status,
         }
       : { status: "not-provided" },

@@ -22,7 +22,7 @@ vp node scripts/run-memory-comparison.ts \
   --output /tmp/supermemory-chunks.json
 ```
 
-The optional `--quieter-report` attaches matching cases from a completed canonical SQL evaluation. Each case retains its SQL metrics under `quieter`, while the baseline metadata retains its mode and configured expansion model. Missing cases and reports from another evaluation layer are marked explicitly. Pairing uses the shared scenario ID; an older report without a corpus digest cannot independently prove that its fixtures match. Produce it with `vp run memory:eval --output /tmp/quieter-memory-eval.json` against the guarded disposable database described in [AI memory](ai-memory.md#synthetic-recall-evaluation). The comparison does not run or modify Quieter databases itself.
+The optional `--quieter-report` attaches matching cases from a completed canonical SQL evaluation. Each case retains its SQL metrics under `quieter`, while baseline metadata retains its mode, retrieval method and configured expansion or embedding model. Missing cases and reports from another evaluation layer are marked explicitly. Pairing uses the shared scenario ID; an older report without a corpus digest cannot independently prove that its fixtures match. Produce it with `vp run memory:eval --output /tmp/quieter-memory-eval.json` against the guarded disposable database described in [AI memory](ai-memory.md#synthetic-recall-evaluation). The comparison does not run or modify Quieter databases itself.
 
 Use memory mode for a selected full corpus when you also want extracted-memory and profile observations:
 
@@ -68,3 +68,11 @@ The separate flight-only run processed all 31 source documents through memory ex
 An earlier graph attempt was interrupted when the local process disappeared during concurrent host memory pressure. It produced a blocked report and was excluded. The successful retry used a fresh isolated store and the supported single-concurrency controls. The owned service process tree was stopped after the reports were captured.
 
 The captured Supermemory artifacts predate the per-case SQL pairing fix. Their baseline header is metadata only. Keep those raw artifacts unchanged; pair them with lexical and semantic SQL reports in a separately labeled offline summary. This avoids presenting a postprocessed document as another service run.
+
+## Current hybrid retrieval observation
+
+The [current embedding evaluation](reviews/semantic-search/memory-embedding-live.json) uses `openai/text-embedding-3-small:1024:v1` through OpenRouter and the actual SQL memory loader. It passes all ten ownership, applicability and freshness contracts and retrieves the expected fact in all four semantic probes. The evaluation prepares each complete eligible synthetic scope before scoring; production searches can initially have partial preparation coverage.
+
+This replaces transient query expansion in the application. It does not rerun or alter the captured Supermemory service results above. The earlier lexical misses and multilingual query-expansion miss remain in the [historical evidence](reviews/memory-recall/README.md). A hit in either system proves retrieval of the scored synthetic source concept, not extraction truth or answer quality. Different models, ranking policies and source representations still prevent a claim of equal work or general superiority.
+
+The shared implementation now also provides TIN and vector search over private chat prose and retained mail. These are application capabilities, not outcomes measured by the Supermemory fact-recall comparison. See [architecture, operation and current verification limits](reviews/semantic-search/README.md).
