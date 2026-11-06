@@ -834,6 +834,26 @@ export const DesignSystemShowcase = () => {
                   id: "design-system-assistant",
                   parts: [
                     {
+                      input: { query: "design review" },
+                      output: {
+                        category: "inbox",
+                        fetchedAt: "2026-11-06T12:00:00Z",
+                        messages: [
+                          {
+                            from: "Alex <alex@example.invalid>",
+                            id: "design-system-mail",
+                            subject: "Design review",
+                            threadId: "design-system-thread",
+                          },
+                        ],
+                        query: "design review",
+                        status: "success",
+                      },
+                      state: "output-available",
+                      toolCallId: "design-system-search",
+                      type: "tool-search_gmail",
+                    },
+                    {
                       text: "Here is the latest reply and a **short summary**.",
                       type: "text",
                     },

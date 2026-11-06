@@ -8,8 +8,8 @@ import {
   getMessageSuggestions,
   getMessageText,
 } from "@quieter/app/features/chat/domain/chat-messages";
-import { isChatToolPart } from "@quieter/app/features/chat/domain/chat-tools";
 import type { ChatToolApproval } from "@quieter/app/features/chat/domain/chat-tools";
+import { getChatActivitySegments } from "@quieter/app/features/chat/domain/tool-activity";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
@@ -62,58 +62,61 @@ export const ChatMessage = ({
     );
   }
 
-  const approvalsByToolCall = new Map(
-    approvals.map((approval) => [approval.toolCallId, approval] as const)
+  const segments = getChatActivitySegments({ approvals, parts: message.parts });
+  const activeWork = segments.some(
+    (segment) =>
+      segment.kind === "approval" ||
+      (segment.kind === "activity" &&
+        segment.steps.some((step) => step.phase === "running"))
   );
-  const progress = getAssistantProgress(message.parts, isStreaming);
+  const showThinking =
+    !activeWork && getAssistantProgress(message.parts, isStreaming) !== null;
   const suggestions = getMessageSuggestions(message.parts);
 
   return (
     <article className="group/message w-full min-w-0 space-y-1 text-body/relaxed text-fg">
-      {message.parts.map((part, index) => {
-        if (part.type === "text" && part.text.trim() !== "") {
+      {segments.map((segment) => {
+        if (segment.kind === "text") {
           return (
             <MarkdownContent
-              // oxlint-disable-next-line react/no-array-index-key -- SDK text parts are append-only and have no IDs.
-              key={`${message.id}:text:${index}`}
-              markdown={part.text}
+              key={`${message.id}:${segment.id}`}
+              markdown={segment.text}
             />
           );
         }
-        if (isChatToolPart(part)) {
-          return (
-            <ToolActivity
-              approval={approvalsByToolCall.get(part.toolCallId)}
-              isStreaming={isStreaming}
-              key={part.toolCallId}
-              part={part}
-            />
-          );
-        }
-        return null;
+        return (
+          <ToolActivity
+            activity={segment}
+            isStreaming={isStreaming}
+            key={segment.id}
+          />
+        );
       })}
-      {progress === null ? null : (
+      {showThinking ? (
         <p aria-live="polite" className="text-caption text-muted-fg">
-          {progress}
+          Thinking…
         </p>
-      )}
-      {onSuggestion !== undefined && suggestions.length > 0 ? (
+      ) : null}
+      {onSuggestion !== undefined &&
+      !isStreaming &&
+      !activeWork &&
+      text !== "" &&
+      suggestions.length > 0 ? (
         <div
           aria-label="Suggested replies"
-          className="flex flex-wrap gap-2 pt-2"
+          className="flex animate-in flex-wrap gap-2 pt-3 duration-(--app-motion-duration-feedback) fade-in motion-reduce:animate-none"
         >
           {suggestions.map((suggestion) => (
             <Button
               className="max-w-full"
-              disabled={isStreaming}
               key={suggestion.text}
               onClick={() => {
                 onSuggestion(suggestion.text);
               }}
-              size="compact"
+              size="sm"
               title={suggestion.text}
               type="button"
-              variant="outline"
+              variant="secondary"
             >
               <span className="truncate">{suggestion.label}</span>
             </Button>

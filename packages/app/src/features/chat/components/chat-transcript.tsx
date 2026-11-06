@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 
 type ChatTranscriptProps = {
   approvals: ChatToolApproval[];
+  completedAssistantMessageId?: string | null;
   docked: boolean;
   errorMessage?: string;
   isStreaming: boolean;
@@ -25,6 +26,7 @@ const SCROLL_THRESHOLD = 120;
 
 export const ChatTranscript = ({
   approvals,
+  completedAssistantMessageId = null,
   docked,
   errorMessage,
   isStreaming,
@@ -124,7 +126,11 @@ export const ChatTranscript = ({
               key={message.id}
               message={message}
               onSuggestion={
-                message === messages.at(-1) ? onSuggestion : undefined
+                message === messages.at(-1) &&
+                message.id === completedAssistantMessageId &&
+                !isStreaming
+                  ? onSuggestion
+                  : undefined
               }
             />
           ))}
