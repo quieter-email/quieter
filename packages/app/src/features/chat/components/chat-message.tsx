@@ -14,6 +14,7 @@ import { toastError } from "@quieter/app/lib/error-toast";
 import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Surface } from "@quieter/ui/surface";
 import { toast } from "@quieter/ui/toast";
 import type { UIMessage } from "ai";
 
@@ -48,12 +49,15 @@ export const ChatMessage = ({
 
   if (message.role === "user") {
     return (
-      <p
-        className="text-body/relaxed text-muted-fg"
+      <Surface
+        className="max-w-2/3 self-end"
         data-conversation-item={message.id}
+        variant="detail"
       >
-        {text}
-      </p>
+        <p className="text-body/relaxed wrap-anywhere whitespace-pre-wrap text-fg">
+          {text}
+        </p>
+      </Surface>
     );
   }
 
@@ -64,7 +68,7 @@ export const ChatMessage = ({
   const suggestions = getMessageSuggestions(message.parts);
 
   return (
-    <article className="group/message min-w-0 space-y-1 text-body/relaxed text-fg">
+    <article className="group/message w-full min-w-0 space-y-1 text-body/relaxed text-fg">
       {message.parts.map((part, index) => {
         if (part.type === "text" && part.text.trim() !== "") {
           return (

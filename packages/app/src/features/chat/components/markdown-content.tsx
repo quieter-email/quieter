@@ -33,7 +33,7 @@ type MarkdownContentProps = {
 };
 
 export const MarkdownContent = ({ markdown }: MarkdownContentProps) => (
-  <div className="typeset typeset-docs max-w-[37em]">
+  <div className="typeset typeset-docs">
     <Remark
       rehypeReactOptions={{
         components: {

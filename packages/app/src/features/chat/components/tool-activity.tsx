@@ -197,9 +197,9 @@ const ToolDetails = ({ input, draft }: { input: unknown; draft: boolean }) => {
   return (
     <dl className="max-h-48 space-y-2 overflow-y-auto text-caption">
       {details.map(({ label, key, value }) => (
-        <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2" key={key}>
-          <dt className="text-muted-fg">{label}</dt>
-          <dd className="break-words whitespace-pre-wrap text-fg">{value}</dd>
+        <div className="space-y-1" key={key}>
+          <dt className="wrap-anywhere text-muted-fg">{label}</dt>
+          <dd className="wrap-anywhere whitespace-pre-wrap text-fg">{value}</dd>
         </div>
       ))}
     </dl>
@@ -217,7 +217,7 @@ export const ToolActivity = ({
 }) => {
   const name = getToolName(part.type);
   const approvalAction =
-    name === "delete_calendar_event" ? "Delete" : "Confirm destructive action";
+    name === "delete_calendar_event" ? "Delete" : "Confirm";
   const awaitingApproval =
     requiresChatToolApproval({ input: part.input, toolName: name }) &&
     part.state === "approval-requested";
@@ -296,9 +296,14 @@ export const ToolActivity = ({
         <IconButtonTooltip label="Action details">
           <CollapsibleTrigger
             aria-label="Action details"
+            className="group/tool-disclosure"
             render={<Button size="icon-xs" variant="ghost" />}
           >
-            <Icon aria-hidden icon={ArrowDown01Icon} />
+            <Icon
+              aria-hidden
+              className="group-data-panel-open/tool-disclosure:rotate-180"
+              icon={ArrowDown01Icon}
+            />
           </CollapsibleTrigger>
         </IconButtonTooltip>
       </div>
@@ -308,56 +313,58 @@ export const ToolActivity = ({
         </output>
       ) : null}
       <CollapsiblePanel>
-        <div className="py-2">
-          {awaitingApproval && approval && isCalendarWriteToolName(name) ? (
-            <div className="mb-3">
-              <CalendarApprovalDetails approval={approval} />
-            </div>
-          ) : null}
-          {awaitingApproval && approval?.linearReview ? (
-            <p className="mb-3 text-caption text-fg">
-              The tool and arguments below will be sent to your connected
-              account, {approval.linearReview.account}, in{" "}
-              {approval.linearReview.workspace}.
-            </p>
-          ) : null}
-          {awaitingApproval && approval?.connectorReview ? (
-            <p className="mb-3 text-caption text-fg">
-              {[
-                approval.connectorReview.account,
-                approval.connectorReview.workspace,
-              ]
-                .filter(Boolean)
-                .join(", ")}
-            </p>
-          ) : null}
-          <ToolDetails draft={draft} input={part.input} />
-          {awaitingApproval && approval ? (
-            <ActionFooter className="mt-3">
-              <Button
-                disabled={isStreaming}
-                onClick={() => {
-                  approval.deny();
-                }}
-                size="compact"
-                type="button"
-                variant="secondary"
-              >
-                Cancel
-              </Button>
-              <Button
-                disabled={isStreaming}
-                onClick={() => {
-                  approval.approve();
-                }}
-                size="compact"
-                type="button"
-                variant="destructive"
-              >
-                {approvalAction}
-              </Button>
-            </ActionFooter>
-          ) : null}
+        <div className="min-h-0 overflow-hidden">
+          <div className="py-2">
+            {awaitingApproval && approval && isCalendarWriteToolName(name) ? (
+              <div className="mb-3">
+                <CalendarApprovalDetails approval={approval} />
+              </div>
+            ) : null}
+            {awaitingApproval && approval?.linearReview ? (
+              <p className="mb-3 text-caption text-fg">
+                The tool and arguments below will be sent to your connected
+                account, {approval.linearReview.account}, in{" "}
+                {approval.linearReview.workspace}.
+              </p>
+            ) : null}
+            {awaitingApproval && approval?.connectorReview ? (
+              <p className="mb-3 text-caption text-fg">
+                {[
+                  approval.connectorReview.account,
+                  approval.connectorReview.workspace,
+                ]
+                  .filter(Boolean)
+                  .join(", ")}
+              </p>
+            ) : null}
+            <ToolDetails draft={draft} input={part.input} />
+            {awaitingApproval && approval ? (
+              <ActionFooter className="mt-3">
+                <Button
+                  disabled={isStreaming}
+                  onClick={() => {
+                    approval.deny();
+                  }}
+                  size="compact"
+                  type="button"
+                  variant="secondary"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  disabled={isStreaming}
+                  onClick={() => {
+                    approval.approve();
+                  }}
+                  size="compact"
+                  type="button"
+                  variant="destructive"
+                >
+                  {approvalAction}
+                </Button>
+              </ActionFooter>
+            ) : null}
+          </div>
         </div>
       </CollapsiblePanel>
     </Collapsible>
