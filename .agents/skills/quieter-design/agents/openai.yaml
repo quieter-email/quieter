@@ -1,0 +1,4 @@
+interface:
+  display_name: "Quieter design"
+  short_description: "Design and implement the Quieter visual system"
+  default_prompt: "Use $quieter-design to design, implement, or review this Quieter interface using our shared components and established design logic."

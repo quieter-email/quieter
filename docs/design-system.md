@@ -2,6 +2,8 @@
 
 The product uses `@quieter/ui` for reusable appearance and app components for domain behavior. The live reference is `/design-system`. Start a local preview with `vp run dev`, then open that route. It uses sample data and does not require a connected mailbox.
 
+For design decisions, product patterns, implementation guidance, and Paper review, use the [Quieter design skill](../.agents/skills/quieter-design/SKILL.md). Its references distinguish the settled system from earlier experiments and point back to the current component contracts.
+
 ## Where to look
 
 | Concern | Source |
