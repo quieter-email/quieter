@@ -99,6 +99,7 @@ export const ThreadRail = ({
   const capture = useMotionValue<CaptureState>("free");
   const pitch = useMotionValue(10);
   const [preview, setPreview] = useState<Preview>({ id: null, kind: "idle" });
+  const [focusedId, setFocusedId] = useState<string | null>(null);
   const dismissed = useRef(false);
   const railRef = useRef<HTMLElement>(null);
   const buttons = useRef(new Map<string, HTMLElement>());
@@ -106,10 +107,9 @@ export const ThreadRail = ({
   const itemCount = items.length;
   const previewIndex = items.findIndex((item) => item.id === preview.id);
   const previewItem = items[previewIndex];
-  const tabStopId =
-    preview.kind === "focus" && items.some((item) => item.id === preview.id)
-      ? preview.id
-      : (items.find((item) => item.id === activeId)?.id ?? items[0]?.id);
+  const tabStopId = items.some((item) => item.id === focusedId)
+    ? focusedId
+    : (items.find((item) => item.id === activeId)?.id ?? items[0]?.id);
 
   useEffect((): (() => void) | undefined => {
     const rail = railRef.current;
@@ -264,6 +264,7 @@ export const ThreadRail = ({
               data-thread-rail-item={item.id}
               onBlur={(event) => {
                 if (railRef.current?.contains(event.relatedTarget) !== true) {
+                  setFocusedId(null);
                   setPreview((current) => ({ ...current, kind: "idle" }));
                 }
               }}
@@ -272,6 +273,7 @@ export const ThreadRail = ({
               }}
               onFocus={() => {
                 dismissed.current = false;
+                setFocusedId(item.id);
                 setPreview({ id: item.id, kind: "focus" });
               }}
               onKeyDown={(event) => {
