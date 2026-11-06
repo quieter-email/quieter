@@ -178,7 +178,9 @@ export const ThreadRail = ({
         return;
       }
 
-      const x = Math.abs(event.clientX - bounds.left);
+      const offsetX = event.clientX - bounds.left;
+      const onRight = offsetX >= 0;
+      const x = Math.abs(offsetX);
       pitch.set(bounds.height / pointerItems.length);
       const position =
         ((event.clientY - bounds.top) / bounds.height) * pointerItems.length -
@@ -188,13 +190,15 @@ export const ThreadRail = ({
         Math.max(bounds.top - event.clientY, event.clientY - bounds.bottom, 0)
       );
       const captureState =
-        captureDistance <= (capture.get() === "captured" ? 56 : 40)
+        onRight && captureDistance <= (capture.get() === "captured" ? 56 : 40)
           ? "captured"
           : "free";
       capture.set(captureState);
       cursorIndex.set(position);
       const outerFalloff = Math.max(0, 1 - (captureDistance / 640) ** 4) ** 2;
-      approach.set(outerFalloff / (1 + (x / 640) ** 2));
+      approach.set(
+        (outerFalloff / (1 + (x / 640) ** 2)) * (onRight ? 1 : 0.02)
+      );
 
       if (captureState === "free" && !overPreview) {
         dismissed.current = false;
