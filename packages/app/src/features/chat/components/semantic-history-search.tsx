@@ -268,8 +268,10 @@ export const SemanticHistorySearch = ({
                     <Text size="caption" tone="muted">
                       {search.data.coverage.indexedSources} of{" "}
                       {search.data.coverage.totalSources} retained messages
-                      ready to search by meaning. New content continues
-                      preparing in the background.
+                      ready to search by meaning.
+                      {preparation.data?.active === true
+                        ? " New content continues preparing in the background."
+                        : ""}
                     </Text>
                     {search.data.coverage.complete ? null : (
                       <>

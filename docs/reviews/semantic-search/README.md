@@ -40,9 +40,11 @@ The [earlier SQL and Supermemory reports](../memory-recall/README.md) remain unc
 
 Focused verification passed 18 provider-boundary tests, three final-selection tests, six importer tests, nine real PostgreSQL lifecycle and isolation tests, and fourteen durable-queue integration tests. Controlled vectors in database tests prove access, freshness, native query and concurrency behavior; they do not substitute for the live model-quality report. Migration checks and disposable forward replay passed with the native-search-compatible database image.
 
-The broader run passed 2,020 tests with 491 configured skips, and the combined disposable-database selection passed 483 tests across 43 files. Those runs preceded the final known-cost parsing and search-import recovery corrections. The provider correction has passed its focused 18-case suite; affected capture verification and final application/CI checks are still being completed.
+The broader run passed 2,020 tests with 491 configured skips, and the combined disposable-database selection passed 483 tests across 43 files. Those runs preceded the final known-cost parsing and search-import recovery corrections. The provider correction passed its focused 18-case suite. The search-import correction passed six regressions and the affected capture/importance suites, 59 tests in total.
 
-Repository-wide local `vp check --fix` completed formatting, then its type-aware analysis process was killed by host memory pressure before source analysis. This is not a lint pass. Targeted checks on the changed implementation files passed. This document does not claim final CI or actual-application acceptance yet.
+Repository-wide local `vp check --fix` completed formatting, then its type-aware analysis process was killed by host memory pressure before source analysis. Targeted checks passed. The unchanged full lint/type configuration subsequently passed in [CI on 497c14c7](https://github.com/quieter-email/quieter/actions/runs/42314220142/job/128222790885), together with general tests, database integration, deployment safety and the web build. That code was synchronized with main. The [pull request checks](https://github.com/quieter-email/quieter/pull/499/checks) report the latest publication status.
+
+[Actual application verification](actual-app-verification.md) used real embeddings and native source records, not a replacement page or mocked RPC. Desktop light and narrow dark screenshots cover results, source navigation, preparation progress and optional older-mail registration.
 
 ## Run locally
 
