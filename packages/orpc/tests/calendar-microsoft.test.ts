@@ -245,6 +245,55 @@ describe("Microsoft calendar series edits", () => {
     }
   );
 
+  test("rejects a skipped-date repeat rule without sending a mutation", async () => {
+    const request = mockCalendarEvent(event);
+    await expect(
+      updateMicrosoftCalendarEventForUser({
+        ...reference,
+        changes: {
+          recurrence: ["RRULE:FREQ=MONTHLY;BYMONTHDAY=31;COUNT=3"],
+          time: {
+            endDate: "2026-02-01",
+            kind: "all-day",
+            startDate: "2026-01-31",
+          },
+        },
+        version: event["@odata.etag"],
+      })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(
+      request.mock.calls.some(([, init]) => init?.method === "PATCH")
+    ).toBeFalsy();
+  });
+
+  test("keeps the native month-end pattern when only its time changes", async () => {
+    const request = mockCalendarEvent({
+      ...event,
+      recurrence: {
+        pattern: { dayOfMonth: 31, interval: 1, type: "absoluteMonthly" },
+        range: { startDate: "2026-01-31", type: "noEnd" },
+      },
+    });
+    await updateMicrosoftCalendarEventForUser({
+      ...reference,
+      changes: {
+        time: {
+          end: "2026-01-31T12:00:00Z",
+          kind: "timed",
+          start: "2026-01-31T11:00:00Z",
+          timeZone: "Europe/Berlin",
+        },
+      },
+      version: event["@odata.etag"],
+    });
+    const mutation = request.mock.calls.find(
+      ([, init]) => init?.method === "PATCH"
+    );
+    expect(JSON.parse(z.string().parse(mutation?.[1]?.body))).toMatchObject({
+      recurrence: { pattern: { dayOfMonth: 31, type: "absoluteMonthly" } },
+    });
+  });
+
   test.each([
     { ...event, recurrence: null },
     { ...event, recurrence: null, seriesMasterId: "master-1" },

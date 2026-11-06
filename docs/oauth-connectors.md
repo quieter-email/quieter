@@ -52,6 +52,8 @@ Production registrations use `https://quieter.email/api/connectors/callback`. Mi
 
 Both Microsoft client secrets expire on **May 2, 2027**. Before that date, create a replacement in the corresponding registration, update that stage's `MicrosoftClientSecret`, deploy through the protected workflow, verify a connection, and remove the retired secret.
 
+Outlook rejects new monthly rules on the 29th through 31st and yearly rules such as February 29 that could skip nonexistent dates. Outlook moves those occurrences to the month's last day, which differs from the shared calendar's repeat rules. Existing Outlook series retain their native rule when changing only their time. Their month-end rules are preserved when read, with preview unavailable when the shared preview cannot represent them.
+
 Microsoft publisher verification is not complete. Personal Microsoft accounts can grant these delegated permissions themselves. Other organizations can require administrator consent or a verified publisher under their tenant policies. Do not describe Microsoft as universally approval-free. See [delegated access and consent](https://learn.microsoft.com/en-us/entra/identity-platform/delegated-access-primer) and [publisher verification](https://learn.microsoft.com/en-us/entra/identity-platform/publisher-verification-overview).
 
 OAuth registration and secret storage do not deploy the feature. Apply the committed migration and deploy the linked secret bindings through the protected production workflows, then perform production consent and read checks. Development tokens cannot be copied to production because the OAuth clients and encryption keys are separate.

@@ -17,6 +17,7 @@ const weekdays = [
 ] as const;
 const dayCodes = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 const indices = ["first", "second", "third", "fourth", "last"] as const;
+const minimumDaysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 export const microsoftRecurrenceSchema = z.object({
   pattern: z.object({
     dayOfMonth: z.number().int().optional(),
@@ -80,7 +81,26 @@ export const fromMicrosoftRecurrence = (
   }[pattern.type];
   const parts = [`FREQ=${frequency}`, `INTERVAL=${pattern.interval}`];
   if (pattern.type === "absoluteMonthly" || pattern.type === "absoluteYearly") {
-    parts.push(`BYMONTHDAY=${pattern.dayOfMonth}`);
+    const minimumDays =
+      pattern.type === "absoluteMonthly"
+        ? 28
+        : minimumDaysInMonth[(pattern.month ?? 0) - 1];
+    if (
+      minimumDays !== undefined &&
+      pattern.dayOfMonth !== undefined &&
+      pattern.dayOfMonth > minimumDays &&
+      pattern.dayOfMonth <= 31
+    ) {
+      parts.push(
+        `BYMONTHDAY=${Array.from(
+          { length: pattern.dayOfMonth - minimumDays + 1 },
+          (_, index) => minimumDays + index
+        ).join(",")}`,
+        "BYSETPOS=-1"
+      );
+    } else {
+      parts.push(`BYMONTHDAY=${pattern.dayOfMonth}`);
+    }
   }
   if (pattern.type === "absoluteYearly" || pattern.type === "relativeYearly") {
     parts.push(`BYMONTH=${pattern.month}`);
@@ -262,6 +282,20 @@ export const toMicrosoftRecurrence = (
     }
   } else {
     throw invalid;
+  }
+  const minimumDays =
+    pattern.type === "absoluteMonthly"
+      ? 28
+      : minimumDaysInMonth[(pattern.month ?? 0) - 1];
+  if (
+    minimumDays !== undefined &&
+    pattern.dayOfMonth !== undefined &&
+    pattern.dayOfMonth > minimumDays
+  ) {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "This calendar cannot preserve repeat rules that skip months without the selected date. Choose an earlier day or a weekday repeat rule.",
+    });
   }
   const range: z.infer<typeof microsoftRecurrenceSchema>["range"] = {
     recurrenceTimeZone: time.kind === "timed" ? time.timeZone : "UTC",
