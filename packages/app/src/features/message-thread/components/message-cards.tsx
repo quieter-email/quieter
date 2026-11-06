@@ -7,6 +7,8 @@ import {
   Tick01Icon,
   ZoomInAreaIcon,
 } from "@hugeicons/core-free-icons";
+import { ConversationNavigator } from "@quieter/app/components/conversation-navigator";
+import type { ConversationNavigationScope } from "@quieter/app/components/conversation-navigator";
 import {
   buildComposeDraftFromSavedDraftMessage,
   findLinkedDraftForMessage,
@@ -39,8 +41,9 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { SenderAvatar } from "@quieter/ui/sender-avatar";
 import { TooltipGroup } from "@quieter/ui/tooltip";
 import { domAnimation, LazyMotion } from "motion/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { flushSync } from "react-dom";
 
 type MessageHeaderContentProps = {
   message: MessageListItem;
@@ -378,6 +381,7 @@ const ThreadMessageBody = ({
     aria-hidden={!expanded}
     // oxlint-disable-next-line shadcn/no-arbitrary-values -- Grid-rows collapse animation needs the exact property.
     className="grid overflow-hidden transition-[grid-template-rows] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-in-out) motion-reduce:transition-none"
+    data-conversation-expansion
     style={{
       // oxlint-disable-next-line shadcn/no-inline-styles -- Collapse animation is driven by measured state.
       gridTemplateRows: expanded ? "1fr" : "0fr",
@@ -479,7 +483,10 @@ const ThreadMessageCard = ({
 
   return (
     <LazyMotion features={domAnimation}>
-      <section className="group/message transition-colors duration-200">
+      <section
+        className="group/message transition-colors duration-200"
+        data-conversation-item={message.id}
+      >
         <MessageHeaderContent
           className="p-4 @sm:px-5 @sm:py-4"
           deliveryStatus={
@@ -640,6 +647,7 @@ export const ThreadMessageList = ({
   mailboxId,
   mailboxProvider,
   messages,
+  navigationScope,
   onComposeDraftRequested,
   onUnsubscribe,
   isActionPending,
@@ -651,6 +659,7 @@ export const ThreadMessageList = ({
   mailboxId: string;
   mailboxProvider: MessageViewProps["mailboxProvider"];
   messages: MessageListItem[];
+  navigationScope?: ConversationNavigationScope;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onUnsubscribe?: (messageId: string) => Promise<boolean>;
   verificationCodes: RouterOutputs["mail"]["listVerificationCodes"]["items"];
@@ -660,9 +669,71 @@ export const ThreadMessageList = ({
     return lastMessage ? [lastMessage.id] : [];
   });
   const expandedMessageIdSet = new Set(expandedMessageIds);
+  const navigationItems = useMemo(
+    () =>
+      messages.map((message) => {
+        const sender = parseSender(message.from);
+        const senderDisplayName = sender.name?.trim() ?? "";
+        return {
+          description: message.snippet?.trim() ?? "",
+          id: message.id,
+          label:
+            senderDisplayName === ""
+              ? (sender.display ?? "Unknown sender")
+              : (sender.name ?? senderDisplayName),
+          meta: formatMessageDate(message, "full") ?? "--",
+        };
+      }),
+    [messages]
+  );
+  const prepareMessage = async (id: string) => {
+    if (!expandedMessageIdSet.has(id)) {
+      // oxlint-disable-next-line node/no-sync -- Commit the selected card before reading its browser expansion transition.
+      flushSync(() => {
+        setExpandedMessageIds((current) =>
+          current.includes(id) ? current : [...current, id]
+        );
+      });
+    }
+    const content = navigationScope?.contentRef.current;
+    if (content === null || content === undefined) {
+      return;
+    }
+    const cards = [
+      ...content.querySelectorAll<HTMLElement>("[data-conversation-item]"),
+    ];
+    const targetIndex = cards.findIndex(
+      (element) => element.dataset.conversationItem === id
+    );
+    const transitions = cards
+      .slice(0, targetIndex + 1)
+      .flatMap(
+        (card) =>
+          card
+            .querySelector<HTMLElement>("[data-conversation-expansion]")
+            ?.getAnimations() ?? []
+      )
+      .filter(
+        (animation) =>
+          "transitionProperty" in animation &&
+          animation.transitionProperty === "grid-template-rows" &&
+          Number.isFinite(animation.effect?.getComputedTiming().endTime)
+      );
+    await Promise.allSettled(
+      transitions.map(async (animation) => await animation.finished)
+    );
+  };
 
   return (
     <div>
+      {navigationScope === undefined ? null : (
+        <ConversationNavigator
+          aria-label="Messages in this thread"
+          items={navigationItems}
+          prepareItem={prepareMessage}
+          scope={navigationScope}
+        />
+      )}
       {messages.map((threadMessage) => {
         const isExpanded = expandedMessageIdSet.has(threadMessage.id);
         const linkedDraftMessage = findLinkedDraftForMessage(

@@ -15,6 +15,7 @@
     "./components/consent/consent-banner": "./src/components/consent/consent-banner.tsx",
     "./components/consent/consent-i18n": "./src/components/consent/consent-i18n.ts",
     "./components/consent/consent-preferences-dialog": "./src/components/consent/consent-preferences-dialog.tsx",
+    "./components/conversation-navigator": "./src/components/conversation-navigator.tsx",
     "./components/empty-message-state": "./src/components/empty-message-state.tsx",
     "./components/google-logo": "./src/components/google-logo.tsx",
     "./components/loading-page": "./src/components/loading-page.tsx",

@@ -10,7 +10,7 @@ import {
   useTransform,
 } from "motion/react";
 import type { MotionValue } from "motion/react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 
 import { cn } from "../../lib/cn";
 import { Text } from "./text";
@@ -28,6 +28,7 @@ type ThreadRailProps = {
   items: readonly ThreadRailItem[];
   activeId?: string | null;
   onSelect: (id: string) => void;
+  maxHeight?: number;
   className?: string;
 };
 
@@ -41,6 +42,7 @@ type RailMotion = {
   cursorIndex: MotionValue<number>;
   approach: MotionValue<number>;
   capture: MotionValue<CaptureState>;
+  pitch: MotionValue<number>;
 };
 
 const RailMark = ({
@@ -55,12 +57,13 @@ const RailMark = ({
   reducedMotion: boolean;
 }) => {
   const target = useTransform(() => {
-    const distance = index - motion.cursorIndex.get();
+    const distance =
+      ((index - motion.cursorIndex.get()) * motion.pitch.get()) / 10;
     const broad = 1 / (1 + (distance / 6) ** 2);
     const near = Math.exp(-(distance ** 2) / 5);
     return (
       1 +
-      broad * motion.approach.get() * 1.8 +
+      broad * motion.approach.get() * 1.6 +
       near * (motion.capture.get() === "captured" ? 2.35 : 0)
     );
   });
@@ -73,7 +76,7 @@ const RailMark = ({
   return (
     <m.span
       aria-hidden
-      className="pointer-events-none block h-0.5 w-1.5 origin-left bg-fg motion-reduce:transform-none!"
+      className="pointer-events-none block h-1/5 max-h-0.5 w-1.5 origin-left bg-fg motion-reduce:transform-none!"
       data-thread-rail-mark
       // oxlint-disable-next-line shadcn/no-inline-styles -- MotionValues update each mark without React renders or inherited per-frame CSS variables.
       style={{ opacity, transform: reducedMotion ? "scaleX(1)" : transform }}
@@ -86,6 +89,7 @@ export const ThreadRail = ({
   activeId,
   className,
   items,
+  maxHeight,
   onSelect,
 }: ThreadRailProps) => {
   const reducedMotion = useReducedMotion() === true;
@@ -93,10 +97,13 @@ export const ThreadRail = ({
   const cursorIndex = useMotionValue(0);
   const approach = useMotionValue(0);
   const capture = useMotionValue<CaptureState>("free");
+  const pitch = useMotionValue(10);
   const [preview, setPreview] = useState<Preview>({ id: null, kind: "idle" });
   const dismissed = useRef(false);
   const railRef = useRef<HTMLElement>(null);
   const buttons = useRef(new Map<string, HTMLElement>());
+  const readItems = useEffectEvent(() => items);
+  const itemCount = items.length;
   const previewIndex = items.findIndex((item) => item.id === preview.id);
   const previewItem = items[previewIndex];
   const tabStopId =
@@ -125,6 +132,7 @@ export const ThreadRail = ({
       );
     };
     const handlePointerMove = (event: PointerEvent) => {
+      const pointerItems = readItems();
       if (event.pointerType === "touch" || !finePointer.matches) {
         reset();
         return;
@@ -136,8 +144,10 @@ export const ThreadRail = ({
       }
 
       const x = Math.abs(event.clientX - bounds.left);
+      pitch.set(bounds.height / pointerItems.length);
       const position =
-        ((event.clientY - bounds.top) / bounds.height) * items.length - 0.5;
+        ((event.clientY - bounds.top) / bounds.height) * pointerItems.length -
+        0.5;
       const captureDistance = Math.hypot(
         x,
         Math.max(bounds.top - event.clientY, event.clientY - bounds.bottom, 0)
@@ -149,7 +159,7 @@ export const ThreadRail = ({
       capture.set(captureState);
       cursorIndex.set(
         captureState === "captured"
-          ? Math.max(0, Math.min(items.length - 1, position))
+          ? Math.max(0, Math.min(pointerItems.length - 1, position))
           : position
       );
       approach.set(1 / (1 + (x / 640) ** 2));
@@ -170,7 +180,9 @@ export const ThreadRail = ({
         dismissed.current = false;
       }
       const item =
-        items[Math.max(0, Math.min(items.length - 1, Math.round(position)))];
+        pointerItems[
+          Math.max(0, Math.min(pointerItems.length - 1, Math.round(position)))
+        ];
       setPreview((current) => {
         if (overPreview) {
           return current;
@@ -206,7 +218,7 @@ export const ThreadRail = ({
       view.removeEventListener("blur", reset);
       finePointer.removeEventListener("change", reset);
     };
-  }, [approach, capture, cursorIndex, items, railId]);
+  }, [approach, capture, cursorIndex, itemCount, pitch, railId]);
 
   if (items.length === 0) {
     return null;
@@ -232,9 +244,14 @@ export const ThreadRail = ({
       >
         <nav
           aria-label={label}
-          className={cn("relative w-36 shrink-0", className)}
+          className={cn(
+            "relative flex w-10 shrink-0 scrollbar-none flex-col overflow-x-hidden overflow-y-auto overscroll-contain pointer-coarse:w-11",
+            className
+          )}
           data-thread-rail
           ref={railRef}
+          // oxlint-disable-next-line shadcn/no-inline-styles -- The reading viewport supplies its measured available height.
+          style={{ maxHeight }}
         >
           {/* The compact navigation marks need stable targets independent of their animated length. */}
           {items.map((item, index) => (
@@ -243,7 +260,7 @@ export const ThreadRail = ({
               key={item.id}
               aria-current={activeId === item.id ? "location" : undefined}
               aria-label={item.label}
-              className="flex h-2.5 w-8 cursor-pointer items-center bg-transparent text-left focus-visible:rounded-xs focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring pointer-coarse:h-6 pointer-coarse:w-11"
+              className="flex h-2.5 min-h-0 w-8 cursor-pointer items-center bg-transparent text-left focus-visible:rounded-xs focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring pointer-coarse:h-6 pointer-coarse:min-h-6 pointer-coarse:w-11 pointer-coarse:shrink-0"
               data-thread-rail-item={item.id}
               onBlur={(event) => {
                 if (railRef.current?.contains(event.relatedTarget) !== true) {
@@ -305,7 +322,7 @@ export const ThreadRail = ({
               <RailMark
                 active={activeId === item.id}
                 index={index}
-                motion={{ approach, capture, cursorIndex }}
+                motion={{ approach, capture, cursorIndex, pitch }}
                 reducedMotion={reducedMotion}
               />
             </TooltipTrigger>

@@ -105,6 +105,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     mailboxId,
     mailboxProvider,
     message,
+    navigationScope,
     onBackToList,
     onManageSnippets,
     subject,
@@ -402,10 +403,11 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           allThreadMessages={threadMessages}
           isLoading={isBodyRefreshPending}
           isActionPending={isActionPending}
-          key={message.threadId}
+          key={`${mailboxId}:${message.threadId}`}
           mailboxId={mailboxId}
           mailboxProvider={mailboxProvider}
           messages={visibleMessages}
+          navigationScope={navigationScope}
           onComposeDraftRequested={
             canComposeFromMailbox ? openInlineCompose : undefined
           }

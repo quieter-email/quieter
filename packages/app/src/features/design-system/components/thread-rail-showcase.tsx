@@ -210,6 +210,7 @@ export const ThreadRailShowcase = () => {
             }
             items={items}
             key={example}
+            maxHeight={144}
             onSelect={setSelectedId}
           />
           <div className="pointer-events-none absolute right-6 bottom-6 left-6 text-right">
