@@ -35,10 +35,12 @@ type Preview =
   | { kind: "idle"; id: string | null }
   | { kind: "pointer" | "focus"; id: string };
 
+type CaptureState = "free" | "captured";
+
 type RailMotion = {
   cursorIndex: MotionValue<number>;
   approach: MotionValue<number>;
-  wave: MotionValue<number>;
+  capture: MotionValue<CaptureState>;
 };
 
 const RailMark = ({
@@ -54,13 +56,15 @@ const RailMark = ({
 }) => {
   const target = useTransform(() => {
     const distance = index - motion.cursorIndex.get();
-    const broad = Math.exp(-(distance ** 2) / 18);
+    const broad = 1 / (1 + (distance / 6) ** 2);
     const near = Math.exp(-(distance ** 2) / 5);
     return (
-      1 + broad * motion.approach.get() * 0.5 + near * motion.wave.get() * 3
+      1 +
+      broad * motion.approach.get() * 0.65 +
+      near * (motion.capture.get() === "captured" ? 3.5 : 0)
     );
   });
-  const scale = useSpring(target, { bounce: 0.2, duration: 0.28 });
+  const scale = useSpring(target, { bounce: 0.25, duration: 0.24 });
   const transform = useTransform(scale, (value) => `scaleX(${value})`);
   const opacity = useTransform(scale, (value) =>
     Math.max(active ? 0.65 : 0.22, Math.min(1, 0.22 + (value - 1) * 0.24))
@@ -88,7 +92,7 @@ export const ThreadRail = ({
   const railId = useId();
   const cursorIndex = useMotionValue(0);
   const approach = useMotionValue(0);
-  const wave = useMotionValue(0);
+  const capture = useMotionValue<CaptureState>("free");
   const [preview, setPreview] = useState<Preview>({ id: null, kind: "idle" });
   const dismissed = useRef(false);
   const railRef = useRef<HTMLElement>(null);
@@ -114,7 +118,7 @@ export const ThreadRail = ({
     const finePointer = view.matchMedia("(hover: hover) and (pointer: fine)");
     const reset = () => {
       approach.set(0);
-      wave.set(0);
+      capture.set("free");
       dismissed.current = false;
       setPreview((current) =>
         current.kind === "pointer" ? { ...current, kind: "idle" } : current
@@ -134,9 +138,21 @@ export const ThreadRail = ({
       const x = Math.abs(event.clientX - bounds.left);
       const position =
         ((event.clientY - bounds.top) / bounds.height) * items.length - 0.5;
-      cursorIndex.set(position);
-      approach.set(1 / (1 + (x / 160) ** 2));
-      wave.set(1 / (1 + (x / 24) ** 6));
+      const captureDistance = Math.hypot(
+        x,
+        Math.max(bounds.top - event.clientY, event.clientY - bounds.bottom, 0)
+      );
+      const captureState =
+        captureDistance <= (capture.get() === "captured" ? 76 : 52)
+          ? "captured"
+          : "free";
+      capture.set(captureState);
+      cursorIndex.set(
+        captureState === "captured"
+          ? Math.max(0, Math.min(items.length - 1, position))
+          : position
+      );
+      approach.set(1 / (1 + (x / 640) ** 2));
 
       const { target } = event;
       const popup =
@@ -190,7 +206,7 @@ export const ThreadRail = ({
       view.removeEventListener("blur", reset);
       finePointer.removeEventListener("change", reset);
     };
-  }, [approach, cursorIndex, items, railId, wave]);
+  }, [approach, capture, cursorIndex, items, railId]);
 
   if (items.length === 0) {
     return null;
@@ -289,7 +305,7 @@ export const ThreadRail = ({
               <RailMark
                 active={activeId === item.id}
                 index={index}
-                motion={{ approach, cursorIndex, wave }}
+                motion={{ approach, capture, cursorIndex }}
                 reducedMotion={reducedMotion}
               />
             </TooltipTrigger>
