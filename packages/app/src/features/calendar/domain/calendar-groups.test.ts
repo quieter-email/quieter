@@ -8,13 +8,14 @@ import {
   toggleCalendarGroupVisibility,
 } from "./calendar-groups";
 
-const accounts: CalendarAccount[] = ["first", "second"].map((id) => ({
+const accounts = ["first", "second"].map((id) => ({
   email: `${id}@example.com`,
   id,
   mailboxId: `mailbox-${id}`,
   name: id,
-  status: "connected",
-}));
+  provider: "google_calendar" as const,
+  status: "connected" as const,
+})) satisfies CalendarAccount[];
 const holiday: CalendarSummary = {
   access: "read",
   calendarId: "en.german#holiday@group.v.calendar.google.com",

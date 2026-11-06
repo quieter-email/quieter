@@ -4,7 +4,7 @@ import { GMAIL_MAILBOX_LIMITS } from "@quieter/billing/plans";
 import { db } from "@quieter/database/client";
 import type { DatabaseTransaction } from "@quieter/database/client";
 import { mailbox, member, organization } from "@quieter/database/schema";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 
 export const getGmailMailboxCapacity = async (organizationId: string) => {
   const entitlement = await getOrganizationBillingEntitlement({
@@ -30,6 +30,9 @@ export const withGmailMailboxCapacity = async <Result>(
 ) => {
   const { limit } = await getGmailMailboxCapacity(input.organizationId);
   return await db.transaction(async (database) => {
+    await database.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     const [team] = await database
       .select({ id: organization.id })
       .from(organization)

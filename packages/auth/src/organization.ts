@@ -20,7 +20,7 @@ import {
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
 import { APIError } from "better-auth/api";
-import { and, eq, isNull, ne, or } from "drizzle-orm";
+import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
 
 type AuthUser = typeof user.$inferSelect;
 
@@ -93,6 +93,9 @@ export const ensureUserOrganizationState = async (
   currentUser: UserIdentity
 ): Promise<EnsureUserOrganizationStateResult> =>
   await db.transaction(async (transaction) => {
+    await transaction.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     const [provisioningState] = await transaction
       .select({
         defaultOrganizationProvisioned: user.defaultOrganizationProvisioned,
@@ -303,6 +306,9 @@ export const cleanupMailboxesForDeletedOrganization = async (
     throw new APIError("BAD_REQUEST", { message: failure });
   }
   const objects = await db.transaction(async (transaction) => {
+    await transaction.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     const [lockedOrganization] = await transaction
       .select({ id: organization.id })
       .from(organization)
@@ -583,6 +589,30 @@ export const prepareAccountDeletion = async (userId: string) => {
   }
 };
 
+export const assertCanRemoveOrganizationMember = async (input: {
+  organizationId: string;
+  userId: string;
+}) => {
+  const [ownedMailbox] = await db
+    .select({ id: mailbox.id })
+    .from(mailbox)
+    .where(
+      and(
+        eq(mailbox.organizationId, input.organizationId),
+        eq(mailbox.provider, "managed"),
+        eq(mailbox.accessMode, "private"),
+        eq(mailbox.managedOwnerUserId, input.userId)
+      )
+    )
+    .limit(1);
+  if (ownedMailbox !== undefined) {
+    throw new APIError("BAD_REQUEST", {
+      message:
+        "Transfer private inboxes or make them shared before removing their owner from the team.",
+    });
+  }
+};
+
 export const assertCanLeaveOrganization = async (
   currentUser: UserIdentity,
   organizationId: string,
@@ -603,6 +633,10 @@ export const assertCanLeaveOrganization = async (
   }
   if (options.deleting !== true) {
     await assertCanChangeFundingMembership({
+      organizationId,
+      userId: currentUser.id,
+    });
+    await assertCanRemoveOrganizationMember({
       organizationId,
       userId: currentUser.id,
     });

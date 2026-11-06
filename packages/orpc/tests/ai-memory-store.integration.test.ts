@@ -138,6 +138,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         createdAt: now,
         id: crypto.randomUUID(),
         mailboxId: id,
+        memberId: `member-${userId}`,
         role,
         updatedAt: now,
         userId,
@@ -191,7 +192,7 @@ describe.skipIf(state.databaseUrl === undefined)(
       await db.insert(member).values(
         [userId, otherUserId].map((id) => ({
           createdAt: now,
-          id: crypto.randomUUID(),
+          id: `member-${id}`,
           organizationId,
           role: "member",
           userId: id,
@@ -316,6 +317,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         createdAt: now,
         id: crypto.randomUUID(),
         mailboxId: managedMailboxId,
+        memberId: `member-${otherUserId}`,
         role: "manager",
         updatedAt: now,
         userId: otherUserId,

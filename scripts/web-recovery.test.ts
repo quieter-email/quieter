@@ -108,6 +108,67 @@ describe("web recovery", () => {
     expect(mutations).toHaveLength(0);
   });
 
+  test.each([true, false])(
+    "restores only compatible retained router manifests %s",
+    async (compatible) => {
+      const target = {
+        buildId: "healthy-build",
+        protocol: "personal-actions-v1",
+        slot: "a",
+      };
+      await writeFile(
+        recordFile,
+        JSON.stringify({
+          account,
+          buildId: "healthy-build",
+          deployment: {
+            current: target,
+            previous: compatible
+              ? null
+              : {
+                  buildId: "legacy",
+                  expiresAt: Date.now() + 60_000,
+                  slot: "b",
+                },
+          },
+          release,
+          script: "web",
+          version: previous,
+        })
+      );
+      const original = fetch;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, options?: RequestInit) => {
+          if (url.endsWith("deployment.json")) {
+            return Response.json({
+              current: target,
+              previous: null,
+              serverTime: Date.now(),
+            });
+          }
+          if (url.endsWith("/api/health")) {
+            return Response.json({ buildId: "healthy-build", healthy: true });
+          }
+          return await original(url, options);
+        })
+      );
+      const restoration = recoverWeb({
+        account,
+        expectedVersion: version,
+        mode: "restore",
+        recordFile,
+        token: "test",
+      });
+      if (compatible) {
+        await restoration;
+      } else {
+        await expect(restoration).rejects.toThrow("recovery release expired");
+      }
+      expect(mutations).toHaveLength(compatible ? 1 : 0);
+    }
+  );
+
   test.each([
     "restore",
     "changed-current",
@@ -132,19 +193,12 @@ describe("web recovery", () => {
       token: "test",
     });
     if (scenario === "restore") {
-      await restore;
-      expect(mutations).toStrictEqual([
-        expect.objectContaining({
-          versions: [{ percentage: 100, version_id: previous }],
-        }),
-      ]);
-      expect(checkDeployment).toHaveBeenCalledWith(
-        "https://quieter.email",
-        "healthy-build"
+      await expect(restore).rejects.toThrow(
+        "predates the personal Action protocol"
       );
     } else {
       await expect(restore).rejects.toThrow("changed");
-      expect(mutations).toHaveLength(0);
     }
+    expect(mutations).toHaveLength(0);
   });
 });

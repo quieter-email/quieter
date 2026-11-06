@@ -19,7 +19,10 @@ export const ConnectorConnectionResult = () => {
 
     if (connector === "connected") {
       toast.success("Connector connected.");
-      void queryClient.invalidateQueries({ queryKey: CONNECTORS_QUERY_KEY });
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: CONNECTORS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ["calendar"] }),
+      ]);
     } else {
       toast.error("Connector setup could not be completed.");
     }

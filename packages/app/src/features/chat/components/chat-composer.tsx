@@ -8,17 +8,26 @@ import {
 } from "@hugeicons/core-free-icons";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import { ChatModelPicker } from "@quieter/app/features/chat/components/chat-model-picker";
+import { getConnectorIcon } from "@quieter/app/lib/connector-icons";
+import { connectorsQueryOptions } from "@quieter/app/lib/connectors-query";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
   ComposerContextChip,
   PromptComposerFrame,
 } from "@quieter/ui/composer-chrome";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { entranceMotionVariants } from "@quieter/ui/motion";
 import { Textarea } from "@quieter/ui/textarea";
-import type { KeyboardEvent, ReactNode, Ref, SubmitEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { KeyboardEvent, ReactNode, RefObject, SubmitEvent } from "react";
 
 export type ChatContextItem = {
   id: string;
@@ -33,7 +42,7 @@ type ChatComposerProps = {
   contextPicker: ReactNode;
   disabled?: boolean;
   input: string;
-  inputRef?: Ref<HTMLTextAreaElement>;
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
   model: ChatModel | "auto";
   onInputChange: (value: string) => void;
   onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
@@ -73,6 +82,17 @@ export const ChatComposer = ({
   submitting,
   transcribing,
 }: ChatComposerProps) => {
+  const { data: connectorData } = useQuery(connectorsQueryOptions());
+  const connectedAccounts =
+    connectorData?.connectors.flatMap((connector) =>
+      connector.accounts
+        .filter((account) => account.status === "connected")
+        .map((account) => ({
+          account,
+          displayName: connector.displayName,
+          icon: getConnectorIcon(connector.provider),
+        }))
+    ) ?? [];
   const audioBusy = startingRecording || transcribing;
   let dictationIcon = Mic01Icon;
   if (audioBusy) {
@@ -140,12 +160,72 @@ export const ChatComposer = ({
           </output>
         ) : null}
         <div className="flex min-w-0 items-center justify-between gap-2">
-          <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
             <ChatModelPicker
               disabled={disabled}
               model={model}
               onModelChange={onModelChange}
             />
+            <DropdownMenu>
+              <IconButtonTooltip label="Mention connected account">
+                <DropdownMenuTrigger
+                  appearance="icon-transparent"
+                  aria-label="Mention connected account"
+                  disabled={disabled}
+                  type="button"
+                >
+                  @
+                </DropdownMenuTrigger>
+              </IconButtonTooltip>
+              <DropdownMenuContent align="start" size="compact">
+                {connectedAccounts.length === 0 ? (
+                  <p className="px-2 py-2 text-caption text-muted-fg">
+                    No connected accounts
+                  </p>
+                ) : (
+                  connectedAccounts.map(({ account, displayName, icon }) => (
+                    <DropdownMenuItem
+                      key={account.id}
+                      onSelect={() => {
+                        const start =
+                          inputRef?.current?.selectionStart ?? input.length;
+                        const end =
+                          inputRef?.current?.selectionEnd ?? input.length;
+                        const prefix = input.slice(0, start);
+                        const suffix = input.slice(end);
+                        const spacer =
+                          prefix.length > 0 && !/\s$/u.test(prefix) ? " " : "";
+                        const mention = `${spacer}@[connection:${account.id}] `;
+                        onInputChange(`${prefix}${mention}${suffix}`);
+                        requestAnimationFrame(() => {
+                          inputRef?.current?.focus();
+                          inputRef?.current?.setSelectionRange(
+                            start + mention.length,
+                            start + mention.length
+                          );
+                        });
+                      }}
+                    >
+                      <img
+                        alt=""
+                        aria-hidden
+                        className={cn("size-4", icon.className)}
+                        src={icon.src}
+                      />
+                      <span className="truncate">
+                        {displayName}:{" "}
+                        {account.providerWorkspaceName
+                          ? `${account.providerWorkspaceName}, `
+                          : ""}
+                        {account.accountEmail ??
+                          account.displayName ??
+                          "Account"}
+                      </span>
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <IconButtonTooltip label={dictationLabel}>

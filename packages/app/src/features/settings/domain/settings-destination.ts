@@ -34,6 +34,7 @@ export const settingsDestinationSearch = (
   destination: SettingsDestination,
   teamId: string
 ) => ({
+  connectorProvider: undefined,
   domainId: "",
   mailboxId: destination.mailboxId ?? "",
   mailboxView: "list" as const,

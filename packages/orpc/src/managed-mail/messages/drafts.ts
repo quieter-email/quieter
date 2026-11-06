@@ -9,6 +9,7 @@ import {
   mailboxDivisionGrant,
   managedMailAttachment,
   managedMailMessage,
+  member,
   organizationMailSendIdempotency,
 } from "@quieter/database/schema";
 import { buildMimeMessage } from "@quieter/mail/compose/mime";
@@ -138,6 +139,20 @@ const assertPrivateDraftContext = async (
   const [otherGrant] = await tx
     .select({ id: mailboxGrant.id })
     .from(mailboxGrant)
+    .innerJoin(
+      member,
+      and(
+        eq(member.id, mailboxGrant.memberId),
+        eq(member.userId, mailboxGrant.userId)
+      )
+    )
+    .innerJoin(
+      mailbox,
+      and(
+        eq(mailbox.id, mailboxGrant.mailboxId),
+        eq(mailbox.organizationId, member.organizationId)
+      )
+    )
     .where(
       and(
         eq(mailboxGrant.mailboxId, input.mailboxId),

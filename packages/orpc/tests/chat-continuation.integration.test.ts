@@ -857,46 +857,108 @@ describe.skipIf(state.databaseUrl === undefined)(
       });
     });
 
-    test.each(["linear_read", "linear_write"] as const)(
-      "dispatches an ordinary %s request without approval",
-      async (toolName) => {
+    test.each([
+      {
+        connectionId: "connection-1",
+        discovery: "success",
+        expectedSuccess: true,
+        toolName: "linear_read",
+      },
+      {
+        connectionId: "connection-1",
+        discovery: "success",
+        expectedSuccess: true,
+        toolName: "linear_write",
+      },
+      {
+        connectionId: "connection-1",
+        discovery: "failed",
+        expectedSuccess: false,
+        toolName: "linear_write",
+      },
+      {
+        connectionId: "connection-1",
+        discovery: "unlisted",
+        expectedSuccess: false,
+        toolName: "linear_write",
+      },
+      {
+        connectionId: "other-connection",
+        discovery: "success",
+        expectedSuccess: false,
+        toolName: "linear_write",
+      },
+    ] as const)(
+      "$toolName on $connectionId respects $discovery discovery without routine approval",
+      async ({ connectionId, discovery, expectedSuccess, toolName }) => {
         await db.delete(chatMessage).where(eq(chatMessage.chatId, threadId));
+        if (discovery === "failed") {
+          state.linearList.mockRejectedValue(new Error("Discovery failed"));
+        } else if (discovery === "unlisted") {
+          state.linearList.mockResolvedValue([{ name: "search_issues" }]);
+        }
         state.model.mockReturnValue(
           new MockLanguageModelV4({
-            doStream: {
-              stream: convertArrayToReadableStream([
-                { type: "stream-start", warnings: [] },
-                {
-                  input: JSON.stringify({
-                    arguments: {
-                      teamId: "team-1",
-                      title: "Untrusted requested change",
-                    },
-                    connectionId: "connection-1",
-                    toolName:
-                      toolName === "linear_read"
-                        ? "search_issues"
-                        : "create_issue",
-                  }),
-                  toolCallId: "induced-write",
-                  toolName,
-                  type: "tool-call",
-                },
-                {
-                  finishReason: { raw: undefined, unified: "tool-calls" },
-                  type: "finish",
-                  usage: {
-                    inputTokens: {
-                      cacheRead: 0,
-                      cacheWrite: 0,
-                      noCache: 1,
-                      total: 1,
-                    },
-                    outputTokens: { reasoning: 0, text: 1, total: 1 },
+            doStream: [
+              {
+                stream: convertArrayToReadableStream([
+                  { type: "stream-start", warnings: [] },
+                  {
+                    input: "{}",
+                    toolCallId: "discovery",
+                    toolName: "linear_list_tools",
+                    type: "tool-call",
                   },
-                },
-              ]),
-            },
+                  {
+                    finishReason: { raw: undefined, unified: "tool-calls" },
+                    type: "finish",
+                    usage: {
+                      inputTokens: {
+                        cacheRead: 0,
+                        cacheWrite: 0,
+                        noCache: 1,
+                        total: 1,
+                      },
+                      outputTokens: { reasoning: 0, text: 1, total: 1 },
+                    },
+                  },
+                ]),
+              },
+              {
+                stream: convertArrayToReadableStream([
+                  { type: "stream-start", warnings: [] },
+                  {
+                    input: JSON.stringify({
+                      arguments: {
+                        teamId: "team-1",
+                        title: "Untrusted requested change",
+                      },
+                      connectionId,
+                      toolName:
+                        toolName === "linear_read"
+                          ? "search_issues"
+                          : "create_issue",
+                    }),
+                    toolCallId: "induced-write",
+                    toolName,
+                    type: "tool-call",
+                  },
+                  {
+                    finishReason: { raw: undefined, unified: "tool-calls" },
+                    type: "finish",
+                    usage: {
+                      inputTokens: {
+                        cacheRead: 0,
+                        cacheWrite: 0,
+                        noCache: 1,
+                        total: 1,
+                      },
+                      outputTokens: { reasoning: 0, text: 1, total: 1 },
+                    },
+                  },
+                ]),
+              },
+            ],
           })
         );
         const response = await createAiChatResponse({
@@ -906,7 +968,15 @@ describe.skipIf(state.databaseUrl === undefined)(
             mailboxId: state.mailboxId,
             message: {
               id: userMessageId,
-              parts: [{ text: "Use @Linear to find my teams.", type: "text" }],
+              parts: [
+                {
+                  text:
+                    toolName === "linear_read"
+                      ? "Use @Linear to find my teams."
+                      : "Use @Linear to create an issue.",
+                  type: "text",
+                },
+              ],
               role: "user",
             },
             threadId,
@@ -918,7 +988,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         await expect(response.text()).resolves.not.toContain(
           "tool-approval-request"
         );
-        expect(state.linear).toHaveBeenCalledOnce();
+        expect(state.linear).toHaveBeenCalledTimes(expectedSuccess ? 1 : 0);
       }
     );
 

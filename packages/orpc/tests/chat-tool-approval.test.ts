@@ -44,6 +44,20 @@ describe("destructive-only chat approval", () => {
       toolName: "linear_write",
     },
     { input: { toolName: "update_issue" }, toolName: "linear_write" },
+    {
+      input: {
+        arguments: { name: "Delete the old heading" },
+        provider: "clickup",
+        toolName: "create_task",
+      },
+      toolName: "connector_write",
+    },
+    { input: { toolName: "update_task" }, toolName: "connector_write" },
+    { input: { toolName: "complete_task" }, toolName: "connector_write" },
+    {
+      input: { toolName: "notion_append_blocks" },
+      toolName: "connector_write",
+    },
     { input: { action: "archive" }, toolName: "modify_mail" },
     { input: { action: "trash" }, toolName: "modify_mail" },
     { input: {}, toolName: "save_compose_draft" },
@@ -62,13 +76,15 @@ describe("destructive-only chat approval", () => {
     "reset_workspace",
     "remove_member",
     "destroy_project",
-  ])("requires confirmation for %s", (toolName) => {
-    expect(
-      requiresChatToolApproval({
-        input: { toolName },
-        toolName: "linear_write",
-      })
-    ).toBeTruthy();
+  ])("requires confirmation for %s across connected accounts", (toolName) => {
+    for (const proxy of ["linear_write", "connector_write"]) {
+      expect(
+        requiresChatToolApproval({
+          input: { toolName },
+          toolName: proxy,
+        })
+      ).toBeTruthy();
+    }
   });
 
   test("requires confirmation before deleting a calendar event", () => {

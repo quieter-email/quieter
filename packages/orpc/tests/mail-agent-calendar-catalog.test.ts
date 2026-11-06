@@ -68,9 +68,12 @@ const specification = actionSpecificationSchema.parse({
 describe("mail agent Calendar account ownership", () => {
   beforeEach(() => {
     mocks.query.mockReset().mockResolvedValue({ rows: [] });
-    mocks.accounts
-      .mockReset()
-      .mockResolvedValue({ accounts: [], isConfigured: true });
+    mocks.accounts.mockReset().mockResolvedValue({
+      accounts: [],
+      googleConfigured: true,
+      isConfigured: true,
+      microsoftConfigured: false,
+    });
     mocks.account.mockReset().mockResolvedValue({
       email: "owner@example.test",
       id: "legacy-calendar",
@@ -98,7 +101,9 @@ describe("mail agent Calendar account ownership", () => {
           status: "needs-mailbox",
         },
       ],
+      googleConfigured: true,
       isConfigured: true,
+      microsoftConfigured: false,
     });
     const accounts = await getAgentAccounts("owner");
     expect(accounts).toStrictEqual(
@@ -116,8 +121,7 @@ describe("mail agent Calendar account ownership", () => {
     );
     expect(mocks.accounts).toHaveBeenCalledWith({ userId: "owner" });
     const [query, params] = mocks.query.mock.calls[0] ?? [];
-    expect(query).toContain('"connectorCredential"."provider" =');
-    expect(params).toContain("linear");
+    expect(query).toContain('"connectorCredential"."userId" =');
     expect(params).toContain("owner");
   });
 

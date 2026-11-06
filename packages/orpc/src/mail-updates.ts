@@ -40,6 +40,7 @@ export const listMailUpdateRecipients = async (
       .innerJoin(
         member,
         and(
+          eq(member.id, mailboxGrant.memberId),
           eq(member.userId, mailboxGrant.userId),
           eq(member.organizationId, selected.organizationId)
         )

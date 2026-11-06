@@ -78,11 +78,11 @@ export const assertMigrationExecutionAllowed = (
   const url = new URL(value);
 
   if (LOOPBACK_HOSTS.has(getHostname(url))) {
-    return;
+    return "local" as const;
   }
 
   if (isExplicitLocalPlanetScaleUrl(url, environment) && url.port === "5432") {
-    return;
+    return "local" as const;
   }
 
   const isGitHubActionsJob =
@@ -111,4 +111,6 @@ export const assertMigrationExecutionAllowed = (
       "Remote database migrations are restricted to approved GitHub Actions deployment jobs"
     );
   }
+
+  return "production" as const;
 };

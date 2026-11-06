@@ -16,7 +16,7 @@ import {
   organization,
   user,
   mailboxAgentRevision,
-  mailboxAgentSetting,
+  mailboxPersonalAgentSetting,
   mailboxAgentRun,
   mailboxAgentEffect,
 } from "@quieter/database/schema";
@@ -326,14 +326,14 @@ describe.skipIf(state.databaseUrl === undefined)(
         manifestDigest: manifest.digest,
         specification,
       });
-      await db.insert(mailboxAgentSetting).values({
-        activatedByUserId: actor.userId,
+      await db.insert(mailboxPersonalAgentSetting).values({
         activationVersion: 1,
         activeRevisionId: revisionId,
         createdAt: now,
         enabled: true,
         mailboxId: actor.mailboxId,
         updatedAt: now,
+        userId: actor.userId,
       });
       await db.insert(mailboxAgentRun).values({
         actorUserId: actor.userId,
@@ -379,8 +379,8 @@ describe.skipIf(state.databaseUrl === undefined)(
         .delete(mailboxAgentRun)
         .where(eq(mailboxAgentRun.mailboxId, actor.mailboxId));
       await db
-        .delete(mailboxAgentSetting)
-        .where(eq(mailboxAgentSetting.mailboxId, actor.mailboxId));
+        .delete(mailboxPersonalAgentSetting)
+        .where(eq(mailboxPersonalAgentSetting.mailboxId, actor.mailboxId));
       await db
         .delete(mailboxAgentRevision)
         .where(eq(mailboxAgentRevision.mailboxId, actor.mailboxId));
@@ -478,9 +478,9 @@ describe.skipIf(state.databaseUrl === undefined)(
 
     test("revoked authority is terminal", async () => {
       await db
-        .update(mailboxAgentSetting)
+        .update(mailboxPersonalAgentSetting)
         .set({ enabled: false })
-        .where(eq(mailboxAgentSetting.mailboxId, actor.mailboxId));
+        .where(eq(mailboxPersonalAgentSetting.mailboxId, actor.mailboxId));
       await drainMailAgentRuns({ limit: 1 });
       await expect(row()).resolves.toMatchObject({
         attempts: 1,

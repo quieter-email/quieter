@@ -6,7 +6,10 @@ import {
   listLinearMcpToolsForUser,
   runLinearMcpToolCallsForUser,
 } from "../src/connectors/linear-mcp";
-import type { getLinearConnectionForUser } from "../src/connectors/runtime";
+import type {
+  getConnectorConnectionForUser,
+  getLinearConnectionForUser,
+} from "../src/connectors/runtime";
 
 vi.mock(import("../src/connectors/linear-mcp"), () => ({
   isMutatingLinearMcpTool: vi.fn<(input: { name: string }) => boolean>(
@@ -18,6 +21,15 @@ vi.mock(import("../src/connectors/linear-mcp"), () => ({
 }));
 
 vi.mock(import("../src/connectors/runtime"), () => ({
+  getConnectorConnectionForUser: vi
+    .fn<typeof getConnectorConnectionForUser>()
+    .mockResolvedValue({
+      account: "user@example.test",
+      connectionId: "connection-1",
+      displayName: "Test account",
+      providerAccountId: "linear-user-1",
+      workspace: "Test workspace",
+    }),
   getLinearConnectionForUser: vi
     .fn<typeof getLinearConnectionForUser>()
     .mockResolvedValue({
@@ -82,7 +94,7 @@ describe("chat Linear tools", () => {
       },
     ]);
     const tools = createLinearChatTools({
-      latestUserRequest: "Use @Linear to find my teams.",
+      latestUserRequest: "Use @[connection:connection-1] to find my teams.",
       userId: "user-1",
     });
 
@@ -90,7 +102,9 @@ describe("chat Linear tools", () => {
     expect(runLinearMcpToolCallsForUser).not.toHaveBeenCalled();
     expect(tools.linear_write).toBeDefined();
 
-    await invokeTool(tools, "linear_list_tools", {});
+    await invokeTool(tools, "linear_list_tools", {
+      connectionId: "connection-1",
+    });
     expect(listLinearMcpToolsForUser).toHaveBeenCalledWith({
       connectionId: "connection-1",
       signal: undefined,

@@ -16,7 +16,7 @@ import {
   organizationDivision,
   user,
 } from "@quieter/database/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { assertDomainBillingAccess } from "../mail-domain/billing";
 import { assertOrganizationManager } from "../organization/divisions";
@@ -146,6 +146,9 @@ export const createManagedMailbox = async (input: {
   const mailboxId = randomUUID();
   const now = new Date();
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     const [receivingDomain] = await tx
       .select({ id: mailDomain.id })
       .from(mailDomain)
@@ -190,6 +193,7 @@ export const createManagedMailbox = async (input: {
       });
     }
 
+    let managerMemberId = creatorMembership.id;
     if (ownerId !== null) {
       const [ownerMembership] = await tx
         .select({ id: member.id })
@@ -207,6 +211,7 @@ export const createManagedMailbox = async (input: {
           message: "The mailbox owner must be a member of this team.",
         });
       }
+      managerMemberId = ownerMembership.id;
     }
     await tx.insert(mailbox).values({
       accessMode,
@@ -228,6 +233,7 @@ export const createManagedMailbox = async (input: {
       createdAt: now,
       id: randomUUID(),
       mailboxId,
+      memberId: managerMemberId,
       role: "manager",
       updatedAt: now,
       userId: ownerId ?? input.userId,
@@ -300,6 +306,7 @@ export const listManagedMailboxAdministration = async (input: {
       .select({
         accessMode: mailbox.accessMode,
         catchAllDomain: mailDomain.domain,
+        directMemberId: member.id,
         directRole: mailboxGrant.role,
         directUserId: mailboxGrant.userId,
         displayName: mailbox.displayName,
@@ -319,6 +326,14 @@ export const listManagedMailboxAdministration = async (input: {
         eq(organizationDivision.id, mailbox.divisionId)
       )
       .leftJoin(mailboxGrant, eq(mailboxGrant.mailboxId, mailbox.id))
+      .leftJoin(
+        member,
+        and(
+          eq(member.id, mailboxGrant.memberId),
+          eq(member.userId, mailboxGrant.userId),
+          eq(member.organizationId, mailbox.organizationId)
+        )
+      )
       .leftJoin(
         mailboxDivisionGrant,
         eq(mailboxDivisionGrant.mailboxId, mailbox.id)
@@ -373,6 +388,7 @@ export const listManagedMailboxAdministration = async (input: {
       status: row.status,
     };
     if (
+      row.directMemberId !== null &&
       row.directRole !== null &&
       row.directUserId !== null &&
       !record.directGrantIds.has(row.directUserId)
@@ -388,7 +404,11 @@ export const listManagedMailboxAdministration = async (input: {
       record.divisionGrantIds.add(row.divisionGrantDivisionId);
       record.divisionGrantCount += 1;
     }
-    if (row.directRole === "manager" && row.directUserId !== null) {
+    if (
+      row.directMemberId !== null &&
+      row.directRole === "manager" &&
+      row.directUserId !== null
+    ) {
       record.managerGrantIds.add(`direct:${row.directUserId}`);
     }
     if (
@@ -457,6 +477,14 @@ export const getManagedMailboxDetails = async (input: {
         userId: user.id,
       })
       .from(mailboxGrant)
+      .innerJoin(
+        member,
+        and(
+          eq(member.id, mailboxGrant.memberId),
+          eq(member.userId, mailboxGrant.userId),
+          eq(member.organizationId, selectedMailbox.organizationId)
+        )
+      )
       .innerJoin(user, eq(user.id, mailboxGrant.userId))
       .where(eq(mailboxGrant.mailboxId, input.mailboxId)),
     db
@@ -518,6 +546,9 @@ export const updateManagedMailbox = async (input: {
   userId: string;
 }) =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -569,6 +600,9 @@ export const setManagedMailboxAccessMode = async (input: {
   userId: string;
 }) =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -602,6 +636,8 @@ export const setManagedMailboxAccessMode = async (input: {
         ownerUserId: ownerId,
       };
     }
+    const managerId = ownerId ?? selectedMailbox.ownerUserId;
+    let managerMembership: { id: string } | undefined;
     if (input.accessMode === "private") {
       await assertOrganizationManager(
         {
@@ -615,18 +651,20 @@ export const setManagedMailboxAccessMode = async (input: {
           message: "Choose a team member who owns this private mailbox.",
         });
       }
-      const [ownerMembership] = await tx
+    }
+    if (managerId !== null) {
+      [managerMembership] = await tx
         .select({ id: member.id })
         .from(member)
         .where(
           and(
             eq(member.organizationId, selectedMailbox.organizationId),
-            eq(member.userId, ownerId)
+            eq(member.userId, managerId)
           )
         )
         .limit(1)
         .for("key share");
-      if (ownerMembership === undefined) {
+      if (managerMembership === undefined) {
         throw new ORPCError("BAD_REQUEST", {
           message: "The mailbox owner must be a member of this team.",
         });
@@ -642,20 +680,24 @@ export const setManagedMailboxAccessMode = async (input: {
         .delete(mailboxGrant)
         .where(eq(mailboxGrant.mailboxId, input.mailboxId));
     }
-    const managerId = ownerId ?? selectedMailbox.ownerUserId;
-    if (managerId !== null) {
+    if (managerId !== null && managerMembership !== undefined) {
       await tx
         .insert(mailboxGrant)
         .values({
           createdAt: now,
           id: randomUUID(),
           mailboxId: input.mailboxId,
+          memberId: managerMembership.id,
           role: "manager",
           updatedAt: now,
           userId: managerId,
         })
         .onConflictDoUpdate({
-          set: { role: "manager", updatedAt: now },
+          set: {
+            memberId: managerMembership.id,
+            role: "manager",
+            updatedAt: now,
+          },
           target: [mailboxGrant.mailboxId, mailboxGrant.userId],
         });
     }
@@ -682,6 +724,9 @@ export const setManagedMailboxGrant = async (input: {
   userId: string;
 }) =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -702,7 +747,7 @@ export const setManagedMailboxGrant = async (input: {
       });
     }
     const [target] = await tx
-      .select({ organizationId: mailbox.organizationId })
+      .select({ memberId: member.id })
       .from(mailbox)
       .innerJoin(
         member,
@@ -712,7 +757,8 @@ export const setManagedMailboxGrant = async (input: {
         )
       )
       .where(eq(mailbox.id, input.mailboxId))
-      .limit(1);
+      .limit(1)
+      .for("key share", { of: member });
     if (target === undefined) {
       throw new ORPCError("BAD_REQUEST", {
         message: "Mailbox grants can only be assigned to team members.",
@@ -726,12 +772,13 @@ export const setManagedMailboxGrant = async (input: {
         createdAt: now,
         id: randomUUID(),
         mailboxId: input.mailboxId,
+        memberId: target.memberId,
         role: input.role,
         updatedAt: now,
         userId: input.targetUserId,
       })
       .onConflictDoUpdate({
-        set: { role: input.role, updatedAt: now },
+        set: { memberId: target.memberId, role: input.role, updatedAt: now },
         target: [mailboxGrant.mailboxId, mailboxGrant.userId],
       });
     return {
@@ -747,6 +794,9 @@ export const removeManagedMailboxGrant = async (input: {
   userId: string;
 }) =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -766,9 +816,31 @@ export const removeManagedMailboxGrant = async (input: {
           "The mailbox owner cannot lose access. Transfer ownership or make the mailbox shared first.",
       });
     }
+    const [targetMembership] = await tx
+      .select({ id: member.id })
+      .from(member)
+      .where(
+        and(
+          eq(member.organizationId, selectedMailbox.organizationId),
+          eq(member.userId, input.targetUserId)
+        )
+      )
+      .limit(1)
+      .for("key share");
+    if (targetMembership === undefined) {
+      return { removed: true };
+    }
     const managerGrants = await tx
       .select({ userId: mailboxGrant.userId })
       .from(mailboxGrant)
+      .innerJoin(
+        member,
+        and(
+          eq(member.id, mailboxGrant.memberId),
+          eq(member.userId, mailboxGrant.userId),
+          eq(member.organizationId, selectedMailbox.organizationId)
+        )
+      )
       .where(
         and(
           eq(mailboxGrant.mailboxId, input.mailboxId),
@@ -791,6 +863,7 @@ export const removeManagedMailboxGrant = async (input: {
       .where(
         and(
           eq(mailboxGrant.mailboxId, input.mailboxId),
+          eq(mailboxGrant.memberId, targetMembership.id),
           eq(mailboxGrant.userId, input.targetUserId)
         )
       );
@@ -804,6 +877,9 @@ export const setManagedMailboxDivisionGrant = async (input: {
   userId: string;
 }) =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -855,6 +931,9 @@ export const removeManagedMailboxDivisionGrant = async (input: {
   userId: string;
 }) =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)

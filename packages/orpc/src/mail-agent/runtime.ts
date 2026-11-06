@@ -13,7 +13,6 @@ import {
   mailboxAgentEffect,
   mailboxAgentRevision,
   mailboxAgentRun,
-  mailboxAgentSetting,
 } from "@quieter/database/schema";
 import type { MailboxAgentUsage } from "@quieter/database/schema";
 import {
@@ -39,12 +38,17 @@ import {
   listCalendarsForUser,
 } from "../calendar/service";
 import { runLinearMcpToolCallsForUser } from "../connectors/linear-mcp";
+import {
+  callRegisteredConnectorTool,
+  connectorToolRegistry,
+} from "../connectors/tool-registry";
 import type { MailRequestContext } from "../gmail-request";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { publishMailUpdate } from "../mail-updates";
 import { composeMailOperations } from "../mail/compose";
 import { queriesMailOperations } from "../mail/queries";
 import { assertAgentMailboxAccess } from "./access";
+import { assertMailAgentRunAuthority } from "./authority";
 import {
   agentDigest,
   calendarEventSchema,
@@ -55,6 +59,7 @@ import {
   memoryLookupSchema,
 } from "./catalog";
 import type { AgentCatalogTool } from "./catalog";
+import { getPersonalActionCutoverError } from "./cutover";
 import {
   getAgentConnectorEffects,
   matchesAgentEligibility,
@@ -135,6 +140,9 @@ const runResultSchema = z.strictObject({
 
 const claimNextRun = async (): Promise<ClaimedRun | null> =>
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
     const now = new Date();
     const [candidate] = await tx
       .select()
@@ -206,53 +214,6 @@ const claimNextRun = async (): Promise<ClaimedRun | null> =>
     return claimed === undefined ? null : { ...claimed, leaseToken };
   });
 
-const assertRunAuthority = async (run: ClaimedRun) => {
-  const [lease] = await db
-    .select({ id: mailboxAgentRun.id })
-    .from(mailboxAgentRun)
-    .where(
-      and(
-        eq(mailboxAgentRun.id, run.id),
-        eq(mailboxAgentRun.mailboxId, run.mailboxId),
-        eq(mailboxAgentRun.leaseToken, run.leaseToken),
-        eq(mailboxAgentRun.status, "running"),
-        gt(mailboxAgentRun.leaseExpiresAt, new Date())
-      )
-    )
-    .limit(1);
-  if (lease === undefined) {
-    throw new ORPCError("CONFLICT", {
-      message: "This action no longer owns its run.",
-    });
-  }
-  const [setting] = await db
-    .select()
-    .from(mailboxAgentSetting)
-    .where(
-      and(
-        eq(mailboxAgentSetting.mailboxId, run.mailboxId),
-        eq(mailboxAgentSetting.activeRevisionId, run.revisionId),
-        eq(mailboxAgentSetting.enabled, true),
-        eq(mailboxAgentSetting.activationVersion, run.settingVersion)
-      )
-    )
-    .limit(1);
-  if (
-    setting === undefined ||
-    (run.triggerKind === "mail_received" &&
-      setting.activatedByUserId !== run.actorUserId)
-  ) {
-    throw new ORPCError("FORBIDDEN", {
-      message: "This action was paused or replaced before it finished.",
-    });
-  }
-  return await assertAgentMailboxAccess({
-    mailboxId: run.mailboxId,
-    manage: true,
-    userId: run.actorUserId,
-  });
-};
-
 const reportRunUsage = async (run: typeof mailboxAgentRun.$inferSelect) => {
   if (run.usageReportedAt || run.usage === null || run.usage.length === 0) {
     if (run.usageReportedAt === null) {
@@ -289,7 +250,7 @@ const executeRun = async (run: ClaimedRun) => {
   let writes = 0;
   const usage: MailboxAgentUsage[] = run.usage ?? [];
   try {
-    const authorized = await assertRunAuthority(run);
+    const authorized = await assertMailAgentRunAuthority(run);
     const budget = await getMailAutomationAiBudgetStatus({
       organizationId: authorized.organizationId,
       userId: run.actorUserId,
@@ -303,7 +264,8 @@ const executeRun = async (run: ClaimedRun) => {
       .where(
         and(
           eq(mailboxAgentRevision.id, run.revisionId),
-          eq(mailboxAgentRevision.mailboxId, run.mailboxId)
+          eq(mailboxAgentRevision.mailboxId, run.mailboxId),
+          eq(mailboxAgentRevision.createdByUserId, run.actorUserId)
         )
       )
       .limit(1);
@@ -315,6 +277,17 @@ const executeRun = async (run: ClaimedRun) => {
     );
     if (specification.mailboxId !== run.mailboxId) {
       throw new Error("Reviewed action mailbox does not match its run.");
+    }
+    if (
+      specification.toolGrants.some(
+        (grant) => grant.toolId === "mail.save_draft"
+      )
+    ) {
+      await assertAgentMailboxAccess({
+        mailboxId: run.mailboxId,
+        saveDraft: true,
+        userId: run.actorUserId,
+      });
     }
     const catalog = await loadAgentCatalog({
       connectionIds: specification.connectors.map(
@@ -346,7 +319,17 @@ const executeRun = async (run: ClaimedRun) => {
     );
     let personalContextUsed = false;
     const assertContextAuthority = async () => {
-      const access = await assertRunAuthority(run);
+      const access = await assertMailAgentRunAuthority(run);
+      if (
+        access.shared &&
+        specification.connectors.length > 0 &&
+        compiled.tools.some((tool) => tool.toolId === "mail.save_draft")
+      ) {
+        throw new ORPCError("FORBIDDEN", {
+          message:
+            "Connected account information cannot be saved into a draft visible to other inbox members. Review this prompt again.",
+        });
+      }
       if (access.shared && personalContextUsed) {
         throw new ORPCError("FORBIDDEN", {
           message:
@@ -499,7 +482,7 @@ const executeRun = async (run: ClaimedRun) => {
             "An earlier change needs review before this action can continue.",
         });
       }
-      const liveAccess = await assertContextAuthority();
+      await assertContextAuthority();
       const liveCatalog = await loadAgentCatalog({
         connectionIds: specification.connectors.map(
           (connection) => connection.connectionId
@@ -515,6 +498,7 @@ const executeRun = async (run: ClaimedRun) => {
           message: "The connected tools changed while the action was running.",
         });
       }
+      const liveAccess = await assertContextAuthority();
       if (tool.operation === "read") {
         const readArgs = z
           .fromJSONSchema(
@@ -582,6 +566,25 @@ const executeRun = async (run: ClaimedRun) => {
             );
           }
           return boundAgentToolOutput(result.output);
+        }
+        if (
+          tool.provider &&
+          tool.provider !== "google_calendar" &&
+          connectorToolRegistry[tool.provider] &&
+          tool.providerToolName &&
+          tool.connectionId
+        ) {
+          return boundAgentToolOutput(
+            await callRegisteredConnectorTool({
+              arguments: z.record(z.string(), z.unknown()).parse(readArgs),
+              connectionId: tool.connectionId,
+              effect: "read",
+              provider: tool.provider,
+              signal,
+              toolName: tool.providerToolName,
+              userId: run.actorUserId,
+            })
+          );
         }
         throw new Error("The reviewed lookup is unavailable.");
       }
@@ -662,6 +665,12 @@ const executeRun = async (run: ClaimedRun) => {
         tool.toolId === "calendar.create_event" ||
         tool.toolId === "linear.create_issue" ||
         tool.toolId === "linear.create_comment" ||
+        [
+          "todoist.create_task",
+          "clickup.create_task",
+          "notion.notion_create_page",
+          "notion.notion_append_blocks",
+        ].includes(tool.toolId) ||
         (["linear.save_issue", "linear.save_comment"].includes(tool.toolId) &&
           z.object({ id: z.string().optional() }).parse(effectiveArgs).id ===
             undefined);
@@ -671,21 +680,29 @@ const executeRun = async (run: ClaimedRun) => {
         inputDigest,
       ]);
       const effectClaim = await db.transaction(async (tx) => {
-        const [lease] = await tx
-          .select({ id: mailboxAgentRun.id })
-          .from(mailboxAgentRun)
-          .where(
-            and(
-              eq(mailboxAgentRun.id, run.id),
-              eq(mailboxAgentRun.leaseToken, run.leaseToken),
-              eq(mailboxAgentRun.status, "running"),
-              gt(mailboxAgentRun.leaseExpiresAt, new Date())
-            )
-          )
-          .for("update");
-        if (lease === undefined) {
-          throw new ORPCError("CONFLICT", {
-            message: "This action no longer owns its run.",
+        await tx.execute(
+          sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+        );
+        const admitted = await assertMailAgentRunAuthority(run, tx, true);
+        if (tool.toolId === "mail.save_draft") {
+          await assertAgentMailboxAccess(
+            {
+              mailboxId: run.mailboxId,
+              saveDraft: true,
+              userId: run.actorUserId,
+            },
+            tx
+          );
+        }
+        if (
+          admitted.shared &&
+          (personalContextUsed ||
+            (tool.toolId === "mail.save_draft" &&
+              specification.connectors.length > 0))
+        ) {
+          throw new ORPCError("FORBIDDEN", {
+            message:
+              "Personal context and connected account information cannot be saved into a shared inbox draft.",
           });
         }
         const previous = createsResource
@@ -812,6 +829,22 @@ const executeRun = async (run: ClaimedRun) => {
             );
           }
           result = called.output;
+        } else if (
+          tool.provider &&
+          tool.provider !== "google_calendar" &&
+          connectorToolRegistry[tool.provider] &&
+          tool.providerToolName &&
+          tool.connectionId
+        ) {
+          result = await callRegisteredConnectorTool({
+            arguments: z.record(z.string(), z.unknown()).parse(effectiveArgs),
+            connectionId: tool.connectionId,
+            effect: "write",
+            provider: tool.provider,
+            signal,
+            toolName: tool.providerToolName,
+            userId: run.actorUserId,
+          });
         } else {
           throw new Error("The reviewed change is unavailable.");
         }
@@ -986,6 +1019,7 @@ const executeRun = async (run: ClaimedRun) => {
         )
       );
   } catch (error) {
+    const cutoverError = getPersonalActionCutoverError(error);
     if (
       isAiCreditAdmissionBusy(error) &&
       !providerStarted &&
@@ -1014,7 +1048,11 @@ const executeRun = async (run: ClaimedRun) => {
         );
       return;
     }
-    if (!(error instanceof ORPCError) && !isAiCreditAdmissionBusy(error)) {
+    if (
+      !(error instanceof ORPCError) &&
+      cutoverError === null &&
+      !isAiCreditAdmissionBusy(error)
+    ) {
       reportError(
         new Error(
           `Inbox action execution failed (${error instanceof Error ? error.name : "unknown"}).`
@@ -1022,9 +1060,10 @@ const executeRun = async (run: ClaimedRun) => {
         { operation: "mail-agent:run" }
       );
     }
+    const failure = cutoverError ?? error;
     const errorMessage =
-      error instanceof ORPCError
-        ? error.message
+      failure instanceof ORPCError
+        ? failure.message
         : "This action could not finish. Please try again after reviewing any partial results.";
     await db
       .update(mailboxAgentRun)
