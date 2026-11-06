@@ -137,44 +137,33 @@ export const MessageDetail = ({
       ref={detailRef}
       tabIndex={focusOnOpen === true ? -1 : undefined}
     >
-      <div
-        className="flex w-14 shrink-0 items-center justify-center py-4 pl-4 empty:hidden pointer-coarse:w-16"
-        ref={gutterRef}
-      />
-      <div
-        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto"
-        data-message-detail-scroll-container
-        ref={viewportRef}
-      >
-        <m.div
-          animate={{
-            filter: "blur(0px)",
-            opacity: 1,
-            transform: "translate3d(0, 0, 0)",
-          }}
-          className="flex min-h-full min-w-0 flex-1 flex-col"
-          initial={
+      <m.div
+        animate={{
+          filter: "blur(0px)",
+          opacity: 1,
+          transform: "translate3d(0, 0, 0)",
+        }}
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
+        initial={
+          reducedMotion === true
+            ? { opacity: 0 }
+            : {
+                filter: "blur(4px)",
+                opacity: 0.55,
+                transform: "translate3d(8px, 0, 0)",
+              }
+        }
+        key={`${mailboxId}:${selectedMessage?.id ?? (isPending === true ? "loading" : "empty")}`}
+        transition={{
+          duration:
             reducedMotion === true
-              ? { opacity: 0 }
-              : {
-                  filter: "blur(4px)",
-                  opacity: 0.55,
-                  transform: "translate3d(8px, 0, 0)",
-                }
-          }
-          key={`${mailboxId}:${selectedMessage?.id ?? (isPending === true ? "loading" : "empty")}`}
-          ref={contentRef}
-          transition={{
-            duration:
-              reducedMotion === true
-                ? appMotionDuration.feedback
-                : appMotionDuration.layout,
-            ease: appEaseOut,
-          }}
-        >
-          {messageContent}
-        </m.div>
-      </div>
+              ? appMotionDuration.feedback
+              : appMotionDuration.layout,
+          ease: appEaseOut,
+        }}
+      >
+        {messageContent}
+      </m.div>
     </section>
   );
 };
