@@ -295,14 +295,13 @@ export const ComposerDictationControl = ({
 }) => (
   <div
     className={cn(
-      "inline-flex h-8 w-36 shrink-0 items-center gap-2 rounded-full bg-panel p-1 not-squircle",
+      "inline-flex h-8 w-36 shrink-0 items-center gap-2 rounded-md bg-detail p-1 squircle",
       entranceMotionVariants({ effect: "pop" })
     )}
   >
     <IconButtonTooltip label="Cancel dictation">
       <Button
         aria-label="Cancel dictation"
-        chrome="round"
         disabled={disabled}
         onClick={onCancel}
         size="icon-xs"
@@ -317,7 +316,6 @@ export const ComposerDictationControl = ({
         <IconButtonTooltip label="Finish dictation">
           <Button
             aria-label="Finish dictation"
-            chrome="round"
             disabled={disabled}
             onClick={onFinish}
             size="icon-xs"
