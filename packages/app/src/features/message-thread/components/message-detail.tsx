@@ -113,7 +113,12 @@ export const MessageDetail = ({
           mailboxId={mailboxId}
           mailboxProvider={mailboxProvider}
           message={selectedMessage}
-          navigationScope={{ contentRef, gutterRef, viewportRef }}
+          navigationScope={{
+            contentRef,
+            gutterRef,
+            interactionRef: detailRef,
+            viewportRef,
+          }}
           onConversationOpened={onConversationOpened}
           onBackToList={onBackToList}
           onAutoFocusComplete={onAutoFocusComplete}

@@ -37,6 +37,7 @@ export const ChatTranscript = ({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const gutterRef = useRef<HTMLDivElement | null>(null);
+  const interactionRef = useRef<HTMLDivElement | null>(null);
   const followIntent = useRef<"tail" | "browse">("tail");
   const previousViewport = useRef<{
     clientHeight: number;
@@ -107,6 +108,7 @@ export const ChatTranscript = ({
         "flex-1": docked,
         "max-h-[min(28rem,calc(100dvh-15rem))]": !docked,
       })}
+      ref={interactionRef}
     >
       <div
         className="flex w-14 shrink-0 items-center justify-center py-4 pl-4 empty:hidden pointer-coarse:w-16"
@@ -177,12 +179,13 @@ export const ChatTranscript = ({
       <ConversationNavigator
         aria-label="Questions in this conversation"
         enabled={docked}
+        itemExtent="until-next"
         items={promptItems}
         onNavigateStart={() => {
           followIntent.current = "browse";
           setShowLatest(true);
         }}
-        scope={{ contentRef, gutterRef, viewportRef }}
+        scope={{ contentRef, gutterRef, interactionRef, viewportRef }}
       />
       {showLatest ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">

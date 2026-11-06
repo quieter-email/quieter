@@ -11,6 +11,7 @@ import {
 } from "motion/react";
 import type { MotionValue } from "motion/react";
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
+import type { RefObject } from "react";
 
 import { cn } from "../../lib/cn";
 import { Text } from "./text";
@@ -26,6 +27,8 @@ export type ThreadRailItem = {
 type ThreadRailProps = {
   "aria-label": string;
   items: readonly ThreadRailItem[];
+  interactionRef: RefObject<HTMLElement | null>;
+  highlightedIds: readonly string[];
   activeId?: string | null;
   onSelect: (id: string) => void;
   maxHeight?: number;
@@ -88,6 +91,8 @@ export const ThreadRail = ({
   "aria-label": label,
   activeId,
   className,
+  highlightedIds,
+  interactionRef,
   items,
   maxHeight,
   onSelect,
@@ -105,6 +110,7 @@ export const ThreadRail = ({
   const buttons = useRef(new Map<string, HTMLElement>());
   const readItems = useEffectEvent(() => items);
   const itemCount = items.length;
+  const highlightedIdSet = new Set(highlightedIds);
   const previewIndex = items.findIndex((item) => item.id === preview.id);
   const previewItem = items[previewIndex];
   const tabStopId = items.some((item) => item.id === focusedId)
@@ -137,6 +143,35 @@ export const ThreadRail = ({
         reset();
         return;
       }
+
+      const { target } = event;
+      const popup =
+        target instanceof view.Element
+          ? target.closest("[data-thread-rail-preview]")
+          : null;
+      const overPreview =
+        popup instanceof view.HTMLElement &&
+        popup.dataset.threadRailPreview === railId;
+      const interaction = interactionRef.current;
+      const interactionBounds = interaction?.getBoundingClientRect();
+      if (
+        interaction === null ||
+        interactionBounds === undefined ||
+        event.clientX < interactionBounds.left ||
+        event.clientX > interactionBounds.right ||
+        event.clientY < interactionBounds.top ||
+        event.clientY > interactionBounds.bottom ||
+        !(target instanceof view.Node) ||
+        (!interaction.contains(target) && !overPreview)
+      ) {
+        if (overPreview) {
+          approach.set(0);
+          capture.set("free");
+        } else {
+          reset();
+        }
+        return;
+      }
       const bounds = rail.getBoundingClientRect();
       if (bounds.height === 0) {
         reset();
@@ -153,30 +188,15 @@ export const ThreadRail = ({
         Math.max(bounds.top - event.clientY, event.clientY - bounds.bottom, 0)
       );
       const captureState =
-        captureDistance <= (capture.get() === "captured" ? 76 : 52)
+        captureDistance <= (capture.get() === "captured" ? 56 : 40)
           ? "captured"
           : "free";
       capture.set(captureState);
-      cursorIndex.set(
-        captureState === "captured"
-          ? Math.max(0, Math.min(pointerItems.length - 1, position))
-          : position
-      );
-      approach.set(1 / (1 + (x / 640) ** 2));
+      cursorIndex.set(position);
+      const outerFalloff = Math.max(0, 1 - (captureDistance / 640) ** 4) ** 2;
+      approach.set(outerFalloff / (1 + (x / 640) ** 2));
 
-      const { target } = event;
-      const popup =
-        target instanceof view.Element
-          ? target.closest("[data-thread-rail-preview]")
-          : null;
-      const overPreview =
-        popup instanceof view.HTMLElement &&
-        popup.dataset.threadRailPreview === railId;
-      const near =
-        x <= 40 &&
-        event.clientY >= bounds.top &&
-        event.clientY <= bounds.bottom;
-      if (!near && !overPreview) {
+      if (captureState === "free" && !overPreview) {
         dismissed.current = false;
       }
       const item =
@@ -188,9 +208,7 @@ export const ThreadRail = ({
           return current;
         }
         if (
-          !near ||
-          !(target instanceof view.Node) ||
-          !rail.contains(target) ||
+          captureState === "free" ||
           dismissed.current ||
           item === undefined
         ) {
@@ -218,7 +236,15 @@ export const ThreadRail = ({
       view.removeEventListener("blur", reset);
       finePointer.removeEventListener("change", reset);
     };
-  }, [approach, capture, cursorIndex, itemCount, pitch, railId]);
+  }, [
+    approach,
+    capture,
+    cursorIndex,
+    interactionRef,
+    itemCount,
+    pitch,
+    railId,
+  ]);
 
   if (items.length === 0) {
     return null;
@@ -229,6 +255,7 @@ export const ThreadRail = ({
       <Tooltip
         onOpenChange={(open, details) => {
           if (open || details.reason === "trigger-hover") {
+            details.cancel();
             return;
           }
           if (details.reason === "escape-key") {
@@ -322,7 +349,7 @@ export const ThreadRail = ({
               type="button"
             >
               <RailMark
-                active={activeId === item.id}
+                active={highlightedIdSet.has(item.id)}
                 index={index}
                 motion={{ approach, capture, cursorIndex, pitch }}
                 reducedMotion={reducedMotion}
@@ -331,30 +358,48 @@ export const ThreadRail = ({
           ))}
         </nav>
         <TooltipContent
-          className="w-64"
+          className="w-64 cursor-pointer text-left"
           data-thread-rail-preview={railId}
-          onPointerLeave={() => {
-            setPreview((current) =>
-              current.kind === "pointer"
-                ? { ...current, kind: "idle" }
-                : current
-            );
+          onClick={() => {
+            if (previewItem !== undefined) {
+              dismissed.current = true;
+              setPreview((current) => ({ ...current, kind: "idle" }));
+              onSelect(previewItem.id);
+            }
           }}
+          onPointerDown={(event) => {
+            if (event.button === 0) {
+              // Keep mark focus until click; blurring it would unmount this card.
+              event.preventDefault();
+            }
+          }}
+          render={
+            <button
+              aria-label={
+                previewItem === undefined
+                  ? undefined
+                  : `Go to ${previewItem.label}`
+              }
+              type="button"
+            />
+          }
           side="right"
           sideOffset={8}
+          tabIndex={-1}
         >
           {previewItem === undefined ? null : (
-            <div className="space-y-1">
+            <span className="flex flex-col gap-1">
               {previewItem.meta === undefined ? null : (
-                <Text size="micro" tone="muted" truncate>
+                <Text as="span" size="micro" tone="muted" truncate>
                   {previewItem.meta}
                 </Text>
               )}
-              <Text size="sm" truncate weight="medium">
+              <Text as="span" size="sm" truncate weight="medium">
                 {previewItem.label}
               </Text>
               {previewItem.description === undefined ? null : (
                 <Text
+                  as="span"
                   className="line-clamp-2 break-words"
                   size="caption"
                   tone="muted"
@@ -362,7 +407,7 @@ export const ThreadRail = ({
                   {previewItem.description}
                 </Text>
               )}
-            </div>
+            </span>
           )}
         </TooltipContent>
       </Tooltip>

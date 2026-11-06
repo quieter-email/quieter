@@ -11,6 +11,7 @@ export type ConversationNavigationScope = {
   viewportRef: RefObject<HTMLElement | null>;
   contentRef: RefObject<HTMLElement | null>;
   gutterRef: RefObject<HTMLElement | null>;
+  interactionRef: RefObject<HTMLElement | null>;
 };
 
 type ConversationNavigatorProps = {
@@ -18,6 +19,7 @@ type ConversationNavigatorProps = {
   scope: ConversationNavigationScope;
   items: readonly ThreadRailItem[];
   enabled?: boolean;
+  itemExtent?: "element" | "until-next";
   onNavigateStart?: () => void;
   prepareItem?: (id: string) => void | Promise<void>;
 };
@@ -27,7 +29,7 @@ type NavigationGeometry =
   | {
       kind: "visible";
       host: HTMLElement;
-      activeId: string;
+      highlightedIds: readonly string[];
       maxHeight: number;
       itemIds: readonly string[];
     };
@@ -35,12 +37,13 @@ type NavigationGeometry =
 export const ConversationNavigator = ({
   "aria-label": label,
   enabled = true,
+  itemExtent = "element",
   items,
   onNavigateStart,
   prepareItem,
   scope,
 }: ConversationNavigatorProps) => {
-  const { contentRef, gutterRef, viewportRef } = scope;
+  const { contentRef, gutterRef, interactionRef, viewportRef } = scope;
   const [geometry, setGeometry] = useState<NavigationGeometry>({
     kind: "hidden",
   });
@@ -77,7 +80,9 @@ export const ConversationNavigator = ({
       );
       const landmarks = readItems().flatMap((item) => {
         const element = anchors.get(item.id);
-        return element === undefined ? [] : [{ element, item }];
+        return element === undefined
+          ? []
+          : [{ bounds: element.getBoundingClientRect(), item }];
       });
       const hostStyle = view.getComputedStyle(host);
       const maxHeight =
@@ -97,34 +102,35 @@ export const ConversationNavigator = ({
         return;
       }
 
-      const readingLine = viewport.getBoundingClientRect().top + 1;
-      let activeId = first.item.id;
-      for (const landmark of landmarks) {
-        if (landmark.element.getBoundingClientRect().top > readingLine) {
-          break;
-        }
-        activeId = landmark.item.id;
-      }
-      if (
-        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <=
-        1
-      ) {
-        activeId = landmarks.at(-1)?.item.id ?? activeId;
-      }
-
-      const visibleIds = landmarks.map(({ item }) => item.id);
+      const viewportTop =
+        viewport.getBoundingClientRect().top + viewport.clientTop;
+      const viewportBottom = viewportTop + viewport.clientHeight;
+      const contentBottom = content.getBoundingClientRect().bottom;
+      const highlightedIds = landmarks.flatMap((landmark, index) => {
+        const bottom =
+          itemExtent === "until-next"
+            ? (landmarks[index + 1]?.bounds.top ?? contentBottom)
+            : landmark.bounds.bottom;
+        return landmark.bounds.top < viewportBottom && bottom > viewportTop
+          ? [landmark.item.id]
+          : [];
+      });
+      const landmarkIds = landmarks.map(({ item }) => item.id);
       setGeometry((current) =>
         current.kind === "visible" &&
         current.host === host &&
-        current.activeId === activeId &&
         current.maxHeight === maxHeight &&
-        current.itemIds.length === visibleIds.length &&
-        current.itemIds.every((id, index) => id === visibleIds[index])
+        current.itemIds.length === landmarkIds.length &&
+        current.itemIds.every((id, index) => id === landmarkIds[index]) &&
+        current.highlightedIds.length === highlightedIds.length &&
+        current.highlightedIds.every(
+          (id, index) => id === highlightedIds[index]
+        )
           ? current
           : {
-              activeId,
+              highlightedIds,
               host,
-              itemIds: visibleIds,
+              itemIds: landmarkIds,
               kind: "visible",
               maxHeight,
             }
@@ -146,7 +152,7 @@ export const ConversationNavigator = ({
       }
       navigationRequest.current += 1;
     };
-  }, [contentRef, enabled, gutterRef, itemIds, viewportRef]);
+  }, [contentRef, enabled, gutterRef, itemExtent, itemIds, viewportRef]);
 
   const navigate = async (id: string) => {
     navigationRequest.current += 1;
@@ -195,8 +201,10 @@ export const ConversationNavigator = ({
   }
   return createPortal(
     <ThreadRail
-      activeId={geometry.activeId}
+      activeId={geometry.highlightedIds[0] ?? geometry.itemIds[0]}
       aria-label={label}
+      highlightedIds={geometry.highlightedIds}
+      interactionRef={interactionRef}
       items={items.filter((item) => geometry.itemIds.includes(item.id))}
       maxHeight={geometry.maxHeight}
       onSelect={(id) => {
