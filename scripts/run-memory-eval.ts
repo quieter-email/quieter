@@ -47,6 +47,7 @@ try {
     }
     const response = await fetch("https://openrouter.ai/api/v1/auth/key", {
       headers: { Authorization: `Bearer ${serverEnv.OPENROUTER_API_KEY}` },
+      signal: AbortSignal.timeout(10_000),
     });
     const maximumKeyLimit = z.coerce
       .number()

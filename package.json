@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "memory:compare": "node scripts/run-memory-comparison.ts",
-    "memory:eval": "node scripts/run-memory-eval.ts",
+    "memory:eval": "vp run @quieter/env#build && node --env-file-if-exists=.env.local scripts/run-memory-eval.ts",
     "mail:benchmark": "vp run @quieter/env#build && node --env-file=.env.local scripts/run-mail-benchmark.ts",
     "agent:doctor": "node scripts/agent-tooling-doctor.ts",
     "pstack:adapt": "node scripts/adapt-pstack.ts",

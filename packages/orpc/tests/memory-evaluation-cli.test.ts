@@ -138,7 +138,7 @@ describe("memory evaluation command boundaries", () => {
     expect(requested.length).toBeGreaterThan(0);
     const report: unknown = JSON.parse(await readFile(outputPath, "utf8"));
     expect(report).toMatchObject({ runId: resumeRunId, status: "complete" });
-  });
+  }, 30_000);
 
   test("a rejected database target never receives setup or cleanup traffic", async () => {
     let connections = 0;
