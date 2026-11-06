@@ -108,7 +108,7 @@ Custom unsubscribe destinations can be allowed by the sender's policy. Their UI 
 
 Marketing uses shared tokens and controls. Its dedicated layout, illustrations, shaders, and storytelling have a different job from a dense workspace. Do not apply workspace header insets to every feature or pricing card.
 
-Change `features/home` only when the request explicitly includes the landing page or an authorized shared change actually affects it. Preserve intentional full-height marketing sections. A product whitespace bug is not permission to collapse the landing page's section heights.
+During design-system maintenance, change `features/home` only when the user explicitly includes the landing page. Outside design-system maintenance, change `features/home` only when the request explicitly includes the landing page or an authorized shared change actually affects it. Preserve intentional full-height marketing sections. A product whitespace bug is not permission to collapse the landing page's section heights.
 
 Feature groups and pricing need clear hierarchy with restrained type. Use reasonable content padding and distinct blocks rather than a stack of tiny-inset rows squeezed into a large table-like box. Plans should be comparable without oversized bold names or prices. Use live product facts rather than stale mock prices.
 
