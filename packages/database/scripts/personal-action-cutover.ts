@@ -278,7 +278,10 @@ export const preparePersonalActionCutover = async (
 
 export const releasePersonalActionCutover = async (
   sql: postgres.Sql,
-  input: CutoverBuild & { verifiedDeploymentBuildId: string }
+  input: CutoverBuild & {
+    expectedWorkflowIdentity?: string;
+    verifiedDeploymentBuildId: string;
+  }
 ) =>
   await sql.begin(async (transaction) => {
     await transaction`SELECT pg_advisory_xact_lock(hashtext('quieter-forward-migrations'))`;
@@ -291,6 +294,13 @@ export const releasePersonalActionCutover = async (
       buildId: input.buildId,
       requirePersonalTable: true,
     });
+    if (
+      input.expectedWorkflowIdentity !== undefined &&
+      (state.phase !== "fenced" ||
+        state.workflowIdentity !== input.expectedWorkflowIdentity)
+    ) {
+      throw new Error("The original workflow no longer owns the Action fence");
+    }
     const ledger = await transaction<
       { name: string; hash: string }[]
     >`SELECT name, hash FROM drizzle.__drizzle_migrations`;
