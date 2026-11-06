@@ -45,6 +45,7 @@ import {
 import { useColorMode } from "@quieter/ui/color-mode";
 import {
   ComposerActionBar,
+  ComposerDictationControl,
   ComposerContextChip,
   PromptComposerFrame,
 } from "@quieter/ui/composer-chrome";
@@ -1469,6 +1470,35 @@ export const DesignSystemShowcase = () => {
               autoSize
               className="w-80 max-w-full"
               placeholder="Describe which emails belong here…"
+            />
+          </Row>
+          <Row label="Dictation status">
+            <ComposerDictationControl
+              onCancel={() => {
+                toast("Dictation cancelled");
+              }}
+              onFinish={() => {
+                toast("Recording finished");
+              }}
+              state={{ phase: "starting" }}
+            />
+            <ComposerDictationControl
+              onCancel={() => {
+                toast("Dictation cancelled");
+              }}
+              onFinish={() => {
+                toast("Recording finished");
+              }}
+              state={{ analyser: null, phase: "recording" }}
+            />
+            <ComposerDictationControl
+              onCancel={() => {
+                toast("Dictation cancelled");
+              }}
+              onFinish={() => {
+                toast("Recording finished");
+              }}
+              state={{ phase: "transcribing" }}
             />
           </Row>
           <Row label="Prompt composer">

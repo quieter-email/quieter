@@ -16,6 +16,11 @@ import {
   useState,
 } from "react";
 
+type DictationSession = {
+  controller: AbortController;
+  phase: "starting" | "recording" | "transcribing";
+};
+
 export const useChatDictation = ({
   chatId,
   enabled,
@@ -27,7 +32,14 @@ export const useChatDictation = ({
   mailboxId: string;
   onTranscript: (text: string) => void;
 }) => {
-  const { isRecording, isSupported, start, stop } = useAudioRecorder();
+  const {
+    analyser,
+    cancel: cancelRecording,
+    isRecording,
+    isSupported,
+    start,
+    stop,
+  } = useAudioRecorder();
   const queryClient = useQueryClient();
   const { mutateAsync } = useMutation({
     mutationFn: async ({
@@ -50,8 +62,7 @@ export const useChatDictation = ({
     "idle"
   );
   const mounted = useRef(true);
-  const pending = useRef(false);
-  const session = useRef<AbortController | null>(null);
+  const session = useRef<DictationSession | null>(null);
   const latest = useRef(onTranscript);
   useLayoutEffect(() => {
     latest.current = onTranscript;
@@ -60,35 +71,43 @@ export const useChatDictation = ({
     mounted.current = true;
     return () => {
       mounted.current = false;
-      session.current?.abort();
     };
   }, []);
+
+  const cancel = useCallback(() => {
+    const { current } = session;
+    session.current = null;
+    current?.controller.abort();
+    cancelRecording();
+    if (mounted.current) {
+      setPhase("idle");
+    }
+  }, [cancelRecording]);
   useLayoutEffect(
     () => () => {
-      session.current?.abort();
+      cancel();
     },
-    [chatId, enabled, mailboxId]
+    [cancel, chatId, enabled, mailboxId]
   );
 
   const finish = useCallback(async () => {
-    const currentSession = session.current;
+    const { current } = session;
     if (
-      pending.current ||
+      current?.phase !== "recording" ||
       !isRecording ||
-      currentSession === null ||
-      currentSession.signal.aborted
+      current.controller.signal.aborted
     ) {
       return;
     }
-    pending.current = true;
+    current.phase = "transcribing";
     setPhase("transcribing");
     try {
       const clip = await stop();
-      if (!mounted.current || currentSession.signal.aborted) {
+      if (!mounted.current || current.controller.signal.aborted) {
         return;
       }
       const recording = await prepareTranscriptionRecording(clip);
-      if (!mounted.current || currentSession.signal.aborted) {
+      if (!mounted.current || current.controller.signal.aborted) {
         return;
       }
       const result = await mutateAsync({
@@ -98,20 +117,21 @@ export const useChatDictation = ({
           mailboxId,
           mode: "chat",
         },
-        signal: currentSession.signal,
+        signal: current.controller.signal,
       });
-      if (mounted.current && !currentSession.signal.aborted) {
+      if (mounted.current && !current.controller.signal.aborted) {
         latest.current(result.text);
       }
     } catch (error) {
-      if (mounted.current && !currentSession.signal.aborted) {
+      if (mounted.current && !current.controller.signal.aborted) {
         toastError(error, { boundary: "assistant-dictation" });
       }
     } finally {
-      pending.current = false;
-      session.current = null;
-      if (mounted.current) {
-        setPhase("idle");
+      if (session.current === current) {
+        session.current = null;
+        if (mounted.current) {
+          setPhase("idle");
+        }
       }
     }
   }, [chatId, isRecording, mailboxId, mutateAsync, stop]);
@@ -131,61 +151,49 @@ export const useChatDictation = ({
       }
     };
   }, [isRecording]);
-  useEffect(() => {
-    if (
-      !isRecording ||
-      phase !== "idle" ||
-      pending.current ||
-      (enabled && session.current?.signal.aborted === false)
-    ) {
+
+  const toggle = async () => {
+    if (!enabled) {
       return;
     }
-    const discard = async () => {
-      pending.current = true;
-      try {
-        await stop();
-      } catch (error) {
-        if (mounted.current) {
-          toastError(error, { boundary: "assistant-dictation-stop" });
-        }
-      } finally {
-        pending.current = false;
+    if (session.current?.phase === "recording") {
+      if (isRecording) {
+        await finish();
+        return;
+      }
+      cancel();
+    }
+    if (session.current !== null) {
+      return;
+    }
+    const current: DictationSession = {
+      controller: new AbortController(),
+      phase: "starting",
+    };
+    session.current = current;
+    setPhase("starting");
+    try {
+      await start();
+      if (session.current === current) {
+        current.phase = "recording";
+        setPhase("idle");
+      }
+    } catch (error) {
+      if (mounted.current && !current.controller.signal.aborted) {
+        toastError(error, { boundary: "assistant-microphone" });
+      }
+      if (session.current === current) {
         session.current = null;
         if (mounted.current) {
           setPhase("idle");
         }
       }
-    };
-    void discard();
-  }, [chatId, enabled, isRecording, mailboxId, phase, stop]);
-
-  const toggle = async () => {
-    if (!enabled || pending.current) {
-      return;
-    }
-    if (isRecording) {
-      await finish();
-      return;
-    }
-    pending.current = true;
-    const currentSession = new AbortController();
-    session.current = currentSession;
-    setPhase("starting");
-    try {
-      await start();
-    } catch (error) {
-      if (mounted.current && !currentSession.signal.aborted) {
-        toastError(error, { boundary: "assistant-microphone" });
-      }
-    } finally {
-      pending.current = false;
-      if (mounted.current) {
-        setPhase("idle");
-      }
     }
   };
 
   return {
+    analyser,
+    cancel,
     isRecording,
     isStarting: phase === "starting",
     isSupported,

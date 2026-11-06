@@ -641,11 +641,15 @@ const ChatSession = ({
         model={model}
         onModelChange={setModel}
         recording={dictation.isRecording}
+        recordingAnalyser={dictation.analyser}
         recordingSupported={dictation.isSupported}
         startingRecording={dictation.isStarting}
         transcribing={dictation.isTranscribing}
         onToggleDictation={() => {
           void dictation.toggle();
+        }}
+        onCancelDictation={() => {
+          dictation.cancel();
         }}
         disabled={!canUseAiChat || busy || streaming || approvals.length > 0}
         streaming={streaming || approvals.length > 0}

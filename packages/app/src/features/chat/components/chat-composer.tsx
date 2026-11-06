@@ -13,6 +13,7 @@ import { connectorsQueryOptions } from "@quieter/app/lib/connectors-query";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
+  ComposerDictationControl,
   ComposerContextChip,
   PromptComposerFrame,
 } from "@quieter/ui/composer-chrome";
@@ -24,7 +25,6 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { entranceMotionVariants } from "@quieter/ui/motion";
 import { Textarea } from "@quieter/ui/textarea";
 import { useQuery } from "@tanstack/react-query";
 import type { KeyboardEvent, ReactNode, RefObject, SubmitEvent } from "react";
@@ -51,8 +51,10 @@ type ChatComposerProps = {
   onStop: () => void;
   onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
   onToggleDictation: () => void;
+  onCancelDictation: () => void;
   placeholder?: string;
   recording: boolean;
+  recordingAnalyser: AnalyserNode | null;
   recordingSupported: boolean;
   startingRecording: boolean;
   streaming: boolean;
@@ -74,8 +76,10 @@ export const ChatComposer = ({
   onStop,
   onSubmit,
   onToggleDictation,
+  onCancelDictation,
   placeholder = "Ask about your mail…",
   recording,
+  recordingAnalyser,
   recordingSupported,
   startingRecording,
   streaming,
@@ -94,20 +98,9 @@ export const ChatComposer = ({
         }))
     ) ?? [];
   const audioBusy = startingRecording || transcribing;
-  let dictationIcon = Mic01Icon;
-  if (audioBusy) {
-    dictationIcon = Loading03Icon;
-  } else if (recording) {
-    dictationIcon = StopIcon;
-  }
-  let dictationLabel = "Dictate";
-  if (!recordingSupported) {
-    dictationLabel = "Dictation is unavailable in this browser";
-  } else if (recording) {
-    dictationLabel = "Finish dictation";
-  } else if (audioBusy) {
-    dictationLabel = transcribing ? "Transcribing…" : "Starting microphone…";
-  }
+  const dictationLabel = recordingSupported
+    ? "Dictate"
+    : "Dictation is unavailable in this browser";
 
   return (
     <form className="mt-auto w-full shrink-0 p-0.5" onSubmit={onSubmit}>
@@ -146,19 +139,6 @@ export const ChatComposer = ({
           value={input}
           variant="prompt"
         />
-        {recording || audioBusy ? (
-          <output
-            className={cn(
-              "px-1 text-caption text-muted-fg",
-              entranceMotionVariants()
-            )}
-            aria-live="polite"
-          >
-            {recording
-              ? "Listening… Finish when you're done, up to 60 seconds."
-              : dictationLabel}
-          </output>
-        ) : null}
         <div className="flex min-w-0 items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <ChatModelPicker
@@ -228,22 +208,29 @@ export const ChatComposer = ({
             </DropdownMenu>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <IconButtonTooltip label={dictationLabel}>
-              <Button
-                aria-label={dictationLabel}
-                aria-pressed={recording}
-                disabled={disabled || audioBusy || !recordingSupported}
-                onClick={onToggleDictation}
-                size="icon-sm"
-                variant={recording ? "secondary" : "ghost"}
-              >
-                <Icon
-                  aria-hidden
-                  animation={audioBusy ? "spin" : undefined}
-                  icon={dictationIcon}
-                />
-              </Button>
-            </IconButtonTooltip>
+            {recording || audioBusy ? (
+              <ComposerDictationControl
+                onCancel={onCancelDictation}
+                onFinish={onToggleDictation}
+                state={
+                  recording
+                    ? { analyser: recordingAnalyser, phase: "recording" }
+                    : { phase: startingRecording ? "starting" : "transcribing" }
+                }
+              />
+            ) : (
+              <IconButtonTooltip label={dictationLabel}>
+                <Button
+                  aria-label={dictationLabel}
+                  disabled={disabled || !recordingSupported}
+                  onClick={onToggleDictation}
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <Icon aria-hidden icon={Mic01Icon} />
+                </Button>
+              </IconButtonTooltip>
+            )}
             {streaming ? (
               <IconButtonTooltip label="Stop response">
                 <Button
