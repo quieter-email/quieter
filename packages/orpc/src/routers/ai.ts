@@ -226,6 +226,7 @@ export const aiRouter = {
               agent: "search",
               mailboxId: mailbox.id,
               query: input.query,
+              semantic: { billingMailboxId: mailbox.id },
               userId: context.userId,
             })
           ),

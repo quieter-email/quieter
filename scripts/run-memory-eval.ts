@@ -4,8 +4,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs, promisify } from "node:util";
 
+import { z } from "zod";
+
 const { values } = parseArgs({
-  options: { output: { type: "string" } },
+  options: {
+    case: { type: "string" },
+    output: { type: "string" },
+    semantic: { default: false, type: "boolean" },
+  },
 });
 const temporary = await mkdtemp(path.join(tmpdir(), "quieter-memory-eval-"));
 let report: string;
@@ -28,21 +34,72 @@ try {
       "Evaluation accepts only disposable loopback quieter_migration_test PostgreSQL without URL options."
     );
   }
+  if (values.semantic) {
+    const { serverEnv } = await import("@quieter/env/server");
+    if (
+      serverEnv.QUIETER_DEPLOYMENT_ENV !== "local" ||
+      !serverEnv.OPENROUTER_API_KEY
+    ) {
+      throw new Error(
+        "Semantic evaluation requires a capped local development key."
+      );
+    }
+    const response = await fetch("https://openrouter.ai/api/v1/auth/key", {
+      headers: { Authorization: `Bearer ${serverEnv.OPENROUTER_API_KEY}` },
+    });
+    z.object({
+      data: z.object({
+        limit: z.number().positive().max(5),
+        limit_remaining: z.number().min(0.01),
+      }),
+    }).parse(await response.json());
+    if (!response.ok) {
+      throw new Error("Development key verification failed.");
+    }
+  }
+  if (values.case !== undefined) {
+    const { memoryRecallScenarios } =
+      await import("../packages/orpc/evals/memory-recall-scenarios.ts");
+    if (
+      !memoryRecallScenarios.some((scenario) => scenario.id === values.case)
+    ) {
+      throw new Error("Choose an existing synthetic evaluation case.");
+    }
+  }
   const resultPath = path.join(temporary, "results.json");
+  let executionFailed = false;
   try {
     // oxlint-disable-next-line typescript/strict-void-return -- Node execFile provides the callback signature consumed by promisify.
     await promisify(execFile)(
       "vp",
-      ["test", "run", "packages/orpc/tests/memory-recall.eval.test.ts"],
+      [
+        "test",
+        "run",
+        "packages/orpc/tests/memory-recall.eval.test.ts",
+        "--maxWorkers=1",
+      ],
       {
-        env: { ...process.env, MEMORY_EVAL_REPORT: resultPath },
+        env: {
+          ...process.env,
+          MEMORY_EVAL_REPORT: resultPath,
+          MEMORY_EVAL_SEMANTIC: String(values.semantic),
+          ...(values.case ? { MEMORY_EVAL_CASE: values.case } : {}),
+        },
         maxBuffer: 1_000_000,
       }
     );
   } catch {
+    executionFailed = true;
     process.exitCode = 1;
   }
-  report = await readFile(resultPath, "utf-8");
+  const result = z
+    .looseObject({ status: z.string() })
+    .parse(JSON.parse(await readFile(resultPath, "utf-8")));
+  report = JSON.stringify(
+    { ...result, status: executionFailed ? "failed" : result.status },
+    null,
+    2
+  );
 } catch {
   report = JSON.stringify(
     {

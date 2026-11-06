@@ -3,10 +3,20 @@ import {
   AI_MEMORY_CATEGORIES,
   containsProhibitedMemorySecret,
 } from "@quieter/ai/ai-memory";
-import type { AiMemoryCategory } from "@quieter/ai/ai-memory";
+import type {
+  AiMemoryCategory,
+  AiMemoryProvenance,
+} from "@quieter/ai/ai-memory";
+import { expandMemoryRecallQuery } from "@quieter/ai/ai-memory-recall";
+import type { AiUsageReport } from "@quieter/ai/chat-usage";
+import { isAiCreditAdmissionBusy } from "@quieter/ai/errors";
+import { resolveBackgroundModel } from "@quieter/ai/model-config";
+import { reportAiUsage } from "@quieter/billing";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import { aiMemory } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
+import { RetryError } from "ai";
 import {
   and,
   asc,
@@ -22,6 +32,7 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 
+import { serializeAiMemoryProvenance } from "./ai-memory-provenance";
 import { assertAccessibleMailbox } from "./mailbox/service";
 
 type MemoryRow = Omit<typeof aiMemory.$inferSelect, "embedding" | "embeddedAt">;
@@ -36,7 +47,9 @@ export type AiAgentMemoryContext = {
 export type AiMemoryOverviewCursor = { afterId: string; startedAt: string };
 export type AiMemoryOverviewPage = {
   hasMore: boolean;
-  items: Pick<MemoryRow, "content" | "id" | "kind" | "summary">[];
+  items: (Pick<MemoryRow, "content" | "id" | "kind" | "summary"> & {
+    provenance: AiMemoryProvenance;
+  })[];
   nextCursor: AiMemoryOverviewCursor | null;
   total: number;
 };
@@ -260,16 +273,21 @@ export const rankAiMemoryCandidates = ({
   candidates,
   now = new Date(),
   query,
+  recallTerms = [],
   selection,
 }: {
   agent: string;
   candidates: MemoryRow[];
   now?: Date;
   query: string;
+  recallTerms?: string[];
   selection?: AiMemoryContextSelection;
 }) => {
   const policy = selection ?? CONTEXT_POLICIES[agent] ?? CONTEXT_POLICIES.chat;
-  const tokens = searchTokens(query);
+  const tokens = new Set([
+    ...searchTokens(query),
+    ...searchTokens(recallTerms.join(" ")),
+  ]);
   const contacts = new Set(queryContacts(query));
   return candidates
     .flatMap((memory) => {
@@ -296,6 +314,9 @@ export const rankAiMemoryCandidates = ({
       const overlap = [...tokens].filter((token) =>
         contentTokens.has(token)
       ).length;
+      const originalOverlap = [...searchTokens(query)].filter((token) =>
+        contentTokens.has(token)
+      ).length;
       const personFact =
         memory.kind === "learned" &&
         ["identity", "relationships", "work", "interests", "activity"].includes(
@@ -307,7 +328,7 @@ export const rankAiMemoryCandidates = ({
         correspondents.length > 0 &&
         !contactMatch &&
         !corePersonFact &&
-        !(personFact && overlap > 0)
+        !(personFact && originalOverlap > 0)
       ) {
         return [];
       }
@@ -345,12 +366,14 @@ export const selectAiMemoryContext = ({
   agent,
   candidates,
   query,
+  recallTerms = [],
   now = new Date(),
   selection,
 }: {
   agent: string;
   candidates: MemoryRow[];
   query: string;
+  recallTerms?: string[];
   now?: Date;
   selection?: AiMemoryContextSelection;
 }): AiAgentMemoryContext => {
@@ -360,6 +383,7 @@ export const selectAiMemoryContext = ({
     candidates,
     now,
     query,
+    recallTerms,
     selection: policy,
   }).map(({ memory }) => ({
     memory,
@@ -467,10 +491,12 @@ const loadTaskCandidates = async ({
   mailboxId,
   userId,
   query,
+  recallTerms = [],
   selection,
 }: AiAgentMemoryAccess & {
   agent: string;
   query: string;
+  recallTerms?: string[];
   selection: AiMemoryContextSelection;
   userId: string;
 }) => {
@@ -537,7 +563,12 @@ const loadTaskCandidates = async ({
       )
     )
     .as("balanced_memory");
-  const tokenQuery = [...searchTokens(query)]
+  const tokenQuery = [
+    ...new Set([
+      ...searchTokens(query),
+      ...searchTokens(recallTerms.join(" ")),
+    ]),
+  ]
     .map((token) => `'${token.replaceAll("'", "''")}':*`)
     .join(" | ");
   const lexical = tokenQuery
@@ -633,6 +664,7 @@ export const rankAiAgentMemoryCandidates = async ({
 };
 
 type AiAgentContextInput = AiAgentMemoryAccess & {
+  semantic?: { billingMailboxId: string; signal?: AbortSignal };
   agent: string;
   candidates?: AiAgentMemoryCandidates;
   query: string;
@@ -674,6 +706,90 @@ export async function loadAiAgentContext(
       });
     }
     const policy = resolveContextSelection(input.agent, input.selection);
+    let recallTerms: string[] = [];
+    if (input.semantic !== undefined && input.query.trim()) {
+      const { billingMailboxId, signal } = input.semantic;
+      signal?.throwIfAborted();
+      await assertAccessibleMailbox({
+        mailboxId: billingMailboxId,
+        userId: input.userId,
+      });
+      const externalId = `memory-recall:${crypto.randomUUID()}`;
+      const billing = await createMailboxAiBillingContext({
+        externalId,
+        mailboxId: billingMailboxId,
+        usageKind: "aiMemory",
+        userId: input.userId,
+      });
+      let usage: AiUsageReport | undefined;
+      try {
+        recallTerms = await expandMemoryRecallQuery({
+          billing,
+          onUsage: (value) => {
+            usage = value;
+          },
+          query: input.query,
+          signal,
+        });
+      } catch (error) {
+        signal?.throwIfAborted();
+        let cause: unknown = error;
+        const visited = new Set<unknown>();
+        while (cause instanceof Error && !visited.has(cause)) {
+          visited.add(cause);
+          if (cause instanceof ORPCError) {
+            throw cause;
+          }
+          cause = RetryError.isInstance(cause) ? cause.lastError : cause.cause;
+        }
+        if (isAiCreditAdmissionBusy(error)) {
+          throw error;
+        }
+        reportError(new Error("Personal context search expansion failed."), {
+          operation: "ai-memory:expand-recall",
+        });
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Personal context could not be loaded. Try again.",
+        });
+      } finally {
+        if (usage !== undefined) {
+          try {
+            await reportAiUsage({
+              completionTokens: usage.completionTokens,
+              costUsd: usage.costUsd,
+              externalId,
+              mailboxId: billingMailboxId,
+              model: resolveBackgroundModel(),
+              promptTokens: usage.promptTokens,
+              promptTokensDetails: {
+                cacheWriteTokens: usage.cacheWriteTokens,
+                cachedTokens: usage.cachedTokens,
+              },
+              usageKind: "aiMemory",
+              userId: input.userId,
+            });
+          } catch {
+            reportError(
+              new Error("Personal context search usage could not be recorded."),
+              { operation: "ai-memory:recall-usage" }
+            );
+          }
+        }
+      }
+      await assertAccessibleMailbox({
+        mailboxId: billingMailboxId,
+        userId: input.userId,
+      });
+      if (
+        input.mailboxId !== undefined &&
+        input.mailboxId !== billingMailboxId
+      ) {
+        await assertAccessibleMailbox({
+          mailboxId: input.mailboxId,
+          userId: input.userId,
+        });
+      }
+    }
     try {
       return selectAiMemoryContext({
         agent: input.agent,
@@ -681,10 +797,12 @@ export async function loadAiAgentContext(
           agent: input.agent,
           mailboxId: input.mailboxId,
           query: input.query,
+          recallTerms,
           selection: policy,
           userId: input.userId,
         }),
         query: input.query,
+        recallTerms,
         selection: policy,
       });
     } catch (error) {
@@ -720,9 +838,15 @@ export async function loadAiAgentContext(
   const [rows, totals] = await Promise.all([
     db
       .select({
+        confidence: aiMemory.confidence,
         content: aiMemory.content,
+        createdAt: aiMemory.createdAt,
+        expiresAt: aiMemory.expiresAt,
         id: aiMemory.id,
         kind: aiMemory.kind,
+        lastConfirmedAt: aiMemory.lastConfirmedAt,
+        reinforcementCount: aiMemory.reinforcementCount,
+        source: aiMemory.source,
         summary: aiMemory.summary,
       })
       .from(aiMemory)
@@ -731,15 +855,18 @@ export async function loadAiAgentContext(
       .limit(101),
     db.select({ total: count() }).from(aiMemory).where(where),
   ]);
-  const items = rows.slice(0, 100).map((row) =>
-    containsProhibitedMemorySecret(`${row.summary} ${row.content}`)
-      ? {
-          ...row,
-          content: "A sensitive detail was omitted.",
-          summary: "Sensitive detail omitted",
-        }
-      : row
-  );
+  const items = rows.slice(0, 100).map((row) => {
+    const sensitive = containsProhibitedMemorySecret(
+      `${row.summary} ${row.content}`
+    );
+    return {
+      content: sensitive ? "A sensitive detail was omitted." : row.content,
+      id: row.id,
+      kind: row.kind,
+      provenance: serializeAiMemoryProvenance(row),
+      summary: sensitive ? "Sensitive detail omitted" : row.summary,
+    };
+  });
   const last = items.at(-1);
   const hasMore = rows.length > items.length;
   return {

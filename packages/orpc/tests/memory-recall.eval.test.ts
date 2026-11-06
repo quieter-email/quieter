@@ -1,5 +1,9 @@
 import { writeFile } from "node:fs/promises";
 
+import type { expandMemoryRecallQuery } from "@quieter/ai/ai-memory-recall";
+import { resolveBackgroundModel } from "@quieter/ai/model-config";
+import type { reportAiUsage } from "@quieter/billing";
+import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import {
   aiMemory,
@@ -21,11 +25,17 @@ import {
 } from "vite-plus/test";
 import { z } from "zod";
 
+import { memoryRecallScenarios as scenarios } from "../evals/memory-recall-scenarios";
+import type { Scenario } from "../evals/memory-recall-scenarios";
 import { loadAiAgentContext, saveAiMemory } from "../src/ai-memory";
 
 const state = vi.hoisted(() => ({
+  caseId: process.env.MEMORY_EVAL_CASE,
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
+  expansions: new Map<string, string[]>(),
+  organizationId: crypto.randomUUID(),
   reportPath: process.env.MEMORY_EVAL_REPORT,
+  semantic: process.env.MEMORY_EVAL_SEMANTIC === "true",
 }));
 vi.mock(import("@quieter/env/server"), async (original) => {
   const actual = await original();
@@ -57,201 +67,41 @@ vi.mock(import("@quieter/observability"), async (original) => ({
   reportError: vi.fn<typeof reportError>(),
 }));
 
-type Fact = Pick<typeof aiMemory.$inferInsert, "key" | "content" | "metadata"> &
-  Partial<
-    Pick<typeof aiMemory.$inferInsert, "status" | "expiresAt" | "importance">
-  > & { owner?: "other" };
-type Scenario = {
-  id: string;
-  kind: "contract" | "quality-probe";
-  facts: Fact[];
-  agent: string;
-  query: string;
-  mailbox: "primary" | "secondary" | "shared";
-  relevant: string[];
-  forbidden: string[];
-  edit?: { key: string; content: string };
-};
-const voice: Fact = {
-  content: "Prefers concise warm replies with natural contractions.",
-  key: "voice",
-  metadata: { agents: ["all"], category: "writing_style" },
-};
-const recipient: Fact = {
-  content: "With Alex, use informal German and playful greetings.",
-  key: "alex",
-  metadata: {
-    agents: ["all"],
-    category: "writing_style",
-    correspondents: ["alex@example.test"],
-  },
-};
-const distractors: Fact[] = Array.from({ length: 45 }, (_, index) => ({
-  content: `Project ${index} is migrating its deployment pipeline.`,
-  importance: 5,
-  key: `project-${index}`,
-  metadata: { agents: ["all"], category: "work" },
+vi.mock(import("@quieter/billing/ai-reservation"), async (original) => ({
+  ...(await original()),
+  createMailboxAiBillingContext: vi
+    .fn<typeof createMailboxAiBillingContext>()
+    .mockResolvedValue({
+      account: null,
+      admittedAt: new Date(),
+      groupId: crypto.randomUUID(),
+      kind: "team",
+      organizationId: state.organizationId,
+      usageKind: "aiMemory",
+    }),
 }));
-const scenarios: Scenario[] = [
-  {
-    agent: "reply_suggestion",
-    facts: [voice, recipient, ...distractors],
-    forbidden: [],
-    id: "recipient-and-general-voice",
-    kind: "contract",
-    mailbox: "primary",
-    query: "Reply to alex@example.test about lunch",
-    relevant: ["voice", "alex"],
-  },
-  {
-    agent: "reply_suggestion",
-    facts: [voice, recipient],
-    forbidden: ["alex"],
-    id: "recipient-exclusion",
-    kind: "contract",
-    mailbox: "primary",
-    query: "Reply to blair@example.test",
-    relevant: ["voice"],
-  },
-  {
-    agent: "search",
-    facts: [
-      {
-        content: "The user's husband is Blair, blair@example.test.",
-        key: "partner",
-        metadata: { agents: ["all"], category: "relationships" },
-      },
-      ...distractors,
-    ],
-    forbidden: [],
-    id: "relationship-reference",
-    kind: "contract",
-    mailbox: "primary",
-    query: "Find messages from my husband",
-    relevant: ["partner"],
-  },
-  {
-    agent: "chat",
-    facts: [
-      voice,
-      {
-        content: "Other reader prefers long formal introductions.",
-        key: "foreign",
-        metadata: { agents: ["all"], category: "writing_style" },
-        owner: "other",
-      },
-    ],
-    forbidden: ["foreign"],
-    id: "shared-mailbox-personal-isolation",
-    kind: "contract",
-    mailbox: "shared",
-    query: "What are my writing preferences?",
-    relevant: ["voice"],
-  },
-  {
-    agent: "compose",
-    facts: [voice],
-    forbidden: [],
-    id: "general-preferences-cross-mailboxes",
-    kind: "contract",
-    mailbox: "secondary",
-    query: "Draft a message",
-    relevant: ["voice"],
-  },
-  {
-    agent: "auto_label",
-    facts: [
-      {
-        content: "Prefer the Travel label for itinerary confirmations.",
-        key: "label",
-        metadata: { agents: ["all"], category: "labeling" },
-      },
-    ],
-    forbidden: [],
-    id: "label-rule-origin",
-    kind: "contract",
-    mailbox: "primary",
-    query: "Travel itinerary",
-    relevant: ["label"],
-  },
-  {
-    agent: "auto_label",
-    facts: [
-      {
-        content: "Prefer the Travel label for itinerary confirmations.",
-        key: "label",
-        metadata: { agents: ["all"], category: "labeling" },
-      },
-    ],
-    forbidden: ["label"],
-    id: "label-rule-other-mailbox",
-    kind: "contract",
-    mailbox: "secondary",
-    query: "Travel itinerary",
-    relevant: [],
-  },
-  {
-    agent: "compose",
-    facts: [
-      voice,
-      {
-        content: "Temporarily prefers formal greetings.",
-        expiresAt: new Date("2020-01-01"),
-        key: "expired",
-        metadata: { category: "preferences" },
-      },
-      {
-        content: "Prefers elaborate email signatures.",
-        key: "archived",
-        metadata: { category: "writing_style" },
-        status: "archived",
-      },
-    ],
-    forbidden: ["expired", "archived"],
-    id: "expired-and-archived",
-    kind: "contract",
-    mailbox: "primary",
-    query: "Draft a greeting and signature",
-    relevant: ["voice"],
-  },
-  {
-    agent: "compose",
-    edit: {
-      content: "Prefers detailed explanations with a formal greeting.",
-      key: "voice",
-    },
-    facts: [voice],
-    forbidden: [],
-    id: "manual-edit-freshness",
-    kind: "contract",
-    mailbox: "primary",
-    query: "Draft a reply",
-    relevant: ["voice"],
-  },
-  {
-    agent: "chat",
-    facts: [
-      {
-        content: "Avoids red-eye flights.",
-        importance: 1,
-        key: "flight",
-        metadata: { agents: ["all"], category: "preferences" },
-      },
-      ...Array.from({ length: 30 }, (_, index): Fact => ({
-        content: `Prefers the ${index}th garden layout in the landscape catalog.`,
-        importance: 5,
-        key: `preference-${index}`,
-        metadata: { agents: ["all"], category: "preferences" },
-      })),
-    ],
-    forbidden: [],
-    id: "word-disjoint-semantic-recall",
-    kind: "quality-probe",
-    mailbox: "primary",
-    query: "How should I choose an overnight journey by air?",
-    relevant: ["flight"],
-  },
-];
+vi.mock(import("@quieter/billing"), async (original) => ({
+  ...(await original()),
+  reportAiUsage: vi.fn<typeof reportAiUsage>(),
+}));
+
+vi.mock(import("@quieter/ai/ai-memory-recall"), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    expandMemoryRecallQuery: vi.fn<typeof expandMemoryRecallQuery>(
+      async (input) => {
+        const terms = await actual.expandMemoryRecallQuery(input);
+        state.expansions.set(input.query, terms);
+        return terms;
+      }
+    ),
+  };
+});
+const selectedScenarios = scenarios.filter(
+  (scenario) => !state.caseId || scenario.id === state.caseId
+);
+
 const resultSchema = z.object({ text: z.string() });
 const results: {
   id: string;
@@ -261,6 +111,7 @@ const results: {
   missing: string[];
   forbidden: string[];
   returnedCharacters: number;
+  expansionTerms?: string[];
 }[] = [];
 
 describe.skipIf(state.databaseUrl === undefined)(
@@ -268,7 +119,7 @@ describe.skipIf(state.databaseUrl === undefined)(
   () => {
     const userId = crypto.randomUUID();
     const otherUserId = crypto.randomUUID();
-    const organizationId = crypto.randomUUID();
+    const { organizationId } = state;
     const mailboxes = {
       foreign: crypto.randomUUID(),
       primary: crypto.randomUUID(),
@@ -359,15 +210,19 @@ describe.skipIf(state.databaseUrl === undefined)(
           JSON.stringify(
             {
               cases: results,
+              configuredExpansionModel: state.semantic
+                ? resolveBackgroundModel()
+                : null,
               layer: "canonical-sql-recall",
               measured: [
                 "retrieved-fact-coverage",
                 "forbidden-fact-exposure",
                 "returned-characters",
               ],
+              mode: state.semantic ? "semantic-live" : "lexical",
               provider: "quieter",
               status:
-                results.length === scenarios.length + 1
+                results.length === selectedScenarios.length + 1
                   ? "complete"
                   : "incomplete",
               unmeasured: [
@@ -408,111 +263,129 @@ describe.skipIf(state.databaseUrl === undefined)(
       });
     });
 
-    test.each(scenarios)("$id", async (scenario) => {
-      vi.mocked(reportError).mockClear();
-      await db
-        .delete(aiMemory)
-        .where(inArray(aiMemory.userId, [userId, otherUserId]));
-      const facts = scenario.facts.map(({ owner, ...fact }) => ({
-        ...fact,
-        id: `${userId}:${owner ?? "actor"}:${fact.key}`,
-        userId: owner === "other" ? otherUserId : userId,
-      }));
-      await db.insert(aiMemory).values(
-        facts.map((fact): typeof aiMemory.$inferInsert => ({
+    test.each(selectedScenarios)(
+      "$id",
+      async (scenario) => {
+        vi.mocked(reportError).mockClear();
+        await db
+          .delete(aiMemory)
+          .where(inArray(aiMemory.userId, [userId, otherUserId]));
+        const facts = scenario.facts.map(({ owner, ...fact }) => ({
           ...fact,
-          confidence: 1,
-          createdAt: now,
-          importance: fact.importance ?? 3,
-          kind: "learned",
-          lastConfirmedAt: now,
-          metadata: {
-            ...fact.metadata,
-            ...(fact.key === "label"
-              ? { sourceMailboxId: mailboxes.primary }
+          id: `${userId}:${owner ?? "actor"}:${fact.key}`,
+          userId: owner === "other" ? otherUserId : userId,
+        }));
+        await db.insert(aiMemory).values(
+          facts.map((fact): typeof aiMemory.$inferInsert => ({
+            ...fact,
+            confidence: 1,
+            createdAt: now,
+            importance: fact.importance ?? 3,
+            kind: "learned",
+            lastConfirmedAt: now,
+            metadata: {
+              ...fact.metadata,
+              ...(fact.key === "label"
+                ? { sourceMailboxId: mailboxes.primary }
+                : {}),
+            },
+            scope: "user",
+            scopeKey: `user:${fact.userId}`,
+            source: "explicit",
+            summary: fact.content,
+            updatedAt: now,
+          }))
+        );
+        if (scenario.edit) {
+          const fact = facts.find(({ key }) => key === scenario.edit?.key);
+          if (!fact) {
+            throw new Error("Edit fixture missing.");
+          }
+          const before = await loadAiAgentContext({
+            ...(state.semantic
+              ? { semantic: { billingMailboxId: mailboxes[scenario.mailbox] } }
               : {}),
-          },
-          scope: "user",
-          scopeKey: `user:${fact.userId}`,
-          source: "explicit",
-          summary: fact.content,
-          updatedAt: now,
-        }))
-      );
-      if (scenario.edit) {
-        const fact = facts.find(({ key }) => key === scenario.edit?.key);
-        if (!fact) {
-          throw new Error("Edit fixture missing.");
+            agent: scenario.agent,
+            mailboxId: mailboxes[scenario.mailbox],
+            query: scenario.query,
+            userId,
+          });
+          // oxlint-disable-next-line vitest/no-conditional-expect -- Only freshness scenarios have an explicit edit.
+          expect(before.memory).toContain(fact.content);
+          const oldContent = fact.content;
+          await saveAiMemory({
+            category: "writing_style",
+            content: scenario.edit.content,
+            memoryId: fact.id,
+            userId,
+            version: 1,
+          });
+          const after = await loadAiAgentContext({
+            ...(state.semantic
+              ? { semantic: { billingMailboxId: mailboxes[scenario.mailbox] } }
+              : {}),
+            agent: scenario.agent,
+            mailboxId: mailboxes[scenario.mailbox],
+            query: scenario.query,
+            userId,
+          });
+          // oxlint-disable-next-line vitest/no-conditional-expect -- Only freshness scenarios have an explicit edit.
+          expect(after.memory).not.toContain(oldContent);
+          fact.content = scenario.edit.content;
         }
-        const before = await loadAiAgentContext({
+        const context = await loadAiAgentContext({
+          ...(state.semantic
+            ? { semantic: { billingMailboxId: mailboxes[scenario.mailbox] } }
+            : {}),
           agent: scenario.agent,
           mailboxId: mailboxes[scenario.mailbox],
           query: scenario.query,
           userId,
         });
-        // oxlint-disable-next-line vitest/no-conditional-expect -- Only freshness scenarios have an explicit edit.
-        expect(before.memory).toContain(fact.content);
-        const oldContent = fact.content;
-        await saveAiMemory({
-          category: "writing_style",
-          content: scenario.edit.content,
-          memoryId: fact.id,
-          userId,
-          version: 1,
+        expect(reportError).not.toHaveBeenCalled();
+        const texts = new Set(
+          [context.instructions, context.memory]
+            .flatMap((value) =>
+              (value ?? "").split("\n").filter((line) => line.startsWith("{"))
+            )
+            .map((line) => resultSchema.parse(JSON.parse(line)).text)
+        );
+        const matched = facts
+          .filter(({ content }) => texts.has(content))
+          .map(({ key }) => key);
+        const missing = scenario.relevant.filter(
+          (key) => !matched.includes(key)
+        );
+        const forbidden = scenario.forbidden.filter((key) =>
+          matched.includes(key)
+        );
+        const correct = missing.length === 0 && forbidden.length === 0;
+        const statuses =
+          scenario.kind === "quality-probe"
+            ? { failure: "miss" as const, success: "hit" as const }
+            : { failure: "fail" as const, success: "pass" as const };
+        results.push({
+          ...(state.semantic
+            ? { expansionTerms: state.expansions.get(scenario.query) }
+            : {}),
+          forbidden,
+          id: scenario.id,
+          kind: scenario.kind,
+          matched,
+          missing,
+          returnedCharacters:
+            (context.instructions?.length ?? 0) + (context.memory?.length ?? 0),
+          status: correct ? statuses.success : statuses.failure,
         });
-        const after = await loadAiAgentContext({
-          agent: scenario.agent,
-          mailboxId: mailboxes[scenario.mailbox],
-          query: scenario.query,
-          userId,
-        });
-        // oxlint-disable-next-line vitest/no-conditional-expect -- Only freshness scenarios have an explicit edit.
-        expect(after.memory).not.toContain(oldContent);
-        fact.content = scenario.edit.content;
-      }
-      const context = await loadAiAgentContext({
-        agent: scenario.agent,
-        mailboxId: mailboxes[scenario.mailbox],
-        query: scenario.query,
-        userId,
-      });
-      expect(reportError).not.toHaveBeenCalled();
-      const texts = new Set(
-        [context.instructions, context.memory]
-          .flatMap((value) =>
-            (value ?? "").split("\n").filter((line) => line.startsWith("{"))
-          )
-          .map((line) => resultSchema.parse(JSON.parse(line)).text)
-      );
-      const matched = facts
-        .filter(({ content }) => texts.has(content))
-        .map(({ key }) => key);
-      const missing = scenario.relevant.filter((key) => !matched.includes(key));
-      const forbidden = scenario.forbidden.filter((key) =>
-        matched.includes(key)
-      );
-      const correct = missing.length === 0 && forbidden.length === 0;
-      const statuses =
-        scenario.kind === "quality-probe"
-          ? { failure: "miss" as const, success: "hit" as const }
-          : { failure: "fail" as const, success: "pass" as const };
-      results.push({
-        forbidden,
-        id: scenario.id,
-        kind: scenario.kind,
-        matched,
-        missing,
-        returnedCharacters:
-          (context.instructions?.length ?? 0) + (context.memory?.length ?? 0),
-        status: correct ? statuses.success : statuses.failure,
-      });
-      if (scenario.kind === "contract") {
-        // oxlint-disable-next-line vitest/no-conditional-expect -- Quality probes record misses instead of failing contracts.
-        expect({ forbidden, missing }).toMatchObject({
-          forbidden: [],
-          missing: [],
-        });
-      }
-    });
+        if (scenario.kind === "contract") {
+          // oxlint-disable-next-line vitest/no-conditional-expect -- Quality probes record misses instead of failing contracts.
+          expect({ forbidden, missing }).toMatchObject({
+            forbidden: [],
+            missing: [],
+          });
+        }
+      },
+      state.semantic ? 60_000 : 15_000
+    );
   }
 );

@@ -15,6 +15,14 @@ describe("personal context read tool", () => {
             content: "Detail ".repeat(1000),
             id: "memory-50",
             kind: "learned" as const,
+            provenance: {
+              confidence: 0.7,
+              createdAt: "2026-10-01T12:00:00Z",
+              expiresAt: null,
+              lastConfirmedAt: "2026-10-15T12:00:00Z",
+              reinforcementCount: 3,
+              source: "inferred",
+            },
             summary: "A remembered detail",
           },
         ],
@@ -40,6 +48,7 @@ describe("personal context read tool", () => {
     expect(readPersonalContext).toHaveBeenCalledWith({ cursor });
     expect(result).toMatchObject({
       hasMore: true,
+      items: [{ provenance: { reinforcementCount: 3, source: "inferred" } }],
       nextCursor: { afterId: "memory-50" },
       status: "success",
       total: 63,

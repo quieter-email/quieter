@@ -6,6 +6,7 @@
     "./compile-action-specification": "./src/compile-action-specification.ts",
     "./action-specification": "./src/action-specification.ts",
     "./ai-memory": "./src/ai-memory.ts",
+    "./ai-memory-recall": "./src/ai-memory-recall.ts",
     "./chat-agent": "./src/chat-agent.ts",
     "./chat-context": "./src/chat-context.ts",
     "./chat-tools": "./src/chat-tools.ts",

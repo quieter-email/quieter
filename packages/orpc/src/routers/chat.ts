@@ -379,6 +379,7 @@ export const chatRouter = {
                   agent: "compose",
                   mailboxId: input.mailboxId,
                   query: text,
+                  semantic: { billingMailboxId: input.mailboxId },
                   userId: context.userId,
                 });
                 const formatUsageId = `chat-transcription-format:${crypto.randomUUID()}`;

@@ -961,6 +961,7 @@ const prepareChatContext = async (input: {
             characterBudget: 12_000,
           }
         : undefined,
+    semantic: { billingMailboxId: input.mailboxId, signal: input.signal },
     userId: input.userId,
   });
   return {

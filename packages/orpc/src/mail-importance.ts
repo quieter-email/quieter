@@ -773,6 +773,7 @@ export const processPendingMailImportance = async (
               agent: "mail_importance",
               mailboxId: job.mailboxId,
               query: buildMailMemoryQuery(source.message),
+              semantic: { billingMailboxId: job.mailboxId },
               userId: memoryActor.userId,
             });
       attemptId = randomUUID();
