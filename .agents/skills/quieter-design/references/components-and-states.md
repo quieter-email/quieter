@@ -75,6 +75,16 @@ Use `size="auto"` for multiline actions. `pending` on a normal button preserves 
 
 `chrome="toolbar"` is a shape choice. A primary header action remains primary with toolbar geometry. Controls inside its popup revert to normal popup control geometry. Do not apply header rounding to every menu item.
 
+## Cursor behavior
+
+Almost never use `cursor: pointer`. Ordinary clickable controls use `cursor: default`, including buttons, icon actions, toggles, tabs, menu actions, selectable rows, and links that change state within the current view.
+
+Reserve the pointer for unmistakable links that take the user to a different page. Judge the destination and interaction, not the HTML tag or router API. Search-param changes, filters, sorting, pagination, selected mail, and other same-view state remain default even when implemented as links that can open in another tab.
+
+Keep real link semantics, `href`, keyboard access, and modifier-click behavior where appropriate. A link can use the default cursor without becoming a button. Do not add a hand cursor merely to advertise clickability; use the established hover, pressed, and focus feedback.
+
+This rule distinguishes the default arrow from the hand pointer. Keep purposeful text-entry, drag, resize, and disabled cursors where the control's behavior calls for them. Do not force every element to the default arrow with a global reset.
+
 ## Action footers
 
 Overlay footers, compact panel completion rows, and drawers fill the available content width. A single action spans the row. Multiple actions share equal width. Three actions remain side by side when their labels fit and wrap only when necessary.

@@ -69,6 +69,8 @@ For a finishing row, put actions directly in the shared layout:
 
 This illustrates ordering and fill behavior, not a requirement to add Delete to every form. Use the overlay's own footer when available.
 
+Cursor treatment follows the shared interactive owner or established recipe. Avoid blanket `a[href]`, router-link, or clickable-element rules that assign `cursor-pointer`. Same-view links need `cursor-default` while retaining navigation semantics. Make any pointer exception for a clear different-page destination deliberately; do not scatter caller overrides across equivalent controls.
+
 ## Layout and clipping
 
 Use flex and grid for ordinary controls, fields, rows, and text. Align through shared height, line height, padding, and layout. Avoid absolute x/y values, pixel nudges, translations, or manually offset icons to fake centering.

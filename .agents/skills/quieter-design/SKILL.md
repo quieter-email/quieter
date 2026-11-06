@@ -27,6 +27,7 @@ The working code, current theme definitions, latest approved design, and current
 - Shared props own appearance. App layout owns placement, available width, external gaps, and domain behavior. Do not override a component's padding, fill, type, radius, shadow, or interaction styling at a call site.
 - Keep real content in normal flow. Use measured positioning for calendars, virtualized rows, floating windows, and graphics where the interaction requires it. Never position ordinary text to fake centering.
 - Prefer subtle keyboard focus and ordinary optimistic toggles. Preserve keyboard visibility, focus management, error feedback, and accessible names.
+- Use `cursor: default` for controls and same-view navigation. Reserve `cursor: pointer` for unmistakable links to a different page. An anchor, changed search params, or support for opening a new tab does not by itself warrant a pointer.
 - Apply a shared change to all relevant consumers, examples, themes, and approved Paper views within the task's scope. Report what changed and where. Do not claim a global migration after editing one screen.
 - Preserve existing density, behavior, and information hierarchy during polish. Make the requested correction without restarting a visual experiment.
 

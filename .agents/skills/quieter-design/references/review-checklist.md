@@ -35,6 +35,7 @@ Use the relevant sections for a focused change. Use all sections and an explicit
 - Are appearance props respected without conflicting visual classes?
 - Are native controls or direct underlying-library imports limited to justified exceptions?
 - Do icon-only controls have shared tooltips and concise accessible labels?
+- Do controls and same-view links use the default cursor, with the pointer reserved for clear different-page links rather than search-param changes or new-tab capability?
 - Is keyboard focus visible and discreet, with correct dialog focus return?
 - Are hover, pressed, selected, disabled, pending, read-only, invalid, and success states coherent where applicable?
 - Do pending buttons retain width and pending switches retain their thumb?
