@@ -96,7 +96,7 @@ describe("deployed Action consumer verification", () => {
           result = {
             deployments: [
               {
-                created_on: "2026-11-04",
+                created_on: "2026-11-04T00:00:00Z",
                 versions: [{ percentage: 100, version_id: version }],
               },
             ],

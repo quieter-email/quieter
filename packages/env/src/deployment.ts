@@ -77,3 +77,26 @@ export const createDeploymentVerificationEnv = (
       QUIETER_BUILD_ID: actionReleaseEnvironmentSchema.shape.QUIETER_BUILD_ID,
     })
     .parse(runtime);
+
+export const createActionCutoverRecoveryEnv = (
+  runtime: Record<string, unknown> = process.env
+) =>
+  z
+    .object({
+      CI: z.literal("true"),
+      CLOUDFLARE_API_TOKEN: z.string().min(1),
+      CLOUDFLARE_DEFAULT_ACCOUNT_ID: z.string().regex(/^[a-f0-9]{32}$/u),
+      DEPLOYMENT_ATTEMPT: z.coerce.number().int().positive(),
+      DEPLOYMENT_RUN: z.coerce.number().int().positive(),
+      GITHUB_ACTIONS: z.literal("true"),
+      GITHUB_EVENT_NAME: z.literal("workflow_dispatch"),
+      GITHUB_REF: z.literal("refs/heads/main"),
+      GITHUB_REF_PROTECTED: z.literal("true"),
+      GITHUB_REPOSITORY: z.literal("quieter-email/quieter"),
+      GITHUB_RUN_ATTEMPT: z.string().regex(/^[1-9]\d*$/u),
+      GITHUB_RUN_ID: z.string().regex(/^[1-9]\d*$/u),
+      GITHUB_WORKFLOW_REF: z.literal(
+        "quieter-email/quieter/.github/workflows/action-cutover-recovery.yml@refs/heads/main"
+      ),
+    })
+    .parse(runtime);
