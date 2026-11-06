@@ -10,9 +10,9 @@ Do not leave one ordinary settings group directly on Panel while its equivalent 
 
 ## Settings row spacing
 
-The row layout owns its vertical padding and responsive horizontal inset. At default desktop geometry it uses 16px vertically and 24px horizontally. Narrow content uses 16px horizontally. Themes can alter the shared row-padding token.
+The row layout owns its padding through the guide's [settings spacing contract](../../../../docs/design-system.md#space-and-shape). Compare the active theme and container width before treating a difference as a defect.
 
-The intent is balanced clearance around text and actions. A 32px action contributes height, so equal raw x/y padding is not always equal visual spacing. Compare the action's outer box to every card edge. Do not make an action sit 8px from the right while the row has 24px above it.
+The intent is balanced clearance around text and actions. An action contributes height, so equal raw x/y padding is not always equal visual spacing. Compare the action's outer box to every card edge. Do not leave it cramped against the right edge while the same row has generous vertical clearance.
 
 Use one padding owner. Do not put a padded `SettingsCard` wrapper around a row that already owns its inset. Do not turn small shade gaps into row content padding. A multi-row group should have predictable first/last clearance and consistent gaps between its actual row contents.
 
@@ -34,7 +34,7 @@ Include permission-limited, empty, pending, error, and success states when relev
 
 Table body uses the established Section grouping. Column headers can use one inset Detail tray. Align the header tray and body width, including its right edge. Labels align with the actual content columns and sit vertically centered in the header.
 
-Use the current small shade inset and derived radius, not the old DNS experiment's isolated 12px/4px/8px geometry. The source owner decides the table's current contract. Do not revive a hardcoded radius because an early recap called it concentric.
+Use the existing compact Surface and inset Detail recipe for the table header. Its contour derives from the actual Section edge distance. Do not introduce a separate table radius scale or infer its geometry from a screenshot.
 
 Rows generally do not need decorative borders. Maintain readable column rhythm, row padding, status Pill placement, long value behavior, and copy actions. DNS host names, TXT values, TTL, priority, and verified state have different width needs. Keep the table usable at narrow widths through its established scroll or responsive treatment.
 
@@ -52,7 +52,7 @@ Totals, balance, overage, and related numbers can share one Detail summary insid
 
 The segmented usage bar is a main information element. Give it room above and below. Align its allocated track width with the summary and legend structure. Use system-appropriate rounded ends, not an exaggerated capsule and not a square slab. Segments meet cleanly inside one clipped track. Do not round each segment or distort values to make zero usage visible.
 
-The final user correction asked for deliberate spacing around this bar. A small nested layer gap does not mean the chart should touch the summary or legend. Use the real billing renderer's geometry, not the generic small `ProgressTrack`, to reproduce the usage chart.
+A small nested layer gap does not mean the chart should touch the summary or legend. Use the real billing renderer's geometry, not the generic small `ProgressTrack`, to reproduce the usage chart.
 
 Legend colors and values map to the same categories as the bar. Text stays readable in every theme. Responsive columns preserve category/value association. Zero amounts, a nearly full balance, overflow/overage, and absent categories need coherent rendering.
 
@@ -80,7 +80,7 @@ Onboarding setup options use existing selectable cards and progress where approp
 
 ## Audiences, templates, and campaigns
 
-These patterns come from the attached growth feature branch and were not present on the inspected main baseline. Check the [source and branch caveat](sources-and-decisions.md) before using them. Do not add a missing feature as part of unrelated design work.
+These patterns correspond to the [PR #389 compatibility snapshot](sources-and-decisions.md#compatibility-snapshots). Verify their availability in the target branch before using them. Do not add a missing feature as part of unrelated design work.
 
 Growth workspaces belong to the same product. They reuse Panel shells, inset Section headers, ordinary form controls, semantic status Pills, list behavior, and shared dialogs. They are not separate admin dashboards with a new density or palette.
 
@@ -94,7 +94,7 @@ Template source, rendered preview, and any local-authoring integration must use 
 
 ## Public unsubscribe
 
-The public campaign-unsubscribe view is also feature-branch-only in the inspected sources. It is distinct from the current mailbox unsubscribe action. Verify which path exists in the branch being changed.
+The public campaign-unsubscribe view belongs to the same [PR #389 snapshot](sources-and-decisions.md#compatibility-snapshots). It is distinct from the mailbox unsubscribe action. Verify which path exists in the branch being changed.
 
 The public confirmation view uses the same visual language with no app sidebar or sign-in requirement. Include confirmation, success, already-unsubscribed, invalid/expired link, and error behavior according to the current handler contract.
 
@@ -114,7 +114,7 @@ Feature groups and pricing need clear hierarchy with restrained type. Use reason
 
 The waitlist field is a deliberate visual exception. Over atmospheric artwork, use the approved darker field treatment so it does not dominate the hero. Keep the actual form semantics, email validation, keyboard submit, progress, success, and failure behavior. Implement the exception at its existing marketing owner, not by darkening all product inputs.
 
-The footer can have a large lowercase `quieter` wordmark with reduced opacity and a subtle fade. The user ultimately chose ordinary text. Do not make a new GPU shader a prerequisite. This decorative, `aria-hidden` artwork may use the existing absolute positioning behind the content. Keep real links and copyright in flow and readable over it. Prevent overlap with interactive targets and horizontal overflow.
+The footer wordmark is large lowercase `quieter` text with reduced opacity and a subtle fade. It does not require a GPU shader. This decorative, `aria-hidden` artwork may use the existing absolute positioning behind the content. Keep real links and copyright in flow and readable over it. Prevent overlap with interactive targets and horizontal overflow.
 
 Small demos can be quietly interactive. Shortcut keys can be clicked, snippets inserted, draft text sent in the demo, and labels changed. The interaction should be discoverable without a tutorial, use local deterministic sample state, and provide restrained feedback. Do not contact a provider, send actual mail, mutate user data, or create a second production app behind the marketing preview.
 

@@ -30,7 +30,7 @@ Product-view artboards should reveal all content for review. Extend the artboard
 
 Separate full-content inspection from a realistic viewport capture. A full-height board proves content completeness. A viewport capture proves actual scrolling, sticky headers, overlays, and narrow behavior. Use both where the task needs them.
 
-Keep boards and their labels organized by product area and state. Place variants predictably and use a clear reading order. Do not revive the discarded `02b Experiment` as an approved reference. Remove an experiment only when that cleanup is authorized and its contents are no longer needed.
+Keep boards and their labels organized by product area and state. Place variants predictably and use a clear reading order. Distinguish experiments from approved designs. When a particular board is authoritative, record its stable file link and node or artboard ID in the task's evidence so another agent can inspect it.
 
 ## Component-system boards
 
@@ -59,9 +59,7 @@ Record the actual role and values when correcting a discrepancy. Do not eyeball 
 
 ## Verify in the running application
 
-Prefer the existing connected browser tools or the repository's agent-browser workflow for actual UI interaction. If a worktree needs local configuration, follow its approved-development-resource rules. Use an existing safe preview where possible.
-
-Before starting a server, check occupied ports and choose an unused one. Record the PID and configured URL. Stop only the process tree started for this task when verification is complete. Preserve other tasks' services. Keep the local AWS billing/proxy MCP servers disabled unless this task specifically needs them.
+Prefer the existing connected browser tools or the repository's agent-browser workflow for actual UI interaction. Follow the repository's [local configuration and server-lifecycle rules](../../../../AGENTS.md#local-development-and-debugging). Use an existing safe preview where possible.
 
 Use sample personas and permitted development data. Do not expose keys or private content in screenshots. A browser-only fixture can verify presentation when clearly labeled. It does not prove server persistence or actual sending. Real integration verification must follow its existing guarded setup.
 

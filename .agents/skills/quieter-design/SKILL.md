@@ -11,12 +11,12 @@ This skill records settled product decisions and the reasons behind them. It doe
 
 ## Start with the actual system
 
-1. Locate the Quieter checkout and read its `AGENTS.md` and `docs/design-system.md`.
+1. Locate the Quieter checkout and read its [repository policy](../../../AGENTS.md) and [design-system guide](../../../docs/design-system.md).
 2. Read the relevant `packages/ui` implementation, its public export, its `/design-system` example, and the closest real product caller. Upstream shadcn APIs are not this project's API.
 3. Read [foundations](references/foundations.md) for palette, shape, typography, and spacing decisions. Then read only the task-relevant references below.
 4. Classify each gap as a shared appearance defect, a product layout defect, a missing state, or a real exception. Fix it at that owner.
 
-The working code, current theme definitions, latest approved design, and current user request must agree. [Sources and decision history](references/sources-and-decisions.md) explains how to resolve stale screenshots, old experiments, and branch differences. Never turn a known defect in the current code into a design requirement.
+The working code, current theme definitions, latest approved design, and current user request must agree. The [source map and compatibility notes](references/sources-and-decisions.md) identify the inspectable references. Never turn a known defect in the current code into a design requirement.
 
 ## Rules that shape every view
 
@@ -42,12 +42,12 @@ The working code, current theme definitions, latest approved design, and current
 | Change shared APIs, implement a design, wire data, or manage themes | [Implementation rules](references/implementation.md) |
 | Design in Paper, reproduce a view, or compare Paper with a running app | [Paper and visual verification](references/paper-and-verification.md) |
 | Audit an interface or finish a broad sweep | [Review checklist](references/review-checklist.md) |
-| Resolve conflicting old feedback or find source files | [Sources and decision history](references/sources-and-decisions.md) |
+| Find authoritative specifications, source files, or branch compatibility | [Source map and compatibility](references/sources-and-decisions.md) |
 
 Read both visual and implementation references when changing a shared component. A view-level task also needs its product pattern. For a full-system audit, use all references and keep an explicit coverage list of views and states.
 
 ## Finish at the right scale
 
-Check the changed treatment in its real context and relevant states. A routine token or prop correction needs a focused diff and visual check when appearance is uncertain. Substantial behavior, security, concurrency, migrations, or broad uncertain refactors need the repository's stronger checks. Do not write tests that freeze wording or visual constants.
+Use the [repository verification policy](../../../AGENTS.md#finish) and the relevant [visual checks](references/paper-and-verification.md). Check the changed treatment in its real context and relevant states.
 
 In the handoff, say what the user now sees, what shared component or token changed, which other views inherited it, what you inspected, and any real remaining mismatch. Keep unsupported claims about pixel parity, accessibility, or full coverage out of the report.
