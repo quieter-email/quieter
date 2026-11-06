@@ -249,7 +249,11 @@ const MessageViewContent = (props: MessageViewContentProps) => {
   });
 
   return (
-    <article ref={viewRef} tabIndex={-1} className="@container w-full">
+    <article
+      ref={viewRef}
+      tabIndex={-1}
+      className="@container flex min-h-0 w-full flex-1 flex-col"
+    >
       <WorkspaceHeader>
         <div className="flex min-w-0 items-center gap-3">
           {onBackToList ? (
@@ -351,274 +355,310 @@ const MessageViewContent = (props: MessageViewContentProps) => {
         />
       </WorkspaceHeader>
 
-      {mailboxProvider !== "api" &&
-      composeDemoMode !== true &&
-      composeManagedDemoMode !== true ? (
-        <ThreadActionResults
-          mailboxId={mailboxId}
-          onOpenDraft={
-            canComposeFromMailbox
-              ? (draftMessage) => {
-                  openInlineCompose(
-                    buildComposeDraftFromSavedDraftMessage(draftMessage)
-                  );
-                }
-              : undefined
-          }
-          threadId={message.threadId}
-          threadMessages={threadMessages}
-        />
-      ) : null}
-
-      {isSingleMessageThread ? (
-        visibleMessages.map((threadMessage) => (
-          <SingleMessageCard
-            isLoading={isBodyRefreshPending}
-            isActionPending={isActionPending}
-            key={threadMessage.id}
-            linkedDraftMessage={findLinkedDraftForMessage(
-              threadMessages,
-              threadMessage
-            )}
-            mailboxId={mailboxId}
-            mailboxProvider={mailboxProvider}
-            message={threadMessage}
-            onComposeDraftRequested={
-              canComposeFromMailbox ? openInlineCompose : undefined
-            }
-            onUnsubscribe={
-              mailboxProvider === "gmail"
-                ? mailboxActions.unsubscribeFromMessage
-                : undefined
-            }
-            verificationCode={
-              verificationCodes.find(
-                (item) => item.messageId === threadMessage.id
-              )?.code
-            }
+      <div className="flex min-h-0 flex-1">
+        {navigationScope === undefined ? null : (
+          <div
+            className="flex w-14 shrink-0 items-center justify-center py-4 pl-4 empty:hidden pointer-coarse:w-16"
+            ref={(element) => {
+              navigationScope.gutterRef.current = element;
+            }}
           />
-        ))
-      ) : (
-        <ThreadMessageList
-          allThreadMessages={threadMessages}
-          isLoading={isBodyRefreshPending}
-          isActionPending={isActionPending}
-          key={`${mailboxId}:${message.threadId}`}
-          mailboxId={mailboxId}
-          mailboxProvider={mailboxProvider}
-          messages={visibleMessages}
-          navigationScope={navigationScope}
-          onComposeDraftRequested={
-            canComposeFromMailbox ? openInlineCompose : undefined
-          }
-          onUnsubscribe={
-            mailboxProvider === "gmail"
-              ? mailboxActions.unsubscribeFromMessage
-              : undefined
-          }
-          verificationCodes={verificationCodes}
-        />
-      )}
-
-      {showInlineCompose ? (
-        <div className="px-4 py-4 @sm:px-5 @sm:py-5">
-          <LazyMotion features={domMax}>
-            <AnimatePresence initial={false} mode="popLayout">
-              {inlineDraft ? (
-                <m.div
-                  animate={{ height: "auto", opacity: 1 }}
-                  className="overflow-hidden"
-                  data-inline-compose-host
-                  exit={{ height: 0, opacity: 0 }}
-                  initial={{ height: INLINE_REPLY_BAR_HEIGHT, opacity: 0 }}
-                  key="inline-compose"
-                  ref={inlineComposerRef}
-                  transition={{
-                    ...inlineComposeTransition,
-                    opacity: inlineComposeFadeTransition,
-                  }}
-                >
-                  {inlineDraft.assistantUnsaved === true ? (
-                    <p className="mb-3 text-caption text-muted-fg">
-                      Suggested reply. Review and edit before sending.
-                    </p>
-                  ) : null}
-                  <Suspense
-                    fallback={
-                      <ComposerEditorFrame className="min-h-64">
-                        <output
-                          aria-label="Loading inline composer"
-                          aria-live="polite"
-                          className="grid flex-1 place-items-center"
-                        >
-                          <Icon
-                            aria-hidden
-                            size={20}
-                            tone="muted"
-                            animation="spin"
-                            icon={Loading03Icon}
-                          />
-                        </output>
-                      </ComposerEditorFrame>
-                    }
-                  >
-                    <InlineComposeSurface
-                      actionDraft={actionDraft}
-                      demoMode={composeDemoMode}
-                      initialDraft={inlineDraft}
-                      key={inlineDraft.localId}
-                      mailboxId={mailboxId}
-                      managedDemoMode={composeManagedDemoMode}
-                      onClose={() => {
-                        setInlineDraft(null);
-                        setActionDraft(null);
-                      }}
-                      onManageSnippets={onManageSnippets}
-                      persistDrafts={composePersistDrafts}
-                      senderEmail={currentUserEmail}
-                      senderMailbox={composeSenderMailbox}
-                      signature={composeSignature}
-                      variant="inline"
-                    />
-                  </Suspense>
-                </m.div>
-              ) : (
-                <m.div
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  initial={{ opacity: 0 }}
-                  key="inline-reply-bar"
-                  transition={inlineComposeFadeTransition}
-                >
-                  <ComposerActionBar>
-                    <Button
-                      disabled={
-                        !hotkeyLinkedDraftMessage && isBodyRefreshPending
-                      }
-                      className="min-w-44 flex-1"
-                      onClick={() => {
+        )}
+        <div
+          className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
+          data-message-detail-scroll-container
+          ref={(element) => {
+            if (navigationScope !== undefined) {
+              navigationScope.viewportRef.current = element;
+            }
+          }}
+        >
+          <div
+            className="@container min-h-full min-w-0"
+            ref={(element) => {
+              if (navigationScope !== undefined) {
+                navigationScope.contentRef.current = element;
+              }
+            }}
+          >
+            {mailboxProvider !== "api" &&
+            composeDemoMode !== true &&
+            composeManagedDemoMode !== true ? (
+              <ThreadActionResults
+                mailboxId={mailboxId}
+                onOpenDraft={
+                  canComposeFromMailbox
+                    ? (draftMessage) => {
                         openInlineCompose(
-                          hotkeyLinkedDraftMessage
-                            ? buildComposeDraftFromSavedDraftMessage(
-                                hotkeyLinkedDraftMessage
-                              )
-                            : buildComposeDraftFromMessageAction({
-                                action: "reply",
-                                currentUserEmail,
-                                existingDraftMessage: hotkeyLinkedDraftMessage,
-                                message: hotkeyMessage,
-                              })
+                          buildComposeDraftFromSavedDraftMessage(draftMessage)
                         );
-                      }}
-                      type="button"
-                      size="auto"
-                      variant="ghost"
-                    >
-                      <Icon
-                        aria-hidden
-                        icon={
-                          hotkeyLinkedDraftMessage
-                            ? Edit01Icon
-                            : MailReply02Icon
-                        }
-                      />
-                      <Text
-                        as="span"
-                        className="min-w-0"
-                        size="sm"
-                        tone="muted"
-                        truncate
-                      >
-                        {hotkeyLinkedDraftMessage
-                          ? "Continue draft"
-                          : `Reply to ${replyTargetLabel}`}
-                      </Text>
-                    </Button>
-                    {showReplyAll ? (
-                      <IconButtonTooltip label="Reply all">
-                        <Button
-                          aria-label="Reply all"
-                          disabled={isBodyRefreshPending}
-                          onClick={() => {
-                            openInlineCompose(
-                              buildComposeDraftFromMessageAction({
-                                action: "reply-all",
-                                currentUserEmail,
-                                existingDraftMessage: hotkeyLinkedDraftMessage,
-                                message: hotkeyMessage,
-                              })
-                            );
-                          }}
-                          size="sm"
-                          type="button"
-                          variant="ghost"
-                        >
-                          <Icon aria-hidden icon={MailReplyAll02Icon} />
-                          <span className="hidden @sm:inline">Reply all</span>
-                        </Button>
-                      </IconButtonTooltip>
-                    ) : null}
-                    {!hotkeyLinkedDraftMessage &&
-                    composeDemoMode !== true &&
-                    composeManagedDemoMode !== true ? (
-                      <Button
-                        disabled={
-                          suggestReply.isPending ||
-                          isBodyRefreshPending ||
-                          isActionPending
-                        }
-                        onClick={requestSuggestedReply}
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <Icon
-                          aria-hidden
-                          animation={
-                            suggestReply.isPending ? "spin" : undefined
-                          }
-                          icon={
-                            suggestReply.isPending
-                              ? Loading03Icon
-                              : SparklesIcon
-                          }
-                        />
-                        <span aria-live="polite">
-                          {suggestReply.isPending
-                            ? "Suggesting reply…"
-                            : "Suggest reply"}
-                        </span>
-                      </Button>
-                    ) : null}
-                    <IconButtonTooltip label="Forward">
-                      <Button
-                        aria-label="Forward"
-                        disabled={isBodyRefreshPending}
-                        onClick={() => {
-                          openInlineCompose(
-                            buildComposeDraftFromMessageAction({
-                              action: "forward",
-                              currentUserEmail,
-                              existingDraftMessage: null,
-                              message: hotkeyMessage,
-                            })
-                          );
+                      }
+                    : undefined
+                }
+                threadId={message.threadId}
+                threadMessages={threadMessages}
+              />
+            ) : null}
+
+            {isSingleMessageThread ? (
+              visibleMessages.map((threadMessage) => (
+                <SingleMessageCard
+                  isLoading={isBodyRefreshPending}
+                  isActionPending={isActionPending}
+                  key={threadMessage.id}
+                  linkedDraftMessage={findLinkedDraftForMessage(
+                    threadMessages,
+                    threadMessage
+                  )}
+                  mailboxId={mailboxId}
+                  mailboxProvider={mailboxProvider}
+                  message={threadMessage}
+                  onComposeDraftRequested={
+                    canComposeFromMailbox ? openInlineCompose : undefined
+                  }
+                  onUnsubscribe={
+                    mailboxProvider === "gmail"
+                      ? mailboxActions.unsubscribeFromMessage
+                      : undefined
+                  }
+                  verificationCode={
+                    verificationCodes.find(
+                      (item) => item.messageId === threadMessage.id
+                    )?.code
+                  }
+                />
+              ))
+            ) : (
+              <ThreadMessageList
+                allThreadMessages={threadMessages}
+                isLoading={isBodyRefreshPending}
+                isActionPending={isActionPending}
+                key={`${mailboxId}:${message.threadId}`}
+                mailboxId={mailboxId}
+                mailboxProvider={mailboxProvider}
+                messages={visibleMessages}
+                navigationScope={navigationScope}
+                onComposeDraftRequested={
+                  canComposeFromMailbox ? openInlineCompose : undefined
+                }
+                onUnsubscribe={
+                  mailboxProvider === "gmail"
+                    ? mailboxActions.unsubscribeFromMessage
+                    : undefined
+                }
+                verificationCodes={verificationCodes}
+              />
+            )}
+
+            {showInlineCompose ? (
+              <div className="px-4 py-4 @sm:px-5 @sm:py-5">
+                <LazyMotion features={domMax}>
+                  <AnimatePresence initial={false} mode="popLayout">
+                    {inlineDraft ? (
+                      <m.div
+                        animate={{ height: "auto", opacity: 1 }}
+                        className="overflow-hidden"
+                        data-inline-compose-host
+                        exit={{ height: 0, opacity: 0 }}
+                        initial={{
+                          height: INLINE_REPLY_BAR_HEIGHT,
+                          opacity: 0,
                         }}
-                        size="sm"
-                        type="button"
-                        variant="ghost"
+                        key="inline-compose"
+                        ref={inlineComposerRef}
+                        transition={{
+                          ...inlineComposeTransition,
+                          opacity: inlineComposeFadeTransition,
+                        }}
                       >
-                        <Icon aria-hidden icon={ArrowRightDoubleIcon} />
-                        <span className="hidden @sm:inline">Forward</span>
-                      </Button>
-                    </IconButtonTooltip>
-                  </ComposerActionBar>
-                </m.div>
-              )}
-            </AnimatePresence>
-          </LazyMotion>
+                        {inlineDraft.assistantUnsaved === true ? (
+                          <p className="mb-3 text-caption text-muted-fg">
+                            Suggested reply. Review and edit before sending.
+                          </p>
+                        ) : null}
+                        <Suspense
+                          fallback={
+                            <ComposerEditorFrame className="min-h-64">
+                              <output
+                                aria-label="Loading inline composer"
+                                aria-live="polite"
+                                className="grid flex-1 place-items-center"
+                              >
+                                <Icon
+                                  aria-hidden
+                                  size={20}
+                                  tone="muted"
+                                  animation="spin"
+                                  icon={Loading03Icon}
+                                />
+                              </output>
+                            </ComposerEditorFrame>
+                          }
+                        >
+                          <InlineComposeSurface
+                            actionDraft={actionDraft}
+                            demoMode={composeDemoMode}
+                            initialDraft={inlineDraft}
+                            key={inlineDraft.localId}
+                            mailboxId={mailboxId}
+                            managedDemoMode={composeManagedDemoMode}
+                            onClose={() => {
+                              setInlineDraft(null);
+                              setActionDraft(null);
+                            }}
+                            onManageSnippets={onManageSnippets}
+                            persistDrafts={composePersistDrafts}
+                            senderEmail={currentUserEmail}
+                            senderMailbox={composeSenderMailbox}
+                            signature={composeSignature}
+                            variant="inline"
+                          />
+                        </Suspense>
+                      </m.div>
+                    ) : (
+                      <m.div
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        initial={{ opacity: 0 }}
+                        key="inline-reply-bar"
+                        transition={inlineComposeFadeTransition}
+                      >
+                        <ComposerActionBar>
+                          <Button
+                            disabled={
+                              !hotkeyLinkedDraftMessage && isBodyRefreshPending
+                            }
+                            className="min-w-44 flex-1"
+                            onClick={() => {
+                              openInlineCompose(
+                                hotkeyLinkedDraftMessage
+                                  ? buildComposeDraftFromSavedDraftMessage(
+                                      hotkeyLinkedDraftMessage
+                                    )
+                                  : buildComposeDraftFromMessageAction({
+                                      action: "reply",
+                                      currentUserEmail,
+                                      existingDraftMessage:
+                                        hotkeyLinkedDraftMessage,
+                                      message: hotkeyMessage,
+                                    })
+                              );
+                            }}
+                            type="button"
+                            size="auto"
+                            variant="ghost"
+                          >
+                            <Icon
+                              aria-hidden
+                              icon={
+                                hotkeyLinkedDraftMessage
+                                  ? Edit01Icon
+                                  : MailReply02Icon
+                              }
+                            />
+                            <Text
+                              as="span"
+                              className="min-w-0"
+                              size="sm"
+                              tone="muted"
+                              truncate
+                            >
+                              {hotkeyLinkedDraftMessage
+                                ? "Continue draft"
+                                : `Reply to ${replyTargetLabel}`}
+                            </Text>
+                          </Button>
+                          {showReplyAll ? (
+                            <IconButtonTooltip label="Reply all">
+                              <Button
+                                aria-label="Reply all"
+                                disabled={isBodyRefreshPending}
+                                onClick={() => {
+                                  openInlineCompose(
+                                    buildComposeDraftFromMessageAction({
+                                      action: "reply-all",
+                                      currentUserEmail,
+                                      existingDraftMessage:
+                                        hotkeyLinkedDraftMessage,
+                                      message: hotkeyMessage,
+                                    })
+                                  );
+                                }}
+                                size="sm"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <Icon aria-hidden icon={MailReplyAll02Icon} />
+                                <span className="hidden @sm:inline">
+                                  Reply all
+                                </span>
+                              </Button>
+                            </IconButtonTooltip>
+                          ) : null}
+                          {!hotkeyLinkedDraftMessage &&
+                          composeDemoMode !== true &&
+                          composeManagedDemoMode !== true ? (
+                            <Button
+                              disabled={
+                                suggestReply.isPending ||
+                                isBodyRefreshPending ||
+                                isActionPending
+                              }
+                              onClick={requestSuggestedReply}
+                              size="sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <Icon
+                                aria-hidden
+                                animation={
+                                  suggestReply.isPending ? "spin" : undefined
+                                }
+                                icon={
+                                  suggestReply.isPending
+                                    ? Loading03Icon
+                                    : SparklesIcon
+                                }
+                              />
+                              <span aria-live="polite">
+                                {suggestReply.isPending
+                                  ? "Suggesting reply…"
+                                  : "Suggest reply"}
+                              </span>
+                            </Button>
+                          ) : null}
+                          <IconButtonTooltip label="Forward">
+                            <Button
+                              aria-label="Forward"
+                              disabled={isBodyRefreshPending}
+                              onClick={() => {
+                                openInlineCompose(
+                                  buildComposeDraftFromMessageAction({
+                                    action: "forward",
+                                    currentUserEmail,
+                                    existingDraftMessage: null,
+                                    message: hotkeyMessage,
+                                  })
+                                );
+                              }}
+                              size="sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <Icon aria-hidden icon={ArrowRightDoubleIcon} />
+                              <span className="hidden @sm:inline">Forward</span>
+                            </Button>
+                          </IconButtonTooltip>
+                        </ComposerActionBar>
+                      </m.div>
+                    )}
+                  </AnimatePresence>
+                </LazyMotion>
+              </div>
+            ) : null}
+          </div>
         </div>
-      ) : null}
+      </div>
     </article>
   );
 };

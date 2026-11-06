@@ -291,7 +291,7 @@ export const ThreadRail = ({
               key={item.id}
               aria-current={activeId === item.id ? "location" : undefined}
               aria-label={item.label}
-              className="flex h-2.5 min-h-0 w-8 cursor-pointer items-center bg-transparent text-left focus-visible:rounded-xs focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring pointer-coarse:h-6 pointer-coarse:min-h-6 pointer-coarse:w-11 pointer-coarse:shrink-0"
+              className="flex h-2.5 min-h-0 w-8 cursor-default items-center bg-transparent text-left focus-visible:rounded-xs focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring pointer-coarse:h-6 pointer-coarse:min-h-6 pointer-coarse:w-11 pointer-coarse:shrink-0"
               data-thread-rail-item={item.id}
               onBlur={(event) => {
                 if (railRef.current?.contains(event.relatedTarget) !== true) {
@@ -362,7 +362,7 @@ export const ThreadRail = ({
           ))}
         </nav>
         <TooltipContent
-          className="w-64 cursor-pointer text-left"
+          className="w-64 cursor-default text-left"
           data-thread-rail-preview={railId}
           onClick={() => {
             if (previewItem !== undefined) {
