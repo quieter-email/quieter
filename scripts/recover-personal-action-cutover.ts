@@ -50,6 +50,7 @@ export const recoverPersonalActionCutover = async (
   }
   await mkdir(evidenceDirectory, { recursive: true });
   const initialFile = `${evidenceDirectory}/original-evidence.json`;
+  const cutoverFile = `${evidenceDirectory}/original-cutover.json`;
   if (mode === "prepare") {
     const { stdout: archive } = await execute(
       "gh",
@@ -67,12 +68,16 @@ export const recoverPersonalActionCutover = async (
     }
     const archiveFile = `${evidenceDirectory}/original.zip`;
     await writeFile(archiveFile, archive, { flag: "wx" });
-    const { stdout } = await execute(
-      "unzip",
-      ["-p", archiveFile, "action-deployment-initial-evidence.json"],
-      { maxBuffer: 1_000_000, timeout: 10_000 }
-    );
-    await writeFile(initialFile, stdout, { flag: "wx" });
+    for (const [source, destination] of [
+      ["action-deployment-initial-evidence.json", initialFile],
+      ["action-cutover-after.json", cutoverFile],
+    ] as const) {
+      const { stdout } = await execute("unzip", ["-p", archiveFile, source], {
+        maxBuffer: 1_000_000,
+        timeout: 10_000,
+      });
+      await writeFile(destination, stdout, { flag: "wx" });
+    }
     await writeFile(
       `${evidenceDirectory}/artifact.json`,
       JSON.stringify(artifact),
@@ -92,6 +97,7 @@ export const recoverPersonalActionCutover = async (
   const recovery = validateRecoveryProvenance({
     artifact,
     attempt: env.DEPLOYMENT_ATTEMPT,
+    cutover: JSON.parse(await readFile(cutoverFile, "utf-8")),
     evidence: JSON.parse(await readFile(initialFile, "utf-8")),
     jobs,
     now: Date.now(),

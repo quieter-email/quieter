@@ -47,6 +47,18 @@ const fixture = {
     workflow_run: { head_sha: sourceCommit, id: 123 },
   },
   attempt: 1,
+  cutover: {
+    pending: true,
+    required: true,
+    state: {
+      buildId: sourceCommit,
+      id: "personal-actions-v1",
+      phase: "fenced",
+      preparedAt: "2026-11-06T09:59:24Z",
+      releasedAt: null,
+      workflowIdentity: "123/1",
+    },
+  },
   evidence: original,
   jobs: {
     jobs: [
@@ -135,6 +147,12 @@ describe("interrupted Action cutover recovery", () => {
       (input) => {
         input.evidence.sourceCommit = "c".repeat(40);
       },
+      (input) => {
+        input.cutover.state.buildId = "c".repeat(40);
+      },
+      (input) => {
+        input.cutover.state.phase = "ready";
+      },
     ];
     for (const mutate of mutations) {
       const input = structuredClone(fixture);
@@ -176,6 +194,39 @@ describe("interrupted Action cutover recovery", () => {
     expect(() => validateRecoveryProvenance(redirected)).toThrow(
       /every consumer/u
     );
+  });
+
+  test("retains the actual fence owner when the same source is redeployed", () => {
+    const input = structuredClone(fixture);
+    input.cutover.state.workflowIdentity = "99/2";
+    expect(validateRecoveryProvenance(input).workflowIdentity).toBe("99/2");
+  });
+
+  test("preserves the verified compatible web predecessor", () => {
+    const input = structuredClone(fixture);
+    input.evidence.workers = input.evidence.workers.map((worker) => ({
+      ...worker,
+      buildId:
+        worker.role === "web-b" ? `${"c".repeat(40)}-99-1` : worker.buildId,
+    }));
+    const recovered = validateRecoveryProvenance(input);
+    const current = structuredClone(recovered.evidence);
+    current.workers = current.workers.map((worker) => ({
+      ...worker,
+      deployedAt: "2026-11-06T10:03:57Z",
+    }));
+    expect(() => {
+      assertRecoveryContinuity(recovered.evidence, current);
+    }).not.toThrow();
+    current.workers = current.workers.map((worker) => ({ ...worker, buildId }));
+    expect(() => {
+      assertRecoveryContinuity(recovered.evidence, current);
+    }).toThrow(/changed during the drain/u);
+    input.evidence.workers = input.evidence.workers.map((worker) => ({
+      ...worker,
+      buildId: "old-build",
+    }));
+    expect(() => validateRecoveryProvenance(input)).toThrow(/every consumer/u);
   });
 
   test("rejects rollback and restoration even when the active version is unchanged", () => {

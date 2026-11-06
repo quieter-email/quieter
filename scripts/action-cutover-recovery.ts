@@ -81,6 +81,7 @@ export const recoveryArtifactSchema = z.object({
 export const validateRecoveryProvenance = (input: {
   artifact: unknown;
   attempt: number;
+  cutover: unknown;
   evidence: unknown;
   jobs: unknown;
   now: number;
@@ -91,6 +92,20 @@ export const validateRecoveryProvenance = (input: {
   const jobs = jobsSchema.parse(input.jobs);
   const evidence = actionEvidenceSchema.parse(input.evidence);
   const artifact = recoveryArtifactSchema.parse(input.artifact);
+  const { state: fence } = z
+    .object({
+      pending: z.literal(true),
+      required: z.literal(true),
+      state: z.object({
+        buildId: actionEvidenceSchema.shape.sourceCommit,
+        id: z.literal(PERSONAL_ACTION_PROTOCOL),
+        phase: z.literal("fenced"),
+        preparedAt: timestamp,
+        releasedAt: z.null(),
+        workflowIdentity: z.string().regex(/^[1-9]\d*\/[1-9]\d*$/u),
+      }),
+    })
+    .parse(input.cutover);
   if (
     run.id !== input.runId ||
     run.run_attempt !== input.attempt ||
@@ -160,14 +175,20 @@ export const validateRecoveryProvenance = (input: {
   };
   if (
     evidence.sourceCommit !== run.head_sha ||
+    fence.buildId !== run.head_sha ||
+    Date.parse(fence.preparedAt) > verifiedAt ||
     evidence.buildId !== buildId ||
     evidence.workers.length !== 5 ||
     new Set(evidence.workers.map((worker) => worker.role)).size !== 5 ||
     evidence.workers.some(
       (worker) =>
-        worker.buildId !== buildId ||
+        (worker.buildId !== buildId &&
+          worker.role !== "web-a" &&
+          worker.role !== "web-b") ||
         worker.script !== workerIdentities[worker.role]
     ) ||
+    evidence.workers.filter((worker) => worker.buildId !== buildId).length >
+      1 ||
     evidence.lambdas.length !== 2 ||
     new Set(evidence.lambdas.map((lambda) => lambda.role)).size !== 2 ||
     new Set(evidence.lambdas.map((lambda) => lambda.arn)).size !== 2 ||
@@ -190,7 +211,7 @@ export const validateRecoveryProvenance = (input: {
     drainDeadline: new Date(drainDeadline).toISOString(),
     evidence,
     sourceCommit: run.head_sha,
-    workflowIdentity: `${run.id}/${run.run_attempt}`,
+    workflowIdentity: fence.workflowIdentity,
   };
 };
 
