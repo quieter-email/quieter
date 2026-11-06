@@ -70,8 +70,8 @@ vi.mock(import("@quieter/ai/parse-mail-search"), async (original) => ({
 vi.mock(import("@quieter/ai/openrouter-transcription"), () => ({
   generateOpenRouterTranscription: mocks.transcribe,
 }));
-vi.mock(import("@quieter/ai/format-transcribed-email"), () => ({
-  formatTranscribedEmail: mocks.format,
+vi.mock(import("@quieter/ai/format-transcribed-text"), () => ({
+  formatTranscribedText: mocks.format,
 }));
 
 const context = { db, headers: new Headers() };
@@ -94,10 +94,16 @@ describe("foreground AI billing error propagation", () => {
         promptTokens: 0,
       },
     });
+    mocks.format.mockResolvedValue("Hello");
     mocks.parse.mockResolvedValue({ filters: [], freeText: "hello" });
   });
 
-  test.each(["search", "transcription", "formatting"] as const)(
+  test.each([
+    "search",
+    "transcription",
+    "formatting",
+    "chat-formatting",
+  ] as const)(
     "%s preserves actionable admission errors without unexpected reporting",
     async (path) => {
       const error = new ORPCError("FORBIDDEN", {
@@ -139,6 +145,31 @@ describe("foreground AI billing error propagation", () => {
         { context }
       )
     ).resolves.toMatchObject({ text: "hello" });
+    await expect(
+      call(chatRouter.transcribeAudio, audio, { context })
+    ).resolves.toMatchObject({ text: "Hello" });
+  });
+
+  test("chat dictation returns cleaned text", async () => {
+    mocks.format.mockResolvedValue("Could you send the update?");
+    await expect(
+      call(chatRouter.transcribeAudio, { ...audio, mode: "chat" }, { context })
+    ).resolves.toMatchObject({ text: "Could you send the update?" });
+  });
+
+  test("unexpected cleanup failure preserves recognized speech", async () => {
+    mocks.format.mockRejectedValue(new Error("Provider unavailable"));
+    await expect(
+      call(chatRouter.transcribeAudio, audio, { context })
+    ).resolves.toMatchObject({ text: "Hello" });
+    expect(mocks.report).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.anything()
+    );
+  });
+
+  test("empty cleanup preserves recognized speech", async () => {
+    mocks.format.mockResolvedValue("  ");
     await expect(
       call(chatRouter.transcribeAudio, audio, { context })
     ).resolves.toMatchObject({ text: "Hello" });

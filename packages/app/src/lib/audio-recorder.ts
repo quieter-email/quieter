@@ -23,41 +23,79 @@ const stopStreamTracks = (stream: MediaStream) => {
   }
 };
 
-/**
- * Minimal MediaRecorder wrapper for push-to-talk capture. Recording stops
- * when the caller invokes stop(), which resolves with the encoded clip.
- */
+type RecordingSession = {
+  kind: "recording" | "stopping" | "cancelled";
+  recorder: MediaRecorder;
+  stream: MediaStream;
+  chunks: Blob[];
+  startedAt: number;
+  meter: {
+    context: AudioContext;
+    source: MediaStreamAudioSourceNode;
+    analyser: AnalyserNode;
+  } | null;
+  completion: {
+    resolve: (recording: AudioRecorderRecording) => void;
+    reject: (error: Error) => void;
+  } | null;
+};
+
+type RecorderSession = { kind: "starting" } | RecordingSession;
+
+const closeAudioContext = async (context: AudioContext) => {
+  if (context.state === "closed") {
+    return;
+  }
+  try {
+    await context.close();
+  } catch (error) {
+    toastError(error, { boundary: "audio-meter-close" });
+  }
+};
+
+const releaseRecording = (session: RecordingSession) => {
+  stopStreamTracks(session.stream);
+  if (session.meter !== null) {
+    session.meter.source.disconnect();
+    session.meter.analyser.disconnect();
+    void closeAudioContext(session.meter.context);
+    session.meter = null;
+  }
+};
+
 export const useAudioRecorder = () => {
-  const [isRecording, setIsRecording] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const startedAtRef = useRef(0);
-  // Set synchronously while a start() call is between its availability check
-  // and ownership of the recorder, so concurrent calls cannot both acquire a
-  // stream while awaiting getUserMedia.
-  const startingRef = useRef(false);
-  // Tracks whether getUserMedia resolved for an unmounted component, so the
-  // late stream is stopped immediately instead of keeping the mic hot.
-  const unmountedRef = useRef(false);
-  const activeStreamRef = useRef<MediaStream | null>(null);
+  const [phase, setPhase] = useState<"idle" | "starting" | "recording">("idle");
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+  const sessionRef = useRef<RecorderSession | null>(null);
+  const mountedRef = useRef(true);
+
+  const cancel = useCallback(() => {
+    const session = sessionRef.current;
+    sessionRef.current = null;
+    if (session !== null && session.kind !== "starting") {
+      session.kind = "cancelled";
+      session.completion?.reject(
+        new DOMException("Recording cancelled.", "AbortError")
+      );
+      session.completion = null;
+      releaseRecording(session);
+      if (session.recorder.state !== "inactive") {
+        session.recorder.stop();
+      }
+    }
+    if (mountedRef.current) {
+      setPhase("idle");
+      setAnalyser(null);
+    }
+  }, []);
 
   useEffect(() => {
-    unmountedRef.current = false;
+    mountedRef.current = true;
     return () => {
-      unmountedRef.current = true;
-      const recorder = recorderRef.current;
-      recorderRef.current = null;
-      if (recorder !== null && recorder.state !== "inactive") {
-        recorder.stop();
-      }
-      const stream = activeStreamRef.current;
-      activeStreamRef.current = null;
-      if (stream !== null) {
-        stopStreamTracks(stream);
-      }
+      mountedRef.current = false;
+      cancel();
     };
-  }, []);
+  }, [cancel]);
 
   const preferredMimeType =
     typeof window !== "undefined" &&
@@ -68,7 +106,7 @@ export const useAudioRecorder = () => {
   const isSupported = preferredMimeType !== undefined;
 
   const start = useCallback(async () => {
-    if (isRecording || recorderRef.current !== null || startingRef.current) {
+    if (!mountedRef.current || sessionRef.current !== null) {
       return;
     }
     if (typeof window !== "undefined" && !window.isSecureContext) {
@@ -82,59 +120,127 @@ export const useAudioRecorder = () => {
         message: "This browser cannot record audio. Try another browser.",
       });
     }
-    startingRef.current = true;
-    setIsStarting(true);
+    const starting: RecorderSession = { kind: "starting" };
+    sessionRef.current = starting;
+    setPhase("starting");
     let stream: MediaStream | null = null;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (unmountedRef.current) {
+      if (sessionRef.current !== starting || !mountedRef.current) {
         stopStreamTracks(stream);
-        throw new Error("Audio recording is unavailable.");
+        return;
       }
-      activeStreamRef.current = stream;
-      const ownedStream = stream;
-      const recorder = new MediaRecorder(ownedStream, {
+      const recorder = new MediaRecorder(stream, {
         mimeType: preferredMimeType,
       });
-      chunksRef.current = [];
+      const session: RecordingSession = {
+        chunks: [],
+        completion: null,
+        kind: "recording",
+        meter: null,
+        recorder,
+        startedAt: Date.now(),
+        stream,
+      };
+      sessionRef.current = session;
+      let context: AudioContext | null = null;
+      let source: MediaStreamAudioSourceNode | null = null;
+      let meterAnalyser: AnalyserNode | null = null;
+      try {
+        context = new AudioContext();
+        source = context.createMediaStreamSource(stream);
+        meterAnalyser = context.createAnalyser();
+        meterAnalyser.fftSize = 256;
+        source.connect(meterAnalyser);
+        const meter = { analyser: meterAnalyser, context, source };
+        session.meter = meter;
+        setAnalyser(meterAnalyser);
+        void (async () => {
+          try {
+            await meter.context.resume();
+          } catch {
+            if (session.meter === meter) {
+              meter.source.disconnect();
+              meter.analyser.disconnect();
+              void closeAudioContext(meter.context);
+              session.meter = null;
+              if (sessionRef.current === session) {
+                setAnalyser(null);
+              }
+            }
+          }
+        })();
+      } catch {
+        source?.disconnect();
+        meterAnalyser?.disconnect();
+        if (context !== null) {
+          void closeAudioContext(context);
+        }
+      }
       recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
+        if (session.kind !== "cancelled" && event.data.size > 0) {
+          session.chunks.push(event.data);
         }
       };
       recorder.onstop = () => {
-        stopStreamTracks(ownedStream);
-        activeStreamRef.current = null;
-        setIsRecording(false);
+        releaseRecording(session);
+        if (sessionRef.current === session) {
+          sessionRef.current = null;
+          setPhase("idle");
+          setAnalyser(null);
+        }
+        const { completion } = session;
+        session.completion = null;
+        if (completion === null || session.kind === "cancelled") {
+          return;
+        }
+        const mimeType =
+          recorder.mimeType ||
+          session.chunks.find((chunk) => chunk.type.length > 0)?.type;
+        if (!mimeType) {
+          completion.reject(
+            new ORPCError("BAD_REQUEST", {
+              message: "This audio format is not supported.",
+            })
+          );
+          return;
+        }
+        completion.resolve({
+          blob: new Blob(session.chunks, { type: mimeType }),
+          durationMs: Date.now() - session.startedAt,
+          mimeType,
+        });
       };
       recorder.addEventListener("error", () => {
-        toastError(new Error("Audio recording failed."), {
-          boundary: "audio-recorder",
-        });
-        stopStreamTracks(ownedStream);
-        activeStreamRef.current = null;
-        setIsRecording(false);
-        recorderRef.current = null;
+        const error = new Error("Audio recording failed.");
+        const { completion } = session;
+        completion?.reject(error);
+        session.completion = null;
+        if (sessionRef.current === session) {
+          cancel();
+          if (completion === null) {
+            toastError(error, { boundary: "audio-recorder" });
+          }
+        } else {
+          releaseRecording(session);
+        }
       });
-      recorderRef.current = recorder;
-      startedAtRef.current = Date.now();
       recorder.start();
-      setIsRecording(true);
+      setPhase("recording");
     } catch (error) {
-      // A failed attempt releases everything it claimed, even when the stream
-      // was already registered as active before setup threw.
       if (stream !== null) {
-        if (activeStreamRef.current === stream) {
-          activeStreamRef.current = null;
-        }
-        if (
-          recorderRef.current !== null &&
-          recorderRef.current.stream === stream
-        ) {
-          recorderRef.current = null;
-        }
         stopStreamTracks(stream);
       }
+      const { current } = sessionRef;
+      if (
+        current !== starting &&
+        (current === null ||
+          current.kind === "starting" ||
+          current.stream !== stream)
+      ) {
+        return;
+      }
+      cancel();
       if (error instanceof DOMException) {
         let message: string | undefined;
         switch (error.name) {
@@ -170,44 +276,43 @@ export const useAudioRecorder = () => {
         }
       }
       throw error;
-    } finally {
-      startingRef.current = false;
-      if (!unmountedRef.current) {
-        setIsStarting(false);
-      }
     }
-  }, [isRecording, preferredMimeType]);
+  }, [cancel, preferredMimeType]);
 
   const stop = useCallback(async (): Promise<AudioRecorderRecording> => {
-    const recorder = recorderRef.current;
-    if (recorder === null || !isRecording) {
+    const session = sessionRef.current;
+    if (session === null || session.kind !== "recording") {
       throw new Error("No recording is active.");
     }
-    const durationMs = Date.now() - startedAtRef.current;
-    const chunks = chunksRef.current;
-    // Waiting for the stop event is the only way to know the encoder flushed
-    // its final chunk before the blob is assembled.
+    session.kind = "stopping";
+    setPhase("idle");
+    setAnalyser(null);
+    // The stop event follows the encoder's final data event.
     // oxlint-disable-next-line promise/avoid-new
-    const finished = new Promise<void>((resolve) => {
-      const previousOnStop = recorder.onstop;
-      recorder.onstop = (event) => {
-        previousOnStop?.call(recorder, event);
-        resolve();
-      };
+    return await new Promise((resolve, reject) => {
+      session.completion = { reject, resolve };
+      try {
+        session.recorder.stop();
+        releaseRecording(session);
+      } catch (error) {
+        session.completion = null;
+        cancel();
+        reject(
+          error instanceof Error
+            ? error
+            : new Error("Audio recording failed.", { cause: error })
+        );
+      }
     });
-    recorder.stop();
-    recorderRef.current = null;
-    await finished;
-    const mimeType =
-      recorder.mimeType || chunks.find((chunk) => chunk.type.length > 0)?.type;
-    if (!mimeType) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: "This audio format is not supported.",
-      });
-    }
-    const blob = new Blob(chunks, { type: mimeType });
-    return { blob, durationMs, mimeType };
-  }, [isRecording]);
+  }, [cancel]);
 
-  return { isRecording, isStarting, isSupported, start, stop };
+  return {
+    analyser,
+    cancel,
+    isRecording: phase === "recording",
+    isStarting: phase === "starting",
+    isSupported,
+    start,
+    stop,
+  };
 };
