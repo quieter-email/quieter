@@ -50,6 +50,7 @@ export const ChatMessage = ({
   if (message.role === "user") {
     return (
       <Surface
+        chrome="bubble"
         className="max-w-2/3 self-end"
         data-conversation-item={message.id}
         variant="detail"

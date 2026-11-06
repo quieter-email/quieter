@@ -33,7 +33,7 @@ type MarkdownContentProps = {
 };
 
 export const MarkdownContent = ({ markdown }: MarkdownContentProps) => (
-  <div className="typeset typeset-docs">
+  <div className="typeset typeset-body">
     <Remark
       rehypeReactOptions={{
         components: {
