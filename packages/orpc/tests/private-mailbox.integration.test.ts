@@ -28,6 +28,7 @@ import {
 } from "vite-plus/test";
 
 import type { queueMailboxMessageMemory } from "../src/ai-memory-capture";
+import { listMailUpdateRecipients } from "../src/mail-updates";
 import type { learnAiMemoryFromMailAction } from "../src/mail/feedback";
 import { mutationsMailOperations } from "../src/mail/mutations";
 import { getAuthorizedManagedMailbox } from "../src/mailbox/access";
@@ -38,6 +39,7 @@ import {
   setManagedMailboxDivisionGrant,
   removeManagedMailboxGrant,
 } from "../src/mailbox/managed-grants";
+import { listAccessibleMailboxState } from "../src/mailbox/service";
 import {
   createManagedLabel,
   deleteManagedLabel,
@@ -758,6 +760,163 @@ describe.skipIf(databaseUrl === undefined)(
       expect(
         after?.managedMailboxes.some((item) => item.id === mailboxId)
       ).toBeTruthy();
+    });
+
+    test("leaving and rejoining does not restore a direct grant or live updates", async () => {
+      const mailboxId = await create();
+      const membership = {
+        createdAt: now,
+        id: randomUUID(),
+        organizationId,
+        role: "member",
+        userId: outsider,
+      };
+      await db.insert(member).values(membership);
+      try {
+        await setManagedMailboxGrant({
+          mailboxId,
+          role: "reader",
+          targetUserId: outsider,
+          userId: owner,
+        });
+        await expect(
+          getAuthorizedManagedMailbox({ mailboxId, userId: outsider })
+        ).resolves.toMatchObject({ role: "reader" });
+        await expect(listMailUpdateRecipients(mailboxId)).resolves.toContain(
+          outsider
+        );
+        await db.delete(member).where(eq(member.id, membership.id));
+        await db.insert(member).values({ ...membership, id: randomUUID() });
+
+        await expect(
+          getAuthorizedManagedMailbox({ mailboxId, userId: outsider })
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        await expect(
+          listMailUpdateRecipients(mailboxId)
+        ).resolves.not.toContain(outsider);
+        const state = await listAccessibleMailboxState({ userId: outsider });
+        expect(
+          state.groups
+            .flatMap((group) => group.mailboxes)
+            .some((item) => item.id === mailboxId)
+        ).toBeFalsy();
+        const onboarding = await getOnboardingState(outsider);
+        expect(
+          onboarding?.managedMailboxes.some((item) => item.id === mailboxId)
+        ).toBeFalsy();
+
+        await setManagedMailboxGrant({
+          mailboxId,
+          role: "responder",
+          targetUserId: outsider,
+          userId: owner,
+        });
+        await expect(
+          getAuthorizedManagedMailbox({ mailboxId, userId: outsider })
+        ).resolves.toMatchObject({ role: "responder" });
+      } finally {
+        await db
+          .delete(member)
+          .where(
+            and(
+              eq(member.userId, outsider),
+              eq(member.organizationId, organizationId)
+            )
+          );
+      }
+    });
+
+    test("unbound legacy grants do not grant content, listing or live updates", async () => {
+      const mailboxId = await create();
+      await db.insert(mailboxGrant).values({
+        createdAt: now,
+        id: randomUUID(),
+        mailboxId,
+        role: "manager",
+        updatedAt: now,
+        userId: other,
+      });
+      await expect(
+        getAuthorizedManagedMailbox({ mailboxId, userId: other })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      await expect(listMailUpdateRecipients(mailboxId)).resolves.not.toContain(
+        other
+      );
+      const state = await listAccessibleMailboxState({ userId: other });
+      expect(
+        state.groups
+          .flatMap((group) => group.mailboxes)
+          .some((item) => item.id === mailboxId)
+      ).toBeFalsy();
+      const onboarding = await getOnboardingState(other);
+      expect(
+        onboarding?.managedMailboxes.some((item) => item.id === mailboxId)
+      ).toBeFalsy();
+    });
+
+    test("an unbound manager grant cannot elevate a current division reader", async () => {
+      const mailboxId = await create("shared");
+      await setManagedMailboxDivisionGrant({
+        divisionId,
+        mailboxId,
+        role: "reader",
+        userId: admin,
+      });
+      await db.insert(mailboxGrant).values({
+        createdAt: now,
+        id: randomUUID(),
+        mailboxId,
+        role: "manager",
+        updatedAt: now,
+        userId: other,
+      });
+      await expect(
+        getAuthorizedManagedMailbox({ mailboxId, userId: other })
+      ).resolves.toMatchObject({ role: "reader" });
+      await expect(
+        getAuthorizedManagedMailbox({
+          mailboxId,
+          requiredRoles: ["responder"],
+          userId: other,
+        })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      const state = await listAccessibleMailboxState({ userId: other });
+      expect(
+        state.groups
+          .flatMap((group) => group.mailboxes)
+          .find((item) => item.id === mailboxId)
+      ).toMatchObject({ directGrantRole: null, grantRole: "reader" });
+    });
+
+    test("a grant bound to a different member cannot authorize its named user", async () => {
+      const mailboxId = await create();
+      const [ownerMembership] = await db
+        .select({ id: member.id })
+        .from(member)
+        .where(
+          and(
+            eq(member.userId, owner),
+            eq(member.organizationId, organizationId)
+          )
+        );
+      if (ownerMembership === undefined) {
+        throw new Error("Missing owner fixture membership.");
+      }
+      await db.insert(mailboxGrant).values({
+        createdAt: now,
+        id: randomUUID(),
+        mailboxId,
+        memberId: ownerMembership.id,
+        role: "manager",
+        updatedAt: now,
+        userId: other,
+      });
+      await expect(
+        getAuthorizedManagedMailbox({ mailboxId, userId: other })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      await expect(listMailUpdateRecipients(mailboxId)).resolves.not.toContain(
+        other
+      );
     });
 
     test("database prevents owner-account deletion from cascading into team mail", async () => {

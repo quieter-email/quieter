@@ -164,9 +164,11 @@ export const SettingsScreen = ({
                   {!isMobileOpen && results}
                   <div hidden={searching} className="space-y-6">
                     <SettingsBreadcrumbs />
-                    {tab !== "organization" && tab !== "mailboxes" && (
-                      <SettingsPageHeader title={title} />
-                    )}
+                    {tab !== "organization" &&
+                      tab !== "mailboxes" &&
+                      tab !== "connectors" && (
+                        <SettingsPageHeader title={title} />
+                      )}
                     <Suspense
                       fallback={
                         <SettingsLoadingState

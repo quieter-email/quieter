@@ -6,6 +6,7 @@ import {
   listConnectors,
   startConnectorOAuth,
 } from "../connectors/service";
+import { getRequestHeaders } from "../context";
 import { protectedProcedure } from "./base";
 
 export const connectorsRouter = {
@@ -28,12 +29,17 @@ export const connectorsRouter = {
   startConnection: protectedProcedure
     .input(
       z.object({
+        connectionId: z.string().trim().min(1).optional(),
         provider: connectorProviderSchema,
         returnTo: z.string().optional(),
       })
     )
     .handler(
       async ({ context, input }) =>
-        await startConnectorOAuth({ ...input, userId: context.userId })
+        await startConnectorOAuth({
+          ...input,
+          headers: getRequestHeaders(context),
+          userId: context.userId,
+        })
     ),
 };

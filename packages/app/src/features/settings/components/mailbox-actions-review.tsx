@@ -48,35 +48,54 @@ export const getActionsTriggerLabel = (
 export const MailboxActionsReview = ({
   accounts,
   revision,
+  shared,
 }: {
   accounts: ActionsSettings["accounts"];
   revision: ActionsRevision;
+  shared: boolean;
 }) => {
   const { specification } = revision;
   const accountLabels = new Map(
     accounts.map((account) => [account.connectionId, account.label])
   );
-  const referenceLabels = new Map(
-    specification.connectors.map((connector) => [
-      connector.referenceId,
-      accountLabels.get(connector.connectionId) ?? "Unavailable account",
-    ])
-  );
+  const accessGroups = [
+    ...specification.connectors.map((connector) => ({
+      id: `connector:${connector.referenceId}`,
+      label: accountLabels.get(connector.connectionId) ?? "Unavailable account",
+      permissions: specification.permissions.filter(
+        (permission) =>
+          permission.scope === "connector" &&
+          permission.connectorReferenceId === connector.referenceId
+      ),
+      scope: "connector" as const,
+    })),
+    ...(["mailbox", "memory"] as const)
+      .map((scope) => ({
+        id: scope,
+        label: scope === "mailbox" ? "This inbox" : "Your saved preferences",
+        permissions: specification.permissions.filter(
+          (permission) => permission.scope === scope
+        ),
+        scope,
+      }))
+      .filter((group) => group.permissions.length > 0),
+  ];
 
   return (
     <SettingsCard>
       <SettingsInsetRows>
         <div className={settingsSurfaceVariants({ variant: "body" })}>
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-body font-medium text-fg">Review</h3>
+            <h3 className="text-body font-medium text-fg">
+              Review your action
+            </h3>
             <Pill tone={revision.canActivate ? "success" : "orange"}>
               {revision.canActivate ? "Ready to activate" : "Needs attention"}
             </Pill>
           </div>
           <p className="text-body text-fg">{specification.review.summary}</p>
           <p className="text-caption text-muted-fg">
-            Check the instructions and access below. Edit your instructions and
-            review again to correct anything.
+            Check what your action can do before turning it on.
           </p>
         </div>
         <div className={settingsSurfaceVariants({ variant: "body" })}>
@@ -110,101 +129,82 @@ export const MailboxActionsReview = ({
               <p>Every condition must match the triggering message.</p>
             </SettingsRowText>
           ) : null}
-          {specification.toolGrants
-            .filter((grant) => grant.argumentTemplate)
-            .map((grant) => {
-              const capability = revision.capabilities.find(
-                (item) => item.toolId === grant.toolId
-              );
-              const permission = specification.permissions.find(
-                (item) => item.id === grant.permissionId
-              );
-              const accountLabel =
-                permission?.scope === "connector"
-                  ? referenceLabels.get(permission.connectorReferenceId)
-                  : null;
-              return (
-                <SettingsRowText
-                  key={`${grant.permissionId}:${grant.toolId}`}
-                  title={capability?.label ?? "Approved change"}
-                >
-                  {accountLabel ? <p>{accountLabel}</p> : null}
-                  <p>
-                    Runs once per matching message using these exact arguments.
-                    Message placeholders copy only the incoming subject or body.
-                  </p>
-                  <pre className="break-words whitespace-pre-wrap">
-                    {grant.argumentTemplate}
-                  </pre>
-                </SettingsRowText>
-              );
-            })}
-          <SettingsRowText title="Instructions">
-            <p className="whitespace-pre-wrap">{specification.instructions}</p>
-          </SettingsRowText>
         </div>
-        <div className={settingsSurfaceVariants({ variant: "body" })}>
-          <SettingsRowText title="Connected accounts">
-            {specification.connectors.length === 0
-              ? "No connected accounts required."
-              : null}
-          </SettingsRowText>
-          {specification.connectors.length > 0 ? (
-            <ul className="space-y-1 text-body-sm text-fg">
-              {specification.connectors.map((connector) => (
-                <li key={connector.referenceId}>
-                  {accountLabels.get(connector.connectionId) ??
-                    "Unavailable account"}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <SettingsRowText title="Allowed tools">
-            {revision.capabilities.length === 0
-              ? "No tools are available for this review."
-              : null}
-          </SettingsRowText>
-          {revision.capabilities.length > 0 ? (
+        {accessGroups.map((group) => (
+          <div
+            className={settingsSurfaceVariants({ variant: "body" })}
+            key={group.id}
+          >
+            <h4 className="text-body-sm font-medium break-words text-fg">
+              {group.label}
+            </h4>
             <ul className="space-y-2 text-body-sm text-fg">
-              {revision.capabilities.map((capability) => (
-                <li
-                  key={`${capability.toolId}:${capability.accountLabel ?? "mailbox"}`}
-                >
-                  <p>{capability.label}</p>
-                  <p className="text-caption text-muted-fg">
-                    {operationLabels[capability.operation]}
-                    {capability.accountLabel
-                      ? `, ${capability.accountLabel}`
-                      : ""}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <SettingsRowText title="Permissions">
-            {specification.permissions.length === 0
-              ? "No additional permissions requested."
-              : null}
-          </SettingsRowText>
-          {specification.permissions.length > 0 ? (
-            <ul className="space-y-1 text-body-sm text-fg">
-              {specification.permissions.map((permission) => {
-                let target =
-                  permission.scope === "mailbox"
-                    ? "this mailbox"
-                    : "your saved preferences";
-                if (permission.scope === "connector") {
-                  target =
-                    referenceLabels.get(permission.connectorReferenceId) ??
-                    "Unavailable account";
-                }
+              {group.permissions.map((permission) => {
+                const grants = specification.toolGrants.filter(
+                  (grant) => grant.permissionId === permission.id
+                );
                 return (
-                  <li key={permission.id}>
-                    {operationLabels[permission.operation]}, {target}
+                  <li className="space-y-2" key={permission.id}>
+                    {grants.length === 0
+                      ? operationLabels[permission.operation]
+                      : null}
+                    {grants.map((grant) => (
+                      <div className="space-y-1" key={grant.toolId}>
+                        <p>
+                          {operationLabels[permission.operation]},{" "}
+                          {revision.capabilities.find(
+                            (capability) => capability.toolId === grant.toolId
+                          )?.label ?? "Approved operation"}
+                        </p>
+                        {grant.argumentTemplate ? (
+                          <details className="text-caption text-muted-fg">
+                            <summary className="cursor-pointer">
+                              Exact changes
+                            </summary>
+                            <p className="mt-2">
+                              Runs once per matching message with these exact
+                              arguments. Message placeholders copy only the
+                              incoming subject or body.
+                            </p>
+                            <pre className="mt-2 break-words whitespace-pre-wrap text-fg">
+                              {grant.argumentTemplate}
+                            </pre>
+                          </details>
+                        ) : null}
+                      </div>
+                    ))}
                   </li>
                 );
               })}
             </ul>
+            {group.permissions.length === 0 ? (
+              <p className="text-body-sm text-muted-fg">
+                No operations requested.
+              </p>
+            ) : null}
+            {group.scope === "mailbox" &&
+            shared &&
+            specification.toolGrants.some(
+              (grant) => grant.toolId === "mail.save_draft"
+            ) ? (
+              <p className="text-caption text-warning">
+                Reply drafts saved in this shared inbox are visible to its
+                members.
+              </p>
+            ) : null}
+          </div>
+        ))}
+        <div className={settingsSurfaceVariants({ variant: "body" })}>
+          <details className="text-body-sm text-muted-fg">
+            <summary className="cursor-pointer">Reviewed instructions</summary>
+            <p className="mt-2 whitespace-pre-wrap text-fg">
+              {specification.instructions}
+            </p>
+          </details>
+          {specification.connectors.length > 0 ? (
+            <p className="text-caption text-muted-fg">
+              Destination access follows the permissions of your connected app.
+            </p>
           ) : null}
         </div>
         {specification.review.assumptions.length > 0 ? (

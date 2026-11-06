@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 
 import { db } from "@quieter/database/client";
 import { mailbox, member, organization, user } from "@quieter/database/schema";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   afterAll,
   beforeAll,
@@ -13,7 +13,11 @@ import {
   vi,
 } from "vite-plus/test";
 
-import { cleanupOrganizationsForDeletedUser } from "../src/organization";
+import {
+  assertCanLeaveOrganization,
+  assertCanRemoveOrganizationMember,
+  cleanupOrganizationsForDeletedUser,
+} from "../src/organization";
 
 const { databaseUrl } = vi.hoisted(() => ({
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
@@ -29,6 +33,7 @@ describe.skipIf(databaseUrl === undefined)(
   "private mailbox account deletion",
   () => {
     const organizationId = randomUUID();
+    const otherOrganizationId = randomUUID();
     const owner = randomUUID();
     const gmailOwner = randomUUID();
     const privateMailboxId = randomUUID();
@@ -69,6 +74,19 @@ describe.skipIf(databaseUrl === undefined)(
           userId,
         }))
       );
+      await db.insert(organization).values({
+        createdAt: now,
+        id: otherOrganizationId,
+        name: "Other account fixture",
+        slug: otherOrganizationId,
+      });
+      await db.insert(member).values({
+        createdAt: now,
+        id: randomUUID(),
+        organizationId: otherOrganizationId,
+        role: "member",
+        userId: owner,
+      });
       await db.insert(mailbox).values([
         {
           accessMode: "private",
@@ -96,8 +114,14 @@ describe.skipIf(databaseUrl === undefined)(
       await db
         .delete(mailbox)
         .where(inArray(mailbox.id, [privateMailboxId, gmailMailboxId]));
-      await db.delete(member).where(eq(member.organizationId, organizationId));
-      await db.delete(organization).where(eq(organization.id, organizationId));
+      await db
+        .delete(member)
+        .where(
+          inArray(member.organizationId, [organizationId, otherOrganizationId])
+        );
+      await db
+        .delete(organization)
+        .where(inArray(organization.id, [organizationId, otherOrganizationId]));
       await db.delete(user).where(inArray(user.id, [owner, gmailOwner]));
     });
 
@@ -109,7 +133,12 @@ describe.skipIf(databaseUrl === undefined)(
         db
           .select({ userId: member.userId })
           .from(member)
-          .where(eq(member.userId, owner))
+          .where(
+            and(
+              eq(member.userId, owner),
+              eq(member.organizationId, organizationId)
+            )
+          )
       ).resolves.toStrictEqual([{ userId: owner }]);
       await expect(
         db
@@ -117,6 +146,37 @@ describe.skipIf(databaseUrl === undefined)(
           .from(mailbox)
           .where(eq(mailbox.id, privateMailboxId))
       ).resolves.toStrictEqual([{ id: privateMailboxId }]);
+    });
+
+    test("private inbox owners cannot leave or be removed until ownership transfers", async () => {
+      const identity = {
+        email: `${owner}@example.com`,
+        id: owner,
+        name: "Account fixture",
+      };
+      await expect(
+        assertCanLeaveOrganization(identity, organizationId)
+      ).rejects.toMatchObject({ status: "BAD_REQUEST" });
+      await expect(
+        assertCanRemoveOrganizationMember({ organizationId, userId: owner })
+      ).rejects.toMatchObject({ status: "BAD_REQUEST" });
+      await db
+        .update(mailbox)
+        .set({ managedOwnerUserId: gmailOwner })
+        .where(eq(mailbox.id, privateMailboxId));
+      try {
+        await expect(
+          assertCanLeaveOrganization(identity, organizationId)
+        ).resolves.toBeUndefined();
+        await expect(
+          assertCanRemoveOrganizationMember({ organizationId, userId: owner })
+        ).resolves.toBeUndefined();
+      } finally {
+        await db
+          .update(mailbox)
+          .set({ managedOwnerUserId: owner })
+          .where(eq(mailbox.id, privateMailboxId));
+      }
     });
 
     test("personal Gmail cleanup still allows account deletion", async () => {

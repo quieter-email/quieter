@@ -28,6 +28,10 @@ export const createGmailResources = (
     "GMAIL_LIVE_SYNC_TOKEN_SECRET"
   );
   let gmailLiveSyncUrl: $util.Input<string> = "";
+  let actionWorkers: {
+    gmailRealtime: $util.Output<string>;
+    gmailMaintenance: $util.Output<string>;
+  } | null = null;
   let gmailPubSubIngressUrl: $util.Output<string> | null = null;
 
   if (context.gmailPubSubEnabled) {
@@ -60,6 +64,7 @@ export const createGmailResources = (
             context.gmailPubSubEnvironment.GMAIL_PUBSUB_SUBSCRIPTION,
           GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
           ...context.billingEnvironment,
+          ...context.releaseEnvironment,
           QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
           SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
         },
@@ -112,6 +117,7 @@ export const createGmailResources = (
             GMAIL_PUBSUB_TOPIC:
               context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
             ...context.billingEnvironment,
+            ...context.releaseEnvironment,
             QUIETER_GMAIL_AI_AUTOMATION_ENABLED:
               context.mailAutomationAiEnabled,
             SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
@@ -141,7 +147,10 @@ export const createGmailResources = (
         },
       }
     );
-    void gmailPubSubMaintenance;
+    actionWorkers = {
+      gmailMaintenance: gmailPubSubMaintenance.nodes.worker.scriptName,
+      gmailRealtime: gmailRealtimeWorker.nodes.worker.scriptName,
+    };
 
     gmailLiveSyncUrl = gmailRealtimeWorker.url.apply((url) =>
       url ? `${url.replace(/^http/u, "ws")}/gmail/live` : ""
@@ -152,6 +161,7 @@ export const createGmailResources = (
   }
 
   return {
+    actionWorkers,
     gmailLiveSyncUrl,
     gmailPubSubIngressUrl,
   };

@@ -277,7 +277,9 @@ describe("calendar tool execution", () => {
   test("uses successful reads from the same context before routine writes", async () => {
     mocks.accounts.mockResolvedValue({
       accounts: [{ ...account, mailboxId: "mailbox-1" }],
+      googleConfigured: true,
       isConfigured: true,
+      microsoftConfigured: false,
     });
     mocks.calendars.mockResolvedValue({ calendars: [calendar] });
     mocks.event.mockResolvedValue(event);
@@ -314,7 +316,9 @@ describe("calendar tool execution", () => {
   test("preserves exact persisted deletion approval alongside fresh reads", async () => {
     mocks.accounts.mockResolvedValue({
       accounts: [{ ...account, mailboxId: "mailbox-1" }],
+      googleConfigured: true,
       isConfigured: true,
+      microsoftConfigured: false,
     });
     mocks.calendars.mockResolvedValue({ calendars: [calendar] });
     mocks.event.mockResolvedValue(event);

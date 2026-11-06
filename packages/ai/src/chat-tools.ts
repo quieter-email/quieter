@@ -1,4 +1,5 @@
 import {
+  calendarAccountBaseSchema,
   calendarAccountSchema,
   calendarCreateInputSchema,
   calendarDateSchema,
@@ -245,13 +246,7 @@ export const calendarListToolResultSchema = z.object({
   status: z.literal("success"),
 });
 const calendarListReviewSchema = calendarListToolResultSchema.extend({
-  accounts: z.array(
-    calendarAccountSchema.options[0].pick({
-      email: true,
-      id: true,
-      name: true,
-    })
-  ),
+  accounts: z.array(calendarAccountBaseSchema),
 });
 export const calendarEventsToolResultSchema = z.object({
   events: z.array(calendarEventSchema),
@@ -273,6 +268,7 @@ export const calendarWriteInputSchemas = {
 export type CalendarWriteToolName = keyof typeof calendarWriteInputSchemas;
 export const calendarWriteToolNames = Object.keys(calendarWriteInputSchemas);
 export const mutatingChatToolNames = [
+  "connector_write",
   "linear_write",
   "modify_mail",
   "save_compose_draft",
@@ -281,6 +277,7 @@ export const mutatingChatToolNames = [
 ];
 
 export const approvalRequiredToolNames = [
+  "connector_write",
   "delete_calendar_event",
   "linear_write",
 ];
@@ -292,7 +289,10 @@ export const requiresChatToolApproval = (input: {
   if (input.toolName === "delete_calendar_event") {
     return true;
   }
-  if (input.toolName !== "linear_write") {
+  if (
+    input.toolName !== "linear_write" &&
+    input.toolName !== "connector_write"
+  ) {
     return false;
   }
   const command = z.object({ toolName: z.string() }).safeParse(input.input);
@@ -310,6 +310,61 @@ const linearConnectionReviewSchema = z.object({
   workspace: z.string().nullable(),
 });
 export type LinearToolReview = z.infer<typeof linearConnectionReviewSchema>;
+
+const connectorConnectionReviewSchema = linearConnectionReviewSchema.extend({
+  provider: z.string().min(1),
+});
+export type ConnectorWriteReview = z.infer<
+  typeof connectorConnectionReviewSchema
+>;
+
+export const resolveConnectorWriteReview = (input: {
+  input: unknown;
+  transcript: readonly UIMessage[];
+}): ConnectorWriteReview | undefined => {
+  const proposed = z
+    .object({
+      connectionId: z.string().min(1),
+      provider: z.string().min(1),
+      toolName: z.string().min(1),
+    })
+    .safeParse(input.input);
+  if (!proposed.success) {
+    return undefined;
+  }
+  for (const message of input.transcript.toReversed()) {
+    for (const part of message.parts.toReversed()) {
+      if (
+        part.type !== "tool-connector_list_tools" ||
+        part.state !== "output-available"
+      ) {
+        continue;
+      }
+      const result = z
+        .object({
+          connection: connectorConnectionReviewSchema,
+          status: z.literal("success"),
+          tools: z.array(
+            z.object({ effect: z.enum(["read", "write"]), name: z.string() })
+          ),
+        })
+        .safeParse(part.output);
+      if (
+        result.success &&
+        result.data.connection.connectionId === proposed.data.connectionId &&
+        result.data.connection.provider === proposed.data.provider &&
+        result.data.tools.some(
+          (descriptor) =>
+            descriptor.name === proposed.data.toolName &&
+            descriptor.effect === "write"
+        )
+      ) {
+        return result.data.connection;
+      }
+    }
+  }
+  return undefined;
+};
 
 export const resolveLinearToolReview = (input: {
   input: unknown;

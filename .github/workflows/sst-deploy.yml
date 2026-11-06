@@ -6,6 +6,11 @@ on:
       - main
   workflow_dispatch:
     inputs:
+      execute_personal_action_cutover:
+        description: Install or resume the durable personal Action fence, migrate, deploy all consumers, verify their identities, and release
+        required: false
+        default: false
+        type: boolean
       refresh_state:
         description: Run sst refresh before planning (auto skips it unless an emergency web recovery ran since the last deploy)
         required: false
@@ -125,7 +130,7 @@ jobs:
       contents: read
       id-token: write
       actions: read
-    timeout-minutes: 35
+    timeout-minutes: 60
     env:
       SST_STAGE: production
       QUIETER_BUILD_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -244,6 +249,30 @@ jobs:
       - name: Verify web release routing has not drifted
         run: vp exec node scripts/web-release.ts verify https://quieter.email "$QUIETER_BUILD_ID"
 
+      - name: Prepare or assert durable personal Action cutover
+        id: action-cutover
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+          EXECUTE_CUTOVER: ${{ github.event_name == 'workflow_dispatch' && inputs.execute_personal_action_cutover == true && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          vp exec node packages/database/scripts/run-personal-action-cutover.ts status > action-cutover-before.json
+          if [[ "$(jq -r .required action-cutover-before.json)" == true ]]; then
+            if [[ "$EXECUTE_CUTOVER" != true ]]; then
+              echo 'Personal Action cutover requires a protected manual dispatch with execute_personal_action_cutover=true.' >&2
+              exit 1
+            fi
+            predecessor="$(jq -r '.state.buildId // empty' action-cutover-before.json)"
+            args=(prepare --build-id "$GITHUB_SHA")
+            if [[ -n "$predecessor" ]]; then
+              args+=(--expected-previous-build-id "$predecessor")
+            fi
+            vp exec node packages/database/scripts/run-personal-action-cutover.ts "${args[@]}"
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+          vp exec node packages/database/scripts/run-personal-action-cutover.ts assert --build-id "$GITHUB_SHA"
+
       - name: Apply production database migrations
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
@@ -292,3 +321,56 @@ jobs:
         if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
         timeout-minutes: 5
         run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID" https://updates.quieter.email/mail/live
+
+      - name: Disable direct private release URLs
+        run: vp exec node scripts/check-action-deployment.ts secure-private-releases
+
+      - name: Verify every deployed Action consumer
+        id: action-consumers
+        run: vp exec node scripts/check-action-deployment.ts verify .sst/outputs.json action-deployment-initial-evidence.json
+
+      - name: Drain previous Action consumers
+        if: steps.action-cutover.outputs.pending == 'true'
+        run: |
+          echo 'Keeping Actions fenced for 16 minutes so prior scheduled and push invocations finish.'
+          sleep 960
+
+      - name: Reverify Action consumers before release
+        run: vp exec node scripts/check-action-deployment.ts verify
+
+      - name: Release verified personal Actions
+        if: steps.action-cutover.outputs.pending == 'true'
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+        run: |
+          set -euo pipefail
+          test "$(jq -r .buildId action-deployment-evidence.json)" = "$QUIETER_BUILD_ID"
+          test "$(jq -r .sourceCommit action-deployment-evidence.json)" = "$GITHUB_SHA"
+          vp exec node packages/database/scripts/run-personal-action-cutover.ts release --build-id "$GITHUB_SHA" --verified-build-id "$GITHUB_SHA"
+
+      - name: Record durable cutover state
+        if: always()
+        continue-on-error: true
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+        run: |
+          vp exec node packages/database/scripts/run-personal-action-cutover.ts status > action-cutover-after.json
+          echo '### Personal Action cutover' >> "$GITHUB_STEP_SUMMARY"
+          jq '{required,pending,state}' action-cutover-after.json >> "$GITHUB_STEP_SUMMARY"
+          echo 'Failure or cancellation never releases the fence. Resume this same commit with: gh workflow run sst-deploy.yml --ref main -f execute_personal_action_cutover=true' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain nonsecret cutover evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: action-cutover
+          path: |
+            action-cutover-before.json
+            action-cutover-after.json
+            action-deployment-initial-evidence.json
+            action-deployment-evidence.json
+            .sst/web-deployment.json
+          if-no-files-found: ignore
+          retention-days: 90

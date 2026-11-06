@@ -192,10 +192,12 @@ const validateAuthAndDeployment = (env: Map<string, string>) => {
   }
   if (
     env.get("QUIETER_LOCAL_PROVIDER_MODE") === "write" &&
-    !env.get("QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS")
+    !env.get("QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS") &&
+    !env.get("QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS") &&
+    !env.get("QUIETER_LOCAL_CONNECTOR_WRITE_ACCOUNTS")
   ) {
     errors.push(
-      "Write tests require QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS and dedicated mailboxes or an explicit production handoff."
+      "Write tests require an explicit Gmail, calendar, or connector test-account allowlist."
     );
   }
   const authUrl = env.get("BETTER_AUTH_URL");

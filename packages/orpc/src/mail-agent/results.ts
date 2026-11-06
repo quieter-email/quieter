@@ -6,6 +6,7 @@ const resultIdentitySchema = z.object({
   eventId: z.string().max(1024).optional(),
   htmlLink: z.string().max(2048).optional(),
   id: z.string().max(256).optional(),
+  name: z.string().max(512).optional(),
   summary: z.string().max(512).optional(),
   title: z.string().max(512).optional(),
   url: z.string().max(2048).optional(),
@@ -25,6 +26,9 @@ const continuationSchema = z
     calendarId: z.string().max(1024).optional(),
     currentDate: z.iso.date().optional(),
     fetchedAt: z.iso.datetime({ offset: true }).optional(),
+    hasMore: z.boolean().optional(),
+    nextCursor: z.string().max(2048).nullish(),
+    nextPage: z.number().int().nonnegative().optional(),
     nextPageToken: z.string().max(2048).optional(),
     partial: z.boolean().optional(),
     query: z.string().max(300).optional(),
@@ -71,7 +75,16 @@ const getResultIdentity = (result: unknown) => {
       if (
         parsed.protocol === "https:" &&
         parsed.href.length <= 2048 &&
-        (["linear.app", "calendar.google.com"].some(
+        ([
+          "linear.app",
+          "calendar.google.com",
+          "notion.so",
+          "todoist.com",
+          "app.clickup.com",
+          "outlook.office.com",
+          "outlook.office365.com",
+          "outlook.live.com",
+        ].some(
           (hostname) =>
             parsed.hostname === hostname ||
             parsed.hostname.endsWith(`.${hostname}`)
@@ -95,7 +108,10 @@ const getResultIdentity = (result: unknown) => {
         : null,
     title:
       identity?.success === true
-        ? (identity.data.title ?? identity.data.summary ?? null)
+        ? (identity.data.title ??
+          identity.data.name ??
+          identity.data.summary ??
+          null)
         : null,
     url,
   };

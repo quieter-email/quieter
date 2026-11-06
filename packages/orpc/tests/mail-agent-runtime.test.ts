@@ -30,6 +30,7 @@ type Row = Record<string, unknown>;
 type Predicate = (row: Row) => boolean;
 const state = vi.hoisted(() => ({
   authorized: true,
+  blockedMutation: null as "claim" | "effect" | null,
   calendar: vi.fn<typeof createCalendarEventForUser>(),
   calendarAccount: vi.fn<typeof getCalendarAccountForUser>(),
   calendarList: vi.fn<typeof listCalendarsForUser>(),
@@ -108,8 +109,27 @@ vi.mock("@quieter/database/client", async () => {
       orderBy: () => query,
       returning: () => query,
       // oxlint-disable-next-line unicorn/no-thenable -- Drizzle executes a query when its builder is awaited.
-      then: async (fulfilled: (rows: Row[]) => unknown) => {
+      then: (fulfilled: (rows: Row[]) => unknown) => {
         const name = getTableName(table);
+        if (
+          (state.blockedMutation === "claim" &&
+            name === "mailboxAgentRun" &&
+            operation === "update" &&
+            values?.status === "running") ||
+          (state.blockedMutation === "effect" &&
+            name === "mailboxAgentEffect" &&
+            operation === "insert")
+        ) {
+          throw new Error("Action write was fenced", {
+            cause: Object.assign(
+              new Error("An update is in progress. Retry shortly."),
+              {
+                code: "55000",
+                constraint_name: "quieter_action_cutover",
+              }
+            ),
+          });
+        }
         const rows = state.tables.get(name) ?? [];
         state.tables.set(name, rows);
         if (
@@ -130,7 +150,7 @@ vi.mock("@quieter/database/client", async () => {
             Object.assign(row, values);
           }
         }
-        return await fulfilled(selected);
+        return fulfilled(selected);
       },
       where: (next: Predicate) => {
         predicate = next;
@@ -140,6 +160,7 @@ vi.mock("@quieter/database/client", async () => {
     return query;
   };
   const operations = {
+    execute: async () => [],
     insert: (table: Table) => ({
       values: (values: Row) => build(table, "insert", values),
     }),
@@ -182,7 +203,12 @@ vi.mock("../src/mail-agent/access", () => ({
     if (!state.authorized) {
       throw new ORPCError("FORBIDDEN", { message: "Access was revoked." });
     }
-    return { organizationId: "organization", shared: state.shared };
+    return {
+      canSaveDraft: true,
+      memberId: null,
+      organizationId: "organization",
+      shared: state.shared,
+    };
   },
 }));
 vi.mock(import("../src/mail-automation/ai-budget"), async (original) => ({
@@ -444,6 +470,7 @@ describe("durable background action execution", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     state.authorized = true;
+    state.blockedMutation = null;
     state.shared = false;
     state.memory.mockReset();
     state.memory.mockResolvedValue({ instructions: null, memory: null });
@@ -490,13 +517,14 @@ describe("durable background action execution", () => {
         usage: null,
       },
     ]);
-    state.tables.set("mailboxAgentSetting", [
+    state.tables.set("mailboxPersonalAgentSetting", [
       {
-        activatedByUserId: "actor",
         activationVersion: 1,
         activeRevisionId: "revision",
         enabled: true,
         mailboxId: "mailbox",
+        memberId: null,
+        userId: "actor",
       },
     ]);
     state.tables.set("mailboxAgentRun", [
@@ -512,6 +540,7 @@ describe("durable background action execution", () => {
         leaseToken: null,
         mailboxId: "mailbox",
         messageId: "message",
+        privateResult: true,
         revisionId: "revision",
         settingVersion: 1,
         status: "queued",
@@ -541,6 +570,26 @@ describe("durable background action execution", () => {
       draftId: "draft",
       messageId: "draft-message",
     });
+  });
+
+  test("propagates a fenced claim before loading mail or starting a provider", async () => {
+    state.blockedMutation = "claim";
+    await expect(drainMailAgentRuns({ limit: 1 })).rejects.toThrow("fenced");
+    expect(state.read).not.toHaveBeenCalled();
+    expect(state.model).not.toHaveBeenCalled();
+    expect(state.save).not.toHaveBeenCalled();
+    expect(runRow()).toMatchObject({ status: "queued" });
+  });
+
+  test("does not call a provider when the effect transaction is fenced", async () => {
+    state.blockedMutation = "effect";
+    await grantLinearWrites(["save_issue"]);
+    state.model.mockReturnValue(modelWithConnectorCall(true));
+    await drainMailAgentRuns({ limit: 1 });
+    expect(state.linear).not.toHaveBeenCalled();
+    expect(state.save).not.toHaveBeenCalled();
+    expect(state.tables.get("mailboxAgentEffect") ?? []).toHaveLength(0);
+    expect(runRow()).toMatchObject({ status: "needs_attention" });
   });
 
   test("allows a no-argument calendar lookup using only the approved connection", async () => {
@@ -601,7 +650,7 @@ describe("durable background action execution", () => {
     const specification = actionSpecificationSchema.parse(
       revision?.specification
     );
-    const setting = state.tables.get("mailboxAgentSetting")?.[0];
+    const setting = state.tables.get("mailboxPersonalAgentSetting")?.[0];
     Object.assign(setting ?? {}, { activeRevisionId: null, version: 0 });
     state.model.mockReturnValue(
       new MockLanguageModelV4({
@@ -981,7 +1030,7 @@ describe("durable background action execution", () => {
       permissionId: "calendar-write",
       toolId: "calendar.create_event",
     });
-    const setting = state.tables.get("mailboxAgentSetting")?.[0];
+    const setting = state.tables.get("mailboxPersonalAgentSetting")?.[0];
     Object.assign(setting ?? {}, { activeRevisionId: null, version: 0 });
     state.model.mockReturnValueOnce(
       new MockLanguageModelV4({

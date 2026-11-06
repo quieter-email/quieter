@@ -26,7 +26,10 @@ import { and, eq } from "drizzle-orm";
 import type { z } from "zod";
 
 import type { GoogleCalendarEventDraft } from "../connectors/ical";
-import { ConnectorHttpError } from "../connectors/runtime";
+import {
+  ConnectorHttpError,
+  hasRequiredConnectorScopes,
+} from "../connectors/runtime";
 import {
   CALENDAR_SCOPES,
   runAuthorizedGmailMailbox,
@@ -47,6 +50,16 @@ import {
   toCalendarSummary,
 } from "./google";
 import type { GoogleCalendar, GoogleEvent } from "./google";
+import {
+  createMicrosoftCalendarEventForUser,
+  deleteMicrosoftCalendarEventForUser,
+  getMicrosoftCalendarEventForUser,
+  listMicrosoftCalendarEventsForUser,
+  listMicrosoftCalendarsForUser,
+  respondToMicrosoftCalendarEventForUser,
+  updateMicrosoftCalendarColorForUser,
+  updateMicrosoftCalendarEventForUser,
+} from "./microsoft";
 
 type UserRequest = {
   retryUnauthorized?: boolean;
@@ -124,9 +137,14 @@ const readCalendarFailure = (error: unknown): never => {
 
 export const listCalendarAccountsForUser = async (
   input: UserRequest
-): Promise<{ accounts: CalendarAccount[]; isConfigured: boolean }> => {
+): Promise<{
+  accounts: CalendarAccount[];
+  googleConfigured: boolean;
+  isConfigured: boolean;
+  microsoftConfigured: boolean;
+}> => {
   input.signal?.throwIfAborted();
-  const [mailboxes, legacyAccounts] = await Promise.all([
+  const [mailboxes, legacyAccounts, microsoftAccounts] = await Promise.all([
     db
       .select({
         displayName: mailbox.displayName,
@@ -158,6 +176,21 @@ export const listCalendarAccountsForUser = async (
           eq(connectorCredential.provider, "google_calendar")
         )
       ),
+    db
+      .select({
+        accountEmail: connectorCredential.accountEmail,
+        displayName: connectorCredential.displayName,
+        id: connectorCredential.id,
+        scopes: connectorCredential.scopes,
+        status: connectorCredential.status,
+      })
+      .from(connectorCredential)
+      .where(
+        and(
+          eq(connectorCredential.userId, input.userId),
+          eq(connectorCredential.provider, "microsoft_calendar")
+        )
+      ),
   ]);
   const legacyBySubject = new Map(
     legacyAccounts.map((account) => [account.providerAccountId, account])
@@ -184,6 +217,7 @@ export const listCalendarAccountsForUser = async (
       id: legacy?.id ?? record.id,
       mailboxId: record.id,
       name: record.displayName ?? record.emailAddress,
+      provider: "google_calendar",
       status,
     };
   });
@@ -194,18 +228,42 @@ export const listCalendarAccountsForUser = async (
         id: legacy.id,
         mailboxId: null,
         name: legacy.displayName ?? legacy.accountEmail ?? "Calendar account",
+        provider: "google_calendar",
         status: "needs-mailbox",
       });
     }
   }
+  for (const account of microsoftAccounts) {
+    accounts.push({
+      email: account.accountEmail,
+      id: account.id,
+      mailboxId: null,
+      name: account.displayName ?? account.accountEmail ?? "Calendar account",
+      provider: "microsoft_calendar",
+      status:
+        account.status === "connected" &&
+        hasRequiredConnectorScopes("microsoft_calendar", account.scopes ?? "")
+          ? "connected"
+          : "needs-reconnect",
+    });
+  }
+  const googleConfigured = Boolean(
+    serverEnv.BETTER_AUTH_URL &&
+    serverEnv.GOOGLE_GMAIL_CLIENT_ID &&
+    serverEnv.GOOGLE_GMAIL_CLIENT_SECRET &&
+    serverEnv.GMAIL_TOKEN_ENCRYPTION_KEY
+  );
+  const microsoftConfigured = Boolean(
+    serverEnv.BETTER_AUTH_URL &&
+    serverEnv.MICROSOFT_CLIENT_ID &&
+    serverEnv.MICROSOFT_CLIENT_SECRET &&
+    serverEnv.CONNECTOR_TOKEN_ENCRYPTION_KEY
+  );
   return {
     accounts,
-    isConfigured: Boolean(
-      serverEnv.BETTER_AUTH_URL &&
-      serverEnv.GOOGLE_GMAIL_CLIENT_ID &&
-      serverEnv.GOOGLE_GMAIL_CLIENT_SECRET &&
-      serverEnv.GMAIL_TOKEN_ENCRYPTION_KEY
-    ),
+    googleConfigured,
+    isConfigured: googleConfigured || microsoftConfigured,
+    microsoftConfigured,
   };
 };
 
@@ -228,6 +286,11 @@ const getAuthorizedCalendarAccount = async (
   input: UserRequest & { connectionId: string }
 ) => {
   const account = await getCalendarAccountForUser(input);
+  if (account.provider === "microsoft_calendar") {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Open this invitation in your calendar account to import it.",
+    });
+  }
   if (account.status === "needs-mailbox") {
     throw new ORPCError("FORBIDDEN", {
       message: "Connect this account as a Gmail mailbox to use its calendar.",
@@ -324,7 +387,7 @@ const withCalendar = async <T>(
   }
 };
 
-export const listCalendarsForUser = async (
+const listCalendarsForUserGoogle = async (
   input: UserRequest & { connectionId: string }
 ) => {
   const account = await getAuthorizedCalendarAccount(input);
@@ -363,7 +426,7 @@ export const listCalendarsForUser = async (
   }
 };
 
-export const listCalendarColorsForUser = async (
+const listCalendarColorsForUserGoogle = async (
   input: UserRequest & { connectionId: string }
 ): Promise<{ colors: string[] }> => {
   const account = await getAuthorizedCalendarAccount(input);
@@ -391,7 +454,7 @@ export const listCalendarColorsForUser = async (
   }
 };
 
-export const updateCalendarColorForUser = async (
+const updateCalendarColorForUserGoogle = async (
   input: z.infer<typeof calendarUpdateColorInputSchema> & UserRequest
 ): Promise<CalendarSummary> =>
   await withCalendar(input, "preference-write", async (context) => {
@@ -402,7 +465,7 @@ export const updateCalendarColorForUser = async (
     return toCalendarSummary({ calendar, connectionId: context.connectionId });
   });
 
-export const listCalendarEventsForUser = async (
+const listCalendarEventsForUserGoogle = async (
   input: z.infer<typeof calendarEventsInputSchema> & UserRequest
 ): Promise<{ events: CalendarEvent[] }> =>
   await withCalendar(input, "read", async (context) => {
@@ -425,7 +488,7 @@ export const listCalendarEventsForUser = async (
     };
   });
 
-export const getCalendarEventForUser = async (
+const getCalendarEventForUserGoogle = async (
   input: CalendarEventRef & UserRequest
 ): Promise<CalendarEvent> =>
   await withCalendar(
@@ -438,7 +501,7 @@ export const getCalendarEventForUser = async (
       )
   );
 
-export const createCalendarEventForUser = async (
+const createCalendarEventForUserGoogle = async (
   input: z.infer<typeof calendarCreateInputSchema> & UserRequest
 ): Promise<CalendarMutationResult> =>
   await withCalendar(input, "event-write", async (context) => {
@@ -469,7 +532,7 @@ export const createCalendarEventForUser = async (
     };
   });
 
-export const updateCalendarEventForUser = async (
+const updateCalendarEventForUserGoogle = async (
   input: z.infer<typeof calendarUpdateInputSchema> & UserRequest
 ): Promise<CalendarMutationResult> =>
   await withCalendar(input, "event-write", async (context) => {
@@ -548,7 +611,7 @@ export const updateCalendarEventForUser = async (
     };
   });
 
-export const deleteCalendarEventForUser = async (
+const deleteCalendarEventForUserGoogle = async (
   input: z.infer<typeof calendarDeleteInputSchema> & UserRequest
 ): Promise<CalendarMutationResult> =>
   await withCalendar(input, "event-write", async (context) => {
@@ -581,7 +644,7 @@ export const deleteCalendarEventForUser = async (
     };
   });
 
-export const respondToCalendarEventForUser = async (
+const respondToCalendarEventForUserGoogle = async (
   input: z.infer<typeof calendarRespondInputSchema> & UserRequest
 ): Promise<CalendarMutationResult> =>
   await withCalendar(input, "event-write", async (context) => {
@@ -680,3 +743,102 @@ export const importCalendarInvitationForUser = async (
       summary: event.summary ?? input.event.summary,
     };
   });
+
+const withCalendarProvider = async <
+  Input extends UserRequest & { connectionId: string },
+  Result,
+>(
+  input: Input,
+  google: (request: Input) => Promise<Result>,
+  microsoft: (request: Input) => Promise<Result>
+): Promise<Result> => {
+  const account = await getCalendarAccountForUser(input);
+  try {
+    return await (account.provider === "microsoft_calendar"
+      ? microsoft(input)
+      : google(input));
+  } catch (error) {
+    return readCalendarFailure(error);
+  }
+};
+
+export const listCalendarsForUser = async (
+  input: UserRequest & { connectionId: string }
+) =>
+  await withCalendarProvider(
+    input,
+    listCalendarsForUserGoogle,
+    listMicrosoftCalendarsForUser
+  );
+
+export const listCalendarColorsForUser = async (
+  input: UserRequest & { connectionId: string }
+): Promise<{ colors: string[] }> => {
+  const account = await getCalendarAccountForUser(input);
+  return account.provider === "microsoft_calendar"
+    ? { colors: [] }
+    : await listCalendarColorsForUserGoogle(input);
+};
+
+export const updateCalendarColorForUser = async (
+  input: z.infer<typeof calendarUpdateColorInputSchema> & UserRequest
+) =>
+  await withCalendarProvider(
+    input,
+    updateCalendarColorForUserGoogle,
+    updateMicrosoftCalendarColorForUser
+  );
+
+export const listCalendarEventsForUser = async (
+  input: z.infer<typeof calendarEventsInputSchema> & UserRequest
+) =>
+  await withCalendarProvider(
+    input,
+    listCalendarEventsForUserGoogle,
+    listMicrosoftCalendarEventsForUser
+  );
+
+export const getCalendarEventForUser = async (
+  input: CalendarEventRef & UserRequest
+) =>
+  await withCalendarProvider(
+    input,
+    getCalendarEventForUserGoogle,
+    getMicrosoftCalendarEventForUser
+  );
+
+export const createCalendarEventForUser = async (
+  input: z.infer<typeof calendarCreateInputSchema> & UserRequest
+) =>
+  await withCalendarProvider(
+    input,
+    createCalendarEventForUserGoogle,
+    createMicrosoftCalendarEventForUser
+  );
+
+export const updateCalendarEventForUser = async (
+  input: z.infer<typeof calendarUpdateInputSchema> & UserRequest
+) =>
+  await withCalendarProvider(
+    input,
+    updateCalendarEventForUserGoogle,
+    updateMicrosoftCalendarEventForUser
+  );
+
+export const deleteCalendarEventForUser = async (
+  input: z.infer<typeof calendarDeleteInputSchema> & UserRequest
+) =>
+  await withCalendarProvider(
+    input,
+    deleteCalendarEventForUserGoogle,
+    deleteMicrosoftCalendarEventForUser
+  );
+
+export const respondToCalendarEventForUser = async (
+  input: z.infer<typeof calendarRespondInputSchema> & UserRequest
+) =>
+  await withCalendarProvider(
+    input,
+    respondToCalendarEventForUserGoogle,
+    respondToMicrosoftCalendarEventForUser
+  );

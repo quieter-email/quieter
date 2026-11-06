@@ -27,7 +27,7 @@ import {
 import { getGmailMessageCount, getGmailProfile } from "@quieter/gmail";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import { reportError } from "@quieter/observability";
-import { and, asc, count, eq, gt, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -37,6 +37,7 @@ import {
   REQUIRED_GMAIL_SCOPES,
 } from "../gmail-mailbox-access";
 import { callGmail } from "../gmail-request";
+import { pausePersonalAgentConnections } from "../mail-agent/authority";
 import { getOrganizationApiMailboxId } from "../organization-api-mail";
 import {
   assertOwnedGmailMailbox,
@@ -338,6 +339,8 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       .innerJoin(
         member,
         and(
+          eq(member.id, mailboxGrant.memberId),
+          eq(member.userId, mailboxGrant.userId),
           eq(member.userId, input.userId),
           eq(member.organizationId, mailbox.organizationId)
         )
@@ -392,6 +395,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       .leftJoin(
         mailboxGrant,
         and(
+          eq(mailboxGrant.memberId, member.id),
           eq(mailboxGrant.mailboxId, mailbox.id),
           eq(mailboxGrant.userId, input.userId)
         )
@@ -1277,6 +1281,13 @@ export const disconnectGmailMailbox = async (input: {
   userId: string;
 }) => {
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
+    );
+    await pausePersonalAgentConnections(
+      { connectionIds: [input.mailboxId], userId: input.userId },
+      tx
+    );
     const [deletedMailbox] = await tx
       .delete(mailbox)
       .where(

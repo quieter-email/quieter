@@ -58,7 +58,14 @@ export type MailDomainConnectAttemptStatus =
   | "pending"
   | "returned";
 export type ConnectorConnectionStatus = "connected" | "needs_reconnect";
-export type ConnectorProvider = "google_calendar" | "linear";
+export type ConnectorProvider =
+  | "google_calendar"
+  | "linear"
+  | "notion"
+  | "todoist"
+  | "clickup"
+  | "microsoft_calendar"
+  | "microsoft_onedrive";
 export type MailboxConnectionStatus = "connected" | "needs_reconnect";
 export type MailboxGrantRole = "manager" | "reader" | "responder";
 export type MailboxAccessMode = "private" | "shared";
@@ -1174,7 +1181,7 @@ export const connectorCredential = pgTable(
   (table) => [
     check(
       "connector_credential_provider_check",
-      sql`${table.provider} in ('google_calendar', 'linear')`
+      sql`${table.provider} in ('google_calendar', 'linear', 'notion', 'todoist', 'clickup', 'microsoft_calendar', 'microsoft_onedrive')`
     ),
     check(
       "connector_credential_status_check",
@@ -1694,6 +1701,34 @@ export const mailboxAgentSetting = pgTable("mailboxAgentSetting", {
   version: integer("version").notNull().default(0),
 });
 
+export const mailboxPersonalAgentSetting = pgTable(
+  "mailboxPersonalAgentSetting",
+  {
+    activatedAt: timestamp("activatedAt"),
+    activationVersion: integer("activationVersion").notNull().default(0),
+    activeRevisionId: text("activeRevisionId"),
+    createdAt: timestamp("createdAt").notNull(),
+    draftRevisionId: text("draftRevisionId"),
+    enabled: boolean("enabled").notNull().default(false),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    memberId: text("memberId").references(() => member.id, {
+      onDelete: "cascade",
+    }),
+    updatedAt: timestamp("updatedAt").notNull(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    version: integer("version").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.userId] }),
+    index("mailbox_personal_agent_setting_member_idx").on(table.memberId),
+    index("mailbox_personal_agent_setting_user_idx").on(table.userId),
+  ]
+);
+
 export const mailboxAgentRevision = pgTable(
   "mailboxAgentRevision",
   {
@@ -1770,6 +1805,9 @@ export const mailboxAgentRun = pgTable(
       table.mailboxId,
       table.invocationKey
     ),
+    uniqueIndex("mailbox_agent_run_received_actor_message_unique")
+      .on(table.mailboxId, table.actorUserId, table.messageId)
+      .where(sql`${table.triggerKind} = 'mail_received'`),
     index("mailbox_agent_run_pending_idx").on(
       table.status,
       table.leaseExpiresAt
@@ -2164,11 +2202,13 @@ export const connectorOAuthState = pgTable(
   "connectorOAuthState",
   {
     codeVerifier: text("codeVerifier").notNull(),
+    connectionId: text("connectionId"),
     createdAt: timestamp("createdAt").notNull(),
     expiresAt: timestamp("expiresAt").notNull(),
     id: text("id").primaryKey(),
     provider: text("provider").$type<ConnectorProvider>().notNull(),
     returnTo: text("returnTo").notNull(),
+    sessionHash: text("sessionHash"),
     userId: text("userId")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -2176,7 +2216,7 @@ export const connectorOAuthState = pgTable(
   (table) => [
     check(
       "connector_oauth_state_provider_check",
-      sql`${table.provider} in ('google_calendar', 'linear')`
+      sql`${table.provider} in ('google_calendar', 'linear', 'notion', 'todoist', 'clickup', 'microsoft_calendar', 'microsoft_onedrive')`
     ),
     index("connector_oauth_state_user_id_idx").on(table.userId),
     index("connector_oauth_state_expires_at_idx").on(table.expiresAt),
@@ -2191,6 +2231,9 @@ export const mailboxGrant = pgTable(
     mailboxId: text("mailboxId")
       .notNull()
       .references(() => mailbox.id, { onDelete: "cascade" }),
+    memberId: text("memberId").references(() => member.id, {
+      onDelete: "cascade",
+    }),
     role: text("role").$type<MailboxGrantRole>().notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
     userId: text("userId")
@@ -2203,6 +2246,7 @@ export const mailboxGrant = pgTable(
       sql`${table.role} in ('reader', 'responder', 'manager')`
     ),
     index("mailbox_grant_mailbox_id_idx").on(table.mailboxId),
+    index("mailbox_grant_member_id_idx").on(table.memberId),
     index("mailbox_grant_user_id_idx").on(table.userId),
     unique("mailbox_grant_mailbox_id_user_id_unique").on(
       table.mailboxId,
@@ -3593,6 +3637,7 @@ export const tables = {
   mailboxAutomationSettings,
   mailboxDivisionGrant,
   mailboxGrant,
+  mailboxPersonalAgentSetting,
   mailboxVerificationCode,
   managedMailAttachment,
   managedMailLabel,

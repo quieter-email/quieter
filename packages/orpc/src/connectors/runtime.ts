@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import { connectorCredential } from "@quieter/database/schema";
-import { requireServerEnv } from "@quieter/env/server";
+import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -9,72 +9,39 @@ import {
   decryptGmailCredentialSecret,
   encryptGmailCredentialSecret,
 } from "../gmail-credential-crypto";
-import { LINEAR_CONNECTOR_PROVIDER } from "./contracts";
+import { connectorDisplayNames } from "./contracts";
 import type { ConnectorProvider } from "./contracts";
+import {
+  ConnectorTokenError,
+  oauthProviders,
+  requestConnectorToken,
+} from "./oauth-provider";
 
 export { LINEAR_CONNECTOR_PROVIDER } from "./contracts";
-const CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60 * 1000;
-export const LINEAR_AUTHORIZATION_URL = "https://linear.app/oauth/authorize";
+export { LINEAR_SCOPES } from "./oauth-provider";
 export const LINEAR_MCP_URL = "https://mcp.linear.app/mcp";
-export const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
-const permanentLinearTokenErrors = new Set(["invalid_grant", "invalid_token"]);
+
 type ConnectorAuthorizationInput = {
   connectionId?: string;
   provider: ConnectorProvider;
   signal?: AbortSignal;
   userId: string;
+  mutates?: boolean;
 };
-
-// The agent reaches Linear through the workspace's own tools, so the grant has to
-// cover the changes those tools make. Connections made under the older, narrower
-// grant keep working for reads and fail the rest until they are reconnected.
-export const LINEAR_SCOPES = ["read", "write"] as const;
-
-const connectorDefinitions = {
-  [LINEAR_CONNECTOR_PROVIDER]: {
-    displayName: "Linear",
-    scopes: LINEAR_SCOPES,
-  },
-} as const satisfies Record<
-  ConnectorProvider,
-  {
-    displayName: string;
-    scopes: readonly string[];
-  }
->;
-
-const linearRefreshResponseSchema = z.object({
-  access_token: z.string().min(1),
-  expires_in: z.number().int().positive(),
-  refresh_token: z.string().min(1),
-  scope: z.union([z.string(), z.array(z.string())]).optional(),
-  token_type: z.string().min(1),
-});
-
-export const getLinearOAuthClient = () => ({
-  clientId: requireServerEnv("LINEAR_CLIENT_ID"),
-  clientSecret: requireServerEnv("LINEAR_CLIENT_SECRET"),
-});
-
-const getConnectorCredentialEncryptionKey = () =>
-  requireServerEnv("CONNECTOR_TOKEN_ENCRYPTION_KEY");
 
 export const encryptConnectorSecret = (value: string) =>
   encryptGmailCredentialSecret(value, {
-    legacyKey: getConnectorCredentialEncryptionKey(),
+    legacyKey: requireServerEnv("CONNECTOR_TOKEN_ENCRYPTION_KEY"),
   });
-
 const decryptConnectorSecret = (value: string) =>
   decryptGmailCredentialSecret(value, {
-    legacyKey: getConnectorCredentialEncryptionKey(),
+    legacyKey: requireServerEnv("CONNECTOR_TOKEN_ENCRYPTION_KEY"),
   });
-
 export const normalizeOAuthScope = (scope: string | string[]) =>
   Array.isArray(scope) ? scope.join(" ") : scope;
 
 export class ConnectorHttpError extends Error {
   readonly status: number;
-
   constructor(message: string, status: number) {
     super(message);
     this.name = "ConnectorHttpError";
@@ -82,24 +49,29 @@ export class ConnectorHttpError extends Error {
   }
 }
 
-const hasCachedConnectorAccessToken = (record: {
-  accessTokenExpiresAt: Date | null;
-  encryptedAccessToken: string | null;
-}): record is {
-  accessTokenExpiresAt: Date;
-  encryptedAccessToken: string;
-} =>
-  !!record.encryptedAccessToken &&
-  record.accessTokenExpiresAt !== null &&
-  record.accessTokenExpiresAt.getTime() >
-    Date.now() + CONNECTOR_ACCESS_TOKEN_EXPIRY_BUFFER_MS;
+export const hasRequiredConnectorScopes = (
+  provider: ConnectorProvider,
+  scopes: string
+) => {
+  const granted = new Set(
+    scopes
+      .split(/[\s,]+/u)
+      .filter(Boolean)
+      .map((scope) =>
+        scope.replace(/^https:\/\/graph\.microsoft\.com\//u, "").toLowerCase()
+      )
+  );
+  return oauthProviders[provider].scopes.every((scope) =>
+    granted.has(scope.toLowerCase())
+  );
+};
 
 export const hasConnectedConnector = async (input: {
   provider: ConnectorProvider;
   userId: string;
 }) => {
-  const [credential] = await db
-    .select({ id: connectorCredential.id })
+  const records = await db
+    .select({ scopes: connectorCredential.scopes })
     .from(connectorCredential)
     .where(
       and(
@@ -107,156 +79,70 @@ export const hasConnectedConnector = async (input: {
         eq(connectorCredential.provider, input.provider),
         eq(connectorCredential.status, "connected")
       )
-    )
-    .limit(1);
-
-  return Boolean(credential);
+    );
+  return records.some((record) =>
+    hasRequiredConnectorScopes(input.provider, record.scopes)
+  );
 };
 
-export const getLinearConnectionForUser = async (userId: string) => {
-  const [connection] = await db
+export const getConnectorConnectionForUser = async (input: {
+  provider: ConnectorProvider;
+  userId: string;
+  connectionId?: string;
+}) => {
+  const records = await db
     .select({
       account: connectorCredential.accountEmail,
       connectionId: connectorCredential.id,
+      displayName: connectorCredential.displayName,
+      providerAccountId: connectorCredential.providerAccountId,
       workspace: connectorCredential.providerWorkspaceName,
     })
     .from(connectorCredential)
     .where(
       and(
-        eq(connectorCredential.userId, userId),
-        eq(connectorCredential.provider, LINEAR_CONNECTOR_PROVIDER),
-        eq(connectorCredential.status, "connected")
+        eq(connectorCredential.userId, input.userId),
+        eq(connectorCredential.provider, input.provider),
+        input.connectionId === undefined
+          ? undefined
+          : eq(connectorCredential.id, input.connectionId)
       )
     )
-    .limit(1);
-  if (connection === undefined) {
+    .limit(2);
+  const [record] = records;
+  if (record === undefined) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "Connect Linear before using this action.",
+      message: `Connect ${connectorDisplayNames[input.provider]} before using this action.`,
     });
   }
-  return connection;
+  if (records.length > 1) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Choose the account to use for this action.",
+    });
+  }
+  return {
+    ...record,
+    account: record.account ?? record.displayName ?? record.providerAccountId,
+  };
+};
+
+export const getLinearConnectionForUser = async (userId: string) => {
+  const { account, connectionId, workspace } =
+    await getConnectorConnectionForUser({ provider: "linear", userId });
+  return { account, connectionId, workspace };
 };
 
 const getConnectorRepairRequiredError = (provider: ConnectorProvider) =>
   new ORPCError("BAD_REQUEST", {
-    message: `Reconnect ${connectorDefinitions[provider].displayName} before using this action.`,
+    message: `Reconnect ${connectorDisplayNames[provider]} before using this action.`,
   });
 
-/**
- * A refresh returns a token carrying the scopes the user originally granted. When the
- * response omits them, the stored grant is what the token still has — writing the
- * connector's current definition instead would claim scopes this credential never got.
- */
-const getRefreshedScopes = (
-  record: { scopes: string | null },
-  scope: string | string[] | undefined
-) => (scope === undefined ? (record.scopes ?? "") : normalizeOAuthScope(scope));
-
-/** A grant missing a scope the connector now needs cannot serve its tools. */
-export const hasRequiredConnectorScopes = (
-  provider: ConnectorProvider,
-  scopes: string
+const getAuthorizedConnectorToken = async (
+  input: ConnectorAuthorizationInput,
+  rejectedToken?: string
 ) => {
-  const granted = new Set(
-    scopes.split(/[\s,]+/u).filter((value) => value !== "")
-  );
-  return connectorDefinitions[provider].scopes.every((scope) =>
-    granted.has(scope)
-  );
-};
-
-const refreshConnectorAccessToken = async (
-  record: {
-    encryptedRefreshToken: string | null;
-    id: string;
-    scopes: string | null;
-  },
-  signal?: AbortSignal
-) => {
-  signal?.throwIfAborted();
-  if (!record.encryptedRefreshToken) {
-    await db
-      .update(connectorCredential)
-      .set({ status: "needs_reconnect", updatedAt: new Date() })
-      .where(eq(connectorCredential.id, record.id));
-    throw getConnectorRepairRequiredError(LINEAR_CONNECTOR_PROVIDER);
-  }
-
-  const config = getLinearOAuthClient();
-  const response = await fetch(LINEAR_TOKEN_URL, {
-    body: new URLSearchParams({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      grant_type: "refresh_token",
-      refresh_token: decryptConnectorSecret(record.encryptedRefreshToken),
-    }),
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    method: "POST",
-    signal:
-      signal === undefined
-        ? AbortSignal.timeout(15_000)
-        : AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
-  });
-
-  if (!response.ok) {
-    const body = await response
-      .json()
-      .then((value: unknown) =>
-        z.object({ error: z.string().optional() }).safeParse(value)
-      )
-      .catch(() => null);
-    const errorCode = body?.success === true ? body.data.error : undefined;
-    if (
-      response.status === 400 ||
-      response.status === 401 ||
-      (errorCode !== undefined && permanentLinearTokenErrors.has(errorCode))
-    ) {
-      await db
-        .update(connectorCredential)
-        .set({ status: "needs_reconnect", updatedAt: new Date() })
-        .where(eq(connectorCredential.id, record.id));
-      throw getConnectorRepairRequiredError(LINEAR_CONNECTOR_PROVIDER);
-    }
-
-    throw new Error(
-      `${connectorDefinitions[LINEAR_CONNECTOR_PROVIDER].displayName} token refresh failed with status ${response.status}.`
-    );
-  }
-
-  const refreshed = linearRefreshResponseSchema.parse(await response.json());
-  const now = new Date();
-  const scopes = getRefreshedScopes(record, refreshed.scope);
-  const hasRequiredScopes = hasRequiredConnectorScopes(
-    LINEAR_CONNECTOR_PROVIDER,
-    scopes
-  );
-  await db
-    .update(connectorCredential)
-    .set({
-      accessTokenExpiresAt: new Date(
-        now.getTime() + refreshed.expires_in * 1000
-      ),
-      encryptedAccessToken: encryptConnectorSecret(refreshed.access_token),
-      encryptedRefreshToken: encryptConnectorSecret(refreshed.refresh_token),
-      scopes,
-      // An older, narrower grant still refreshes, but it cannot do what the connector
-      // now asks of it, so it is surfaced as needing a reconnect rather than silently
-      // failing at the first call that needs the missing scope.
-      status: hasRequiredScopes ? "connected" : "needs_reconnect",
-      updatedAt: now,
-    })
-    .where(eq(connectorCredential.id, record.id));
-
-  if (!hasRequiredScopes) {
-    throw getConnectorRepairRequiredError(LINEAR_CONNECTOR_PROVIDER);
-  }
-  return refreshed.access_token;
-};
-
-const getAuthorizedConnectorAccessToken = async (
-  input: ConnectorAuthorizationInput
-) => {
-  const [record] = await db
+  input.signal?.throwIfAborted();
+  const records = await db
     .select({
       accessTokenExpiresAt: connectorCredential.accessTokenExpiresAt,
       encryptedAccessToken: connectorCredential.encryptedAccessToken,
@@ -276,27 +162,195 @@ const getAuthorizedConnectorAccessToken = async (
           : eq(connectorCredential.id, input.connectionId)
       )
     )
-    .limit(1);
-
-  if (record === undefined || record.provider !== LINEAR_CONNECTOR_PROVIDER) {
+    .limit(2);
+  const [current] = records;
+  if (current === undefined || current.provider !== input.provider) {
     throw new ORPCError("BAD_REQUEST", {
-      message: `Connect ${connectorDefinitions[input.provider].displayName} before using this action.`,
+      message: `Connect ${connectorDisplayNames[input.provider]} before using this action.`,
     });
   }
-
-  input.signal?.throwIfAborted();
+  if (records.length > 1) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Choose the account to use for this action.",
+    });
+  }
   if (
-    record.status === "needs_reconnect" ||
-    !hasRequiredConnectorScopes(record.provider, record.scopes ?? "")
+    current.status !== "connected" ||
+    !hasRequiredConnectorScopes(input.provider, current.scopes)
   ) {
-    throw getConnectorRepairRequiredError(record.provider);
+    throw getConnectorRepairRequiredError(input.provider);
   }
-
-  if (hasCachedConnectorAccessToken(record)) {
-    return decryptConnectorSecret(record.encryptedAccessToken);
+  if (current.encryptedAccessToken !== null) {
+    const cached = decryptConnectorSecret(current.encryptedAccessToken);
+    if (
+      cached !== rejectedToken &&
+      (current.accessTokenExpiresAt === null ||
+        current.accessTokenExpiresAt.getTime() > Date.now() + 60_000)
+    ) {
+      return {
+        accessToken: cached,
+        encryptedAccessToken: current.encryptedAccessToken,
+      };
+    }
   }
+  // The row lock serializes rotating refresh tokens across requests and workers.
+  const result = await db.transaction(async (transaction) => {
+    const [record] = await transaction
+      .select()
+      .from(connectorCredential)
+      .where(
+        and(
+          eq(connectorCredential.id, current.id),
+          eq(connectorCredential.userId, input.userId),
+          eq(connectorCredential.provider, input.provider)
+        )
+      )
+      .for("update");
+    if (record === undefined) {
+      return { error: true } as const;
+    }
+    if (
+      record.status !== "connected" ||
+      !hasRequiredConnectorScopes(input.provider, record.scopes)
+    ) {
+      return { error: true } as const;
+    }
+    const cached =
+      record.encryptedAccessToken === null
+        ? null
+        : decryptConnectorSecret(record.encryptedAccessToken);
+    if (
+      cached !== null &&
+      cached !== rejectedToken &&
+      (record.accessTokenExpiresAt === null ||
+        record.accessTokenExpiresAt.getTime() > Date.now() + 60_000)
+    ) {
+      return {
+        accessToken: cached,
+        encryptedAccessToken: record.encryptedAccessToken,
+      };
+    }
+    if (record.encryptedRefreshToken === null) {
+      await transaction
+        .update(connectorCredential)
+        .set({ status: "needs_reconnect", updatedAt: new Date() })
+        .where(eq(connectorCredential.id, record.id));
+      return { error: true } as const;
+    }
+    let refreshed;
+    try {
+      refreshed = await requestConnectorToken(
+        input.provider,
+        { refreshToken: decryptConnectorSecret(record.encryptedRefreshToken) },
+        input.signal
+      );
+    } catch (error) {
+      if (!(error instanceof ConnectorTokenError) || !error.permanent) {
+        throw error;
+      }
+      await transaction
+        .update(connectorCredential)
+        .set({ status: "needs_reconnect", updatedAt: new Date() })
+        .where(eq(connectorCredential.id, record.id));
+      return { error: true } as const;
+    }
+    const { token } = refreshed;
+    const scopes =
+      token.scope === undefined
+        ? record.scopes
+        : normalizeOAuthScope(token.scope);
+    const valid = hasRequiredConnectorScopes(input.provider, scopes);
+    const encryptedAccessToken = encryptConnectorSecret(token.access_token);
+    await transaction
+      .update(connectorCredential)
+      .set({
+        accessTokenExpiresAt:
+          token.expires_in === undefined
+            ? null
+            : new Date(Date.now() + token.expires_in * 1000),
+        encryptedAccessToken,
+        encryptedRefreshToken:
+          token.refresh_token === undefined
+            ? record.encryptedRefreshToken
+            : encryptConnectorSecret(token.refresh_token),
+        scopes,
+        status: valid ? "connected" : "needs_reconnect",
+        updatedAt: new Date(),
+      })
+      .where(eq(connectorCredential.id, record.id));
+    return valid
+      ? { accessToken: token.access_token, encryptedAccessToken }
+      : ({ error: true } as const);
+  });
+  if ("error" in result) {
+    throw getConnectorRepairRequiredError(input.provider);
+  }
+  return result;
+};
 
-  return await refreshConnectorAccessToken(record, input.signal);
+export const runAuthorizedConnector = async <Result>(
+  input: ConnectorAuthorizationInput,
+  run: (accessToken: string, signal?: AbortSignal) => Promise<Result>
+): Promise<Result> => {
+  const connection = await getConnectorConnectionForUser(input);
+  if (input.mutates === true && serverEnv.QUIETER_DEPLOYMENT_ENV === "local") {
+    const allowed = new Set(
+      (serverEnv.QUIETER_LOCAL_CONNECTOR_WRITE_ACCOUNTS ?? "")
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    );
+    if (
+      serverEnv.QUIETER_LOCAL_PROVIDER_MODE !== "write" ||
+      !allowed.has(`${input.provider}:${connection.providerAccountId}`)
+    ) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "Local changes require an explicitly allowed test account.",
+      });
+    }
+  }
+  const authorization = { ...input, connectionId: connection.connectionId };
+  let token = await getAuthorizedConnectorToken(authorization);
+  try {
+    return await run(token.accessToken, input.signal);
+  } catch (error) {
+    if (!(error instanceof ConnectorHttpError) || error.status !== 401) {
+      throw error;
+    }
+    if (input.mutates !== true) {
+      token = await getAuthorizedConnectorToken(
+        authorization,
+        token.accessToken
+      );
+      try {
+        return await run(token.accessToken, input.signal);
+      } catch (retryError) {
+        if (
+          !(retryError instanceof ConnectorHttpError) ||
+          retryError.status !== 401
+        ) {
+          throw retryError;
+        }
+      }
+    }
+    if (token.encryptedAccessToken !== null) {
+      await db
+        .update(connectorCredential)
+        .set({ status: "needs_reconnect", updatedAt: new Date() })
+        .where(
+          and(
+            eq(connectorCredential.id, connection.connectionId),
+            eq(connectorCredential.userId, input.userId),
+            eq(connectorCredential.provider, input.provider),
+            eq(
+              connectorCredential.encryptedAccessToken,
+              token.encryptedAccessToken
+            )
+          )
+        );
+    }
+    throw getConnectorRepairRequiredError(input.provider);
+  }
 };
 
 const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
@@ -391,15 +445,14 @@ export const getLinearIdentityFromAccessToken = async (accessToken: string) => {
   };
 };
 
-/** A refreshed token for the caller's own Linear connection, for the MCP client. */
 export const getLinearAccessTokenForUser = async (input: {
   connectionId?: string;
   userId: string;
   signal?: AbortSignal;
-}) =>
-  await getAuthorizedConnectorAccessToken({
-    connectionId: input.connectionId,
-    provider: LINEAR_CONNECTOR_PROVIDER,
-    signal: input.signal,
-    userId: input.userId,
+}) => {
+  const token = await getAuthorizedConnectorToken({
+    ...input,
+    provider: "linear",
   });
+  return token.accessToken;
+};

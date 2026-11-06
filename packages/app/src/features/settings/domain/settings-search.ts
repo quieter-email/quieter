@@ -119,7 +119,8 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   {
     description: "Connected services for chat",
     id: "connectors",
-    keywords: "integrations connectors linear oauth services",
+    keywords:
+      "integrations connectors linear notion todoist clickup outlook calendar onedrive oauth services",
     scope: "personal",
     tab: "connectors",
     title: "Connected apps",

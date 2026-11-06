@@ -22,8 +22,10 @@ import {
   connectorDisplayNames,
   linearReadTools,
 } from "../connectors/contracts";
+import type { ConnectorProvider } from "../connectors/contracts";
 import { listLinearMcpToolsForUser } from "../connectors/linear-mcp";
 import { hasRequiredConnectorScopes } from "../connectors/runtime";
+import { connectorToolRegistry } from "../connectors/tool-registry";
 import { connectorMentionPattern } from "./contracts";
 
 const linearWriteTools = new Set([
@@ -59,7 +61,7 @@ export type AgentCatalogTool = {
   inputSchema: unknown;
   label: string;
   operation: "read" | "write";
-  provider: "linear" | "google_calendar" | null;
+  provider: ConnectorProvider | "google_calendar" | null;
   providerToolName: string | null;
   scope: "mailbox" | "connector" | "memory";
   toolId: string;
@@ -110,26 +112,28 @@ export const getAgentAccounts = async (userId: string) => {
       status: connectorCredential.status,
     })
     .from(connectorCredential)
-    .where(
-      and(
-        eq(connectorCredential.userId, userId),
-        eq(connectorCredential.provider, "linear")
-      )
-    );
+    .where(eq(connectorCredential.userId, userId));
   const { accounts: calendarAccounts } = await listCalendarAccountsForUser({
     userId,
   });
   return [
-    ...accounts.map((account) => ({
-      connectionId: account.id,
-      label: `${connectorDisplayNames.linear}, ${account.displayName ?? account.providerWorkspaceName ?? account.accountEmail ?? account.providerAccountId}`,
-      provider: "linear" as const,
-      status: account.status,
-    })),
+    ...accounts.flatMap((account) =>
+      account.provider === "microsoft_calendar" ||
+      account.provider === "google_calendar"
+        ? []
+        : [
+            {
+              connectionId: account.id,
+              label: `${connectorDisplayNames[account.provider]}, ${[...new Set([account.displayName, account.providerWorkspaceName, account.accountEmail].filter((part): part is string => Boolean(part)))].join(", ") || account.providerAccountId}`,
+              provider: account.provider,
+              status: account.status,
+            },
+          ]
+    ),
     ...calendarAccounts.map((account) => ({
       connectionId: account.id,
-      label: `Google Calendar, ${account.name}`,
-      provider: "google_calendar" as const,
+      label: `${account.provider === "microsoft_calendar" ? "Outlook Calendar" : "Google Calendar"}, ${[...new Set([account.name, account.email].filter(Boolean))].join(", ")}`,
+      provider: account.provider ?? "google_calendar",
       status:
         account.status === "connected"
           ? ("connected" as const)
@@ -201,15 +205,15 @@ export const loadAgentCatalog = async (input: {
     .where(
       and(
         eq(connectorCredential.userId, input.userId),
-        inArray(connectorCredential.id, input.connectionIds),
-        eq(connectorCredential.provider, "linear")
+        inArray(connectorCredential.id, input.connectionIds)
       )
     );
   if (
     accounts.some(
       (account) =>
         account.status !== "connected" ||
-        !hasRequiredConnectorScopes("linear", account.scopes ?? "")
+        (account.provider !== "google_calendar" &&
+          !hasRequiredConnectorScopes(account.provider, account.scopes ?? ""))
     )
   ) {
     throw new ORPCError("BAD_REQUEST", {
@@ -219,7 +223,11 @@ export const loadAgentCatalog = async (input: {
   }
   for (const connectionId of input.connectionIds) {
     const account = accounts.find((candidate) => candidate.id === connectionId);
-    if (account === undefined) {
+    if (
+      account === undefined ||
+      account.provider === "microsoft_calendar" ||
+      account.provider === "google_calendar"
+    ) {
       const calendarAccount = await getCalendarAccountForUser({
         connectionId,
         userId: input.userId,
@@ -241,7 +249,7 @@ export const loadAgentCatalog = async (input: {
       const base = {
         accountLabel: calendarAccount.name,
         connectionId,
-        provider: "google_calendar" as const,
+        provider: calendarAccount.provider ?? "google_calendar",
         scope: "connector" as const,
       };
       tools.push(
@@ -293,9 +301,40 @@ export const loadAgentCatalog = async (input: {
     const base = {
       accountLabel,
       connectionId: account.id,
-      provider: "linear" as const,
+      provider: account.provider,
       scope: "connector" as const,
     };
+    const registry = connectorToolRegistry[account.provider];
+    if (registry) {
+      for (const descriptor of registry.tools) {
+        if (
+          descriptor.effect === "write" &&
+          ![
+            "notion_create_page",
+            "notion_append_blocks",
+            "create_task",
+            "update_task",
+          ].includes(descriptor.name)
+        ) {
+          continue;
+        }
+        tools.push({
+          ...base,
+          description: descriptor.description,
+          inputSchema: descriptor.inputSchema,
+          label: descriptor.name.replaceAll("_", " "),
+          operation: descriptor.effect,
+          providerToolName: descriptor.name,
+          toolId: `${account.provider}.${descriptor.name}`,
+        });
+      }
+      continue;
+    }
+    if (account.provider !== "linear") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This connected account has no supported actions.",
+      });
+    }
     const discovered = await listLinearMcpToolsForUser({
       connectionId: account.id,
       signal: input.signal,

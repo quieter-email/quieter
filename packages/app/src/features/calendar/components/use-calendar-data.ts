@@ -479,6 +479,8 @@ export const useCalendarData = ({
     displayEvent,
     events,
     failures,
+    googleConfigured:
+      preview !== null || accountsQuery.data?.googleConfigured === true,
     hiddenCalendarKeys: calendarGroups
       .filter((group) =>
         group.keys.every((key) => hiddenCalendarKeys.includes(key))
@@ -497,6 +499,8 @@ export const useCalendarData = ({
       (accountsQuery.isFetching ||
         calendarQueries.some((query) => query.isFetching) ||
         eventQueries.some((query) => query.isFetching)),
+    microsoftConfigured:
+      preview !== null || accountsQuery.data?.microsoftConfigured === true,
     mutation,
     refresh,
     retryFailures: async () => {

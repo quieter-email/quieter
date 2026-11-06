@@ -15,6 +15,7 @@ import { chatModelSchema } from "@quieter/ai/chat-models";
 import {
   createForegroundClientTools,
   createForegroundServerTools,
+  resolveConnectorWriteReview,
   mutatingChatToolNames,
   requiresChatToolApproval,
   resolveLinearToolReview,
@@ -90,6 +91,10 @@ import {
 import { composeMailOperations } from "../mail/compose";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { createCalendarToolsContext } from "./calendar-tools";
+import {
+  connectorToolsPrompt,
+  createConnectorChatTools,
+} from "./connector-tools";
 import { replaceChatParts } from "./continuation";
 import { createLinearChatTools } from "./linear-tools";
 import { assertExactChatToolApproval } from "./tool-approval";
@@ -1473,6 +1478,7 @@ const createAiChatResponseInRequest = async (
       latestUserRequest,
       userId: input.userId,
     }),
+    ...createConnectorChatTools({ latestUserRequest, userId: input.userId }),
     ...createCalendarChatTools(
       createCalendarToolsContext({
         foreground: validated.foreground,
@@ -1551,11 +1557,40 @@ const createAiChatResponseInRequest = async (
     toolPersistence = pending;
     await pending;
   };
+  const connectedAccountTranscript = transcript.filter(
+    (message) => message.id === assistantMessageId
+  );
   for (const [toolName, definition] of Object.entries(tools)) {
-    if (!MUTATING_CHAT_TOOLS.has(toolName) || !definition.execute) {
+    if (!definition.execute) {
       continue;
     }
     const { execute } = definition;
+    if (
+      toolName === "linear_list_tools" ||
+      toolName === "connector_list_tools"
+    ) {
+      definition.execute = async (toolInput: unknown, options) => {
+        const output: unknown = await execute(toolInput, options);
+        connectedAccountTranscript.push({
+          id: assistantMessageId,
+          parts: [
+            {
+              input: toolInput,
+              output,
+              state: "output-available",
+              toolCallId: options.toolCallId,
+              type: `tool-${toolName}`,
+            },
+          ],
+          role: "assistant",
+        });
+        return output;
+      };
+      continue;
+    }
+    if (!MUTATING_CHAT_TOOLS.has(toolName)) {
+      continue;
+    }
     // oxlint-disable-next-line eslint/no-loop-func -- Wrappers intentionally share this request's uncertain-write state.
     definition.execute = async (toolInput: unknown, options) => {
       options.abortSignal?.throwIfAborted();
@@ -1565,18 +1600,17 @@ const createAiChatResponseInRequest = async (
         userId: input.userId,
       });
       if (
-        toolName === "linear_write" &&
-        requiresChatToolApproval({ input: toolInput, toolName }) &&
-        resolveLinearToolReview({
+        (toolName === "linear_write" || toolName === "connector_write") &&
+        (toolName === "linear_write"
+          ? resolveLinearToolReview
+          : resolveConnectorWriteReview)({
           input: toolInput,
-          transcript: transcript.filter(
-            (message) => message.id === assistantMessageId
-          ),
+          transcript: connectedAccountTranscript,
         }) === undefined
       ) {
         throw new ChatRequestError(
           409,
-          "Read the connected account and available actions before requesting approval again."
+          "Read the connected account and available actions before continuing."
         );
       }
       const part = {
@@ -1621,6 +1655,7 @@ const createAiChatResponseInRequest = async (
       : []),
     calendarToolsPrompt,
     linearToolsPrompt,
+    connectorToolsPrompt,
   ].join("\n\n");
 
   const usageId = crypto.randomUUID();

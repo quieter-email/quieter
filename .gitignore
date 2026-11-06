@@ -44,6 +44,9 @@ yarn-error.log*
 
 # Local scratch (never commit)
 .scratch/
+packages/database/.migration-prefix-*/
+packages/database/.migration-cutover-*/
+packages/database/.migration-forward-*/
 
 # Local agent tooling, except shared skill discovery
 .opencode/*

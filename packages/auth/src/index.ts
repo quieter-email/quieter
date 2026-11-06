@@ -38,6 +38,7 @@ import {
   assertCanChangeFundingMembership,
   assertCanDeleteOrganization,
   assertCanLeaveOrganization,
+  assertCanRemoveOrganizationMember,
   assertOrganizationLifecycleOpen,
   cleanupMailboxesForDeletedOrganization,
   cleanupOrganizationsForDeletedUser,
@@ -287,6 +288,10 @@ export const auth = lazyAuth(() =>
           },
           beforeRemoveMember: async ({ member: removedMember }) => {
             await assertCanChangeFundingMembership({
+              organizationId: removedMember.organizationId,
+              userId: removedMember.userId,
+            });
+            await assertCanRemoveOrganizationMember({
               organizationId: removedMember.organizationId,
               userId: removedMember.userId,
             });

@@ -10,6 +10,7 @@ import {
 import { SETTINGS_TITLES } from "@quieter/app/features/settings/domain/settings-navigation";
 import { mailboxesQueryOptions } from "@quieter/app/lib/mailboxes-query";
 import { settingsRouteApi } from "@quieter/app/lib/route-apis";
+import { connectorDisplayNames } from "@quieter/orpc/connector-contracts";
 import { Breadcrumbs } from "@quieter/ui/breadcrumbs";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -24,6 +25,7 @@ type Crumb = {
 export const SettingsBreadcrumbs = () => {
   const {
     tab,
+    connectorProvider,
     mailboxId,
     mailboxView,
     organizationId,
@@ -42,6 +44,7 @@ export const SettingsBreadcrumbs = () => {
       organizationId !== "",
   });
   const baseSearch = {
+    connectorProvider: undefined,
     domainId: "",
     mailboxId: "",
     mailboxView: "list" as const,
@@ -150,8 +153,15 @@ export const SettingsBreadcrumbs = () => {
     crumbs.push({
       id: "personal-section",
       label: SETTINGS_TITLES[tab],
-      search: { tab },
+      search: tab === "connectors" ? { organizationId, tab } : { tab },
     });
+    if (tab === "connectors" && connectorProvider) {
+      crumbs.push({
+        id: "connector-provider",
+        label: connectorDisplayNames[connectorProvider],
+        search: { connectorProvider, tab },
+      });
+    }
   }
 
   return (

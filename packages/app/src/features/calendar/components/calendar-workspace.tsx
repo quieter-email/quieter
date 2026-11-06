@@ -19,7 +19,9 @@ import {
   calendarEventQueryOptions,
   calendarEventsQueryOptions,
   getCalendarCacheMonthRanges,
+  getCalendarQueryKey,
 } from "@quieter/app/lib/calendar-query";
+import { openConnectorLink } from "@quieter/app/lib/connectors-query";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { openGoogleAccountLink } from "@quieter/app/lib/google-account-link";
 import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
@@ -73,6 +75,7 @@ import {
 } from "@quieter/ui/select";
 import { Surface } from "@quieter/ui/surface";
 import { Text } from "@quieter/ui/text";
+import { toast } from "@quieter/ui/toast";
 import {
   WorkspaceHeader,
   WorkspaceSection,
@@ -167,6 +170,18 @@ const CalendarWorkspaceContent = ({
   const route = useMailboxRouteSearch();
   const { setMailboxSearch } = route;
   const queryClient = useQueryClient();
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("connector") !== "connected") {
+      return;
+    }
+    url.searchParams.delete("connector");
+    window.history.replaceState(window.history.state, "", url);
+    void queryClient.invalidateQueries({
+      queryKey: getCalendarQueryKey(userId),
+    });
+    toast.success("Calendar connected.");
+  }, [queryClient, userId]);
   const agentWorkspace = useAgentWorkspace();
   const online = useSyncExternalStore(
     subscribeToOnline,
@@ -580,12 +595,24 @@ const CalendarWorkspaceContent = ({
     }
     store.setState((current) => ({ ...current, pendingConnection: target }));
     try {
-      await openGoogleAccountLink({
-        loginHint: account?.email ?? undefined,
-        mailboxId: account?.mailboxId ?? undefined,
-        queryClient,
-        returnTo: `${window.location.pathname}${window.location.search}${window.location.hash}`,
-      });
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (
+        account?.provider === "microsoft_calendar" ||
+        (target.kind === "add" && target.provider === "microsoft_calendar")
+      ) {
+        await openConnectorLink({
+          connectionId: account?.id,
+          provider: "microsoft_calendar",
+          returnTo,
+        });
+      } else {
+        await openGoogleAccountLink({
+          loginHint: account?.email ?? undefined,
+          mailboxId: account?.mailboxId ?? undefined,
+          queryClient,
+          returnTo,
+        });
+      }
     } catch (error) {
       toastError(error, { boundary: "calendar" });
     } finally {
@@ -1013,8 +1040,7 @@ const CalendarWorkspaceContent = ({
     );
   }
   const showInitialLoading = data.isLoading && !requestedEventRef;
-  let emptyDescription =
-    "Your Gmail mailbox includes your calendars. Connect it to see your schedule.";
+  let emptyDescription = "Connect a calendar account to see your schedule.";
   let emptyTitle = "Your day, in one place";
   if (!online) {
     emptyDescription =
@@ -1070,10 +1096,11 @@ const CalendarWorkspaceContent = ({
       <CalendarSidebar
         accounts={data.accounts}
         calendars={data.calendars}
+        canConnectMicrosoft={data.microsoftConfigured}
         canCreate={writableCalendars.length > 0}
         date={date}
         hiddenCalendarKeys={data.hiddenCalendarKeys}
-        isConfigured={data.isConfigured}
+        isConfigured={data.googleConfigured}
         isMobileOpen={isMobileSidebarOpen}
         onConnect={(target) => {
           void connect(target);
@@ -1363,18 +1390,47 @@ const CalendarWorkspaceContent = ({
             <EmptyMessageState
               action={
                 !data.isLoading && data.isConfigured ? (
-                  <Button
-                    disabled={ui.pendingConnection !== null}
-                    onClick={() => {
-                      void connect({ kind: "add", source: "empty" });
-                    }}
-                    pending={
-                      ui.pendingConnection?.kind === "add" &&
-                      ui.pendingConnection.source === "empty"
-                    }
-                  >
-                    Connect Gmail
-                  </Button>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button
+                      disabled={
+                        !data.googleConfigured || ui.pendingConnection !== null
+                      }
+                      onClick={() => {
+                        void connect({
+                          kind: "add",
+                          provider: "google_calendar",
+                          source: "empty",
+                        });
+                      }}
+                      pending={
+                        ui.pendingConnection?.kind === "add" &&
+                        ui.pendingConnection.source === "empty" &&
+                        ui.pendingConnection.provider === "google_calendar"
+                      }
+                    >
+                      Connect Gmail
+                    </Button>
+                    {data.microsoftConfigured ? (
+                      <Button
+                        disabled={ui.pendingConnection !== null}
+                        onClick={() => {
+                          void connect({
+                            kind: "add",
+                            provider: "microsoft_calendar",
+                            source: "empty",
+                          });
+                        }}
+                        pending={
+                          ui.pendingConnection?.kind === "add" &&
+                          ui.pendingConnection.source === "empty" &&
+                          ui.pendingConnection.provider === "microsoft_calendar"
+                        }
+                        variant="secondary"
+                      >
+                        Connect Outlook
+                      </Button>
+                    ) : null}
+                  </div>
                 ) : undefined
               }
               description={emptyDescription}
@@ -1403,12 +1459,12 @@ const CalendarWorkspaceContent = ({
               }
               description={
                 data.accounts.some((account) => account.status !== "connected")
-                  ? "Manage the mailbox connection in the sidebar to see its calendars."
+                  ? "Manage the account connection in the sidebar to see its calendars."
                   : "Choose a calendar in the sidebar to see its events."
               }
               title={
                 data.accounts.some((account) => account.status !== "connected")
-                  ? "Your mailbox needs attention"
+                  ? "Your calendar account needs attention"
                   : "No calendars visible"
               }
             />

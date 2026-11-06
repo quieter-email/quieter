@@ -1,4 +1,8 @@
-import { createSstConfigEnv } from "@quieter/env/sst";
+import {
+  actionReleaseEnvironmentSchema,
+  PERSONAL_ACTION_PROTOCOL,
+} from "@quieter/env/deployment";
+import { createSstCommandEnv, createSstConfigEnv } from "@quieter/env/sst";
 
 import { requireSecretResource } from "./secrets";
 import {
@@ -116,6 +120,11 @@ export const createDeploymentContext = (secretResources: SecretResources) => {
       "POLAR_ACCESS_TOKEN"
     ).value,
     r2Environment: createR2Environment(env, secretResources),
+    releaseEnvironment: actionReleaseEnvironmentSchema.parse({
+      QUIETER_ACTION_PROTOCOL: PERSONAL_ACTION_PROTOCOL,
+      QUIETER_BUILD_ID:
+        createSstCommandEnv().QUIETER_BUILD_ID ?? `local-${stage}`,
+    }),
     sentryEnvironment: createSentryEnvironment(secretResources),
   };
 };

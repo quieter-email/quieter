@@ -36,7 +36,9 @@ export const calendarRouter = {
     .output(
       z.object({
         accounts: z.array(calendarAccountSchema),
+        googleConfigured: z.boolean(),
         isConfigured: z.boolean(),
+        microsoftConfigured: z.boolean(),
       })
     )
     .handler(

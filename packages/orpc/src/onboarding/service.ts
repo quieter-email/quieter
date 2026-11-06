@@ -82,6 +82,14 @@ const getSetupState = async (organizationId: string | null, userId: string) => {
               db
                 .select({ id: mailboxGrant.id })
                 .from(mailboxGrant)
+                .innerJoin(
+                  member,
+                  and(
+                    eq(member.id, mailboxGrant.memberId),
+                    eq(member.userId, mailboxGrant.userId),
+                    eq(member.organizationId, mailbox.organizationId)
+                  )
+                )
                 .where(
                   and(
                     eq(mailboxGrant.mailboxId, mailbox.id),

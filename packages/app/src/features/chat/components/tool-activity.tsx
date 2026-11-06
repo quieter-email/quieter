@@ -25,6 +25,18 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 
 const labels: Record<string, { complete: string; pending: string }> = {
+  connector_list_tools: {
+    complete: "Read connected account",
+    pending: "Reading connected account…",
+  },
+  connector_read: {
+    complete: "Read connected content",
+    pending: "Reading connected content…",
+  },
+  connector_write: {
+    complete: "Updated connected account",
+    pending: "Updating connected account…",
+  },
   create_calendar_event: {
     complete: "Created event",
     pending: "Creating event…",
@@ -307,6 +319,16 @@ export const ToolActivity = ({
               The tool and arguments below will be sent to your connected
               account, {approval.linearReview.account}, in{" "}
               {approval.linearReview.workspace}.
+            </p>
+          ) : null}
+          {awaitingApproval && approval?.connectorReview ? (
+            <p className="mb-3 text-caption text-fg">
+              {[
+                approval.connectorReview.account,
+                approval.connectorReview.workspace,
+              ]
+                .filter(Boolean)
+                .join(", ")}
             </p>
           ) : null}
           <ToolDetails draft={draft} input={part.input} />

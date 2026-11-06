@@ -14,6 +14,8 @@ Normal development uses `quieter_dev` on the existing PlanetScale cluster, with 
 
 See [Development integration plan](development-integrations.md) for the accepted provider setup, shared-Gmail ownership rules, secret handling, and work still needed for complete local feature coverage.
 
+See [OAuth connectors](oauth-connectors.md) for Notion, Todoist, ClickUp, Outlook Calendar and OneDrive registration, development secrets and manual acceptance steps.
+
 ## Install
 
 Cloudflare uses the beta `cf` CLI and Vite plugin with `apps/web/cloudflare.config.ts` and `packages/cloudflare/cloudflare.config.ts`. The background runtime uses `wrangler dev --experimental-new-config` to load the same config and retain shared `.wrangler/state` persistence; the current `cf dev` rejects `--persist-to`. SST remains the deployment authority. The Wrangler JSON fixture only serves Worker type generation and tests. Type generation explicitly loads the empty `packages/cloudflare/wrangler.types.env` fixture, keeping its output independent of local `.dev.vars` files. Run `vp exec sst install` after dependency installation to generate infrastructure types. The updated `cf` delegate launcher works on Windows without a patch. Worker tests use isolated Vitest 4 packages until Cloudflare supports Vitest 5.
