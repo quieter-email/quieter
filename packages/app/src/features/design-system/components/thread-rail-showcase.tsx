@@ -5,7 +5,7 @@ import { Surface } from "@quieter/ui/surface";
 import { Text } from "@quieter/ui/text";
 import { ThreadRail } from "@quieter/ui/thread-rail";
 import type { ThreadRailItem } from "@quieter/ui/thread-rail";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 const mailConversation: [string, string][] = [
   [
@@ -167,8 +167,14 @@ const examples = {
 export const ThreadRailShowcase = () => {
   const [example, setExample] = useState<"mail" | "chat">("mail");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const interactionRef = useRef<HTMLDivElement | null>(null);
   const items = examples[example];
-  const selected = items.find((item) => item.id === selectedId);
+  const selectedIndex = items.findIndex((item) => item.id === selectedId);
+  const selected = items[selectedIndex];
+  const highlightedStart = Math.max(0, selectedIndex);
+  const highlightedIds = items
+    .slice(highlightedStart, highlightedStart + 3)
+    .map((item) => item.id);
 
   return (
     <Surface id="thread-rail" padding="compact" variant="panel">
@@ -200,7 +206,10 @@ export const ThreadRailShowcase = () => {
         </Text>
       </div>
       <Surface chrome="inset" padding="none">
-        <div className="relative flex min-h-88 items-center py-10 pl-8 sm:pl-16 pointer-coarse:pb-24">
+        <div
+          className="relative flex min-h-88 items-center py-10 pl-8 sm:pl-16 pointer-coarse:pb-24"
+          ref={interactionRef}
+        >
           <ThreadRail
             activeId={selectedId}
             aria-label={
@@ -208,6 +217,8 @@ export const ThreadRailShowcase = () => {
                 ? "Messages in the mail thread"
                 : "Turns in the AI conversation"
             }
+            highlightedIds={highlightedIds}
+            interactionRef={interactionRef}
             items={items}
             key={example}
             maxHeight={144}
@@ -218,7 +229,7 @@ export const ThreadRailShowcase = () => {
               Move closer. Follow the conversation.
             </Text>
             <Text className="mt-1" size="caption" tone="muted">
-              Click a mark to choose a message.
+              Click a mark or preview to choose a message.
             </Text>
           </div>
         </div>
