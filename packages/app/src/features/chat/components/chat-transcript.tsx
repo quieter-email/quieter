@@ -1,14 +1,17 @@
 "use client";
 
 import { Alert02Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import { ConversationNavigator } from "@quieter/app/components/conversation-navigator";
 import { ChatMessage } from "@quieter/app/features/chat/components/chat-message";
+import { getMessageText } from "@quieter/app/features/chat/domain/chat-messages";
 import type { ChatToolApproval } from "@quieter/app/features/chat/domain/chat-tools";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { UIMessage } from "ai";
-import { useEffect, useRef, useState } from "react";
+import { useReducedMotion } from "motion/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type ChatTranscriptProps = {
   approvals: ChatToolApproval[];
@@ -33,7 +36,26 @@ export const ChatTranscript = ({
 }: ChatTranscriptProps) => {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
+  const gutterRef = useRef<HTMLDivElement | null>(null);
+  const followIntent = useRef<"tail" | "browse">("tail");
+  const previousViewport = useRef<{
+    clientHeight: number;
+    scrollHeight: number;
+    scrollTop: number;
+  } | null>(null);
+  const reducedMotion = useReducedMotion();
   const [showLatest, setShowLatest] = useState(false);
+  const promptItems = useMemo(
+    () =>
+      messages.flatMap((message) => {
+        if (message.role !== "user") {
+          return [];
+        }
+        const text = getMessageText(message.parts);
+        return text === "" ? [] : [{ id: message.id, label: text }];
+      }),
+    [messages]
+  );
 
   const scrollToLatest = (behavior: ScrollBehavior) => {
     const viewport = viewportRef.current;
@@ -41,25 +63,38 @@ export const ChatTranscript = ({
       return;
     }
     viewport.scrollTo({ behavior, top: viewport.scrollHeight });
+    previousViewport.current = {
+      clientHeight: viewport.clientHeight,
+      scrollHeight: viewport.scrollHeight,
+      scrollTop: viewport.scrollTop,
+    };
     setShowLatest(false);
   };
 
   useEffect(() => {
     const content = contentRef.current;
-    if (content === null) {
+    const viewport = viewportRef.current;
+    if (content === null || viewport === null) {
       return;
     }
     const observer = new ResizeObserver(() => {
-      const viewport = viewportRef.current;
-      if (
-        viewport !== null &&
-        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <
-          SCROLL_THRESHOLD
-      ) {
+      const previous = previousViewport.current;
+      const wasFollowing =
+        followIntent.current === "tail" &&
+        (previous === null ||
+          previous.scrollHeight - previous.scrollTop - previous.clientHeight <
+            SCROLL_THRESHOLD);
+      previousViewport.current = {
+        clientHeight: viewport.clientHeight,
+        scrollHeight: viewport.scrollHeight,
+        scrollTop: viewport.scrollTop,
+      };
+      if (wasFollowing) {
         scrollToLatest("auto");
       }
     });
     observer.observe(content);
+    observer.observe(viewport);
     scrollToLatest("auto");
     return () => {
       observer.disconnect();
@@ -68,23 +103,36 @@ export const ChatTranscript = ({
 
   return (
     <div
-      className={cn("relative flex min-h-0 flex-col", {
+      className={cn("relative flex min-h-0", {
         "flex-1": docked,
         "max-h-[min(28rem,calc(100dvh-15rem))]": !docked,
       })}
     >
       <div
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        className="flex w-14 shrink-0 items-center justify-center py-4 pl-4 empty:hidden pointer-coarse:w-16"
+        ref={gutterRef}
+      />
+      <div
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
         onScroll={() => {
           const viewport = viewportRef.current;
           if (viewport === null) {
             return;
           }
+          const previous = previousViewport.current;
+          if (
+            previous !== null &&
+            previous.clientHeight === viewport.clientHeight &&
+            previous.scrollHeight === viewport.scrollHeight
+          ) {
+            previous.scrollTop = viewport.scrollTop;
+          }
           setShowLatest(
-            viewport.scrollHeight -
-              viewport.scrollTop -
-              viewport.clientHeight >=
-              SCROLL_THRESHOLD
+            followIntent.current === "browse" ||
+              viewport.scrollHeight -
+                viewport.scrollTop -
+                viewport.clientHeight >=
+                SCROLL_THRESHOLD
           );
         }}
         ref={viewportRef}
@@ -126,6 +174,16 @@ export const ChatTranscript = ({
           )}
         </div>
       </div>
+      <ConversationNavigator
+        aria-label="Questions in this conversation"
+        enabled={docked}
+        items={promptItems}
+        onNavigateStart={() => {
+          followIntent.current = "browse";
+          setShowLatest(true);
+        }}
+        scope={{ contentRef, gutterRef, viewportRef }}
+      />
       {showLatest ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
           <IconButtonTooltip label="Scroll to latest message">
@@ -134,7 +192,8 @@ export const ChatTranscript = ({
               // oxlint-disable-next-line shadcn/no-restyle -- Floating scroll button keeps its elevated treatment.
               className="pointer-events-auto rounded-full bg-bg-raised shadow-elevation"
               onClick={() => {
-                scrollToLatest("smooth");
+                followIntent.current = "tail";
+                scrollToLatest(reducedMotion === true ? "auto" : "smooth");
               }}
               size="icon-sm"
               type="button"

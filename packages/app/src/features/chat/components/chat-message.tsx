@@ -47,7 +47,14 @@ export const ChatMessage = ({
   }
 
   if (message.role === "user") {
-    return <p className="text-body/relaxed text-muted-fg">{text}</p>;
+    return (
+      <p
+        className="text-body/relaxed text-muted-fg"
+        data-conversation-item={message.id}
+      >
+        {text}
+      </p>
+    );
   }
 
   const approvalsByToolCall = new Map(

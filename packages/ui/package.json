@@ -63,6 +63,7 @@
     "./switch": "./src/components/ui/switch.tsx",
     "./tabs": "./src/components/ui/tabs.tsx",
     "./theme-picker": "./src/components/ui/theme-picker.tsx",
+    "./thread-rail": "./src/components/ui/thread-rail.tsx",
     "./textarea": "./src/components/ui/textarea.tsx",
     "./text": "./src/components/ui/text.tsx",
     "./text-field": "./src/components/ui/text-field.tsx",

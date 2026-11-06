@@ -66,6 +66,9 @@ export const MessageDetail = ({
 }: MessageDetailProps) => {
   const reducedMotion = useReducedMotion();
   const detailRef = useRef<HTMLElement>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const gutterRef = useRef<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
     if (focusOnOpen === true) {
       detailRef.current?.focus({ preventScroll: true });
@@ -110,6 +113,7 @@ export const MessageDetail = ({
           mailboxId={mailboxId}
           mailboxProvider={mailboxProvider}
           message={selectedMessage}
+          navigationScope={{ contentRef, gutterRef, viewportRef }}
           onConversationOpened={onConversationOpened}
           onBackToList={onBackToList}
           onAutoFocusComplete={onAutoFocusComplete}
@@ -124,13 +128,18 @@ export const MessageDetail = ({
 
   return (
     <section
-      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+      className="flex min-h-0 min-w-0 flex-1 overflow-hidden"
       ref={detailRef}
       tabIndex={focusOnOpen === true ? -1 : undefined}
     >
       <div
+        className="flex w-14 shrink-0 items-center justify-center py-4 pl-4 empty:hidden pointer-coarse:w-16"
+        ref={gutterRef}
+      />
+      <div
         className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto"
         data-message-detail-scroll-container
+        ref={viewportRef}
       >
         <m.div
           animate={{
@@ -149,6 +158,7 @@ export const MessageDetail = ({
                 }
           }
           key={`${mailboxId}:${selectedMessage?.id ?? (isPending === true ? "loading" : "empty")}`}
+          ref={contentRef}
           transition={{
             duration:
               reducedMotion === true
