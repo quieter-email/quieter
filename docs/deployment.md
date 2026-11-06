@@ -137,7 +137,15 @@ The first successful consumer verification starts a 16-minute drain with Actions
 
 The workflow verifies all consumer identities again after the drain and writes `action-deployment-evidence.json`. The final database transaction releases the same fenced source commit. The private `action-cutover` artifact retains the before/after state, captured web plan, and both sets of nonsecret provider evidence for 90 days. The verifier does not print linked secrets or full function environments. Its Cloudflare API contract is documented in [Worker script versions](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/get/). The AWS status contract is documented in [get-function-configuration](https://docs.aws.amazon.com/cli/latest/reference/lambda/get-function-configuration.html).
 
-If any step fails or the run is canceled after preparation, the database stays fenced. Read the job summary and retained evidence, fix the failing check, and rerun the same commit with the command above. A reviewed newer forward fix must explicitly identify the prior fenced source commit before taking ownership. Ordinary pushes fail closed while preparation is required. After the first successful release, ordinary pushes verify the permanent protocol guards and use the normal deployment path.
+If any step fails or the run is canceled after preparation, the database stays fenced. If deployment and initial consumer verification completed, recover that deployment after its original drain deadline:
+
+```sh
+gh workflow run action-cutover-recovery.yml --ref main -f deployment_run=RUN_ID -f deployment_attempt=1
+```
+
+The protected recovery verifies the original run, attempt, successful steps, and retained artifact digest. It uses the original verification timestamp and fails immediately if the drain has not elapsed. It does not deploy, migrate, or sleep. Fresh public health, signed updates, and provider checks must match the original consumer identities. A newer Cloudflare deployment, changed Lambda revision, missing evidence, or a different fence owner prevents release. The final transaction checks the original source and workflow owner while holding the migration lock. The recovery retains its evidence in `action-cutover-recovery`.
+
+If the original deployment never completed verification or its consumers changed, fix the failed check and use a reviewed forward deployment with a fresh drain. A newer forward fix must explicitly identify the prior fenced source commit before taking ownership. Ordinary pushes fail closed while preparation is required. After the first successful release, ordinary pushes verify the permanent protocol guards and skip the cutover drain. A normal deployment can then apply any subsequent secret or code changes.
 
 Do not restore a pre-cutover router or legacy Action settings after migration. Web recovery refuses incompatible records. Use a reviewed compatible forward fix after a partial deploy, and reconcile uncertain provider effects separately. The workflow never releases from a failure handler or `finally` block.
 
