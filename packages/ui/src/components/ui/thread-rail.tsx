@@ -10,7 +10,7 @@ import {
   useTransform,
 } from "motion/react";
 import type { MotionValue } from "motion/react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { cn } from "../../lib/cn";
 import { Text } from "./text";
@@ -91,6 +91,7 @@ export const ThreadRail = ({
   const wave = useMotionValue(0);
   const [preview, setPreview] = useState<Preview>({ id: null, kind: "idle" });
   const dismissed = useRef(false);
+  const railRef = useRef<HTMLElement>(null);
   const buttons = useRef(new Map<string, HTMLElement>());
   const previewIndex = items.findIndex((item) => item.id === preview.id);
   const previewItem = items[previewIndex];
@@ -98,6 +99,98 @@ export const ThreadRail = ({
     preview.kind === "focus" && items.some((item) => item.id === preview.id)
       ? preview.id
       : (items.find((item) => item.id === activeId)?.id ?? items[0]?.id);
+
+  useEffect((): (() => void) | undefined => {
+    const rail = railRef.current;
+    if (rail === null) {
+      return undefined;
+    }
+    const document = rail.ownerDocument;
+    const view = document.defaultView;
+    if (view === null) {
+      return undefined;
+    }
+
+    const finePointer = view.matchMedia("(hover: hover) and (pointer: fine)");
+    const reset = () => {
+      approach.set(0);
+      wave.set(0);
+      dismissed.current = false;
+      setPreview((current) =>
+        current.kind === "pointer" ? { ...current, kind: "idle" } : current
+      );
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerType === "touch" || !finePointer.matches) {
+        reset();
+        return;
+      }
+      const bounds = rail.getBoundingClientRect();
+      if (bounds.height === 0) {
+        reset();
+        return;
+      }
+
+      const x = Math.abs(event.clientX - bounds.left);
+      const position =
+        ((event.clientY - bounds.top) / bounds.height) * items.length - 0.5;
+      cursorIndex.set(position);
+      approach.set(1 / (1 + (x / 160) ** 2));
+      wave.set(1 / (1 + (x / 24) ** 6));
+
+      const { target } = event;
+      const popup =
+        target instanceof view.Element
+          ? target.closest("[data-thread-rail-preview]")
+          : null;
+      const overPreview =
+        popup instanceof view.HTMLElement &&
+        popup.dataset.threadRailPreview === railId;
+      const near =
+        x <= 40 &&
+        event.clientY >= bounds.top &&
+        event.clientY <= bounds.bottom;
+      if (!near && !overPreview) {
+        dismissed.current = false;
+      }
+      const item =
+        items[Math.max(0, Math.min(items.length - 1, Math.round(position)))];
+      setPreview((current) => {
+        if (overPreview) {
+          return current;
+        }
+        if (
+          !near ||
+          !(target instanceof view.Node) ||
+          !rail.contains(target) ||
+          dismissed.current ||
+          item === undefined
+        ) {
+          return current.kind === "pointer"
+            ? { ...current, kind: "idle" }
+            : current;
+        }
+        return current.kind === "pointer" && current.id === item.id
+          ? current
+          : { id: item.id, kind: "pointer" };
+      });
+    };
+
+    document.addEventListener("pointermove", handlePointerMove, {
+      passive: true,
+    });
+    document.addEventListener("pointerleave", reset);
+    document.addEventListener("pointercancel", reset);
+    view.addEventListener("blur", reset);
+    finePointer.addEventListener("change", reset);
+    return () => {
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerleave", reset);
+      document.removeEventListener("pointercancel", reset);
+      view.removeEventListener("blur", reset);
+      finePointer.removeEventListener("change", reset);
+    };
+  }, [approach, cursorIndex, items, railId, wave]);
 
   if (items.length === 0) {
     return null;
@@ -121,72 +214,11 @@ export const ThreadRail = ({
           previewItem === undefined ? null : `${railId}-${previewIndex}`
         }
       >
-        {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- The navigation senses proximity while native buttons own activation and keyboard behavior. */}
         <nav
           aria-label={label}
           className={cn("relative w-36 shrink-0", className)}
           data-thread-rail
-          onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) {
-              setPreview((current) => ({ ...current, kind: "idle" }));
-            }
-          }}
-          onPointerCancel={() => {
-            approach.set(0);
-            wave.set(0);
-            setPreview((current) => ({ ...current, kind: "idle" }));
-          }}
-          onPointerLeave={(event) => {
-            approach.set(0);
-            wave.set(0);
-            dismissed.current = false;
-            if (
-              event.relatedTarget instanceof Element &&
-              event.relatedTarget.closest("[data-thread-rail-preview]") !== null
-            ) {
-              return;
-            }
-            setPreview((current) =>
-              current.kind === "pointer"
-                ? { ...current, kind: "idle" }
-                : current
-            );
-          }}
-          onPointerMove={(event) => {
-            if (
-              event.pointerType === "touch" ||
-              !window.matchMedia("(hover: hover) and (pointer: fine)")
-                .matches ||
-              !(event.target instanceof Node) ||
-              !event.currentTarget.contains(event.target)
-            ) {
-              return;
-            }
-            const bounds = event.currentTarget.getBoundingClientRect();
-            const x = Math.max(0, event.clientX - bounds.left);
-            const position =
-              ((event.clientY - bounds.top) / bounds.height) * items.length -
-              0.5;
-            const pull = Math.max(0, 1 - x / 128);
-            const close = Math.max(0, 1 - x / 40);
-            cursorIndex.set(position);
-            approach.set(pull * pull * (3 - 2 * pull));
-            wave.set(close * close * (3 - 2 * close));
-            const item =
-              items[
-                Math.max(0, Math.min(items.length - 1, Math.round(position)))
-              ];
-            setPreview((current) => {
-              if (x > 40 || dismissed.current || item === undefined) {
-                return current.kind === "pointer"
-                  ? { ...current, kind: "idle" }
-                  : current;
-              }
-              return current.kind === "pointer" && current.id === item.id
-                ? current
-                : { id: item.id, kind: "pointer" };
-            });
-          }}
+          ref={railRef}
         >
           {/* The compact navigation marks need stable targets independent of their animated length. */}
           {items.map((item, index) => (
@@ -197,6 +229,11 @@ export const ThreadRail = ({
               aria-label={item.label}
               className="flex h-2.5 w-8 cursor-pointer items-center bg-transparent text-left focus-visible:rounded-xs focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring pointer-coarse:h-6 pointer-coarse:w-11"
               data-thread-rail-item={item.id}
+              onBlur={(event) => {
+                if (railRef.current?.contains(event.relatedTarget) !== true) {
+                  setPreview((current) => ({ ...current, kind: "idle" }));
+                }
+              }}
               onClick={() => {
                 onSelect(item.id);
               }}
@@ -260,7 +297,7 @@ export const ThreadRail = ({
         </nav>
         <TooltipContent
           className="w-64"
-          data-thread-rail-preview
+          data-thread-rail-preview={railId}
           onPointerLeave={() => {
             setPreview((current) =>
               current.kind === "pointer"
