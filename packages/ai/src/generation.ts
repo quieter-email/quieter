@@ -104,6 +104,8 @@ export const runTextGeneration = async (input: {
   billing: AiBillingContext;
   abortSignal?: AbortSignal;
   maxOutputTokens: number;
+  maxRetries?: number;
+  prioritizeLatency?: boolean;
   model?: ChatModel;
   onUsage?: (usage: AiUsageReport) => void;
   prompt: string;
@@ -116,8 +118,10 @@ export const runTextGeneration = async (input: {
       : { abortSignal: input.abortSignal }),
     instructions: `${AI_PROMPT_SECURITY_POLICY}\n\n${input.system}`,
     maxOutputTokens: input.maxOutputTokens,
+    ...(input.maxRetries === undefined ? {} : { maxRetries: input.maxRetries }),
     model: createChatModel(input.model ?? defaultChatModel, {
       billing: input.billing,
+      prioritizeLatency: input.prioritizeLatency,
     }),
     ...reasoningProviderOptions(input.reasoningEffort),
     prompt: input.prompt,

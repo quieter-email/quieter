@@ -8,7 +8,6 @@ import {
   LeftToRightListNumberIcon,
   QuoteUpIcon,
   NoteIcon,
-  StopIcon,
   TextBoldIcon,
   TextItalicIcon,
   TextStrikethroughIcon,
@@ -20,6 +19,7 @@ import { SlashCommands } from "@quieter/app/features/compose/domain/slash-comman
 import type { VisualEmailDocument } from "@quieter/mail/visual-email";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { ComposerDictationControl } from "@quieter/ui/composer-chrome";
 import {
   Dialog,
   DialogContent,
@@ -91,17 +91,6 @@ const ComposeSignature = Node.create({
   selectable: false,
 });
 
-const audioWaveBars = [
-  { id: "low-left", scale: 0.42 },
-  { id: "mid-left", scale: 0.7 },
-  { id: "peak-left", scale: 0.95 },
-  { id: "soft-left", scale: 0.58 },
-  { id: "peak-right", scale: 0.82 },
-  { id: "soft-right", scale: 0.48 },
-  { id: "mid-right", scale: 0.72 },
-  { id: "low-right", scale: 0.52 },
-];
-
 const EMPTY_SNIPPETS: NonNullable<ComposeEditorProps["snippets"]> = [];
 
 type ComposeEditorProps = {
@@ -120,6 +109,8 @@ type ComposeEditorProps = {
   onSlashMenuOpenChange?: (open: boolean) => void;
   onRecordingStart?: () => void;
   onRecordingStop?: () => void;
+  onRecordingCancel?: () => void;
+  recordingAnalyser?: AnalyserNode | null;
   recording?: boolean;
   recordingStarting?: boolean;
   recordingSupported?: boolean;
@@ -141,6 +132,8 @@ type ComposeEditorContextValue = {
   onCreateSnippet?: (text: string) => void;
   onRecordingStart?: () => void;
   onRecordingStop?: () => void;
+  onRecordingCancel?: () => void;
+  recordingAnalyser: AnalyserNode | null;
   recording: boolean;
   recordingStarting: boolean;
   recordingSupported: boolean;
@@ -175,6 +168,8 @@ export const ComposeEditor = ({
   onSlashMenuOpenChange,
   onRecordingStart,
   onRecordingStop,
+  onRecordingCancel,
+  recordingAnalyser = null,
   recording = false,
   recordingStarting = false,
   recordingSupported = false,
@@ -209,7 +204,8 @@ export const ComposeEditor = ({
   const editor = useEditor({
     autofocus: false,
     content: document?.content ?? html.trim(),
-    editable: disabled !== true,
+    editable:
+      disabled !== true && !recording && !recordingStarting && !transcribing,
     editorProps: {
       attributes: {
         class:
@@ -319,8 +315,11 @@ export const ComposeEditor = ({
       return;
     }
     // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent
-    editor.setEditable(disabled !== true, false);
-  }, [disabled, editor]);
+    editor.setEditable(
+      disabled !== true && !recording && !recordingStarting && !transcribing,
+      false
+    );
+  }, [disabled, editor, recording, recordingStarting, transcribing]);
 
   useEffect(() => {
     if (!editor) {
@@ -349,9 +348,11 @@ export const ComposeEditor = ({
       disabled: disabled === true,
       editor,
       onCreateSnippet,
+      onRecordingCancel,
       onRecordingStart,
       onRecordingStop,
       recording,
+      recordingAnalyser,
       recordingStarting,
       recordingSupported,
       transcribing,
@@ -363,6 +364,8 @@ export const ComposeEditor = ({
       onCreateSnippet,
       onRecordingStart,
       onRecordingStop,
+      onRecordingCancel,
+      recordingAnalyser,
       recording,
       recordingStarting,
       recordingSupported,
@@ -477,40 +480,10 @@ export const ComposeEditorBody = ({
   className?: string;
   invalid?: boolean;
 }) => {
-  const { density, disabled, editor, recording, transcribing } =
-    useComposeEditor();
-  const audioActive = recording || transcribing;
+  const { density, disabled, editor } = useComposeEditor();
   let editorBody: ReactNode;
 
-  if (audioActive) {
-    editorBody = (
-      <output
-        aria-label={recording ? "Recording audio" : "Transcribing audio"}
-        className={cn("flex h-full items-center justify-center px-4 py-3.5", {
-          "min-h-28": density === "compact",
-          "min-h-48": density === "comfortable",
-        })}
-      >
-        <div className="flex h-10 items-center gap-1.5 rounded-full bg-muted px-4">
-          {audioWaveBars.map((bar, index) => (
-            <span
-              className={cn("h-6 w-1 animate-pulse rounded-full", {
-                "bg-muted-fg": transcribing,
-                "bg-primary": recording,
-              })}
-              key={bar.id}
-              style={{
-                // oxlint-disable-next-line shadcn/no-inline-styles -- Bar delay and scale are computed per sample.
-                animationDelay: `${index * 70}ms`,
-                // oxlint-disable-next-line shadcn/no-inline-styles -- Bar delay and scale are computed per sample.
-                transform: `scaleY(${bar.scale})`,
-              }}
-            />
-          ))}
-        </div>
-      </output>
-    );
-  } else if (editor) {
+  if (editor) {
     editorBody = (
       <EditorContent
         className="absolute inset-0 overflow-y-auto px-4 py-3.5 [&>.ProseMirror]:min-h-full"
@@ -788,32 +761,35 @@ export const ComposeEditorDictationButton = () => {
     disabled,
     onRecordingStart,
     onRecordingStop,
+    onRecordingCancel,
+    recordingAnalyser,
     recording,
     recordingStarting,
     recordingSupported,
     transcribing,
   } = useComposeEditor();
-  const recordingLabel = recordingStarting ? "Starting microphone" : "Dictate";
-  const label = recordingSupported ? recordingLabel : "Recording unavailable";
+  const label = recordingSupported ? "Dictate" : "Recording unavailable";
 
-  return recording ? (
-    <IconButtonTooltip label="Stop recording">
-      <ToolbarButton
-        aria-label="Stop recording"
-        // oxlint-disable-next-line shadcn/no-restyle -- Recording stop keeps its primary tint.
-        className="text-primary"
+  if (
+    (recording || recordingStarting || transcribing) &&
+    onRecordingCancel &&
+    onRecordingStop
+  ) {
+    return (
+      <ComposerDictationControl
         disabled={disabled}
-        onClick={onRecordingStop}
-        onMouseDown={(event) => {
-          event.preventDefault();
-        }}
-        type="button"
-      >
-        <Icon icon={StopIcon} />
-        Stop
-      </ToolbarButton>
-    </IconButtonTooltip>
-  ) : (
+        onCancel={onRecordingCancel}
+        onFinish={onRecordingStop}
+        state={
+          recording
+            ? { analyser: recordingAnalyser, phase: "recording" }
+            : { phase: recordingStarting ? "starting" : "transcribing" }
+        }
+      />
+    );
+  }
+
+  return (
     <IconButtonTooltip label={label}>
       <ToolbarButton
         aria-label={label}

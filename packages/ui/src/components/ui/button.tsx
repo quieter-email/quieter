@@ -75,6 +75,7 @@ export const buttonVariants = cva(
       auxiliaryPress: { false: null, true: null },
       chrome: {
         default: null,
+        round: "rounded-full not-squircle",
         toolbar: null,
       },
       focusRing: {
