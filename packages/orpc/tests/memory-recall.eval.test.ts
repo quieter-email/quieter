@@ -127,9 +127,11 @@ describe.skipIf(state.databaseUrl === undefined)(
       shared: crypto.randomUUID(),
     };
     const now = new Date();
+    let fixturesMayExist = false;
     beforeAll(async () => {
       const url = new URL(state.databaseUrl ?? "");
       if (
+        !["postgres:", "postgresql:"].includes(url.protocol) ||
         !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
         url.pathname !== "/quieter_migration_test" ||
         url.search ||
@@ -140,6 +142,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         );
       }
       await db.execute(sql`select 1 from ${aiMemory} limit 1`);
+      fixturesMayExist = true;
       await db.insert(user).values(
         [userId, otherUserId].map((id) => ({
           createdAt: now,
@@ -199,11 +202,15 @@ describe.skipIf(state.databaseUrl === undefined)(
     });
 
     afterAll(async () => {
-      await db
-        .delete(aiMemory)
-        .where(inArray(aiMemory.userId, [userId, otherUserId]));
-      await db.delete(organization).where(eq(organization.id, organizationId));
-      await db.delete(user).where(inArray(user.id, [userId, otherUserId]));
+      if (fixturesMayExist) {
+        await db
+          .delete(aiMemory)
+          .where(inArray(aiMemory.userId, [userId, otherUserId]));
+        await db
+          .delete(organization)
+          .where(eq(organization.id, organizationId));
+        await db.delete(user).where(inArray(user.id, [userId, otherUserId]));
+      }
       if (state.reportPath) {
         await writeFile(
           state.reportPath,

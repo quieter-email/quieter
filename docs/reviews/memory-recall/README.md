@@ -26,7 +26,7 @@ Hit means the relevant synthetic fact appeared in Quieter context or its source-
 
 These files preserve the captured output. The older Supermemory reports contain baseline metadata but did not attach Quieter cases. The table above joins the independently captured reports by shared scenario ID. The comparison command now attaches matching Quieter outcomes directly; the recorded service output has not been rewritten to imply another service run.
 
-See [comparison setup and limitations](../../memory-comparison.md), [SQL evaluation instructions](../../ai-memory.md#synthetic-recall-evaluation), and the source/date [component previews](../../screenshots/memory-provenance/light-wide.png). The previews render the actual provenance component and shared styles in synthetic surrounding layout. Full application navigation was not verified because the development optimizer was killed during resource contention.
+See [comparison setup and limitations](../../memory-comparison.md), [SQL evaluation instructions](../../ai-memory.md#synthetic-recall-evaluation), and the [actual application verification](actual-app-verification.md). The earlier [component previews](../../screenshots/memory-provenance/light-wide.png) remain separate from the later authenticated application screenshots.
 
 ## Verification
 
@@ -34,8 +34,9 @@ See [comparison setup and limitations](../../memory-comparison.md), [SQL evaluat
 - The explicit disposable PostgreSQL run passed 51 tests across the store, overview, context selection, semantic authority and lazy tool suites.
 - Final controlled-transport comparison tests passed all 10 cases, including baseline pairing and resumed-corpus rejection.
 - Changed-file format, lint and type analysis completed. Its comparison-test style/type findings were corrected and that file passed its final check.
+- Final CI integration selection passed 460 tests across 41 files against disposable PostgreSQL, including the corrected recall billing fixture. Two actual CLI boundary regressions passed for resumed ingestion and rejected-database cleanup.
 - Import boundaries passed for 906 source files/manifests. AWS and Cloudflare handler bundle checks passed, including all five Cloudflare Workers.
-- Repository-wide type-aware lint was killed before analysis on two attempts. Formatting completed, but the global lint/type gate is not verified. No source diagnostic was produced by those killed attempts.
+- Full repository `vp check`, including type-aware lint and type checking, passed in [CI for head 6e64d8d2](https://github.com/quieter-email/quieter/actions/runs/42272441782/job/128080165897). Local attempts were killed under host memory pressure without source diagnostics. CI ran the unmodified lint/type configuration; no rules or file scopes were weakened.
 
 Independent review found two consequential issues that were fixed before publication: continuation after uncertain paid inference and discarded per-case comparison data. Focused tests exercise both corrections. A separate cross-family audit review was unavailable within the configured consultation allowance; the independent final source/evidence review used the inherited model.
 

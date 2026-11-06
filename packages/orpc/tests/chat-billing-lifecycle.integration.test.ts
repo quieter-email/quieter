@@ -190,6 +190,7 @@ describe.skipIf(state.databaseUrl === undefined)(
           throw new Error("Fixture must exercise paid team admission.");
         }
         const ambient = billing.groupId.startsWith("ai-memory-event:");
+        const recall = billing.groupId.startsWith("memory-recall:");
         const model = wrapLanguageModel({
           middleware: createAiBillingMiddleware(billing, () => 0.01),
           model: new MockLanguageModelV4({
@@ -202,6 +203,7 @@ describe.skipIf(state.databaseUrl === undefined)(
                 ambientStarted.resolve(true);
                 await ambientRelease.promise;
               }
+              const immediate = recall ? { terms: [] } : { intent: "none" };
               return {
                 content: [
                   {
@@ -212,7 +214,7 @@ describe.skipIf(state.databaseUrl === undefined)(
                             operations: [],
                             summary: "No lasting facts.",
                           }
-                        : { intent: "none" }
+                        : immediate
                     ),
                     type: "text",
                   },
@@ -412,6 +414,12 @@ describe.skipIf(state.databaseUrl === undefined)(
         .from(aiCreditReservation)
         .where(eq(aiCreditReservation.organizationId, actor.organizationId));
       expect(held.filter((row) => row.status === "reserved")).toHaveLength(1);
+      expect(
+        held.some(
+          (row) =>
+            row.groupId.startsWith("memory-recall:") && row.status === "settled"
+        )
+      ).toBeTruthy();
       expect(
         held.some((row) => row.groupId.startsWith("ai-memory-event:"))
       ).toBeFalsy();

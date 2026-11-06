@@ -53,6 +53,7 @@ try {
     extractionModel,
     pause: setTimeout,
     quieterReport,
+    resumeRunId: values["resume-run-id"],
     scenarioIds: values.scenario ?? [],
     serviceVersion,
     taskType: z.enum(["memory", "superrag"]).parse(values["task-type"]),

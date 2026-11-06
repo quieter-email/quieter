@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setImmediate } from "node:timers/promises";
 
+import type { expandMemoryRecallQuery } from "@quieter/ai/ai-memory-recall";
 import { classifyMailImportance } from "@quieter/ai/mail-importance";
 import { reportAiUsage } from "@quieter/billing";
 import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
@@ -76,6 +77,11 @@ vi.mock(import("@quieter/env/public"), async (importOriginal) => {
 });
 vi.mock(import("@quieter/ai/mail-importance"), () => ({
   classifyMailImportance: vi.fn<typeof classifyMailImportance>(),
+}));
+vi.mock(import("@quieter/ai/ai-memory-recall"), () => ({
+  expandMemoryRecallQuery: vi
+    .fn<typeof expandMemoryRecallQuery>()
+    .mockResolvedValue([]),
 }));
 vi.mock(import("@quieter/billing"), () => ({
   reportAiUsage: vi.fn<typeof reportAiUsage>(),
