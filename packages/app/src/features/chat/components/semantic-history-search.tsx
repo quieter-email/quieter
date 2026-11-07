@@ -6,6 +6,11 @@ import { toastError } from "@quieter/app/lib/error-toast";
 import { rpc } from "@quieter/app/lib/orpc";
 import { Button } from "@quieter/ui/button";
 import {
+  Collapsible,
+  CollapsiblePanel,
+  CollapsibleTrigger,
+} from "@quieter/ui/collapsible";
+import {
   Dialog,
   DialogBody,
   DialogCloseButton,
@@ -193,64 +198,9 @@ export const SemanticHistorySearch = ({
               value={query}
             />
             {kind === "mail" ? (
-              <div className="space-y-2">
-                <Text size="caption" tone="muted">
-                  Searches messages retained in Quieter. Normal mail search
-                  always covers your full mailbox.
-                </Text>
-                {preparation.data?.canImport === true &&
-                preparation.data.importRequested ? (
-                  <Text size="caption" tone="muted">
-                    {preparation.data.importComplete
-                      ? "Older mail has been imported."
-                      : "Older mail is being prepared in the background. Results may be incomplete."}
-                  </Text>
-                ) : null}
-                {preparation.data?.canImport === true &&
-                !preparation.data.importRequested ? (
-                  <>
-                    <Text size="caption" tone="muted">
-                      Preparing older mail for search uses your AI balance.
-                    </Text>
-                    <Button
-                      disabled={prepareMail.isPending || search.isFetching}
-                      onClick={() => {
-                        prepareMail.mutate();
-                      }}
-                      type="button"
-                      variant="secondary"
-                    >
-                      {prepareMail.isPending
-                        ? "Starting preparation…"
-                        : "Prepare older mail"}
-                    </Button>
-                  </>
-                ) : null}
-                {preparation.data?.waiting === true ? (
-                  <Text size="caption" tone="muted">
-                    Preparation is waiting for access or available usage. It
-                    will retry automatically.
-                  </Text>
-                ) : null}
-              </div>
-            ) : null}
-            {preparation.data?.active === true ? (
-              <div className="space-y-2">
-                <Button
-                  disabled={pausePreparation.isPending}
-                  onClick={() => {
-                    pausePreparation.mutate();
-                  }}
-                  type="button"
-                  variant="secondary"
-                >
-                  Stop background preparation
-                </Button>
-                <Text size="caption" tone="muted">
-                  The current batch can finish. Search again to resume preparing
-                  retained content.
-                </Text>
-              </div>
+              <Text size="caption" tone="muted">
+                Searches mail already saved in Quieter.
+              </Text>
             ) : null}
             <div aria-live="polite">
               {search.isFetching ? (
@@ -265,37 +215,11 @@ export const SemanticHistorySearch = ({
               ) : null}
               {search.data ? (
                 <div className="space-y-3">
-                  <div className="space-y-2">
+                  {search.data.coverage.complete ? null : (
                     <Text size="caption" tone="muted">
-                      {search.data.coverage.indexedSources} of{" "}
-                      {search.data.coverage.totalSources} retained messages
-                      ready to search by meaning.
-                      {preparation.data?.active === true
-                        ? " New content continues preparing in the background."
-                        : ""}
+                      Results may be incomplete while search is prepared.
                     </Text>
-                    {search.data.coverage.complete ? null : (
-                      <>
-                        <Text size="caption" tone="muted">
-                          Results may be incomplete while more content is
-                          prepared.
-                        </Text>
-                        <Button
-                          onClick={() => {
-                            setSubmitted((previous) =>
-                              previous === null
-                                ? null
-                                : { ...previous, request: previous.request + 1 }
-                            );
-                          }}
-                          type="button"
-                          variant="secondary"
-                        >
-                          Continue preparing search
-                        </Button>
-                      </>
-                    )}
-                  </div>
+                  )}
                   {search.data.items.length === 0 ? (
                     <Text size="sm" tone="muted">
                       No matching history found.
@@ -344,6 +268,113 @@ export const SemanticHistorySearch = ({
                 </div>
               ) : null}
             </div>
+            {search.data !== undefined ||
+            kind === "mail" ||
+            preparation.data?.active === true ? (
+              <Collapsible key={kind}>
+                <CollapsibleTrigger
+                  render={<Button size="sm" type="button" variant="ghost" />}
+                >
+                  Search coverage
+                </CollapsibleTrigger>
+                <CollapsiblePanel>
+                  <div className="min-h-0 space-y-3 overflow-hidden pt-2">
+                    {search.data ? (
+                      <div className="space-y-2">
+                        <Text size="caption" tone="muted">
+                          {search.data.coverage.indexedSources} of{" "}
+                          {search.data.coverage.totalSources} retained messages
+                          ready to search by meaning.
+                          {preparation.data?.active === true
+                            ? " New content continues preparing in the background."
+                            : ""}
+                        </Text>
+                        {search.data.coverage.complete ? null : (
+                          <Button
+                            onClick={() => {
+                              setSubmitted((previous) =>
+                                previous === null
+                                  ? null
+                                  : {
+                                      ...previous,
+                                      request: previous.request + 1,
+                                    }
+                              );
+                            }}
+                            type="button"
+                            variant="secondary"
+                          >
+                            Continue preparing search
+                          </Button>
+                        )}
+                      </div>
+                    ) : null}
+                    {kind === "mail" ? (
+                      <div className="space-y-2">
+                        <Text size="caption" tone="muted">
+                          Normal mail search covers your full mailbox.
+                        </Text>
+                        {preparation.data?.canImport === true &&
+                        preparation.data.importRequested ? (
+                          <Text size="caption" tone="muted">
+                            {preparation.data.importComplete
+                              ? "Older mail has been imported."
+                              : "Older mail is being prepared in the background. Results may be incomplete."}
+                          </Text>
+                        ) : null}
+                        {preparation.data?.canImport === true &&
+                        !preparation.data.importRequested ? (
+                          <>
+                            <Text size="caption" tone="muted">
+                              Preparing older mail for search uses your AI
+                              balance.
+                            </Text>
+                            <Button
+                              disabled={
+                                prepareMail.isPending || search.isFetching
+                              }
+                              onClick={() => {
+                                prepareMail.mutate();
+                              }}
+                              type="button"
+                              variant="secondary"
+                            >
+                              {prepareMail.isPending
+                                ? "Starting preparation…"
+                                : "Prepare older mail"}
+                            </Button>
+                          </>
+                        ) : null}
+                        {preparation.data?.waiting === true ? (
+                          <Text size="caption" tone="muted">
+                            Preparation is waiting for access or available
+                            usage. It will retry automatically.
+                          </Text>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {preparation.data?.active === true ? (
+                      <div className="space-y-2">
+                        <Button
+                          disabled={pausePreparation.isPending}
+                          onClick={() => {
+                            pausePreparation.mutate();
+                          }}
+                          type="button"
+                          variant="secondary"
+                        >
+                          Stop background preparation
+                        </Button>
+                        <Text size="caption" tone="muted">
+                          The current batch can finish. Search again to resume
+                          preparing retained content.
+                        </Text>
+                      </div>
+                    ) : null}
+                  </div>
+                </CollapsiblePanel>
+              </Collapsible>
+            ) : null}
           </DialogBody>
           <DialogFooter>
             <DialogCloseButton>Close</DialogCloseButton>

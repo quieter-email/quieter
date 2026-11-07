@@ -9,17 +9,21 @@ Verified through the normal authenticated application and Cloudflare Worker on p
 - **Stop.** **Stop background preparation** removed the owned chat registration, verified independently in PostgreSQL. Retained content and completed vectors remained available.
 - **Older mail.** The Gmail fixture showed the AI-balance notice before opt-in. **Prepare older mail** persisted an import request and displayed pending preparation. The stop action canceled it before any provider import. The actual paged importer and recovery behavior have separate transport and database tests; no live Gmail history was downloaded in this verification.
 - **Responsive layout.** Results remained readable in the narrow dark dialog and desktop light dialog. The native thread reader opened correctly at narrow width.
+- **Minimal default view.** Conversation and mail results sit directly below the query. **Search coverage** reveals counts, continuation, older-mail preparation and stop controls. Desktop light and narrow dark checks confirmed the collapsed and expanded layouts. Stopping preparation through the disclosure removed its action after the request completed.
 
 | State | Screenshot |
 | --- | --- |
 | Conversation result | [Desktop light](../../screenshots/semantic-search/conversation-results-light.png) |
 | Mail result | [Desktop light](../../screenshots/semantic-search/mail-results-light.png) |
 | Mail result | [Narrow dark](../../screenshots/semantic-search/mail-results-narrow-dark.png) |
+| Optional coverage controls | [Narrow dark](../../screenshots/semantic-search/coverage-controls-narrow-dark.png) |
 | Canonical message reader | [Narrow dark](../../screenshots/semantic-search/opened-mail-narrow-dark.png) |
 | Mail reader opened from calendar search | [Desktop light](../../screenshots/semantic-search/calendar-to-mail-light.png) |
 | Incomplete preparation | [Desktop light](../../screenshots/semantic-search/partial-preparation-light.png) |
 | Older-mail balance notice | [Before opt-in](../../screenshots/semantic-search/older-mail-opt-in-light.png) |
 | Durable import request | [After opt-in](../../screenshots/semantic-search/older-mail-requested-light.png) |
+
+The conversation and mail result screenshots show the final minimal layout. The partial-preparation and older-mail captures record those flows before their controls were grouped under **Search coverage**.
 
 The browser, server and disposable database belong to this task. The browser and server were stopped after verification, and approved ignored development configuration was restored and passed `env:doctor`. Kernel OOM records confirmed the earlier interrupted browser attempts; successful verification followed after reducing the owned server heap and leaving unrelated services untouched.
 
