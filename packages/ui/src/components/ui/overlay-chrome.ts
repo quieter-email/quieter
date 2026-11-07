@@ -7,9 +7,9 @@ export const overlayBackdropClassName =
   "fixed inset-0 z-50 bg-black/50 backdrop-blur-xs transition-opacity duration-150 ease-(--app-motion-ease-out) data-ending-style:opacity-0 data-ending-style:duration-100 data-starting-style:opacity-0";
 
 export const overlaySurfaceClassName =
-  "border border-transparent bg-section text-fg shadow-lg";
+  "border border-transparent bg-panel text-fg shadow-lg";
 
-export const overlayPopupClassName = `${overlaySurfaceClassName} fixed top-1/2 left-1/2 z-50 w-[min(92vw,30rem)] -translate-1/2 overflow-hidden rounded-4xl transition-[opacity,scale] duration-150 ease-(--app-motion-ease-out) will-change-[opacity,scale] data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-ending-style:duration-100 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-opacity motion-reduce:data-ending-style:scale-100 motion-reduce:data-starting-style:scale-100`;
+export const overlayPopupClassName = `${overlaySurfaceClassName} fixed top-1/2 left-1/2 z-50 w-[min(92vw,30rem)] -translate-1/2 overflow-hidden rounded-panel transition-[opacity,scale] duration-150 ease-(--app-motion-ease-out) will-change-[opacity,scale] data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-ending-style:duration-100 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-opacity motion-reduce:data-ending-style:scale-100 motion-reduce:data-starting-style:scale-100`;
 
 export const overlayTitleClassName = "truncate text-body-lg font-medium";
 

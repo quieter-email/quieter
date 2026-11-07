@@ -55,7 +55,7 @@ export const MessageInspectorPanel = ({
 
   if (isInspectorPending) {
     inspectorBody = (
-      <div className="flex items-center gap-2 text-body text-muted-fg">
+      <div className="flex items-center gap-2 text-body-sm text-muted-fg">
         <Icon aria-hidden animation="spin" icon={Loading03Icon} />
         <span>Loading message details…</span>
       </div>
@@ -70,10 +70,10 @@ export const MessageInspectorPanel = ({
     inspectorBody = (
       <>
         <section className="space-y-3">
-          <Text as="h3" weight="medium">
+          <Text as="h3" size="sm" weight="medium">
             Message
           </Text>
-          <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-body">
+          <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-body-sm">
             {[
               { label: "From", value: inspector.from },
               { label: "To", value: inspector.to },
@@ -101,7 +101,7 @@ export const MessageInspectorPanel = ({
             </AccordionHeader>
             <AccordionPanel>
               <div className="space-y-4">
-                <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-body">
+                <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-body-sm">
                   {[
                     { label: "Reference", value: inspector.messageHeaderId },
                     { label: "Subject", value: inspector.subject },
@@ -118,12 +118,12 @@ export const MessageInspectorPanel = ({
                   )}
                 </dl>
                 <section className="space-y-2">
-                  <Text as="h3" weight="medium">
+                  <Text as="h3" size="sm" weight="medium">
                     Message headers
                   </Text>
                   {inspector.headers.map((header) => (
                     <p
-                      className="text-body text-fg"
+                      className="text-body-sm text-fg"
                       key={`${inspector.messageHeaderId}-${header.name}-${header.value}`}
                     >
                       <span className="font-medium text-fg">
@@ -136,10 +136,10 @@ export const MessageInspectorPanel = ({
 
                 {(inspector.rawText?.trim() ?? "") !== "" && (
                   <section className="space-y-2">
-                    <h3 className="text-body font-medium text-fg">
+                    <h3 className="text-body-sm font-medium text-fg">
                       Original message
                     </h3>
-                    <pre className="overflow-x-auto text-body whitespace-pre-wrap text-fg">
+                    <pre className="overflow-x-auto text-body-sm whitespace-pre-wrap text-fg">
                       {inspector.rawText}
                     </pre>
                   </section>
@@ -147,10 +147,10 @@ export const MessageInspectorPanel = ({
 
                 {(inspector.raw?.trim() ?? "") !== "" && (
                   <section className="space-y-2">
-                    <h3 className="text-body font-medium text-fg">
+                    <h3 className="text-body-sm font-medium text-fg">
                       Source record
                     </h3>
-                    <pre className="overflow-x-auto text-body break-all whitespace-pre-wrap text-fg">
+                    <pre className="overflow-x-auto text-body-sm break-all whitespace-pre-wrap text-fg">
                       {inspector.raw}
                     </pre>
                   </section>
@@ -158,10 +158,10 @@ export const MessageInspectorPanel = ({
 
                 {payloadText !== "" && (
                   <section className="space-y-2">
-                    <h3 className="text-body font-medium text-fg">
+                    <h3 className="text-body-sm font-medium text-fg">
                       Message structure
                     </h3>
-                    <pre className="overflow-x-auto text-body whitespace-pre-wrap text-fg">
+                    <pre className="overflow-x-auto text-body-sm whitespace-pre-wrap text-fg">
                       {payloadText}
                     </pre>
                   </section>

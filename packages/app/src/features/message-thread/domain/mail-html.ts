@@ -68,6 +68,55 @@ const EMAIL_SANITIZE_CONFIG: Config = {
   WHOLE_DOCUMENT: true,
 };
 
+export const isPlainTextEmailHtml = ({
+  html,
+  text,
+}: {
+  html: string;
+  text: string;
+}): boolean => {
+  const root = DOMPurify.sanitize(html, {
+    ...EMAIL_SANITIZE_CONFIG,
+    RETURN_DOM: true,
+  });
+  if (!(root instanceof Element)) {
+    return false;
+  }
+  for (const element of [root, ...root.querySelectorAll("*")]) {
+    if (
+      !["HTML", "HEAD", "BODY", "DIV", "P", "SPAN", "BR", "A"].includes(
+        element.tagName
+      ) ||
+      [...element.attributes].some(
+        (attribute) =>
+          element.tagName !== "A" ||
+          !["href", "target", "rel"].includes(attribute.name)
+      )
+    ) {
+      return false;
+    }
+    if (
+      element.tagName === "A" &&
+      (!/^https?:\/\//iu.test(element.getAttribute("href") ?? "") ||
+        element.getAttribute("href") !== element.textContent?.trim())
+    ) {
+      return false;
+    }
+  }
+  const body = root.querySelector("body") ?? root;
+  for (const element of body.querySelectorAll("br, p, div")) {
+    if (element.tagName === "BR") {
+      element.replaceWith("\n");
+    } else {
+      element.append("\n");
+    }
+  }
+  return (
+    body.textContent?.replaceAll(/\s+/gu, " ").trim() ===
+    text.replaceAll(/\s+/gu, " ").trim()
+  );
+};
+
 const createDocument = (html: string): Document => {
   const parser = new DOMParser();
   return parser.parseFromString(html, "text/html");

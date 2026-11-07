@@ -20,7 +20,7 @@ export const FullPageDialogContent = ({
     <DialogPrimitive.Popup
       className={cn(
         overlaySurfaceClassName,
-        "fixed inset-2 z-50 flex flex-col overflow-hidden rounded-4xl transition-[opacity,scale] duration-200 ease-(--app-motion-ease-out) will-change-[opacity,scale] data-ending-style:scale-[0.99] data-ending-style:opacity-0 data-ending-style:duration-150 data-starting-style:scale-[0.99] data-starting-style:opacity-0 motion-reduce:transition-opacity motion-reduce:data-ending-style:scale-100 motion-reduce:data-starting-style:scale-100 sm:inset-4 lg:inset-6",
+        "fixed inset-2 z-50 flex flex-col overflow-hidden rounded-panel transition-[opacity,scale] duration-200 ease-(--app-motion-ease-out) will-change-[opacity,scale] data-ending-style:scale-[0.99] data-ending-style:opacity-0 data-ending-style:duration-150 data-starting-style:scale-[0.99] data-starting-style:opacity-0 motion-reduce:transition-opacity motion-reduce:data-ending-style:scale-100 motion-reduce:data-starting-style:scale-100 sm:inset-4 lg:inset-6",
         className
       )}
       {...props}
@@ -36,7 +36,7 @@ export const FullPageDialogHeader = ({
 }: ComponentPropsWithoutRef<"header">) => (
   <header
     className={cn(
-      "m-0.5 flex shrink-0 items-center gap-3 rounded-3xl bg-detail p-3.5",
+      "m-0.5 flex shrink-0 items-center gap-3 rounded-section bg-section p-3.5",
       className
     )}
     {...props}

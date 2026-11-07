@@ -207,11 +207,11 @@ export const MessageDeliverySection = ({
 
   return (
     <section className="space-y-3">
-      <h3 className="text-body font-medium text-fg">
+      <Text as="h3" size="sm" weight="medium">
         {delivery?.deliveryTrackingAvailable === false
           ? "Activity"
           : "Delivery"}
-      </h3>
+      </Text>
 
       {isDeliveryPending ? (
         <p className="text-body text-muted-fg">Loading delivery status…</p>
@@ -242,7 +242,7 @@ export const MessageDeliverySection = ({
           {delivery.openTracking === null ? null : (
             <Surface variant="detail">
               <div className="space-y-3">
-                <Text size="lg" weight="medium">
+                <Text size="sm" weight="medium">
                   {delivery.openTracking.reportedLoadCount === 0
                     ? "No image loads reported"
                     : `${delivery.openTracking.reportedLoadCount.toLocaleString()} image ${delivery.openTracking.reportedLoadCount === 1 ? "load" : "loads"} reported`}
