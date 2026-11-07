@@ -3,6 +3,7 @@
 import {
   Delete02Icon,
   FileAttachmentIcon,
+  LayoutRightIcon,
   Mail01Icon,
   Refresh01Icon,
   Search01Icon,
@@ -137,6 +138,7 @@ import { WorkspaceDock } from "@quieter/ui/workspace-dock";
 import {
   workspaceGutterClassName,
   WorkspaceHeader,
+  WorkspaceHeaderActionSlot,
   WorkspaceSection,
 } from "@quieter/ui/workspace-section";
 import { useCallback, useState } from "react";
@@ -515,6 +517,33 @@ const WorkspaceDockShowcase = () => {
           }
         >
           <WorkspaceSection>
+            <WorkspaceHeader>
+              <div className="flex items-center gap-2">
+                <Input
+                  aria-label="Workspace search"
+                  className="min-w-0 flex-1"
+                  placeholder="Search"
+                />
+                <WorkspaceHeaderActionSlot
+                  className="data-[visible=false]:-ms-2"
+                  visible={!open}
+                >
+                  <IconButtonTooltip label="Open side panel">
+                    <Button
+                      chrome="toolbar"
+                      aria-label="Open side panel"
+                      onClick={() => {
+                        setOpen(true);
+                      }}
+                      size="icon"
+                      variant="toolbar"
+                    >
+                      <Icon aria-hidden icon={LayoutRightIcon} />
+                    </Button>
+                  </IconButtonTooltip>
+                </WorkspaceHeaderActionSlot>
+              </div>
+            </WorkspaceHeader>
             <div className="space-y-3 p-4">
               <Text weight="medium">Workspace</Text>
               <Text size="sm" tone="muted">

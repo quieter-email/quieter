@@ -2,9 +2,9 @@
 
 import { LayoutRightIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { WorkspaceHeaderActionSlot } from "@quieter/ui/workspace-section";
 import { createContext, use } from "react";
 
 export const AssistantSidebarContext = createContext<{
@@ -15,8 +15,12 @@ export const AssistantSidebarContext = createContext<{
 
 export const AssistantSidebarTrigger = ({
   className,
+  size = "icon",
+  variant = "toolbar",
 }: {
   className?: string;
+  size?: "icon" | "icon-sm";
+  variant?: "toolbar" | "ghost";
 }) => {
   const sidebar = use(AssistantSidebarContext);
   if (!sidebar) {
@@ -24,21 +28,15 @@ export const AssistantSidebarTrigger = ({
   }
 
   return (
-    <div
-      aria-hidden={sidebar.open}
-      className={cn(
-        "flex shrink-0 self-stretch overflow-hidden transition-opacity duration-200 ease-out motion-reduce:transition-none",
-        {
-          "pointer-events-none w-0 opacity-0": sidebar.open,
-          "w-8 opacity-100": !sidebar.open,
-        },
-        className
-      )}
+    <WorkspaceHeaderActionSlot
+      className={className}
       data-sidebar-open={sidebar.open}
-      inert={sidebar.open}
+      size={size}
+      visible={!sidebar.open}
     >
       <IconButtonTooltip label="Expand assistant sidebar">
         <Button
+          chrome="toolbar"
           aria-controls={sidebar.panelId}
           aria-expanded={sidebar.open}
           aria-label="Expand assistant sidebar"
@@ -46,13 +44,13 @@ export const AssistantSidebarTrigger = ({
           onClick={(event) => {
             sidebar.onOpen(event.currentTarget);
           }}
-          size="icon"
+          size={size}
           type="button"
-          variant="toolbar"
+          variant={variant}
         >
           <Icon aria-hidden icon={LayoutRightIcon} />
         </Button>
       </IconButtonTooltip>
-    </div>
+    </WorkspaceHeaderActionSlot>
   );
 };
