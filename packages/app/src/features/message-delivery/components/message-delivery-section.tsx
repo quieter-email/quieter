@@ -240,7 +240,7 @@ export const MessageDeliverySection = ({
             <DeliveryRecipients delivery={delivery} />
           ) : null}
           {delivery.openTracking === null ? null : (
-            <Surface>
+            <Surface variant="detail">
               <div className="space-y-3">
                 <Text size="lg" weight="medium">
                   {delivery.openTracking.reportedLoadCount === 0

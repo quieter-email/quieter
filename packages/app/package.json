@@ -75,6 +75,7 @@
     "./features/hotkeys/domain/hotkey-guards": "./src/features/hotkeys/domain/hotkey-guards.ts",
     "./features/hotkeys/domain/keyboard-shortcuts": "./src/features/hotkeys/domain/keyboard-shortcuts.ts",
     "./features/mailbox/components/inbox-page-client": "./src/features/mailbox/components/inbox-page-client.tsx",
+    "./features/mailbox/components/mail-subview-header": "./src/features/mailbox/components/mail-subview-header.tsx",
     "./features/mailbox/components/mailbox-access-pill": "./src/features/mailbox/components/mailbox-access-pill.tsx",
     "./features/mailbox/components/mailbox-action-handlers": "./src/features/mailbox/components/mailbox-action-handlers.ts",
     "./features/mailbox/components/mailbox-idle-state": "./src/features/mailbox/components/mailbox-idle-state.tsx",

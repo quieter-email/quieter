@@ -9,10 +9,10 @@ import { buttonFooterClassName, buttonVariants } from "./button";
 import type { ButtonProps } from "./button";
 import {
   overlayDescriptionClassName,
+  overlaySurfaceClassName,
   overlayTitleClassName,
   overlayTriggerClassName,
 } from "./overlay-chrome";
-import { popupSurfaceClassName } from "./popup-surface";
 
 export const Drawer = DrawerPrimitive.Root;
 export const DrawerPortal = DrawerPrimitive.Portal;
@@ -32,7 +32,7 @@ export const DrawerOverlay = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Overlay>) => (
   <DrawerPrimitive.Overlay
-    className={cn("fixed inset-0 z-50 bg-black/50 backdrop-blur-sm", className)}
+    className={cn("fixed inset-0 z-50 bg-black/50 backdrop-blur-xs", className)}
     {...props}
   />
 );
@@ -62,12 +62,12 @@ export const DrawerContent = ({
     <DrawerOverlay />
     <DrawerPrimitive.Content
       className={cn(
-        popupSurfaceClassName,
-        "fixed z-50 flex flex-col overflow-hidden rounded-xl",
-        "data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=bottom]:bottom-0 data-[vaul-drawer-direction=bottom]:max-h-[96vh] data-[vaul-drawer-direction=bottom]:rounded-t-xl data-[vaul-drawer-direction=bottom]:border-t",
-        "data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:max-h-[96vh] data-[vaul-drawer-direction=top]:rounded-b-xl data-[vaul-drawer-direction=top]:border-b",
-        "data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:h-full data-[vaul-drawer-direction=left]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=left]:rounded-r-xl data-[vaul-drawer-direction=left]:border-r",
-        "data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=right]:rounded-l-xl data-[vaul-drawer-direction=right]:border-l",
+        overlaySurfaceClassName,
+        "fixed z-50 flex flex-col overflow-hidden rounded-4xl",
+        "data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=bottom]:bottom-0 data-[vaul-drawer-direction=bottom]:max-h-[96vh] data-[vaul-drawer-direction=bottom]:rounded-t-4xl data-[vaul-drawer-direction=bottom]:border-t",
+        "data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:max-h-[96vh] data-[vaul-drawer-direction=top]:rounded-b-4xl data-[vaul-drawer-direction=top]:border-b",
+        "data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:h-full data-[vaul-drawer-direction=left]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=left]:rounded-r-4xl data-[vaul-drawer-direction=left]:border-r",
+        "data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=right]:rounded-l-4xl data-[vaul-drawer-direction=right]:border-l",
         className
       )}
       {...props}
@@ -83,7 +83,7 @@ export const DrawerHeader = ({
   ...props
 }: ComponentPropsWithoutRef<"div">) => (
   <div
-    className={cn("m-0.5 rounded-lg bg-section p-3.5", className)}
+    className={cn("m-0.5 rounded-3xl bg-detail p-3.5", className)}
     {...props}
   />
 );

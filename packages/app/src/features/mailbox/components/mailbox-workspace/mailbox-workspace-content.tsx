@@ -16,6 +16,7 @@ import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-c
 import { DraftRecoveryNotice } from "@quieter/app/features/compose/components/draft-recovery-notice";
 import { buildComposeDraftFromSavedDraftMessage } from "@quieter/app/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
+import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail-subview-header";
 import { FirstRunManagedMailSetup } from "@quieter/app/features/mailbox/components/mailbox-workspace/first-run-managed-mail-setup";
 import { MailboxMessagesPanel } from "@quieter/app/features/mailbox/components/mailbox-workspace/mailbox-messages-panel";
 import {
@@ -42,6 +43,7 @@ import { Icon } from "@quieter/ui/icon";
 import { Text } from "@quieter/ui/text";
 import { WorkspaceDock } from "@quieter/ui/workspace-dock";
 import {
+  WorkspaceHeader,
   WorkspaceSection,
   workspaceGutterClassName,
   workspaceSectionVariants,
@@ -102,7 +104,7 @@ type MailboxWorkspaceContentProps = {
   isManagedDemoMode: boolean;
   layoutState: MailboxWorkspaceLayoutState;
   mailboxGroups: MailboxSidebarGroups;
-  onCloseCompose: () => void;
+  onCloseSubview: () => void;
   onComposeSenderSwitch: (mailboxId: string) => Promise<void>;
   onConnectGmail: () => void;
   onComposeDraftRequested: (
@@ -145,13 +147,16 @@ const workspaceContentMotion = {
 } as const;
 
 const ComposeWorkspaceLoading = ({
+  onClose,
   onOpenSidebar,
-}: Pick<MailboxWorkspaceContentProps, "onOpenSidebar">) => (
+}: Pick<MailboxWorkspaceContentProps, "onOpenSidebar"> & {
+  onClose: () => void;
+}) => (
   <div className="flex h-full min-h-0 flex-col" data-compose-workspace>
-    <MobileHeader
-      className="px-4 sm:px-6"
-      leading="sidebar"
-      onLeadingClick={onOpenSidebar}
+    <MailSubviewHeader
+      className="px-4 pt-4 sm:px-6 sm:pt-6"
+      closeAction={{ label: "Close composer", onClick: onClose }}
+      onOpenSidebar={onOpenSidebar}
       title="New message"
     />
     <output
@@ -165,12 +170,19 @@ const ComposeWorkspaceLoading = ({
   </div>
 );
 
-const SnippetWorkspaceLoading = () => (
-  <WorkspaceSection centered className="lg:col-span-2">
+const SnippetWorkspaceLoading = ({
+  onOpenSidebar,
+}: {
+  onOpenSidebar: () => void;
+}) => (
+  <WorkspaceSection className="lg:col-span-2">
+    <WorkspaceHeader>
+      <MailSubviewHeader onOpenSidebar={onOpenSidebar} title="Snippets" />
+    </WorkspaceHeader>
     <output
       aria-label="Loading snippets"
       aria-live="polite"
-      className="flex items-center gap-3 text-body text-muted-fg"
+      className="flex flex-1 items-center justify-center gap-3 text-body text-muted-fg"
     >
       <Icon aria-hidden size={20} animation="spin" icon={Loading03Icon} />
       Loading snippets…
@@ -259,7 +271,12 @@ const ComposeWorkspace = (
 ) => {
   const module = useWorkspaceModule(composeWorkspaceResource);
   if (module === null) {
-    return <ComposeWorkspaceLoading onOpenSidebar={props.onOpenSidebar} />;
+    return (
+      <ComposeWorkspaceLoading
+        onClose={props.onClose}
+        onOpenSidebar={props.onOpenSidebar}
+      />
+    );
   }
   const Workspace = module.default;
   return <Workspace {...props} />;
@@ -272,7 +289,7 @@ const SnippetWorkspace = (
 ) => {
   const module = useWorkspaceModule(snippetWorkspaceResource);
   if (module === null) {
-    return <SnippetWorkspaceLoading />;
+    return <SnippetWorkspaceLoading onOpenSidebar={props.onOpenSidebar} />;
   }
   const Workspace = module.default;
   return <Workspace {...props} />;
@@ -433,7 +450,7 @@ const MailboxWorkspaceContentInner = ({
   isManagedDemoMode,
   layoutState,
   mailboxGroups,
-  onCloseCompose,
+  onCloseSubview,
   onComposeSenderSwitch,
   onConnectGmail,
   onComposeDraftRequested,
@@ -471,6 +488,10 @@ const MailboxWorkspaceContentInner = ({
   });
   const calendarActive = workspace === "calendar";
   const allInboxesActive = selectedView === "all-inboxes";
+  const mailViewActive =
+    !isComposeMailbox &&
+    !isSnippetMailbox &&
+    (selectedView === "inbox" || allInboxesActive);
   const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);
   const senderMailboxes = mailboxes
     .filter(
@@ -578,7 +599,12 @@ const MailboxWorkspaceContentInner = ({
   } else if (isComposeMailbox) {
     mailboxContent = (
       <Suspense
-        fallback={<ComposeWorkspaceLoading onOpenSidebar={onOpenSidebar} />}
+        fallback={
+          <ComposeWorkspaceLoading
+            onClose={onCloseSubview}
+            onOpenSidebar={onOpenSidebar}
+          />
+        }
       >
         <ComposeWorkspace
           key={composeSession.key}
@@ -590,7 +616,7 @@ const MailboxWorkspaceContentInner = ({
           demoMode={isDemoMode}
           managedDemoMode={isManagedDemoMode}
           mailboxId={composeMailbox?.id ?? null}
-          onClose={onCloseCompose}
+          onClose={onCloseSubview}
           onSwitchSenderMailbox={onComposeSenderSwitch}
           onManageSnippets={onManageSnippets}
           onOpenSidebar={onOpenSidebar}
@@ -612,7 +638,9 @@ const MailboxWorkspaceContentInner = ({
   } else if (activeMailbox === null) {
     mailboxContent = (
       <div className="absolute inset-0 min-h-0 min-w-0 overflow-hidden">
-        <Suspense fallback={<SnippetWorkspaceLoading />}>
+        <Suspense
+          fallback={<SnippetWorkspaceLoading onOpenSidebar={onOpenSidebar} />}
+        >
           <SnippetWorkspace
             key={selectedMailboxId}
             mailboxId={selectedMailboxId}
@@ -774,16 +802,11 @@ const MailboxWorkspaceContentInner = ({
   ) {
     mailboxContent = (
       <WorkspaceSection>
-        <MobileHeader
-          leading="sidebar"
-          onLeadingClick={onOpenSidebar}
-          title="Organize mailbox"
-        />
         <MailboxOrganizer
           canManage={composeMailbox?.grantRole === "manager"}
-          headerAction={<AssistantSidebarTrigger />}
           key={selectedMailboxId}
           mailboxId={selectedMailboxId}
+          onOpenSidebar={onOpenSidebar}
           searchQuery={searchQuery}
         />
       </WorkspaceSection>
@@ -797,11 +820,6 @@ const MailboxWorkspaceContentInner = ({
         animate={{ opacity: 1 }}
         transition={{ duration: 0.08, ease: "linear" }}
       >
-        <MobileHeader
-          leading="sidebar"
-          onLeadingClick={onOpenSidebar}
-          title="Labels"
-        />
         <LabelsWorkspacePanel
           canManage={
             selectedMailboxProvider !== "managed" ||
@@ -812,6 +830,8 @@ const MailboxWorkspaceContentInner = ({
           mailboxProvider={
             selectedMailboxProvider === "managed" ? "managed" : "gmail"
           }
+          onClose={onCloseSubview}
+          onOpenSidebar={onOpenSidebar}
         />
       </m.div>
     );
@@ -907,13 +927,15 @@ const MailboxWorkspaceContentInner = ({
                   onSelectView={onSelectView}
                   reconnectingMailboxId={reconnectingMailboxId}
                   searchQuery={searchQuery}
-                  selectedMailbox={
-                    selectedView === "rules" ? null : activeMailbox
-                  }
+                  selectedMailbox={mailViewActive ? activeMailbox : null}
                   isSnippetMailbox={isSnippetMailbox}
                   selectedMailboxId={selectedMailboxId}
                   selectedMailboxProvider={selectedMailboxProvider}
-                  selectedView={selectedView}
+                  selectedView={
+                    isComposeMailbox || isSnippetMailbox
+                      ? undefined
+                      : selectedView
+                  }
                   isMobileOpen={layoutState.isMobileSidebarOpen}
                 />
               ) : null}

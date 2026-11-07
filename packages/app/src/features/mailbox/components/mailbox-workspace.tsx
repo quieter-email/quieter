@@ -5,7 +5,10 @@ import type { ComposeDraftState } from "@quieter/app/features/compose/domain/dra
 import { parseMailtoComposeDraft } from "@quieter/app/features/compose/domain/mailto";
 import { shouldIgnoreAppShortcut } from "@quieter/app/features/hotkeys/domain/hotkey-guards";
 import { MailboxWorkspaceContent } from "@quieter/app/features/mailbox/components/mailbox-workspace/mailbox-workspace-content";
-import { useMailWorkspaceRouteSearch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
+import {
+  useMailSubviewNavigation,
+  useMailWorkspaceRouteSearch,
+} from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import { useMailboxSelection } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-selection";
 import { useWorkspaceUiState } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-workspace-ui-state";
 import {
@@ -142,21 +145,17 @@ type SetMailboxSearch = ReturnType<
 type MailboxProvider = "api" | "gmail" | "managed" | null;
 
 const useMailboxWorkspaceCompose = ({
-  activeMailbox,
   canComposeNew,
   newComposeMailboxId,
   selectedMailboxId,
   isComposeMailbox,
-  isSnippetMailbox,
   view,
   setMailboxSearch,
 }: {
-  activeMailbox: MailboxCategory;
   canComposeNew: boolean;
   newComposeMailboxId: string | null;
   selectedMailboxId: string | null;
   isComposeMailbox: boolean;
-  isSnippetMailbox: boolean;
   view: MailboxWorkspaceView;
   setMailboxSearch: SetMailboxSearch;
 }) => {
@@ -186,7 +185,6 @@ const useMailboxWorkspaceCompose = ({
       mailboxId: selectedMailboxId,
     });
   }
-  const composeReturnMailboxRef = useRef<MailboxCategory>("inbox");
   const launchedMailtoRef = useRef<string | null>(null);
   const allInboxesActive = view === "all-inboxes";
 
@@ -199,11 +197,6 @@ const useMailboxWorkspaceCompose = ({
       return;
     }
     void loadComposeWorkspace();
-    const returnMailbox =
-      isComposeMailbox || isSnippetMailbox
-        ? composeReturnMailboxRef.current
-        : activeMailbox;
-    composeReturnMailboxRef.current = returnMailbox;
     const nextMailboxId =
       draft === null && allInboxesActive ? newComposeMailboxId : draftMailboxId;
     setComposeSession((session) => ({
@@ -250,17 +243,7 @@ const useMailboxWorkspaceCompose = ({
     }
   };
 
-  const closeComposeWorkspace = () => {
-    void setMailboxSearch({
-      mailbox: composeReturnMailboxRef.current,
-      messageId: null,
-      threadId: null,
-      view: allInboxesActive ? view : "inbox",
-    });
-  };
-
   return {
-    closeComposeWorkspace,
     composeSession,
     launchedMailtoRef,
     openComposeWorkspace,
@@ -904,6 +887,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     view: requestedView,
     workspace,
   } = useMailWorkspaceRouteSearch();
+  const closeMailSubview = useMailSubviewNavigation();
   const { isMobileSidebarOpen, setIsMobileSidebarOpen } = useWorkspaceUiState();
   const isDemoMode = useDemoModeEnabled();
   const isManagedDemoMode = useManagedDemoModeEnabled();
@@ -990,14 +974,12 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     writableMailboxes[0]?.id ??
     null;
   const composeWorkspace = useMailboxWorkspaceCompose({
-    activeMailbox,
     canComposeNew:
       view === "all-inboxes"
         ? writableMailboxes.length > 0
         : newComposeMailboxId !== null &&
           newComposeMailboxId === selectedMailboxId,
     isComposeMailbox,
-    isSnippetMailbox,
     newComposeMailboxId,
     selectedMailboxId,
     setMailboxSearch,
@@ -1070,10 +1052,8 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     selectMailboxId,
     selectView,
   } = workspaceActions;
-  const {
-    closeComposeWorkspace: handleCloseComposeWorkspace,
-    openComposeWorkspace: handleComposeDraftRequested,
-  } = composeWorkspace;
+  const { openComposeWorkspace: handleComposeDraftRequested } =
+    composeWorkspace;
   if (!session.isPending && !session.isRefetching && !sessionMatchesUser) {
     return (
       <MailboxSessionNotice
@@ -1104,7 +1084,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       layoutState={{ isMobileSidebarOpen }}
       mailboxGroups={mailboxGroups}
       messageId={messageId}
-      onCloseCompose={handleCloseComposeWorkspace}
+      onCloseSubview={closeMailSubview}
       onComposeSenderSwitch={async (nextMailboxId) => {
         await composeWorkspace.switchComposeSenderMailbox(nextMailboxId);
         workspaceActions.resetDraftChatKey();

@@ -9,8 +9,6 @@ import {
   Loading03Icon,
   MailSend02Icon,
 } from "@hugeicons/core-free-icons";
-import { MobileHeader } from "@quieter/app/components/mobile-header";
-import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import {
   ComposeEditor,
   ComposeEditorBody,
@@ -39,6 +37,7 @@ import {
 } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { findRecoverableComposeDraft } from "@quieter/app/features/compose/domain/draft-recovery";
+import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail-subview-header";
 import {
   appEaseOut,
   appMotionDuration,
@@ -148,6 +147,7 @@ export type ComposeSurfaceProps = {
   mailboxId: string | null;
   onClose: () => void;
   onManageSnippets?: () => void;
+  onOpenSidebar?: () => void;
   onSenderSwitch?: (
     mailboxId: string,
     currentDraft: ComposeDraftState,
@@ -306,6 +306,7 @@ const ReadyComposeSurface = ({
   mailboxId,
   onClose,
   onManageSnippets,
+  onOpenSidebar,
   onSenderSwitch,
   persistDrafts = true,
   senderEmail,
@@ -736,6 +737,24 @@ const ReadyComposeSurface = ({
 
   return (
     <>
+      {isInline ? null : (
+        <MailSubviewHeader
+          className="px-4 pt-4 sm:px-6 sm:pt-6"
+          closeAction={{
+            disabled:
+              !state.open ||
+              state.isFinishing ||
+              state.draft.saveStatus === "sending" ||
+              switchingSender,
+            label: "Close composer",
+            onClick: () => {
+              void closeComposeDialog();
+            },
+          }}
+          onOpenSidebar={onOpenSidebar}
+          title="New message"
+        />
+      )}
       <form
         action={async () => {
           if (canSubmitCompose) {
@@ -1411,24 +1430,26 @@ const ReadyComposeSurface = ({
                               <Icon icon={Delete02Icon} />
                             </ToolbarButton>
                           </IconButtonTooltip>
-                          <IconButtonTooltip label="Close composer">
-                            <ToolbarButton
-                              aria-label="Close composer"
-                              disabled={
-                                !state.open ||
-                                state.isFinishing ||
-                                state.draft.saveStatus === "sending" ||
-                                switchingSender
-                              }
-                              onClick={() => {
-                                void closeComposeDialog();
-                              }}
-                              size="icon"
-                              type="button"
-                            >
-                              <Icon icon={Cancel01Icon} />
-                            </ToolbarButton>
-                          </IconButtonTooltip>
+                          {isInline ? (
+                            <IconButtonTooltip label="Close composer">
+                              <ToolbarButton
+                                aria-label="Close composer"
+                                disabled={
+                                  !state.open ||
+                                  state.isFinishing ||
+                                  state.draft.saveStatus === "sending" ||
+                                  switchingSender
+                                }
+                                onClick={() => {
+                                  void closeComposeDialog();
+                                }}
+                                size="icon"
+                                type="button"
+                              >
+                                <Icon icon={Cancel01Icon} />
+                              </ToolbarButton>
+                            </IconButtonTooltip>
+                          ) : null}
                         </>
                       }
                     />
@@ -1670,46 +1691,58 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
       (Reflect.get(error, "code") === "NOT_FOUND" ||
         Reflect.get(error, "status") === 404);
     return (
-      <output className="flex flex-col items-center justify-center gap-3 p-6">
-        {isError ? (
-          <>
-            <Text>Could not load your draft.</Text>
-            {canRecoverCopy ? (
-              <>
-                <Text>
-                  Your saved draft is no longer available. Recover your text as
-                  a new draft.
-                </Text>
-                <Button
-                  onClick={() => {
-                    setRecoveredCopy(
-                      createRecoveredComposeCopy(recoverableSeed)
-                    );
-                  }}
-                >
-                  Recover as copy
-                </Button>
-              </>
-            ) : null}
-            <Button
-              onClick={() => {
-                void refetch();
-              }}
-              variant="outline"
-            >
-              Try again
-            </Button>
-            <Button onClick={props.onClose} variant="ghost">
-              Close
-            </Button>
-          </>
-        ) : (
-          <>
-            <Icon aria-hidden animation="spin" icon={Loading03Icon} />
-            <Text>Loading draft…</Text>
-          </>
+      <>
+        {props.variant === "inline" ? null : (
+          <MailSubviewHeader
+            className="px-4 pt-4 sm:px-6 sm:pt-6"
+            closeAction={{ label: "Close composer", onClick: props.onClose }}
+            onOpenSidebar={props.onOpenSidebar}
+            title="New message"
+          />
         )}
-      </output>
+        <output className="flex flex-col items-center justify-center gap-3 p-6">
+          {isError ? (
+            <>
+              <Text>Could not load your draft.</Text>
+              {canRecoverCopy ? (
+                <>
+                  <Text>
+                    Your saved draft is no longer available. Recover your text
+                    as a new draft.
+                  </Text>
+                  <Button
+                    onClick={() => {
+                      setRecoveredCopy(
+                        createRecoveredComposeCopy(recoverableSeed)
+                      );
+                    }}
+                  >
+                    Recover as copy
+                  </Button>
+                </>
+              ) : null}
+              <Button
+                onClick={() => {
+                  void refetch();
+                }}
+                variant="outline"
+              >
+                Try again
+              </Button>
+              {props.variant === "inline" ? (
+                <Button onClick={props.onClose} variant="ghost">
+                  Close
+                </Button>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Icon aria-hidden animation="spin" icon={Loading03Icon} />
+              <Text>Loading draft…</Text>
+            </>
+          )}
+        </output>
+      </>
     );
   }
   return (
@@ -1824,17 +1857,6 @@ export const ComposeWorkspace = ({
       )}
       data-compose-workspace
     >
-      <MobileHeader
-        className="px-4 sm:px-6"
-        leading="sidebar"
-        onLeadingClick={onOpenSidebar}
-        title="New message"
-      >
-        <AssistantSidebarTrigger />
-      </MobileHeader>
-      <div className="hidden shrink-0 justify-end px-6 pt-6 lg:flex">
-        <AssistantSidebarTrigger />
-      </div>
       <ComposeSurface
         allowSenderSwitch={!senderBoundToInitialDraft}
         beforeNavigate={cleanupInactiveDrafts}
@@ -1848,6 +1870,7 @@ export const ComposeWorkspace = ({
         onClose={() => {
           finishCompose(onClose);
         }}
+        onOpenSidebar={onOpenSidebar}
         onManageSnippets={
           onManageSnippets
             ? () => {

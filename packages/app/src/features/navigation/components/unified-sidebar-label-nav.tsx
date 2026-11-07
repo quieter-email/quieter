@@ -17,6 +17,7 @@ import {
 } from "@quieter/app/features/message-search/state/message-list-search-state";
 import type { MailSidebar } from "@quieter/app/features/navigation/components/mail-sidebar";
 import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
+import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
@@ -42,11 +43,13 @@ export const UnifiedSidebarLabelNav = ({
   userId,
   onRequestClose,
   searchQuery,
+  selectedMailbox,
 }: {
   groups: ComponentProps<typeof MailSidebar>["groups"];
   mailboxId: string | null;
   userId: string;
   searchQuery: string;
+  selectedMailbox: MailboxCategory | null;
   onRequestClose?: () => void;
 }) => {
   const preferences = useUnifiedInboxPreferences(userId);
@@ -216,7 +219,8 @@ export const UnifiedSidebarLabelNav = ({
           </p>
         )}
         {labels.map(([nameKey, label]) => {
-          const isActive = selectedLabelKeys.has(nameKey);
+          const isActive =
+            selectedMailbox !== null && selectedLabelKeys.has(nameKey);
           const nextQuery = serializeStructuredSearchState({
             ...search,
             filters: [
@@ -245,9 +249,11 @@ export const UnifiedSidebarLabelNav = ({
               // oxlint-enable shadcn/no-restyle
               key={nameKey}
               mailboxSearch={{
+                mailbox: selectedMailbox ?? "inbox",
                 mailboxId,
                 messageId: null,
                 query: nextQuery,
+                view: "all-inboxes",
                 workspace: null,
               }}
               onClick={onRequestClose}

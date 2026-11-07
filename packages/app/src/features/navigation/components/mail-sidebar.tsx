@@ -267,6 +267,7 @@ const SidebarInboxSection = ({
         {allInboxesActive && (
           <UnifiedSidebarLabelNav
             groups={groups}
+            selectedMailbox={selectedMailbox}
             mailboxId={selectedMailboxId}
             onRequestClose={onRequestClose}
             userId={userId}
@@ -286,6 +287,7 @@ const SidebarInboxSection = ({
             embedded={embedded === true}
             onRequestClose={onRequestClose}
             onManageLabels={onManageLabels}
+            selectedMailbox={selectedMailbox}
             onSearch={(query) => {
               onSearch(query);
               onRequestClose?.();

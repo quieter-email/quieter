@@ -17,6 +17,7 @@ import {
 } from "@quieter/app/features/message-search/state/message-list-search-state";
 import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
+import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import { managedLabelCountsQueryOptions } from "@quieter/app/lib/managed-mailbox-organization-query";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
@@ -41,6 +42,7 @@ type SidebarLabelNavProps = {
   onRequestClose?: () => void;
   onSearch: (query: string) => void;
   searchQuery: string;
+  selectedMailbox: MailboxCategory | null;
 };
 
 const ManagedLabelColorDot = ({
@@ -111,6 +113,7 @@ export const SidebarLabelNav = ({
   onRequestClose,
   onSearch,
   searchQuery,
+  selectedMailbox,
 }: SidebarLabelNavProps) => {
   const shouldAnimateEntrance = animateEntrance;
   const [hiddenLabelState, updateHiddenLabelState] = useReducer(
@@ -215,8 +218,9 @@ export const SidebarLabelNav = ({
     }
     return visibleUserLabels.map((label, index) => {
       const isActive =
-        selectedLabelKeys.has(normalizeLabelSelectionKey(label.id)) ||
-        selectedLabelKeys.has(normalizeLabelSelectionKey(label.name));
+        selectedMailbox !== null &&
+        (selectedLabelKeys.has(normalizeLabelSelectionKey(label.id)) ||
+          selectedLabelKeys.has(normalizeLabelSelectionKey(label.name)));
       const nextQuery = updateLabelFilter(
         searchQuery,
         selectedLabelKeys.has(normalizeLabelSelectionKey(label.id))
@@ -247,9 +251,11 @@ export const SidebarLabelNav = ({
               embedded
                 ? undefined
                 : {
+                    mailbox: selectedMailbox ?? "inbox",
                     mailboxId,
                     messageId: null,
                     query: nextQuery,
+                    view: "inbox",
                     workspace: null,
                   }
             }
