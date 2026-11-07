@@ -239,6 +239,7 @@
     "./features/settings/components/use-settings-anchor": "./src/features/settings/components/use-settings-anchor.ts",
     "./features/settings/components/use-settings-team": "./src/features/settings/components/use-settings-team.ts",
     "./features/settings/domain/billing": "./src/features/settings/domain/billing.ts",
+    "./features/settings/domain/default-view-setting": "./src/features/settings/domain/default-view-setting.ts",
     "./features/settings/domain/demo-mode-setting": "./src/features/settings/domain/demo-mode-setting.ts",
     "./features/settings/domain/external-images-setting": "./src/features/settings/domain/external-images-setting.ts",
     "./features/settings/domain/mail-layout-setting": "./src/features/settings/domain/mail-layout-setting.ts",

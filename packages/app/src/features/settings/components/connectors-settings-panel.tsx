@@ -54,39 +54,6 @@ type PendingConnection =
   | { kind: "reconnect"; connectionId: string }
   | null;
 
-const connectorAccess = {
-  clickup: {
-    description:
-      "Browse selected workspaces and their tasks. Create tasks and update their details or status.",
-    title: "Workspaces you authorize",
-  },
-  linear: {
-    description:
-      "Search and read issues and projects. Create issues and update their details.",
-    title: "Your Linear workspace",
-  },
-  microsoft_calendar: {
-    description:
-      "Read your calendars and availability. Create, update, and delete events where your account has permission.",
-    title: "Your calendars and events",
-  },
-  microsoft_onedrive: {
-    description:
-      "Browse and search your drive. Read text files and view file details, with links to open other documents.",
-    title: "Files in your drive",
-  },
-  notion: {
-    description:
-      "Search and read selected pages. Create pages and add content where you grant access.",
-    title: "Pages you choose",
-  },
-  todoist: {
-    description:
-      "Read your projects and active tasks. Create, update, and complete tasks.",
-    title: "Your projects and tasks",
-  },
-} satisfies Record<ConnectorProvider, { description: string; title: string }>;
-
 const getAccountLabel = (account: ConnectorAccount) => {
   const identity = account.accountEmail?.trim() || account.displayName?.trim();
   const workspace = account.providerWorkspaceName?.trim();
@@ -167,7 +134,6 @@ const ConnectorDetail = ({ connector }: { connector: Connector }) => {
   };
   const unavailable = !connector.isConfigured;
   const isBusy = pendingConnection !== null || disconnectMutation.isPending;
-  const access = connectorAccess[connector.provider];
   const connectButton = (
     <Button
       disabled={unavailable || isBusy}
@@ -301,17 +267,6 @@ const ConnectorDetail = ({ connector }: { connector: Connector }) => {
           </Text>
         )}
       </SettingsSection>
-      <SettingsSection title="Access">
-        <SettingsRows>
-          <SettingsRow title={access.title}>{access.description}</SettingsRow>
-        </SettingsRows>
-      </SettingsSection>
-      <Text size="sm" tone="muted">
-        Type @ in chat or action instructions to choose a connected{" "}
-        {connector.displayName} account.
-        {connector.provider === "microsoft_calendar" &&
-          " Your events also appear in Calendar."}
-      </Text>
       <AlertDialog
         onOpenChange={(open) => {
           if (!open && !disconnectMutation.isPending) {

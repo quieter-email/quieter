@@ -25,7 +25,17 @@ import type { UserBillingOverview } from "@quieter/app/features/settings/domain/
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
 import { openExternalUrl } from "@quieter/app/runtime";
+import { BILLING_PRODUCTS } from "@quieter/billing/plans";
+import type { BillingProductId } from "@quieter/billing/plans";
 import { ActionFooter } from "@quieter/ui/action-footer";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
 import { Fieldset } from "@quieter/ui/fieldset";
 import {
@@ -46,6 +56,10 @@ type AccountBilling = UserBillingOverview["account"];
 
 const periodFormatter = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
+});
+const priceFormatter = new Intl.NumberFormat("en-US", {
+  currency: "USD",
+  style: "currency",
 });
 
 const AccountUsageSettings = ({
@@ -178,6 +192,7 @@ const AccountUsageSettings = ({
 const AccountBillingContent = ({ account }: { account: AccountBilling }) => {
   const queryClient = useQueryClient();
   const currentProduct = normalizeBillingProduct(account.product);
+  const [planChange, setPlanChange] = useState<BillingProductId | null>(null);
   const statusMessage = getBillingStatusMessage(account);
   const checkoutMutation = useMutation({
     ...orpc.billing.createCheckout.mutationOptions(),
@@ -188,6 +203,7 @@ const AccountBillingContent = ({ account }: { account: AccountBilling }) => {
       });
     },
     onSuccess: async (result) => {
+      setPlanChange(null);
       void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
       await openExternalUrl(result.checkoutUrl);
     },
@@ -252,6 +268,9 @@ const AccountBillingContent = ({ account }: { account: AccountBilling }) => {
                 compact
                 canChoose={
                   !account.isClosing &&
+                  (!account.hasAccess ||
+                    (account.subscription?.cancelAtPeriodEnd !== true &&
+                      account.subscription?.status !== "trialing")) &&
                   (account.hasAccess ||
                     account.subscription === null ||
                     account.subscription.status === "canceled" ||
@@ -265,7 +284,11 @@ const AccountBillingContent = ({ account }: { account: AccountBilling }) => {
                 }
                 key={product}
                 onCheckout={() => {
-                  checkoutMutation.mutate({ product });
+                  if (account.hasAccess && currentProduct !== null) {
+                    setPlanChange(product);
+                  } else {
+                    checkoutMutation.mutate({ product });
+                  }
                 }}
                 productId={product}
               />
@@ -304,6 +327,54 @@ const AccountBillingContent = ({ account }: { account: AccountBilling }) => {
           settings={account.settings}
         />
       )}
+      <AlertDialog
+        onOpenChange={(open) => {
+          if (!open && !checkoutMutation.isPending) {
+            setPlanChange(null);
+          }
+        }}
+        open={planChange !== null}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change your plan?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {planChange === null ? null : (
+                <>
+                  Switch to {BILLING_PRODUCTS[planChange].name} for{" "}
+                  {priceFormatter.format(
+                    BILLING_PRODUCTS[planChange].monthlyPriceCents / 100
+                  )}
+                  /month. Any prorated amount is invoiced when you change plans.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button
+              disabled={checkoutMutation.isPending}
+              onClick={() => {
+                setPlanChange(null);
+              }}
+              variant="secondary"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={checkoutMutation.isPending || planChange === null}
+              onClick={() => {
+                if (planChange !== null) {
+                  checkoutMutation.mutate({ product: planChange });
+                }
+              }}
+              pending={checkoutMutation.isPending}
+              pendingLabel="Changing plan"
+            >
+              Change plan
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

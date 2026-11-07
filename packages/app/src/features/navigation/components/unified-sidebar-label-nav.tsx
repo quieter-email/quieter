@@ -16,7 +16,6 @@ import {
   parseStructuredSearchQuery,
 } from "@quieter/app/features/message-search/state/message-list-search-state";
 import type { MailSidebar } from "@quieter/app/features/navigation/components/mail-sidebar";
-import { MailboxOrganizer } from "@quieter/app/features/navigation/components/mailbox-organizer";
 import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
@@ -51,7 +50,6 @@ export const UnifiedSidebarLabelNav = ({
   onRequestClose?: () => void;
 }) => {
   const preferences = useUnifiedInboxPreferences(userId);
-  const [rulesMailboxId, setRulesMailboxId] = useState<string | null>(null);
   const [, refreshHiddenLabels] = useState(0);
   const mailboxes = groups
     .flatMap((group) => group.mailboxes)
@@ -126,9 +124,6 @@ export const UnifiedSidebarLabelNav = ({
   const labels = [...labelsByName.entries()].toSorted(([left], [right]) =>
     left.localeCompare(right)
   );
-  const rulesMailbox = mailboxes.find(
-    (mailbox) => mailbox.id === rulesMailboxId && mailbox.provider === "managed"
-  );
 
   return (
     <section className="mt-4">
@@ -179,9 +174,29 @@ export const UnifiedSidebarLabelNav = ({
                   )}
                   {mailbox.provider === "managed" && (
                     <DropdownMenuItem
-                      onSelect={() => {
-                        setRulesMailboxId(mailbox.id);
-                      }}
+                      onSelect={onRequestClose}
+                      render={
+                        <Link
+                          replace
+                          resetScroll={false}
+                          search={(previous) =>
+                            applyMailboxSearchPatch(
+                              mailboxSearchSchema.parse(previous),
+                              {
+                                chatId:
+                                  mailbox.id === mailboxId ? undefined : null,
+                                mailbox: "inbox",
+                                mailboxId: mailbox.id,
+                                messageId: null,
+                                threadId: null,
+                                view: "rules",
+                                workspace: null,
+                              }
+                            )
+                          }
+                          to="/"
+                        />
+                      }
                     >
                       {mailbox.grantRole === "manager" ? "Manage" : "About"}{" "}
                       rules for {mailbox.emailAddress}
@@ -288,21 +303,6 @@ export const UnifiedSidebarLabelNav = ({
             </p>
           )}
       </nav>
-      {rulesMailbox && (
-        <MailboxOrganizer
-          key={rulesMailbox.id}
-          canManage={rulesMailbox.grantRole === "manager"}
-          mailboxId={rulesMailbox.id}
-          onOpenChange={(open) => {
-            if (!open) {
-              setRulesMailboxId(null);
-            }
-          }}
-          open
-          searchQuery={searchQuery}
-          showTrigger={false}
-        />
-      )}
     </section>
   );
 };

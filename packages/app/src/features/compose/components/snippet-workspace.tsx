@@ -7,6 +7,7 @@ import {
   Search01Icon,
   SidebarLeftIcon,
 } from "@hugeicons/core-free-icons";
+import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { SnippetFields } from "@quieter/app/features/compose/components/snippet-fields";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
@@ -206,6 +207,7 @@ export const SnippetWorkspace = ({
               <Icon icon={Add01Icon} />
               New
             </Button>
+            <AssistantSidebarTrigger />
           </div>
           <label
             className="relative mt-3 block"

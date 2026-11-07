@@ -892,7 +892,7 @@ export const MailboxSwitcherDropdown = ({
           }}
         >
           <div
-            className="flex max-h-96 flex-col gap-1 overflow-y-auto p-1"
+            className="flex max-h-96 [scrollbar-gutter:stable_both-edges] flex-col gap-1 overflow-y-auto px-2 py-1"
             data-mailbox-switcher-list
             onKeyDown={handleArrowNavigation}
             ref={listRef}

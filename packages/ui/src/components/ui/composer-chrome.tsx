@@ -6,7 +6,7 @@ import {
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 import { cn } from "../../lib/cn";
 import { Button } from "./button";
@@ -18,38 +18,15 @@ import { entranceMotionVariants } from "./motion";
 export const PromptComposerFrame = ({
   className,
   ...props
-}: ComponentPropsWithoutRef<"div">) => {
-  const [keyboardNavigation, setKeyboardNavigation] = useState(false);
-
-  useEffect(() => {
-    // Text inputs also match :focus-visible after a click or while typing.
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Tab") {
-        setKeyboardNavigation(true);
-      }
-    };
-    const handlePointerDown = () => {
-      setKeyboardNavigation(false);
-    };
-    document.addEventListener("keydown", handleKeyDown, true);
-    document.addEventListener("pointerdown", handlePointerDown, true);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown, true);
-      document.removeEventListener("pointerdown", handlePointerDown, true);
-    };
-  }, []);
-
-  return (
-    <div
-      className={cn(
-        "flex min-w-0 flex-col gap-1 rounded-section border border-transparent bg-section p-2 shadow-sm data-keyboard-navigation:has-[:focus-visible]:ring-1 data-keyboard-navigation:has-[:focus-visible]:ring-ring data-keyboard-navigation:has-[:focus-visible]:ring-inset",
-        className
-      )}
-      data-keyboard-navigation={keyboardNavigation || undefined}
-      {...props}
-    />
-  );
-};
+}: ComponentPropsWithoutRef<"div">) => (
+  <div
+    className={cn(
+      "flex min-w-0 flex-col gap-1 rounded-section border border-transparent bg-section p-2 shadow-sm",
+      className
+    )}
+    {...props}
+  />
+);
 
 export const ComposerActionBar = ({
   className,
@@ -115,7 +92,6 @@ export const ComposerFrame = ({
   </div>
 );
 
-/** The one element that holds every header input, hairline-divided rather than boxed. */
 export const ComposerFieldGroup = ({
   bare = false,
   children,
@@ -126,7 +102,7 @@ export const ComposerFieldGroup = ({
 }) => (
   <div
     className={cn(
-      "w-full shrink-0 overflow-hidden rounded-section border border-transparent bg-section",
+      "flex w-full shrink-0 flex-col gap-2 overflow-hidden rounded-section border border-transparent bg-section p-3",
       { "rounded-none border-0 bg-transparent shadow-none": bare },
       className
     )}
@@ -137,7 +113,7 @@ export const ComposerFieldGroup = ({
 );
 
 const composerFieldRowClassName =
-  "flex min-w-0 items-center gap-(--composer-field-gap) px-(--composer-field-inset) transition-colors duration-150 ease-out has-[:focus-visible]:bg-detail";
+  "flex min-h-10 min-w-0 items-center gap-(--composer-field-gap)";
 
 export const ComposerFieldRow = ({
   children,
@@ -156,13 +132,13 @@ export const ComposerFieldRow = ({
 }) => (
   <Field
     className={cn(
-      "gap-0 [--composer-field-gap:calc(var(--spacing)*2.5)] [--composer-field-inset:calc(var(--spacing)*4)] [--composer-field-label-width:calc(var(--spacing)*14)]",
+      "gap-1 [--composer-field-gap:calc(var(--spacing)*2)] [--composer-field-inset:0px] [--composer-field-label-width:calc(var(--spacing)*12)]",
       { "border-b border-transparent": divided },
       className
     )}
   >
     <div className={composerFieldRowClassName}>
-      <FieldLabel className="w-(--composer-field-label-width) shrink-0 text-body font-normal text-muted-fg">
+      <FieldLabel className="w-(--composer-field-label-width) shrink-0 text-body-sm font-medium text-muted-fg">
         {label}
       </FieldLabel>
       {children}
@@ -184,7 +160,7 @@ export const ComposerEditorFrame = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "flex min-h-0 flex-1 flex-col overflow-hidden rounded-section bg-section squircle has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-inset",
+      "flex min-h-0 flex-1 flex-col overflow-hidden rounded-section bg-section squircle",
       className
     )}
     {...props}
@@ -210,7 +186,8 @@ const DictationWaveform = ({ analyser }: { analyser: AnalyserNode | null }) => {
   useEffect(() => {
     const element = waveformRef.current;
     if (!element || !analyser) {
-      return;
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Effects return an optional cleanup.
+      return undefined;
     }
     const bars = [...element.children].filter(
       (bar) => bar instanceof HTMLElement
@@ -257,7 +234,6 @@ const DictationWaveform = ({ analyser }: { analyser: AnalyserNode | null }) => {
     };
     reducedMotion.addEventListener("change", updateMotion);
     updateMotion();
-    // oxlint-disable-next-line typescript/consistent-return -- Inactive audio has no animation loop or listener to dispose.
     return () => {
       cancelAnimationFrame(frame);
       reducedMotion.removeEventListener("change", updateMotion);

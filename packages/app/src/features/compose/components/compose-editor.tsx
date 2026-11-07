@@ -101,6 +101,7 @@ type ComposeEditorProps = {
   disabled?: boolean;
   onChange: (payload: { html: string; text: string }) => void;
   onBlur?: () => void;
+  onReadyChange?: (ready: boolean) => void;
   onInlineImageFiles: (files: File[]) => void | Promise<void>;
   snippets?: { id: string; name: string; bodyText: string }[];
   snippetStatus?: string;
@@ -160,6 +161,7 @@ export const ComposeEditor = ({
   html,
   onBlur,
   onChange,
+  onReadyChange,
   onInlineImageFiles,
   snippets = EMPTY_SNIPPETS,
   snippetStatus,
@@ -341,6 +343,23 @@ export const ComposeEditor = ({
       emitUpdate: false,
     });
   }, [document, editor, html]);
+
+  useEffect((): (() => void) | undefined => {
+    if (!editor || !onReadyChange) {
+      return undefined;
+    }
+    const handleCreate = () => {
+      onReadyChange(true);
+    };
+    editor.on("create", handleCreate);
+    if (editor.isInitialized) {
+      handleCreate();
+    }
+    return () => {
+      editor.off("create", handleCreate);
+      onReadyChange(false);
+    };
+  }, [editor, onReadyChange]);
 
   const contextValue = useMemo(
     () => ({

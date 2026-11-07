@@ -10,6 +10,7 @@ import {
   MailSend02Icon,
 } from "@hugeicons/core-free-icons";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
+import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import {
   ComposeEditor,
   ComposeEditorBody,
@@ -239,6 +240,7 @@ const ReadyComposeSurface = ({
   const queryClient = useQueryClient();
   const reducedMotion = useReducedMotion();
   const composeEditorRef = useRef<ComposeEditorHandle | null>(null);
+  const [editorReady, setEditorReady] = useState(false);
   const mountedRef = useRef(false);
   const modKeyLabel = useSyncExternalStore(
     () => () => {
@@ -285,6 +287,7 @@ const ReadyComposeSurface = ({
     beforeNavigate,
     defaultSenderName: editableSender?.name,
     demoMode,
+    editorReady,
     getTextFromHtml: (html) =>
       composeEditorRef.current?.getTextFromHtml(html) ??
       new DOMParser().parseFromString(html, "text/html").body.textContent ??
@@ -708,6 +711,7 @@ const ReadyComposeSurface = ({
                     form.setFieldValue("bodyText", text);
                   }}
                   onInlineImageFiles={addInlineImageFiles}
+                  onReadyChange={setEditorReady}
                   onSlashMenuOpenChange={setSlashMenuOpen}
                   snippets={snippetsQuery.data?.snippets}
                   snippetStatus={snippetStatus}
@@ -959,7 +963,7 @@ const ReadyComposeSurface = ({
                               }
                               label="To"
                               trailing={
-                                <div className="flex shrink-0 items-center gap-0.5">
+                                <div className="flex shrink-0 items-center gap-1.5">
                                   <Button
                                     aria-controls="compose-cc-field"
                                     aria-expanded={state.showCc}
@@ -968,7 +972,7 @@ const ReadyComposeSurface = ({
                                       toggleRecipientVisibility("cc");
                                     }}
                                     type="button"
-                                    variant="chip"
+                                    variant="secondary"
                                   >
                                     Cc
                                   </Button>
@@ -980,7 +984,7 @@ const ReadyComposeSurface = ({
                                       toggleRecipientVisibility("bcc");
                                     }}
                                     type="button"
-                                    variant="chip"
+                                    variant="secondary"
                                   >
                                     Bcc
                                   </Button>
@@ -992,6 +996,7 @@ const ReadyComposeSurface = ({
                                 chrome="composer"
                                 data-compose-recipient-field
                                 disabled={!canEditBody}
+                                placeholder="Add recipients"
                                 onBlur={() => {
                                   recipientField.handleBlur();
                                 }}
@@ -1054,6 +1059,7 @@ const ReadyComposeSurface = ({
                           form={form}
                           label="Subject"
                           name="subject"
+                          placeholder="Add a subject"
                         />
                       ) : null}
                     </ComposerFieldGroup>
@@ -1652,7 +1658,12 @@ export const ComposeWorkspace = ({
         leading="sidebar"
         onLeadingClick={onOpenSidebar}
         title="New message"
-      />
+      >
+        <AssistantSidebarTrigger />
+      </MobileHeader>
+      <div className="hidden shrink-0 justify-end px-6 pt-6 lg:flex">
+        <AssistantSidebarTrigger />
+      </div>
       <ComposeSurface
         allowSenderSwitch={!senderBoundToInitialDraft}
         beforeNavigate={cleanupInactiveDrafts}

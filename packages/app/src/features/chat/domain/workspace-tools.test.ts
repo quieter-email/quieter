@@ -29,6 +29,9 @@ const createWorkspace = ({
   const openCompose = vi
     .fn<WorkspaceBridge["openCompose"]>()
     .mockResolvedValue({ draftId: "draft-a", draftRevision: 1 });
+  const openInlineCompose = vi
+    .fn<WorkspaceBridge["openInlineCompose"]>()
+    .mockResolvedValue({ draftId: "draft-a", draftRevision: 1 });
 
   return {
     control,
@@ -38,9 +41,11 @@ const createWorkspace = ({
     navigate,
     navigateCalendar,
     openCompose,
+    openInlineCompose,
     read,
     registerCalendar: () => () => {},
     registerCompose: () => () => {},
+    registerInlineCompose: () => () => {},
     waitForCalendar: () => {
       throw new Error("The calendar was not registered.");
     },

@@ -4,6 +4,12 @@ import {
   SettingsRows,
   SettingsSection,
 } from "@quieter/app/features/settings/components/settings-layout";
+import {
+  DEFAULT_VIEW_OPTIONS,
+  setDefaultView,
+  useDefaultView,
+} from "@quieter/app/features/settings/domain/default-view-setting";
+import { authClient } from "@quieter/app/lib/auth";
 import { toastError } from "@quieter/app/lib/error-toast";
 import {
   getMailboxesQueryKey,
@@ -21,6 +27,8 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export const DefaultMailboxSetting = () => {
+  const userId = authClient.useSession().data?.user.id ?? "";
+  const defaultView = useDefaultView(userId);
   const queryClient = useQueryClient();
   const { data, error, isError, isPending, refetch } = useQuery(
     mailboxesQueryOptions()
@@ -64,6 +72,43 @@ export const DefaultMailboxSetting = () => {
           <SettingsRow
             action={
               <Select
+                disabled={!userId}
+                items={DEFAULT_VIEW_OPTIONS}
+                onValueChange={(value) => {
+                  const option = DEFAULT_VIEW_OPTIONS.find(
+                    (item) => item.value === value
+                  );
+                  if (option) {
+                    setDefaultView(userId, option.value);
+                  }
+                }}
+                value={defaultView}
+              >
+                <SelectTrigger
+                  aria-label="Default view"
+                  className="w-36 @md:w-60"
+                  size="sm"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  <SelectList>
+                    {DEFAULT_VIEW_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectList>
+                </SelectContent>
+              </Select>
+            }
+            title="Default view"
+          >
+            Choose what opens when you start Quieter on this device.
+          </SettingsRow>
+          <SettingsRow
+            action={
+              <Select
                 disabled={isPending || setDefaultMailboxMutation.isPending}
                 items={items}
                 onValueChange={(value) => {
@@ -99,7 +144,7 @@ export const DefaultMailboxSetting = () => {
             }
             title="Default mailbox"
           >
-            Choose which inbox opens when you visit quieter.
+            Choose which mailbox to use when opening mail.
           </SettingsRow>
         </SettingsRows>
       )}

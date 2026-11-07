@@ -29,6 +29,7 @@ import {
   navigateCalendarOutputSchema,
   openComposeInputSchema,
   openComposeOutputSchema,
+  openInlineComposeOutputSchema,
   saveComposeDraftOutputSchema,
   sendMailOutputSchema,
 } from "@quieter/ai/chat-tools";
@@ -321,6 +322,7 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
         navigate: navigateOutputSchema,
         navigate_calendar: navigateCalendarOutputSchema,
         open_compose: openComposeOutputSchema,
+        open_inline_compose: openInlineComposeOutputSchema,
       }[toolName];
       const output = outputSchema.parse(part.output);
       if (output.generation !== parsedBody.foreground.generation) {

@@ -69,6 +69,10 @@ const labels: Record<string, { complete: string; pending: string }> = {
     pending: "Opening calendar…",
   },
   open_compose: { complete: "Opened draft", pending: "Opening draft…" },
+  open_inline_compose: {
+    complete: "Opened conversation draft",
+    pending: "Opening conversation draft…",
+  },
   read_gmail_message: { complete: "Read message", pending: "Reading message…" },
   read_gmail_messages: {
     complete: "Read messages",
@@ -236,6 +240,7 @@ export const ToolActivity = ({
     name === "send_mail" ||
     name === "save_compose_draft" ||
     name === "open_compose" ||
+    name === "open_inline_compose" ||
     name === "edit_compose";
   const wording = labels[name] ?? {
     complete: "Completed action",

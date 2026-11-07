@@ -223,10 +223,26 @@ const CalendarWorkspaceContent = ({
   });
   const date = route.calendarDate ?? now.date;
   const view = route.calendarView ?? "week";
-  const range = useMemo(
-    () => getCalendarRange({ date, timeZone, view, weekStartsOn }),
-    [date, timeZone, view, weekStartsOn]
-  );
+  const range = useMemo(() => {
+    const visible = getCalendarRange({ date, timeZone, view, weekStartsOn });
+    if (view !== "month") {
+      return visible;
+    }
+    const first = addCalendarDays(visible.dates[0] ?? date, -28);
+    const dates = Array.from(
+      { length: visible.dates.length + 56 },
+      (_, index) => addCalendarDays(first, index)
+    );
+    return {
+      dates,
+      end: getCalendarRange({
+        date: addCalendarDays(first, dates.length),
+        timeZone,
+        view: "day",
+      }).start,
+      start: getCalendarRange({ date: first, timeZone, view: "day" }).start,
+    };
+  }, [date, timeZone, view, weekStartsOn]);
   const preferencesKey = `quieter:calendar-preferences:${userId}:${preview ?? "live"}`;
   const initialPreferences = useMemo<string[]>(() => {
     try {
@@ -1478,6 +1494,12 @@ const CalendarWorkspaceContent = ({
               }
               dates={range.dates}
               items={items}
+              onDateChange={(nextDate) => {
+                void setMailboxSearch(
+                  { calendarDate: nextDate },
+                  { replace: true }
+                );
+              }}
               onEventClick={(key) => {
                 const event = eventsByKey.get(key);
                 if (event) {
