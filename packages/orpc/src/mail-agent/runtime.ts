@@ -446,6 +446,7 @@ const executeRun = async (run: ClaimedRun) => {
             .filter(Boolean)
             .join("\n")
             .slice(0, 4000),
+          semantic: { billingMailboxId: run.mailboxId },
           userId: run.actorUserId,
         })
       );

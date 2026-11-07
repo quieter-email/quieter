@@ -1320,7 +1320,7 @@ export const gmailCapturedMessage = pgTable(
     providerRevision: text("providerRevision").notNull(),
     snapshot: jsonb("snapshot").$type<CapturedMailSnapshot>(),
     source: text("source")
-      .$type<"bootstrap" | "history" | "on_demand" | "recovery">()
+      .$type<"bootstrap" | "history" | "on_demand" | "recovery" | "search">()
       .notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
   },
@@ -3583,6 +3583,118 @@ export const apikey = pgTable(
   ]
 );
 
+export const semanticEmbedding = pgTable(
+  "semanticEmbedding",
+  {
+    chatMessageId: text("chatMessageId").references(() => chatMessage.id, {
+      onDelete: "cascade",
+    }),
+    chunkIndex: integer("chunkIndex").notNull(),
+    createdAt: timestamp("createdAt").notNull(),
+    embedding: vector("embedding", { dimensions: 1024 }).notNull(),
+    gmailMailboxId: text("gmailMailboxId"),
+    gmailMessageId: text("gmailMessageId"),
+    managedMessageId: text("managedMessageId").references(
+      () => managedMailMessage.id,
+      { onDelete: "cascade" }
+    ),
+    memoryId: text("memoryId").references(() => aiMemory.id, {
+      onDelete: "cascade",
+    }),
+    model: text("model").notNull(),
+    searchText: text("searchText").notNull(),
+    sourceKey: text("sourceKey").notNull(),
+    sourceRevision: text("sourceRevision").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.sourceKey, table.model, table.chunkIndex] }),
+    foreignKey({
+      columns: [table.gmailMailboxId, table.gmailMessageId],
+      foreignColumns: [
+        gmailCapturedMessage.mailboxId,
+        gmailCapturedMessage.messageId,
+      ],
+      name: "semantic_embedding_gmail_source_fkey",
+    }).onDelete("cascade"),
+    check(
+      "semantic_embedding_source_check",
+      sql`num_nonnulls(${table.memoryId}, ${table.chatMessageId}, ${table.gmailMessageId}, ${table.managedMessageId}) = 1 and ((${table.gmailMailboxId} is null) = (${table.gmailMessageId} is null))`
+    ),
+    check("semantic_embedding_chunk_check", sql`${table.chunkIndex} >= 0`),
+    index("semantic_embedding_memory_idx").on(table.memoryId),
+    index("semantic_embedding_chat_idx").on(table.chatMessageId),
+    index("semantic_embedding_gmail_idx").on(
+      table.gmailMailboxId,
+      table.gmailMessageId
+    ),
+    index("semantic_embedding_managed_idx").on(table.managedMessageId),
+    index("semantic_embedding_text_idx").using("tin", table.searchText),
+  ]
+);
+
+export const semanticSearchLease = pgTable(
+  "semanticSearchLease",
+  {
+    expiresAt: timestamp("expiresAt").notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    token: text("token").notNull(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.mailboxId] })]
+);
+
+export const semanticIndexRequest = pgTable(
+  "semanticIndexRequest",
+  {
+    attemptCount: integer("attemptCount").notNull().default(0),
+    availableAt: timestamp("availableAt").notNull(),
+    completedAt: timestamp("completedAt"),
+    indexedSources: integer("indexedSources").notNull().default(0),
+    kind: text("kind").$type<"memory" | "chat" | "mail">().notNull(),
+    lastError: text("lastError"),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    leaseToken: text("leaseToken"),
+    mailImportPageToken: text("mailImportPageToken"),
+    mailImportPendingIds: jsonb("mailImportPendingIds")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    mailImportRequestedAt: timestamp("mailImportRequestedAt"),
+    mailImportedAt: timestamp("mailImportedAt"),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    requestedAt: timestamp("requestedAt").notNull(),
+    totalSources: integer("totalSources").notNull().default(0),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.mailboxId, table.kind] }),
+    check(
+      "semantic_index_request_kind_check",
+      sql`${table.kind} in ('memory', 'chat', 'mail')`
+    ),
+    check(
+      "semantic_index_request_count_check",
+      sql`${table.attemptCount} >= 0 and ${table.indexedSources} >= 0 and ${table.totalSources} >= 0`
+    ),
+    check(
+      "semantic_index_request_lease_check",
+      sql`(${table.leaseToken} is null) = (${table.leaseExpiresAt} is null)`
+    ),
+    index("semantic_index_request_pending_idx").on(
+      table.availableAt,
+      table.leaseExpiresAt
+    ),
+  ]
+);
+
 export const tables = {
   account,
   aiGeneratedMailBody,
@@ -3665,6 +3777,9 @@ export const tables = {
   organizationMailUsageSettings,
   passkey,
   rateLimitBucket,
+  semanticEmbedding,
+  semanticIndexRequest,
+  semanticSearchLease,
   session,
   user,
   userAiContext,

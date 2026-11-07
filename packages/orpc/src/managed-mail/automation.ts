@@ -320,6 +320,7 @@ const processManagedAutoLabelMessage = async (input: {
               candidates: memoryCandidates,
               mailboxId: input.mailboxId,
               query: buildMailMemoryQuery(message),
+              semantic: { billingMailboxId: input.mailboxId },
               userId: memoryUserId,
             }),
         aiLabels.length === 0

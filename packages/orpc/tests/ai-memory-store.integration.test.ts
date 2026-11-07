@@ -37,6 +37,7 @@ import {
   forgetAiMemory,
   learnAiMemoryFromChatMessage,
   learnAiMemoryFromMailAction,
+  loadAiAgentContext,
   purgePersonalAiMemory,
   recordAiMemoryEvent,
   refreshAiMemoryFromEvent,
@@ -216,6 +217,60 @@ describe.skipIf(state.databaseUrl === undefined)(
 
     afterAll(async () => {
       await db.$client.end();
+    });
+
+    test("keeps provenance private and clears stale attribution after explicit edits", async () => {
+      const saved = await saveAiMemory({
+        category: "preferences",
+        content: "Prefers concise project updates.",
+        userId,
+      });
+      const pointer = `legacy-evidence-${crypto.randomUUID()}`;
+      const confirmedAt = new Date("2026-01-15T12:00:00Z");
+      await db
+        .update(aiMemory)
+        .set({
+          confidence: 0.7,
+          lastConfirmedAt: confirmedAt,
+          reinforcementCount: 3,
+          source: "inferred",
+          sourceReference: pointer,
+        })
+        .where(eq(aiMemory.id, saved.id));
+      const found = await searchAiMemory({ userId });
+      const observed = found.items.find(({ id }) => id === saved.id);
+      expect(observed?.provenance).toMatchObject({
+        confidence: 0.7,
+        lastConfirmedAt: confirmedAt.toISOString(),
+        reinforcementCount: 3,
+        source: "inferred",
+      });
+      const overview = await loadAiAgentContext({ overview: {}, userId });
+      expect(
+        overview.items.find(({ id }) => id === saved.id)?.provenance
+      ).toMatchObject(observed?.provenance ?? {});
+      expect(JSON.stringify([found, overview])).not.toContain(pointer);
+      const foreign = await searchAiMemory({ userId: otherUserId });
+      expect(foreign.items.map(({ id }) => id)).not.toContain(saved.id);
+      const edited = await saveAiMemory({
+        category: "preferences",
+        content: "Prefers detailed project updates.",
+        memoryId: saved.id,
+        userId,
+        version: saved.version,
+      });
+      expect(edited.provenance.source).toBe("explicit");
+      expect(
+        new Date(edited.provenance.lastConfirmedAt).getTime()
+      ).toBeGreaterThan(confirmedAt.getTime());
+      const [stored] = await db
+        .select({ sourceReference: aiMemory.sourceReference })
+        .from(aiMemory)
+        .where(eq(aiMemory.id, saved.id));
+      expect(stored?.sourceReference).toBeNull();
+      await forgetAiMemory({ memoryId: saved.id, userId });
+      const forgotten = await loadAiAgentContext({ overview: {}, userId });
+      expect(forgotten.items.map(({ id }) => id)).not.toContain(saved.id);
     });
 
     test("saves explicit facts while learning is paused and rejects stale or foreign edits", async () => {

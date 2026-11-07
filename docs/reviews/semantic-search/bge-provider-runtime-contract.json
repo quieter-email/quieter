@@ -1,0 +1,85 @@
+{
+  "requestedModel": "baai/bge-m3",
+  "routing": {
+    "dimensions": 1024,
+    "encoding_format": "float",
+    "require_parameters": true,
+    "zdr": true
+  },
+  "providers": [
+    {
+      "status": 200,
+      "model": "BAAI/bge-m3",
+      "provider": "DeepInfra",
+      "usage": {
+        "prompt_tokens": 18,
+        "total_tokens": 18,
+        "cost": 1.8e-7,
+        "is_byok": false,
+        "cost_details": {
+          "upstream_inference_cost": 1.8e-7,
+          "upstream_inference_prompt_cost": 1.8e-7,
+          "upstream_inference_completions_cost": 0
+        }
+      },
+      "entries": [
+        {
+          "index": 0,
+          "dimensions": 1024,
+          "finite": true,
+          "nonzero": true
+        },
+        {
+          "index": 1,
+          "dimensions": 1024,
+          "finite": true,
+          "nonzero": true
+        }
+      ]
+    },
+    {
+      "status": 200,
+      "model": "parasail-bge-m3",
+      "provider": "Parasail",
+      "usage": {
+        "prompt_tokens": 18,
+        "total_tokens": 18,
+        "cost": 1.8e-7,
+        "is_byok": false,
+        "cost_details": {
+          "upstream_inference_cost": 1.8e-7,
+          "upstream_inference_prompt_cost": 1.8e-7,
+          "upstream_inference_completions_cost": 0
+        }
+      },
+      "entries": [
+        {
+          "index": 0,
+          "dimensions": 1024,
+          "finite": true,
+          "nonzero": true
+        },
+        {
+          "index": 1,
+          "dimensions": 1024,
+          "finite": true,
+          "nonzero": true
+        }
+      ]
+    }
+  ],
+  "sameTextCrossProvider": [
+    {
+      "index": 0,
+      "cosine": 0.9999995482308753,
+      "normA": 1.0000000113416356,
+      "normB": 1.0000000662446429
+    },
+    {
+      "index": 1,
+      "cosine": 0.9999992273258018,
+      "normA": 0.9999999830328414,
+      "normB": 1.0000000155215454
+    }
+  ]
+}

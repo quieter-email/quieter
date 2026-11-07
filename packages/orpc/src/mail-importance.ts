@@ -594,7 +594,7 @@ export const processPendingMailImportance = async (
       and(
         input.mailboxId ? eq(mailbox.id, input.mailboxId) : undefined,
         sql`(
-    exists (select 1 from ${gmailCapturedMessage} c where c."mailboxId" = ${mailbox.id} and c."deletedAt" is null and not (c.snapshot->'labelIds' ?| array['SENT','DRAFT']) and not exists (select 1 from ${mailMessageImportance} i where i."mailboxId" = c."mailboxId" and i."messageId" = c."messageId"))
+    exists (select 1 from ${gmailCapturedMessage} c where c."mailboxId" = ${mailbox.id} and c."deletedAt" is null and c.source <> 'search' and not (c.snapshot->'labelIds' ?| array['SENT','DRAFT']) and not exists (select 1 from ${mailMessageImportance} i where i."mailboxId" = c."mailboxId" and i."messageId" = c."messageId"))
     or exists (select 1 from ${managedMailMessage} m where m."mailboxId" = ${mailbox.id} and m.direction = 'inbound' and not exists (select 1 from ${mailMessageImportance} i where i."mailboxId" = m."mailboxId" and i."messageId" = m.id))
   )`
       )
@@ -615,6 +615,7 @@ export const processPendingMailImportance = async (
         and(
           eq(gmailCapturedMessage.mailboxId, box.id),
           isNull(gmailCapturedMessage.deletedAt),
+          sql`${gmailCapturedMessage.source} <> 'search'`,
           sql`not (${gmailCapturedMessage.snapshot}->'labelIds' ?| array['SENT','DRAFT'])`,
           isNull(mailMessageImportance.messageId)
         )
@@ -773,6 +774,7 @@ export const processPendingMailImportance = async (
               agent: "mail_importance",
               mailboxId: job.mailboxId,
               query: buildMailMemoryQuery(source.message),
+              semantic: { billingMailboxId: job.mailboxId },
               userId: memoryActor.userId,
             });
       attemptId = randomUUID();

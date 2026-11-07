@@ -4,6 +4,12 @@ Researched and exercised on September 5, 2026. This is a coverage ledger, not a 
 
 Agent connector readiness is tracked separately in [Agent tooling](agent-tooling.md). The original runtime audit omitted verification of Sentry MCP and other agent access. Passing application tests or disabling local telemetry does not establish that debugging tools are ready.
 
+## Current semantic-search verification
+
+The November 7, 2026 search change uses the existing OpenRouter credential for 1024-dimensional `openai/text-embedding-3-small` vectors and PostgreSQL for derivative chunks. Production SQL uses PlanetScale TIN BM25 with pgvector. The inspected `quieter_dev` has pgvector 0.8.5 installed; TIN 1.0.1 and vectorscale 0.9.0 are available but were not enabled by this work. No shared-cluster or production migration was performed.
+
+Disposable verification uses the pinned image in `infra/docker/semantic-search-postgres.Dockerfile`, PostgreSQL 17.11, Lead TIN compatibility 1.0.6 and pgvector 0.8.6. Native queries and the migration chain passed locally. The actual embedding run passed ten memory contracts and hit all four semantic probes. These results do not measure production performance. See [current evidence and limitations](reviews/semantic-search/README.md).
+
 ## Verified setup, previous revision
 
 | Area | Current evidence | Remaining proof |
@@ -14,7 +20,7 @@ Agent connector readiness is tracked separately in [Agent tooling](agent-tooling
 | Cloudflare | Native web/Worker runtime; signed WebSocket smoke; direct ingress and DO tests; authenticated manual maintenance | Deployed concurrency, hibernation, IAM and cloud pooling |
 | Secrets | 22 development SST secrets in local-leander; 21 runtime links; fresh-checkout pull verified; SST starts web and background runtimes together | No AWS managed-mail stage is required or authorized for local development |
 | OpenRouter | Separate $1-capped development key; API smoke cost $0.000002; actual app chat streamed the expected response and saved its conversation | Voice, tool use, auto-label and verification-code quality tests |
-| Workers AI | Separate AI-only token; real 1024-dimension embedding | Application memory write/search/delete lifecycle |
+| Former Workers AI adapter | Historical 1024-dimensional smoke test only; this adapter is retired | Current embedding evidence uses OpenRouter below |
 | Polar | Non-expiring sandbox token, existing Managed/Pro products, official CLI 1.3.9 in WSL; six real customer/member events returned HTTP 200 | Checkout/portal/renewal/cancellation/credits with bypass off |
 | Telemetry | Explicit opt-in implemented; off by default; consent still required for PostHog | Development-project ingestion and browser privacy assertions |
 | Managed mail | Private fixture mailbox opens in the browser with its body and attachment; archive and restore-to-inbox actions pass; native R2 read/delete tests; fixture reseed preserves one message; domain changes and external sending blocked locally | SES/MX delivery requires a deployment and is excluded from this local setup |
@@ -56,7 +62,7 @@ Local Explorer is already installed and working. It exposes local resource inspe
 
 The Vite plugin also has built-in tunnel support, including named tunnels. A stable HTTPS address is useful for OAuth callbacks and signed webhooks. Expose only the application endpoints required for integration tests; local inspection tools and preview authentication must remain protected. See [development tunnels](https://developers.cloudflare.com/workers/local-development/local-dev-tunnels/).
 
-### Cloudflare R2 and Workers AI
+### Cloudflare R2
 
 R2 has native local simulation through Worker bindings, plus optional remote bindings to a real bucket. However, quieter reads and writes raw mail using the S3 HTTP API. Those requests do not become local merely because a local R2 binding exists. See [R2 Worker API development](https://developers.cloudflare.com/r2/get-started/workers-api/).
 
@@ -64,13 +70,13 @@ The local raw-message adapter now uses native R2 bindings, with shared persisten
 
 The fixture exposed a managed-mail attachment gap. Thread responses now include attachment metadata, and downloads authorize the selected mailbox and resolve the original MIME part server-side. A nullable `partIndex` column identifies attachments with duplicate filenames on new inbound messages. Apply its additive migration before deploying the reader; it has only been applied to `quieter_dev` here. Existing attachments use an exact metadata match and refuse ambiguous matches. New managed drafts and sends now retain their MIME objects and attachment positions. Historical messages whose original bytes were never retained still cannot supply those bytes. The additive send-storage migration must precede deployment; it has only been verified on a disposable loopback database. See [outbound recovery](outbound-mail-feedback.md).
 
-Workers AI executes models remotely even during local development. quieter calls its REST API for the 1024-dimensional `@cf/qwen/qwen3-embedding-0.6b` model and stores embeddings in PostgreSQL. Local binding configuration alone will not intercept those REST calls. Supply a restricted development AI token for real embedding checks and deterministic embedding fixtures for offline tests. Vectorize is not required by the current implementation. See [Cloudflare local development](https://developers.cloudflare.com/workers/local-development/).
+The former Workers AI embedding adapter is retired. Current semantic search calls OpenRouter through `packages/ai/src/search-embeddings.ts` and stores source-bound chunks in PostgreSQL. It requires neither a Workers AI credential nor Vectorize. The historical Workers AI smoke result does not verify the current adapter. See [current semantic-search operation](ai-memory.md#shared-semantic-history-search).
 
-### PlanetScale, PostgreSQL, pgvector, and Drizzle
+### PlanetScale, PostgreSQL, native search, and Drizzle
 
 PlanetScale officially supports ordinary local PostgreSQL for development and separate PostgreSQL branches for cloud testing. A PlanetScale branch is an isolated deployment. The observed account has only the production `main` branch; `quieter_dev` is a separate logical database on that cluster. It shares cluster resources with production. See [development environments](https://planetscale.com/docs/postgres/development-environments) and [PostgreSQL branching](https://planetscale.com/docs/postgres/branching).
 
-Use the existing allowlisted `quieter_dev` logical database for normal development. No additional paid PlanetScale branch/cluster or persistent local PostgreSQL is required. Keep destructive migration tests on disposable CI databases. The shared cluster is PostgreSQL 18.6, while the existing CI lane uses PostgreSQL 16; retain a version-compatibility check. See [official pgvector installation](https://github.com/pgvector/pgvector).
+Use the existing allowlisted `quieter_dev` logical database for normal development. No additional paid PlanetScale branch/cluster or persistent local PostgreSQL is required. Keep destructive migration tests on disposable CI databases. The shared cluster is PostgreSQL 18.6. Search verification and the migration CI lane use PostgreSQL 17 with the pinned Lead plus pgvector image. Retain the version-compatibility distinction. See [PlanetScale hybrid search](https://planetscale.com/docs/postgres/search), [Lead for CI](https://planetscale.com/blog/introducing-lead), and [pgvector](https://github.com/pgvector/pgvector).
 
 Drizzle already supplies migration tooling and a local Studio database browser. Add a guarded Vite+ script for Studio targeting only the chosen development DB. The existing repository migration wrappers should remain the authority for schema changes. See [Drizzle Studio](https://orm.drizzle.team/docs/drizzle-kit-studio).
 
@@ -112,9 +118,9 @@ Linear supports OAuth with localhost redirects and provides its real API/MCP ser
 
 ### OpenRouter and the AI SDK
 
-OpenRouter is a hosted API. Use a development key with a spending limit for real model behavior. The existing local key is different from production and had approximately $0.998 remaining under a $1 limit when inspected. That is enough for a small probe, not an unrestricted regression suite. No budget was changed. See [OpenRouter key management](https://openrouter.ai/docs/guides/overview/auth/management-api-keys).
+OpenRouter is a hosted API. Use a separate development key with a spending limit for real model behavior. Store it in the development SST `OpenRouterApiKey` Secret and linked binding, or the approved ignored local configuration when needed. A revoked development key must remain revoked; use a fresh key for later verification. Do not infer current credentials or remaining balance from historical smoke results. See [OpenRouter key management](https://openrouter.ai/docs/guides/overview/auth/management-api-keys).
 
-The installed AI SDK already exports `MockLanguageModelV4`, embedding/transcription mocks, and stream simulation helpers. Use these native library tools for reproducible tool calls, streaming, cancellation, malformed output, provider errors, and credit calculations. quieter has a custom OpenRouter transcription HTTP path, so test its request/response adapter too. A separate OpenAI key is not required by the current provider path. See the installed `ai/test` exports and [AI SDK testing](https://ai-sdk.dev/docs/ai-sdk-core/testing).
+The installed AI SDK already exports `MockLanguageModelV4`, embedding/transcription mocks, and stream simulation helpers. Use these native library tools for reproducible tool calls, streaming, cancellation, malformed output, provider errors, and credit calculations. quieter has custom OpenRouter transcription and embedding HTTP adapters, so test those transport boundaries too. The embedding adapter requires private routing, reported cost, the selected model and valid 1024-dimensional vectors. Its real response identity and usage shape are captured in the [provider contract evidence](reviews/semantic-search/provider-runtime-contract.json). See [OpenRouter embeddings](https://openrouter.ai/docs/api_reference/embeddings). A separate OpenAI key is not required by the current provider path. See the installed `ai/test` exports and [AI SDK testing](https://ai-sdk.dev/docs/ai-sdk-core/testing).
 
 ### Better Auth
 
@@ -153,7 +159,7 @@ These are required acceptance cases, not a claim that every row was executed dur
 | Gmail maintenance | Watch expiry, missing history, retry/backoff, stale leases | Real watch renewal, OAuth expiry, subscription authentication |
 | AI chat | Stream/tool calls, cancellation, persistence, credit errors, malformed output | Capped real OpenRouter model calls |
 | Voice input | Permission/error UI, format and size validation, transcription fixtures | Actual microphone and OpenRouter transcription |
-| AI memory | Personal/mailbox ownership, lexical/semantic retrieval, deletion | pgvector index and real embedding dimensions |
+| AI memory and history search | Personal ownership, mailbox access, hybrid retrieval, edit/delete fencing, resumable preparation | Real embedding quality, PlanetScale TIN behavior and production workload performance |
 | Automatic AI features | Label/detail extraction with fixed outputs | Selected real-model quality regression examples |
 | Calendar connector | OAuth state, credential encryption, owner isolation, event conflicts, cache lifecycle, UTC/DST/all-day cases, preview UI | Dedicated-account consent, refresh/revoke, calendar permissions, guest notifications, recurrence, meeting creation, and imports |
 | Linear connector | MCP/tool schemas, auth expiry, retries, permission errors | Dedicated workspace read/write/revoke |

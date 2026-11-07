@@ -70,6 +70,7 @@ import {
 import { z } from "zod";
 
 import { assertCanUseAi } from "./ai-access";
+import { serializeAiMemoryProvenance } from "./ai-memory-provenance";
 import { assertAccessibleMailbox } from "./mailbox/service";
 
 const MEMORY_EVENT_METADATA_STRING_LIMIT = 600;
@@ -2734,6 +2735,7 @@ const toSearchMemory = (memory: MemoryRow) => ({
   correspondents: memory.metadata.correspondents ?? [],
   id: memory.id,
   kind: memory.kind,
+  provenance: serializeAiMemoryProvenance(memory),
   source: memory.source,
   summary: memory.summary,
   updatedAt: memory.updatedAt.toISOString(),
@@ -2890,6 +2892,7 @@ export const saveAiMemory = async ({
         topics: existing?.metadata.topics ?? [],
       },
       source: "explicit" as const,
+      sourceReference: null,
       status: "active" as const,
       summary: normalizedContent.replaceAll(/\s+/gu, " ").slice(0, 300),
       updatedAt: now,

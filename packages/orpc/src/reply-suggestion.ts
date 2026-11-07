@@ -113,6 +113,7 @@ export const requestReplySuggestion = async ({
         .filter(Boolean)
         .join(" ")
         .slice(0, 2000),
+      semantic: { billingMailboxId: mailbox.id, signal: context.signal },
       userId: context.userId,
     });
     const model = resolveBackgroundModel();
