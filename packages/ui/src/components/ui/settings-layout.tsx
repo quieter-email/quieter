@@ -242,7 +242,7 @@ export const SettingsRowLayout = ({
   <div
     ref={anchorRef}
     className={cn(settingsSurfaceVariants({ variant: "rowShell" }), {
-      "bg-detail": selected,
+      "bg-selection": selected,
     })}
   >
     {icon !== undefined && icon !== null ? (

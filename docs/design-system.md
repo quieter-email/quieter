@@ -105,6 +105,7 @@ The type tokens include line heights and heading tracking. Prefer those defaults
 | Floating menus, selectors, and popovers | `popover`, `popover-fg` |
 | Modal dialogs, alerts, and drawers | `panel`, `fg`, with `section` headers and `detail` controls |
 | Fields and interaction ladder | `input`, `control`, `control-hover`, `control-active` |
+| Selected navigation, rows, tabs, and options | `selection`, `fg` |
 | Main action | `primary`, `primary-hover`, `primary-active`, `primary-fg` |
 | Secondary action | `secondary`, `secondary-hover`, `secondary-active`, `secondary-fg` |
 | Muted content and menu highlights | `muted`, `muted-fg`, `accent`, `accent-fg` |
@@ -114,7 +115,7 @@ The type tokens include line heights and heading tracking. Prefer those defaults
 
 Use state colors for state, and categorical colors for labels or categories. A role such as mailbox manager maps to a generic Pill tone in the app. It does not need a second identical style called `access-manager` in the shared package.
 
-The default dark surface ladder is Canvas `#0A0A0B`, Panel `#131315`, Section `#1B1B1E`, and Detail `#26262A`. Canvas holds the sidebar. Panel holds the workspace. Section groups content and header controls. Detail holds fields, secondary actions, nested summaries, and selected items. Hover and pressed states remain separate. Floating menus, selectors, popovers, and tooltips use their own `popover` fill. Their shared `popupSurfaceClassName` adds a subtle foreground border and shadow. Modal dialogs, alerts, and drawers use the standard Panel shade through `overlaySurfaceClassName`, Section for inset headers, and Detail for nested controls. Their border is transparent; a dimmed backdrop with a light 4px blur separates them from the page. Primary actions retain their theme's primary color. Other filled surfaces usually need no visible border. Outline variants, invalid fields, keyboard focus, and calendar grid lines retain meaningful edges.
+The default dark surface ladder is Canvas `#0A0A0B`, Panel `#131315`, Section `#1B1B1E`, and Detail `#26262A`. Canvas holds the sidebar. Panel holds the workspace. Section groups content and header controls. Detail holds fields, secondary actions, and nested summaries. Selection uses its own semantic role: it preserves Detail in dark themes and strengthens the fill against Canvas in light themes. Hover and pressed states remain separate. Floating menus, selectors, popovers, and tooltips use their own `popover` fill. Their shared `popupSurfaceClassName` adds a subtle foreground border and shadow. Modal dialogs, alerts, and drawers use the standard Panel shade through `overlaySurfaceClassName`, Section for inset headers, and Detail for nested controls. Their border is transparent; a dimmed backdrop with a light 4px blur separates them from the page. Primary actions retain their theme's primary color. Other filled surfaces usually need no visible border. Outline variants, invalid fields, keyboard focus, and calendar grid lines retain meaningful edges.
 
 Semantic aliases such as `card` and `bg-surface` can share values while serving different roles. Preserve those roles. Unused speculative aliases can be removed after checking all consumers, including CSS, theme code, generated assets, and the landing page. There is no requirement to use every token or keep every possible component variant.
 

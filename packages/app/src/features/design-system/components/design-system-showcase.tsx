@@ -172,7 +172,12 @@ const surfaceTokens = [
     name: "section",
     note: "header trays and grouped content",
   },
-  { cls: "bg-detail", name: "detail", note: "controls and selected items" },
+  { cls: "bg-detail", name: "detail", note: "controls and nested content" },
+  {
+    cls: "bg-selection",
+    name: "selection",
+    note: "selected items and options",
+  },
   { cls: "bg-card", name: "card", note: "semantic content surface" },
   { cls: "bg-muted", name: "muted", note: "quiet content surface" },
   { cls: "bg-secondary", name: "secondary", note: "secondary actions" },
@@ -661,6 +666,14 @@ export const DesignSystemShowcase = () => {
                 </Text>
               </Surface>
             </Surface>
+          </Surface>
+          <Surface variant="selection">
+            <Text size="sm" weight="medium">
+              Selected item
+            </Text>
+            <Text size="sm">
+              Selection stays distinct from its parent surface.
+            </Text>
           </Surface>
           <WorkspaceSection layout="surface">
             <WorkspaceHeader>

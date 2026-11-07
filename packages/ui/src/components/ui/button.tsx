@@ -107,7 +107,7 @@ export const buttonVariants = cva(
         card: "group h-auto min-h-32 w-full flex-col items-start justify-start rounded-section bg-section p-4 text-left text-fg whitespace-normal hover:bg-control-hover",
         // Compact toggle chip. The pressed look
         // follows aria-pressed so callers only pass the state.
-        chip: "h-7 px-1.5 text-caption text-muted-fg active:scale-100 aria-pressed:bg-detail aria-pressed:text-fg",
+        chip: "h-7 px-1.5 text-caption text-muted-fg active:scale-100 aria-pressed:bg-selection aria-pressed:text-fg",
         default: "bg-primary text-primary-fg shadow-sm hover:bg-primary-hover",
         destructive:
           "bg-destructive text-destructive-fg shadow-sm hover:bg-destructive-hover",
@@ -120,7 +120,7 @@ export const buttonVariants = cva(
         // Segmented option, e.g. the rule-builder choices. The selected look
         // follows aria-pressed so callers only pass the state.
         option:
-          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:scale-100 aria-pressed:bg-detail aria-pressed:text-fg aria-pressed:shadow-sm",
+          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:scale-100 aria-pressed:bg-selection aria-pressed:text-fg aria-pressed:shadow-sm",
         outline: "border-border bg-control text-fg hover:bg-control-hover",
         // Outline treatment for dark backdrops, e.g. the status screens.
         overlay: "border-fg/20 bg-transparent text-fg hover:bg-fg/10",

@@ -85,7 +85,7 @@ const toolbarButtonVariants = cva(
         default: "",
         primary:
           "bg-primary text-primary-fg shadow-sm hover:bg-primary-hover hover:text-primary-fg active:bg-primary-active active:text-primary-fg",
-        selected: "bg-detail text-fg shadow-sm",
+        selected: "bg-selection text-fg shadow-sm",
       },
     },
   }

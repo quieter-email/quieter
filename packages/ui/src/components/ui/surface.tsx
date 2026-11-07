@@ -39,6 +39,7 @@ export const surfaceVariants = cva("", {
       detail: "rounded-md bg-detail",
       panel: "rounded-panel bg-panel",
       section: "rounded-section bg-section",
+      selection: "rounded-md bg-selection",
     },
   },
 });
