@@ -2,7 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
-import { gmailComposeOperation } from "@quieter/database/schema";
+import {
+  gmailComposeOperation,
+  gmailMessageOpenTracking,
+} from "@quieter/database/schema";
 import {
   createDraft,
   deleteDraft,
@@ -27,6 +30,11 @@ import { reportError } from "@quieter/observability";
 import { and, eq, inArray, lt, or } from "drizzle-orm";
 import type { z } from "zod";
 
+import { prepareGmailOpenTracking } from "./gmail-open-tracking";
+import {
+  buildOpenTrackingHtmlTransform,
+  resolveOrganizationMailOpenTracking,
+} from "./organization-mail-delivery";
 import { hashRequest } from "./request-hash";
 
 type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
@@ -274,9 +282,21 @@ const acceptComposeOperation = async (
   strict = false
 ) => {
   await db
-    .update(gmailComposeOperation)
-    .set({ response, status: "accepted", updatedAt: new Date() })
-    .where(eq(gmailComposeOperation.id, operation.id))
+    .transaction(async (transaction) => {
+      await transaction
+        .update(gmailComposeOperation)
+        .set({ response, status: "accepted", updatedAt: new Date() })
+        .where(eq(gmailComposeOperation.id, operation.id));
+      if (
+        operation.kind === "send" &&
+        operation.operationKey.startsWith("send:")
+      ) {
+        await transaction
+          .update(gmailMessageOpenTracking)
+          .set({ messageId: response.id })
+          .where(eq(gmailMessageOpenTracking.composeOperationId, operation.id));
+      }
+    })
     .catch((error: unknown) => {
       reportError(error, { operation: "compose:gmail-persist-acceptance" });
       if (strict) {
@@ -577,7 +597,8 @@ export const sendGmailMessage = async (
   accessToken: string,
   mailboxId: string,
   inputMessage: ComposeDraftInput,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  organizationId?: string | null
 ): Promise<{
   id: string;
   threadId?: string;
@@ -736,9 +757,22 @@ export const sendGmailMessage = async (
           });
         }
       }
+      const tracking = buildOpenTrackingHtmlTransform({
+        messageHeaderId: operation.messageHeaderId,
+        openTrackingEnabled: organizationId
+          ? await resolveOrganizationMailOpenTracking({ organizationId })
+          : false,
+      });
+      await prepareGmailOpenTracking({
+        enabled:
+          tracking.htmlTransform !== undefined && message.bodyHtml !== "",
+        operation,
+        recipients: message.recipients,
+      });
       const raw = Buffer.from(
         await buildMimeMessage(message, {
           messageId: operation.messageHeaderId,
+          ...tracking,
         })
       ).toString("base64url");
       requestSignal.throwIfAborted();

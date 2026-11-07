@@ -39,7 +39,7 @@ Recipient projections can be recomputed atomically from the immutable event log.
 
 ## Open tracking
 
-Open tracking is disabled until an organization admin enables it in team settings, optionally letting authorized API senders opt out per send; without that allowance the team setting applies to every message. When active, html messages sent through the organization API or managed compose include a signed marker carrying only the quieter message header id.
+Open tracking is disabled until an organization admin enables it in team settings, optionally letting authorized API senders opt out per send; without that allowance the team setting applies to every message. When active, HTML messages sent through the organization API, managed compose, or connected Gmail compose include a signed marker carrying only the quieter message header id. Draft saves and plain-text-only sends do not add markers.
 
 Marker loads are verified by signature, resolved back to the outbound message, and recorded as bounded engagement signals:
 
@@ -47,6 +47,10 @@ Marker loads are verified by signature, resolved back to the outbound message, a
 - Only unambiguous single-recipient sends also record a recipient-level `opened` event on the normalized timeline; batched sends record the open for the message because one copy goes to every recipient.
 - Opens are approximate. Privacy proxies pre-fetch images, caches can serve or swallow markers, some clients block images entirely, and automatic tools can trigger loads. An open never proves a person read a message.
 - Disabling tracking stops markers on future sends and leaves historical reporting untouched.
+
+Connected Gmail sends store their tracking row under the private mailbox and permanent compose send operation. The send receipt and Gmail message ID are saved together, including during uncertain-send recovery. Marker loads can arrive while a send is still being confirmed. Activity reads require access to the selected mailbox and match both mailbox and message ID. Gmail activity stays out of organization-wide delivery metrics, and the interface does not claim Gmail supplies delivery receipts. Multi-recipient sends expose only message-level image loads.
+
+Apply the additive `20261107111600_boring_magik` migration through the protected migration workflow before deploying this Gmail tracking code. It adds `gmailMessageOpenTracking` without changing existing tables. Existing development databases also need that migration before manually exercising tracking. Migration generation and checks do not apply it, and this change sends no verification mail.
 
 The public API exposes recipient delivery history at `GET /api/messages/{messageId}` and active suppressions at `GET /api/suppressions`. Both require `Quieter-Version: 2026-10`. The TypeScript SDK wraps these as `getMessage` and `listSuppressions`. Open tracking loads `GET /api/o/{token}` without that header.
 

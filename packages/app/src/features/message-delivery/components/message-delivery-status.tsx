@@ -27,6 +27,19 @@ export const MessageDeliveryStatus = ({
     return null;
   }
 
+  if (!delivery.deliveryTrackingAvailable) {
+    return (
+      <Pill
+        title="Tracking image loads are approximate and do not confirm the message was read."
+        tone="gray"
+      >
+        {(delivery.openTracking?.reportedLoadCount ?? 0) > 0
+          ? "Image loaded"
+          : "No image loads"}
+      </Pill>
+    );
+  }
+
   const status = getAggregateDeliveryStatus(delivery.recipients);
   const label =
     status === null ? ACCEPTED_DELIVERY_LABEL : getDeliveryStatusLabel(status);

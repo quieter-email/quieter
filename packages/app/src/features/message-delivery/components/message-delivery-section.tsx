@@ -206,7 +206,11 @@ export const MessageDeliverySection = ({
 
   return (
     <section className="space-y-3">
-      <h3 className="text-body font-medium text-fg">Delivery</h3>
+      <h3 className="text-body font-medium text-fg">
+        {delivery?.deliveryTrackingAvailable === false
+          ? "Activity"
+          : "Delivery"}
+      </h3>
 
       {isDeliveryPending ? (
         <p className="text-body text-muted-fg">Loading delivery status…</p>
@@ -220,16 +224,50 @@ export const MessageDeliverySection = ({
 
       {delivery === undefined ? null : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
-            <Pill tone={DELIVERY_PILL_TONES[getDeliveryStatusTone(status)]}>
-              {summaryLabel}
-            </Pill>
-            <span className="text-body text-muted-fg">
-              {getDeliveryStatusDescription(status)}
-            </span>
-          </div>
+          {delivery.deliveryTrackingAvailable ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Pill tone={DELIVERY_PILL_TONES[getDeliveryStatusTone(status)]}>
+                {summaryLabel}
+              </Pill>
+              <span className="text-body text-muted-fg">
+                {getDeliveryStatusDescription(status)}
+              </span>
+            </div>
+          ) : null}
 
-          <DeliveryRecipients delivery={delivery} />
+          {delivery.deliveryTrackingAvailable ? (
+            <DeliveryRecipients delivery={delivery} />
+          ) : null}
+          {delivery.openTracking === null ? null : (
+            <div className="space-y-1">
+              <Text weight="medium">
+                {delivery.openTracking.reportedLoadCount === 0
+                  ? "No tracking image loads reported"
+                  : `${delivery.openTracking.reportedLoadCount.toLocaleString()} tracking image loads reported`}
+              </Text>
+              {delivery.openTracking.firstLoadedAt === null ? null : (
+                <Text size="caption" tone="muted">
+                  First load{" "}
+                  {eventTimeFormatter.format(
+                    delivery.openTracking.firstLoadedAt
+                  )}
+                </Text>
+              )}
+              {delivery.openTracking.lastLoadedAt === null ? null : (
+                <Text size="caption" tone="muted">
+                  Latest load{" "}
+                  {eventTimeFormatter.format(
+                    delivery.openTracking.lastLoadedAt
+                  )}
+                </Text>
+              )}
+              <Text size="caption" tone="muted">
+                Mail clients and privacy proxies may load or block the image.
+                Loads do not confirm the message was read or identify who read
+                it.
+              </Text>
+            </div>
+          )}
         </>
       )}
     </section>
