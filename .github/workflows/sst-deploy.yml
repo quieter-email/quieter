@@ -30,7 +30,7 @@ concurrency:
 jobs:
   prior-checks:
     name: Find verified commit
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       actions: read
@@ -124,7 +124,7 @@ jobs:
           (needs.verify.result == 'success' ||
            (needs.prior-checks.result == 'success' &&
             needs.prior-checks.outputs.reuse == 'true' && needs.verify.result == 'skipped')) }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     environment: production
     permissions:
       contents: read

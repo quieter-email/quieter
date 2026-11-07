@@ -21,7 +21,7 @@ concurrency:
 jobs:
   checks:
     name: Lint and typecheck
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -39,7 +39,7 @@ jobs:
 
   tests:
     name: Tests
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -71,7 +71,7 @@ jobs:
 
   deployment-checks:
     name: Deployment safety checks
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -97,7 +97,7 @@ jobs:
 
   web-worker-build:
     name: Web worker build
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -125,7 +125,7 @@ jobs:
 
   migration-integration:
     name: Migration integration tests
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       ACTION_CUTOVER_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/quieter_cutover_test
