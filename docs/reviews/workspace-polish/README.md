@@ -179,3 +179,31 @@ Text-only messages use the app font at 14px on a transparent background. Unforma
 | Paper text-only message | ![Paper text-only message](https://github.com/user-attachments/assets/4e1f7091-4c49-4451-b12a-d5ad063e7079) |
 
 Manual browser checks covered 12 text and HTML cases. Rich HTML cases produced identical isolated markup before and after, including sender fonts and colors, tables, images, right-to-left content, and links. Dark, light, and 390px layouts were inspected. Focused lint/type checks and the source commit hook passed. No new tests were written.
+
+## Light theme contrast
+
+**Light themes: selection and text contrast**
+
+Selection now has its own shared fill across sidebar navigation, mail rows, tabs, options, and selected settings rows. Light control shades distinguish idle, hover, and pressed states. Secondary text and small badge labels are darker too, so the stronger fill keeps sender emails, previews, and timestamps readable. The five dark palettes retain their existing colors. Geometry, spacing, and typography are unchanged.
+
+| Theme or view | Before | After |
+| --- | --- | --- |
+| Light inbox and selected message | ![Light inbox before](https://github.com/user-attachments/assets/d0f0265a-3548-4627-9b8a-1f025fa2b6e5) | ![Light inbox after](https://github.com/user-attachments/assets/88e18938-a4f3-46e6-bdb3-3f37dd3fcd82) |
+| Porcelain | ![Porcelain before](https://github.com/user-attachments/assets/509c896f-1b63-4424-be61-84bd5d30295f) | ![Porcelain after](https://github.com/user-attachments/assets/57255430-0368-420e-b598-5e718a4ea4ff) |
+| Lilac haze | ![Lilac haze before](https://github.com/user-attachments/assets/e83c2f5e-293c-48ad-8938-e4d46e2f27e7) | ![Lilac haze after](https://github.com/user-attachments/assets/1239eb49-f3b2-4dcf-8e52-aea9bf740425) |
+| Sand | ![Sand before](https://github.com/user-attachments/assets/047f300e-8d8a-4434-823e-2770a0dacdaa) | ![Sand after](https://github.com/user-attachments/assets/a330cc59-a98e-4215-bd1a-938afe5836b1) |
+| Sage | ![Sage before](https://github.com/user-attachments/assets/98193a43-aedc-497b-b445-d24dd67cd027) | ![Sage after](https://github.com/user-attachments/assets/8fc0ced7-7c8c-4cea-9e32-6a37f3196471) |
+| Settings navigation and fields | ![Settings before](https://github.com/user-attachments/assets/ec6bfc24-db26-4e95-a0ce-b3dbd0641c03) | ![Settings after](https://github.com/user-attachments/assets/1de263eb-5588-4256-ab2f-bff356b513cd) |
+| Calendar | ![Calendar before](https://github.com/user-attachments/assets/3205ba00-e9e0-49ea-99f4-6f5e4fc1b5b9) | ![Calendar after](https://github.com/user-attachments/assets/9f5afd20-8614-450b-a88b-60ee298877a9) |
+| Dark palette comparison | ![Dark before](https://github.com/user-attachments/assets/05637213-9b15-44c3-a6e3-4cb3079c1158) | ![Dark after](https://github.com/user-attachments/assets/dfb2d00d-80c5-4c70-a0bb-0540099d6104) |
+
+| Additional state | Screenshot |
+| --- | --- |
+| Selected tabs, toggle groups, toolbars, and fields | ![Selection controls](https://github.com/user-attachments/assets/cba5fee5-19f9-4f2f-bce7-9158b75a625e) |
+| Menu highlight and text | ![Menu state](https://github.com/user-attachments/assets/fa1cdb1d-1bee-463b-813c-0b953b1e0fc7) |
+| Narrow reading view | ![Narrow light reading view](https://github.com/user-attachments/assets/1fc15b38-0b24-4654-977d-3820d229bec9) |
+| Paper, all five light themes and selected-message text | ![Paper light themes](https://github.com/user-attachments/assets/ee78cd05-0d8f-4e8e-bcc7-c2817407d58b) |
+
+Manual checks covered the five light themes, selected message metadata, settings, calendar, tabs, toggles, menus, and a 390px reading view. The updated secondary-text colors retain at least 5.4:1 contrast against the shared selection fill in these palettes. All five dark palette comparisons were unchanged. Focused checks and the source commit hook passed. Verification used headless Chromium after the request to keep browser windows hidden.
+
+The settings baseline replays the previous palette in the loaded view so the comparison includes the same content. This gallery supersedes earlier light-theme captures below. [Paper component reference](https://app.paper.design/file/01M67920912B7N0WCQ8N924QN0/p-8-0).
