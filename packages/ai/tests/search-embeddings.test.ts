@@ -72,22 +72,25 @@ describe("search embedding provider boundary", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  test("accepts the provider's unqualified identity for the selected model", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>().mockResolvedValue(
-        Response.json({
-          ...providerResponse(),
-          model: "text-embedding-3-small",
-        })
-      )
-    );
-    const vectors = await embedSearchTexts({
-      billing,
-      values: ["Synthetic text"],
-    });
-    expect(vectors).toHaveLength(1);
-  });
+  test.each(["BAAI/bge-m3", "parasail-bge-m3"])(
+    "accepts the selected model's observed provider identity %s",
+    async (model) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>().mockResolvedValue(
+          Response.json({
+            ...providerResponse(),
+            model,
+          })
+        )
+      );
+      const vectors = await embedSearchTexts({
+        billing,
+        values: ["Synthetic text"],
+      });
+      expect(vectors).toHaveLength(1);
+    }
+  );
 
   test("settles usage and preserves input correspondence for reordered vectors", async () => {
     const response = providerResponse();
@@ -123,6 +126,7 @@ describe("search embedding provider boundary", () => {
       .object({
         dimensions: z.number(),
         encoding_format: z.string(),
+        model: z.string(),
         provider: z.object({
           require_parameters: z.boolean(),
           zdr: z.boolean(),
@@ -134,6 +138,7 @@ describe("search embedding provider boundary", () => {
     expect(request).toMatchObject({
       dimensions: 1024,
       encoding_format: "float",
+      model: "baai/bge-m3",
       provider: { require_parameters: true, zdr: true },
     });
   });
@@ -189,6 +194,8 @@ describe("search embedding provider boundary", () => {
       ],
     },
     { model: "incompatible-vector-space" },
+    { model: "openai/text-embedding-3-small" },
+    { model: "text-embedding-3-small" },
     {
       data: [
         {

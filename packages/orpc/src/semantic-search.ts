@@ -89,6 +89,17 @@ const readCoverage = async (
   };
 };
 
+export const readSemanticSearchCoverage = async (
+  input: SemanticSearchScope
+): Promise<SemanticSearchCoverage> => {
+  const mailbox = await assertAccessibleMailbox(input);
+  const coverage = await readCoverage(
+    semanticSourceQuery(input, mailbox.provider)
+  );
+  await assertAccessibleMailbox(input);
+  return coverage;
+};
+
 const runSemanticPreparation = async (
   input: SemanticSearchScope & {
     signal?: AbortSignal;

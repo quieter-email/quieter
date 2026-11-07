@@ -216,6 +216,36 @@ export const memoryRecallScenarios: Scenario[] = [
       key: "focus",
       query: "What kind of setting helps me concentrate amid interruptions?",
     },
+    {
+      content: "Eats a vegan diet.",
+      id: "semantic-spanish-diet",
+      key: "diet",
+      query: "¿Qué puedo pedir sin productos de origen animal?",
+    },
+    {
+      content: "Needs a distraction-free environment for focused work.",
+      id: "semantic-french-focus",
+      key: "focus",
+      query: "Quel endroit me permet de me concentrer sans être dérangé ?",
+    },
+    {
+      content: "Uses a wheelchair and needs step-free venues.",
+      id: "semantic-japanese-accessibility",
+      key: "accessibility",
+      query: "段差のない会場を選ぶ必要があるのはなぜですか？",
+    },
+    {
+      content: "Avoids red-eye flights.",
+      id: "semantic-arabic-travel",
+      key: "flight",
+      query: "ما الذي أفضله عند حجز رحلة جوية خلال الليل؟",
+    },
+    {
+      content: "Reist am liebsten mit der Bahn und vermeidet Inlandsflüge.",
+      id: "semantic-german-source-english-query",
+      key: "domestic-travel",
+      query: "How do I prefer to travel between cities within the country?",
+    },
   ].map(({ content, id, key, query }): Scenario => ({
     agent: "chat",
     facts: [

@@ -6,10 +6,9 @@ import { z } from "zod";
 import { providerUsageResponseSchema, runBilledAiRequest } from "./billing";
 import type { AiUsageReport } from "./chat-usage";
 
-export const SEARCH_EMBEDDING_MODEL = "openai/text-embedding-3-small";
+export const SEARCH_EMBEDDING_MODEL = "baai/bge-m3";
 export const SEARCH_EMBEDDING_DIMENSIONS = 1024;
-export const SEARCH_EMBEDDING_MODEL_KEY =
-  "openai/text-embedding-3-small:1024:v1";
+export const SEARCH_EMBEDDING_MODEL_KEY = `${SEARCH_EMBEDDING_MODEL}:${SEARCH_EMBEDDING_DIMENSIONS}:v1`;
 
 const searchTextsSchema = z
   .array(
@@ -38,7 +37,7 @@ const embeddingResponseSchema = z.object({
       index: z.number().int().nonnegative(),
     })
   ),
-  model: z.enum([SEARCH_EMBEDDING_MODEL, "text-embedding-3-small"]),
+  model: z.enum([SEARCH_EMBEDDING_MODEL, "BAAI/bge-m3", "parasail-bge-m3"]),
 });
 const tokenUsageSchema = z.object({
   usage: z.object({ prompt_tokens: z.number().int().nonnegative() }),

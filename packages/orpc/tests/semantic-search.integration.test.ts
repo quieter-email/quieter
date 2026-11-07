@@ -1,12 +1,13 @@
 import { setImmediate, setTimeout } from "node:timers/promises";
 
-import { ORPCError } from "@orpc/server";
+import { call, ORPCError } from "@orpc/server";
 import {
   embedSearchTexts,
   SEARCH_EMBEDDING_MODEL_KEY,
 } from "@quieter/ai/search-embeddings";
+import type { getSessionWithOrganization } from "@quieter/auth/session";
 import type { reportAiUsage } from "@quieter/billing";
-import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
+import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import {
   aiMemory,
@@ -20,6 +21,7 @@ import {
   member,
   organization,
   semanticEmbedding,
+  semanticIndexRequest,
   semanticSearchLease,
   user,
 } from "@quieter/database/schema";
@@ -38,15 +40,40 @@ import {
 
 import { writeGmailCapturedMessageMetadata } from "../src/mail-capture";
 import { normalizeCapturedMailMetadata } from "../src/mail-capture-normalization";
+import { searchRouter } from "../src/routers/search";
 import {
   indexSemanticSources,
   prepareSemanticSearch,
   searchSemanticHistory,
 } from "../src/semantic-search";
+import { semanticSourceQuery } from "../src/semantic-search-sources";
 
 const state = vi.hoisted(() => ({
+  actor: crypto.randomUUID(),
   databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL,
   organizationId: crypto.randomUUID(),
+}));
+vi.mock(import("@quieter/auth/session"), () => ({
+  getSessionWithOrganization: vi
+    .fn<typeof getSessionWithOrganization>()
+    .mockResolvedValue({
+      session: {
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+        id: crypto.randomUUID(),
+        token: "synthetic-session",
+        updatedAt: new Date(),
+        userId: state.actor,
+      },
+      user: {
+        createdAt: new Date(),
+        email: `${state.actor}@example.test`,
+        emailVerified: true,
+        id: state.actor,
+        name: "Synthetic search user",
+        updatedAt: new Date(),
+      },
+    }),
 }));
 vi.mock(import("@quieter/env/server"), async (original) => {
   const actual = await original();
@@ -125,7 +152,7 @@ const snapshot = (
 describe.skipIf(state.databaseUrl === undefined)(
   "source-bound semantic search",
   () => {
-    const actor = crypto.randomUUID();
+    const { actor } = state;
     const colleague = crypto.randomUUID();
     const mailboxIds = {
       foreign: crypto.randomUUID(),
@@ -368,6 +395,11 @@ describe.skipIf(state.databaseUrl === undefined)(
         .delete(managedMailMessage)
         .where(eq(managedMailMessage.mailboxId, mailboxIds.shared));
       await db
+        .delete(semanticIndexRequest)
+        .where(
+          inArray(semanticIndexRequest.mailboxId, Object.values(mailboxIds))
+        );
+      await db
         .insert(mailboxGrant)
         .values(
           [actor, colleague].map((id) => ({
@@ -399,6 +431,217 @@ describe.skipIf(state.databaseUrl === undefined)(
         .delete(organization)
         .where(eq(organization.id, state.organizationId));
       await db.delete(user).where(inArray(user.id, [actor, colleague]));
+    });
+
+    test("a former model's vectors cannot supply current search matches or coverage and remain separately invalidated", async () => {
+      const own = await saveChat({
+        content: "Breakfast preferences include porridge.",
+      });
+      const scope = {
+        kind: "chat",
+        mailboxId: mailboxIds.shared,
+        userId: actor,
+      } satisfies Parameters<typeof indexSemanticSources>[0];
+      const sources = semanticSourceQuery(scope, "managed");
+      await db.execute(sql`with sources as (${sources})
+        insert into ${semanticEmbedding} ("sourceKey", model, "chunkIndex", "sourceRevision", "searchText", embedding, "createdAt", "chatMessageId")
+        select "sourceKey", 'openai/text-embedding-3-small:1024:v1', 0, "sourceRevision", content, ${JSON.stringify(semanticVector)}::vector, now(), "chatMessageId" from sources`);
+      const leaseToken = crypto.randomUUID();
+      await db.insert(semanticSearchLease).values({
+        expiresAt: new Date(Date.now() + 60_000),
+        mailboxId: scope.mailboxId,
+        token: leaseToken,
+        userId: actor,
+      });
+      try {
+        const before = await searchSemanticHistory({
+          ...scope,
+          query: "Overnight air travel",
+        });
+        expect(before.coverage).toMatchObject({
+          complete: false,
+          indexedSources: 0,
+          totalSources: 1,
+        });
+        expect(before.items).toHaveLength(0);
+      } finally {
+        await db
+          .delete(semanticSearchLease)
+          .where(eq(semanticSearchLease.token, leaseToken));
+      }
+      vi.mocked(embedSearchTexts).mockImplementation(async ({ values }) => {
+        await setImmediate();
+        return values.map((value) =>
+          value.includes("porridge") ? unrelatedVector : semanticVector
+        );
+      });
+      await expect(indexSemanticSources(scope)).resolves.toMatchObject({
+        complete: true,
+        indexedSources: 1,
+      });
+      const stored = await db
+        .select({ model: semanticEmbedding.model })
+        .from(semanticEmbedding)
+        .where(eq(semanticEmbedding.chatMessageId, own.messageId));
+      expect(stored).toHaveLength(2);
+      expect(stored.map((entry) => entry.model)).toContain(
+        "openai/text-embedding-3-small:1024:v1"
+      );
+      const semantic = await searchSemanticHistory({
+        ...scope,
+        query: "Overnight air travel",
+      });
+      expect(semantic.items).toHaveLength(0);
+      const lexical = await searchSemanticHistory({
+        ...scope,
+        query: "porridge",
+      });
+      expect(lexical.items).toContainEqual(
+        expect.objectContaining({ messageId: own.messageId })
+      );
+
+      await db
+        .update(chatMessage)
+        .set({
+          parts: [{ text: "Updated porridge preference.", type: "text" }],
+        })
+        .where(eq(chatMessage.id, own.messageId));
+      await expect(
+        db
+          .select()
+          .from(semanticEmbedding)
+          .where(eq(semanticEmbedding.chatMessageId, own.messageId))
+      ).resolves.toHaveLength(0);
+      await indexSemanticSources(scope);
+      await db.execute(sql`insert into ${semanticEmbedding} ("sourceKey", model, "chunkIndex", "sourceRevision", "searchText", embedding, "createdAt", "chatMessageId")
+        select "sourceKey", 'openai/text-embedding-3-small:1024:v1', "chunkIndex", "sourceRevision", "searchText", embedding, "createdAt", "chatMessageId"
+        from ${semanticEmbedding} where "chatMessageId" = ${own.messageId} and model = ${SEARCH_EMBEDDING_MODEL_KEY}`);
+      await db.delete(chat).where(eq(chat.id, own.chatId));
+      await expect(
+        db
+          .select()
+          .from(semanticEmbedding)
+          .where(eq(semanticEmbedding.chatMessageId, own.messageId))
+      ).resolves.toHaveLength(0);
+    });
+
+    test("protected preparation status reads current source coverage without billing or trusting completed counters", async () => {
+      const own = await saveChat({ content: "A quiet launch celebration." });
+      const scope = {
+        kind: "chat",
+        mailboxId: mailboxIds.shared,
+      } satisfies Pick<
+        Parameters<typeof indexSemanticSources>[0],
+        "kind" | "mailboxId"
+      >;
+      const context = { db, headers: new Headers() };
+      const sources = semanticSourceQuery(
+        { ...scope, userId: actor },
+        "managed"
+      );
+      await db.execute(sql`with sources as (${sources})
+        insert into ${semanticEmbedding} ("sourceKey", model, "chunkIndex", "sourceRevision", "searchText", embedding, "createdAt", "chatMessageId")
+        select "sourceKey", 'openai/text-embedding-3-small:1024:v1', 0, "sourceRevision", content, ${JSON.stringify(semanticVector)}::vector, now(), "chatMessageId" from sources`);
+      await db.insert(semanticIndexRequest).values({
+        ...scope,
+        availableAt: now,
+        completedAt: now,
+        indexedSources: 500,
+        requestedAt: now,
+        totalSources: 500,
+        userId: actor,
+      });
+      vi.mocked(createMailboxAiBillingContext).mockClear();
+      await expect(
+        call(searchRouter.status, scope, { context })
+      ).resolves.toMatchObject({
+        active: true,
+        complete: false,
+        indexedSources: 0,
+        totalSources: 1,
+      });
+      expect(embedSearchTexts).not.toHaveBeenCalled();
+      expect(createMailboxAiBillingContext).not.toHaveBeenCalled();
+      await indexSemanticSources({ ...scope, userId: actor });
+      await db
+        .update(semanticIndexRequest)
+        .set({ completedAt: null, indexedSources: 0, totalSources: 0 })
+        .where(eq(semanticIndexRequest.mailboxId, scope.mailboxId));
+      vi.mocked(embedSearchTexts).mockClear();
+      vi.mocked(createMailboxAiBillingContext).mockClear();
+      await expect(
+        call(searchRouter.status, scope, { context })
+      ).resolves.toMatchObject({
+        complete: true,
+        indexedSources: 1,
+        totalSources: 1,
+      });
+      await db
+        .update(chatMessage)
+        .set({ parts: [{ text: "An edited celebration plan.", type: "text" }] })
+        .where(eq(chatMessage.id, own.messageId));
+      await expect(
+        call(searchRouter.status, scope, { context })
+      ).resolves.toMatchObject({
+        complete: false,
+        indexedSources: 0,
+        totalSources: 1,
+      });
+      await expect(
+        call(
+          searchRouter.status,
+          { kind: "chat", mailboxId: mailboxIds.foreign },
+          { context }
+        )
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(embedSearchTexts).not.toHaveBeenCalled();
+      expect(createMailboxAiBillingContext).not.toHaveBeenCalled();
+    });
+
+    test("complete retained coverage does not complete an unfinished explicit mail import", async () => {
+      await saveGmail({ content: "Retained delivery arrangements." });
+      const scope = {
+        kind: "mail",
+        mailboxId: mailboxIds.primary,
+      } satisfies Pick<
+        Parameters<typeof indexSemanticSources>[0],
+        "kind" | "mailboxId"
+      >;
+      await indexSemanticSources({ ...scope, userId: actor });
+      await db.insert(semanticIndexRequest).values({
+        ...scope,
+        availableAt: now,
+        completedAt: now,
+        mailImportRequestedAt: now,
+        requestedAt: now,
+        userId: actor,
+      });
+      vi.mocked(embedSearchTexts).mockClear();
+      vi.mocked(createMailboxAiBillingContext).mockClear();
+      const context = { db, headers: new Headers() };
+      await expect(
+        call(searchRouter.status, scope, { context })
+      ).resolves.toMatchObject({
+        complete: false,
+        importComplete: false,
+        importRequested: true,
+        indexedSources: 1,
+        totalSources: 1,
+      });
+      await db
+        .update(semanticIndexRequest)
+        .set({ mailImportedAt: now })
+        .where(eq(semanticIndexRequest.mailboxId, scope.mailboxId));
+      await expect(
+        call(searchRouter.status, scope, { context })
+      ).resolves.toMatchObject({
+        complete: true,
+        importComplete: true,
+        indexedSources: 1,
+        totalSources: 1,
+      });
+      expect(embedSearchTexts).not.toHaveBeenCalled();
+      expect(createMailboxAiBillingContext).not.toHaveBeenCalled();
     });
 
     test("word-disjoint memory matching retains owner, mailbox, status and expiry restrictions", async () => {

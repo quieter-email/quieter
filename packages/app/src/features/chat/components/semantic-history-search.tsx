@@ -85,6 +85,11 @@ export const SemanticHistorySearch = ({
     refetchInterval: open ? 5000 : false,
     retry: false,
   });
+  const coverage =
+    preparation.data !== undefined &&
+    preparation.dataUpdatedAt > search.dataUpdatedAt
+      ? preparation.data
+      : search.data?.coverage;
   const prepareMail = useMutation({
     mutationFn: async () => await rpc.search.prepareMail({ mailboxId }),
     onError: (error) => {
@@ -282,9 +287,8 @@ export const SemanticHistorySearch = ({
                     {search.data ? (
                       <div className="space-y-2">
                         <Text size="caption" tone="muted">
-                          {search.data.coverage.indexedSources} of{" "}
-                          {search.data.coverage.totalSources} retained messages
-                          ready to search by meaning.
+                          {coverage?.indexedSources} of {coverage?.totalSources}{" "}
+                          retained messages ready to search by meaning.
                           {preparation.data?.active === true
                             ? " New content continues preparing in the background."
                             : ""}
@@ -304,7 +308,10 @@ export const SemanticHistorySearch = ({
                             type="button"
                             variant="secondary"
                           >
-                            Continue preparing search
+                            {coverage !== undefined &&
+                            coverage.indexedSources === coverage.totalSources
+                              ? "Refresh results"
+                              : "Continue preparing search"}
                           </Button>
                         )}
                       </div>

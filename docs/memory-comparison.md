@@ -55,7 +55,7 @@ Memory results map to source concepts through real document metadata or included
 
 A document reaching `done` proves chunk readiness. It does not prove that all memory extraction finished. The runner observes a stable nonempty memory count for bounded polling and retains this limitation. Positive source-lineage hits are observable; absent memory or profile hits remain `indeterminate`. In `superrag` mode, memory and profile lanes are `not-evaluated`.
 
-The shared comparison includes recipient and general voice plus four semantic probes. Actor authorization, shared-mailbox grants, mailbox-specific label rules, forgetting, and live calendar truth remain application contracts. No client-side filtering is used to award Supermemory an equivalent security score. Tokens, costs, latency, extraction truth, and final-answer quality are unmeasured.
+The shared comparison includes recipient and general voice plus nine semantic probes. The captured Supermemory runs below predate the five added cross-language probes and include the original four. Actor authorization, shared-mailbox grants, mailbox-specific label rules, forgetting, and live calendar truth remain application contracts. No client-side filtering is used to award Supermemory an equivalent security score. Tokens, costs, latency, extraction truth, and final-answer quality are unmeasured.
 
 The local configuration differs from Supermemory's hosted proprietary extraction service. Small synthetic retrieval results cannot establish production accuracy, quality, cost, or speed superiority.
 
@@ -71,7 +71,7 @@ The captured Supermemory artifacts predate the per-case SQL pairing fix. Their b
 
 ## Current hybrid retrieval observation
 
-The [current embedding evaluation](reviews/semantic-search/memory-embedding-live.json) uses `openai/text-embedding-3-small:1024:v1` through OpenRouter and the actual SQL memory loader. It passes all ten ownership, applicability and freshness contracts and retrieves the expected fact in all four semantic probes. The evaluation prepares each complete eligible synthetic scope before scoring; production searches can initially have partial preparation coverage.
+The [current BGE-M3 evaluation](reviews/semantic-search/bge-memory-live.json) uses `baai/bge-m3:1024:v1` through OpenRouter and the actual SQL memory loader. It passes all ten ownership, applicability and freshness contracts and retrieves the expected fact in all nine semantic probes, including five additional cross-language cases. The [earlier OpenAI report](reviews/semantic-search/memory-embedding-live.json) remains unchanged and covers the original four probes. Each evaluation prepares the complete eligible synthetic scope before scoring; production searches can initially have partial preparation coverage.
 
 This replaces transient query expansion in the application. It does not rerun or alter the captured Supermemory service results above. The earlier lexical misses and multilingual query-expansion miss remain in the [historical evidence](reviews/memory-recall/README.md). A hit in either system proves retrieval of the scored synthetic source concept, not extraction truth or answer quality. Different models, ranking policies and source representations still prevent a claim of equal work or general superiority.
 

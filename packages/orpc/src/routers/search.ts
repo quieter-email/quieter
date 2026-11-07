@@ -8,7 +8,10 @@ import {
   requestSemanticIndex,
   requestFullMailSemanticIndex,
 } from "../semantic-index-request";
-import { searchSemanticHistory } from "../semantic-search";
+import {
+  readSemanticSearchCoverage,
+  searchSemanticHistory,
+} from "../semantic-search";
 import { mailboxIdSchema, protectedProcedure } from "./base";
 
 const readPreparation = async (input: {
@@ -19,12 +22,9 @@ const readPreparation = async (input: {
   const selectedMailbox = await assertAccessibleMailbox(input);
   const [index] = await db
     .select({
-      completedAt: semanticIndexRequest.completedAt,
       importRequestedAt: semanticIndexRequest.mailImportRequestedAt,
       importedAt: semanticIndexRequest.mailImportedAt,
-      indexedSources: semanticIndexRequest.indexedSources,
       lastError: semanticIndexRequest.lastError,
-      totalSources: semanticIndexRequest.totalSources,
     })
     .from(semanticIndexRequest)
     .where(
@@ -35,14 +35,18 @@ const readPreparation = async (input: {
       )
     )
     .limit(1);
+  const coverage = await readSemanticSearchCoverage(input);
   return {
     active: index !== undefined,
     canImport: selectedMailbox.provider === "gmail",
-    complete: index !== undefined && index.completedAt !== null,
+    complete:
+      index !== undefined &&
+      coverage.complete &&
+      (index.importRequestedAt === null || index.importedAt !== null),
     importComplete: index !== undefined && index.importedAt !== null,
     importRequested: index !== undefined && index.importRequestedAt !== null,
-    indexedSources: index?.indexedSources ?? 0,
-    totalSources: index?.totalSources ?? 0,
+    indexedSources: coverage.indexedSources,
+    totalSources: coverage.totalSources,
     waiting: index !== undefined && index.lastError !== null,
   };
 };

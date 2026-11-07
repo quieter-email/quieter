@@ -1,0 +1,73 @@
+{
+  "layer": "native-history-service",
+  "fixture": "semantic-search.integration.test.ts",
+  "transformation": "Only the embedding transport mock and its per-test default were removed. Existing chat/mail isolation assertions and SQL remained unchanged.",
+  "calls": [
+    {
+      "status": 200,
+      "requestedModel": "baai/bge-m3",
+      "routing": {
+        "require_parameters": true,
+        "zdr": true
+      },
+      "inputCount": 2,
+      "responseModel": "parasail-bge-m3",
+      "provider": "Parasail",
+      "usage": {
+        "prompt_tokens": 17,
+        "cost": 1.7e-7
+      },
+      "entries": [
+        {
+          "index": 0,
+          "dimensions": 1024,
+          "finite": true
+        },
+        {
+          "index": 1,
+          "dimensions": 1024,
+          "finite": true
+        }
+      ]
+    },
+    {
+      "status": 200,
+      "requestedModel": "baai/bge-m3",
+      "routing": {
+        "require_parameters": true,
+        "zdr": true
+      },
+      "inputCount": 2,
+      "responseModel": "parasail-bge-m3",
+      "provider": "Parasail",
+      "usage": {
+        "prompt_tokens": 26,
+        "cost": 2.6e-7
+      },
+      "entries": [
+        {
+          "index": 0,
+          "dimensions": 1024,
+          "finite": true
+        },
+        {
+          "index": 1,
+          "dimensions": 1024,
+          "finite": true
+        }
+      ]
+    }
+  ],
+  "status": "complete",
+  "passed": [
+    {
+      "name": "source-bound semantic search shared mailbox chat search keeps each user's prose private and excludes hidden payloads",
+      "status": "passed"
+    },
+    {
+      "name": "source-bound semantic search managed mail search excludes draft, spam and trash while preserving live source text",
+      "status": "passed"
+    }
+  ],
+  "unmeasured": ["browser-ui", "latency", "comparative-quality", "extraction"]
+}
