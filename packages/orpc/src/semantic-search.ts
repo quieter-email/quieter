@@ -21,6 +21,7 @@ import { reportError } from "@quieter/observability";
 import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { normalizeCapturedMailMetadata } from "./mail-capture-normalization";
 import { assertAccessibleMailbox } from "./mailbox/service";
 import { semanticSourceQuery } from "./semantic-search-sources";
 import type { SemanticSearchScope } from "./semantic-search-sources";
@@ -75,7 +76,7 @@ const readCoverage = async (
 ) => {
   const rows = await db.execute(sql`with sources as (${sourceQuery})
     select count(*) as "totalSources",
-      count(*) filter (where
+      count(*) filter (where sources."sourceRevision" is not null and
         (select count(*) from ${semanticEmbedding} e
           where e."sourceKey" = sources."sourceKey" and e.model = ${SEARCH_EMBEDDING_MODEL_KEY}
             and e."sourceRevision" = sources."sourceRevision") = ceil(char_length(content)::numeric / 2000)) as "indexedSources"
@@ -125,29 +126,35 @@ const runSemanticPreparation = async (
       target: [semanticSearchLease.userId, semanticSearchLease.mailboxId],
     })
     .returning({ token: semanticSearchLease.token });
-  if (lease.length === 0) {
+  const ownsPreparation = lease.length > 0;
+  if (!ownsPreparation && input.operation.kind === "index") {
     throw new ORPCError("CONFLICT", {
       message: "Search is already being prepared. Try again shortly.",
     });
   }
   try {
-    const pending = z
-      .array(chunkSchema)
-      .parse(
-        await db.execute(sql`with sources as (${sourceQuery})
+    if (ownsPreparation && input.kind === "mail") {
+      await normalizeCapturedMailMetadata(input);
+    }
+    const pending = ownsPreparation
+      ? z
+          .array(chunkSchema)
+          .parse(
+            await db.execute(sql`with sources as (${sourceQuery})
         select sources."sourceKey", sources."sourceRevision", chunks."chunkIndex",
           substring(content from chunks."chunkIndex" * 2000 + 1 for 2000) as content
         from sources cross join lateral generate_series(0, ceil(char_length(content)::numeric / 2000)::integer - 1) as chunks("chunkIndex")
-        where not exists (select 1 from ${semanticEmbedding} e
+        where sources."sourceRevision" is not null and not exists (select 1 from ${semanticEmbedding} e
           where e."sourceKey" = sources."sourceKey" and e.model = ${SEARCH_EMBEDDING_MODEL_KEY}
             and e."sourceRevision" = sources."sourceRevision" and e."chunkIndex" = chunks."chunkIndex")
         order by sources."updatedAt" desc, sources."sourceKey", chunks."chunkIndex" limit 16`)
-      )
-      .toSorted(
-        (left, right) =>
-          left.sourceKey.localeCompare(right.sourceKey) ||
-          left.chunkIndex - right.chunkIndex
-      );
+          )
+          .toSorted(
+            (left, right) =>
+              left.sourceKey.localeCompare(right.sourceKey) ||
+              left.chunkIndex - right.chunkIndex
+          )
+      : [];
     if (pending.length === 0 && query === null) {
       return {
         coverage: await readCoverage(sourceQuery),
@@ -327,15 +334,17 @@ const runSemanticPreparation = async (
       queryVector,
     };
   } finally {
-    await db
-      .delete(semanticSearchLease)
-      .where(
-        and(
-          eq(semanticSearchLease.userId, input.userId),
-          eq(semanticSearchLease.mailboxId, input.mailboxId),
-          eq(semanticSearchLease.token, token)
-        )
-      );
+    if (ownsPreparation) {
+      await db
+        .delete(semanticSearchLease)
+        .where(
+          and(
+            eq(semanticSearchLease.userId, input.userId),
+            eq(semanticSearchLease.mailboxId, input.mailboxId),
+            eq(semanticSearchLease.token, token)
+          )
+        );
+    }
   }
 };
 

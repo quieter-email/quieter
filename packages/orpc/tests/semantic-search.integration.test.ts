@@ -1,7 +1,10 @@
-import { setImmediate } from "node:timers/promises";
+import { setImmediate, setTimeout } from "node:timers/promises";
 
 import { ORPCError } from "@orpc/server";
-import { embedSearchTexts } from "@quieter/ai/search-embeddings";
+import {
+  embedSearchTexts,
+  SEARCH_EMBEDDING_MODEL_KEY,
+} from "@quieter/ai/search-embeddings";
 import type { reportAiUsage } from "@quieter/billing";
 import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
@@ -12,10 +15,12 @@ import {
   gmailCapturedMessage,
   mailbox,
   mailboxGrant,
+  mailMessageImportance,
   managedMailMessage,
   member,
   organization,
   semanticEmbedding,
+  semanticSearchLease,
   user,
 } from "@quieter/database/schema";
 import { analyzeMailMessage } from "@quieter/mail/capture";
@@ -31,6 +36,7 @@ import {
   vi,
 } from "vite-plus/test";
 
+import { normalizeCapturedMailMetadata } from "../src/mail-capture-normalization";
 import {
   indexSemanticSources,
   prepareSemanticSearch,
@@ -193,16 +199,47 @@ describe.skipIf(state.databaseUrl === undefined)(
       return { chatId, messageId };
     };
     const saveGmail = async (input: {
+      bodyHtml?: string | null;
+      bodyText?: string | null;
       content: string;
+      internalDate?: string | null;
+      labelIds?: string[];
+      legacyAnalysis?: boolean;
       mailboxId?: string;
       messageId?: string;
+      subject?: string;
     }) => {
       const message = snapshot(
         input.messageId ?? crypto.randomUUID(),
         input.content
       );
+      if (input.bodyHtml !== undefined) {
+        message.bodyHtml = input.bodyHtml;
+      }
+      if (input.bodyText !== undefined) {
+        message.bodyText = input.bodyText;
+      }
+      if (input.internalDate !== undefined) {
+        message.internalDate = input.internalDate;
+      }
+      if (input.labelIds !== undefined) {
+        message.labelIds = input.labelIds;
+      }
+      if (input.subject !== undefined) {
+        message.headers = [{ name: "Subject", value: input.subject }];
+      }
+      const analysis = analyzeMailMessage(message);
       await db.insert(gmailCapturedMessage).values({
-        analysis: analyzeMailMessage(message),
+        analysis:
+          input.legacyAnalysis === true
+            ? {
+                listId: analysis.listId,
+                sender: analysis.sender,
+                truncated: analysis.truncated,
+                unsubscribe: analysis.unsubscribe,
+                version: 1,
+              }
+            : analysis,
         capturedAt: now,
         mailboxId: input.mailboxId ?? mailboxIds.primary,
         messageId: message.id,
@@ -214,12 +251,29 @@ describe.skipIf(state.databaseUrl === undefined)(
       return message.id;
     };
     const saveManaged = async (input: {
+      bodyHtml?: string | null;
+      bodyText?: string | null;
       content: string;
+      legacyAnalysis?: boolean;
+      sentAt?: Date;
       state?: typeof managedMailMessage.$inferInsert.mailboxState;
     }) => {
       const id = crypto.randomUUID();
+      const bodyText =
+        input.bodyText === undefined ? input.content : input.bodyText;
       await db.insert(managedMailMessage).values({
-        bodyText: input.content,
+        analysis:
+          input.legacyAnalysis === true
+            ? null
+            : analyzeMailMessage({
+                bodyHtml: input.bodyHtml,
+                bodyText,
+                from: "sender@example.test",
+                headers: [],
+                subject: "Synthetic supplier discussion",
+              }),
+        bodyHtml: input.bodyHtml,
+        bodyText,
         createdAt: now,
         direction: "inbound",
         from: "sender@example.test",
@@ -227,7 +281,7 @@ describe.skipIf(state.databaseUrl === undefined)(
         mailboxId: mailboxIds.shared,
         mailboxState: input.state ?? "active",
         providerMessageId: id,
-        sentAt: now,
+        sentAt: input.sentAt ?? now,
         subject: "Synthetic supplier discussion",
         threadId: `thread-${id}`,
         updatedAt: now,
@@ -467,6 +521,419 @@ describe.skipIf(state.databaseUrl === undefined)(
         userId: actor,
       });
       expect(after.items).toHaveLength(0);
+    });
+
+    test("mail results retain message dates when older content is captured or updated today", async () => {
+      const messageDate = new Date("2015-03-04T09:30:00Z");
+      const gmailId = await saveGmail({
+        content: "The original travel receipt is attached.",
+        internalDate: String(messageDate.getTime()),
+      });
+      const managedId = await saveManaged({
+        content: "The original travel receipt is attached.",
+        sentAt: messageDate,
+      });
+      for (const { mailboxId, messageId } of [
+        { mailboxId: mailboxIds.primary, messageId: gmailId },
+        { mailboxId: mailboxIds.shared, messageId: managedId },
+      ]) {
+        const result = await searchSemanticHistory({
+          kind: "mail",
+          mailboxId,
+          query: "travel receipt",
+          userId: actor,
+        });
+        expect(result.items).toMatchObject([
+          { messageId, updatedAt: messageDate.toISOString() },
+        ]);
+      }
+    });
+
+    test("retained encoded Gmail subjects are readable and searchable without changing raw headers", async () => {
+      const encodedSubject = "=?UTF-8?B?UsO8Y2tlcnN0YXR0dW5nIGRlciBSZWlzZQ==?=";
+      const messageId = await saveGmail({
+        content: "Details about the booking are included below.",
+        legacyAnalysis: true,
+        subject: encodedSubject,
+      });
+      vi.mocked(embedSearchTexts).mockImplementation(async ({ values }) => {
+        await setImmediate();
+        return values.map((value) =>
+          value === "Rückerstattung" ? unrelatedVector : semanticVector
+        );
+      });
+      const result = await searchSemanticHistory({
+        kind: "mail",
+        mailboxId: mailboxIds.primary,
+        query: "Rückerstattung",
+        userId: actor,
+      });
+      expect(result.items).toMatchObject([{ messageId }]);
+      expect(result.items[0]?.title).toMatch(/Rückerstattung der Reise/u);
+      expect(result.items[0]?.snippet).toMatch(/Rückerstattung/u);
+      const [stored] = await db
+        .select({ snapshot: gmailCapturedMessage.snapshot })
+        .from(gmailCapturedMessage)
+        .where(
+          and(
+            eq(gmailCapturedMessage.mailboxId, mailboxIds.primary),
+            eq(gmailCapturedMessage.messageId, messageId)
+          )
+        );
+      expect(stored?.snapshot?.headers).toContainEqual({
+        name: "Subject",
+        value: encodedSubject,
+      });
+    });
+
+    test("HTML-only mail searches readable text while excluding scripts and styles", async () => {
+      const bodyHtml =
+        "<style>.secretcss { color: red; }</style><script>hiddenscript()</script><p>Caf&eacute; meeting &amp; travel.</p>";
+      const gmailId = await saveGmail({
+        bodyHtml,
+        bodyText: null,
+        content: "",
+        legacyAnalysis: true,
+      });
+      const managedId = await saveManaged({
+        bodyHtml,
+        bodyText: null,
+        content: "",
+        legacyAnalysis: true,
+      });
+      await saveManaged({
+        bodyHtml,
+        content: "A plain-text alternative takes precedence.",
+      });
+      vi.mocked(embedSearchTexts).mockImplementation(async ({ values }) => {
+        await setImmediate();
+        return values.map((value) =>
+          value === "café" ? unrelatedVector : semanticVector
+        );
+      });
+      for (const { mailboxId, messageId } of [
+        { mailboxId: mailboxIds.primary, messageId: gmailId },
+        { mailboxId: mailboxIds.shared, messageId: managedId },
+      ]) {
+        const result = await searchSemanticHistory({
+          kind: "mail",
+          mailboxId,
+          query: "café",
+          userId: actor,
+        });
+        expect(result.items).toMatchObject([{ messageId }]);
+        expect(result.items[0]?.snippet).toMatch(/café meeting & travel/iu);
+        expect(result.items[0]?.snippet).not.toMatch(
+          /secretcss|hiddenscript|&eacute;/u
+        );
+      }
+    });
+
+    test("unprepared subject-only and HTML-only records stay visible in incomplete coverage", async () => {
+      const gmailId = await saveGmail({
+        bodyText: null,
+        content: "",
+        legacyAnalysis: true,
+        subject: "=?UTF-8?B?UsO8Y2tlcnN0YXR0dW5nIGRlciBSZWlzZQ==?=",
+      });
+      const managedId = await saveManaged({
+        bodyHtml: "<style>hiddenstyle</style><p>Caf&eacute; booking.</p>",
+        bodyText: null,
+        content: "",
+        legacyAnalysis: true,
+      });
+      for (const { mailboxId, messageId, query } of [
+        {
+          mailboxId: mailboxIds.primary,
+          messageId: gmailId,
+          query: "Rückerstattung",
+        },
+        { mailboxId: mailboxIds.shared, messageId: managedId, query: "café" },
+      ]) {
+        const token = crypto.randomUUID();
+        await db.insert(semanticSearchLease).values({
+          expiresAt: new Date(Date.now() + 60_000),
+          mailboxId,
+          token,
+          userId: actor,
+        });
+        try {
+          const pending = await searchSemanticHistory({
+            kind: "mail",
+            mailboxId,
+            query,
+            userId: actor,
+          });
+          expect(pending.coverage).toMatchObject({
+            complete: false,
+            indexedSources: 0,
+            totalSources: 1,
+          });
+          expect(pending.items).toHaveLength(0);
+        } finally {
+          await db
+            .delete(semanticSearchLease)
+            .where(eq(semanticSearchLease.token, token));
+        }
+        const ready = await searchSemanticHistory({
+          kind: "mail",
+          mailboxId,
+          query,
+          userId: actor,
+        });
+        expect(ready.coverage.complete).toBeTruthy();
+        expect(ready.items).toMatchObject([{ messageId }]);
+        expect(ready.items[0]?.snippet).not.toMatch(
+          /[=]\?UTF|hiddenstyle|&eacute;/u
+        );
+      }
+    });
+
+    test("metadata repair purges old chunks without changing raw sources or unrelated scopes", async () => {
+      const messageId = await saveGmail({
+        content: "A retained booking message.",
+        legacyAnalysis: true,
+      });
+      const excludedIds: string[] = [];
+      for (const label of ["DRAFT", "SPAM", "TRASH"]) {
+        excludedIds.push(
+          await saveGmail({
+            content: "Excluded source.",
+            labelIds: [label],
+            legacyAnalysis: true,
+          })
+        );
+      }
+      const otherId = await saveGmail({
+        content: "Other mailbox source.",
+        legacyAnalysis: true,
+        mailboxId: mailboxIds.secondary,
+      });
+      const managedId = await saveManaged({
+        bodyHtml: "<p>Retained HTML.</p>",
+        bodyText: null,
+        content: "",
+        legacyAnalysis: true,
+      });
+      await db
+        .update(gmailCapturedMessage)
+        .set({
+          snapshot: sql`jsonb_set(${gmailCapturedMessage.snapshot}, '{truncation,bodyText}', 'true'::jsonb)`,
+          source: "search",
+        })
+        .where(
+          and(
+            eq(gmailCapturedMessage.mailboxId, mailboxIds.primary),
+            eq(gmailCapturedMessage.messageId, messageId)
+          )
+        );
+      const [before] = await db
+        .select({
+          capturedAt: gmailCapturedMessage.capturedAt,
+          providerRevision: gmailCapturedMessage.providerRevision,
+          snapshot: gmailCapturedMessage.snapshot,
+          source: gmailCapturedMessage.source,
+          updatedAt: gmailCapturedMessage.updatedAt,
+        })
+        .from(gmailCapturedMessage)
+        .where(
+          and(
+            eq(gmailCapturedMessage.mailboxId, mailboxIds.primary),
+            eq(gmailCapturedMessage.messageId, messageId)
+          )
+        );
+      const [managedBefore] = await db
+        .select({
+          bodyHtml: managedMailMessage.bodyHtml,
+          bodyText: managedMailMessage.bodyText,
+          sentAt: managedMailMessage.sentAt,
+          updatedAt: managedMailMessage.updatedAt,
+        })
+        .from(managedMailMessage)
+        .where(eq(managedMailMessage.id, managedId));
+      if (before === undefined || managedBefore === undefined) {
+        throw new Error("Missing retained-source fixtures.");
+      }
+      await db.insert(semanticEmbedding).values([
+        {
+          chunkIndex: 0,
+          createdAt: now,
+          embedding: semanticVector,
+          gmailMailboxId: mailboxIds.primary,
+          gmailMessageId: messageId,
+          model: SEARCH_EMBEDDING_MODEL_KEY,
+          searchText: "Old derivative.",
+          sourceKey: JSON.stringify(["gmail", messageId, mailboxIds.primary]),
+          sourceRevision: "legacy",
+        },
+        {
+          chunkIndex: 0,
+          createdAt: now,
+          embedding: semanticVector,
+          managedMessageId: managedId,
+          model: SEARCH_EMBEDDING_MODEL_KEY,
+          searchText: "Old derivative.",
+          sourceKey: JSON.stringify(["managed", managedId, ""]),
+          sourceRevision: "legacy",
+        },
+      ]);
+      await normalizeCapturedMailMetadata({
+        mailboxId: mailboxIds.primary,
+        userId: actor,
+      });
+      await normalizeCapturedMailMetadata({
+        mailboxId: mailboxIds.shared,
+        userId: actor,
+      });
+      await expect(
+        db
+          .select()
+          .from(semanticEmbedding)
+          .where(
+            inArray(semanticEmbedding.sourceKey, [
+              JSON.stringify(["gmail", messageId, mailboxIds.primary]),
+              JSON.stringify(["managed", managedId, ""]),
+            ])
+          )
+      ).resolves.toHaveLength(0);
+      const [after] = await db
+        .select()
+        .from(gmailCapturedMessage)
+        .where(
+          and(
+            eq(gmailCapturedMessage.mailboxId, mailboxIds.primary),
+            eq(gmailCapturedMessage.messageId, messageId)
+          )
+        );
+      expect(after).toMatchObject(before);
+      expect(after?.analysis?.truncated).toBeTruthy();
+      const [managedAfter] = await db
+        .select()
+        .from(managedMailMessage)
+        .where(eq(managedMailMessage.id, managedId));
+      expect(managedAfter).toMatchObject(managedBefore);
+      const untouched = await db
+        .select({ analysis: gmailCapturedMessage.analysis })
+        .from(gmailCapturedMessage)
+        .where(
+          inArray(gmailCapturedMessage.messageId, [...excludedIds, otherId])
+        );
+      expect(untouched).toHaveLength(excludedIds.length + 1);
+      expect(
+        untouched.every((row) => row.analysis?.version === 1)
+      ).toBeTruthy();
+      await expect(
+        db
+          .select()
+          .from(mailMessageImportance)
+          .where(
+            inArray(mailMessageImportance.mailboxId, [
+              mailboxIds.primary,
+              mailboxIds.shared,
+            ])
+          )
+      ).resolves.toHaveLength(0);
+      await expect(
+        normalizeCapturedMailMetadata({
+          mailboxId: mailboxIds.foreign,
+          userId: actor,
+        })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    test("source changes at the same revision cannot persist stale readable metadata", async () => {
+      for (const provider of ["gmail", "managed"] as const) {
+        const input = {
+          bodyHtml: "<p>outdatedmarker booking.</p>",
+          bodyText: null,
+          content: "",
+          legacyAnalysis: true,
+        };
+        const messageId =
+          provider === "gmail"
+            ? await saveGmail(input)
+            : await saveManaged(input);
+        const mailboxId =
+          provider === "gmail" ? mailboxIds.primary : mailboxIds.shared;
+        let normalizing: Promise<void> | undefined;
+        await db.transaction(async (tx) => {
+          const [backend] = await tx.execute(
+            sql`select pg_backend_pid() as pid`
+          );
+          if (typeof backend?.pid !== "number") {
+            throw new TypeError("Missing transaction identity.");
+          }
+          const backendPid = backend.pid;
+          if (provider === "gmail") {
+            await tx
+              .select()
+              .from(gmailCapturedMessage)
+              .where(
+                and(
+                  eq(gmailCapturedMessage.mailboxId, mailboxId),
+                  eq(gmailCapturedMessage.messageId, messageId)
+                )
+              )
+              .for("update");
+          } else {
+            await tx
+              .select()
+              .from(managedMailMessage)
+              .where(eq(managedMailMessage.id, messageId))
+              .for("update");
+          }
+          normalizing = normalizeCapturedMailMetadata({
+            mailboxId,
+            userId: actor,
+          });
+          let blocked = false;
+          for (let attempt = 0; attempt < 100; attempt += 1) {
+            const [activity] = await db.execute(
+              sql`select exists (select 1 from pg_stat_activity where ${backendPid} = any(pg_blocking_pids(pid))) as blocked`
+            );
+            if (activity?.blocked === true) {
+              blocked = true;
+              break;
+            }
+            await setTimeout(20);
+          }
+          expect(blocked).toBeTruthy();
+          if (provider === "gmail") {
+            await tx
+              .update(gmailCapturedMessage)
+              .set({
+                snapshot: sql`jsonb_set(${gmailCapturedMessage.snapshot}, '{bodyHtml}', ${JSON.stringify("<p>currentneedle booking.</p>")}::jsonb)`,
+              })
+              .where(
+                and(
+                  eq(gmailCapturedMessage.mailboxId, mailboxId),
+                  eq(gmailCapturedMessage.messageId, messageId)
+                )
+              );
+          } else {
+            await tx
+              .update(managedMailMessage)
+              .set({ bodyHtml: "<p>currentneedle booking.</p>" })
+              .where(eq(managedMailMessage.id, messageId));
+          }
+        });
+        await normalizing;
+        vi.mocked(embedSearchTexts).mockImplementation(async ({ values }) => {
+          await setImmediate();
+          return values.map((value) =>
+            value === "currentneedle" ? unrelatedVector : semanticVector
+          );
+        });
+        const result = await searchSemanticHistory({
+          kind: "mail",
+          mailboxId,
+          query: "currentneedle",
+          userId: actor,
+        });
+        expect(result.items).toMatchObject([{ messageId }]);
+        expect(result.items[0]?.snippet).toMatch(/currentneedle/u);
+        expect(result.items[0]?.snippet).not.toMatch(/outdatedmarker/u);
+      }
     });
 
     test("managed mail search excludes draft, spam and trash while preserving live source text", async () => {
