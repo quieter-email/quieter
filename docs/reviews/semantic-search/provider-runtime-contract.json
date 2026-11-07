@@ -1,0 +1,30 @@
+{
+  "status": 200,
+  "model": "text-embedding-3-small",
+  "keys": ["object", "data", "model", "usage", "provider", "id"],
+  "usage": {
+    "prompt_tokens": 9,
+    "total_tokens": 9,
+    "cost": 1.8e-7,
+    "is_byok": false,
+    "cost_details": {
+      "upstream_inference_cost": 1.8e-7,
+      "upstream_inference_prompt_cost": 1.8e-7,
+      "upstream_inference_completions_cost": 0
+    }
+  },
+  "entries": [
+    {
+      "index": 0,
+      "dimension": 1024,
+      "type": "object",
+      "finite": true
+    },
+    {
+      "index": 1,
+      "dimension": 1024,
+      "type": "object",
+      "finite": true
+    }
+  ]
+}

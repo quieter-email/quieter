@@ -18,6 +18,8 @@ import { toast } from "@quieter/ui/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 
+import { MemoryProvenance } from "./personalization-memory-provenance";
+
 export type PersonalMemory = RouterOutputs["ai"]["memories"]["items"][number];
 
 export const MemoryEditor = ({
@@ -91,6 +93,11 @@ export const MemoryEditor = ({
               value={content}
             />
           </form>
+          {memory ? (
+            <div className="mt-3">
+              <MemoryProvenance details provenance={memory.provenance} />
+            </div>
+          ) : null}
         </DialogBody>
         <DialogFooter>
           <DialogCloseButton disabled={save.isPending}>

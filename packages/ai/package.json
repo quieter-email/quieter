@@ -20,6 +20,7 @@
     "./openrouter-transcription": "./src/openrouter-transcription.ts",
     "./parse-mail-search": "./src/parse-mail-search.ts",
     "./prompt-security": "./src/prompt-security.ts",
+    "./search-embeddings": "./src/search-embeddings.ts",
     "./suggest-reply": "./src/suggest-reply.ts",
     "./transcription-format": "./src/transcription-format.ts",
     "./chat-transcript": "./src/chat-transcript.ts",

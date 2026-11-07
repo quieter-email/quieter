@@ -401,6 +401,7 @@ const processAutoLabelMessage = async ({
               candidates: autoLabelContext.memoryCandidates,
               mailboxId,
               query: buildMailMemoryQuery(message),
+              semantic: { billingMailboxId: mailboxId },
               userId: autoLabelContext.memoryCandidates.userId,
             });
       const aiLabelIds =

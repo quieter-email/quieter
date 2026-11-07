@@ -2,9 +2,10 @@ import { convert } from "html-to-text";
 import { addressParser } from "postal-mime";
 import { z } from "zod";
 
+import { decodeMimeHeaderValue } from "./message-content";
 import type { MessageAttachment, MessageHeader } from "./messages";
 
-export const MAIL_MESSAGE_ANALYSIS_VERSION = 1;
+export const MAIL_MESSAGE_ANALYSIS_VERSION = 2;
 export const MAIL_CAPTURE_BODY_LIMIT = 512_000;
 export const MAIL_CAPTURE_HEADER_LIMIT = 128;
 export const MAIL_CAPTURE_HEADER_VALUE_LIMIT = 8192;
@@ -16,7 +17,6 @@ const captureAnchorAttributes = z.object({
 const EXPLICIT_UNSUBSCRIBE = /\b(?:unsubscribe|abmelden|abbestellen)\b/iu;
 
 export type MailMessageAnalysis = {
-  version: number;
   sender: { address: string; name: string | null; domain: string } | null;
   listId: string | null;
   unsubscribe: {
@@ -29,7 +29,14 @@ export type MailMessageAnalysis = {
     }[];
   };
   truncated: boolean;
-};
+} & (
+  | { version: 1 }
+  | {
+      version: typeof MAIL_MESSAGE_ANALYSIS_VERSION;
+      subject: string | null;
+      htmlText: string | null;
+    }
+);
 
 export type CapturedMailSnapshot = {
   id: string;
@@ -161,10 +168,14 @@ export const parseMailUnsubscribeTarget = (
 
 export const analyzeMailMessage = (input: {
   from?: string | null;
+  subject?: string | null;
   headers: MessageHeader[];
   bodyText?: string | null;
   bodyHtml?: string | null;
-}): MailMessageAnalysis => {
+}): Extract<
+  MailMessageAnalysis,
+  { version: typeof MAIL_MESSAGE_ANALYSIS_VERSION }
+> => {
   const bounded = boundMailCaptureContent(input);
   const headerValues = (name: string) =>
     bounded.headers
@@ -231,8 +242,18 @@ export const analyzeMailMessage = (input: {
       target: target.target,
     });
   };
+  let htmlText: string | null = null;
   if (bounded.bodyHtml) {
+    const textOptions = {
+      limits: {
+        maxChildNodes: 10_000,
+        maxDepth: 64,
+        maxInputLength: MAIL_CAPTURE_BODY_LIMIT,
+      },
+      wordwrap: false,
+    } satisfies NonNullable<Parameters<typeof convert>[1]>;
     convert(bounded.bodyHtml, {
+      ...textOptions,
       formatters: {
         captureAnchor: (element, walk, builder) => {
           const nodes = [...element.children];
@@ -258,14 +279,13 @@ export const analyzeMailMessage = (input: {
           walk(element.children, builder);
         },
       },
-      limits: {
-        maxChildNodes: 10_000,
-        maxDepth: 64,
-        maxInputLength: MAIL_CAPTURE_BODY_LIMIT,
-      },
       selectors: [{ format: "captureAnchor", selector: "a" }],
-      wordwrap: false,
     });
+    if (!bounded.bodyText) {
+      const converted = convert(bounded.bodyHtml, textOptions);
+      htmlText = truncateMailCaptureText(converted, MAIL_CAPTURE_BODY_LIMIT);
+      truncated ||= converted.length > MAIL_CAPTURE_BODY_LIMIT;
+    }
   }
   for (const line of (bounded.bodyText ?? "").split(/\r?\n/u)) {
     if (EXPLICIT_UNSUBSCRIBE.test(line) && line.length < 2048) {
@@ -280,9 +300,22 @@ export const analyzeMailMessage = (input: {
   const listId =
     /<(?<listId>[^<>\s]+)>/u.exec(listHeader)?.groups?.listId?.toLowerCase() ??
     null;
+  const subject =
+    input.subject === undefined
+      ? (decodeMimeHeaderValue(
+          bounded.headers.find(
+            (header) => header.name.toLowerCase() === "subject"
+          )?.value
+        ) ?? null)
+      : input.subject;
   return {
+    htmlText,
     listId: listId === null ? null : truncateMailCaptureText(listId, 512),
     sender: normalizedSender,
+    subject:
+      subject === null
+        ? null
+        : truncateMailCaptureText(subject, MAIL_CAPTURE_HEADER_VALUE_LIMIT),
     truncated,
     unsubscribe: {
       bodyCandidates,

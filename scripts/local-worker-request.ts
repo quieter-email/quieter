@@ -10,14 +10,24 @@ if (
     "mail-recovery",
     "importance",
     "memory",
+    "semantic-index",
     "actions",
   ].includes(action)
 ) {
   throw new Error(
-    "Use dev:trigger health, maintenance, mail-recovery, importance, memory, or actions."
+    "Use dev:trigger health, maintenance, mail-recovery, importance, memory, semantic-index <user-id> <mailbox-id> <memory|chat|mail>, or actions."
   );
 }
 const response = await fetch(`http://127.0.0.1:8787/__dev/${action}`, {
+  ...(action === "semantic-index"
+    ? {
+        body: JSON.stringify({
+          kind: process.argv[5],
+          mailboxId: process.argv[4],
+          userId: process.argv[3],
+        }),
+      }
+    : {}),
   ...(action === "memory"
     ? { body: JSON.stringify({ userId: process.argv[3] }) }
     : {}),
@@ -26,7 +36,9 @@ const response = await fetch(`http://127.0.0.1:8787/__dev/${action}`, {
   },
   method: action === "health" ? "GET" : "POST",
   signal: AbortSignal.timeout(
-    ["importance", "memory", "actions"].includes(action) ? 180_000 : 30_000
+    ["importance", "memory", "actions", "semantic-index"].includes(action)
+      ? 180_000
+      : 30_000
   ),
 });
 if (!response.ok) {

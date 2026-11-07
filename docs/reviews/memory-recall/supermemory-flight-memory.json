@@ -1,0 +1,719 @@
+{
+  "cases": [
+    {
+      "corpus": [
+        {
+          "concept": "flight",
+          "text": "Avoids red-eye flights."
+        },
+        {
+          "concept": "preference-0",
+          "text": "Prefers the 0th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-1",
+          "text": "Prefers the 1th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-2",
+          "text": "Prefers the 2th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-3",
+          "text": "Prefers the 3th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-4",
+          "text": "Prefers the 4th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-5",
+          "text": "Prefers the 5th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-6",
+          "text": "Prefers the 6th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-7",
+          "text": "Prefers the 7th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-8",
+          "text": "Prefers the 8th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-9",
+          "text": "Prefers the 9th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-10",
+          "text": "Prefers the 10th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-11",
+          "text": "Prefers the 11th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-12",
+          "text": "Prefers the 12th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-13",
+          "text": "Prefers the 13th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-14",
+          "text": "Prefers the 14th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-15",
+          "text": "Prefers the 15th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-16",
+          "text": "Prefers the 16th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-17",
+          "text": "Prefers the 17th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-18",
+          "text": "Prefers the 18th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-19",
+          "text": "Prefers the 19th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-20",
+          "text": "Prefers the 20th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-21",
+          "text": "Prefers the 21th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-22",
+          "text": "Prefers the 22th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-23",
+          "text": "Prefers the 23th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-24",
+          "text": "Prefers the 24th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-25",
+          "text": "Prefers the 25th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-26",
+          "text": "Prefers the 26th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-27",
+          "text": "Prefers the 27th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-28",
+          "text": "Prefers the 28th garden layout in the landscape catalog."
+        },
+        {
+          "concept": "preference-29",
+          "text": "Prefers the 29th garden layout in the landscape catalog."
+        }
+      ],
+      "id": "word-disjoint-semantic-recall",
+      "lanes": [
+        {
+          "entries": [
+            {
+              "concept": "flight",
+              "id": "1b7d47e723af58e59c4b4d",
+              "text": "Avoids red-eye flights."
+            },
+            {
+              "concept": "preference-4",
+              "id": "048bbc265393e66258c16b",
+              "text": "Prefers the 4th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-18",
+              "id": "51551fd1432fcee3864181",
+              "text": "Prefers the 18th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-7",
+              "id": "ee37aa2b078f720bfbaed5",
+              "text": "Prefers the 7th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-12",
+              "id": "5aa031d57d83668e3435b4",
+              "text": "Prefers the 12th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-11",
+              "id": "2ee97393e6904a5370d145",
+              "text": "Prefers the 11th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-2",
+              "id": "a9c3def77cd84730135ae5",
+              "text": "Prefers the 2th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-28",
+              "id": "09bf071014a0849da0f9d8",
+              "text": "Prefers the 28th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-8",
+              "id": "4d345270ee5b0b5ebc9fc3",
+              "text": "Prefers the 8th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-19",
+              "id": "499aa6c8c76a6daf6ab11d",
+              "text": "Prefers the 19th garden layout in the landscape catalog."
+            }
+          ],
+          "matched": [
+            "flight",
+            "preference-4",
+            "preference-18",
+            "preference-7",
+            "preference-12",
+            "preference-11",
+            "preference-2",
+            "preference-28",
+            "preference-8",
+            "preference-19"
+          ],
+          "mode": "chunks",
+          "relevant": ["flight"],
+          "returnedCharacters": 1192,
+          "status": "hit",
+          "unmappedEntries": 0,
+          "unresolved": []
+        },
+        {
+          "entries": [
+            {
+              "concept": "flight",
+              "id": "f79h3uosYbVkZd7zNRCbuh",
+              "text": "Document is titled 'Avoids red-eye flights.'"
+            },
+            {
+              "concept": "flight",
+              "id": "c9qiQUVCpvzBXrmpC8qEN6",
+              "text": "User avoids red-eye flights."
+            },
+            {
+              "concept": "preference-4",
+              "id": "DTPSNzHoDx2rDZW4bbLmnm",
+              "text": "User prefers the 4th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-8",
+              "id": "mL9hw3Zq2b7VHUcQJ6Tsjk",
+              "text": "User prefers the 8th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-12",
+              "id": "EkpRcTouJmqrnSjF7oVScF",
+              "text": "User prefers the 12th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-7",
+              "id": "MZBaBxZr8n5m4H79kt38RZ",
+              "text": "User prefers the 7th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-2",
+              "id": "AfJyw875jUCWNCb4mVbnDv",
+              "text": "User prefers the 2th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-19",
+              "id": "jJuYP2VD8UNrG2nw6ZieV1",
+              "text": "User prefers the 19th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-28",
+              "id": "ZGHDy6wsE8j92BoEy5Uf95",
+              "text": "User prefers the 28th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-16",
+              "id": "Qb7sEbidXnLpX8EnKvisJs",
+              "text": "User prefers the 16th garden layout in the landscape catalog."
+            }
+          ],
+          "matched": [
+            "flight",
+            "preference-4",
+            "preference-8",
+            "preference-12",
+            "preference-7",
+            "preference-2",
+            "preference-19",
+            "preference-28",
+            "preference-16"
+          ],
+          "mode": "memories",
+          "relevant": ["flight"],
+          "returnedCharacters": 1218,
+          "status": "hit",
+          "unmappedEntries": 0,
+          "unresolved": []
+        },
+        {
+          "entries": [
+            {
+              "concept": "preference-26",
+              "id": "V8yqYEqf995GqYV8kXkpaX",
+              "text": "User prefers the 26th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-20",
+              "id": "Kem8xVwDLuNfTb5FVqTxaW",
+              "text": "There is a landscape catalog that includes a 20th garden layout."
+            },
+            {
+              "concept": "preference-20",
+              "id": "UtttdPdty3Ruszw9FuP3Qz",
+              "text": "The user prefers the 20th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-9",
+              "id": "WswASLoQuPTLmSd6dWFLD9",
+              "text": "[2026-11-06] The total number of chunks in the document is 1."
+            },
+            {
+              "concept": "preference-9",
+              "id": "SJbQvfNwD4epPztvLFTfw9",
+              "text": "[2026-11-06] The document source is an API."
+            },
+            {
+              "concept": "preference-9",
+              "id": "tJwcydePv1mbz47DpPhSNQ",
+              "text": "[2026-11-06] The document is titled \"Prefers the 9th garden layout in the landscape catalog.\""
+            },
+            {
+              "concept": "preference-9",
+              "id": "G4h64jaUNLsQoZXqv7Ud1K",
+              "text": "[2026-11-06] User prefers the 9th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-0",
+              "id": "2bGDddohenGVpMbqPETxvP",
+              "text": "[2026-11-06] The document is titled 'Prefers the 0th garden layout in the landscape cat...'."
+            },
+            {
+              "concept": "preference-0",
+              "id": "cKKKo2NrNgK7d9bb4fDRTH",
+              "text": "[2026-11-06] User prefers the 0th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-3",
+              "id": "S7dYwjdoWRXa1qUdhGhtH5",
+              "text": "[2026-11-06] The document is titled 'Prefers the 3th garden layout in the landscape catalog.'"
+            },
+            {
+              "concept": "preference-3",
+              "id": "xVRPU7Cj3KN2fE9HfyC1xW",
+              "text": "[2026-11-06] User prefers the 3rd garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-8",
+              "id": "C6X7cNZ3nyH68DqUCKFAvz",
+              "text": "[2026-11-06] There is a landscape catalog with multiple garden layouts."
+            },
+            {
+              "concept": "preference-8",
+              "id": "mL9hw3Zq2b7VHUcQJ6Tsjk",
+              "text": "[2026-11-06] User prefers the 8th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-27",
+              "id": "BLYHcEhnAiz9DWLLYYkEdX",
+              "text": "[2026-11-06] All chunks are from a document titled 'Prefers the 27th garden layout in the landscape ca...'."
+            },
+            {
+              "concept": "preference-27",
+              "id": "tGZtf4fjYvgDpBZzRmGBMz",
+              "text": "[2026-11-06] User prefers the 27th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-4",
+              "id": "dE2UUVrkHwAD6iYzAqUp83",
+              "text": "[2026-11-06] All chunks of the document have been processed into memories."
+            },
+            {
+              "concept": "preference-4",
+              "id": "DTPSNzHoDx2rDZW4bbLmnm",
+              "text": "[2026-11-06] User prefers the 4th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-29",
+              "id": "8a5bmCM37r8AWY2XitaNkm",
+              "text": "[2026-11-06] The document's total chunk count is 1."
+            },
+            {
+              "concept": "preference-29",
+              "id": "urc2JxjthfvosxWfzi3xAJ",
+              "text": "[2026-11-06] The document has 1 chunk."
+            },
+            {
+              "concept": "preference-29",
+              "id": "jFi6BgR5Zmv5P2fwCm9Mw2",
+              "text": "[2026-11-06] The source of the document is 'api'."
+            },
+            {
+              "concept": "preference-29",
+              "id": "mK5NhEJzmbz9EkQ6D3Rt1Q",
+              "text": "[2026-11-06] The document title is 'Prefers the 29th garden layout in the landscape ca...'."
+            },
+            {
+              "concept": "preference-29",
+              "id": "1znCaeXQdCJNu721Gxp1xD",
+              "text": "[2026-11-06] User prefers the 29th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-21",
+              "id": "MqXoiRSx53aQyy2PicjWC2",
+              "text": "[2026-11-06] The document is titled 'Prefers the 21th garden layout in the landscape catalog.'"
+            },
+            {
+              "concept": "preference-21",
+              "id": "3wEUoNaMjq4ZNhy5hQWYFE",
+              "text": "[2026-11-06] The user prefers the 21st garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-19",
+              "id": "Q19FSUeAtznV9xgwKbPjz4",
+              "text": "[2026-11-06] The document file path is unknown."
+            },
+            {
+              "concept": "preference-19",
+              "id": "o2xYnWn2a3qQAKLh9RbMfj",
+              "text": "[2026-11-06] The document consists of one chunk."
+            },
+            {
+              "concept": "preference-19",
+              "id": "6829GjSzqPP68DodcVcm6o",
+              "text": "[2026-11-06] The source of the document is an API."
+            },
+            {
+              "concept": "preference-19",
+              "id": "XhxdmBwi8fNgFhPu85SmP5",
+              "text": "[2026-11-06] The document is titled 'Prefers the 19th garden layout in the landscape ca...'."
+            },
+            {
+              "concept": "preference-19",
+              "id": "jJuYP2VD8UNrG2nw6ZieV1",
+              "text": "[2026-11-06] User prefers the 19th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-22",
+              "id": "DdmF9yfF8rT9RsS2MSD64n",
+              "text": "[2026-11-06] The document is titled 'Prefers the 22th garden layout in the landscape ca...'."
+            },
+            {
+              "concept": "preference-22",
+              "id": "gSErv8xhqUsng2vAdPF6df",
+              "text": "[2026-11-06] User prefers the 22th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-2",
+              "id": "QDNG25jRShWpUetBos28nQ",
+              "text": "[2026-11-06] The document is titled 'Prefers the 2th garden layout in the landscape catalog.'"
+            },
+            {
+              "concept": "preference-2",
+              "id": "AfJyw875jUCWNCb4mVbnDv",
+              "text": "[2026-11-06] User prefers the 2th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-17",
+              "id": "KUqhEAQPUEoKJ9yCg8LxBs",
+              "text": "[2026-11-06] The document is titled 'Prefers the 17th garden layout in the landscape catalog.'"
+            },
+            {
+              "concept": "preference-17",
+              "id": "L8JSenSvJKLfAMfpvqHyEQ",
+              "text": "[2026-11-06] User prefers the 17th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-25",
+              "id": "PBe3BEdBzyAMyesLcKnRi6",
+              "text": "[2026-11-06] Total number of memories created in this session: 1."
+            },
+            {
+              "concept": "preference-25",
+              "id": "4PBotVyhjHvPbYxayb2M2m",
+              "text": "[2026-11-06] User prefers the 25th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-24",
+              "id": "Hh5NecJ8CwBMDEFkdonsM7",
+              "text": "[2026-11-06] Document references the landscape catalog."
+            },
+            {
+              "concept": "preference-24",
+              "id": "sW3Mq1usnDxTju3hkNT6CD",
+              "text": "[2026-11-06] User prefers the 24th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-10",
+              "id": "sFs8AMhp59cMefAqasTb2e",
+              "text": "[2026-11-06] User prefers the 10th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-26",
+              "id": "ahJVxm76bHo8cM1LotWxVx",
+              "text": "[2026-11-06] The document titled 'Prefers the 26th garden layout in the landscape ca...' contains a preference about garden layouts."
+            },
+            {
+              "concept": "preference-15",
+              "id": "Uu1UCXdeFa8EVYcCjzGUAS",
+              "text": "[2026-11-06] The document has a total of 1 chunk."
+            },
+            {
+              "concept": "preference-15",
+              "id": "eRwFR9XbePkBUaCaWkbq4x",
+              "text": "[2026-11-06] The document filepath is unknown."
+            },
+            {
+              "concept": "preference-15",
+              "id": "CnMFVvYHXJstaxNBAZGMGr",
+              "text": "[2026-11-06] User prefers the 15th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-13",
+              "id": "4jpDNVK3m3pqXy2SkYeJNZ",
+              "text": "[2026-11-06] The document contains a preference for the 13th garden layout."
+            },
+            {
+              "concept": "preference-13",
+              "id": "ivEMqgajYiRWfxYP8Hbhxz",
+              "text": "[2026-11-06] User prefers the 13th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-11",
+              "id": "zLygd4TKxm8931oX4qDEdY",
+              "text": "[2026-11-06] The title of the document is 'Prefers the 11th garden layout in the landscape ca...'."
+            },
+            {
+              "concept": "preference-11",
+              "id": "ynTitCDB9Np55KP3XoR1CW",
+              "text": "[2026-11-06] There is only 1 chunk in the document."
+            },
+            {
+              "concept": "preference-11",
+              "id": "VbwS98iF6Js2iaeyVM2bts",
+              "text": "[2026-11-06] The filename of the document is unknown."
+            },
+            {
+              "concept": "preference-11",
+              "id": "6Lwa5diSfMqC1nmnzocDNB",
+              "text": "[2026-11-06] User prefers the 11th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-1",
+              "id": "i3vU7zP6PEht9vzixyEcfK",
+              "text": "[2026-11-06] There is one garden layout in the landscape catalog indicated as '1th'."
+            },
+            {
+              "concept": "preference-1",
+              "id": "Xiw8DhVNVU8JLgWxsrdqN7",
+              "text": "[2026-11-06] User prefers the 1th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-23",
+              "id": "Ec1deUzFSro8Cus1fricsD",
+              "text": "[2026-11-06] The document title is 'Prefers the 23th garden layout in the landscape ca...'."
+            },
+            {
+              "concept": "preference-23",
+              "id": "eHVqCs3CmJsc4zuuqQdDsx",
+              "text": "[2026-11-06] The user prefers the 23rd garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-6",
+              "id": "Rp4qKH3Pej4E3Z6TDVLS6n",
+              "text": "[2026-11-06] The document is titled 'Prefers the 6th garden layout in the landscape catalog.'"
+            },
+            {
+              "concept": "preference-6",
+              "id": "UbbS2SL6G3AujRAuXBZpuT",
+              "text": "[2026-11-06] User prefers the 6th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-7",
+              "id": "ma6T1uELCYPHVc9Qgpk8Cx",
+              "text": "[2026-11-06] The document's title is 'Prefers the 7th garden layout in the landscape catalog.'"
+            },
+            {
+              "concept": "preference-7",
+              "id": "MZBaBxZr8n5m4H79kt38RZ",
+              "text": "[2026-11-06] User prefers the 7th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-18",
+              "id": "DyT5nJcbiZK9n6ow7hhyBW",
+              "text": "[2026-11-06] The document is titled \"Prefers the 18th garden layout in the landscape ca...\""
+            },
+            {
+              "concept": "preference-18",
+              "id": "q1p3hHptR9oLfVk9dgFhKT",
+              "text": "[2026-11-06] User prefers the 18th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "flight",
+              "id": "f79h3uosYbVkZd7zNRCbuh",
+              "text": "[2026-11-06] Document is titled 'Avoids red-eye flights.'"
+            },
+            {
+              "concept": "flight",
+              "id": "c9qiQUVCpvzBXrmpC8qEN6",
+              "text": "[2026-11-06] User avoids red-eye flights."
+            },
+            {
+              "concept": "preference-28",
+              "id": "pY7N3UQEM1LkCANS2MWAmC",
+              "text": "[2026-11-06] The document is titled 'Prefers the 28th garden layout in the landscape ca...'."
+            },
+            {
+              "concept": "preference-28",
+              "id": "ZGHDy6wsE8j92BoEy5Uf95",
+              "text": "[2026-11-06] User prefers the 28th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-5",
+              "id": "eKe478CHkagAsfUkFiNQtH",
+              "text": "[2026-11-06] The document title is 'Prefers the 5th garden layout in the landscape catalog.'."
+            },
+            {
+              "concept": "preference-5",
+              "id": "HZYdsVa8FpitZQ3prpidMW",
+              "text": "[2026-11-06] User prefers the 5th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-16",
+              "id": "9vgmhC8pbTfbqnhHDhutpb",
+              "text": "[2026-11-06] The document has only one chunk."
+            },
+            {
+              "concept": "preference-16",
+              "id": "ezm26FiRKLha82kxVfdMRS",
+              "text": "[2026-11-06] The document is titled 'Prefers the 16th garden layout in the landscape ca...'."
+            },
+            {
+              "concept": "preference-16",
+              "id": "Qb7sEbidXnLpX8EnKvisJs",
+              "text": "[2026-11-06] User prefers the 16th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-12",
+              "id": "KGP2bgoZ88yAQSX4gVNCb8",
+              "text": "[2026-11-06] The document is titled 'Prefers the 12th garden layout in the landscape catalog.'"
+            },
+            {
+              "concept": "preference-12",
+              "id": "EkpRcTouJmqrnSjF7oVScF",
+              "text": "[2026-11-06] User prefers the 12th garden layout in the landscape catalog."
+            },
+            {
+              "concept": "preference-14",
+              "id": "HsNxbwGn1u7DWvvNRMDR2k",
+              "text": "[2026-11-06] The document's source is an API."
+            },
+            {
+              "concept": "preference-14",
+              "id": "KVxcc846heHMhYkkybBFC9",
+              "text": "[2026-11-06] User prefers the 14th garden layout in the landscape catalog."
+            }
+          ],
+          "matched": [
+            "preference-26",
+            "preference-20",
+            "preference-9",
+            "preference-0",
+            "preference-3",
+            "preference-8",
+            "preference-27",
+            "preference-4",
+            "preference-29",
+            "preference-21",
+            "preference-19",
+            "preference-22",
+            "preference-2",
+            "preference-17",
+            "preference-25",
+            "preference-24",
+            "preference-10",
+            "preference-15",
+            "preference-13",
+            "preference-11",
+            "preference-1",
+            "preference-23",
+            "preference-6",
+            "preference-7",
+            "preference-18",
+            "flight",
+            "preference-28",
+            "preference-5",
+            "preference-16",
+            "preference-12",
+            "preference-14"
+          ],
+          "mode": "profile",
+          "relevant": ["flight"],
+          "returnedCharacters": 10301,
+          "status": "hit",
+          "unmappedEntries": 0,
+          "unresolved": []
+        }
+      ],
+      "memoryObservation": {
+        "completion": "not-proven-by-document-done-or-count-stability",
+        "count": 81,
+        "stablePolls": 5
+      },
+      "namespace": "quieter_eval_79fb6d52_c0c1_41df_a14b_3cd34b653f40_word_disjoint_semantic_recall",
+      "query": "How should I choose an overnight journey by air?",
+      "taskType": "memory"
+    }
+  ],
+  "comparisonScope": "source-concept-coverage-on-shared-synthetic-corpus",
+  "configuration": {
+    "embeddingModel": "Xenova/bge-base-en-v1.5",
+    "extractionModel": "openai/gpt-4.1-nano",
+    "limit": 10,
+    "memoryCharacterBudget": 32000,
+    "service": "supermemory-local",
+    "serviceVersion": "0.0.9"
+  },
+  "limitations": [
+    "Source-concept coverage uses document lineage and metadata, not an answer-quality judgment.",
+    "Per-fact document ingestion preserves retrieval granularity; extracted memories can merge or paraphrase facts.",
+    "A stable nonempty memory count is an observation, not proof every extraction job completed; absent memory/profile hits remain indeterminate.",
+    "The local service and configured extractor differ from the hosted proprietary extraction service.",
+    "No actor authorization, mailbox isolation, deletion, latency, token, cost, or final-answer comparison is scored.",
+    "The character cap bounds returned records; it does not equalize tokenizer counts or provider retrieval effort."
+  ],
+  "quieterBaseline": {
+    "layer": "canonical-sql-recall",
+    "status": "complete"
+  },
+  "runId": "79fb6d52-c0c1-41df-a14b-3cd34b653f40",
+  "status": "complete",
+  "taskType": "memory",
+  "version": 1
+}

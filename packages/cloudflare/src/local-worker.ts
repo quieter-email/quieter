@@ -146,6 +146,38 @@ export default {
         return requestErrorResponse(error, "local-mail-agent");
       }
     }
+    if (url.pathname === "/__dev/semantic-index") {
+      try {
+        const input = z
+          .object({
+            kind: z.enum(["memory", "chat", "mail"]),
+            mailboxId: z.string().min(1).max(500),
+            userId: z.string().min(1).max(500),
+          })
+          .safeParse(await readBoundedJson(request, 4096));
+        if (!input.success) {
+          return Response.json(
+            { error: "Choose a local user, mailbox and search type." },
+            { status: 400 }
+          );
+        }
+        const { requestSemanticIndex, processPendingSemanticIndexes } =
+          await import("@quieter/orpc/semantic-index");
+        return Response.json(
+          await withRequestDatabaseClient(async () => {
+            await requestSemanticIndex(input.data);
+            return await processPendingSemanticIndexes({
+              allowLocal: true,
+              limit: 3,
+              mailboxId: input.data.mailboxId,
+              userId: input.data.userId,
+            });
+          })
+        );
+      } catch (error) {
+        return requestErrorResponse(error, "local-semantic-index");
+      }
+    }
     if (url.pathname === "/__dev/memory") {
       try {
         const input = z
