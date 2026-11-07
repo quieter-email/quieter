@@ -18,7 +18,7 @@ Gmail initially contributes messages already retained by Quieter. Ordinary provi
 
 The importer uses authorized Gmail reads and the canonical revision-guarded snapshot writer. It never changes provider state. Import checkpoints survive embedding failures, and confirmed missing messages are skipped. Search imports enqueue neither importance analysis nor memory learning. The UI distinguishes source preparation from historical import progress, reports partial coverage and polls status without making AI calls.
 
-Semantic chunking processes the complete retained text in bounded batches. A source counts as indexed only after all current chunks exist. Canonical mail capture can itself retain a bounded representation; source capture limits remain separate from embedding coverage. Repeated preparation does not restart a completed historical scan. Stopping its registration removes its checkpoint, so another historical scan requires another explicit request.
+Semantic chunking processes the complete retained text in bounded batches. The shared source projection collapses Unicode whitespace before hashing, counting and chunking, so blank passages cannot block a batch or create empty final chunks. Authoritative source text remains unchanged. A source counts as indexed only after all current chunks exist. Canonical mail capture can itself retain a bounded representation; source capture limits remain separate from embedding coverage. Repeated preparation does not restart a completed historical scan. Stopping its registration removes its checkpoint, so another historical scan requires another explicit request.
 
 ## Native database setup
 
@@ -38,7 +38,7 @@ The [earlier SQL and Supermemory reports](../memory-recall/README.md) remain unc
 
 ## Verification status
 
-Focused verification passed 18 provider-boundary tests, three final-selection tests, six importer tests, nine real PostgreSQL lifecycle and isolation tests, and fourteen durable-queue integration tests. Controlled vectors in database tests prove access, freshness, native query and concurrency behavior; they do not substitute for the live model-quality report. Migration checks and disposable forward replay passed with the native-search-compatible database image.
+Focused verification passed 18 provider-boundary tests, three final-selection tests, six importer tests, ten real PostgreSQL lifecycle and isolation tests, and fourteen durable-queue integration tests. The whitespace regression reproduced provider rejection before the shared projection fix, then verified complete coverage, later-passage retrieval and unchanged source text. Controlled vectors in database tests prove access, freshness, native query and concurrency behavior; they do not substitute for the live model-quality report. Migration checks and disposable forward replay passed with the native-search-compatible database image.
 
 The broader run passed 2,020 tests with 491 configured skips, and the combined disposable-database selection passed 483 tests across 43 files. Those runs preceded the final known-cost parsing and search-import recovery corrections. The provider correction passed its focused 18-case suite. The search-import correction passed six regressions and the affected capture/importance suites, 59 tests in total.
 

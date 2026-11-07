@@ -71,7 +71,14 @@ export const semanticSourceQuery = (
             where ${managedMailMessage.mailboxId} = ${input.mailboxId}
               and ${managedMailMessage.mailboxState} in ('active', 'archived')`;
   }
-  return sql`select projected.*, md5(jsonb_build_array(content, version)::text) as "sourceRevision",
+  const whitespacePattern =
+    "[\u0009-\u000D\u0020\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+";
+  return sql`select normalized.*, md5(jsonb_build_array(content, version)::text) as "sourceRevision",
       jsonb_build_array(kind, id, coalesce("gmailMailboxId", ''))::text as "sourceKey"
-    from (${projected}) as projected where btrim(content) <> ''`;
+    from (
+      select kind, id, btrim(regexp_replace(content, ${whitespacePattern}, ' ', 'g')) as content,
+        title, version, "threadId", "chatId", "updatedAt", "memoryId", "chatMessageId",
+        "gmailMailboxId", "gmailMessageId", "managedMessageId"
+      from (${projected}) as projected
+    ) as normalized where content <> ''`;
 };

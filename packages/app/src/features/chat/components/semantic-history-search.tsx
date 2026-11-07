@@ -121,6 +121,7 @@ export const SemanticHistorySearch = ({
           query: "",
           threadId: item.threadId,
           view: "inbox",
+          workspace: null,
         },
         { replace: false }
       );

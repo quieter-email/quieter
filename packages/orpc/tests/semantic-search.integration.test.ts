@@ -537,6 +537,50 @@ describe.skipIf(state.databaseUrl === undefined)(
       expect(result.items[0]?.snippet).toContain("needlezyx");
     });
 
+    test("Unicode whitespace cannot block meaningful records or create empty final chunks", async () => {
+      const whitespace =
+        "\t\n\v\f\r \u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF";
+      const padding = whitespace.repeat(200);
+      const content = `${padding}${"ordinary background ".repeat(110)}${padding}needlezyx distinctive later passage${padding}`;
+      const own = await saveChat({ content });
+      await saveChat({ content: padding });
+      await saveChat({
+        content: `${"A separate conversation".padEnd(2000, "x")}${whitespace}`,
+      });
+      vi.mocked(embedSearchTexts).mockImplementation(async ({ values }) => {
+        if (values.some((value) => value.trim().length === 0)) {
+          throw new Error("The embedding provider rejects blank text.");
+        }
+        await setImmediate();
+        return values.map((value) =>
+          value === "needlezyx" ? unrelatedVector : semanticVector
+        );
+      });
+      const coverage = await indexSemanticSources({
+        kind: "chat",
+        mailboxId: mailboxIds.shared,
+        userId: actor,
+      });
+      expect(coverage).toMatchObject({
+        complete: true,
+        indexedSources: 2,
+        totalSources: 2,
+      });
+      const result = await searchSemanticHistory({
+        kind: "chat",
+        mailboxId: mailboxIds.shared,
+        query: "needlezyx",
+        userId: actor,
+      });
+      expect(result.items).toMatchObject([{ messageId: own.messageId }]);
+      expect(result.items[0]?.snippet).toContain("needlezyx");
+      const [source] = await db
+        .select({ parts: chatMessage.parts })
+        .from(chatMessage)
+        .where(eq(chatMessage.id, own.messageId));
+      expect(source?.parts).toContainEqual({ text: content, type: "text" });
+    });
+
     test("an edit racing inference invalidates the old representation and cannot persist stale chunks", async () => {
       const id = await saveMemory({ content: "Avoid red-eye flights." });
       const started = Promise.withResolvers<boolean>();
