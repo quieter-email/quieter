@@ -36,6 +36,7 @@ import {
   vi,
 } from "vite-plus/test";
 
+import { writeGmailCapturedMessageMetadata } from "../src/mail-capture";
 import { normalizeCapturedMailMetadata } from "../src/mail-capture-normalization";
 import {
   indexSemanticSources,
@@ -521,6 +522,328 @@ describe.skipIf(state.databaseUrl === undefined)(
         userId: actor,
       });
       expect(after.items).toHaveLength(0);
+    });
+
+    test("Gmail read, archive and metadata changes preserve prepared search without new embedding usage", async () => {
+      const messageId = await saveGmail({
+        content: "The supplier confirmed a late autumn delivery.",
+        labelIds: ["INBOX", "UNREAD", "Label_1"],
+      });
+      const input = {
+        kind: "mail" as const,
+        mailboxId: mailboxIds.primary,
+        userId: actor,
+      };
+      await indexSemanticSources(input);
+      const before = await db
+        .select({ createdAt: semanticEmbedding.createdAt })
+        .from(semanticEmbedding)
+        .where(
+          and(
+            eq(semanticEmbedding.gmailMailboxId, mailboxIds.primary),
+            eq(semanticEmbedding.gmailMessageId, messageId)
+          )
+        );
+      expect(before.length).toBeGreaterThan(0);
+      vi.mocked(embedSearchTexts).mockClear();
+      const labelChanges = [
+        ["INBOX", "Label_1"],
+        ["Label_1"],
+        ["Label_2", "UNREAD"],
+      ];
+      for (const [index, labelIds] of labelChanges.entries()) {
+        await writeGmailCapturedMessageMetadata({
+          labelIds,
+          mailboxId: mailboxIds.primary,
+          messageId,
+          providerRevision: String(index + 2),
+        });
+        await expect(indexSemanticSources(input)).resolves.toMatchObject({
+          complete: true,
+        });
+        expect(embedSearchTexts).not.toHaveBeenCalled();
+      }
+      await db
+        .update(gmailCapturedMessage)
+        .set({
+          snapshot: sql`jsonb_set(jsonb_set(${gmailCapturedMessage.snapshot}, '{internalDate}', ${JSON.stringify("1425461400000")}::jsonb), '{headers}', (${gmailCapturedMessage.snapshot}->'headers') || ${JSON.stringify([{ name: "X-Trace", value: "Non-search metadata" }])}::jsonb)`,
+        })
+        .where(
+          and(
+            eq(gmailCapturedMessage.mailboxId, mailboxIds.primary),
+            eq(gmailCapturedMessage.messageId, messageId)
+          )
+        );
+      await expect(indexSemanticSources(input)).resolves.toMatchObject({
+        complete: true,
+      });
+      expect(embedSearchTexts).not.toHaveBeenCalled();
+      const after = await db
+        .select({ createdAt: semanticEmbedding.createdAt })
+        .from(semanticEmbedding)
+        .where(
+          and(
+            eq(semanticEmbedding.gmailMailboxId, mailboxIds.primary),
+            eq(semanticEmbedding.gmailMessageId, messageId)
+          )
+        );
+      expect(after).toHaveLength(before.length);
+    });
+
+    test("managed archive and read changes preserve prepared search without new embedding usage", async () => {
+      const messageId = await saveManaged({
+        content: "The supplier confirmed a late autumn delivery.",
+      });
+      const input = {
+        kind: "mail" as const,
+        mailboxId: mailboxIds.shared,
+        userId: actor,
+      };
+      await indexSemanticSources(input);
+      const before = await db
+        .select({ createdAt: semanticEmbedding.createdAt })
+        .from(semanticEmbedding)
+        .where(eq(semanticEmbedding.managedMessageId, messageId));
+      expect(before.length).toBeGreaterThan(0);
+      vi.mocked(embedSearchTexts).mockClear();
+      for (const mailboxState of ["archived", "active"] as const) {
+        await db
+          .update(managedMailMessage)
+          .set({
+            isRead: true,
+            mailboxState,
+            sentAt: new Date("2015-03-04T09:30:00Z"),
+          })
+          .where(eq(managedMailMessage.id, messageId));
+        await expect(indexSemanticSources(input)).resolves.toMatchObject({
+          complete: true,
+        });
+        expect(embedSearchTexts).not.toHaveBeenCalled();
+      }
+      const after = await db
+        .select({ createdAt: semanticEmbedding.createdAt })
+        .from(semanticEmbedding)
+        .where(eq(semanticEmbedding.managedMessageId, messageId));
+      expect(after).toHaveLength(before.length);
+    });
+
+    test("mail eligibility and searchable source changes physically erase prepared chunks", async () => {
+      const gmailId = await saveGmail({
+        content: "The supplier confirmed delivery.",
+      });
+      for (const [index, label] of ["DRAFT", "SPAM", "TRASH"].entries()) {
+        await indexSemanticSources({
+          kind: "mail",
+          mailboxId: mailboxIds.primary,
+          userId: actor,
+        });
+        const prepared = await db
+          .select()
+          .from(semanticEmbedding)
+          .where(
+            and(
+              eq(semanticEmbedding.gmailMailboxId, mailboxIds.primary),
+              eq(semanticEmbedding.gmailMessageId, gmailId)
+            )
+          );
+        expect(prepared.length).toBeGreaterThan(0);
+        await writeGmailCapturedMessageMetadata({
+          labelIds: [label],
+          mailboxId: mailboxIds.primary,
+          messageId: gmailId,
+          providerRevision: String(index * 2 + 2),
+        });
+        await expect(
+          db
+            .select()
+            .from(semanticEmbedding)
+            .where(
+              and(
+                eq(semanticEmbedding.gmailMailboxId, mailboxIds.primary),
+                eq(semanticEmbedding.gmailMessageId, gmailId)
+              )
+            )
+        ).resolves.toHaveLength(0);
+        const result = await searchSemanticHistory({
+          kind: "mail",
+          mailboxId: mailboxIds.primary,
+          query: "supplier delivery",
+          userId: actor,
+        });
+        expect(result.items).toHaveLength(0);
+        await writeGmailCapturedMessageMetadata({
+          labelIds: ["INBOX"],
+          mailboxId: mailboxIds.primary,
+          messageId: gmailId,
+          providerRevision: String(index * 2 + 3),
+        });
+      }
+      const managedId = await saveManaged({
+        content: "The supplier confirmed delivery.",
+      });
+      for (const mailboxState of ["draft", "spam", "trash"] as const) {
+        await indexSemanticSources({
+          kind: "mail",
+          mailboxId: mailboxIds.shared,
+          userId: actor,
+        });
+        const prepared = await db
+          .select()
+          .from(semanticEmbedding)
+          .where(eq(semanticEmbedding.managedMessageId, managedId));
+        expect(prepared.length).toBeGreaterThan(0);
+        await db
+          .update(managedMailMessage)
+          .set({ mailboxState })
+          .where(eq(managedMailMessage.id, managedId));
+        await expect(
+          db
+            .select()
+            .from(semanticEmbedding)
+            .where(eq(semanticEmbedding.managedMessageId, managedId))
+        ).resolves.toHaveLength(0);
+        const result = await searchSemanticHistory({
+          kind: "mail",
+          mailboxId: mailboxIds.shared,
+          query: "supplier delivery",
+          userId: actor,
+        });
+        expect(result.items).toHaveLength(0);
+        await db
+          .update(managedMailMessage)
+          .set({ mailboxState: "active" })
+          .where(eq(managedMailMessage.id, managedId));
+      }
+      for (const [provider, messageId, mailboxId] of [
+        ["gmail", gmailId, mailboxIds.primary],
+        ["managed", managedId, mailboxIds.shared],
+      ] as const) {
+        await indexSemanticSources({ kind: "mail", mailboxId, userId: actor });
+        if (provider === "gmail") {
+          await db
+            .update(gmailCapturedMessage)
+            .set({
+              snapshot: sql`jsonb_set(${gmailCapturedMessage.snapshot}, '{bodyText}', ${JSON.stringify("A changed delivery plan.")}::jsonb)`,
+            })
+            .where(
+              and(
+                eq(gmailCapturedMessage.mailboxId, mailboxId),
+                eq(gmailCapturedMessage.messageId, messageId)
+              )
+            );
+        } else {
+          await db
+            .update(managedMailMessage)
+            .set({ bodyText: "A changed delivery plan." })
+            .where(eq(managedMailMessage.id, messageId));
+        }
+        await expect(
+          db
+            .select()
+            .from(semanticEmbedding)
+            .where(
+              provider === "gmail"
+                ? and(
+                    eq(semanticEmbedding.gmailMailboxId, mailboxId),
+                    eq(semanticEmbedding.gmailMessageId, messageId)
+                  )
+                : eq(semanticEmbedding.managedMessageId, messageId)
+            )
+        ).resolves.toHaveLength(0);
+      }
+    });
+
+    test("canonical and raw mail content changes invalidate their existing chunks", async () => {
+      for (const change of [
+        {
+          snapshot: sql`jsonb_set(${gmailCapturedMessage.snapshot}, '{headers}', ${JSON.stringify([{ name: "Subject", value: "A changed subject" }])}::jsonb)`,
+        },
+        {
+          analysis: sql`jsonb_set(${gmailCapturedMessage.analysis}, '{subject}', ${JSON.stringify("A changed canonical subject")}::jsonb)`,
+        },
+        {
+          snapshot: sql`jsonb_set(${gmailCapturedMessage.snapshot}, '{bodyHtml}', ${JSON.stringify("<p>A changed HTML message.</p>")}::jsonb)`,
+        },
+        {
+          analysis: sql`jsonb_set(${gmailCapturedMessage.analysis}, '{htmlText}', ${JSON.stringify("A changed canonical message.")}::jsonb)`,
+        },
+        { mailboxId: mailboxIds.secondary },
+      ]) {
+        const messageId = await saveGmail({
+          bodyHtml: "<p>The supplier confirmed delivery.</p>",
+          bodyText: null,
+          content: "",
+        });
+        await indexSemanticSources({
+          kind: "mail",
+          mailboxId: mailboxIds.primary,
+          userId: actor,
+        });
+        const prepared = await db
+          .select()
+          .from(semanticEmbedding)
+          .where(
+            and(
+              eq(semanticEmbedding.gmailMailboxId, mailboxIds.primary),
+              eq(semanticEmbedding.gmailMessageId, messageId)
+            )
+          );
+        expect(prepared.length).toBeGreaterThan(0);
+        await db
+          .update(gmailCapturedMessage)
+          .set(change)
+          .where(
+            and(
+              eq(gmailCapturedMessage.mailboxId, mailboxIds.primary),
+              eq(gmailCapturedMessage.messageId, messageId)
+            )
+          );
+        await expect(
+          db
+            .select()
+            .from(semanticEmbedding)
+            .where(
+              and(
+                eq(semanticEmbedding.gmailMailboxId, mailboxIds.primary),
+                eq(semanticEmbedding.gmailMessageId, messageId)
+              )
+            )
+        ).resolves.toHaveLength(0);
+      }
+      for (const change of [
+        { subject: "A changed subject" },
+        { bodyHtml: "<p>A changed HTML message.</p>" },
+        {
+          analysis: sql`jsonb_set(${managedMailMessage.analysis}, '{htmlText}', ${JSON.stringify("A changed canonical message.")}::jsonb)`,
+        },
+        { id: crypto.randomUUID() },
+      ]) {
+        const messageId = await saveManaged({
+          bodyHtml: "<p>The supplier confirmed delivery.</p>",
+          bodyText: null,
+          content: "",
+        });
+        await indexSemanticSources({
+          kind: "mail",
+          mailboxId: mailboxIds.shared,
+          userId: actor,
+        });
+        const prepared = await db
+          .select()
+          .from(semanticEmbedding)
+          .where(eq(semanticEmbedding.managedMessageId, messageId));
+        expect(prepared.length).toBeGreaterThan(0);
+        await db
+          .update(managedMailMessage)
+          .set(change)
+          .where(eq(managedMailMessage.id, messageId));
+        await expect(
+          db
+            .select()
+            .from(semanticEmbedding)
+            .where(eq(semanticEmbedding.managedMessageId, messageId))
+        ).resolves.toHaveLength(0);
+      }
     });
 
     test("mail results retain message dates when older content is captured or updated today", async () => {
