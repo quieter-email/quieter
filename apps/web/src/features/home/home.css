@@ -371,7 +371,6 @@
   flex-direction: column;
   gap: 24px;
   padding-top: 24px;
-  border-top: 1px solid var(--border);
 }
 .home-plan h3 {
   font-size: var(--text-body-lg);
