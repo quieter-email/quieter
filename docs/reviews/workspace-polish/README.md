@@ -157,4 +157,4 @@ Snippets and Organize mailbox are destinations with active sidebar rows and no X
 
 See [validation](validation.md) and the [decision trail](decisions.tsv). The additive `20261107111600_boring_magik` migration was applied to the allowlisted development database only. Production needs that migration before this release deploys. Real Gmail sending, reconciliation, and public tracking-image loads still need a dedicated test mailbox. No production migration or deployment occurred.
 
-The gallery uses native GitHub attachments. The final tree contains no screenshot binaries; earlier commits are preserved. All 81 hosted images returned image content successfully.
+The gallery uses native GitHub attachments. This review folder contains no screenshot binaries; earlier commits are preserved. All 81 hosted images returned image content successfully.

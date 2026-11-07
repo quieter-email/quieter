@@ -76,6 +76,12 @@ Manual navigation restored Unread plus a label filter, a selected message/thread
 
 ## Screenshot publishing
 
-The local GitHub CLI was too old for native attachments. A task-local official 2.103.3 release was downloaded and checked against its release digest. Native `gh pr edit --attach` uploaded all 81 screenshots in two batches. The published body was inspected between batches so no successful upload was repeated. Every hosted URL returned HTTP 200 and image content with a normal GET. GitHub's signed image redirects reject HEAD requests, so HEAD was not used as evidence of a broken image. The final tree removes screenshot binaries after verifying their local byte-for-byte backups and hosted links. Earlier commits remain unchanged.
+The local GitHub CLI was too old for native attachments. A task-local official 2.103.3 release was downloaded and checked against its release digest. Native `gh pr edit --attach` uploaded all 81 screenshots in two batches. The published body was inspected between batches so no successful upload was repeated. Every hosted URL returned HTTP 200 and image content with a normal GET. GitHub's signed image redirects reject HEAD requests, so HEAD was not used as evidence of a broken image. This review folder removes its screenshot binaries after verifying their local byte-for-byte backups and hosted links. Earlier commits remain unchanged.
 
 The task preview process tree and task browser sessions were stopped after verification. Other task processes were preserved.
+
+## Final main synchronization
+
+Main's chat activity update was merged while preserving inline-compose activity in its new domain renderer. Manual reply, reply-all, and forward samples classified as completed draft actions.
+
+The later memory/history-search update was also merged cleanly. Focused lint and type checks passed for the overlapping workspace, memory-list, and schema files. `vp run db:check` passed migration graph, schema drift, and safety checks. The installed Drizzle version supports the two commutative snapshot leaves, so no history repair or duplicate migration was needed. A production web build passed again after this merge, including deployment-boundary checks. No newly merged migration was applied by this chat.
