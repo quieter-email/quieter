@@ -55,3 +55,30 @@ export const WorkspaceHeader = ({
 }: WorkspaceHeaderProps) => (
   <header {...props} className={cn(workspaceHeaderVariants(), className)} />
 );
+
+export const WorkspaceHeaderActionSlot = ({
+  className,
+  size = "icon",
+  visible,
+  ...props
+}: ComponentPropsWithoutRef<"div"> & {
+  size?: "icon" | "icon-sm";
+  visible: boolean;
+}) => (
+  <div
+    {...props}
+    aria-hidden={!visible}
+    className={cn(
+      // oxlint-disable-next-line shadcn/no-arbitrary-values -- The slot animates its layout width, surrounding gap offset, and visibility together.
+      "flex shrink-0 items-center self-stretch overflow-hidden transition-[width,margin-inline-start,opacity] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-out) motion-reduce:transition-none",
+      {
+        "pointer-events-none w-0 opacity-0": !visible,
+        "w-7 opacity-100": visible && size === "icon-sm",
+        "w-8 opacity-100": visible && size === "icon",
+      },
+      className
+    )}
+    data-visible={visible}
+    inert={!visible}
+  />
+);
