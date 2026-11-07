@@ -907,7 +907,9 @@ const MailboxWorkspaceContentInner = ({
                   onSelectView={onSelectView}
                   reconnectingMailboxId={reconnectingMailboxId}
                   searchQuery={searchQuery}
-                  selectedMailbox={activeMailbox}
+                  selectedMailbox={
+                    selectedView === "rules" ? null : activeMailbox
+                  }
                   isSnippetMailbox={isSnippetMailbox}
                   selectedMailboxId={selectedMailboxId}
                   selectedMailboxProvider={selectedMailboxProvider}
