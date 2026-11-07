@@ -18,9 +18,8 @@ export const SelectionIndicator = ({
       className={cn(
         "pointer-events-none absolute inset-0 -z-10 rounded-[inherit] [corner-shape:inherit]",
         {
-          "bg-detail shadow-sm": variant === "default",
           "bg-primary": variant === "primary",
-          "bg-secondary shadow-sm": variant === "secondary",
+          "bg-selection shadow-sm": variant !== "primary",
         }
       )}
       initial={false}

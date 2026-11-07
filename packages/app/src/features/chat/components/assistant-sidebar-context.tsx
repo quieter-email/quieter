@@ -11,7 +11,6 @@ export const AssistantSidebarContext = createContext<{
   onOpen: (trigger: HTMLButtonElement) => void;
   open: boolean;
   panelId: string;
-  showNavigationTrigger: boolean;
 } | null>(null);
 
 export const AssistantSidebarTrigger = ({

@@ -59,7 +59,7 @@ export const BillingProductCard = ({
           return "Current plan";
         }
         if (canChoose) {
-          return "Choose";
+          return currentProduct === null ? "Choose plan" : "Change plan";
         }
         return "Manage billing first";
       })()}

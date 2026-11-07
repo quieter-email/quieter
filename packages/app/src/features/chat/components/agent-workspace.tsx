@@ -1,4 +1,7 @@
-import type { navigateCalendarInputSchema } from "@quieter/ai/chat-tools";
+import type {
+  navigateCalendarInputSchema,
+  openInlineComposeInputSchema,
+} from "@quieter/ai/chat-tools";
 import { createForegroundControl } from "@quieter/app/features/chat/domain/foreground-control";
 import { AgentWorkspaceContext } from "@quieter/app/features/chat/domain/workspace-context";
 import type { ComposeFormValues } from "@quieter/app/features/compose/domain/compose-form";
@@ -8,6 +11,7 @@ import {
 } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { useMailboxRouteSearch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
+import type { MailboxSearchPatch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import type { CalendarWorkspace } from "@quieter/calendar";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
@@ -18,6 +22,14 @@ export type CalendarBridge = {
   navigate: (
     input: z.infer<typeof navigateCalendarInputSchema>
   ) => Promise<void>;
+};
+
+export type InlineComposeBridge = {
+  mailboxId: string;
+  threadId: string;
+  open: (
+    input: z.infer<typeof openInlineComposeInputSchema>
+  ) => Pick<ComposeDraftState, "localId" | "draftId" | "draftAnchor">;
 };
 
 type ComposeBridge = {
@@ -65,8 +77,10 @@ const createWorkspaceBridge = (mailboxId: string) => {
   };
   let compose: ComposeBridge | null = null;
   let calendar: CalendarBridge | null = null;
+  let inlineCompose: InlineComposeBridge | null = null;
   let onComposeReady: (() => void) | undefined;
   let onCalendarReady: (() => void) | undefined;
+  let onInlineComposeReady: (() => void) | undefined;
   return {
     activate() {
       disposed = false;
@@ -77,8 +91,10 @@ const createWorkspaceBridge = (mailboxId: string) => {
       foregroundControl.cancel();
       compose = null;
       calendar = null;
+      inlineCompose = null;
       onComposeReady?.();
       onCalendarReady?.();
+      onInlineComposeReady?.();
     },
     getCalendar: () => (disposed ? null : calendar),
     getCompose: () => (disposed ? null : compose),
@@ -98,6 +114,18 @@ const createWorkspaceBridge = (mailboxId: string) => {
       return () => {
         if (compose === bridge) {
           compose = null;
+        }
+      };
+    },
+    registerInlineCompose(registered: InlineComposeBridge) {
+      if (registered.mailboxId !== mailboxId) {
+        throw new Error("The conversation belongs to another mailbox.");
+      }
+      inlineCompose = registered;
+      onInlineComposeReady?.();
+      return () => {
+        if (inlineCompose === registered) {
+          inlineCompose = null;
         }
       };
     },
@@ -128,7 +156,11 @@ const createWorkspaceBridge = (mailboxId: string) => {
         window.clearTimeout(timeout);
       }
     },
-    async waitForCompose(draftId: string, generation: number) {
+    async waitForCompose(
+      draftId: string,
+      generation: number,
+      expected?: Pick<ComposeDraftState, "draftId" | "draftAnchor">
+    ) {
       const pending =
         Promise.withResolvers<ReturnType<ComposeBridge["read"]>>();
       const check = () => {
@@ -137,7 +169,17 @@ const createWorkspaceBridge = (mailboxId: string) => {
           return;
         }
         const mounted = compose?.read();
-        if (mounted?.draftId === draftId) {
+        const expectedAnchor = expected?.draftAnchor;
+        const mountedAnchor = mounted?.draftAnchor;
+        const matchesRecoveredDraft =
+          expectedAnchor !== undefined &&
+          expectedAnchor !== null &&
+          mountedAnchor?.sourceMessageId === expectedAnchor.sourceMessageId &&
+          mountedAnchor.sourceThreadId === expectedAnchor.sourceThreadId &&
+          mountedAnchor.seededBy === expectedAnchor.seededBy &&
+          (expected?.draftId === undefined ||
+            mounted?.providerDraftId === expected.draftId);
+        if (mounted && (mounted.draftId === draftId || matchesRecoveredDraft)) {
           pending.resolve(mounted);
         }
       };
@@ -157,12 +199,39 @@ const createWorkspaceBridge = (mailboxId: string) => {
         window.clearTimeout(timeout);
       }
     },
+    async waitForInlineCompose(threadId: string, generation: number) {
+      const pending = Promise.withResolvers<InlineComposeBridge>();
+      const check = () => {
+        if (!control.isCurrent(generation)) {
+          pending.reject(new Error("The request was stopped."));
+        } else if (inlineCompose?.threadId === threadId) {
+          pending.resolve(inlineCompose);
+        }
+      };
+      onInlineComposeReady = check;
+      const subscription = control.state.subscribe(check);
+      const timeout = window.setTimeout(() => {
+        pending.reject(
+          new Error("The conversation could not be opened. Try again.")
+        );
+      }, 20_000);
+      check();
+      try {
+        return await pending.promise;
+      } finally {
+        if (onInlineComposeReady === check) {
+          onInlineComposeReady = undefined;
+        }
+        subscription.unsubscribe();
+        window.clearTimeout(timeout);
+      }
+    },
   };
 };
 
 export type WorkspaceBridge = Omit<
   ReturnType<typeof createWorkspaceBridge>,
-  "activate" | "dispose"
+  "activate" | "dispose" | "waitForInlineCompose"
 > & {
   read: () => {
     calendar?: CalendarWorkspace;
@@ -217,6 +286,10 @@ export type WorkspaceBridge = Omit<
       subject?: string;
       bodyText?: string;
     },
+    generation: number
+  ) => Promise<{ draftId: string; draftRevision: number }>;
+  openInlineCompose: (
+    input: z.infer<typeof openInlineComposeInputSchema>,
     generation: number
   ) => Promise<{ draftId: string; draftRevision: number }>;
 };
@@ -280,6 +353,7 @@ export const AgentWorkspaceProvider = ({
           view !== undefined &&
           ![
             "inbox",
+            "important",
             "unread",
             "archive",
             "spam",
@@ -295,11 +369,30 @@ export const AgentWorkspaceProvider = ({
         if (current.current.route.workspace === "calendar") {
           assistantNavigation.current = { generation, workspace: "mail" };
         }
-        await current.current.route.setMailboxSearch({
-          ...(view === undefined
-            ? {}
-            : { view: view === "labels" ? "labels" : "inbox" }),
-          ...(view === "inbox" ||
+        const opensMailContent =
+          input.messageId !== undefined ||
+          input.threadId !== undefined ||
+          input.query !== undefined;
+        const revealsMailContent =
+          opensMailContent &&
+          (current.current.route.isComposeMailbox ||
+            current.current.route.isSnippetMailbox ||
+            current.current.route.view === "labels" ||
+            current.current.route.view === "rules");
+        let mailbox: MailboxSearchPatch["mailbox"] =
+          revealsMailContent || view === "labels" ? "inbox" : undefined;
+        let destinationView: MailboxSearchPatch["view"];
+        if (view !== undefined) {
+          destinationView = view === "labels" ? "labels" : "inbox";
+        } else if (revealsMailContent) {
+          destinationView =
+            current.current.route.view === "all-inboxes"
+              ? "all-inboxes"
+              : "inbox";
+        }
+        if (
+          view === "inbox" ||
+          view === "important" ||
           view === "unread" ||
           view === "archive" ||
           view === "spam" ||
@@ -307,11 +400,17 @@ export const AgentWorkspaceProvider = ({
           view === "trash" ||
           view === "drafts" ||
           view === "snippets"
-            ? { mailbox: view }
-            : {}),
+        ) {
+          mailbox = view;
+        }
+        await current.current.route.setMailboxSearch({
+          mailbox,
           messageId: input.messageId ?? (view === undefined ? undefined : null),
-          query: input.query ?? (view === undefined ? undefined : null),
+          query:
+            input.query ??
+            (view === undefined && !opensMailContent ? undefined : null),
           threadId: input.threadId ?? (view === undefined ? undefined : null),
+          view: destinationView,
           workspace: null,
         });
       },
@@ -386,6 +485,53 @@ export const AgentWorkspaceProvider = ({
           draftRevision: mounted.draftRevision,
         };
       },
+      async openInlineCompose(input, generation) {
+        if (
+          activeMailboxId.current !== mailboxId ||
+          !bridge.control.isCurrent(generation)
+        ) {
+          throw new Error("The request was stopped.");
+        }
+        if (bridge.getCompose() || current.current.route.isComposeMailbox) {
+          throw new Error(
+            "A draft is already open. Read and edit that draft, or let the user close it first."
+          );
+        }
+        await workspace.navigate(
+          {
+            messageId: input.messageId,
+            threadId: input.threadId,
+            view:
+              current.current.route.view === "all-inboxes"
+                ? undefined
+                : "inbox",
+          },
+          generation
+        );
+        const inline = await bridge.waitForInlineCompose(
+          input.threadId,
+          generation
+        );
+        if (
+          activeMailboxId.current !== mailboxId ||
+          !bridge.control.isCurrent(generation)
+        ) {
+          throw new Error("The request was stopped.");
+        }
+        if (bridge.getCompose()) {
+          throw new Error("A draft is already open. Read it before editing.");
+        }
+        const draft = inline.open(input);
+        const mounted = await bridge.waitForCompose(
+          draft.localId,
+          generation,
+          draft
+        );
+        return {
+          draftId: mounted.draftId,
+          draftRevision: mounted.draftRevision,
+        };
+      },
       read() {
         if (activeMailboxId.current !== mailboxId) {
           throw new Error("The request was stopped.");
@@ -408,13 +554,14 @@ export const AgentWorkspaceProvider = ({
           };
         }
         const draft = bridge.getCompose()?.read();
+        const { view: selectedView } = selected;
         let view: string = selected.activeMailbox;
         if (selected.isComposeMailbox) {
           view = "compose";
         } else if (selected.isSnippetMailbox) {
           view = "snippets";
-        } else if (selected.view === "labels") {
-          view = "labels";
+        } else if (selectedView === "labels" || selectedView === "rules") {
+          view = selectedView;
         }
         return {
           generation: bridge.control.state.get().generation,

@@ -4,6 +4,13 @@ import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { MessageDeliverySection } from "@quieter/app/features/message-delivery/components/message-delivery-section";
 import type { MessageListItem } from "@quieter/app/lib/mail";
 import { getMessageInspectorOptions } from "@quieter/app/lib/mail/message-inspector-query";
+import {
+  Accordion,
+  AccordionHeader,
+  AccordionItem,
+  AccordionPanel,
+  AccordionTrigger,
+} from "@quieter/ui/accordion";
 import { Button } from "@quieter/ui/button";
 import {
   Dialog,
@@ -48,7 +55,7 @@ export const MessageInspectorPanel = ({
 
   if (isInspectorPending) {
     inspectorBody = (
-      <div className="flex items-center gap-2 text-body text-muted-fg">
+      <div className="flex items-center gap-2 text-body-sm text-muted-fg">
         <Icon aria-hidden animation="spin" icon={Loading03Icon} />
         <span>Loading message details…</span>
       </div>
@@ -62,75 +69,120 @@ export const MessageInspectorPanel = ({
   } else if (inspector !== undefined) {
     inspectorBody = (
       <>
-        <section className="space-y-2">
-          <h3 className="text-body font-medium text-fg">Summary</h3>
-          {[
-            { label: "Reference", value: inspector.messageHeaderId },
-            { label: "Subject", value: inspector.subject },
-            { label: "Date", value: inspector.date },
-            { label: "Snippet", value: inspector.snippet },
-          ].flatMap((row) =>
-            (row.value?.trim() ?? "") === ""
-              ? []
-              : [
-                  <p className="text-body text-fg" key={row.label}>
-                    <span className="font-medium text-fg">{row.label}: </span>
-                    <span className="wrap-break-word">{row.value}</span>
-                  </p>,
-                ]
-          )}
+        <section className="space-y-3">
+          <Text as="h3" size="sm" weight="medium">
+            Message
+          </Text>
+          <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-body-sm">
+            {[
+              { label: "From", value: inspector.from },
+              { label: "To", value: inspector.to },
+              { label: "Cc", value: inspector.cc },
+              { label: "Bcc", value: inspector.bcc },
+              { label: "Reply-to", value: inspector.replyTo },
+              { label: "Date", value: inspector.date },
+            ].map((row) =>
+              (row.value?.trim() ?? "") === "" ? null : (
+                <div className="contents" key={`${row.label}-${row.value}`}>
+                  <dt className="text-muted-fg">{row.label}</dt>
+                  <dd className="min-w-0 wrap-break-word text-fg">
+                    {row.value}
+                  </dd>
+                </div>
+              )
+            )}
+          </dl>
         </section>
 
-        <section className="space-y-2">
-          <h3 className="text-body font-medium text-fg">Message headers</h3>
-          {inspector.headers.map((header) => (
-            <p
-              className="text-body text-fg"
-              key={`${inspector.messageHeaderId}-${header.name}-${header.value}`}
-            >
-              <span className="font-medium text-fg">{header.name}: </span>
-              <span className="wrap-break-word">{header.value}</span>
-            </p>
-          ))}
-        </section>
+        <Accordion>
+          <AccordionItem value="technical-details">
+            <AccordionHeader>
+              <AccordionTrigger>Technical details</AccordionTrigger>
+            </AccordionHeader>
+            <AccordionPanel>
+              <div className="space-y-4">
+                <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-body-sm">
+                  {[
+                    { label: "Reference", value: inspector.messageHeaderId },
+                    { label: "Subject", value: inspector.subject },
+                    { label: "Snippet", value: inspector.snippet },
+                  ].map((row) =>
+                    (row.value?.trim() ?? "") === "" ? null : (
+                      <div className="contents" key={row.label}>
+                        <dt className="text-muted-fg">{row.label}</dt>
+                        <dd className="min-w-0 wrap-break-word text-fg">
+                          {row.value}
+                        </dd>
+                      </div>
+                    )
+                  )}
+                </dl>
+                <section className="space-y-2">
+                  <Text as="h3" size="sm" weight="medium">
+                    Message headers
+                  </Text>
+                  {inspector.headers.map((header) => (
+                    <p
+                      className="text-body-sm text-fg"
+                      key={`${inspector.messageHeaderId}-${header.name}-${header.value}`}
+                    >
+                      <span className="font-medium text-fg">
+                        {header.name}:{" "}
+                      </span>
+                      <span className="wrap-break-word">{header.value}</span>
+                    </p>
+                  ))}
+                </section>
 
-        {(inspector.rawText?.trim() ?? "") !== "" && (
-          <section className="space-y-2">
-            <h3 className="text-body font-medium text-fg">Original message</h3>
-            <pre className="overflow-x-auto text-body whitespace-pre-wrap text-fg">
-              {inspector.rawText}
-            </pre>
-          </section>
-        )}
+                {(inspector.rawText?.trim() ?? "") !== "" && (
+                  <section className="space-y-2">
+                    <h3 className="text-body-sm font-medium text-fg">
+                      Original message
+                    </h3>
+                    <pre className="overflow-x-auto text-body-sm whitespace-pre-wrap text-fg">
+                      {inspector.rawText}
+                    </pre>
+                  </section>
+                )}
 
-        {(inspector.raw?.trim() ?? "") !== "" && (
-          <section className="space-y-2">
-            <h3 className="text-body font-medium text-fg">Gmail record</h3>
-            <pre className="overflow-x-auto text-body break-all whitespace-pre-wrap text-fg">
-              {inspector.raw}
-            </pre>
-          </section>
-        )}
+                {(inspector.raw?.trim() ?? "") !== "" && (
+                  <section className="space-y-2">
+                    <h3 className="text-body-sm font-medium text-fg">
+                      Source record
+                    </h3>
+                    <pre className="overflow-x-auto text-body-sm break-all whitespace-pre-wrap text-fg">
+                      {inspector.raw}
+                    </pre>
+                  </section>
+                )}
 
-        {payloadText !== "" && (
-          <section className="space-y-2">
-            <h3 className="text-body font-medium text-fg">Message structure</h3>
-            <pre className="overflow-x-auto text-body whitespace-pre-wrap text-fg">
-              {payloadText}
-            </pre>
-          </section>
-        )}
+                {payloadText !== "" && (
+                  <section className="space-y-2">
+                    <h3 className="text-body-sm font-medium text-fg">
+                      Message structure
+                    </h3>
+                    <pre className="overflow-x-auto text-body-sm whitespace-pre-wrap text-fg">
+                      {payloadText}
+                    </pre>
+                  </section>
+                )}
+              </div>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
       </>
     );
   }
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="w-[min(92vw,56rem)]">
+      <DialogContent className="w-[min(92vw,36rem)]">
         <DialogHeader>
-          <DialogTitle>Full details</DialogTitle>
+          <DialogTitle>Message details</DialogTitle>
           <DialogDescription>
-            Complete information available for this message.
+            {inspector?.subject ||
+              message.subject ||
+              "Message activity and delivery details."}
           </DialogDescription>
         </DialogHeader>
 

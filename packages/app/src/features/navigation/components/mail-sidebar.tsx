@@ -4,24 +4,19 @@ import {
   Cancel01Icon,
   Calendar03Icon,
   Edit01Icon,
-  LayoutRightIcon,
   NoteEditIcon,
+  Sorting05Icon,
 } from "@hugeicons/core-free-icons";
-import { AssistantSidebarContext } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import {
   loadComposeWorkspace,
   loadSnippetWorkspace,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
 import type { MailboxWorkspaceView } from "@quieter/app/features/mailbox/domain/mailbox-workspace-view";
-import { MailboxOrganizer } from "@quieter/app/features/navigation/components/mailbox-organizer";
 import { MailboxSwitcherDropdown } from "@quieter/app/features/navigation/components/mailbox-switcher";
 import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/components/mailbox-switcher";
 import { SidebarLabelNav } from "@quieter/app/features/navigation/components/sidebar-label-nav";
 import { SidebarMailboxNav } from "@quieter/app/features/navigation/components/sidebar-mailbox-nav";
-import {
-  SidebarMailboxNavItem,
-  SidebarNavItem,
-} from "@quieter/app/features/navigation/components/sidebar-nav-item";
+import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
@@ -29,7 +24,7 @@ import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { SidebarFooterLinks } from "./sidebar-footer-links";
 import { UnifiedSidebarLabelNav } from "./unified-sidebar-label-nav";
@@ -60,6 +55,7 @@ type MailSidebarProps = {
   selectedMailboxId: string | null;
   selectedMailboxProvider: "api" | "gmail" | "managed" | null;
   selectedMailbox: MailboxCategory | null;
+  selectedView?: MailboxWorkspaceView;
   isSnippetMailbox: boolean;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
   onReconnectMailbox: (mailbox: { emailAddress: string; id: string }) => void;
@@ -102,6 +98,7 @@ const SidebarInboxSection = ({
   selectedMailbox,
   selectedMailboxId,
   selectedMailboxProvider,
+  selectedView,
 }: Pick<
   SidebarContentProps,
   | "animateEntrance"
@@ -119,6 +116,7 @@ const SidebarInboxSection = ({
   | "selectedMailbox"
   | "selectedMailboxId"
   | "selectedMailboxProvider"
+  | "selectedView"
 >) => {
   const selectedMailboxGrantRole = groups
     .flatMap((group) => group.mailboxes)
@@ -208,48 +206,68 @@ const SidebarInboxSection = ({
         {embedded !== true && selectedMailboxId !== null ? (
           <SidebarEntrance
             animateEntrance={animateEntrance}
-            className="w-full"
+            className="mt-4 w-full"
             index={10}
           >
-            <SidebarMailboxNavItem
-              active={isSnippetMailbox}
-              aria-current={isSnippetMailbox ? "page" : undefined}
-              // oxlint-disable shadcn/no-restyle -- The sidebar row uses its existing animated active styling.
-              className="justify-start gap-3 px-3 text-left"
-              // oxlint-enable shadcn/no-restyle
-              mailboxSearch={{
-                mailbox: "snippets",
-                mailboxId: selectedMailboxId,
-                messageId: null,
-                threadId: null,
-                view: "inbox",
-                workspace: null,
-              }}
-              onClick={onRequestClose}
-              onFocus={() => void loadSnippetWorkspace()}
-              onMouseEnter={() => void loadSnippetWorkspace()}
-              onPointerDown={() => void loadSnippetWorkspace()}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              <Icon tone="default" icon={NoteEditIcon} />
-              Snippets
-            </SidebarMailboxNavItem>
+            <nav aria-label="Mail tools" className="flex flex-col">
+              <p className="mb-1 px-2 text-caption font-medium text-muted-fg">
+                Tools
+              </p>
+              <SidebarMailboxNavItem
+                active={isSnippetMailbox}
+                aria-current={isSnippetMailbox ? "page" : undefined}
+                // oxlint-disable shadcn/no-restyle -- The sidebar row uses its existing animated active styling.
+                className="justify-start gap-3 px-3 text-left"
+                // oxlint-enable shadcn/no-restyle
+                mailboxSearch={{
+                  mailbox: "snippets",
+                  mailboxId: selectedMailboxId,
+                  messageId: null,
+                  threadId: null,
+                  view: "inbox",
+                  workspace: null,
+                }}
+                onClick={onRequestClose}
+                onFocus={() => void loadSnippetWorkspace()}
+                onMouseEnter={() => void loadSnippetWorkspace()}
+                onPointerDown={() => void loadSnippetWorkspace()}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                <Icon tone="default" icon={NoteEditIcon} />
+                Snippets
+              </SidebarMailboxNavItem>
+              {!allInboxesActive && selectedMailboxProvider === "managed" ? (
+                <SidebarMailboxNavItem
+                  active={selectedView === "rules"}
+                  aria-current={selectedView === "rules" ? "page" : undefined}
+                  // oxlint-disable-next-line shadcn/no-restyle -- Matches the existing sidebar navigation row.
+                  className="justify-start gap-3 px-3 text-left"
+                  mailboxSearch={{
+                    mailbox: "inbox",
+                    mailboxId: selectedMailboxId,
+                    messageId: null,
+                    threadId: null,
+                    view: "rules",
+                    workspace: null,
+                  }}
+                  onClick={onRequestClose}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Icon aria-hidden tone="default" icon={Sorting05Icon} />
+                  Organize mailbox
+                </SidebarMailboxNavItem>
+              ) : null}
+            </nav>
           </SidebarEntrance>
-        ) : null}
-        {!allInboxesActive &&
-        selectedMailboxProvider === "managed" &&
-        selectedMailboxId ? (
-          <MailboxOrganizer
-            canManage={selectedMailboxGrantRole === "manager"}
-            mailboxId={selectedMailboxId}
-            searchQuery={searchQuery}
-          />
         ) : null}
         {allInboxesActive && (
           <UnifiedSidebarLabelNav
             groups={groups}
+            selectedMailbox={selectedMailbox}
             mailboxId={selectedMailboxId}
             onRequestClose={onRequestClose}
             userId={userId}
@@ -269,6 +287,7 @@ const SidebarInboxSection = ({
             embedded={embedded === true}
             onRequestClose={onRequestClose}
             onManageLabels={onManageLabels}
+            selectedMailbox={selectedMailbox}
             onSearch={(query) => {
               onSearch(query);
               onRequestClose?.();
@@ -294,38 +313,6 @@ const SidebarFooter = ({
   </SidebarEntrance>
 );
 
-const SidebarAssistantAction = ({
-  onRequestClose,
-}: {
-  onRequestClose?: () => void;
-}) => {
-  const assistant = use(AssistantSidebarContext);
-  if (
-    !assistant ||
-    assistant.open ||
-    (!assistant.showNavigationTrigger && !onRequestClose)
-  ) {
-    return null;
-  }
-  return (
-    <div className="px-2">
-      <SidebarNavItem
-        aria-controls={assistant.panelId}
-        aria-expanded={assistant.open}
-        data-assistant-launcher
-        onClick={(event) => {
-          assistant.onOpen(event.currentTarget);
-          onRequestClose?.();
-        }}
-        type="button"
-      >
-        <Icon aria-hidden icon={LayoutRightIcon} />
-        Open assistant
-      </SidebarNavItem>
-    </div>
-  );
-};
-
 const SidebarContent = ({
   allInboxesActive,
   userId,
@@ -347,6 +334,7 @@ const SidebarContent = ({
   selectedMailboxId,
   selectedMailbox,
   selectedMailboxProvider,
+  selectedView,
   switcherSide = "right",
 }: SidebarContentProps) => {
   const handleSelectMailboxId = (mailboxId: string) => {
@@ -419,16 +407,14 @@ const SidebarContent = ({
         selectedMailbox={selectedMailbox}
         selectedMailboxId={selectedMailboxId}
         selectedMailboxProvider={selectedMailboxProvider}
+        selectedView={selectedView}
       />
 
       {!embedded && (
-        <>
-          <SidebarAssistantAction onRequestClose={onRequestClose} />
-          <SidebarFooter
-            animateEntrance={animateEntrance}
-            onRequestClose={onRequestClose}
-          />
-        </>
+        <SidebarFooter
+          animateEntrance={animateEntrance}
+          onRequestClose={onRequestClose}
+        />
       )}
     </div>
   );

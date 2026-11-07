@@ -5,6 +5,7 @@ import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
 import type { CalendarView } from "@quieter/calendar";
 import { useNavigate } from "@tanstack/react-router";
+import { useLayoutEffect, useRef } from "react";
 
 const MAILBOX_ROUTE_CATEGORIES = [
   "inbox",
@@ -148,6 +149,47 @@ export const useMailboxSearchActions = () => {
       search: (previous) =>
         applyMailboxSearchPatch(mailboxSearchSchema.parse(previous), patch),
       to: ".",
+    });
+  };
+};
+
+export const useMailSubviewNavigation = () => {
+  const search = inboxRouteApi.useSearch();
+  const setMailboxSearch = useMailboxSearchActions();
+  const lastDestinationSearchRef = useRef<MailboxRouteState | null>(null);
+  const isDestination =
+    search.workspace === "calendar" ||
+    (search.mailbox !== "compose" && search.view !== "labels");
+
+  useLayoutEffect(() => {
+    if (isDestination) {
+      lastDestinationSearchRef.current = search;
+    }
+  }, [isDestination, search]);
+
+  return () => {
+    const previous = lastDestinationSearchRef.current;
+    void setMailboxSearch({
+      ...previous,
+      chatId:
+        previous && previous.mailboxId !== search.mailboxId
+          ? (previous.chatId ?? null)
+          : undefined,
+      compose: null,
+      mailbox:
+        previous?.mailbox ??
+        (search.mailbox === "compose" || search.mailbox === "snippets"
+          ? "inbox"
+          : search.mailbox),
+      mailboxId: previous
+        ? (previous.mailboxId ?? null)
+        : (search.mailboxId ?? null),
+      mailto: null,
+      messageId: previous?.messageId ?? null,
+      query: previous?.query ?? search.query,
+      threadId: previous?.threadId ?? null,
+      view: previous?.view ?? "inbox",
+      workspace: previous?.workspace ?? null,
     });
   };
 };

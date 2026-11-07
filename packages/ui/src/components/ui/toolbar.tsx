@@ -31,7 +31,8 @@ export const Toolbar = ({
         }),
         "inline-flex items-center border border-transparent shadow-sm squircle",
         {
-          "m-0.5 min-h-12 gap-1.5 border-0 p-2 shadow-none": chrome === "inset",
+          "m-0.5 min-h-12 gap-1.5 border-0 px-3.5 py-2 shadow-none":
+            chrome === "inset",
           "min-h-10 gap-1 p-1": chrome === "default" && size === "default",
           "min-h-8 gap-0.5 rounded-lg p-0.5":
             chrome === "default" && size === "compact",
@@ -64,7 +65,7 @@ const toolbarButtonVariants = cva(
       },
       {
         chrome: "inset",
-        className: "bg-control-hover hover:bg-control-active",
+        className: "bg-accent hover:bg-control-active",
         variant: "selected",
       },
     ],
@@ -84,7 +85,7 @@ const toolbarButtonVariants = cva(
         default: "",
         primary:
           "bg-primary text-primary-fg shadow-sm hover:bg-primary-hover hover:text-primary-fg active:bg-primary-active active:text-primary-fg",
-        selected: "bg-detail text-fg shadow-sm",
+        selected: "bg-selection text-fg shadow-sm",
       },
     },
   }

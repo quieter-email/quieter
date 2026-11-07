@@ -9,6 +9,7 @@ import { ORPCError } from "@orpc/client";
 import {
   applyEmailPreferences,
   getCalendarLinks,
+  isPlainTextEmailHtml,
   linkifyText,
   normalizeMailContentId,
   preprocessEmailHtml,
@@ -432,7 +433,7 @@ const PlainTextMessageBody = ({ text }: { text: string }) => {
   return (
     <>
       <CalendarLinkActions links={calendarLinks} />
-      <p className="bg-transparent p-4 text-body-lg/7 wrap-break-word whitespace-pre-wrap text-fg">
+      <p className="bg-transparent p-4 font-sans text-body wrap-break-word whitespace-pre-wrap text-fg">
         {segments.map((segment) =>
           segment.kind === "link" ? (
             <a
@@ -461,12 +462,19 @@ export const MessageBody = ({
 }: MessageBodyProps) => {
   const fallbackText = message.bodyText?.trim();
   const htmlBody = message.bodyHtml?.trim();
+  const isTextOnly = useMemo(
+    () =>
+      !!htmlBody &&
+      !!fallbackText &&
+      isPlainTextEmailHtml({ html: htmlBody, text: fallbackText }),
+    [fallbackText, htmlBody]
+  );
 
   if (!htmlBody && !fallbackText && isLoading === true) {
     return <MessageBodyLoadingSkeleton />;
   }
 
-  if (!htmlBody) {
+  if (!htmlBody || isTextOnly) {
     return <PlainTextMessageBody text={fallbackText || "No content."} />;
   }
 

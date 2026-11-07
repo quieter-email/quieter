@@ -19,6 +19,8 @@ import {
   getWorkspaceOutputSchema,
   openComposeInputSchema,
   openComposeOutputSchema,
+  openInlineComposeInputSchema,
+  openInlineComposeOutputSchema,
   requiresChatToolApproval,
   saveComposeDraftInputSchema,
   saveComposeDraftOutputSchema,
@@ -225,6 +227,13 @@ const operations: Record<
     failed: "Couldn't open a draft",
     pending: "Preparing your draft…",
     subject: "Draft",
+  },
+  open_inline_compose: {
+    category: "draft",
+    complete: "Prepared your conversation draft",
+    failed: "Couldn't open a conversation draft",
+    pending: "Preparing your conversation draft…",
+    subject: "Conversation draft",
   },
   read_gmail_attachment: {
     category: "mail",
@@ -585,6 +594,24 @@ const describeActivity = (
         const { event } = result.data;
         activity.context = event
           ? [event.title, formatActivityTime(event.time)]
+          : [];
+      }
+      break;
+    }
+    case "open_inline_compose": {
+      const result = openInlineComposeOutputSchema.safeParse(part.output);
+      const command = openInlineComposeInputSchema.safeParse(part.input);
+      if (result.success) {
+        activity.phase = "complete";
+        activity.title = operation.complete;
+        activity.context = command.success
+          ? [
+              {
+                forward: "Forward",
+                reply: "Reply",
+                "reply-all": "Reply all",
+              }[command.data.action],
+            ]
           : [];
       }
       break;

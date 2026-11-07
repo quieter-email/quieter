@@ -30,6 +30,7 @@ import {
   CollapsibleTrigger,
 } from "@quieter/ui/collapsible";
 import { Pill } from "@quieter/ui/pill";
+import { Surface } from "@quieter/ui/surface";
 import { Text } from "@quieter/ui/text";
 import { useQuery } from "@tanstack/react-query";
 
@@ -206,7 +207,11 @@ export const MessageDeliverySection = ({
 
   return (
     <section className="space-y-3">
-      <h3 className="text-body font-medium text-fg">Delivery</h3>
+      <Text as="h3" size="sm" weight="medium">
+        {delivery?.deliveryTrackingAvailable === false
+          ? "Activity"
+          : "Delivery"}
+      </Text>
 
       {isDeliveryPending ? (
         <p className="text-body text-muted-fg">Loading delivery status…</p>
@@ -220,16 +225,57 @@ export const MessageDeliverySection = ({
 
       {delivery === undefined ? null : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
-            <Pill tone={DELIVERY_PILL_TONES[getDeliveryStatusTone(status)]}>
-              {summaryLabel}
-            </Pill>
-            <span className="text-body text-muted-fg">
-              {getDeliveryStatusDescription(status)}
-            </span>
-          </div>
+          {delivery.deliveryTrackingAvailable ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Pill tone={DELIVERY_PILL_TONES[getDeliveryStatusTone(status)]}>
+                {summaryLabel}
+              </Pill>
+              <span className="text-body text-muted-fg">
+                {getDeliveryStatusDescription(status)}
+              </span>
+            </div>
+          ) : null}
 
-          <DeliveryRecipients delivery={delivery} />
+          {delivery.deliveryTrackingAvailable ? (
+            <DeliveryRecipients delivery={delivery} />
+          ) : null}
+          {delivery.openTracking === null ? null : (
+            <Surface variant="detail">
+              <div className="space-y-3">
+                <Text size="sm" weight="medium">
+                  {delivery.openTracking.reportedLoadCount === 0
+                    ? "No image loads reported"
+                    : `${delivery.openTracking.reportedLoadCount.toLocaleString()} image ${delivery.openTracking.reportedLoadCount === 1 ? "load" : "loads"} reported`}
+                </Text>
+                <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-caption">
+                  {delivery.openTracking.firstLoadedAt === null ? null : (
+                    <div className="contents">
+                      <dt className="text-muted-fg">First load</dt>
+                      <dd className="text-fg">
+                        {eventTimeFormatter.format(
+                          delivery.openTracking.firstLoadedAt
+                        )}
+                      </dd>
+                    </div>
+                  )}
+                  {delivery.openTracking.lastLoadedAt === null ? null : (
+                    <div className="contents">
+                      <dt className="text-muted-fg">Latest load</dt>
+                      <dd className="text-fg">
+                        {eventTimeFormatter.format(
+                          delivery.openTracking.lastLoadedAt
+                        )}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+                <Text size="caption" tone="muted">
+                  Approximate activity. Loads may be automated or blocked and do
+                  not confirm reading or identify a reader.
+                </Text>
+              </div>
+            </Surface>
+          )}
         </>
       )}
     </section>

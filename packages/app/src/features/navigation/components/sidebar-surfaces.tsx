@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 const sidebarSurfaceVariants = cva("squircle rounded-md", {
   variants: {
     surface: {
-      active: "pointer-events-none absolute inset-0 z-0 bg-detail",
+      active: "pointer-events-none absolute inset-0 z-0 bg-selection",
     },
   },
 });

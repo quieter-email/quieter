@@ -2,6 +2,7 @@
 
 import {
   Add01Icon,
+  ArrowDown01Icon,
   ArrowLeft01Icon,
   Cancel01Icon,
   MoreHorizontalIcon,
@@ -22,6 +23,12 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Pill } from "@quieter/ui/pill";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@quieter/ui/popover";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { Link, useLocation } from "@tanstack/react-router";
 import { useState } from "react";
@@ -285,163 +292,198 @@ const CalendarSidebarContent = ({
           }}
           selected={selectedDate}
         />
-        <div className="space-y-6 px-3">
-          {accounts.map((account) => (
-            <section className="space-y-2" key={account.id}>
-              <div className="flex min-w-0 items-center gap-1">
-                <h2
-                  className="min-w-0 flex-1 truncate text-caption font-medium text-muted-fg"
-                  title={account.email ?? account.name}
-                >
-                  {account.email ?? account.name}
-                </h2>
-                {preview ? null : (
-                  <DropdownMenu>
-                    <IconButtonTooltip label={`Manage ${account.name}`}>
-                      <DropdownMenuTrigger
-                        appearance="icon-transparent"
-                        aria-label={`Manage ${account.name}`}
+        <div className="space-y-2 px-2">
+          <Popover>
+            <PopoverTrigger
+              render={<Button fullWidth size="sm" variant="secondary" />}
+            >
+              Calendars
+              <span className="min-w-0 flex-1 text-right text-caption text-muted-fg">
+                {
+                  calendars.filter(
+                    (calendar) =>
+                      !hiddenCalendarKeys.includes(getCalendarRefKey(calendar))
+                  ).length
+                }{" "}
+                shown
+              </span>
+              <Icon aria-hidden icon={ArrowDown01Icon} />
+            </PopoverTrigger>
+            <PopoverContent align="start" size="sm">
+              <PopoverTitle>Calendars</PopoverTitle>
+              <div className="mt-3 max-h-96 space-y-4 overflow-y-auto">
+                {accounts.map((account) => (
+                  <section className="space-y-2" key={account.id}>
+                    <div className="flex min-w-0 items-center gap-1">
+                      <h2
+                        className="min-w-0 flex-1 truncate text-caption font-medium text-muted-fg"
+                        title={account.email ?? account.name}
                       >
-                        <Icon aria-hidden icon={MoreHorizontalIcon} />
-                      </DropdownMenuTrigger>
-                    </IconButtonTooltip>
-                    <DropdownMenuContent align="start" size="compact">
-                      <DropdownMenuItem
-                        disabled={pendingConnection !== null}
-                        onSelect={() => {
-                          onConnect({ accountId: account.id, kind: "account" });
-                        }}
-                      >
-                        Reconnect account
-                      </DropdownMenuItem>
-                      <CalendarMailboxSettingsItem
-                        account={account}
-                        close={close}
-                      />
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                        {account.email ?? account.name}
+                      </h2>
+                      {preview ? null : (
+                        <DropdownMenu>
+                          <IconButtonTooltip label={`Manage ${account.name}`}>
+                            <DropdownMenuTrigger
+                              appearance="icon-transparent"
+                              aria-label={`Manage ${account.name}`}
+                            >
+                              <Icon aria-hidden icon={MoreHorizontalIcon} />
+                            </DropdownMenuTrigger>
+                          </IconButtonTooltip>
+                          <DropdownMenuContent align="start" size="compact">
+                            <DropdownMenuItem
+                              disabled={pendingConnection !== null}
+                              onSelect={() => {
+                                onConnect({
+                                  accountId: account.id,
+                                  kind: "account",
+                                });
+                              }}
+                            >
+                              Reconnect account
+                            </DropdownMenuItem>
+                            <CalendarMailboxSettingsItem
+                              account={account}
+                              close={close}
+                            />
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                    {account.status === "connected" ? null : (
+                      <div>
+                        <Button
+                          disabled={
+                            !(account.provider === "microsoft_calendar"
+                              ? canConnectMicrosoft
+                              : isConfigured) || pendingConnection !== null
+                          }
+                          onClick={() => {
+                            onConnect({
+                              accountId: account.id,
+                              kind: "account",
+                            });
+                          }}
+                          pending={
+                            pendingConnection?.kind === "account" &&
+                            pendingConnection.accountId === account.id
+                          }
+                          size="compact"
+                          title={
+                            account.provider === "microsoft_calendar"
+                              ? "Reconnect this Outlook account to refresh its calendars."
+                              : accountConnectionActions[account.status]
+                                  .description
+                          }
+                          variant="secondary"
+                        >
+                          {account.provider === "microsoft_calendar"
+                            ? "Reconnect"
+                            : accountConnectionActions[account.status].label}
+                        </Button>
+                      </div>
+                    )}
+                    {calendars
+                      .filter(
+                        (calendar) => calendar.connectionId === account.id
+                      )
+                      .map((calendar) => (
+                        <CalendarColorControl
+                          calendar={calendar}
+                          canUpdate={account.provider !== "microsoft_calendar"}
+                          disabled={
+                            account.status !== "connected" ||
+                            pendingCalendarColorKey !== null
+                          }
+                          key={getCalendarRefKey(calendar)}
+                          onUpdateCalendarColor={onUpdateCalendarColor}
+                          pending={
+                            pendingCalendarColorKey ===
+                            getCalendarRefKey(calendar)
+                          }
+                          presets={colorPresets}
+                        >
+                          <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-body-sm">
+                            <Checkbox
+                              aria-label={`Show ${calendar.name}`}
+                              checked={
+                                !hiddenCalendarKeys.includes(
+                                  getCalendarRefKey(calendar)
+                                )
+                              }
+                              onCheckedChange={() => {
+                                onToggleCalendar(calendar);
+                              }}
+                            >
+                              <CheckboxIndicator />
+                            </Checkbox>
+                            <span
+                              className="min-w-0 flex-1 truncate"
+                              title={calendar.name}
+                            >
+                              {calendar.name}
+                            </span>
+                            {calendar.access === "read" ||
+                            calendar.access === "busy" ? (
+                              <Pill size="xs" tone="neutral">
+                                Read only
+                              </Pill>
+                            ) : null}
+                          </label>
+                        </CalendarColorControl>
+                      ))}
+                  </section>
+                ))}
               </div>
-              {account.status === "connected" ? null : (
-                <div className="space-y-2">
-                  <p className="text-caption text-muted-fg">
-                    {account.provider === "microsoft_calendar"
-                      ? "Reconnect this Outlook account to refresh its calendars."
-                      : accountConnectionActions[account.status].description}
-                  </p>
+            </PopoverContent>
+          </Popover>
+          {preview ? null : (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
                   <Button
-                    disabled={
-                      !(account.provider === "microsoft_calendar"
-                        ? canConnectMicrosoft
-                        : isConfigured) || pendingConnection !== null
-                    }
+                    disabled={pendingConnection !== null}
                     fullWidth
-                    onClick={() => {
-                      onConnect({ accountId: account.id, kind: "account" });
-                    }}
                     pending={
-                      pendingConnection?.kind === "account" &&
-                      pendingConnection.accountId === account.id
+                      pendingConnection?.kind === "add" &&
+                      pendingConnection.source === "sidebar"
                     }
                     size="sm"
-                  >
-                    {account.provider === "microsoft_calendar"
-                      ? "Reconnect"
-                      : accountConnectionActions[account.status].label}
-                  </Button>
-                </div>
-              )}
-              {calendars
-                .filter((calendar) => calendar.connectionId === account.id)
-                .map((calendar) => (
-                  <CalendarColorControl
-                    calendar={calendar}
-                    canUpdate={account.provider !== "microsoft_calendar"}
-                    disabled={
-                      account.status !== "connected" ||
-                      pendingCalendarColorKey !== null
-                    }
-                    key={getCalendarRefKey(calendar)}
-                    onUpdateCalendarColor={onUpdateCalendarColor}
-                    pending={
-                      pendingCalendarColorKey === getCalendarRefKey(calendar)
-                    }
-                    presets={colorPresets}
-                  >
-                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-body-sm">
-                      <Checkbox
-                        aria-label={`Show ${calendar.name}`}
-                        checked={
-                          !hiddenCalendarKeys.includes(
-                            getCalendarRefKey(calendar)
-                          )
-                        }
-                        onCheckedChange={() => {
-                          onToggleCalendar(calendar);
-                        }}
-                      >
-                        <CheckboxIndicator />
-                      </Checkbox>
-                      <span
-                        className="min-w-0 flex-1 truncate"
-                        title={calendar.name}
-                      >
-                        {calendar.name}
-                      </span>
-                      {calendar.access === "read" ||
-                      calendar.access === "busy" ? (
-                        <Pill size="xs" tone="neutral">
-                          Read only
-                        </Pill>
-                      ) : null}
-                    </label>
-                  </CalendarColorControl>
-                ))}
-            </section>
-          ))}
-          {preview ? null : (
-            <Button
-              disabled={!isConfigured || pendingConnection !== null}
-              fullWidth
-              onClick={() => {
-                onConnect({
-                  kind: "add",
-                  provider: "google_calendar",
-                  source: "sidebar",
-                });
-              }}
-              pending={
-                pendingConnection?.kind === "add" &&
-                pendingConnection.source === "sidebar" &&
-                pendingConnection.provider === "google_calendar"
-              }
-              variant="ghost"
-            >
-              <Icon aria-hidden icon={Add01Icon} />
-              Add Gmail mailbox
-            </Button>
-          )}
-          {preview ? null : (
-            <Button
-              disabled={!canConnectMicrosoft || pendingConnection !== null}
-              fullWidth
-              onClick={() => {
-                onConnect({
-                  kind: "add",
-                  provider: "microsoft_calendar",
-                  source: "sidebar",
-                });
-              }}
-              pending={
-                pendingConnection?.kind === "add" &&
-                pendingConnection.source === "sidebar" &&
-                pendingConnection.provider === "microsoft_calendar"
-              }
-              variant="ghost"
-            >
-              <Icon aria-hidden icon={Add01Icon} />
-              Add Outlook Calendar
-            </Button>
+                    variant="ghost"
+                  />
+                }
+              >
+                <Icon aria-hidden icon={Add01Icon} />
+                Add account
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" size="compact">
+                <DropdownMenuItem
+                  disabled={!isConfigured || pendingConnection !== null}
+                  onSelect={() => {
+                    onConnect({
+                      kind: "add",
+                      provider: "google_calendar",
+                      source: "sidebar",
+                    });
+                  }}
+                >
+                  Gmail mailbox
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canConnectMicrosoft || pendingConnection !== null}
+                  onSelect={() => {
+                    onConnect({
+                      kind: "add",
+                      provider: "microsoft_calendar",
+                      source: "sidebar",
+                    });
+                  }}
+                >
+                  Outlook Calendar
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </div>

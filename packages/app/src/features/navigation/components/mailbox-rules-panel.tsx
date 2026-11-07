@@ -28,12 +28,18 @@ import type { RouterOutputs } from "@quieter/orpc";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
-import { FullPageDialogDescription } from "@quieter/ui/full-page-dialog";
+import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import {
+  SettingsCard,
+  SettingsSectionLayout,
+  settingsSurfaceVariants,
+} from "@quieter/ui/settings-layout";
 import { Surface } from "@quieter/ui/surface";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
+import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
 import { Toggle, ToggleGroup } from "@quieter/ui/toggle";
 
@@ -121,9 +127,11 @@ const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
   } = props;
 
   return (
-    <Surface>
+    <div>
       <div className="space-y-2">
-        <p className="text-caption font-medium text-muted-fg">Then</p>
+        <Text size="sm" weight="medium">
+          Then
+        </Text>
         <ToggleGroup
           aria-label="Rule action"
           className="grid grid-cols-2 sm:grid-cols-4"
@@ -242,7 +250,7 @@ const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
           Stop evaluating later rules after this match
         </label>
       </div>
-    </Surface>
+    </div>
   );
 };
 
@@ -255,9 +263,17 @@ const ManagedRuleLabelsEditor = (props: MailboxOrganizerContentProps) => {
   } = props;
 
   return ruleActionKind === "set-labels" ? (
-    <Surface>
+    <div>
       <div className="space-y-2">
-        <p className="text-caption font-medium text-muted-fg">Labels</p>
+        <Text size="sm" weight="medium">
+          Apply these labels
+        </Text>
+        {labelsData !== undefined &&
+          !labelsData.some((label) => label.type === "user") && (
+            <Text size="sm" tone="muted">
+              Create a label in Labels to use this action.
+            </Text>
+          )}
         {(labelsData ?? []).flatMap((label) =>
           label.type === "user"
             ? [
@@ -286,7 +302,7 @@ const ManagedRuleLabelsEditor = (props: MailboxOrganizerContentProps) => {
             : []
         )}
       </div>
-    </Surface>
+    </div>
   ) : null;
 };
 
@@ -360,6 +376,7 @@ const ManagedRulePreviewActions = (props: MailboxOrganizerContentProps) => {
 
 const ManagedRuleBuilder = (props: MailboxOrganizerContentProps) => {
   const {
+    editingRuleId,
     ruleMatchMode,
     ruleName,
     ruleQuery,
@@ -369,50 +386,66 @@ const ManagedRuleBuilder = (props: MailboxOrganizerContentProps) => {
   } = props;
 
   return (
-    <div className="mt-5 space-y-3">
-      <Input
-        aria-label="Rule name"
-        onChange={(event) => {
-          setRuleName(event.target.value);
-        }}
-        placeholder="Rule name"
-        size="sm"
-        value={ruleName}
-      />
-      <Input
-        aria-label="Rule search"
-        onChange={(event) => {
-          setRuleQueryDraft(event.target.value);
-        }}
-        placeholder="from:vendor@example.com subject:invoice"
-        size="sm"
-        value={ruleQuery}
-      />
-      <ToggleGroup
-        aria-label="Rule match"
-        className="grid grid-cols-2"
-        size="compact"
-        variant="subtle"
-        value={[ruleMatchMode]}
-      >
-        {(["all", "any"] as const).map((mode) => (
-          <Toggle
-            size="sm"
-            key={mode}
-            onClick={() => {
-              setRuleMatchMode(mode);
-            }}
-            type="button"
-            value={mode}
+    <SettingsSectionLayout
+      title={editingRuleId ? "Edit rule" : "New rule"}
+      description="Use the same filters as mail search to choose what this rule matches."
+    >
+      <SettingsCard>
+        <div className={settingsSurfaceVariants({ variant: "body" })}>
+          <Field>
+            <FieldLabel>Rule name</FieldLabel>
+            <Input
+              aria-label="Rule name"
+              onChange={(event) => {
+                setRuleName(event.target.value);
+              }}
+              placeholder="Rule name"
+              size="sm"
+              value={ruleName}
+            />
+          </Field>
+          <Field>
+            <FieldLabel>When mail matches</FieldLabel>
+            <Input
+              aria-label="Rule search"
+              onChange={(event) => {
+                setRuleQueryDraft(event.target.value);
+              }}
+              placeholder="from:vendor@example.com subject:invoice"
+              size="sm"
+              value={ruleQuery}
+            />
+            <FieldDescription>
+              For example, from:vendor@example.com subject:invoice
+            </FieldDescription>
+          </Field>
+          <ToggleGroup
+            aria-label="Rule match"
+            className="grid grid-cols-2"
+            size="compact"
+            variant="subtle"
+            value={[ruleMatchMode]}
           >
-            Match {mode}
-          </Toggle>
-        ))}
-      </ToggleGroup>
-      <ManagedRuleActionEditor {...props} />
-      <ManagedRuleLabelsEditor {...props} />
-      <ManagedRulePreviewActions {...props} />
-    </div>
+            {(["all", "any"] as const).map((mode) => (
+              <Toggle
+                size="sm"
+                key={mode}
+                onClick={() => {
+                  setRuleMatchMode(mode);
+                }}
+                type="button"
+                value={mode}
+              >
+                Match {mode}
+              </Toggle>
+            ))}
+          </ToggleGroup>
+          <ManagedRuleActionEditor {...props} />
+          <ManagedRuleLabelsEditor {...props} />
+          <ManagedRulePreviewActions {...props} />
+        </div>
+      </SettingsCard>
+    </SettingsSectionLayout>
   );
 };
 
@@ -458,66 +491,36 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
   } = props;
 
   return (
-    <div className="flex items-center gap-3 py-2" key={rule.id}>
-      <Icon aria-hidden tone="muted" icon={Tag01Icon} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-body">{rule.name}</p>
-        <p className="text-caption text-muted-fg">
-          {rule.enabled ? "Enabled" : "Disabled"} /{" "}
-          {getRuleActionLabel(
-            getManagedMailboxRuleActions({
-              actions: rule.actions,
-              labelIds: rule.labelIds,
-            })
-          )}
-        </p>
-        {rule.disabledReason ? (
-          <p className="text-caption text-muted-fg">{rule.disabledReason}</p>
-        ) : null}
-      </div>
-      <Switch
-        aria-label={`${rule.enabled ? "Disable" : "Enable"} ${rule.name}`}
-        checked={rule.enabled}
-        disabled={rule.disabledReason !== null}
-        className="shrink-0"
-        size="sm"
-        onCheckedChange={(enabled) => {
-          const conditionGroups = getRuleConditionGroups(rule.conditionGroups);
-          if (
-            hasInvalidRuleConditionGroups(rule.conditionGroups, conditionGroups)
-          ) {
-            toast.error("This rule has invalid condition groups.");
-            return;
-          }
-          void runOptimisticRuleUpdate(
-            rule.id,
-            enabled,
-            async () =>
-              await updateRuleMutation.mutateAsync({
-                definition: {
-                  actions: getManagedMailboxRuleActions({
-                    actions: rule.actions,
-                    labelIds: rule.labelIds,
-                  }),
-                  conditionGroups,
-                  enabled,
-                  labelIds: rule.labelIds,
-                  matchMode: rule.matchMode,
-                  name: rule.name,
-                  search: structuredMailSearchSchema.parse(rule.search),
-                },
-                mailboxId,
-                ruleId: rule.id,
+    <div
+      className={settingsSurfaceVariants({ variant: "insetStackedRow" })}
+      key={rule.id}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <Icon aria-hidden tone="muted" icon={Tag01Icon} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-body">{rule.name}</p>
+          <p className="text-caption text-muted-fg">
+            {rule.enabled ? "Enabled" : "Disabled"} /{" "}
+            {getRuleActionLabel(
+              getManagedMailboxRuleActions({
+                actions: rule.actions,
+                labelIds: rule.labelIds,
               })
-          );
-        }}
-      >
-        <SwitchThumb />
-      </Switch>
-      <IconButtonTooltip label={`Edit ${rule.name}`}>
-        <Button
-          aria-label={`Edit ${rule.name}`}
-          onClick={() => {
+            )}
+          </p>
+          {rule.disabledReason ? (
+            <p className="text-caption text-muted-fg">{rule.disabledReason}</p>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-1">
+        <Switch
+          aria-label={`${rule.enabled ? "Disable" : "Enable"} ${rule.name}`}
+          checked={rule.enabled}
+          disabled={rule.disabledReason !== null}
+          className="shrink-0"
+          size="sm"
+          onCheckedChange={(enabled) => {
             const conditionGroups = getRuleConditionGroups(
               rule.conditionGroups
             );
@@ -530,169 +533,249 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
               toast.error("This rule has invalid condition groups.");
               return;
             }
-            setEditingRuleId(rule.id);
-            setRuleName(rule.name);
-            setRuleQueryDraft(
-              serializeStructuredSearchState(
-                structuredMailSearchSchema.parse(rule.search)
-              )
-            );
-            setRuleMatchMode(rule.matchMode);
-            ruleConditionGroupsRef.current = conditionGroups ?? null;
-            const actions = getManagedMailboxRuleActions({
-              actions: rule.actions,
-              labelIds: rule.labelIds,
-            });
-            const action = getPrimaryRuleAction(actions);
-            ruleActionsRef.current = actions;
-            ruleEnabledRef.current = rule.enabled;
-            setSelectedRuleLabelIds(
-              action?.kind === "set-labels" ? action.addIds : []
-            );
-            setRuleForwardIncludesAttachments(false);
-            if (action?.kind === "set-read") {
-              setRuleActionKind("set-read");
-              setRuleReadState(action.read);
-            } else if (action?.kind === "move") {
-              setRuleActionKind("move");
-              setRuleMoveDestination(action.destination);
-            } else if (action?.kind === "forward") {
-              setRuleActionKind("forward");
-              setRuleForwardRecipients(action.recipients.join(", "));
-              setRuleForwardIncludesAttachments(action.includeAttachments);
-            } else {
-              setRuleActionKind("set-labels");
-            }
-            setRuleStopsProcessing(
-              actions.some((candidate) => candidate.kind === "stop-processing")
-            );
-            setPreview(null);
-          }}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          <Icon aria-hidden icon={Edit01Icon} />
-        </Button>
-      </IconButtonTooltip>
-      <IconButtonTooltip label={`Move ${rule.name} up`}>
-        <Button
-          aria-label={`Move ${rule.name} up`}
-          disabled={index === 0 || pendingReorderRuleId !== null}
-          pending={pendingReorderRuleId === rule.id}
-          onClick={() => {
-            const ruleIds = rules.map((candidate) => candidate.id);
-            [ruleIds[index - 1], ruleIds[index]] = [
-              ruleIds[index],
-              ruleIds[index - 1],
-            ];
-            void runRuleReorder(
+            void runOptimisticRuleUpdate(
               rule.id,
+              enabled,
               async () =>
-                await reorderRulesMutation.mutateAsync({
-                  mailboxId,
-                  ruleIds,
-                }),
-              "Could not reorder rules."
-            );
-          }}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          <Icon aria-hidden icon={ArrowUp01Icon} />
-        </Button>
-      </IconButtonTooltip>
-      <IconButtonTooltip label={`Move ${rule.name} down`}>
-        <Button
-          aria-label={`Move ${rule.name} down`}
-          disabled={index === rules.length - 1 || pendingReorderRuleId !== null}
-          pending={pendingReorderRuleId === rule.id}
-          onClick={() => {
-            const ruleIds = rules.map((candidate) => candidate.id);
-            [ruleIds[index], ruleIds[index + 1]] = [
-              ruleIds[index + 1],
-              ruleIds[index],
-            ];
-            void runRuleReorder(
-              rule.id,
-              async () =>
-                await reorderRulesMutation.mutateAsync({
-                  mailboxId,
-                  ruleIds,
-                }),
-              "Could not reorder rules."
-            );
-          }}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          <Icon aria-hidden icon={ArrowDown01Icon} />
-        </Button>
-      </IconButtonTooltip>
-      <IconButtonTooltip label={`Apply ${rule.name} to existing mail`}>
-        <Button
-          aria-label={`Apply ${rule.name} to existing mail`}
-          disabled={isRowActionPending(rule.id, "backfill")}
-          pending={isRowActionPending(rule.id, "backfill")}
-          pendingLabel="Running…"
-          onClick={() => {
-            void runRuleRowAction(
-              rule.id,
-              "backfill",
-              async () =>
-                await backfillMutation.mutateAsync({
+                await updateRuleMutation.mutateAsync({
+                  definition: {
+                    actions: getManagedMailboxRuleActions({
+                      actions: rule.actions,
+                      labelIds: rule.labelIds,
+                    }),
+                    conditionGroups,
+                    enabled,
+                    labelIds: rule.labelIds,
+                    matchMode: rule.matchMode,
+                    name: rule.name,
+                    search: structuredMailSearchSchema.parse(rule.search),
+                  },
                   mailboxId,
                   ruleId: rule.id,
-                }),
-              "Could not start the historical rule run.",
-              (backfill) => {
-                setActiveBackfillId(backfill.id);
-                toast.success("Historical rule run started.");
+                })
+            );
+          }}
+        >
+          <SwitchThumb />
+        </Switch>
+        <IconButtonTooltip label={`Edit ${rule.name}`}>
+          <Button
+            aria-label={`Edit ${rule.name}`}
+            onClick={() => {
+              const conditionGroups = getRuleConditionGroups(
+                rule.conditionGroups
+              );
+              if (
+                hasInvalidRuleConditionGroups(
+                  rule.conditionGroups,
+                  conditionGroups
+                )
+              ) {
+                toast.error("This rule has invalid condition groups.");
+                return;
               }
-            );
-          }}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          <Icon aria-hidden icon={ArrowRight01Icon} />
-        </Button>
-      </IconButtonTooltip>
-      <IconButtonTooltip label={`Delete ${rule.name}`}>
-        <Button
-          aria-label={`Delete ${rule.name}`}
-          disabled={isRowActionPending(rule.id, "delete")}
-          pending={isRowActionPending(rule.id, "delete")}
-          onClick={() => {
-            void runRuleRowAction(
-              rule.id,
-              "delete",
-              async () =>
-                await deleteRuleMutation.mutateAsync({
-                  mailboxId,
-                  ruleId: rule.id,
-                }),
-              "Could not delete rule."
-            );
-          }}
-          size="icon-sm"
-          type="button"
-          variant="destructive"
-        >
-          <Icon aria-hidden icon={Delete01Icon} />
-        </Button>
-      </IconButtonTooltip>
+              setEditingRuleId(rule.id);
+              setRuleName(rule.name);
+              setRuleQueryDraft(
+                serializeStructuredSearchState(
+                  structuredMailSearchSchema.parse(rule.search)
+                )
+              );
+              setRuleMatchMode(rule.matchMode);
+              ruleConditionGroupsRef.current = conditionGroups ?? null;
+              const actions = getManagedMailboxRuleActions({
+                actions: rule.actions,
+                labelIds: rule.labelIds,
+              });
+              const action = getPrimaryRuleAction(actions);
+              ruleActionsRef.current = actions;
+              ruleEnabledRef.current = rule.enabled;
+              setSelectedRuleLabelIds(
+                action?.kind === "set-labels" ? action.addIds : []
+              );
+              setRuleForwardIncludesAttachments(false);
+              if (action?.kind === "set-read") {
+                setRuleActionKind("set-read");
+                setRuleReadState(action.read);
+              } else if (action?.kind === "move") {
+                setRuleActionKind("move");
+                setRuleMoveDestination(action.destination);
+              } else if (action?.kind === "forward") {
+                setRuleActionKind("forward");
+                setRuleForwardRecipients(action.recipients.join(", "));
+                setRuleForwardIncludesAttachments(action.includeAttachments);
+              } else {
+                setRuleActionKind("set-labels");
+              }
+              setRuleStopsProcessing(
+                actions.some(
+                  (candidate) => candidate.kind === "stop-processing"
+                )
+              );
+              setPreview(null);
+            }}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <Icon aria-hidden icon={Edit01Icon} />
+          </Button>
+        </IconButtonTooltip>
+        <IconButtonTooltip label={`Move ${rule.name} up`}>
+          <Button
+            aria-label={`Move ${rule.name} up`}
+            disabled={index === 0 || pendingReorderRuleId !== null}
+            pending={pendingReorderRuleId === rule.id}
+            onClick={() => {
+              const ruleIds = rules.map((candidate) => candidate.id);
+              [ruleIds[index - 1], ruleIds[index]] = [
+                ruleIds[index],
+                ruleIds[index - 1],
+              ];
+              void runRuleReorder(
+                rule.id,
+                async () =>
+                  await reorderRulesMutation.mutateAsync({
+                    mailboxId,
+                    ruleIds,
+                  }),
+                "Could not reorder rules."
+              );
+            }}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <Icon aria-hidden icon={ArrowUp01Icon} />
+          </Button>
+        </IconButtonTooltip>
+        <IconButtonTooltip label={`Move ${rule.name} down`}>
+          <Button
+            aria-label={`Move ${rule.name} down`}
+            disabled={
+              index === rules.length - 1 || pendingReorderRuleId !== null
+            }
+            pending={pendingReorderRuleId === rule.id}
+            onClick={() => {
+              const ruleIds = rules.map((candidate) => candidate.id);
+              [ruleIds[index], ruleIds[index + 1]] = [
+                ruleIds[index + 1],
+                ruleIds[index],
+              ];
+              void runRuleReorder(
+                rule.id,
+                async () =>
+                  await reorderRulesMutation.mutateAsync({
+                    mailboxId,
+                    ruleIds,
+                  }),
+                "Could not reorder rules."
+              );
+            }}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <Icon aria-hidden icon={ArrowDown01Icon} />
+          </Button>
+        </IconButtonTooltip>
+        <IconButtonTooltip label={`Apply ${rule.name} to existing mail`}>
+          <Button
+            aria-label={`Apply ${rule.name} to existing mail`}
+            disabled={isRowActionPending(rule.id, "backfill")}
+            pending={isRowActionPending(rule.id, "backfill")}
+            pendingLabel="Running…"
+            onClick={() => {
+              void runRuleRowAction(
+                rule.id,
+                "backfill",
+                async () =>
+                  await backfillMutation.mutateAsync({
+                    mailboxId,
+                    ruleId: rule.id,
+                  }),
+                "Could not start the historical rule run.",
+                (backfill) => {
+                  setActiveBackfillId(backfill.id);
+                  toast.success("Historical rule run started.");
+                }
+              );
+            }}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <Icon aria-hidden icon={ArrowRight01Icon} />
+          </Button>
+        </IconButtonTooltip>
+        <IconButtonTooltip label={`Delete ${rule.name}`}>
+          <Button
+            aria-label={`Delete ${rule.name}`}
+            disabled={isRowActionPending(rule.id, "delete")}
+            pending={isRowActionPending(rule.id, "delete")}
+            onClick={() => {
+              void runRuleRowAction(
+                rule.id,
+                "delete",
+                async () =>
+                  await deleteRuleMutation.mutateAsync({
+                    mailboxId,
+                    ruleId: rule.id,
+                  }),
+                "Could not delete rule."
+              );
+            }}
+            size="icon-sm"
+            type="button"
+            variant="destructive"
+          >
+            <Icon aria-hidden icon={Delete01Icon} />
+          </Button>
+        </IconButtonTooltip>
+      </div>
     </div>
   );
 };
 
 const ManagedRulesList = (props: MailboxOrganizerContentProps) => {
-  const { rulesData } = props;
+  const { invalidateRules, rulesData, rulesError, rulesPending } = props;
+
+  if (rulesPending) {
+    return (
+      <Text size="sm" tone="muted">
+        Loading rules…
+      </Text>
+    );
+  }
+
+  if (rulesError && rulesData === undefined) {
+    return (
+      <div className="space-y-3">
+        <Text size="sm" tone="muted">
+          Could not load rules.
+        </Text>
+        <Button
+          onClick={() => void invalidateRules()}
+          size="sm"
+          type="button"
+          variant="secondary"
+        >
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  if (rulesData?.length === 0) {
+    return (
+      <Text size="sm" tone="muted">
+        No rules yet.
+      </Text>
+    );
+  }
 
   return (
-    <div className="mt-5 divide-y divide-border">
+    <SettingsCard>
       {(rulesData ?? []).map((rule, index, rules) => (
         <ManagedRuleRow
           {...props}
@@ -702,7 +785,7 @@ const ManagedRulesList = (props: MailboxOrganizerContentProps) => {
           rules={rules}
         />
       ))}
-    </div>
+    </SettingsCard>
   );
 };
 
@@ -735,7 +818,7 @@ const ManagedRuleBackfill = (props: MailboxOrganizerContentProps) => {
             }}
             size="sm"
             type="button"
-            variant="outline"
+            variant="secondary"
           >
             Cancel
           </Button>
@@ -755,23 +838,23 @@ export const ManagedMailboxRulesPanel = (
   const { canManage } = props;
 
   return (
-    <section>
-      <h2 className="text-body-lg font-medium">Automatic rules</h2>
-      <FullPageDialogDescription className="mt-1">
-        Match new inbound mail with the same filters used by search, then apply
-        a predictable action.
-      </FullPageDialogDescription>
+    <div className="space-y-6">
       {canManage ? (
         <>
-          <ManagedRuleBuilder {...props} />
-          <ManagedRulesList {...props} />
+          <SettingsSectionLayout
+            title="Automatic rules"
+            description="Rules run from top to bottom. Turn a rule off to pause it."
+          >
+            <ManagedRulesList {...props} />
+          </SettingsSectionLayout>
           <ManagedRuleBackfill {...props} />
+          <ManagedRuleBuilder {...props} />
         </>
       ) : (
-        <p className="mt-5 text-body text-muted-fg">
+        <p className="text-body text-muted-fg">
           Mailbox managers configure automatic rules.
         </p>
       )}
-    </section>
+    </div>
   );
 };

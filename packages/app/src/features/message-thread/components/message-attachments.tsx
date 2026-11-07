@@ -15,7 +15,11 @@ import type { IconSvgElement } from "@hugeicons/react";
 import { authClient } from "@quieter/app/lib/auth";
 import { toastError } from "@quieter/app/lib/error-toast";
 import type { MessageAttachment } from "@quieter/app/lib/mail";
-import { downloadAttachmentFromServer } from "@quieter/app/lib/mail/attachments";
+import {
+  clearMessageAttachmentDrag,
+  downloadAttachmentFromServer,
+  startMessageAttachmentDrag,
+} from "@quieter/app/lib/mail/attachments";
 import { getErrorMessage } from "@quieter/app/lib/orpc-errors";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -291,6 +295,15 @@ export const MessageAttachments = ({
                 aria-busy={isDownloadPending}
                 className="max-w-full min-w-0"
                 disabled={isDownloadPending}
+                draggable={!isDownloadPending}
+                onDragEnd={clearMessageAttachmentDrag}
+                onDragStart={(event) => {
+                  startMessageAttachmentDrag(event.dataTransfer, {
+                    attachment,
+                    mailboxId,
+                    messageId: attachment.messageId,
+                  });
+                }}
                 onClick={() => {
                   void handleDownload(attachment);
                 }}

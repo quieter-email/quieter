@@ -166,11 +166,21 @@ export const SettingsBreadcrumbs = () => {
 
   return (
     <Breadcrumbs
-      items={crumbs.map((crumb, index) => ({
-        content:
-          index === crumbs.length - 1 ? (
-            <span aria-current="page">{crumb.label}</span>
-          ) : (
+      items={crumbs.map((crumb, index) => {
+        if (crumb.id === "settings" || index === crumbs.length - 1) {
+          return {
+            content: (
+              <span
+                aria-current={index === crumbs.length - 1 ? "page" : undefined}
+              >
+                {crumb.label}
+              </span>
+            ),
+            id: crumb.id,
+          };
+        }
+        return {
+          content: (
             <Link
               search={(previous) => ({
                 ...previous,
@@ -182,8 +192,9 @@ export const SettingsBreadcrumbs = () => {
               {crumb.label}
             </Link>
           ),
-        id: crumb.id,
-      }))}
+          id: crumb.id,
+        };
+      })}
     />
   );
 };

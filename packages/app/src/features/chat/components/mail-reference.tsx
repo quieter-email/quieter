@@ -52,8 +52,10 @@ export const MailReference = ({
         {
           mailbox: "inbox",
           messageId: reference.messageId,
+          query: null,
           threadId: threadId ?? null,
           view: "inbox",
+          workspace: null,
         },
         { replace: false }
       );

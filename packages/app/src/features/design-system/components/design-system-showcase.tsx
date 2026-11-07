@@ -166,13 +166,18 @@ const showcaseTokens: TokenFieldToken[] = [
 // Literal classes: Tailwind cannot extract an interpolated `bg-${name}`.
 const surfaceTokens = [
   { cls: "bg-canvas", name: "canvas", note: "app background and sidebar" },
-  { cls: "bg-panel", name: "panel", note: "workspace and dialog" },
+  { cls: "bg-panel", name: "panel", note: "workspace" },
   {
     cls: "bg-section",
     name: "section",
     note: "header trays and grouped content",
   },
-  { cls: "bg-detail", name: "detail", note: "controls and selected items" },
+  { cls: "bg-detail", name: "detail", note: "controls and nested content" },
+  {
+    cls: "bg-selection",
+    name: "selection",
+    note: "selected items and options",
+  },
   { cls: "bg-card", name: "card", note: "semantic content surface" },
   { cls: "bg-muted", name: "muted", note: "quiet content surface" },
   { cls: "bg-secondary", name: "secondary", note: "secondary actions" },
@@ -662,6 +667,14 @@ export const DesignSystemShowcase = () => {
               </Surface>
             </Surface>
           </Surface>
+          <Surface variant="selection">
+            <Text size="sm" weight="medium">
+              Selected item
+            </Text>
+            <Text size="sm">
+              Selection stays distinct from its parent surface.
+            </Text>
+          </Surface>
           <WorkspaceSection layout="surface">
             <WorkspaceHeader>
               <div className="flex items-center gap-3">
@@ -1024,6 +1037,14 @@ export const DesignSystemShowcase = () => {
               Small
             </Button>
             <Button type="button">Default</Button>
+            <Button
+              chrome="toolbar"
+              size="field"
+              type="button"
+              variant="secondary"
+            >
+              Field action
+            </Button>
             <Button size="lg" type="button">
               Large
             </Button>

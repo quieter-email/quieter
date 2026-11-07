@@ -11,7 +11,9 @@ import {
   MailReplyAll02Icon,
   SparklesIcon,
 } from "@hugeicons/core-free-icons";
+import type { InlineComposeBridge } from "@quieter/app/features/chat/components/agent-workspace";
 import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
+import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
 import {
   buildComposeDraftFromMessageAction,
   buildComposeDraftFromSavedDraftMessage,
@@ -53,7 +55,14 @@ import { toast } from "@quieter/ui/toast";
 import { WorkspaceHeader } from "@quieter/ui/workspace-section";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domMax, m } from "motion/react";
-import { lazy, Suspense, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 
 const InlineComposeSurface = lazy(
   async () =>
@@ -126,6 +135,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
   const inlineComposerRef = useRef<HTMLDivElement | null>(null);
   const composeRevisionRef = useRef(0);
   const queryClient = useQueryClient();
+  const agentWorkspace = useAgentWorkspace();
   const openInlineCompose = (draft: ComposeDraftState) => {
     if (!draft.draftId && isBodyRefreshPending) {
       return;
@@ -247,6 +257,58 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     onBackToList,
     onComposeDraftRequested: openInlineCompose,
   });
+  const openAssistantCompose = useEffectEvent(
+    (input: Parameters<InlineComposeBridge["open"]>[0]) => {
+      if (inlineDraft) {
+        throw new Error("A draft is already open. Read it before editing.");
+      }
+      if (isBodyRefreshPending || input.threadId !== message.threadId) {
+        throw new Error(
+          "The conversation changed. Open it again before drafting."
+        );
+      }
+      const source = visibleMessages.find(
+        (entry) => entry.id === input.messageId
+      );
+      if (!source || source.draftId) {
+        throw new Error(
+          "This message is not available for a reply or forward."
+        );
+      }
+      const draft = buildComposeDraftFromMessageAction({
+        action: input.action,
+        currentUserEmail,
+        existingDraftMessage:
+          input.action === "forward"
+            ? null
+            : findLinkedDraftForMessage(threadMessages, source),
+        message: source,
+      });
+      openInlineCompose({ ...draft, assistantUnsaved: true });
+      return draft;
+    }
+  );
+  useEffect(() => {
+    if (
+      !agentWorkspace ||
+      agentWorkspace.mailboxId !== mailboxId ||
+      !showInlineCompose ||
+      isBodyRefreshPending
+    ) {
+      return undefined;
+    }
+    return agentWorkspace.registerInlineCompose({
+      mailboxId,
+      open: (input) => openAssistantCompose(input),
+      threadId: message.threadId,
+    });
+  }, [
+    agentWorkspace,
+    isBodyRefreshPending,
+    mailboxId,
+    message.threadId,
+    showInlineCompose,
+  ]);
 
   return (
     <article
@@ -358,7 +420,8 @@ const MessageViewContent = (props: MessageViewContentProps) => {
       <div className="flex min-h-0 flex-1">
         {navigationScope === undefined ? null : (
           <div
-            className="flex w-14 shrink-0 items-center justify-center py-4 pl-4 empty:hidden pointer-coarse:w-16"
+            // oxlint-disable-next-line shadcn/no-arbitrary-values -- Animate the measured rail gutter's layout space and visibility, not unrelated properties.
+            className="flex w-14 shrink-0 items-center justify-center overflow-x-clip py-4 pl-4 transition-[width,padding-left,opacity] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) empty:w-0 empty:pl-0 empty:opacity-0 motion-reduce:transition-none pointer-coarse:w-16 pointer-coarse:empty:w-0"
             ref={(element) => {
               navigationScope.gutterRef.current = element;
             }}
@@ -473,7 +536,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                       >
                         {inlineDraft.assistantUnsaved === true ? (
                           <p className="mb-3 text-caption text-muted-fg">
-                            Suggested reply. Review and edit before sending.
+                            Review and edit before sending.
                           </p>
                         ) : null}
                         <Suspense

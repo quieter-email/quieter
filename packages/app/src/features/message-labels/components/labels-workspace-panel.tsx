@@ -6,6 +6,7 @@ import {
   Edit01Icon,
   MoreVerticalIcon,
 } from "@hugeicons/core-free-icons";
+import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail-subview-header";
 import { AutoLabelEditor } from "@quieter/app/features/message-labels/components/auto-label-editor";
 import { AutoLabelSwitch } from "@quieter/app/features/message-labels/components/auto-label-switch";
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
@@ -89,6 +90,8 @@ type LabelsWorkspacePanelProps = {
   canManage: boolean;
   mailboxId: string | null;
   mailboxProvider: "gmail" | "managed";
+  onClose: () => void;
+  onOpenSidebar: () => void;
 };
 
 type LabelEdit = {
@@ -106,6 +109,8 @@ export const LabelsWorkspacePanel = ({
   canManage,
   mailboxId,
   mailboxProvider,
+  onClose,
+  onOpenSidebar,
 }: LabelsWorkspacePanelProps) => {
   const queryClient = useQueryClient();
   const id = useId();
@@ -649,10 +654,12 @@ export const LabelsWorkspacePanel = ({
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <Text as="h1" className="min-w-0" size="lg" truncate weight="medium">
-            Labels
-          </Text>
+        <MailSubviewHeader
+          className="mb-6"
+          closeAction={{ label: "Close labels", onClick: onClose }}
+          onOpenSidebar={onOpenSidebar}
+          title="Labels"
+        >
           <Button
             aria-haspopup="dialog"
             disabled={
@@ -669,7 +676,7 @@ export const LabelsWorkspacePanel = ({
             <Icon aria-hidden icon={Add01Icon} />
             New label
           </Button>
-        </div>
+        </MailSubviewHeader>
 
         <SettingsCard>
           <SettingsInsetRows>

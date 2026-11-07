@@ -37,14 +37,15 @@
   --canvas: oklch(0.925 0.006 264);
   --panel: oklch(0.993 0.002 264);
   --section: oklch(0.955 0.006 264);
-  --detail: oklch(0.91 0.008 264);
+  --detail: oklch(0.89 0.01 264);
+  --selection: color-mix(in srgb, var(--canvas), var(--fg) 20%);
   --bg: var(--canvas);
   --bg-raised: var(--panel);
   --bg-surface: var(--section);
   --fg: oklch(0.24 0.005 264);
   --control: var(--detail);
-  --control-hover: oklch(0.875 0.01 264);
-  --control-active: oklch(0.84 0.012 264);
+  --control-hover: oklch(0.855 0.012 264);
+  --control-active: oklch(0.79 0.016 264);
   --switch-track: oklch(0.82 0.003 264);
   --switch-thumb: oklch(0.42 0.003 264);
   --card: var(--bg-surface);
@@ -58,8 +59,8 @@
   --secondary-active: var(--control-active);
   --secondary-fg: oklch(0.205 0.002 264);
   --muted: var(--control-hover);
-  --muted-fg: oklch(0.46 0.008 264);
-  --accent: var(--control-hover);
+  --muted-fg: oklch(0.38 0.008 264);
+  --accent: var(--selection);
   --accent-fg: oklch(0.205 0.002 264);
   --destructive: oklch(0.45 0.18 27.33);
   --destructive-fg: oklch(0.985 0.002 264);
@@ -68,23 +69,23 @@
   --warning: oklch(0.48 0.1 70.08);
   --warning-fg: oklch(0.985 0.002 264);
   --q-gray: oklch(0.84 0.014 264);
-  --q-gray-fg: oklch(0.43 0.014 264);
+  --q-gray-fg: oklch(0.36 0.014 264);
   --q-blue: oklch(0.82 0.08 250);
-  --q-blue-fg: oklch(0.43 0.13 250);
+  --q-blue-fg: oklch(0.36 0.13 250);
   --q-cyan: oklch(0.84 0.07 210);
-  --q-cyan-fg: oklch(0.42 0.08 210);
+  --q-cyan-fg: oklch(0.35 0.08 210);
   --q-green: oklch(0.84 0.08 150);
-  --q-green-fg: oklch(0.42 0.1 150);
+  --q-green-fg: oklch(0.35 0.1 150);
   --q-yellow: oklch(0.88 0.09 90);
-  --q-yellow-fg: oklch(0.44 0.08 90);
+  --q-yellow-fg: oklch(0.37 0.08 90);
   --q-orange: oklch(0.84 0.09 55);
-  --q-orange-fg: oklch(0.44 0.12 55);
+  --q-orange-fg: oklch(0.37 0.12 55);
   --q-red: oklch(0.81 0.09 25);
-  --q-red-fg: oklch(0.43 0.16 25);
+  --q-red-fg: oklch(0.36 0.16 25);
   --q-pink: oklch(0.83 0.08 345);
-  --q-pink-fg: oklch(0.43 0.14 345);
+  --q-pink-fg: oklch(0.36 0.14 345);
   --q-purple: oklch(0.82 0.08 300);
-  --q-purple-fg: oklch(0.43 0.14 300);
+  --q-purple-fg: oklch(0.36 0.14 300);
   --border: oklch(0.86 0.004 264 / 0.8);
   --border-strong: oklch(0.65 0.008 264);
   --input: var(--control);
@@ -145,6 +146,7 @@
   --panel: #131315;
   --section: #1b1b1e;
   --detail: #26262a;
+  --selection: var(--detail);
   --bg: var(--canvas);
   --bg-raised: var(--panel);
   --bg-surface: var(--section);
@@ -308,9 +310,12 @@
 }
 
 :root.light[data-color-theme] {
-  --detail: color-mix(in srgb, var(--theme-surface), var(--theme-ink) 8%);
-  --control-hover: color-mix(in srgb, var(--detail), var(--theme-ink) 6%);
-  --control-active: color-mix(in srgb, var(--detail), var(--theme-ink) 12%);
+  --detail: color-mix(in srgb, var(--theme-surface), var(--theme-ink) 10%);
+  --control-hover: color-mix(in srgb, var(--detail), var(--theme-ink) 8%);
+  --control-active: color-mix(in srgb, var(--detail), var(--theme-ink) 18%);
+  --muted: var(--control-hover);
+  --muted-fg: color-mix(in srgb, var(--theme-ink) 90%, var(--theme-base));
+  --accent: var(--selection);
   --popover: var(--panel);
 }
 
@@ -319,6 +324,7 @@
   --color-panel: var(--panel);
   --color-section: var(--section);
   --color-detail: var(--detail);
+  --color-selection: var(--selection);
   --color-brand-bg: var(--brand-bg);
   --color-auth-visual-bg: var(--auth-visual-bg);
   --color-bg: var(--bg);

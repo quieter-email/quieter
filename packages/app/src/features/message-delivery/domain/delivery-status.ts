@@ -39,7 +39,7 @@ const DELIVERY_STATUS_LABELS: Record<
   complained: "Reported as spam",
   delayed: "Delayed",
   delivered: "Delivered",
-  opened: "Opened",
+  opened: "Tracking image loaded",
   queued: "Queued",
   rejected: "Rejected",
   sent: "Sending",
@@ -55,7 +55,7 @@ const DELIVERY_STATUS_DESCRIPTIONS: Record<
   delayed: "Delivery is taking longer than usual. We keep retrying.",
   delivered: "The receiving mail server accepted this message.",
   opened:
-    "The recipient's mail program reported opening this message. Opens are approximate and can be missed or faked by automatic tools.",
+    "A mail client or privacy proxy loaded the tracking image. This does not confirm the message was read.",
   queued: "The message is waiting to be handed to the mail system.",
   rejected: "This message was rejected before it left our system.",
   sent: "Accepted by the sending mail service; delivery is not yet confirmed.",

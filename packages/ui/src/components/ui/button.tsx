@@ -64,6 +64,11 @@ export const buttonVariants = cva(
         variant: "secondary",
       },
       { chrome: "toolbar", className: "rounded-xl" },
+      {
+        className: "aria-pressed:bg-control-active",
+        size: "field",
+        variant: "secondary",
+      },
     ],
     defaultVariants: {
       auxiliaryPress: false,
@@ -88,6 +93,7 @@ export const buttonVariants = cva(
         // Caption-height action, e.g. retry and approval buttons.
         compact: "h-7 px-2 text-caption font-medium [&_svg]:size-3.5",
         default: "h-8 px-3 text-body-sm [&_svg]:size-4",
+        field: "h-10 px-3 text-body-sm [&_svg]:size-4",
         icon: "size-8 p-0 [&_svg]:size-4",
         "icon-lg": "size-9 p-0 [&_svg]:size-4.5",
         "icon-sm": "size-7 p-0 [&_svg]:size-3.5",
@@ -99,14 +105,14 @@ export const buttonVariants = cva(
       variant: {
         // Large selectable card, e.g. the mailbox-type options.
         card: "group h-auto min-h-32 w-full flex-col items-start justify-start rounded-section bg-section p-4 text-left text-fg whitespace-normal hover:bg-control-hover",
-        // Compact toggle chip, e.g. the Cc/Bcc switches. The pressed look
+        // Compact toggle chip. The pressed look
         // follows aria-pressed so callers only pass the state.
-        chip: "h-7 px-1.5 text-caption text-muted-fg active:scale-100 aria-pressed:bg-detail aria-pressed:text-fg",
+        chip: "h-7 px-1.5 text-caption text-muted-fg active:scale-100 aria-pressed:bg-selection aria-pressed:text-fg",
         default: "bg-primary text-primary-fg shadow-sm hover:bg-primary-hover",
         destructive:
           "bg-destructive text-destructive-fg shadow-sm hover:bg-destructive-hover",
         ghost:
-          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg aria-[current=page]:bg-muted aria-[current=page]:text-fg aria-[current=true]:bg-muted aria-[current=true]:text-fg",
+          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg aria-[current=page]:bg-selection aria-[current=page]:text-fg aria-[current=true]:bg-selection aria-[current=true]:text-fg",
         "inline-edit":
           "h-5 min-w-0 shrink justify-start rounded-none border-0 bg-transparent p-0 text-left text-body font-normal text-fg active:scale-100",
         keycap:
@@ -114,7 +120,7 @@ export const buttonVariants = cva(
         // Segmented option, e.g. the rule-builder choices. The selected look
         // follows aria-pressed so callers only pass the state.
         option:
-          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:scale-100 aria-pressed:bg-detail aria-pressed:text-fg aria-pressed:shadow-sm",
+          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg active:scale-100 aria-pressed:bg-selection aria-pressed:text-fg aria-pressed:shadow-sm",
         outline: "border-border bg-control text-fg hover:bg-control-hover",
         // Outline treatment for dark backdrops, e.g. the status screens.
         overlay: "border-fg/20 bg-transparent text-fg hover:bg-fg/10",

@@ -9,6 +9,7 @@ import { buttonFooterClassName, buttonVariants } from "./button";
 import type { ButtonProps } from "./button";
 import {
   overlayDescriptionClassName,
+  overlaySurfaceClassName,
   overlayTitleClassName,
   overlayTriggerClassName,
 } from "./overlay-chrome";
@@ -31,7 +32,7 @@ export const DrawerOverlay = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Overlay>) => (
   <DrawerPrimitive.Overlay
-    className={cn("fixed inset-0 z-50 bg-black/50 backdrop-blur-sm", className)}
+    className={cn("fixed inset-0 z-50 bg-black/50 backdrop-blur-xs", className)}
     {...props}
   />
 );
@@ -61,7 +62,8 @@ export const DrawerContent = ({
     <DrawerOverlay />
     <DrawerPrimitive.Content
       className={cn(
-        "fixed z-50 flex flex-col overflow-hidden rounded-panel border border-transparent bg-panel text-popover-fg shadow-lg",
+        overlaySurfaceClassName,
+        "fixed z-50 flex flex-col overflow-hidden rounded-panel",
         "data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=bottom]:bottom-0 data-[vaul-drawer-direction=bottom]:max-h-[96vh] data-[vaul-drawer-direction=bottom]:rounded-t-panel data-[vaul-drawer-direction=bottom]:border-t",
         "data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:max-h-[96vh] data-[vaul-drawer-direction=top]:rounded-b-panel data-[vaul-drawer-direction=top]:border-b",
         "data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:h-full data-[vaul-drawer-direction=left]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=left]:rounded-r-panel data-[vaul-drawer-direction=left]:border-r",

@@ -9,7 +9,6 @@ import {
   Loading03Icon,
   MailSend02Icon,
 } from "@hugeicons/core-free-icons";
-import { MobileHeader } from "@quieter/app/components/mobile-header";
 import {
   ComposeEditor,
   ComposeEditorBody,
@@ -33,10 +32,12 @@ import {
   clearComposeDraftRuntimeFiles,
   createRecoveredComposeCopy,
   createEmptyComposeDraft,
+  loadComposeRuntimeFile,
   textToComposeBodyHtml,
 } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { findRecoverableComposeDraft } from "@quieter/app/features/compose/domain/draft-recovery";
+import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail-subview-header";
 import {
   appEaseOut,
   appMotionDuration,
@@ -52,6 +53,11 @@ import { authClient } from "@quieter/app/lib/auth";
 import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { deleteDemoDraft } from "@quieter/app/lib/gmail/demo-mail";
+import {
+  MESSAGE_ATTACHMENT_DRAG_TYPE,
+  openAttachmentPreview,
+  readMessageAttachmentDrop,
+} from "@quieter/app/lib/mail/attachments";
 import { refreshCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-query/index";
 import { deleteManagedDemoDraft } from "@quieter/app/lib/managed-mail/demo-managed-mail";
 import { orpc, rpc } from "@quieter/app/lib/orpc";
@@ -67,6 +73,21 @@ import {
   ComposerFieldRow,
   ComposerFrame,
 } from "@quieter/ui/composer-chrome";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@quieter/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@quieter/ui/dropdown-menu";
 import { Field, FieldControl, FieldError, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
@@ -126,6 +147,7 @@ export type ComposeSurfaceProps = {
   mailboxId: string | null;
   onClose: () => void;
   onManageSnippets?: () => void;
+  onOpenSidebar?: () => void;
   onSenderSwitch?: (
     mailboxId: string,
     currentDraft: ComposeDraftState,
@@ -154,7 +176,6 @@ type ComposeFormFieldProps = Pick<
   "handleUserDraftChange" | "form"
 > & {
   disabled?: boolean;
-  divided?: boolean;
   label: string;
   name: keyof Pick<ComposeFormValues, "to" | "cc" | "bcc" | "subject">;
   placeholder?: string;
@@ -180,7 +201,6 @@ const composeRecipientMotion = {
 const ComposeFormField = ({
   handleUserDraftChange,
   disabled,
-  divided,
   form,
   label,
   name,
@@ -191,7 +211,6 @@ const ComposeFormField = ({
       const [error] = field.state.meta.errors;
       return (
         <ComposerFieldRow
-          divided={divided}
           error={error ? (error.message ?? "Invalid value") : undefined}
           label={label}
         >
@@ -215,6 +234,66 @@ const ComposeFormField = ({
   </form.Field>
 );
 
+const RenameAttachmentDialog = ({
+  attachment,
+  disabled,
+  onClose,
+  onSave,
+}: {
+  attachment: ComposeDraftState["attachments"][number];
+  disabled: boolean;
+  onClose: () => void;
+  onSave: (id: string, name: string) => void;
+}) => {
+  const [name, setName] = useState(attachment.name);
+  const valid = !!name.trim() && !/[\r\n\0]/u.test(name);
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+    >
+      <DialogContent>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (valid && !disabled) {
+              onSave(attachment.id, name);
+              onClose();
+            }
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Rename attachment</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <Field>
+              <FieldLabel htmlFor="attachment-name">File name</FieldLabel>
+              <FieldControl
+                disabled={disabled}
+                id="attachment-name"
+                onChange={(event) => {
+                  setName(event.currentTarget.value);
+                }}
+                value={name}
+              />
+            </Field>
+          </DialogBody>
+          <DialogFooter>
+            <DialogCloseButton>Cancel</DialogCloseButton>
+            <Button disabled={!valid || disabled} type="submit">
+              Save
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 const ReadyComposeSurface = ({
   allowSenderSwitch = false,
   beforeNavigate,
@@ -227,6 +306,7 @@ const ReadyComposeSurface = ({
   mailboxId,
   onClose,
   onManageSnippets,
+  onOpenSidebar,
   onSenderSwitch,
   persistDrafts = true,
   senderEmail,
@@ -239,6 +319,7 @@ const ReadyComposeSurface = ({
   const queryClient = useQueryClient();
   const reducedMotion = useReducedMotion();
   const composeEditorRef = useRef<ComposeEditorHandle | null>(null);
+  const [editorReady, setEditorReady] = useState(false);
   const mountedRef = useRef(false);
   const modKeyLabel = useSyncExternalStore(
     () => () => {
@@ -260,6 +341,9 @@ const ReadyComposeSurface = ({
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [renamingAttachment, setRenamingAttachment] = useState<
+    ComposeDraftState["attachments"][number] | null
+  >(null);
   const currentSender =
     senderMailboxes?.find((sender) => sender.id === mailboxId) ??
     senderMailbox ??
@@ -285,6 +369,7 @@ const ReadyComposeSurface = ({
     beforeNavigate,
     defaultSenderName: editableSender?.name,
     demoMode,
+    editorReady,
     getTextFromHtml: (html) =>
       composeEditorRef.current?.getTextFromHtml(html) ??
       new DOMParser().parseFromString(html, "text/html").body.textContent ??
@@ -312,7 +397,9 @@ const ReadyComposeSurface = ({
     state,
     addInlineImageFiles,
     addAttachmentFiles,
+    addMessageAttachment,
     removeAttachment,
+    renameAttachment,
     handleUserDraftChange,
     closeComposeDialog,
     discardActiveDraft,
@@ -385,6 +472,32 @@ const ReadyComposeSurface = ({
   const [showQuotedContent, setShowQuotedContent] = useState(false);
   const hasQuotedContent =
     isInline && state.draft.bodyHtml.includes("<blockquote");
+
+  const openComposeAttachment = async (
+    attachment: ComposeDraftState["attachments"][number]
+  ) => {
+    if (!mailboxId) {
+      return;
+    }
+    try {
+      await openAttachmentPreview({
+        fileName: attachment.name,
+        loadFile: async () => {
+          const loaded = await loadComposeRuntimeFile(
+            attachment,
+            mailboxId,
+            state.draft.messageId
+          );
+          return loaded.file;
+        },
+      });
+    } catch (error) {
+      toastError(error, {
+        boundary: "compose-attachment-preview",
+        fallback: "Could not open that attachment. Please try again.",
+      });
+    }
+  };
 
   const handleSenderChange = async (nextMailboxId: string | null) => {
     if (
@@ -624,6 +737,24 @@ const ReadyComposeSurface = ({
 
   return (
     <>
+      {isInline ? null : (
+        <MailSubviewHeader
+          className="px-4 pt-4 sm:px-6 sm:pt-6"
+          closeAction={{
+            disabled:
+              !state.open ||
+              state.isFinishing ||
+              state.draft.saveStatus === "sending" ||
+              switchingSender,
+            label: "Close composer",
+            onClick: () => {
+              void closeComposeDialog();
+            },
+          }}
+          onOpenSidebar={onOpenSidebar}
+          title="New message"
+        />
+      )}
       <form
         action={async () => {
           if (canSubmitCompose) {
@@ -636,13 +767,19 @@ const ReadyComposeSurface = ({
         })}
         data-compose-surface
         onDragEnterCapture={(event) => {
-          if (event.dataTransfer.types.includes("Files")) {
+          if (
+            event.dataTransfer.types.includes("Files") ||
+            event.dataTransfer.types.includes(MESSAGE_ATTACHMENT_DRAG_TYPE)
+          ) {
             dragDepthRef.current += 1;
             setIsDraggingFiles(true);
           }
         }}
         onDragLeaveCapture={(event) => {
-          if (event.dataTransfer.types.includes("Files")) {
+          if (
+            event.dataTransfer.types.includes("Files") ||
+            event.dataTransfer.types.includes(MESSAGE_ATTACHMENT_DRAG_TYPE)
+          ) {
             dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
             if (dragDepthRef.current === 0) {
               setIsDraggingFiles(false);
@@ -650,13 +787,19 @@ const ReadyComposeSurface = ({
           }
         }}
         onDragOverCapture={(event) => {
-          if (event.dataTransfer.types.includes("Files")) {
+          if (
+            event.dataTransfer.types.includes("Files") ||
+            event.dataTransfer.types.includes(MESSAGE_ATTACHMENT_DRAG_TYPE)
+          ) {
             event.preventDefault();
             event.dataTransfer.dropEffect = canEditBody ? "copy" : "none";
           }
         }}
         onDropCapture={(event) => {
-          if (!event.dataTransfer.types.includes("Files")) {
+          if (
+            !event.dataTransfer.types.includes("Files") &&
+            !event.dataTransfer.types.includes(MESSAGE_ATTACHMENT_DRAG_TYPE)
+          ) {
             return;
           }
           event.preventDefault();
@@ -664,7 +807,19 @@ const ReadyComposeSurface = ({
           dragDepthRef.current = 0;
           setIsDraggingFiles(false);
           if (canEditBody) {
-            addAttachmentFiles([...event.dataTransfer.files]);
+            if (
+              event.dataTransfer.types.includes(MESSAGE_ATTACHMENT_DRAG_TYPE)
+            ) {
+              const source = readMessageAttachmentDrop(
+                event.dataTransfer,
+                mailboxId
+              );
+              if (source) {
+                addMessageAttachment(source.attachment, source.messageId);
+              }
+            } else {
+              addAttachmentFiles([...event.dataTransfer.files]);
+            }
           }
         }}
       >
@@ -708,6 +863,7 @@ const ReadyComposeSurface = ({
                     form.setFieldValue("bodyText", text);
                   }}
                   onInlineImageFiles={addInlineImageFiles}
+                  onReadyChange={setEditorReady}
                   onSlashMenuOpenChange={setSlashMenuOpen}
                   snippets={snippetsQuery.data?.snippets}
                   snippetStatus={snippetStatus}
@@ -754,7 +910,7 @@ const ReadyComposeSurface = ({
                                 }
                                 label="From"
                               >
-                                <div className="flex h-8 min-w-0 flex-1 items-center">
+                                <div className="flex h-10 min-w-0 flex-1 items-center">
                                   <Popover
                                     onOpenChange={setSenderDetailsOpen}
                                     open={senderDetailsOpen}
@@ -769,8 +925,9 @@ const ReadyComposeSurface = ({
                                       render={
                                         <Button
                                           className="max-w-full min-w-0 shrink justify-start"
-                                          size="sm"
-                                          variant="ghost"
+                                          chrome="toolbar"
+                                          size="field"
+                                          variant="secondary"
                                         />
                                       }
                                     >
@@ -942,9 +1099,12 @@ const ReadyComposeSurface = ({
                       senderMailboxes &&
                       senderEmail ? (
                         <ComposerFieldRow label="From">
-                          <span className="flex h-8 min-w-0 items-center truncate px-2 text-body-sm">
-                            {senderEmail}
-                          </span>
+                          <FieldControl
+                            chrome="composer"
+                            readOnly
+                            tabIndex={-1}
+                            value={senderEmail}
+                          />
                         </ComposerFieldRow>
                       ) : null}
                       <form.Field name="to">
@@ -959,8 +1119,9 @@ const ReadyComposeSurface = ({
                               }
                               label="To"
                               trailing={
-                                <div className="flex shrink-0 items-center gap-0.5">
+                                <div className="flex shrink-0 items-center gap-2">
                                   <Button
+                                    chrome="toolbar"
                                     aria-controls="compose-cc-field"
                                     aria-expanded={state.showCc}
                                     aria-pressed={state.showCc}
@@ -968,11 +1129,13 @@ const ReadyComposeSurface = ({
                                       toggleRecipientVisibility("cc");
                                     }}
                                     type="button"
-                                    variant="chip"
+                                    size="field"
+                                    variant="secondary"
                                   >
                                     Cc
                                   </Button>
                                   <Button
+                                    chrome="toolbar"
                                     aria-controls="compose-bcc-field"
                                     aria-expanded={state.showBcc}
                                     aria-pressed={state.showBcc}
@@ -980,7 +1143,8 @@ const ReadyComposeSurface = ({
                                       toggleRecipientVisibility("bcc");
                                     }}
                                     type="button"
-                                    variant="chip"
+                                    size="field"
+                                    variant="secondary"
                                   >
                                     Bcc
                                   </Button>
@@ -992,6 +1156,7 @@ const ReadyComposeSurface = ({
                                 chrome="composer"
                                 data-compose-recipient-field
                                 disabled={!canEditBody}
+                                placeholder="Add recipients"
                                 onBlur={() => {
                                   recipientField.handleBlur();
                                 }}
@@ -1054,13 +1219,14 @@ const ReadyComposeSurface = ({
                           form={form}
                           label="Subject"
                           name="subject"
+                          placeholder="Add a subject"
                         />
                       ) : null}
                     </ComposerFieldGroup>
 
                     <ComposeEditorBody
                       chrome="seamless"
-                      className={cn("min-h-0 flex-1", {
+                      className={cn("flex-1", {
                         "[&_.ProseMirror>blockquote]:hidden":
                           hasQuotedContent && !showQuotedContent,
                       })}
@@ -1068,7 +1234,7 @@ const ReadyComposeSurface = ({
                     />
 
                     {hasQuotedContent ? (
-                      <div className="px-3 pb-1">
+                      <div className="px-4 pb-1">
                         <IconButtonTooltip
                           label={
                             showQuotedContent
@@ -1103,7 +1269,7 @@ const ReadyComposeSurface = ({
                               distance: 4,
                               reducedMotion,
                             })}
-                            className="mx-3 rounded-lg border border-dashed border-primary bg-primary/5 p-3 text-body-sm text-fg"
+                            className="mx-4 rounded-lg border border-dashed border-primary bg-primary/5 p-3 text-body-sm text-fg"
                             exit={
                               reducedMotion === true
                                 ? { opacity: 0 }
@@ -1128,44 +1294,63 @@ const ReadyComposeSurface = ({
                     {state.draft.attachments.length > 0 ? (
                       <ul
                         aria-label="Attachments"
-                        className="flex flex-wrap gap-2 px-3 pb-2"
+                        className="flex flex-wrap gap-2 px-4 pb-2"
                       >
                         {state.draft.attachments.map((attachment) => (
                           <li
-                            className={cn(
-                              "flex max-w-full min-w-0 items-center gap-2 rounded-sm border border-transparent bg-control px-2 py-1 text-body-sm",
-                              entranceMotionVariants({ effect: "pop" })
-                            )}
+                            className="max-w-full min-w-0"
                             key={attachment.id}
                           >
-                            <Icon
-                              aria-hidden
-
-                              icon={Attachment01Icon}
-                            />
-                            <span className="truncate">{attachment.name}</span>
-                            <span className="shrink-0 text-caption text-muted-fg">
-                              {Math.ceil(
-                                attachment.size / 1024
-                              ).toLocaleString()}{" "}
-                              KB
-                            </span>
-                            <IconButtonTooltip
-                              label={`Remove ${attachment.name}`}
-                            >
-                              <Button
-                                aria-label={`Remove ${attachment.name}`}
-                                disabled={!canEditBody}
-                                onClick={() => {
-                                  removeAttachment(attachment.id);
-                                }}
-                                size="icon-xs"
-                                type="button"
-                                variant="ghost"
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                render={
+                                  <Button
+                                    className="max-w-full min-w-0"
+                                    size="compact"
+                                    type="button"
+                                    variant="secondary"
+                                  />
+                                }
                               >
-                                <Icon icon={Cancel01Icon} />
-                              </Button>
-                            </IconButtonTooltip>
+                                <Icon aria-hidden icon={Attachment01Icon} />
+                                <span className="truncate">
+                                  {attachment.name}
+                                </span>
+                                <span className="shrink-0 text-muted-fg">
+                                  {Math.ceil(
+                                    attachment.size / 1024
+                                  ).toLocaleString()}{" "}
+                                  KB
+                                </span>
+                                <Icon aria-hidden icon={ArrowDown01Icon} />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" size="compact">
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void openComposeAttachment(attachment);
+                                  }}
+                                >
+                                  Open in new tab
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={!canEditBody}
+                                  onSelect={() => {
+                                    setRenamingAttachment(attachment);
+                                  }}
+                                >
+                                  Rename
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={!canEditBody}
+                                  onSelect={() => {
+                                    removeAttachment(attachment.id);
+                                  }}
+                                  tone="destructive"
+                                >
+                                  Remove
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </li>
                         ))}
                       </ul>
@@ -1197,7 +1382,7 @@ const ReadyComposeSurface = ({
                           {state.draft.sendUncertain === true
                             ? "Check delivery"
                             : "Send"}
-                          <span className="text-caption text-primary-fg">
+                          <span className="hidden text-caption text-primary-fg @sm:inline">
                             {modKeyLabel}↵
                           </span>
                         </ToolbarButton>
@@ -1245,24 +1430,26 @@ const ReadyComposeSurface = ({
                               <Icon icon={Delete02Icon} />
                             </ToolbarButton>
                           </IconButtonTooltip>
-                          <IconButtonTooltip label="Close composer">
-                            <ToolbarButton
-                              aria-label="Close composer"
-                              disabled={
-                                !state.open ||
-                                state.isFinishing ||
-                                state.draft.saveStatus === "sending" ||
-                                switchingSender
-                              }
-                              onClick={() => {
-                                void closeComposeDialog();
-                              }}
-                              size="icon"
-                              type="button"
-                            >
-                              <Icon icon={Cancel01Icon} />
-                            </ToolbarButton>
-                          </IconButtonTooltip>
+                          {isInline ? (
+                            <IconButtonTooltip label="Close composer">
+                              <ToolbarButton
+                                aria-label="Close composer"
+                                disabled={
+                                  !state.open ||
+                                  state.isFinishing ||
+                                  state.draft.saveStatus === "sending" ||
+                                  switchingSender
+                                }
+                                onClick={() => {
+                                  void closeComposeDialog();
+                                }}
+                                size="icon"
+                                type="button"
+                              >
+                                <Icon icon={Cancel01Icon} />
+                              </ToolbarButton>
+                            </IconButtonTooltip>
+                          ) : null}
                         </>
                       }
                     />
@@ -1314,6 +1501,17 @@ const ReadyComposeSurface = ({
           ) : null}
         </ComposerFrame>
       </form>
+      {renamingAttachment ? (
+        <RenameAttachmentDialog
+          attachment={renamingAttachment}
+          disabled={!canEditBody}
+          key={renamingAttachment.id}
+          onClose={() => {
+            setRenamingAttachment(null);
+          }}
+          onSave={renameAttachment}
+        />
+      ) : null}
       {snippetDraft !== null && mailboxId ? (
         <SaveSnippetDialog
           initialText={snippetDraft}
@@ -1493,46 +1691,58 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
       (Reflect.get(error, "code") === "NOT_FOUND" ||
         Reflect.get(error, "status") === 404);
     return (
-      <output className="flex flex-col items-center justify-center gap-3 p-6">
-        {isError ? (
-          <>
-            <Text>Could not load your draft.</Text>
-            {canRecoverCopy ? (
-              <>
-                <Text>
-                  Your saved draft is no longer available. Recover your text as
-                  a new draft.
-                </Text>
-                <Button
-                  onClick={() => {
-                    setRecoveredCopy(
-                      createRecoveredComposeCopy(recoverableSeed)
-                    );
-                  }}
-                >
-                  Recover as copy
-                </Button>
-              </>
-            ) : null}
-            <Button
-              onClick={() => {
-                void refetch();
-              }}
-              variant="outline"
-            >
-              Try again
-            </Button>
-            <Button onClick={props.onClose} variant="ghost">
-              Close
-            </Button>
-          </>
-        ) : (
-          <>
-            <Icon aria-hidden animation="spin" icon={Loading03Icon} />
-            <Text>Loading draft…</Text>
-          </>
+      <>
+        {props.variant === "inline" ? null : (
+          <MailSubviewHeader
+            className="px-4 pt-4 sm:px-6 sm:pt-6"
+            closeAction={{ label: "Close composer", onClick: props.onClose }}
+            onOpenSidebar={props.onOpenSidebar}
+            title="New message"
+          />
         )}
-      </output>
+        <output className="flex flex-col items-center justify-center gap-3 p-6">
+          {isError ? (
+            <>
+              <Text>Could not load your draft.</Text>
+              {canRecoverCopy ? (
+                <>
+                  <Text>
+                    Your saved draft is no longer available. Recover your text
+                    as a new draft.
+                  </Text>
+                  <Button
+                    onClick={() => {
+                      setRecoveredCopy(
+                        createRecoveredComposeCopy(recoverableSeed)
+                      );
+                    }}
+                  >
+                    Recover as copy
+                  </Button>
+                </>
+              ) : null}
+              <Button
+                onClick={() => {
+                  void refetch();
+                }}
+                variant="outline"
+              >
+                Try again
+              </Button>
+              {props.variant === "inline" ? (
+                <Button onClick={props.onClose} variant="ghost">
+                  Close
+                </Button>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Icon aria-hidden animation="spin" icon={Loading03Icon} />
+              <Text>Loading draft…</Text>
+            </>
+          )}
+        </output>
+      </>
     );
   }
   return (
@@ -1647,12 +1857,6 @@ export const ComposeWorkspace = ({
       )}
       data-compose-workspace
     >
-      <MobileHeader
-        className="px-4 sm:px-6"
-        leading="sidebar"
-        onLeadingClick={onOpenSidebar}
-        title="New message"
-      />
       <ComposeSurface
         allowSenderSwitch={!senderBoundToInitialDraft}
         beforeNavigate={cleanupInactiveDrafts}
@@ -1666,6 +1870,7 @@ export const ComposeWorkspace = ({
         onClose={() => {
           finishCompose(onClose);
         }}
+        onOpenSidebar={onOpenSidebar}
         onManageSnippets={
           onManageSnippets
             ? () => {

@@ -37,8 +37,17 @@ export const deliveryEventSchema = z.object({
 });
 
 export const messageDeliverySchema = z.object({
+  deliveryTrackingAvailable: z.boolean().optional(),
   events: z.array(deliveryEventSchema),
   messageId: z.string(),
+  openTracking: z
+    .object({
+      firstLoadedAt: timestampSchema.nullable(),
+      lastLoadedAt: timestampSchema.nullable(),
+      reportedLoadCount: z.number().int().nonnegative(),
+    })
+    .nullable()
+    .optional(),
   recipients: z.array(
     z.object({
       lastEventAt: timestampSchema,

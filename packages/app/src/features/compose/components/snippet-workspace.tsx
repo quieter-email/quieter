@@ -5,9 +5,9 @@ import {
   Delete02Icon,
   Loading03Icon,
   Search01Icon,
-  SidebarLeftIcon,
 } from "@hugeicons/core-free-icons";
 import { SnippetFields } from "@quieter/app/features/compose/components/snippet-fields";
+import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail-subview-header";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
 import {
@@ -31,7 +31,6 @@ import {
   DialogTitle,
 } from "@quieter/ui/dialog";
 import { Icon } from "@quieter/ui/icon";
-import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { Text } from "@quieter/ui/text";
@@ -169,29 +168,7 @@ export const SnippetWorkspace = ({
     <>
       <WorkspaceSection>
         <WorkspaceHeader className="@container">
-          <div className="flex items-center gap-2">
-            <IconButtonTooltip label="Open sidebar">
-              <Button
-                chrome="toolbar"
-                aria-label="Open sidebar"
-                className="lg:hidden"
-                onClick={onOpenSidebar}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <Icon icon={SidebarLeftIcon} />
-              </Button>
-            </IconButtonTooltip>
-            <Text
-              as="h1"
-              className="min-w-0 flex-1"
-              size="lg"
-              truncate
-              weight="medium"
-            >
-              Snippets
-            </Text>
+          <MailSubviewHeader onOpenSidebar={onOpenSidebar} title="Snippets">
             <Button
               chrome="toolbar"
               onClick={() => {
@@ -206,7 +183,7 @@ export const SnippetWorkspace = ({
               <Icon icon={Add01Icon} />
               New
             </Button>
-          </div>
+          </MailSubviewHeader>
           <label
             className="relative mt-3 block"
             htmlFor="snippet-workspace-search"

@@ -50,6 +50,7 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
+import { recordGmailMailMarkerLoad } from "./gmail-open-tracking";
 import { OrganizationMailSendError } from "./organization-mail-policy";
 
 export type OrganizationMailFeedbackRecipient = {
@@ -624,7 +625,7 @@ export const getOrganizationMailDelivery = async (input: {
     return null;
   }
 
-  const [recipients, events] = await Promise.all([
+  const [recipients, events, openEvents] = await Promise.all([
     db
       .select({
         lastEventAt: organizationMailDeliveryRecipient.lastEventAt,
@@ -667,11 +668,30 @@ export const getOrganizationMailDelivery = async (input: {
         )
       )
       .orderBy(desc(organizationMailDeliveryEvent.occurredAt)),
+    db
+      .select({
+        firstLoadedAt: organizationMailOpenEvent.firstOpenedAt,
+        lastLoadedAt: organizationMailOpenEvent.lastOpenedAt,
+        reportedLoadCount: organizationMailOpenEvent.reportedOpenCount,
+      })
+      .from(organizationMailOpenEvent)
+      .where(
+        and(
+          eq(organizationMailOpenEvent.organizationId, input.organizationId),
+          eq(
+            organizationMailOpenEvent.providerMessageId,
+            input.providerMessageId
+          )
+        )
+      )
+      .limit(1),
   ]);
 
   return {
+    deliveryTrackingAvailable: true,
     events,
     messageId: input.providerMessageId,
+    openTracking: openEvents[0] ?? null,
     recipients,
   };
 };
@@ -1131,6 +1151,10 @@ export const recordOrganizationMailMarkerLoad = async (input: {
   }
 
   if (providerMessageId === undefined || providerMessageId === "") {
+    const gmailOpen = await recordGmailMailMarkerLoad(input);
+    if (gmailOpen !== null) {
+      return gmailOpen;
+    }
     throw new OrganizationMailFeedbackMessageNotFoundError(
       input.messageHeaderId
     );

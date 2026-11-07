@@ -9,7 +9,6 @@ import {
 } from "@quieter/app/features/settings/components/settings-layout";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
-import { ActionFooter } from "@quieter/ui/action-footer";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -35,7 +34,7 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { MemoryEditor } from "./personalization-memory-editor";
@@ -64,6 +63,7 @@ export const PersonalizationMemories = ({
   const [category, setCategory] = useState<PersonalMemory["category"]>();
   const [editor, setEditor] = useState<PersonalMemory | "new" | null>(null);
   const [deleting, setDeleting] = useState<PersonalMemory | null>(null);
+  const nextPageTrigger = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setQuery(search.trim());
@@ -85,6 +85,31 @@ export const PersonalizationMemories = ({
     })
   );
   const items = memories.data?.pages.flatMap((page) => page.items) ?? [];
+  const { fetchNextPage, hasNextPage, isFetchNextPageError, isFetching } =
+    memories;
+  const loadNextPage = useCallback(async () => {
+    const result = await fetchNextPage();
+    if (result.error) {
+      toastError(result.error, { boundary: "ai-settings" });
+    }
+  }, [fetchNextPage]);
+  useEffect(() => {
+    const trigger = nextPageTrigger.current;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void loadNextPage();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    if (trigger && hasNextPage && !isFetching && !isFetchNextPageError) {
+      observer.observe(trigger);
+    }
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasNextPage, isFetchNextPageError, isFetching, loadNextPage]);
   const firstPage = memories.data?.pages[0];
   const categoryCounts = firstPage?.categoryCounts ?? [];
   const allCount = categoryCounts.reduce(
@@ -111,12 +136,6 @@ export const PersonalizationMemories = ({
   );
   const retryMemories = async () => {
     const result = await memories.refetch();
-    if (result.error) {
-      toastError(result.error, { boundary: "ai-settings" });
-    }
-  };
-  const loadMore = async () => {
-    const result = await memories.fetchNextPage();
     if (result.error) {
       toastError(result.error, { boundary: "ai-settings" });
     }
@@ -183,7 +202,7 @@ export const PersonalizationMemories = ({
         {memories.isPending ? (
           <SettingsLoadingState label="Loading memories" />
         ) : null}
-        {memories.isError ? (
+        {memories.isError && !memories.isFetchNextPageError ? (
           <SettingsErrorState
             message="Could not load memories."
             onRetry={() => {
@@ -255,18 +274,18 @@ export const PersonalizationMemories = ({
         ) : null}
       </div>
       {memories.hasNextPage ? (
-        <ActionFooter>
-          <Button
-            onClick={() => {
-              void loadMore();
-            }}
-            pending={memories.isFetchingNextPage}
-            pendingLabel="Loading"
-            size="sm"
-          >
-            Load more
-          </Button>
-        </ActionFooter>
+        <div aria-hidden className="h-px" ref={nextPageTrigger} />
+      ) : null}
+      {memories.isFetchingNextPage ? (
+        <SettingsLoadingState label="Loading more memories" />
+      ) : null}
+      {memories.isFetchNextPageError ? (
+        <SettingsErrorState
+          message="Could not load more memories."
+          onRetry={() => {
+            void loadNextPage();
+          }}
+        />
       ) : null}
       {editor === null ? null : (
         <MemoryEditor
