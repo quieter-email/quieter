@@ -16,9 +16,9 @@ The editable [Mail](https://app.paper.design/file/01M67920912B7N0WCQ8N924QN0/p-1
 | 6. Continuous calendar navigation | Month scrolling uses a bounded rolling week window. Day/week accept horizontal or Shift+wheel navigation while preserving vertical hour scrolling. Arrows remain available. | [Month](https://github.com/user-attachments/assets/8bf8aaac-cd0d-423a-81cd-144dde47a767), [runtime observations](validation.md) |
 | 7. Connection artwork | Replaced Outlook, OneDrive, ClickUp, and Todoist artwork with official assets. Retained the matching Linear mark. | [Before](https://github.com/user-attachments/assets/5807abd4-05a6-452f-a440-496813cb4f13), [after](https://github.com/user-attachments/assets/9ea59f49-b360-4acb-b879-a7c56dea22f0), [light](https://github.com/user-attachments/assets/ec5949f2-2a30-4769-b246-cade6bad4aae) |
 | 8. Connection verbosity | Removed the separate Access section and chat mention instructions. | [Before](https://github.com/user-attachments/assets/1ad2da1a-a4e0-467a-9366-d78d1ccff6bf), [after](https://github.com/user-attachments/assets/8ffb1232-b636-4602-9b8b-59a2b7c591da) |
-| 9. Plan changes | Active subscriptions have an explicit Change plan action and confirmation using the existing billing operation and prices. | [Plan fixture](https://github.com/user-attachments/assets/5228eade-890c-4a45-bb67-502aefcb731d), [confirmation](https://github.com/user-attachments/assets/e2ab564c-3e4e-4f4d-bbf6-65532d3354ad) |
+| 9. Plan changes | Active subscriptions have an explicit Change plan action and confirmation using the existing billing operation and prices. | [Plan fixture](https://github.com/user-attachments/assets/5228eade-890c-4a45-bb67-502aefcb731d), [confirmation](https://github.com/user-attachments/assets/7c3cdd77-27d3-4d3d-ac63-9cd2f1521de2) |
 | 10. Memory pagination | The next page loads when its sentinel approaches the viewport. Failed pages retain an explicit retry. | [Automatic loading fixture](https://github.com/user-attachments/assets/147059b2-9cd2-475b-952d-b2d20edde9bc) |
-| 11. Gmail open tracking | Gmail sends use the existing signed tracking image and organization setting. Private mailbox records retain approximate image-load activity. | [Activity fixture](https://github.com/user-attachments/assets/3231fc02-2b18-4916-bea5-e665043986dd), [rollout](../../outbound-mail-feedback.md) |
+| 11. Gmail open tracking | Gmail sends use the existing signed tracking image and organization setting. Private mailbox records retain approximate image-load activity. | [Activity fixture](https://github.com/user-attachments/assets/7e934ab9-0bd8-4500-9092-0a5238bcf629), [rollout](../../outbound-mail-feedback.md) |
 | 12. Settings breadcrumbs | Settings is a nonclickable hierarchy label. Actual parent categories remain links. | [Connection details](https://github.com/user-attachments/assets/8ffb1232-b636-4602-9b8b-59a2b7c591da) |
 | 13. Assistant launchers | Removed the sidebar launcher and placed controls in main-view headers. | [Compose](https://github.com/user-attachments/assets/87b931fb-0d5d-42e7-b65f-02d4bdd839d7), [labels](https://github.com/user-attachments/assets/82d13d4e-1f42-44f3-9e56-d8795c0de7dc), [snippets](https://github.com/user-attachments/assets/4d6315d6-bba2-4953-86d8-185d30f3a4fb), [organizer](https://github.com/user-attachments/assets/7e548bfb-faad-4c70-9d38-3e2662047ac7) |
 | 14. Startup preference | Added a per-user device Default view preference for mail categories, Calendar, and Compose. It preserves the default mailbox choice. | [Before](https://github.com/user-attachments/assets/51102132-efd7-44cd-9421-b841651ab643), [after](https://github.com/user-attachments/assets/f96073ea-7ce9-4301-aa7e-fede9423aa2e) |
@@ -82,13 +82,13 @@ The memory fixture started with 20 items. Scrolling loaded eight more through th
 
 | Before review | Final result |
 | --- | --- |
-| ![Dialog blending into its background](https://github.com/user-attachments/assets/bb79f2c1-3d38-4c4c-94a1-b701ceb3bf00) | ![Section surface over a lightly blurred backdrop](https://github.com/user-attachments/assets/e2ab564c-3e4e-4f4d-bbf6-65532d3354ad) |
-| ![Overly rounded attachment dialog](https://github.com/user-attachments/assets/c2b25d3e-7e2d-41f5-a8ff-a81ea1622c6e) | ![Tighter shared dialog corners](https://github.com/user-attachments/assets/d9eb3c09-93e4-42ee-ae07-2884c00b8538) |
-| ![Prototype message inspector](https://github.com/user-attachments/assets/a843743b-593e-4301-8542-afab800b8dd2) | ![Activity summary and aligned message details](https://github.com/user-attachments/assets/3231fc02-2b18-4916-bea5-e665043986dd) |
+| ![Dialog blending into its background](https://github.com/user-attachments/assets/bb79f2c1-3d38-4c4c-94a1-b701ceb3bf00) | ![Panel surface over a lightly blurred backdrop](https://github.com/user-attachments/assets/7c3cdd77-27d3-4d3d-ac63-9cd2f1521de2) |
+| ![Overly rounded attachment dialog](https://github.com/user-attachments/assets/c2b25d3e-7e2d-41f5-a8ff-a81ea1622c6e) | ![Restored shared dialog corners](https://github.com/user-attachments/assets/0977ba34-668c-467f-8e30-621fea855685) |
+| ![Prototype message inspector](https://github.com/user-attachments/assets/a843743b-593e-4301-8542-afab800b8dd2) | ![Activity summary and aligned message details](https://github.com/user-attachments/assets/7e934ab9-0bd8-4500-9092-0a5238bcf629) |
 | ![Mail tools mixed with folders](https://github.com/user-attachments/assets/4f710260-6fdd-48ba-8fc1-cec4213e8a28) | ![Separate Tools group](https://github.com/user-attachments/assets/3f2c644f-4741-4b5a-b8bf-1e345c014db5) |
 | ![Labels retaining the previous inbox selection](https://github.com/user-attachments/assets/9f2bf0b1-f53c-492d-b703-9ad09cbb7e15) | ![Labels task with Close and no selected inbox](https://github.com/user-attachments/assets/82d13d4e-1f42-44f3-9e56-d8795c0de7dc) |
 
-Dialogs, alerts, drawers, and full-page overlays use the standard Section shade, with Detail for nested controls. They use the existing 20px radius step and matching 18px inset headers. The visible border is removed, and a dimmed backdrop with a light 4px blur provides separation. Message details uses a narrower layout, an activity summary, aligned metadata, and a collapsed Technical details section that retains the complete source information.
+Dialogs, alerts, drawers, and full-page overlays use the original Panel shade and 30px panel rounding with shared superellipse shaping. Inset headers use Section and its 27px radius; nested controls use Detail. The visible border is removed, and a dimmed backdrop with a light 4px blur provides separation. Message details uses a narrower layout, an activity summary, aligned metadata, and a collapsed Technical details section that retains the complete source information.
 
 Composer attachments keep their compact chips. Their menu offers Open in new tab, Rename, and Remove. Files can be dropped into main or inline composers; existing message attachments can be dragged within the same mailbox. Rename preserves the source attachment identity and survives stale save receipts. Preview tabs show images, inert text, and static PDF pages, with a Download action for other formats. They have no opener and remain usable after closing the composer. PDF support loads only when requested.
 
@@ -101,18 +101,18 @@ Snippets and Organize mailbox are destinations with active sidebar rows and no X
 | Inline forward with a sample attachment and retained quote | ![Inline assistant forward](https://github.com/user-attachments/assets/09cad3fc-d3c3-4181-9bab-21d7e701ef9d) |
 | Expanded inline forward on a narrow screen | ![Expanded inline forward](https://github.com/user-attachments/assets/79ce17ac-e8f5-44ce-81b4-4539a57b1dc6) |
 | Active plan fixture | ![Change plan action](https://github.com/user-attachments/assets/5228eade-890c-4a45-bb67-502aefcb731d) |
-| Plan confirmation | ![Plan confirmation](https://github.com/user-attachments/assets/e2ab564c-3e4e-4f4d-bbf6-65532d3354ad) |
+| Plan confirmation | ![Plan confirmation](https://github.com/user-attachments/assets/7c3cdd77-27d3-4d3d-ac63-9cd2f1521de2) |
 | Automatic memory page loading fixture | ![Loaded memory page](https://github.com/user-attachments/assets/147059b2-9cd2-475b-952d-b2d20edde9bc) |
-| Message activity fixture | ![Message activity](https://github.com/user-attachments/assets/3231fc02-2b18-4916-bea5-e665043986dd) |
-| Light message details | ![Light message details](https://github.com/user-attachments/assets/007c41ad-0b83-4949-aef1-99dc3a7d64a5) |
-| Narrow message details | ![Narrow message details](https://github.com/user-attachments/assets/34b7b924-6cc8-4419-94db-cb8bcbc9551a) |
-| Expanded technical details | ![Technical details](https://github.com/user-attachments/assets/121fba25-bff6-4ef8-8b76-efbe75126703) |
-| Shared dialog surface | ![Dialog](https://github.com/user-attachments/assets/b51eeddc-fca1-4047-9357-b076d0caf1f7) |
-| Light shared dialog | ![Light dialog](https://github.com/user-attachments/assets/b27c1b80-961a-4562-bba5-81ca49ac0363) |
-| Narrow shared dialog | ![Narrow dialog](https://github.com/user-attachments/assets/39c5658d-d241-421f-9393-d1cfc30889bb) |
+| Message activity fixture | ![Message activity](https://github.com/user-attachments/assets/7e934ab9-0bd8-4500-9092-0a5238bcf629) |
+| Light message details | ![Light message details](https://github.com/user-attachments/assets/4760bcb7-0440-4e82-b16f-da4dfa868e3c) |
+| Narrow message details | ![Narrow message details](https://github.com/user-attachments/assets/6c6894d4-3c6f-43e8-b67f-1338a9310122) |
+| Expanded technical details | ![Technical details](https://github.com/user-attachments/assets/e90bb0ed-f03f-4195-9947-abab68432c9e) |
+| Shared dialog surface | ![Dialog](https://github.com/user-attachments/assets/edb128a4-ce70-42e2-b261-1755faa51925) |
+| Light shared dialog | ![Light dialog](https://github.com/user-attachments/assets/96d85718-9de3-41c6-bb9a-6971323210cb) |
+| Narrow shared dialog | ![Narrow dialog](https://github.com/user-attachments/assets/90758ca8-fe46-489c-8229-eb7f6d8799e9) |
 | Restored mailbox picker density | ![Mailbox picker](https://github.com/user-attachments/assets/8c03eecf-2006-43c1-b915-e5121e3b208f) |
 | Attachment menu | ![Attachment actions](https://github.com/user-attachments/assets/4279889c-18aa-411b-829c-fb5a3f2ae16b) |
-| Rename attachment | ![Rename attachment](https://github.com/user-attachments/assets/d9eb3c09-93e4-42ee-ae07-2884c00b8538) |
+| Rename attachment | ![Rename attachment](https://github.com/user-attachments/assets/0977ba34-668c-467f-8e30-621fea855685) |
 | File drop hint | ![Drop files](https://github.com/user-attachments/assets/895f65cb-a557-4090-9682-5aa7ae979a9b) |
 | Separate text preview tab | ![Text attachment preview](https://github.com/user-attachments/assets/214ba048-0b0f-444e-b6c1-063907892176) |
 | Separate PDF preview tab | ![PDF attachment preview](https://github.com/user-attachments/assets/7f673e93-2b27-4b39-b032-60dd75208f20) |
@@ -143,18 +143,39 @@ Snippets and Organize mailbox are destinations with active sidebar rows and no X
 | Snippets destination | ![Paper snippets destination](https://github.com/user-attachments/assets/27096f37-27f2-4d09-92d7-cc4af154ed0a) |
 | Empty organizer | ![Paper empty organizer](https://github.com/user-attachments/assets/4e8e55d9-e348-4ef3-a0e2-1b8cbafb659f) |
 | Attachment actions | ![Paper attachment actions](https://github.com/user-attachments/assets/37eefcf8-a731-458f-9c32-934c13449f4b) |
-| Rename attachment | ![Paper rename attachment](https://github.com/user-attachments/assets/631dfb54-9253-464c-a2ed-aa14f46c57e9) |
+| Rename attachment | ![Paper rename attachment](https://github.com/user-attachments/assets/7e9abd67-5c0d-42c0-9fd9-d418614530ac) |
 | File drop | ![Paper file drop](https://github.com/user-attachments/assets/5ed04f90-c80d-43c3-ac75-49e5c9f751da) |
-| Shared dialog | ![Paper dialog](https://github.com/user-attachments/assets/cd7fe6bb-8eaa-42df-bcc5-424fd527e680) |
-| Shared drawer | ![Paper drawer](https://github.com/user-attachments/assets/ce5bef40-52de-424c-9b76-92bebf241014) |
-| Shared full-page dialog | ![Paper full-page dialog](https://github.com/user-attachments/assets/e072dbc7-a7ec-4485-aab2-a2891fabb0a1) |
-| Plan confirmation | ![Paper plan confirmation](https://github.com/user-attachments/assets/c571b8e8-3c68-4d8a-940f-fe09877027dc) |
+| Shared dialog | ![Paper dialog](https://github.com/user-attachments/assets/74d972a9-033c-4d10-bac4-fe1de9294a47) |
+| Shared drawer | ![Paper drawer](https://github.com/user-attachments/assets/eca5f1d3-e6a7-4ba8-9a68-507485f809e9) |
+| Shared full-page dialog | ![Paper full-page dialog](https://github.com/user-attachments/assets/d23f08a7-ec4c-4d3f-9bf8-bf78505447b3) |
+| Plan confirmation | ![Paper plan confirmation](https://github.com/user-attachments/assets/cc10bd5c-ac1a-42a7-b3ca-30c67f5f50db) |
 | Preferences | ![Paper preferences](https://github.com/user-attachments/assets/92ac44c5-0c38-400b-a77a-a94714663114) |
 | Connected apps | ![Paper connected apps](https://github.com/user-attachments/assets/671643f1-9e83-4c71-b27e-641d629b8f94) |
-| Tracking image activity | ![Paper tracking activity](https://github.com/user-attachments/assets/669410b3-671c-4773-8f3b-d8263b5cbc18) |
+| Tracking image activity | ![Paper tracking activity](https://github.com/user-attachments/assets/6ce355d4-9bea-4105-ba75-d46aa0d9ed5b) |
 
 ## Verification and rollout
 
 See [validation](validation.md) and the [decision trail](decisions.tsv). The additive `20261107111600_boring_magik` migration was applied to the allowlisted development database only. Production needs that migration before this release deploys. Real Gmail sending, reconciliation, and public tracking-image loads still need a dedicated test mailbox. No production migration or deployment occurred.
 
-The gallery uses native GitHub attachments. This review folder contains no screenshot binaries; earlier commits are preserved. All 81 hosted images returned image content successfully.
+The gallery uses native GitHub attachments. This review folder contains no screenshot binaries; earlier commits are preserved. Hosted images were verified with normal GET requests.
+
+## Text-only mail and dialog review
+
+**Text-only mail, compact details, and restored dialog styling**
+
+Text-only messages use the app font at 14px on a transparent background. Unformatted HTML wrappers qualify only when their text matches the plain-text alternative. Sender formatting, fonts, colors, tables, images, direction, and descriptive links keep the existing isolated HTML renderer. Message activity counts and metadata use compact 13px text. Dialogs match the original Panel shade and panel rounding shown in the preferred reference.
+
+| View | Before | After |
+| --- | --- | --- |
+| Text-only message | ![Text-only mail before](https://github.com/user-attachments/assets/f95c8352-0d2c-4b66-913b-de74bed55010) | ![Text-only mail after](https://github.com/user-attachments/assets/128d1ec5-4346-4bbf-a208-a81c6d893c0f) |
+| Rich HTML, unchanged | ![Rich HTML before](https://github.com/user-attachments/assets/4c14707a-83d0-4207-90fc-73573ed3942f) | ![Rich HTML after](https://github.com/user-attachments/assets/9b5c6ecb-491b-488a-beab-b80312c66ac5) |
+| Activity typography | ![Activity with oversized count](https://github.com/user-attachments/assets/3231fc02-2b18-4916-bea5-e665043986dd) | ![Compact activity typography](https://github.com/user-attachments/assets/7e934ab9-0bd8-4500-9092-0a5238bcf629) |
+| Dialog surface and rounding | ![Previous dialog treatment](https://github.com/user-attachments/assets/e2ab564c-3e4e-4f4d-bbf6-65532d3354ad) | ![Restored dialog treatment](https://github.com/user-attachments/assets/7c3cdd77-27d3-4d3d-ac63-9cd2f1521de2) |
+
+| Additional view | Screenshot |
+| --- | --- |
+| Text-only message in light mode | ![Text-only mail light](https://github.com/user-attachments/assets/31e0e920-6cd3-49e8-9567-4bcdd071f04c) |
+| Text-only message at 390px | ![Text-only mail narrow](https://github.com/user-attachments/assets/c30b1368-ac66-4e4b-b99f-3216f270ecc6) |
+| Paper text-only message | ![Paper text-only message](https://github.com/user-attachments/assets/4e1f7091-4c49-4451-b12a-d5ad063e7079) |
+
+Manual browser checks covered 12 text and HTML cases. Rich HTML cases produced identical isolated markup before and after, including sender fonts and colors, tables, images, right-to-left content, and links. Dark, light, and 390px layouts were inspected. Focused lint/type checks and the source commit hook passed. No new tests were written.

@@ -85,3 +85,17 @@ The task preview process tree and task browser sessions were stopped after verif
 Main's chat activity update was merged while preserving inline-compose activity in its new domain renderer. Manual reply, reply-all, and forward samples classified as completed draft actions.
 
 The later memory/history-search update was also merged cleanly. Focused lint and type checks passed for the overlapping workspace, memory-list, and schema files. `vp run db:check` passed migration graph, schema drift, and safety checks. The installed Drizzle version supports the two commutative snapshot leaves, so no history repair or duplicate migration was needed. A production web build passed again after this merge, including deployment-boundary checks. No newly merged migration was applied by this chat.
+
+## Text-only mail and compact details follow-up
+
+Plain-text bodies now use the app's Geist font, 14px body scale, and a transparent surface. Minimal HTML wrappers use that same path only when their text matches the plain-text alternative. Any sender formatting, document attributes, direction, CSS, tables, images, descriptive links, or differing alternative text retains the existing isolated HTML renderer. Its stylesheet and rendering logic were not changed.
+
+Manual checks used the actual pre-change and current MessageBody components with synthetic local messages. All 12 cases behaved as intended: MIME plain text, paragraphs, line breaks, and literal URLs used the plain path; bold formatting, descriptive links, sender fonts/colors, stylesheets, tables, images, direction, and differing alternatives retained identical HTML markup. The rich HTML comparison screenshots are byte-identical. Plain messages were inspected in dark/light and at 390px. Temporary comparison modules were removed afterward.
+
+The activity count changed from 16px to 13px; section labels and metadata now use the compact 13px scale. The shared dialog title keeps its standard size. Dialog, alert, drawer, and full-page shells restore Panel and the original 30px panel radius with shared superellipse shaping. Inset headers restore Section and its radius. The accepted dimming and light 4px blur remain. Actual billing confirmation, attachment rename, shared dialog, and activity views were inspected. Billing was a browser-only synthetic state; no plan change was submitted.
+
+Focused lint/type checks passed after narrowing DOMPurify's Node result at the rendering boundary. The source commit hook passed for all eight changed files. Type System Discipline informed that boundary guard; the remaining changes reuse the existing type, surface, and radius tokens. No new tests were written or full suite repeated for these scoped follow-ups.
+
+Paper now includes a permanent Text-only message reference alongside the existing HTML message view. Its activity typography, plan confirmation, attachment rename, and shared overlay examples match the restored code tokens. All 21 modal shells were restored; the component references were visually reviewed, and working indicators were cleared. Native hosted attachments replace the outdated current-state captures in the PR and review gallery.
+
+The mail-reading-polish browser was closed. Recorded preview root PID10400 and its child processes were stopped after verification; other task processes were preserved.
