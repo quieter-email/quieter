@@ -3,7 +3,7 @@
 import { MailReference } from "@quieter/app/features/chat/components/mail-reference";
 import { parseMailReference } from "@quieter/app/features/chat/domain/mail-reference";
 import type { ComponentPropsWithoutRef } from "react";
-import { Remark } from "react-remark";
+import { useRemarkSync } from "react-remark";
 
 const markdownLink = ({
   children,
@@ -32,18 +32,11 @@ type MarkdownContentProps = {
   markdown: string;
 };
 
-export const MarkdownContent = ({ markdown }: MarkdownContentProps) => (
-  <div className="typeset typeset-docs max-w-[37em]">
-    <Remark
-      rehypeReactOptions={{
-        components: {
-          a: markdownLink,
-          img: markdownImage,
-        },
-      }}
-      remarkToRehypeOptions={{ allowDangerousHtml: false }}
-    >
-      {markdown}
-    </Remark>
-  </div>
-);
+export const MarkdownContent = ({ markdown }: MarkdownContentProps) => {
+  // oxlint-disable-next-line node/no-sync -- This renderer commits final text and follow-up actions together, without file I/O.
+  const content = useRemarkSync(markdown, {
+    rehypeReactOptions: { components: { a: markdownLink, img: markdownImage } },
+    remarkToRehypeOptions: { allowDangerousHtml: false },
+  });
+  return <div className="typeset typeset-body">{content}</div>;
+};

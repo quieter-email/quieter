@@ -547,6 +547,8 @@ export default defineConfig({
       ".scratch/**",
       "packages/cloudflare/tests/**",
     ],
+    // Database suites share queues whose workers can claim other files' fixtures.
+    fileParallelism: process.env.MIGRATION_TEST_DATABASE_URL === undefined,
     setupFiles: ["./vitest.setup.ts"],
   },
 });
