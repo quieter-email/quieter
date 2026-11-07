@@ -420,7 +420,8 @@ const MessageViewContent = (props: MessageViewContentProps) => {
       <div className="flex min-h-0 flex-1">
         {navigationScope === undefined ? null : (
           <div
-            className="flex w-14 shrink-0 items-center justify-center py-4 pl-4 empty:hidden pointer-coarse:w-16"
+            // oxlint-disable-next-line shadcn/no-arbitrary-values -- Animate the measured rail gutter's layout space and visibility, not unrelated properties.
+            className="flex w-14 shrink-0 items-center justify-center overflow-x-clip py-4 pl-4 transition-[width,padding-left,opacity] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) empty:w-0 empty:pl-0 empty:opacity-0 motion-reduce:transition-none pointer-coarse:w-16 pointer-coarse:empty:w-0"
             ref={(element) => {
               navigationScope.gutterRef.current = element;
             }}
