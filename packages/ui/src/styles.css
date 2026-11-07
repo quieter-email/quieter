@@ -18,6 +18,15 @@
   --typeset-flow: 1.25em;
 }
 
+.typeset-body {
+  --typeset-font-body: var(--font-geist);
+  --typeset-font-heading: var(--font-geist);
+  --typeset-font-mono: var(--font-geist-mono);
+  --typeset-size: var(--text-body);
+  --typeset-leading: var(--leading-relaxed);
+  font-size: var(--typeset-size);
+}
+
 :root,
 .theme-light {
   --brand-bg: rgb(238 238 240);

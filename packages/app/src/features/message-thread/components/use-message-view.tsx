@@ -171,6 +171,7 @@ export const useMessageViewData = ({
   const codeQueries = useQueries({
     queries: codeMessageIdBuckets.map((messageIds) =>
       verificationCodesQueryOptions(
+        queryClient,
         mailboxId,
         { messageIds, mode: "messages" },
         mailboxProvider !== "api"

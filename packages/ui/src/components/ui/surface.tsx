@@ -9,6 +9,10 @@ import { cn } from "../../lib/cn";
 export const surfaceVariants = cva("", {
   compoundVariants: [
     {
+      chrome: "bubble",
+      className: "rounded-section",
+    },
+    {
       chrome: "inset",
       className: "rounded-[calc(var(--radius-section)_-_var(--spacing)*0.5)]",
     },
@@ -20,6 +24,7 @@ export const surfaceVariants = cva("", {
   },
   variants: {
     chrome: {
+      bubble: null,
       default: null,
       inset: null,
     },
