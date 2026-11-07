@@ -10,6 +10,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
+import { ChatMessage } from "@quieter/app/features/chat/components/chat-message";
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
 import { ManagedUsageSummary } from "@quieter/app/features/settings/components/organization-settings/organization-mail-usage-settings";
 import { toastError } from "@quieter/app/lib/error-toast";
@@ -810,6 +811,58 @@ export const DesignSystemShowcase = () => {
             <Text size="sm" tone="muted">
               Supporting text
             </Text>
+          </Row>
+          <Row label="Conversation text">
+            <div className="flex w-full min-w-0 flex-col gap-4">
+              <ChatMessage
+                approvals={[]}
+                isStreaming={false}
+                message={{
+                  id: "design-system-user",
+                  parts: [
+                    {
+                      text: "Can you find the latest reply?\n\nPlease include a short summary.",
+                      type: "text",
+                    },
+                  ],
+                  role: "user",
+                }}
+              />
+              <ChatMessage
+                approvals={[]}
+                isStreaming={false}
+                message={{
+                  id: "design-system-assistant",
+                  parts: [
+                    {
+                      input: { query: "design review" },
+                      output: {
+                        category: "inbox",
+                        fetchedAt: "2026-11-06T12:00:00Z",
+                        messages: [
+                          {
+                            from: "Alex <alex@example.invalid>",
+                            id: "design-system-mail",
+                            subject: "Design review",
+                            threadId: "design-system-thread",
+                          },
+                        ],
+                        query: "design review",
+                        status: "success",
+                      },
+                      state: "output-available",
+                      toolCallId: "design-system-search",
+                      type: "tool-search_gmail",
+                    },
+                    {
+                      text: "Here is the latest reply and a **short summary**.",
+                      type: "text",
+                    },
+                  ],
+                  role: "assistant",
+                }}
+              />
+            </div>
           </Row>
           <Row label="Truncated heading">
             <Text

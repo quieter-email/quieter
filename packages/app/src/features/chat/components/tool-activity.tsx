@@ -1,363 +1,336 @@
 import {
   Alert02Icon,
   ArrowDown01Icon,
-  CheckmarkCircle02Icon,
+  Calendar03Icon,
+  Edit02Icon,
+  Link01Icon,
   Loading03Icon,
+  Mail01Icon,
+  Search01Icon,
 } from "@hugeicons/core-free-icons";
-import {
-  requiresChatToolApproval,
-  isCalendarWriteToolName,
-} from "@quieter/ai/chat-tools";
-import { getToolName } from "@quieter/app/features/chat/domain/chat-tools";
+import { linearToolCallInputSchema } from "@quieter/ai/chat-agent";
+import { MailReference } from "@quieter/app/features/chat/components/mail-reference";
+import { humanizeToolName } from "@quieter/app/features/chat/domain/chat-tools";
+import { formatActivityTime } from "@quieter/app/features/chat/domain/tool-activity";
 import type {
-  ChatToolApproval,
-  ChatToolPart,
-} from "@quieter/app/features/chat/domain/chat-tools";
+  ChatActivitySegment,
+  ExceptionalActivity,
+  RoutineActivity,
+} from "@quieter/app/features/chat/domain/tool-activity";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import {
   Collapsible,
   CollapsiblePanel,
   CollapsibleTrigger,
 } from "@quieter/ui/collapsible";
 import { Icon } from "@quieter/ui/icon";
-import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Surface } from "@quieter/ui/surface";
+import { Text } from "@quieter/ui/text";
 
-const labels: Record<string, { complete: string; pending: string }> = {
-  connector_list_tools: {
-    complete: "Read connected account",
-    pending: "Reading connected account…",
-  },
-  connector_read: {
-    complete: "Read connected content",
-    pending: "Reading connected content…",
-  },
-  connector_write: {
-    complete: "Updated connected account",
-    pending: "Updating connected account…",
-  },
-  create_calendar_event: {
-    complete: "Created event",
-    pending: "Creating event…",
-  },
-  delete_calendar_event: {
-    complete: "Deleted event",
-    pending: "Deleting event…",
-  },
-  edit_compose: { complete: "Updated draft", pending: "Updating draft…" },
-  get_calendar_event: { complete: "Read event", pending: "Reading event…" },
-  get_workspace: {
-    complete: "Checked workspace",
-    pending: "Checking workspace…",
-  },
-  list_calendar_events: {
-    complete: "Checked calendar events",
-    pending: "Checking calendar events…",
-  },
-  list_calendars: {
-    complete: "Checked calendars",
-    pending: "Checking calendars…",
-  },
-  modify_mail: {
-    complete: "Updated conversation",
-    pending: "Updating conversation…",
-  },
-  navigate: { complete: "Opened view", pending: "Opening view…" },
-  navigate_calendar: {
-    complete: "Opened calendar",
-    pending: "Opening calendar…",
-  },
-  open_compose: { complete: "Opened draft", pending: "Opening draft…" },
-  read_gmail_message: { complete: "Read message", pending: "Reading message…" },
-  read_gmail_messages: {
-    complete: "Read messages",
-    pending: "Reading messages…",
-  },
-  read_gmail_thread: {
-    complete: "Read conversation",
-    pending: "Reading conversation…",
-  },
-  respond_to_calendar_event: {
-    complete: "Responded to invitation",
-    pending: "Responding to invitation…",
-  },
-  save_compose_draft: { complete: "Saved draft", pending: "Saving draft…" },
-  search_gmail: { complete: "Searched mail", pending: "Searching mail…" },
-  send_mail: { complete: "Sent email", pending: "Sending email…" },
-  update_calendar_event: {
-    complete: "Updated event",
-    pending: "Updating event…",
-  },
+const categoryIcons = {
+  calendar: Calendar03Icon,
+  connection: Link01Icon,
+  draft: Edit02Icon,
+  mail: Mail01Icon,
+  search: Search01Icon,
+  workspace: Mail01Icon,
 };
 
-const CalendarApprovalDetails = ({
-  approval,
+const ActivityApproval = ({
+  activity,
+  isStreaming,
 }: {
-  approval: ChatToolApproval;
+  activity: Extract<ExceptionalActivity, { kind: "approval" }>;
+  isStreaming: boolean;
 }) => {
-  const review = approval.calendarReview;
-  if (review === undefined) {
-    return (
-      <p className="text-caption text-muted-fg">
-        The destination calendar and event need to be read before this action
-        can be approved.
-      </p>
+  const { approval } = activity;
+  const review = approval?.calendarReview;
+  const account = approval?.connectorReview ?? approval?.linearReview;
+  const command = linearToolCallInputSchema.safeParse(activity.input);
+  const canReview = review !== undefined || account !== undefined;
+  const details: [string, string][] = [];
+  let consequence =
+    "Review this change before continuing. It may permanently remove content.";
+  if (review) {
+    details.push(
+      ["When", formatActivityTime(review.time)],
+      ["Account", review.account.email ?? review.account.name],
+      ["Calendar", review.calendar.name],
+      [
+        "Applies to",
+        {
+          event: "This event",
+          occurrence: "This occurrence only",
+          series: "The entire series",
+        }[review.scope],
+      ]
     );
-  }
-  const time =
-    review.time.kind === "all-day"
-      ? `${review.time.startDate} until ${review.time.endDate}, all day, end date excluded`
-      : `${new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-          timeZone: review.time.timeZone,
-        }).formatRange(
-          new Date(review.time.start),
-          new Date(review.time.end)
-        )}, ${review.time.timeZone}`;
-  const details = [
-    ["Event", review.title],
-    ["When", time],
-    ["Account", review.account.email ?? review.account.name],
-    ["Calendar", review.calendar.name],
-    [
-      "Applies to",
-      {
-        event: "This event",
-        occurrence: "This occurrence only",
-        series: "The entire series",
-      }[review.scope],
-    ],
-    ["Guests", "Guests will be notified."],
-  ];
-  return (
-    <dl className="space-y-2 text-caption">
-      {details.map(([label, value]) => (
-        <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2" key={label}>
-          <dt className="text-muted-fg">{label}</dt>
-          <dd className="break-words whitespace-pre-wrap text-fg">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-};
-const ToolDetails = ({ input, draft }: { input: unknown; draft: boolean }) => {
-  if (typeof input !== "object" || input === null) {
-    return null;
-  }
-  let payload = input;
-  if (
-    "draft" in input &&
-    typeof input.draft === "object" &&
-    input.draft !== null
-  ) {
-    payload = input.draft;
-  }
-  const fields = draft
-    ? ([
-        ["To", "to"],
-        ["Cc", "cc"],
-        ["Bcc", "bcc"],
-        ["Subject", "subject"],
-        ["Message", "bodyText"],
-      ] as const)
-    : ([
-        ["Search", "query"],
-        ["Change", "action"],
-        ["Target", "target"],
-        ["Conversation", "threadId"],
-        ["Message", "messageId"],
-        ["Item", "id"],
-        ["View", "view"],
-      ] as const);
-  const details: { key: string; label: string; value: string }[] =
-    fields.flatMap(([label, key]) => {
-      const value: unknown = Reflect.get(payload, key);
-      return typeof value === "string" && value !== ""
-        ? [{ key, label, value }]
-        : [];
-    });
-  if (!draft) {
-    for (const [key, value] of Object.entries(payload)) {
-      if (details.some((detail) => detail.key === key)) {
-        continue;
-      }
-      details.push({
-        key,
-        label:
-          { arguments: "Inputs", connectionId: "Account", toolName: "Tool" }[
+    consequence = {
+      event: "This permanently removes the event. Guests will be notified.",
+      occurrence:
+        "This permanently removes this occurrence. Guests will be notified.",
+      series:
+        "This permanently removes every occurrence in the series. Guests will be notified.",
+    }[review.scope];
+  } else if (command.success) {
+    for (const [key, value] of Object.entries(command.data.arguments)) {
+      const target = /(?:^id$|Id$|_id$|^item$|^target$|^path$)/u.test(key);
+      if (
+        typeof value === "string" &&
+        (target ||
+          ["title", "name", "identifier", "content", "reason"].includes(key))
+      ) {
+        const label =
+          humanizeToolName(
             key
-          ] ?? key.replaceAll("_", " "),
-        value:
-          typeof value === "string" ? value : JSON.stringify(value, null, 2),
-      });
+              .replaceAll(/(?<=[a-z\d])(?=[A-Z])/gu, " ")
+              .replace(/(?:[_\s-]?id)$/iu, "")
+          ) || "Affected item";
+        details.push([target ? label : humanizeToolName(key), value]);
+      }
     }
   }
+
   return (
-    <dl className="max-h-48 space-y-2 overflow-y-auto text-caption">
-      {details.map(({ label, key, value }) => (
-        <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2" key={key}>
-          <dt className="text-muted-fg">{label}</dt>
-          <dd className="break-words whitespace-pre-wrap text-fg">{value}</dd>
+    <Surface className="my-3">
+      <div className="space-y-3">
+        <div className="flex items-start gap-3">
+          <Icon
+            icon={review ? Calendar03Icon : Alert02Icon}
+            size={18}
+            tone="destructive"
+          />
+          <div className="min-w-0 flex-1 space-y-1">
+            <Text size="body" weight="medium">
+              {activity.title}
+            </Text>
+            <Text size="sm" tone="muted">
+              {consequence}
+            </Text>
+          </div>
         </div>
-      ))}
-    </dl>
+        {account ? (
+          <Text className="wrap-anywhere" size="sm" tone="muted">
+            {[account.account, account.workspace].filter(Boolean).join(", ")}
+          </Text>
+        ) : null}
+        {details.length > 0 ? (
+          <dl className="space-y-2">
+            {details.map(([label, value]) => (
+              <div className="space-y-0.5" key={`${label}:${value}`}>
+                <dt className="text-caption text-muted-fg">{label}</dt>
+                <dd className="text-body-sm wrap-anywhere whitespace-pre-wrap text-fg">
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+        {canReview ? null : (
+          <Text size="sm" tone="muted">
+            The destination and affected item need to be checked before this
+            action can be confirmed.
+          </Text>
+        )}
+        {review ? null : (
+          <Collapsible>
+            <CollapsibleTrigger
+              className="group/action-review"
+              render={<Button size="compact" variant="ghost" />}
+            >
+              Full action details
+              <Icon
+                className="group-data-panel-open/action-review:rotate-180"
+                icon={ArrowDown01Icon}
+                size={14}
+              />
+            </CollapsibleTrigger>
+            <CollapsiblePanel>
+              <div className="min-h-0 overflow-hidden">
+                <pre className="mt-2 max-h-64 overflow-auto text-caption wrap-anywhere whitespace-pre-wrap text-muted-fg">
+                  <code>{JSON.stringify(activity.input, null, 2)}</code>
+                </pre>
+              </div>
+            </CollapsiblePanel>
+          </Collapsible>
+        )}
+        {approval ? (
+          <ActionFooter>
+            <Button
+              disabled={isStreaming}
+              onClick={() => {
+                approval.deny();
+              }}
+              size="sm"
+              type="button"
+              variant="secondary"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={isStreaming || !canReview}
+              onClick={() => {
+                approval.approve();
+              }}
+              size="sm"
+              type="button"
+              variant="destructive"
+            >
+              {review ? "Delete event" : "Confirm"}
+            </Button>
+          </ActionFooter>
+        ) : null}
+      </div>
+    </Surface>
   );
 };
 
 export const ToolActivity = ({
-  approval,
+  activity,
   isStreaming,
-  part,
 }: {
-  approval?: ChatToolApproval;
+  activity: Exclude<ChatActivitySegment, { kind: "text" }>;
   isStreaming: boolean;
-  part: ChatToolPart;
 }) => {
-  const name = getToolName(part.type);
-  const approvalAction =
-    name === "delete_calendar_event" ? "Delete" : "Confirm destructive action";
-  const awaitingApproval =
-    requiresChatToolApproval({ input: part.input, toolName: name }) &&
-    part.state === "approval-requested";
-  const output = part.state === "output-available" ? part.output : undefined;
-  const returnedError =
-    typeof output === "object" &&
-    output !== null &&
-    "status" in output &&
-    output.status === "error";
-  const failed = part.state === "output-error" || returnedError;
-  const pending =
-    part.state === "input-streaming" ||
-    part.state === "input-available" ||
-    (part.state === "approval-responded" && part.approval.approved);
-  const draft =
-    name === "send_mail" ||
-    name === "save_compose_draft" ||
-    name === "open_compose" ||
-    name === "edit_compose";
-  const wording = labels[name] ?? {
-    complete: "Completed action",
-    pending: "Working…",
-  };
-  let label = wording.complete;
-  let icon = CheckmarkCircle02Icon;
-  if (pending) {
-    label = wording.pending;
-    icon = Loading03Icon;
+  if (activity.kind === "approval") {
+    return <ActivityApproval activity={activity} isStreaming={isStreaming} />;
   }
-  if (failed) {
-    label = "Action could not be completed";
-    icon = Alert02Icon;
+  if (activity.kind === "failure") {
+    return (
+      <Surface aria-live="polite" className="my-2" variant="detail">
+        <div className="flex items-start gap-3">
+          <Icon icon={Alert02Icon} size={16} tone="destructive" />
+          <div className="min-w-0 space-y-1">
+            <Text size="sm" weight="medium">
+              {activity.title}
+            </Text>
+            <Text className="wrap-anywhere" size="sm" tone="muted">
+              {activity.message}
+            </Text>
+          </div>
+        </div>
+        {activity.sources.length > 0 ? (
+          <div className="mt-3 flex min-w-0 flex-col items-start gap-2">
+            {activity.sources.slice(0, 3).map((source) => (
+              <MailReference key={source.messageId} reference={source}>
+                Open email
+              </MailReference>
+            ))}
+          </div>
+        ) : null}
+      </Surface>
+    );
   }
-  if (part.state === "output-denied") {
-    label = "Skipped";
+
+  const { steps } = activity;
+  const current =
+    steps.findLast((step) => step.phase === "running") ?? steps[0];
+  const sourcesById = new Map<string, RoutineActivity["sources"][number]>();
+  for (const source of steps.flatMap((step) => step.sources)) {
+    const previous = sourcesById.get(source.messageId);
+    sourcesById.set(source.messageId, {
+      ...previous,
+      ...source,
+      from: source.from?.trim() || previous?.from,
+      subject: source.subject?.trim() || previous?.subject,
+    });
   }
-  if (awaitingApproval) {
-    label =
-      name === "delete_calendar_event"
-        ? "Delete this event permanently?"
-        : "Confirm this destructive action?";
-  }
-  let errorText = "The action could not be completed. Try again.";
-  if (part.state === "output-error") {
-    ({ errorText } = part);
-  } else if (
-    returnedError &&
-    "error" in output &&
-    typeof output.error === "string"
-  ) {
-    errorText = output.error;
+  const sources = [...sourcesById.values()];
+  const hasDetails =
+    steps.length > 1 ||
+    steps.some((step) => step.context.length > 0) ||
+    sources.length > 0;
+  const icon =
+    current.phase === "running"
+      ? Loading03Icon
+      : categoryIcons[current.category];
+
+  if (!hasDetails) {
+    return (
+      <output className="flex items-center gap-2 py-2">
+        <Icon
+          animation={current.phase === "running" ? "spin" : undefined}
+          icon={icon}
+          size={14}
+          tone="muted"
+        />
+        <Text size="sm" tone="muted">
+          {current.title}
+        </Text>
+      </output>
+    );
   }
 
   return (
-    <Collapsible
-      defaultOpen={awaitingApproval}
-      key={awaitingApproval ? "approval" : "activity"}
-    >
-      <div className="flex min-h-7 items-center gap-2 text-caption">
-        {awaitingApproval ? null : (
-          <Icon
-            aria-hidden
-            animation={pending ? "spin" : undefined}
-            size={14}
-            tone={failed ? "destructive" : "muted"}
-            icon={icon}
-          />
-        )}
-        <span
-          className={cn("min-w-0 text-muted-fg", {
-            "flex-1": awaitingApproval,
-          })}
-        >
-          {label}
+    <Collapsible>
+      <CollapsibleTrigger
+        className="group/activity"
+        render={<Button className="w-full" size="auto" variant="ghost" />}
+      >
+        <Icon
+          animation={current.phase === "running" ? "spin" : undefined}
+          icon={icon}
+          size={14}
+        />
+        <span aria-live="polite" className="min-w-0 flex-1">
+          {current.title}
         </span>
-        <IconButtonTooltip label="Action details">
-          <CollapsibleTrigger
-            aria-label="Action details"
-            render={<Button size="icon-xs" variant="ghost" />}
-          >
-            <Icon aria-hidden icon={ArrowDown01Icon} />
-          </CollapsibleTrigger>
-        </IconButtonTooltip>
-      </div>
-      {failed ? (
-        <output className="mt-1 block text-caption text-muted-fg">
-          {errorText}
-        </output>
-      ) : null}
-      <CollapsiblePanel>
-        <div className="py-2">
-          {awaitingApproval && approval && isCalendarWriteToolName(name) ? (
-            <div className="mb-3">
-              <CalendarApprovalDetails approval={approval} />
+        <Icon
+          className="group-data-panel-open/activity:rotate-180"
+          icon={ArrowDown01Icon}
+          size={14}
+        />
+      </CollapsibleTrigger>
+      <CollapsiblePanel keepMounted={false}>
+        <div className="min-h-0 overflow-hidden">
+          <Surface className="my-2">
+            <div className="space-y-4">
+              <ol className="space-y-3">
+                {steps.map((step) => (
+                  <li className="flex items-start gap-3" key={step.id}>
+                    <Icon
+                      animation={step.phase === "running" ? "spin" : undefined}
+                      icon={
+                        step.phase === "running"
+                          ? Loading03Icon
+                          : categoryIcons[step.category]
+                      }
+                      size={14}
+                      tone="muted"
+                    />
+                    <div className="min-w-0 space-y-1">
+                      <Text size="sm">{step.title}</Text>
+                      {step.context.map((context) => (
+                        <Text
+                          className="wrap-anywhere"
+                          key={context}
+                          size="caption"
+                          tone="muted"
+                        >
+                          {context}
+                        </Text>
+                      ))}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              {sources.length > 0 ? (
+                <div className="flex min-w-0 flex-col items-start gap-2">
+                  {sources.slice(0, 3).map((source) => (
+                    <MailReference key={source.messageId} reference={source}>
+                      Open email
+                    </MailReference>
+                  ))}
+                  {sources.length > 3 ? (
+                    <Text size="caption" tone="muted">
+                      {sources.length - 3} more emails in these results.
+                    </Text>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
-          ) : null}
-          {awaitingApproval && approval?.linearReview ? (
-            <p className="mb-3 text-caption text-fg">
-              The tool and arguments below will be sent to your connected
-              account, {approval.linearReview.account}, in{" "}
-              {approval.linearReview.workspace}.
-            </p>
-          ) : null}
-          {awaitingApproval && approval?.connectorReview ? (
-            <p className="mb-3 text-caption text-fg">
-              {[
-                approval.connectorReview.account,
-                approval.connectorReview.workspace,
-              ]
-                .filter(Boolean)
-                .join(", ")}
-            </p>
-          ) : null}
-          <ToolDetails draft={draft} input={part.input} />
-          {awaitingApproval && approval ? (
-            <ActionFooter className="mt-3">
-              <Button
-                disabled={isStreaming}
-                onClick={() => {
-                  approval.deny();
-                }}
-                size="compact"
-                type="button"
-                variant="secondary"
-              >
-                Cancel
-              </Button>
-              <Button
-                disabled={isStreaming}
-                onClick={() => {
-                  approval.approve();
-                }}
-                size="compact"
-                type="button"
-                variant="destructive"
-              >
-                {approvalAction}
-              </Button>
-            </ActionFooter>
-          ) : null}
+          </Surface>
         </div>
       </CollapsiblePanel>
     </Collapsible>
