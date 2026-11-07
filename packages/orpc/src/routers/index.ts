@@ -77,6 +77,12 @@ export const appRouter = {
         })
       )
   ),
+  search: lazy(
+    async () =>
+      await import("./search").then(({ searchRouter }) => ({
+        default: searchRouter,
+      }))
+  ),
 };
 
 export type AppRouter = typeof appRouter;

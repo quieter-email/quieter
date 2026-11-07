@@ -1,0 +1,301 @@
+{
+  "status": "complete",
+  "cases": [
+    {
+      "forbidden": [],
+      "id": "inaccessible-mailbox-rejected",
+      "kind": "contract",
+      "matched": [],
+      "missing": [],
+      "returnedCharacters": 0,
+      "status": "pass"
+    },
+    {
+      "indexCoverage": {
+        "complete": true,
+        "indexedSources": 47,
+        "totalSources": 47
+      },
+      "forbidden": [],
+      "id": "recipient-and-general-voice",
+      "kind": "contract",
+      "matched": [
+        "voice",
+        "alex",
+        "project-0",
+        "project-1",
+        "project-10",
+        "project-11",
+        "project-12",
+        "project-13",
+        "project-14",
+        "project-15",
+        "project-16",
+        "project-17",
+        "project-18",
+        "project-19"
+      ],
+      "missing": [],
+      "returnedCharacters": 1936,
+      "status": "pass"
+    },
+    {
+      "indexCoverage": {
+        "complete": true,
+        "indexedSources": 2,
+        "totalSources": 2
+      },
+      "forbidden": [],
+      "id": "recipient-exclusion",
+      "kind": "contract",
+      "matched": ["voice"],
+      "missing": [],
+      "returnedCharacters": 150,
+      "status": "pass"
+    },
+    {
+      "indexCoverage": {
+        "complete": true,
+        "indexedSources": 46,
+        "totalSources": 46
+      },
+      "forbidden": [],
+      "id": "relationship-reference",
+      "kind": "contract",
+      "matched": [
+        "partner",
+        "project-0",
+        "project-1",
+        "project-10",
+        "project-11",
+        "project-12",
+        "project-13",
+        "project-14",
+        "project-15",
+        "project-16",
+        "project-17",
+        "project-18",
+        "project-19"
+      ],
+      "missing": [],
+      "returnedCharacters": 1761,
+      "status": "pass"
+    },
+    {
+      "indexCoverage": {
+        "complete": true,
+        "indexedSources": 1,
+        "totalSources": 1
+      },
+      "forbidden": [],
+      "id": "shared-mailbox-personal-isolation",
+      "kind": "contract",
+      "matched": ["voice"],
+      "missing": [],
+      "returnedCharacters": 150,
+      "status": "pass"
+    },
+    {
+      "indexCoverage": {
+        "complete": true,
+        "indexedSources": 1,
+        "totalSources": 1
+      },
+      "forbidden": [],
+      "id": "general-preferences-cross-mailboxes",
+      "kind": "contract",
+      "matched": ["voice"],
+      "missing": [],
+      "returnedCharacters": 150,
+      "status": "pass"
+    },
+    {
+      "indexCoverage": {
+        "complete": true,
+        "indexedSources": 1,
+        "totalSources": 1
+      },
+      "forbidden": [],
+      "id": "label-rule-origin",
+      "kind": "contract",
+      "matched": ["label"],
+      "missing": [],
+      "returnedCharacters": 142,
+      "status": "pass"
+    },
+    {
+      "indexCoverage": {
+        "complete": true,
+        "indexedSources": 0,
+        "totalSources": 0
+      },
+      "forbidden": [],
+      "id": "label-rule-other-mailbox",
+      "kind": "contract",
+      "matched": [],
+      "missing": [],
+      "returnedCharacters": 0,
+      "status": "pass"
+    },
+    {
+      "indexCoverage": {
+        "complete": true,
+        "indexedSources": 1,
+        "totalSources": 1
+      },
+      "forbidden": [],
+      "id": "expired-and-archived",
+      "kind": "contract",
+      "matched": ["voice"],
+      "missing": [],
+      "returnedCharacters": 150,
+      "status": "pass"
+    },
+    {
+      "indexCoverage": {
+        "complete": true,
+        "indexedSources": 1,
+        "totalSources": 1
+      },
+      "forbidden": [],
+      "id": "manual-edit-freshness",
+      "kind": "contract",
+      "matched": ["voice"],
+      "missing": [],
+      "returnedCharacters": 148,
+      "status": "pass"
+    },
+    {
+      "indexCoverage": {
+        "complete": true,
+        "indexedSources": 31,
+        "totalSources": 31
+      },
+      "forbidden": [],
+      "id": "word-disjoint-semantic-recall",
+      "kind": "quality-probe",
+      "matched": [
+        "flight",
+        "preference-0",
+        "preference-1",
+        "preference-10",
+        "preference-11",
+        "preference-12",
+        "preference-13",
+        "preference-14",
+        "preference-15",
+        "preference-16",
+        "preference-17",
+        "preference-18",
+        "preference-19"
+      ],
+      "missing": [],
+      "returnedCharacters": 1914,
+      "status": "hit"
+    },
+    {
+      "indexCoverage": {
+        "complete": true,
+        "indexedSources": 31,
+        "totalSources": 31
+      },
+      "forbidden": [],
+      "id": "semantic-plant-based",
+      "kind": "quality-probe",
+      "matched": [
+        "diet",
+        "preference-0",
+        "preference-1",
+        "preference-10",
+        "preference-11",
+        "preference-12",
+        "preference-13",
+        "preference-14",
+        "preference-15",
+        "preference-16",
+        "preference-17",
+        "preference-18",
+        "preference-19"
+      ],
+      "missing": [],
+      "returnedCharacters": 1909,
+      "status": "hit"
+    },
+    {
+      "indexCoverage": {
+        "complete": true,
+        "indexedSources": 31,
+        "totalSources": 31
+      },
+      "forbidden": [],
+      "id": "semantic-german-accessibility",
+      "kind": "quality-probe",
+      "matched": [
+        "accessibility",
+        "preference-0",
+        "preference-1",
+        "preference-10",
+        "preference-11",
+        "preference-12",
+        "preference-13",
+        "preference-14",
+        "preference-15",
+        "preference-16",
+        "preference-17",
+        "preference-18",
+        "preference-19"
+      ],
+      "missing": [],
+      "returnedCharacters": 1936,
+      "status": "hit"
+    },
+    {
+      "indexCoverage": {
+        "complete": true,
+        "indexedSources": 31,
+        "totalSources": 31
+      },
+      "forbidden": [],
+      "id": "semantic-quiet-work",
+      "kind": "quality-probe",
+      "matched": [
+        "focus",
+        "preference-0",
+        "preference-1",
+        "preference-10",
+        "preference-11",
+        "preference-12",
+        "preference-13",
+        "preference-14",
+        "preference-15",
+        "preference-16",
+        "preference-17",
+        "preference-18",
+        "preference-19"
+      ],
+      "missing": [],
+      "returnedCharacters": 1945,
+      "status": "hit"
+    }
+  ],
+  "configuredEmbeddingModel": "openai/text-embedding-3-small:1024:v1",
+  "layer": "canonical-sql-recall",
+  "measured": [
+    "retrieved-fact-coverage",
+    "forbidden-fact-exposure",
+    "returned-characters"
+  ],
+  "mode": "semantic-live",
+  "provider": "quieter",
+  "retrieval": "hybrid-embedding",
+  "unmeasured": [
+    "extraction",
+    "deletion-replay",
+    "generation",
+    "tokens",
+    "cost",
+    "latency",
+    "supermemory"
+  ],
+  "version": 2
+}

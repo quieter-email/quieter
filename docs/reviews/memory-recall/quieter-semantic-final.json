@@ -1,0 +1,356 @@
+{
+  "status": "complete",
+  "cases": [
+    {
+      "forbidden": [],
+      "id": "inaccessible-mailbox-rejected",
+      "kind": "contract",
+      "matched": [],
+      "missing": [],
+      "returnedCharacters": 0,
+      "status": "pass"
+    },
+    {
+      "expansionTerms": [
+        "lunch plans",
+        "meeting for lunch",
+        "email to Alex",
+        "dining invitation"
+      ],
+      "forbidden": [],
+      "id": "recipient-and-general-voice",
+      "kind": "contract",
+      "matched": [
+        "voice",
+        "alex",
+        "project-0",
+        "project-1",
+        "project-10",
+        "project-11",
+        "project-12",
+        "project-13",
+        "project-14",
+        "project-15",
+        "project-16",
+        "project-17",
+        "project-18",
+        "project-19"
+      ],
+      "missing": [],
+      "returnedCharacters": 1936,
+      "status": "pass"
+    },
+    {
+      "expansionTerms": ["Blair", "contact blair", "correspondence with blair"],
+      "forbidden": [],
+      "id": "recipient-exclusion",
+      "kind": "contract",
+      "matched": ["voice"],
+      "missing": [],
+      "returnedCharacters": 150,
+      "status": "pass"
+    },
+    {
+      "expansionTerms": [
+        "husband",
+        "spouse",
+        "partner",
+        "messages from husband",
+        "emails from husband",
+        "texts from husband",
+        "spouse contact",
+        "husband contact"
+      ],
+      "forbidden": [],
+      "id": "relationship-reference",
+      "kind": "contract",
+      "matched": [
+        "partner",
+        "project-0",
+        "project-1",
+        "project-10",
+        "project-11",
+        "project-12",
+        "project-13",
+        "project-14",
+        "project-15",
+        "project-16",
+        "project-17",
+        "project-18",
+        "project-19"
+      ],
+      "missing": [],
+      "returnedCharacters": 1761,
+      "status": "pass"
+    },
+    {
+      "expansionTerms": [
+        "writing style",
+        "preferred tone",
+        "writing guidelines",
+        "editorial preferences",
+        "writing habits",
+        "communication style",
+        "content preferences",
+        "voice and tone",
+        "writing format"
+      ],
+      "forbidden": [],
+      "id": "shared-mailbox-personal-isolation",
+      "kind": "contract",
+      "matched": ["voice"],
+      "missing": [],
+      "returnedCharacters": 150,
+      "status": "pass"
+    },
+    {
+      "expansionTerms": [
+        "email draft",
+        "message templates",
+        "writing drafts",
+        "compose message",
+        "saved messages",
+        "communication drafts"
+      ],
+      "forbidden": [],
+      "id": "general-preferences-cross-mailboxes",
+      "kind": "contract",
+      "matched": ["voice"],
+      "missing": [],
+      "returnedCharacters": 150,
+      "status": "pass"
+    },
+    {
+      "expansionTerms": [
+        "travel itinerary",
+        "trip schedule",
+        "travel plans",
+        "vacation schedule",
+        "journey plan",
+        "holiday itinerary",
+        "flight details",
+        "hotel reservations",
+        "travel agenda"
+      ],
+      "forbidden": [],
+      "id": "label-rule-origin",
+      "kind": "contract",
+      "matched": ["label"],
+      "missing": [],
+      "returnedCharacters": 142,
+      "status": "pass"
+    },
+    {
+      "expansionTerms": [
+        "travel itinerary",
+        "trip schedule",
+        "vacation plan",
+        "travel plans",
+        "holiday itinerary",
+        "tour schedule",
+        "flight details",
+        "travel agenda",
+        "booking itinerary",
+        "travel confirmation",
+        "trip itinerary"
+      ],
+      "forbidden": [],
+      "id": "label-rule-other-mailbox",
+      "kind": "contract",
+      "matched": [],
+      "missing": [],
+      "returnedCharacters": 0,
+      "status": "pass"
+    },
+    {
+      "expansionTerms": [
+        "email salutations",
+        "email closings",
+        "professional greeting",
+        "formal sign-off",
+        "email signiture templates",
+        "opening lines",
+        "closing phrases"
+      ],
+      "forbidden": [],
+      "id": "expired-and-archived",
+      "kind": "contract",
+      "matched": ["voice"],
+      "missing": [],
+      "returnedCharacters": 150,
+      "status": "pass"
+    },
+    {
+      "expansionTerms": [
+        "drafting emails",
+        "email response",
+        "write reply",
+        "reply draft",
+        "drafting correspondence"
+      ],
+      "forbidden": [],
+      "id": "manual-edit-freshness",
+      "kind": "contract",
+      "matched": ["voice"],
+      "missing": [],
+      "returnedCharacters": 148,
+      "status": "pass"
+    },
+    {
+      "expansionTerms": [
+        "overnight flight",
+        "red-eye flight",
+        "choosing air travel",
+        "flight selection criteria",
+        "booking overnight travel",
+        "tips for night flights",
+        "selecting airplane seats",
+        "travel comfort factors"
+      ],
+      "forbidden": [],
+      "id": "word-disjoint-semantic-recall",
+      "kind": "quality-probe",
+      "matched": [
+        "flight",
+        "preference-0",
+        "preference-1",
+        "preference-10",
+        "preference-11",
+        "preference-12",
+        "preference-13",
+        "preference-14",
+        "preference-15",
+        "preference-16",
+        "preference-17",
+        "preference-18",
+        "preference-19"
+      ],
+      "missing": [],
+      "returnedCharacters": 1914,
+      "status": "hit"
+    },
+    {
+      "expansionTerms": [
+        "vegan diet",
+        "plant-based meals",
+        "dairy-free",
+        "egg-free",
+        "meat-free recipes",
+        "vegan cooking",
+        "dietary restrictions",
+        "animal product alternatives"
+      ],
+      "forbidden": [],
+      "id": "semantic-plant-based",
+      "kind": "quality-probe",
+      "matched": [
+        "diet",
+        "preference-0",
+        "preference-1",
+        "preference-10",
+        "preference-11",
+        "preference-12",
+        "preference-13",
+        "preference-14",
+        "preference-15",
+        "preference-16",
+        "preference-17",
+        "preference-18",
+        "preference-19"
+      ],
+      "missing": [],
+      "returnedCharacters": 1909,
+      "status": "hit"
+    },
+    {
+      "expansionTerms": [
+        "Barrierefreiheit Veranstaltungsorte",
+        "accessibility event venues",
+        "barrierefreie Infrastruktur",
+        "Rollstuhlgerechtigkeit",
+        "Toiletten für Menschen mit Behinderung",
+        "Leitsysteme barrierefrei",
+        "inklusive Eventplanung",
+        "Checkliste barrierefreie Veranstaltungen",
+        "Zugänglichkeit öffentliche Gebäude",
+        "barrierefreie Anreise"
+      ],
+      "forbidden": [],
+      "id": "semantic-german-accessibility",
+      "kind": "quality-probe",
+      "matched": [
+        "accessibility",
+        "preference-0",
+        "preference-1",
+        "preference-10",
+        "preference-11",
+        "preference-12",
+        "preference-13",
+        "preference-14",
+        "preference-15",
+        "preference-16",
+        "preference-17",
+        "preference-18",
+        "preference-19"
+      ],
+      "missing": [],
+      "returnedCharacters": 1936,
+      "status": "hit"
+    },
+    {
+      "expansionTerms": [
+        "focus environment",
+        "concentration setting",
+        "workplace productivity",
+        "noise management",
+        "deep work space",
+        "distraction free zone",
+        "study habits",
+        "optimal work conditions",
+        "managing interruptions",
+        "quiet workspace",
+        "concentration techniques",
+        "focused workflow"
+      ],
+      "forbidden": [],
+      "id": "semantic-quiet-work",
+      "kind": "quality-probe",
+      "matched": [
+        "focus",
+        "preference-0",
+        "preference-1",
+        "preference-10",
+        "preference-11",
+        "preference-12",
+        "preference-13",
+        "preference-14",
+        "preference-15",
+        "preference-16",
+        "preference-17",
+        "preference-18",
+        "preference-19"
+      ],
+      "missing": [],
+      "returnedCharacters": 1945,
+      "status": "hit"
+    }
+  ],
+  "layer": "canonical-sql-recall",
+  "measured": [
+    "retrieved-fact-coverage",
+    "forbidden-fact-exposure",
+    "returned-characters"
+  ],
+  "mode": "semantic-live",
+  "provider": "quieter",
+  "unmeasured": [
+    "extraction",
+    "deletion-replay",
+    "generation",
+    "tokens",
+    "cost",
+    "latency",
+    "supermemory"
+  ],
+  "version": 1
+}

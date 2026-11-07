@@ -39,6 +39,7 @@ import type { ReactNode } from "react";
 
 import { MemoryEditor } from "./personalization-memory-editor";
 import type { PersonalMemory } from "./personalization-memory-editor";
+import { MemoryProvenance } from "./personalization-memory-provenance";
 
 const memoryCategoryLabels = {
   activity: "Current context",
@@ -227,6 +228,7 @@ export const PersonalizationMemories = ({
                     <p className="text-body-sm break-words whitespace-pre-wrap text-fg">
                       {memory.content}
                     </p>
+                    <MemoryProvenance provenance={memory.provenance} />
                   </div>
                   <DropdownMenu>
                     <IconButtonTooltip label="Memory actions">

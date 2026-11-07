@@ -382,6 +382,7 @@ const ingestManagedMessageForMailbox = async (input: {
           from: managedMailMessage.from,
           headers: managedMailMessage.headers,
           id: managedMailMessage.id,
+          subject: managedMailMessage.subject,
         })
         .from(managedMailMessage)
         .where(

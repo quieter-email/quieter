@@ -124,14 +124,18 @@ export const writeGmailCapturedMessage = async (input: {
           source: input.source,
           updatedAt: now,
         },
-        setWhere: sql`${gmailCapturedMessage.providerRevision}::numeric < ${snapshot.providerRevision}::numeric or (${gmailCapturedMessage.providerRevision}::numeric = ${snapshot.providerRevision}::numeric and ${gmailCapturedMessage.deletedAt} is null and ${gmailCapturedMessage.snapshot} is distinct from excluded.snapshot)`,
+        setWhere: sql`${gmailCapturedMessage.providerRevision}::numeric < ${snapshot.providerRevision}::numeric or (${gmailCapturedMessage.providerRevision}::numeric = ${snapshot.providerRevision}::numeric and ${gmailCapturedMessage.deletedAt} is null and (${gmailCapturedMessage.snapshot} is distinct from excluded.snapshot or (${gmailCapturedMessage.source} = 'search' and excluded.source <> 'search')))`,
         target: [
           gmailCapturedMessage.mailboxId,
           gmailCapturedMessage.messageId,
         ],
       })
       .returning({ messageId: gmailCapturedMessage.messageId });
-    if (accepted.length && !snapshot.labelIds.includes("SENT")) {
+    if (
+      accepted.length &&
+      input.source !== "search" &&
+      !snapshot.labelIds.includes("SENT")
+    ) {
       await ensureMailImportanceWork(tx, {
         mailboxId: input.mailboxId,
         message: snapshot,
