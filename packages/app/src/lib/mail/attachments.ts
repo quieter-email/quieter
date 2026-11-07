@@ -2,6 +2,45 @@ import type { MessageAttachment } from "@quieter/app/lib/mail";
 import { rpc } from "@quieter/app/lib/orpc";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 
+export const MESSAGE_ATTACHMENT_DRAG_TYPE = "application/x-quieter-attachment";
+
+type DraggedMessageAttachment = {
+  attachment: MessageAttachment;
+  mailboxId: string;
+  messageId: string;
+  token: string;
+};
+
+let draggedAttachment: DraggedMessageAttachment | null = null;
+
+export const startMessageAttachmentDrag = (
+  dataTransfer: DataTransfer,
+  source: Omit<DraggedMessageAttachment, "token">
+) => {
+  const token = crypto.randomUUID();
+  draggedAttachment = { ...source, token };
+  dataTransfer.effectAllowed = "copy";
+  dataTransfer.setData(MESSAGE_ATTACHMENT_DRAG_TYPE, token);
+};
+
+export const clearMessageAttachmentDrag = () => {
+  draggedAttachment = null;
+};
+
+export const readMessageAttachmentDrop = (
+  dataTransfer: DataTransfer,
+  mailboxId: string | null
+) => {
+  const source = draggedAttachment;
+  draggedAttachment = null;
+  return source?.mailboxId === mailboxId &&
+    source?.token === dataTransfer.getData(MESSAGE_ATTACHMENT_DRAG_TYPE)
+    ? source
+    : null;
+};
+
+export { openAttachmentPreview } from "./attachment-preview";
+
 export const loadMessageAttachment = async ({
   attachment,
   mailboxId,

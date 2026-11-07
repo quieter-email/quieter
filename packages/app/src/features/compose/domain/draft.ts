@@ -1,3 +1,4 @@
+import type { MessageAttachment } from "@quieter/app/lib/mail";
 import { rpc } from "@quieter/app/lib/orpc";
 import type { ComposeDraftAnchor } from "@quieter/mail/compose/schema";
 
@@ -499,7 +500,7 @@ export const hasComposeDraftContent = (draft: ComposeDraftState): boolean =>
     draft.inlineImages.length > 0
   );
 
-const attachRuntimeFile = async <
+export const loadComposeRuntimeFile = async <
   T extends ComposeAttachment | ComposeInlineImage,
 >(
   asset: T,
@@ -611,6 +612,35 @@ export const addComposeAttachmentFiles = (
   };
 };
 
+export const addComposeMessageAttachment = (
+  draft: ComposeDraftState,
+  attachment: MessageAttachment,
+  messageId: string
+): ComposeDraftState => {
+  assertAttachmentBudget([
+    ...draft.attachments,
+    ...draft.inlineImages,
+    attachment,
+  ]);
+  return {
+    ...draft,
+    attachments: [
+      ...draft.attachments,
+      {
+        gmailAttachmentId: attachment.attachmentId,
+        id: crypto.randomUUID(),
+        isInline: false,
+        mimeType: attachment.mimeType,
+        name: attachment.fileName,
+        size: attachment.size,
+        sourceMessageId: messageId,
+      },
+    ],
+    errorMessage: null,
+    updatedAt: Date.now(),
+  };
+};
+
 const findReferencedInlineImageIds = (html: string): Set<string> => {
   if (html.length === 0 || typeof window === "undefined") {
     return new Set();
@@ -658,13 +688,18 @@ const serializeDraft = async (
     Promise.all(
       draft.inlineImages.map(
         async (image) =>
-          await attachRuntimeFile(image, mailboxId, draft.messageId, signal)
+          await loadComposeRuntimeFile(
+            image,
+            mailboxId,
+            draft.messageId,
+            signal
+          )
       )
     ),
     Promise.all(
       draft.attachments.map(
         async (attachment) =>
-          await attachRuntimeFile(
+          await loadComposeRuntimeFile(
             attachment,
             mailboxId,
             draft.messageId,
@@ -689,7 +724,7 @@ export const prepareLoadedComposeDraft = async (
   const loaded = await Promise.allSettled(
     [...draft.inlineImages, ...draft.attachments].map(
       async (asset) =>
-        await attachRuntimeFile(asset, mailboxId, draft.messageId, signal)
+        await loadComposeRuntimeFile(asset, mailboxId, draft.messageId, signal)
     )
   );
   for (const result of loaded) {

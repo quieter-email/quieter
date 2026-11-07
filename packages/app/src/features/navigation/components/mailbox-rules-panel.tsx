@@ -742,15 +742,15 @@ const ManagedRulesList = (props: MailboxOrganizerContentProps) => {
 
   if (rulesPending) {
     return (
-      <p className={settingsSurfaceVariants({ variant: "padding" })}>
+      <Text size="sm" tone="muted">
         Loading rules…
-      </p>
+      </Text>
     );
   }
 
   if (rulesError && rulesData === undefined) {
     return (
-      <div className={settingsSurfaceVariants({ variant: "body" })}>
+      <div className="space-y-3">
         <Text size="sm" tone="muted">
           Could not load rules.
         </Text>
@@ -768,14 +768,14 @@ const ManagedRulesList = (props: MailboxOrganizerContentProps) => {
 
   if (rulesData?.length === 0) {
     return (
-      <p className={settingsSurfaceVariants({ variant: "padding" })}>
-        No rules yet. Create one below to organize incoming mail.
-      </p>
+      <Text size="sm" tone="muted">
+        No rules yet.
+      </Text>
     );
   }
 
   return (
-    <div>
+    <SettingsCard>
       {(rulesData ?? []).map((rule, index, rules) => (
         <ManagedRuleRow
           {...props}
@@ -785,7 +785,7 @@ const ManagedRulesList = (props: MailboxOrganizerContentProps) => {
           rules={rules}
         />
       ))}
-    </div>
+    </SettingsCard>
   );
 };
 
@@ -845,9 +845,7 @@ export const ManagedMailboxRulesPanel = (
             title="Automatic rules"
             description="Rules run from top to bottom. Turn a rule off to pause it."
           >
-            <SettingsCard>
-              <ManagedRulesList {...props} />
-            </SettingsCard>
+            <ManagedRulesList {...props} />
           </SettingsSectionLayout>
           <ManagedRuleBackfill {...props} />
           <ManagedRuleBuilder {...props} />

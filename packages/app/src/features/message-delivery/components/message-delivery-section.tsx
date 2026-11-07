@@ -30,6 +30,7 @@ import {
   CollapsibleTrigger,
 } from "@quieter/ui/collapsible";
 import { Pill } from "@quieter/ui/pill";
+import { Surface } from "@quieter/ui/surface";
 import { Text } from "@quieter/ui/text";
 import { useQuery } from "@tanstack/react-query";
 
@@ -239,34 +240,41 @@ export const MessageDeliverySection = ({
             <DeliveryRecipients delivery={delivery} />
           ) : null}
           {delivery.openTracking === null ? null : (
-            <div className="space-y-1">
-              <Text weight="medium">
-                {delivery.openTracking.reportedLoadCount === 0
-                  ? "No tracking image loads reported"
-                  : `${delivery.openTracking.reportedLoadCount.toLocaleString()} tracking image loads reported`}
-              </Text>
-              {delivery.openTracking.firstLoadedAt === null ? null : (
-                <Text size="caption" tone="muted">
-                  First load{" "}
-                  {eventTimeFormatter.format(
-                    delivery.openTracking.firstLoadedAt
-                  )}
+            <Surface>
+              <div className="space-y-3">
+                <Text size="lg" weight="medium">
+                  {delivery.openTracking.reportedLoadCount === 0
+                    ? "No image loads reported"
+                    : `${delivery.openTracking.reportedLoadCount.toLocaleString()} image ${delivery.openTracking.reportedLoadCount === 1 ? "load" : "loads"} reported`}
                 </Text>
-              )}
-              {delivery.openTracking.lastLoadedAt === null ? null : (
-                <Text size="caption" tone="muted">
-                  Latest load{" "}
-                  {eventTimeFormatter.format(
-                    delivery.openTracking.lastLoadedAt
+                <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-caption">
+                  {delivery.openTracking.firstLoadedAt === null ? null : (
+                    <div className="contents">
+                      <dt className="text-muted-fg">First load</dt>
+                      <dd className="text-fg">
+                        {eventTimeFormatter.format(
+                          delivery.openTracking.firstLoadedAt
+                        )}
+                      </dd>
+                    </div>
                   )}
+                  {delivery.openTracking.lastLoadedAt === null ? null : (
+                    <div className="contents">
+                      <dt className="text-muted-fg">Latest load</dt>
+                      <dd className="text-fg">
+                        {eventTimeFormatter.format(
+                          delivery.openTracking.lastLoadedAt
+                        )}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+                <Text size="caption" tone="muted">
+                  Approximate activity. Loads may be automated or blocked and do
+                  not confirm reading or identify a reader.
                 </Text>
-              )}
-              <Text size="caption" tone="muted">
-                Mail clients and privacy proxies may load or block the image.
-                Loads do not confirm the message was read or identify who read
-                it.
-              </Text>
-            </div>
+              </div>
+            </Surface>
           )}
         </>
       )}

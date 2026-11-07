@@ -206,61 +206,63 @@ const SidebarInboxSection = ({
         {embedded !== true && selectedMailboxId !== null ? (
           <SidebarEntrance
             animateEntrance={animateEntrance}
-            className="w-full"
+            className="mt-4 w-full"
             index={10}
           >
-            <SidebarMailboxNavItem
-              active={isSnippetMailbox}
-              aria-current={isSnippetMailbox ? "page" : undefined}
-              // oxlint-disable shadcn/no-restyle -- The sidebar row uses its existing animated active styling.
-              className="justify-start gap-3 px-3 text-left"
-              // oxlint-enable shadcn/no-restyle
-              mailboxSearch={{
-                mailbox: "snippets",
-                mailboxId: selectedMailboxId,
-                messageId: null,
-                threadId: null,
-                view: "inbox",
-                workspace: null,
-              }}
-              onClick={onRequestClose}
-              onFocus={() => void loadSnippetWorkspace()}
-              onMouseEnter={() => void loadSnippetWorkspace()}
-              onPointerDown={() => void loadSnippetWorkspace()}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              <Icon tone="default" icon={NoteEditIcon} />
-              Snippets
-            </SidebarMailboxNavItem>
+            <nav aria-label="Mail tools" className="flex flex-col">
+              <p className="mb-1 px-2 text-caption font-medium text-muted-fg">
+                Tools
+              </p>
+              <SidebarMailboxNavItem
+                active={isSnippetMailbox}
+                aria-current={isSnippetMailbox ? "page" : undefined}
+                // oxlint-disable shadcn/no-restyle -- The sidebar row uses its existing animated active styling.
+                className="justify-start gap-3 px-3 text-left"
+                // oxlint-enable shadcn/no-restyle
+                mailboxSearch={{
+                  mailbox: "snippets",
+                  mailboxId: selectedMailboxId,
+                  messageId: null,
+                  threadId: null,
+                  view: "inbox",
+                  workspace: null,
+                }}
+                onClick={onRequestClose}
+                onFocus={() => void loadSnippetWorkspace()}
+                onMouseEnter={() => void loadSnippetWorkspace()}
+                onPointerDown={() => void loadSnippetWorkspace()}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                <Icon tone="default" icon={NoteEditIcon} />
+                Snippets
+              </SidebarMailboxNavItem>
+              {!allInboxesActive && selectedMailboxProvider === "managed" ? (
+                <SidebarMailboxNavItem
+                  active={selectedView === "rules"}
+                  aria-current={selectedView === "rules" ? "page" : undefined}
+                  // oxlint-disable-next-line shadcn/no-restyle -- Matches the existing sidebar navigation row.
+                  className="justify-start gap-3 px-3 text-left"
+                  mailboxSearch={{
+                    mailbox: "inbox",
+                    mailboxId: selectedMailboxId,
+                    messageId: null,
+                    threadId: null,
+                    view: "rules",
+                    workspace: null,
+                  }}
+                  onClick={onRequestClose}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Icon aria-hidden tone="default" icon={Sorting05Icon} />
+                  Organize mailbox
+                </SidebarMailboxNavItem>
+              ) : null}
+            </nav>
           </SidebarEntrance>
-        ) : null}
-        {embedded !== true &&
-        !allInboxesActive &&
-        selectedMailboxProvider === "managed" &&
-        selectedMailboxId ? (
-          <SidebarMailboxNavItem
-            active={selectedView === "rules"}
-            aria-current={selectedView === "rules" ? "page" : undefined}
-            // oxlint-disable-next-line shadcn/no-restyle -- Matches the existing sidebar navigation row.
-            className="justify-start gap-3 px-3 text-left"
-            mailboxSearch={{
-              mailbox: "inbox",
-              mailboxId: selectedMailboxId,
-              messageId: null,
-              threadId: null,
-              view: "rules",
-              workspace: null,
-            }}
-            onClick={onRequestClose}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            <Icon aria-hidden tone="default" icon={Sorting05Icon} />
-            Organize mailbox
-          </SidebarMailboxNavItem>
         ) : null}
         {allInboxesActive && (
           <UnifiedSidebarLabelNav

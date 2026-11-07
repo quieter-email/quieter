@@ -5,6 +5,7 @@ import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
 import { buttonVariants } from "./button";
+import { popupSurfaceClassName } from "./popup-surface";
 
 export const FullPageDialog = DialogPrimitive.Root;
 export const FullPageDialogTrigger = DialogPrimitive.Trigger;
@@ -18,7 +19,8 @@ export const FullPageDialogContent = ({
     <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-200 ease-(--app-motion-ease-out) data-ending-style:opacity-0 data-ending-style:duration-150 data-starting-style:opacity-0" />
     <DialogPrimitive.Popup
       className={cn(
-        "fixed inset-2 z-50 flex flex-col overflow-hidden rounded-panel border border-transparent bg-panel text-fg shadow-lg transition-[opacity,scale] duration-200 ease-(--app-motion-ease-out) will-change-[opacity,scale] data-ending-style:scale-[0.99] data-ending-style:opacity-0 data-ending-style:duration-150 data-starting-style:scale-[0.99] data-starting-style:opacity-0 motion-reduce:transition-opacity motion-reduce:data-ending-style:scale-100 motion-reduce:data-starting-style:scale-100 sm:inset-4 lg:inset-6",
+        popupSurfaceClassName,
+        "fixed inset-2 z-50 flex flex-col overflow-hidden rounded-xl transition-[opacity,scale] duration-200 ease-(--app-motion-ease-out) will-change-[opacity,scale] data-ending-style:scale-[0.99] data-ending-style:opacity-0 data-ending-style:duration-150 data-starting-style:scale-[0.99] data-starting-style:opacity-0 motion-reduce:transition-opacity motion-reduce:data-ending-style:scale-100 motion-reduce:data-starting-style:scale-100 sm:inset-4 lg:inset-6",
         className
       )}
       {...props}
@@ -34,7 +36,7 @@ export const FullPageDialogHeader = ({
 }: ComponentPropsWithoutRef<"header">) => (
   <header
     className={cn(
-      "m-0.5 flex shrink-0 items-center gap-3 rounded-section bg-section p-3.5",
+      "m-0.5 flex shrink-0 items-center gap-3 rounded-lg bg-section p-3.5",
       className
     )}
     {...props}

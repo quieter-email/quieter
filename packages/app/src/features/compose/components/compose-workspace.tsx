@@ -34,6 +34,7 @@ import {
   clearComposeDraftRuntimeFiles,
   createRecoveredComposeCopy,
   createEmptyComposeDraft,
+  loadComposeRuntimeFile,
   textToComposeBodyHtml,
 } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
@@ -53,6 +54,11 @@ import { authClient } from "@quieter/app/lib/auth";
 import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { deleteDemoDraft } from "@quieter/app/lib/gmail/demo-mail";
+import {
+  MESSAGE_ATTACHMENT_DRAG_TYPE,
+  openAttachmentPreview,
+  readMessageAttachmentDrop,
+} from "@quieter/app/lib/mail/attachments";
 import { refreshCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-query/index";
 import { deleteManagedDemoDraft } from "@quieter/app/lib/managed-mail/demo-managed-mail";
 import { orpc, rpc } from "@quieter/app/lib/orpc";
@@ -68,6 +74,21 @@ import {
   ComposerFieldRow,
   ComposerFrame,
 } from "@quieter/ui/composer-chrome";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@quieter/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@quieter/ui/dropdown-menu";
 import { Field, FieldControl, FieldError, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
@@ -213,6 +234,66 @@ const ComposeFormField = ({
   </form.Field>
 );
 
+const RenameAttachmentDialog = ({
+  attachment,
+  disabled,
+  onClose,
+  onSave,
+}: {
+  attachment: ComposeDraftState["attachments"][number];
+  disabled: boolean;
+  onClose: () => void;
+  onSave: (id: string, name: string) => void;
+}) => {
+  const [name, setName] = useState(attachment.name);
+  const valid = !!name.trim() && !/[\r\n\0]/u.test(name);
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+    >
+      <DialogContent>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (valid && !disabled) {
+              onSave(attachment.id, name);
+              onClose();
+            }
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Rename attachment</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <Field>
+              <FieldLabel htmlFor="attachment-name">File name</FieldLabel>
+              <FieldControl
+                disabled={disabled}
+                id="attachment-name"
+                onChange={(event) => {
+                  setName(event.currentTarget.value);
+                }}
+                value={name}
+              />
+            </Field>
+          </DialogBody>
+          <DialogFooter>
+            <DialogCloseButton>Cancel</DialogCloseButton>
+            <Button disabled={!valid || disabled} type="submit">
+              Save
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 const ReadyComposeSurface = ({
   allowSenderSwitch = false,
   beforeNavigate,
@@ -259,6 +340,9 @@ const ReadyComposeSurface = ({
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [renamingAttachment, setRenamingAttachment] = useState<
+    ComposeDraftState["attachments"][number] | null
+  >(null);
   const currentSender =
     senderMailboxes?.find((sender) => sender.id === mailboxId) ??
     senderMailbox ??
@@ -312,7 +396,9 @@ const ReadyComposeSurface = ({
     state,
     addInlineImageFiles,
     addAttachmentFiles,
+    addMessageAttachment,
     removeAttachment,
+    renameAttachment,
     handleUserDraftChange,
     closeComposeDialog,
     discardActiveDraft,
@@ -385,6 +471,32 @@ const ReadyComposeSurface = ({
   const [showQuotedContent, setShowQuotedContent] = useState(false);
   const hasQuotedContent =
     isInline && state.draft.bodyHtml.includes("<blockquote");
+
+  const openComposeAttachment = async (
+    attachment: ComposeDraftState["attachments"][number]
+  ) => {
+    if (!mailboxId) {
+      return;
+    }
+    try {
+      await openAttachmentPreview({
+        fileName: attachment.name,
+        loadFile: async () => {
+          const loaded = await loadComposeRuntimeFile(
+            attachment,
+            mailboxId,
+            state.draft.messageId
+          );
+          return loaded.file;
+        },
+      });
+    } catch (error) {
+      toastError(error, {
+        boundary: "compose-attachment-preview",
+        fallback: "Could not open that attachment. Please try again.",
+      });
+    }
+  };
 
   const handleSenderChange = async (nextMailboxId: string | null) => {
     if (
@@ -636,13 +748,19 @@ const ReadyComposeSurface = ({
         })}
         data-compose-surface
         onDragEnterCapture={(event) => {
-          if (event.dataTransfer.types.includes("Files")) {
+          if (
+            event.dataTransfer.types.includes("Files") ||
+            event.dataTransfer.types.includes(MESSAGE_ATTACHMENT_DRAG_TYPE)
+          ) {
             dragDepthRef.current += 1;
             setIsDraggingFiles(true);
           }
         }}
         onDragLeaveCapture={(event) => {
-          if (event.dataTransfer.types.includes("Files")) {
+          if (
+            event.dataTransfer.types.includes("Files") ||
+            event.dataTransfer.types.includes(MESSAGE_ATTACHMENT_DRAG_TYPE)
+          ) {
             dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
             if (dragDepthRef.current === 0) {
               setIsDraggingFiles(false);
@@ -650,13 +768,19 @@ const ReadyComposeSurface = ({
           }
         }}
         onDragOverCapture={(event) => {
-          if (event.dataTransfer.types.includes("Files")) {
+          if (
+            event.dataTransfer.types.includes("Files") ||
+            event.dataTransfer.types.includes(MESSAGE_ATTACHMENT_DRAG_TYPE)
+          ) {
             event.preventDefault();
             event.dataTransfer.dropEffect = canEditBody ? "copy" : "none";
           }
         }}
         onDropCapture={(event) => {
-          if (!event.dataTransfer.types.includes("Files")) {
+          if (
+            !event.dataTransfer.types.includes("Files") &&
+            !event.dataTransfer.types.includes(MESSAGE_ATTACHMENT_DRAG_TYPE)
+          ) {
             return;
           }
           event.preventDefault();
@@ -664,7 +788,19 @@ const ReadyComposeSurface = ({
           dragDepthRef.current = 0;
           setIsDraggingFiles(false);
           if (canEditBody) {
-            addAttachmentFiles([...event.dataTransfer.files]);
+            if (
+              event.dataTransfer.types.includes(MESSAGE_ATTACHMENT_DRAG_TYPE)
+            ) {
+              const source = readMessageAttachmentDrop(
+                event.dataTransfer,
+                mailboxId
+              );
+              if (source) {
+                addMessageAttachment(source.attachment, source.messageId);
+              }
+            } else {
+              addAttachmentFiles([...event.dataTransfer.files]);
+            }
           }
         }}
       >
@@ -1143,40 +1279,59 @@ const ReadyComposeSurface = ({
                       >
                         {state.draft.attachments.map((attachment) => (
                           <li
-                            className={cn(
-                              "flex max-w-full min-w-0 items-center gap-2 rounded-sm border border-transparent bg-control px-2 py-1 text-body-sm",
-                              entranceMotionVariants({ effect: "pop" })
-                            )}
+                            className="max-w-full min-w-0"
                             key={attachment.id}
                           >
-                            <Icon
-                              aria-hidden
-
-                              icon={Attachment01Icon}
-                            />
-                            <span className="truncate">{attachment.name}</span>
-                            <span className="shrink-0 text-caption text-muted-fg">
-                              {Math.ceil(
-                                attachment.size / 1024
-                              ).toLocaleString()}{" "}
-                              KB
-                            </span>
-                            <IconButtonTooltip
-                              label={`Remove ${attachment.name}`}
-                            >
-                              <Button
-                                aria-label={`Remove ${attachment.name}`}
-                                disabled={!canEditBody}
-                                onClick={() => {
-                                  removeAttachment(attachment.id);
-                                }}
-                                size="icon-xs"
-                                type="button"
-                                variant="ghost"
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                render={
+                                  <Button
+                                    className="max-w-full min-w-0"
+                                    size="compact"
+                                    type="button"
+                                    variant="secondary"
+                                  />
+                                }
                               >
-                                <Icon icon={Cancel01Icon} />
-                              </Button>
-                            </IconButtonTooltip>
+                                <Icon aria-hidden icon={Attachment01Icon} />
+                                <span className="truncate">
+                                  {attachment.name}
+                                </span>
+                                <span className="shrink-0 text-muted-fg">
+                                  {Math.ceil(
+                                    attachment.size / 1024
+                                  ).toLocaleString()}{" "}
+                                  KB
+                                </span>
+                                <Icon aria-hidden icon={ArrowDown01Icon} />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" size="compact">
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void openComposeAttachment(attachment);
+                                  }}
+                                >
+                                  Open in new tab
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={!canEditBody}
+                                  onSelect={() => {
+                                    setRenamingAttachment(attachment);
+                                  }}
+                                >
+                                  Rename
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={!canEditBody}
+                                  onSelect={() => {
+                                    removeAttachment(attachment.id);
+                                  }}
+                                  tone="destructive"
+                                >
+                                  Remove
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </li>
                         ))}
                       </ul>
@@ -1325,6 +1480,17 @@ const ReadyComposeSurface = ({
           ) : null}
         </ComposerFrame>
       </form>
+      {renamingAttachment ? (
+        <RenameAttachmentDialog
+          attachment={renamingAttachment}
+          disabled={!canEditBody}
+          key={renamingAttachment.id}
+          onClose={() => {
+            setRenamingAttachment(null);
+          }}
+          onSave={renameAttachment}
+        />
+      ) : null}
       {snippetDraft !== null && mailboxId ? (
         <SaveSnippetDialog
           initialText={snippetDraft}

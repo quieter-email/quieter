@@ -365,6 +365,7 @@
     "idb": "^8.0.4",
     "lenis": "^1.3.26",
     "motion": "catalog:",
+    "pdfjs-dist": "6.5.438",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-remark": "^2.1.0",

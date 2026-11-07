@@ -12,6 +12,7 @@ import {
   overlayTitleClassName,
   overlayTriggerClassName,
 } from "./overlay-chrome";
+import { popupSurfaceClassName } from "./popup-surface";
 
 export const Drawer = DrawerPrimitive.Root;
 export const DrawerPortal = DrawerPrimitive.Portal;
@@ -61,11 +62,12 @@ export const DrawerContent = ({
     <DrawerOverlay />
     <DrawerPrimitive.Content
       className={cn(
-        "fixed z-50 flex flex-col overflow-hidden rounded-panel border border-transparent bg-panel text-popover-fg shadow-lg",
-        "data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=bottom]:bottom-0 data-[vaul-drawer-direction=bottom]:max-h-[96vh] data-[vaul-drawer-direction=bottom]:rounded-t-panel data-[vaul-drawer-direction=bottom]:border-t",
-        "data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:max-h-[96vh] data-[vaul-drawer-direction=top]:rounded-b-panel data-[vaul-drawer-direction=top]:border-b",
-        "data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:h-full data-[vaul-drawer-direction=left]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=left]:rounded-r-panel data-[vaul-drawer-direction=left]:border-r",
-        "data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=right]:rounded-l-panel data-[vaul-drawer-direction=right]:border-l",
+        popupSurfaceClassName,
+        "fixed z-50 flex flex-col overflow-hidden rounded-xl",
+        "data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=bottom]:bottom-0 data-[vaul-drawer-direction=bottom]:max-h-[96vh] data-[vaul-drawer-direction=bottom]:rounded-t-xl data-[vaul-drawer-direction=bottom]:border-t",
+        "data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:max-h-[96vh] data-[vaul-drawer-direction=top]:rounded-b-xl data-[vaul-drawer-direction=top]:border-b",
+        "data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:h-full data-[vaul-drawer-direction=left]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=left]:rounded-r-xl data-[vaul-drawer-direction=left]:border-r",
+        "data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:w-[min(92vw,32rem)] data-[vaul-drawer-direction=right]:rounded-l-xl data-[vaul-drawer-direction=right]:border-l",
         className
       )}
       {...props}
@@ -81,7 +83,7 @@ export const DrawerHeader = ({
   ...props
 }: ComponentPropsWithoutRef<"div">) => (
   <div
-    className={cn("m-0.5 rounded-section bg-section p-3.5", className)}
+    className={cn("m-0.5 rounded-lg bg-section p-3.5", className)}
     {...props}
   />
 );

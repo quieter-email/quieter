@@ -18,6 +18,7 @@ import type { ComposeFormValues } from "@quieter/app/features/compose/domain/com
 import {
   attachInlineImagesToHtml,
   addComposeAttachmentFiles,
+  addComposeMessageAttachment,
   appendComposeSignature,
   clearComposeDraftRuntimeFiles,
   cloneComposeDraft,
@@ -40,6 +41,7 @@ import {
   saveDemoDraft,
   sendDemoDraft,
 } from "@quieter/app/lib/gmail/demo-mail";
+import type { MessageAttachment } from "@quieter/app/lib/mail";
 import {
   refreshCachedMailboxQueries,
   removeDraftMessageFromCaches,
@@ -508,11 +510,14 @@ export const useComposeDialogController = ({
         }
         const draft = {
           ...activeDraftRef.current,
-          attachments: activeDraftRef.current.attachments.map(
-            (asset) =>
-              receipt.attachments?.find((saved) => saved.id === asset.id) ??
-              asset
-          ),
+          attachments: activeDraftRef.current.attachments.map((asset) => {
+            const saved = receipt.attachments?.find(
+              (candidate) => candidate.id === asset.id
+            );
+            return saved
+              ? { ...saved, name: matchesRevision ? saved.name : asset.name }
+              : asset;
+          }),
           baseRevision: receipt.baseRevision,
           draftId: receipt.providerDraftId,
           inlineImages: activeDraftRef.current.inlineImages.map(
@@ -750,11 +755,14 @@ export const useComposeDialogController = ({
     saveConflictRef.current = false;
     setCanSaveDraftCopy(false);
     const current = buildDraftFromForm(form.state.values);
-    const attachments = activeDraftRef.current.attachments.map(
-      (attachment) =>
-        saved.attachments.find((asset) => asset.id === attachment.id) ??
-        attachment
-    );
+    const attachments = activeDraftRef.current.attachments.map((attachment) => {
+      const savedAttachment = saved.attachments.find(
+        (asset) => asset.id === attachment.id
+      );
+      return savedAttachment
+        ? { ...savedAttachment, name: attachment.name }
+        : attachment;
+    });
     const inlineImages = activeDraftRef.current.inlineImages.map(
       (image) =>
         saved.inlineImages.find((asset) => asset.id === image.id) ?? image
@@ -1496,9 +1504,66 @@ export const useComposeDialogController = ({
     recovery.checkpoint();
   };
 
+  const addMessageAttachment = (
+    attachment: MessageAttachment,
+    messageId: string
+  ) => {
+    if (
+      finishingRef.current ||
+      activeDraftRef.current.sendUncertain === true ||
+      activeDraftRef.current.saveStatus === "sending"
+    ) {
+      return;
+    }
+    try {
+      const draft = addComposeMessageAttachment(
+        activeDraftRef.current,
+        attachment,
+        messageId
+      );
+      draftRevisionRef.current += 1;
+      handleUserDraftChange();
+      setDraft({ ...draft, saveStatus: activeDraftRef.current.saveStatus });
+      recovery.checkpoint();
+    } catch (error) {
+      toastError(error, {
+        boundary: "compose-attachments",
+        fallback:
+          "Could not attach that file. Keep attachments under 24 MB and try again.",
+      });
+    }
+  };
+
+  const renameAttachment = (id: string, name: string) => {
+    const trimmed = name.trim();
+    if (
+      !trimmed ||
+      /[\r\n\0]/u.test(trimmed) ||
+      finishingRef.current ||
+      activeDraftRef.current.sendUncertain === true ||
+      activeDraftRef.current.saveStatus === "sending" ||
+      !activeDraftRef.current.attachments.some(
+        (attachment) => attachment.id === id && attachment.name !== trimmed
+      )
+    ) {
+      return;
+    }
+    handleUserDraftChange();
+    draftRevisionRef.current += 1;
+    setDraft((current) => ({
+      ...current,
+      attachments: current.attachments.map((attachment) =>
+        attachment.id === id ? { ...attachment, name: trimmed } : attachment
+      ),
+      updatedAt: Date.now(),
+    }));
+    recovery.checkpoint();
+  };
+
   return {
     addAttachmentFiles,
     addInlineImageFiles,
+    addMessageAttachment,
     allowSenderRouteChange: (nextMailboxId: string) => {
       senderRouteMailboxIdRef.current = nextMailboxId;
     },
@@ -1523,6 +1588,7 @@ export const useComposeDialogController = ({
     handleUserDraftChange,
     prepareSenderSwitch,
     removeAttachment,
+    renameAttachment,
     saveDraftCopy,
     setActiveDraftError,
     state,

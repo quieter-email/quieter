@@ -165,7 +165,7 @@ const showcaseTokens: TokenFieldToken[] = [
 // Literal classes: Tailwind cannot extract an interpolated `bg-${name}`.
 const surfaceTokens = [
   { cls: "bg-canvas", name: "canvas", note: "app background and sidebar" },
-  { cls: "bg-panel", name: "panel", note: "workspace and dialog" },
+  { cls: "bg-panel", name: "panel", note: "workspace" },
   {
     cls: "bg-section",
     name: "section",
