@@ -15,11 +15,9 @@ const motionElements = {
 
 const EASE = [0.215, 0.61, 0.355, 1] as const;
 
-// CSS removes blur and movement for reduced motion without changing SSR styles.
 const entranceVariants = {
-  hidden: { filter: "blur(10px)", opacity: 0, transform: "translateY(10px)" },
+  hidden: { opacity: 0, transform: "translateY(8px)" },
   visible: {
-    filter: "blur(0px)",
     opacity: 1,
     transform: "translateY(0px)",
   },
@@ -38,7 +36,6 @@ type RevealProps = {
   "onBlur" | "onFocus" | "onMouseEnter" | "onMouseLeave"
 >;
 
-/** Plays the entrance once, the first time the element scrolls into view. */
 export const Reveal = ({
   as,
   children,
@@ -63,7 +60,6 @@ export const Reveal = ({
             },
           },
         };
-  const duration = onMount ? 1.4 : 1.25;
   const Component = motionElements[as ?? "div"];
 
   return (
@@ -71,14 +67,14 @@ export const Reveal = ({
       {...props}
       animate={onMount ? "visible" : undefined}
       className={cn("home-reveal", className)}
-      initial="hidden"
+      initial={reduced === true ? false : "hidden"}
       transition={{
         delay: reduced === true ? 0 : delay,
-        duration: reduced === true ? 0.2 : duration,
+        duration: reduced === true ? 0 : 0.45,
         ease: EASE,
       }}
       variants={variants}
-      viewport={{ margin: "-48px", once: true }}
+      viewport={{ margin: "-24px", once: true }}
       whileInView={onMount ? undefined : "visible"}
     >
       {children}
@@ -100,7 +96,7 @@ export const RevealChild = ({
       {...props}
       className={cn("home-reveal", className)}
       transition={{
-        duration: reduced === true ? 0.2 : 1.25,
+        duration: reduced === true ? 0 : 0.45,
         ease: EASE,
       }}
       variants={entranceVariants}

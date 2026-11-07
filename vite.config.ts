@@ -412,8 +412,6 @@ export default defineConfig({
         files: [
           "apps/web/src/components/telemetry-provider.tsx",
           "packages/app/src/components/telemetry-provider.tsx",
-          "apps/web/src/features/home/components/home-smooth-scroll.tsx",
-          "packages/app/src/features/home/components/home-smooth-scroll.tsx",
           "apps/web/src/features/message-thread/components/message-actions.tsx",
           "packages/app/src/features/message-thread/components/message-actions.tsx",
         ],

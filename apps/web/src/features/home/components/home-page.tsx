@@ -6,9 +6,8 @@ import { Link } from "@tanstack/react-router";
 import { domAnimation, LazyMotion } from "motion/react";
 
 import { HomeSections } from "./home-sections";
-import { HomeSmoothScroll } from "./home-smooth-scroll";
 import { HomeAtmosphericBackground } from "./lazy-webgl-backgrounds";
-import { Reveal, RevealChild } from "./reveal";
+import { Reveal } from "./reveal";
 import { WaitlistForm } from "./waitlist-form";
 
 import "../home.css";
@@ -18,21 +17,21 @@ const Hero = () => (
     <HomeAtmosphericBackground className="home-atmosphere" fadeBottom="black" />
     <div className="home-hero-content">
       <h1 className="home-hero-heading">
-        <Reveal onMount as="span" className="block" delay={0.2}>
+        <Reveal onMount as="span" className="block">
           <span className="home-muted">The full</span>
           {" email "}
           <span className="home-muted">stack</span>
         </Reveal>{" "}
-        <Reveal onMount as="span" className="block" delay={0.4}>
+        <Reveal onMount as="span" className="block" delay={0.06}>
           for your every need
         </Reveal>
       </h1>
-      <Reveal onMount as="p" className="home-hero-description" delay={0.62}>
+      <Reveal onMount as="p" className="home-hero-description" delay={0.12}>
         Your Gmail, managed transactional mail,
         <br />
         and API &amp; MCP, in one place.
       </Reveal>
-      <Reveal onMount className="home-waitlist-wrap" delay={0.84} id="waitlist">
+      <Reveal onMount className="home-waitlist-wrap" delay={0.18} id="waitlist">
         <WaitlistForm className="home-waitlist" />
       </Reveal>
     </div>
@@ -41,29 +40,23 @@ const Hero = () => (
 
 export const HomePage = () => (
   <LazyMotion features={domAnimation}>
-    <HomeSmoothScroll>
-      <div className="home-page dark">
-        <Reveal onMount as="header" className="home-navigation" stagger={0.16}>
-          <RevealChild>
-            <Link aria-label="quieter home" to="/home">
-              <Brand className="h-7 w-28" variant="combination" />
-            </Link>
-          </RevealChild>
-          <RevealChild>
-            <LinkButton
-              search={{ returnTo: "/auth" }}
-              to="/site-password"
-              variant="secondary"
-            >
-              Access
-            </LinkButton>
-          </RevealChild>
-        </Reveal>
-        <main>
-          <Hero />
-          <HomeSections />
-        </main>
-      </div>
-    </HomeSmoothScroll>
+    <div className="home-page dark">
+      <header className="home-navigation">
+        <Link aria-label="quieter home" to="/home">
+          <Brand className="h-7 w-28" variant="combination" />
+        </Link>
+        <LinkButton
+          search={{ returnTo: "/auth" }}
+          to="/site-password"
+          variant="secondary"
+        >
+          Access
+        </LinkButton>
+      </header>
+      <main>
+        <Hero />
+        <HomeSections />
+      </main>
+    </div>
   </LazyMotion>
 );
