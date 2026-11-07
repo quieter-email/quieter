@@ -13,6 +13,10 @@ import {
   loadSnippetWorkspace,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
 import type { MailboxWorkspaceView } from "@quieter/app/features/mailbox/domain/mailbox-workspace-view";
+import {
+  resolveDefaultViewSearch,
+  useDefaultView,
+} from "@quieter/app/features/settings/domain/default-view-setting";
 import { useDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import { useManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
 import { authClient } from "@quieter/app/lib/auth";
@@ -514,7 +518,9 @@ const useMailboxWorkspaceActions = ({
     }
     void setMailboxSearch({
       mailbox:
-        resolvedView === "all-inboxes" || resolvedView === "labels"
+        resolvedView === "all-inboxes" ||
+        resolvedView === "labels" ||
+        resolvedView === "rules"
           ? "inbox"
           : undefined,
       mailboxId:
@@ -866,6 +872,12 @@ const MailboxSessionNotice = ({
 
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const queryClient = useQueryClient();
+  const initialSearch = useLocation({
+    select: (location) => location.searchStr,
+  });
+  const initialSearchRef = useRef(initialSearch);
+  const startupViewAppliedRef = useRef(false);
+  const defaultView = useDefaultView(user.id ?? "");
   const session = authClient.useSession();
   useEffect(() => {
     if (session.error && !session.isPending && !session.isRefetching) {
@@ -945,6 +957,28 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     sessionMatchesUser &&
     (isSandboxMode ||
       (!mailboxesQuery.isPending && !isCompletingGmailConnection));
+  useEffect(() => {
+    if (!isWorkspaceReady || startupViewAppliedRef.current) {
+      return;
+    }
+    startupViewAppliedRef.current = true;
+    const startupSearch = resolveDefaultViewSearch({
+      search: initialSearchRef.current,
+      view: defaultView,
+    });
+    if (startupSearch && defaultView !== "inbox") {
+      void (async () => {
+        try {
+          await setMailboxSearch({ ...startupSearch, view: "inbox" });
+        } catch (error) {
+          toastError(error, {
+            boundary: "default-view",
+            fallback: "Could not open your default view. Please try again.",
+          });
+        }
+      })();
+    }
+  }, [defaultView, isWorkspaceReady, setMailboxSearch]);
   const writableMailboxes = mailboxes.filter(
     (mailbox) =>
       mailbox.connectionStatus === "connected" &&

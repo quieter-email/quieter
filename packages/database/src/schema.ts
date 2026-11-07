@@ -3299,6 +3299,34 @@ export const gmailComposeOperation = pgTable(
   ]
 );
 
+export const gmailMessageOpenTracking = pgTable(
+  "gmailMessageOpenTracking",
+  {
+    composeOperationId: text("composeOperationId")
+      .primaryKey()
+      .references(() => gmailComposeOperation.id, { onDelete: "cascade" }),
+    createdAt: timestamp("createdAt").notNull(),
+    firstLoadedAt: timestamp("firstLoadedAt"),
+    lastLoadedAt: timestamp("lastLoadedAt"),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    messageHeaderId: text("messageHeaderId").notNull(),
+    messageId: text("messageId"),
+    recipient: text("recipient"),
+    reportedLoadCount: integer("reportedLoadCount").notNull().default(0),
+  },
+  (table) => [
+    unique("gmail_message_open_tracking_header_unique").on(
+      table.messageHeaderId
+    ),
+    unique("gmail_message_open_tracking_mailbox_message_unique").on(
+      table.mailboxId,
+      table.messageId
+    ),
+  ]
+);
+
 export const organizationMailSendIdempotency = pgTable(
   "organizationMailSendIdempotency",
   {
@@ -3609,6 +3637,7 @@ export const tables = {
   gmailCapturedMessage,
   gmailCredential,
   gmailLabel,
+  gmailMessageOpenTracking,
   gmailOAuthState,
   gmailUsefulDetail,
   gmailUsefulDetailEvent,

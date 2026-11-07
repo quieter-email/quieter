@@ -27,19 +27,11 @@ const getPendingRowActionKey = (id: string, action: PendingRowAction) =>
 export const useMailboxOrganizerState = ({
   canManage,
   mailboxId,
-  onOpenChange,
-  open,
   searchQuery,
 }: MailboxOrganizerProps) => {
   const queryClient = useQueryClient();
-  const [internalIsOpen, setInternalIsOpen] = useState(false);
-  const isOpen = open ?? internalIsOpen;
-  const setIsOpen = onOpenChange ?? setInternalIsOpen;
   const [ruleName, setRuleName] = useState("");
-  const [ruleQueryDraft, setRuleQueryDraft] = useState<string | null>(
-    open === true ? searchQuery : null
-  );
-  const ruleQuery = ruleQueryDraft ?? searchQuery;
+  const [ruleQueryDraft, setRuleQueryDraft] = useState(searchQuery);
   const [ruleMatchMode, setRuleMatchMode] = useState<RuleMatchMode>("all");
   const ruleConditionGroupsRef = useRef<
     ManagedMailboxRuleConditionGroup[] | null
@@ -71,10 +63,14 @@ export const useMailboxOrganizerState = ({
   const [pendingReorderRuleId, setPendingReorderRuleId] = useState<
     string | null
   >(null);
-  const { data: rulesData } = useQuery(
-    managedRulesQueryOptions(mailboxId, isOpen && canManage)
+  const {
+    data: rulesData,
+    isError: rulesError,
+    isPending: rulesPending,
+  } = useQuery(managedRulesQueryOptions(mailboxId, canManage));
+  const { data: labelsData } = useQuery(
+    labelsQueryOptions(mailboxId, canManage)
   );
-  const { data: labelsData } = useQuery(labelsQueryOptions(mailboxId, isOpen));
   const { data: backfillData } = useQuery({
     enabled: activeBackfillId !== null && activeBackfillId !== "",
     queryFn: async ({ signal }) =>
@@ -160,7 +156,6 @@ export const useMailboxOrganizerState = ({
     editingRuleId,
     editingRuleUpdatePending,
     invalidateRules,
-    isOpen,
     isRowActionPending,
     labelsData,
     pendingReorderRuleId,
@@ -176,18 +171,18 @@ export const useMailboxOrganizerState = ({
     ruleMatchMode,
     ruleMoveDestination,
     ruleName,
-    ruleQuery,
-    ruleQueryDraft,
+    ruleQuery: ruleQueryDraft,
     ruleReadState,
     ruleStopsProcessing,
     rulesData,
+    rulesError,
+    rulesPending,
     runReorder,
     runRowAction,
     selectedRuleLabelIdSet,
     selectedRuleLabelIds,
     setActiveBackfillId,
     setEditingRuleId,
-    setIsOpen,
     setPreview,
     setRuleActionKind,
     setRuleForwardIncludesAttachments,

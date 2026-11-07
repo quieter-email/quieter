@@ -14,18 +14,18 @@ import {
 import { entranceMotionVariants } from "./motion";
 
 const fieldControlVariants = cva(`squircle ${inputControlClassName}`, {
-  compoundVariants: [{ chrome: "ghost", className: "px-2.5" }],
+  compoundVariants: [
+    { chrome: "ghost", className: "px-2.5" },
+    { chrome: "composer", className: "h-10 px-3 text-body-sm" },
+  ],
   defaultVariants: {
     chrome: "default",
     size: "default",
   },
   variants: {
     chrome: {
-      // Borderless header control; the row tints instead, which keeps the
-      // group reading as one surface while still marking where the caret
-      // is. Used by the mail composer.
       composer:
-        "h-11 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-body shadow-none read-only:bg-transparent focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none",
+        "min-w-0 flex-1 rounded-xl border border-transparent bg-detail shadow-none read-only:bg-detail focus-visible:bg-control-hover focus-visible:ring-0 focus-visible:outline-none",
       default:
         "rounded-md border border-border bg-input shadow-sm read-only:cursor-default read-only:bg-input dark:border-transparent",
       ghost: ghostInputClassName,

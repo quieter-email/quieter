@@ -31,6 +31,7 @@ import { UnifiedInboxPanel } from "@quieter/app/features/mailbox/components/unif
 import type { MailboxWorkspaceView } from "@quieter/app/features/mailbox/domain/mailbox-workspace-view";
 import { LabelsWorkspacePanel } from "@quieter/app/features/message-labels/components/labels-workspace-panel";
 import { MailSidebar } from "@quieter/app/features/navigation/components/mail-sidebar";
+import { MailboxOrganizer } from "@quieter/app/features/navigation/components/mailbox-organizer";
 import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/components/mailbox-switcher";
 import { useMailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
@@ -724,6 +725,9 @@ const MailboxWorkspaceContentInner = ({
         >
           <AssistantSidebarTrigger />
         </MobileHeader>
+        <div className="hidden shrink-0 justify-end px-4 pt-4 lg:flex">
+          <AssistantSidebarTrigger />
+        </div>
         <div className="flex min-h-0 flex-1 items-center justify-center px-8">
           <m.div
             className="max-w-md space-y-3 text-center"
@@ -764,6 +768,26 @@ const MailboxWorkspaceContentInner = ({
         </div>
       </WorkspaceSection>
     );
+  } else if (
+    selectedView === "rules" &&
+    selectedMailboxProvider === "managed"
+  ) {
+    mailboxContent = (
+      <WorkspaceSection>
+        <MobileHeader
+          leading="sidebar"
+          onLeadingClick={onOpenSidebar}
+          title="Organize mailbox"
+        />
+        <MailboxOrganizer
+          canManage={composeMailbox?.grantRole === "manager"}
+          headerAction={<AssistantSidebarTrigger />}
+          key={selectedMailboxId}
+          mailboxId={selectedMailboxId}
+          searchQuery={searchQuery}
+        />
+      </WorkspaceSection>
+    );
   } else if (selectedView === "labels") {
     mailboxContent = (
       <m.div
@@ -777,9 +801,7 @@ const MailboxWorkspaceContentInner = ({
           leading="sidebar"
           onLeadingClick={onOpenSidebar}
           title="Labels"
-        >
-          <AssistantSidebarTrigger />
-        </MobileHeader>
+        />
         <LabelsWorkspacePanel
           canManage={
             selectedMailboxProvider !== "managed" ||
@@ -844,13 +866,6 @@ const MailboxWorkspaceContentInner = ({
                 },
                 open: assistantOpen,
                 panelId: assistantPanelId,
-                showNavigationTrigger:
-                  calendarActive ||
-                  isComposeMailbox ||
-                  isSnippetMailbox ||
-                  (onePanelDesktop && Boolean(messageId)) ||
-                  selectedView === "labels" ||
-                  selectedMailboxNeedsReconnect,
               }
             : null
         }
@@ -892,10 +907,13 @@ const MailboxWorkspaceContentInner = ({
                   onSelectView={onSelectView}
                   reconnectingMailboxId={reconnectingMailboxId}
                   searchQuery={searchQuery}
-                  selectedMailbox={activeMailbox}
+                  selectedMailbox={
+                    selectedView === "rules" ? null : activeMailbox
+                  }
                   isSnippetMailbox={isSnippetMailbox}
                   selectedMailboxId={selectedMailboxId}
                   selectedMailboxProvider={selectedMailboxProvider}
+                  selectedView={selectedView}
                   isMobileOpen={layoutState.isMobileSidebarOpen}
                 />
               ) : null}

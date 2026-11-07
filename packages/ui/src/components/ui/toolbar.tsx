@@ -31,7 +31,8 @@ export const Toolbar = ({
         }),
         "inline-flex items-center border border-transparent shadow-sm squircle",
         {
-          "m-0.5 min-h-12 gap-1.5 border-0 p-2 shadow-none": chrome === "inset",
+          "m-0.5 min-h-12 gap-1.5 border-0 px-3.5 py-2 shadow-none":
+            chrome === "inset",
           "min-h-10 gap-1 p-1": chrome === "default" && size === "default",
           "min-h-8 gap-0.5 rounded-lg p-0.5":
             chrome === "default" && size === "compact",

@@ -6,6 +6,7 @@ import {
   Edit01Icon,
   MoreVerticalIcon,
 } from "@hugeicons/core-free-icons";
+import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { AutoLabelEditor } from "@quieter/app/features/message-labels/components/auto-label-editor";
 import { AutoLabelSwitch } from "@quieter/app/features/message-labels/components/auto-label-switch";
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
@@ -653,22 +654,25 @@ export const LabelsWorkspacePanel = ({
           <Text as="h1" className="min-w-0" size="lg" truncate weight="medium">
             Labels
           </Text>
-          <Button
-            aria-haspopup="dialog"
-            disabled={
-              areLabelActionsDisabled || !isNonemptyMailboxId(mailboxId)
-            }
-            onClick={() => {
-              setNewLabelName("");
-              setNewLabelColor("gray");
-              setIsCreatingLabel(true);
-            }}
-            size="sm"
-            type="button"
-          >
-            <Icon aria-hidden icon={Add01Icon} />
-            New label
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              aria-haspopup="dialog"
+              disabled={
+                areLabelActionsDisabled || !isNonemptyMailboxId(mailboxId)
+              }
+              onClick={() => {
+                setNewLabelName("");
+                setNewLabelColor("gray");
+                setIsCreatingLabel(true);
+              }}
+              size="sm"
+              type="button"
+            >
+              <Icon aria-hidden icon={Add01Icon} />
+              New label
+            </Button>
+            <AssistantSidebarTrigger />
+          </div>
         </div>
 
         <SettingsCard>

@@ -38,6 +38,7 @@ export const assistantCapabilitySchema = z.enum([
 
 export const workspaceViewSchema = z.enum([
   "inbox",
+  "important",
   "unread",
   "archive",
   "spam",
@@ -46,12 +47,14 @@ export const workspaceViewSchema = z.enum([
   "drafts",
   "snippets",
   "labels",
+  "rules",
   "compose",
   "calendar",
 ]);
 export const navigableWorkspaceViewSchema = workspaceViewSchema.exclude([
   "compose",
   "calendar",
+  "rules",
 ]);
 
 const optionalText = z.string().trim().max(10_000).optional();
@@ -197,6 +200,15 @@ export const openComposeOutputSchema = z
     generation: z.number().int().positive(),
   })
   .strict();
+
+export const openInlineComposeInputSchema = z
+  .object({
+    action: z.enum(["reply", "reply-all", "forward"]),
+    messageId: z.string().trim().min(1).max(256),
+    threadId: z.string().trim().min(1).max(256),
+  })
+  .strict();
+export const openInlineComposeOutputSchema = openComposeOutputSchema;
 
 export const editComposeInputSchema = composeFieldsSchema
   .extend({
@@ -562,6 +574,12 @@ export const foregroundToolRegistry = {
     location: "client",
     risk: "workspace" as const,
   },
+  open_inline_compose: {
+    capability: "compose",
+    label: "Open conversation draft",
+    location: "client",
+    risk: "workspace" as const,
+  },
   save_compose_draft: {
     capability: "save_draft",
     label: "Save draft",
@@ -581,6 +599,7 @@ export const foregroundClientToolNames = [
   "navigate",
   "navigate_calendar",
   "open_compose",
+  "open_inline_compose",
   "edit_compose",
 ] as const;
 
@@ -595,7 +614,7 @@ export const isForegroundClientToolName = (
 export const createForegroundClientTools = (): ToolSet => ({
   edit_compose: tool({
     description:
-      "Edit an already open, unsaved compose draft. Include its current draftId and expectedDraftRevision. This only edits the visible draft and never saves or sends it.",
+      "Edit an already open compose draft, including an inline conversation reply or forward. Include its current draftId and expectedDraftRevision. bodyText replaces the authored message while retaining its existing conversation quote and signature. This only edits the visible draft and never saves or sends it.",
     inputSchema: editComposeInputSchema,
     outputSchema: editComposeOutputSchema,
   }),
@@ -622,6 +641,12 @@ export const createForegroundClientTools = (): ToolSet => ({
       "Open an unsaved editable compose draft in the visible workspace. This never saves or sends mail.",
     inputSchema: openComposeInputSchema,
     outputSchema: openComposeOutputSchema,
+  }),
+  open_inline_compose: tool({
+    description:
+      "Open an inline reply, reply-all or forward in a known conversation. Read the thread first and use its threadId and the source messageId. The composer derives recipients, subject, quoted content, attachments and reply metadata from that message. Read the workspace and use edit_compose to write the authored message. An existing visible draft must be closed by the user first. This never saves or sends mail.",
+    inputSchema: openInlineComposeInputSchema,
+    outputSchema: openInlineComposeOutputSchema,
   }),
 });
 

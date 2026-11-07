@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
@@ -49,6 +57,7 @@ export type ScheduleProps = {
   currentMinute?: number;
   dates: string[];
   items: ScheduleItem[];
+  onDateChange?: (date: string) => void;
   onEventClick: (id: string) => void;
   onEmptyClick?: () => void;
   onEventMove?: (input: {
@@ -98,6 +107,10 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
 const weekdayFormatter = new Intl.DateTimeFormat("en", {
   timeZone: "UTC",
   weekday: "short",
+});
+const monthFormatter = new Intl.DateTimeFormat("en", {
+  month: "short",
+  timeZone: "UTC",
 });
 const toneClasses = {
   blue: "[--schedule-event-color:var(--q-blue)]",
@@ -190,6 +203,7 @@ export const Schedule = ({
   currentMinute,
   dates,
   items,
+  onDateChange,
   onEventClick,
   onEmptyClick,
   onEventMove,
@@ -202,6 +216,15 @@ export const Schedule = ({
 }: ScheduleProps) => {
   const { timeFormat } = useDateTimePreferences();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const monthAnchorRef = useRef<{ date: string; offset: number } | null>(null);
+  const monthViewportRef = useRef<string | null>(null);
+  const reportedDateRef = useRef<string | null>(null);
+  const positionedScrollRef = useRef<number | null>(null);
+  const wheelGestureRef = useRef({
+    distance: 0,
+    lastEvent: 0,
+    navigated: false,
+  });
   const eventDrag = useScheduleEventDrag({
     hourHeight,
     onEventMove,
@@ -222,6 +245,196 @@ export const Schedule = ({
     originY: number;
     startMinute: number;
   } | null>(null);
+  const monthWeeks = useMemo(
+    () =>
+      view === "month"
+        ? Array.from({ length: Math.ceil(dates.length / 7) }, (_, index) =>
+            dates.slice(index * 7, index * 7 + 7)
+          )
+        : [],
+    [dates, view]
+  );
+
+  const recordMonthScroll = useEffectEvent((navigate: boolean) => {
+    const element = scrollRef.current;
+    if (view !== "month" || !element || !onDateChange) {
+      return;
+    }
+    const bounds = element.getBoundingClientRect();
+    const headerHeight =
+      element.querySelector<HTMLElement>("[data-schedule-weekdays]")
+        ?.offsetHeight ?? 0;
+    const rows = [
+      ...element.querySelectorAll<HTMLElement>("[data-schedule-week]"),
+    ];
+    const anchor = rows.find(
+      (row) => row.getBoundingClientRect().bottom > bounds.top + headerHeight
+    );
+    if (anchor?.dataset.scheduleWeek) {
+      monthAnchorRef.current = {
+        date: anchor.dataset.scheduleWeek,
+        offset: anchor.getBoundingClientRect().top - bounds.top,
+      };
+    }
+    if (!navigate) {
+      return;
+    }
+    if (
+      positionedScrollRef.current !== null &&
+      Math.abs(element.scrollTop - positionedScrollRef.current) < 1
+    ) {
+      positionedScrollRef.current = null;
+      return;
+    }
+    positionedScrollRef.current = null;
+    if (eventDrag.activeRef.current) {
+      return;
+    }
+    const midpoint =
+      bounds.top + headerHeight + (element.clientHeight - headerHeight) / 2;
+    const visible = rows.find((row) => {
+      const rowBounds = row.getBoundingClientRect();
+      return rowBounds.top <= midpoint && rowBounds.bottom > midpoint;
+    });
+    const nextDate = visible?.dataset.scheduleFocusDate;
+    if (
+      nextDate &&
+      nextDate !== selectedDate &&
+      nextDate !== reportedDateRef.current
+    ) {
+      reportedDateRef.current = nextDate;
+      onDateChange(nextDate);
+    }
+  });
+
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    const [firstDate] = dates;
+    if (
+      view !== "month" ||
+      !element ||
+      !firstDate ||
+      !selectedDate ||
+      !onDateChange
+    ) {
+      monthViewportRef.current = null;
+      return;
+    }
+    const previous = monthViewportRef.current;
+    const externalNavigation =
+      !previous ||
+      (selectedDate !== previous && selectedDate !== reportedDateRef.current);
+    const headerHeight =
+      element.querySelector<HTMLElement>("[data-schedule-weekdays]")
+        ?.offsetHeight ?? 0;
+    if (externalNavigation) {
+      const row = [
+        ...element.querySelectorAll<HTMLElement>("[data-schedule-week]"),
+      ].find((candidate) => {
+        const start = candidate.dataset.scheduleWeek;
+        const end = candidate.dataset.scheduleWeekEnd;
+        return (
+          start !== undefined &&
+          end !== undefined &&
+          selectedDate >= start &&
+          selectedDate <= end
+        );
+      });
+      if (row) {
+        element.scrollTop +=
+          row.getBoundingClientRect().top -
+          element.getBoundingClientRect().top -
+          headerHeight;
+        positionedScrollRef.current = element.scrollTop;
+      }
+      reportedDateRef.current = null;
+    } else if (monthAnchorRef.current) {
+      const anchor = monthAnchorRef.current;
+      const row = element.querySelector<HTMLElement>(
+        `[data-schedule-week="${anchor.date}"]`
+      );
+      if (row) {
+        element.scrollTop +=
+          row.getBoundingClientRect().top -
+          element.getBoundingClientRect().top -
+          anchor.offset;
+        positionedScrollRef.current = element.scrollTop;
+      }
+    }
+    monthViewportRef.current = selectedDate;
+    recordMonthScroll(false);
+  }, [dates, items, onDateChange, selectedDate, view]);
+
+  const navigateWithWheel = useEffectEvent((event: WheelEvent) => {
+    const element = scrollRef.current;
+    if (
+      !element ||
+      !onDateChange ||
+      !selectedDate ||
+      event.ctrlKey ||
+      eventDrag.activeRef.current ||
+      selectionRef.current ||
+      resize
+    ) {
+      return;
+    }
+    const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY);
+    if (!horizontal && !event.shiftKey) {
+      return;
+    }
+    const delta = horizontal ? event.deltaX : event.deltaY;
+    const canScroll =
+      delta > 0
+        ? element.scrollLeft + element.clientWidth < element.scrollWidth - 1
+        : element.scrollLeft > 1;
+    if (canScroll) {
+      return;
+    }
+    event.preventDefault();
+    const gesture = wheelGestureRef.current;
+    const now = performance.now();
+    if (now - gesture.lastEvent > 180) {
+      gesture.distance = 0;
+      gesture.navigated = false;
+    }
+    gesture.lastEvent = now;
+    gesture.distance += delta * (event.deltaMode === 1 ? 16 : 1);
+    if (gesture.navigated || Math.abs(gesture.distance) < 80) {
+      return;
+    }
+    gesture.navigated = true;
+    const next = new Date(`${selectedDate}T12:00:00Z`);
+    next.setUTCDate(
+      next.getUTCDate() +
+        Math.sign(gesture.distance) * (view === "week" ? 7 : 1)
+    );
+    onDateChange(next.toISOString().slice(0, 10));
+  });
+  useEffect((): (() => void) | undefined => {
+    const element = scrollRef.current;
+    if (!element) {
+      return undefined;
+    }
+    if (view === "month") {
+      const onScroll = () => {
+        recordMonthScroll(true);
+      };
+      element.addEventListener("scroll", onScroll);
+      return () => {
+        element.removeEventListener("scroll", onScroll);
+      };
+    }
+    if (view !== "day" && view !== "week") {
+      return undefined;
+    }
+    const onWheel = (event: WheelEvent) => {
+      navigateWithWheel(event);
+    };
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      element.removeEventListener("wheel", onWheel);
+    };
+  }, [view]);
 
   const slotsByDate = useMemo(() => {
     if (view !== "day" && view !== "week") {
@@ -514,15 +727,15 @@ export const Schedule = ({
   }
 
   if (view === "month") {
-    const month = dates[20]?.slice(0, 7);
+    const month = selectedDate?.slice(0, 7) ?? dates[20]?.slice(0, 7);
     return (
       <>
         <div
-          aria-label="Month calendar"
+          aria-label="Month calendar, scroll to browse months"
           className={cn(
             surfaceVariants({ padding: "compact" }),
             scheduleFrameClassName,
-            "flex flex-col"
+            "flex flex-col [overflow-anchor:none]"
           )}
           ref={scrollRef}
         >
@@ -533,8 +746,9 @@ export const Schedule = ({
                 padding: "none",
                 variant: "detail",
               }),
-              "mb-0.5 grid min-w-xl shrink-0 grid-cols-7 overflow-hidden"
+              "sticky top-0 z-30 mb-0.5 grid min-w-xl shrink-0 grid-cols-7 overflow-hidden"
             )}
+            data-schedule-weekdays=""
           >
             {dates.slice(0, 7).map((date) => (
               <div className="px-3 py-3 text-caption text-muted-fg" key={date}>
@@ -542,85 +756,99 @@ export const Schedule = ({
               </div>
             ))}
           </div>
-          <div className="grid min-h-0 min-w-xl flex-1 auto-rows-[minmax(min-content,1fr)] grid-cols-7">
-            {dates.map((date) => {
-              const dayItems = (days.get(date) ?? []).toSorted(
-                (left, right) =>
-                  Number(Boolean(right.preview)) - Number(Boolean(left.preview))
-              );
-              const dateVariant = date === selectedDate ? "secondary" : "ghost";
-              return (
-                <div
-                  className="min-h-28 min-w-0 border-t border-r border-border px-2 py-3 data-schedule-drop-active:bg-primary/5 nth-[7n]:border-r-0"
-                  data-schedule-drop-date={date}
-                  data-schedule-drop-kind="date"
-                  data-selected-date={date === selectedDate || undefined}
-                  key={date}
-                  role="presentation"
-                  onClick={(event) => {
-                    if (
-                      event.target instanceof Element &&
-                      !event.target.closest("button")
-                    ) {
-                      onEmptyClick?.();
-                    }
-                  }}
-                  onDoubleClick={(event) => {
-                    if (
-                      event.target instanceof Element &&
-                      !event.target.closest("button")
-                    ) {
-                      onSlotCreate({ allDay: true, date, minute: 0 });
-                    }
-                  }}
-                >
-                  <div className="mb-2 flex items-center justify-between">
-                    <Button
-                      aria-label={`Create event on ${dateFormatter.format(new Date(`${date}T12:00:00Z`))}`}
+          <div className="min-w-xl">
+            {monthWeeks.map((week) => (
+              <div
+                className="grid grid-cols-7"
+                data-schedule-focus-date={week[3] ?? week[0]}
+                data-schedule-week={week[0]}
+                data-schedule-week-end={week.at(-1)}
+                key={week[0]}
+              >
+                {week.map((date) => {
+                  const dayItems = (days.get(date) ?? []).toSorted(
+                    (left, right) =>
+                      Number(Boolean(right.preview)) -
+                      Number(Boolean(left.preview))
+                  );
+                  const dateVariant =
+                    date === selectedDate ? "secondary" : "ghost";
+                  return (
+                    <div
+                      className="min-h-28 min-w-0 border-t border-r border-border px-2 py-3 data-schedule-drop-active:bg-primary/5 nth-[7n]:border-r-0"
+                      data-schedule-drop-date={date}
+                      data-schedule-drop-kind="date"
+                      data-selected-date={date === selectedDate || undefined}
+                      key={date}
+                      role="presentation"
                       onClick={(event) => {
-                        if (event.detail === 0) {
-                          onSlotCreate({ allDay: true, date, minute: 0 });
-                        } else if (event.detail === 1) {
+                        if (
+                          event.target instanceof Element &&
+                          !event.target.closest("button")
+                        ) {
                           onEmptyClick?.();
                         }
                       }}
-                      onDoubleClick={() => {
-                        onSlotCreate({ allDay: true, date, minute: 0 });
+                      onDoubleClick={(event) => {
+                        if (
+                          event.target instanceof Element &&
+                          !event.target.closest("button")
+                        ) {
+                          onSlotCreate({ allDay: true, date, minute: 0 });
+                        }
                       }}
-                      size="compact"
-                      variant={date === today ? "default" : dateVariant}
                     >
-                      <span
-                        className={cn({
-                          "opacity-40": date.slice(0, 7) !== month,
-                        })}
-                      >
-                        {Number(date.slice(8))}
-                        {date === selectedDate ? (
-                          <span className="sr-only">, selected date</span>
+                      <div className="mb-2 flex items-center justify-between">
+                        <Button
+                          aria-label={`Create event on ${dateFormatter.format(new Date(`${date}T12:00:00Z`))}`}
+                          onClick={(event) => {
+                            if (event.detail === 0) {
+                              onSlotCreate({ allDay: true, date, minute: 0 });
+                            } else if (event.detail === 1) {
+                              onEmptyClick?.();
+                            }
+                          }}
+                          onDoubleClick={() => {
+                            onSlotCreate({ allDay: true, date, minute: 0 });
+                          }}
+                          size="compact"
+                          variant={date === today ? "default" : dateVariant}
+                        >
+                          <span
+                            className={cn({
+                              "opacity-40": date.slice(0, 7) !== month,
+                            })}
+                          >
+                            {date.endsWith("-01")
+                              ? `${monthFormatter.format(new Date(`${date}T12:00:00Z`))} 1`
+                              : Number(date.slice(8))}
+                            {date === selectedDate ? (
+                              <span className="sr-only">, selected date</span>
+                            ) : null}
+                          </span>
+                        </Button>
+                      </div>
+                      <div className="space-y-1">
+                        {dayItems
+                          .slice(0, 3)
+                          .map((item) => renderEvent(item, "compact"))}
+                        {dayItems.length > 3 ? (
+                          <Button
+                            onClick={() => {
+                              setExpandedDate(date);
+                            }}
+                            size="compact"
+                            variant="ghost"
+                          >
+                            +{dayItems.length - 3} more
+                          </Button>
                         ) : null}
-                      </span>
-                    </Button>
-                  </div>
-                  <div className="space-y-1">
-                    {dayItems
-                      .slice(0, 3)
-                      .map((item) => renderEvent(item, "compact"))}
-                    {dayItems.length > 3 ? (
-                      <Button
-                        onClick={() => {
-                          setExpandedDate(date);
-                        }}
-                        size="compact"
-                        variant="ghost"
-                      >
-                        +{dayItems.length - 3} more
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </div>
         <Dialog

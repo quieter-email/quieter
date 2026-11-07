@@ -97,6 +97,7 @@ export const useComposeDialogController = ({
   autosavePaused = false,
   beforeNavigate,
   demoMode = false,
+  editorReady,
   defaultSenderName,
   initialDraft = null,
   initialDraftNeedsSave = false,
@@ -112,6 +113,7 @@ export const useComposeDialogController = ({
   autosavePaused?: boolean;
   beforeNavigate?: () => Promise<void>;
   demoMode?: boolean;
+  editorReady: boolean;
   defaultSenderName?: string;
   initialDraft?: ComposeActionDraft | null;
   initialDraftNeedsSave?: boolean;
@@ -534,7 +536,11 @@ export const useComposeDialogController = ({
   );
 
   useEffect((): (() => void) | undefined => {
-    if (!agentWorkspace || agentWorkspace.mailboxId !== mailboxId) {
+    if (
+      !editorReady ||
+      !agentWorkspace ||
+      agentWorkspace.mailboxId !== mailboxId
+    ) {
       return undefined;
     }
     let previousValues = form.state.values;
@@ -568,39 +574,55 @@ export const useComposeDialogController = ({
       },
       edit: (values, expectedRevision) => {
         if (
-          values.bodyText !== undefined &&
-          activeDraftRef.current.inlineImages.length > 0
-        ) {
-          throw new Error(
-            "This draft contains images. Edit its message in the composer to keep them intact."
-          );
-        }
-        if (
           expectedRevision !== draftRevisionRef.current ||
+          finishingRef.current ||
           activeDraftRef.current.sendUncertain === true ||
           activeDraftRef.current.saveStatus === "sending" ||
           activeDraftRef.current.saveStatus === "saving"
         ) {
           throw new Error("The draft changed. Read it again before editing.");
         }
+        let bodyHtml: string | undefined;
+        if (values.bodyText !== undefined) {
+          const currentBody = new DOMParser().parseFromString(
+            form.state.values.bodyHtml,
+            "text/html"
+          );
+          const retainedParts = [
+            ...currentBody.body.querySelectorAll<HTMLElement>(
+              ':scope > [data-compose-quote], :scope > [data-quieter-signature="true"]'
+            ),
+          ];
+          const retainedHtml = retainedParts
+            .map((element) => element.outerHTML)
+            .join("");
+          const retainedImages = getReferencedComposeActionImages(
+            retainedHtml,
+            activeDraftRef.current.inlineImages
+          );
+          if (
+            activeDraftRef.current.inlineImages.some(
+              (asset) => !retainedImages.some((image) => image.id === asset.id)
+            ) ||
+            (activeDraftRef.current.draftAnchor &&
+              !currentBody.body.querySelector(":scope > [data-compose-quote]"))
+          ) {
+            throw new Error(
+              "Edit this message in the composer to keep its images and conversation quote intact."
+            );
+          }
+          bodyHtml = `${textToComposeBodyHtml(values.bodyText)}${retainedHtml}`;
+        }
         assistantUnsavedRef.current = true;
-        for (const field of [
-          "to",
-          "cc",
-          "bcc",
-          "subject",
-          "bodyText",
-        ] as const) {
+        for (const field of ["to", "cc", "bcc", "subject"] as const) {
           const value = values[field];
           if (value !== undefined) {
             form.setFieldValue(field, value);
           }
         }
-        if (values.bodyText !== undefined) {
-          form.setFieldValue(
-            "bodyHtml",
-            textToComposeBodyHtml(values.bodyText)
-          );
+        if (bodyHtml !== undefined) {
+          form.setFieldValue("bodyHtml", bodyHtml);
+          form.setFieldValue("bodyText", getTextFromHtml(bodyHtml));
         }
         setState((currentState) => ({
           ...currentState,
@@ -632,7 +654,7 @@ export const useComposeDialogController = ({
       subscription.unsubscribe();
       unregister();
     };
-  }, [agentWorkspace, form, mailboxId]);
+  }, [agentWorkspace, editorReady, form, getTextFromHtml, mailboxId]);
 
   const persistDraftSnapshot = async (hydrateAttachments = false) => {
     const { values } = form.state;

@@ -37,6 +37,16 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Account",
   },
   {
+    description: "Preferences / Default view",
+    id: "default-view",
+    keywords:
+      "default view startup opening start inbox important unread calendar compose",
+    scope: "personal",
+    section: "default-view",
+    tab: "overview",
+    title: "Default view",
+  },
+  {
     description: "Preferences / Default mailbox",
     id: "default-mailbox",
     keywords: "default mailbox inbox all inboxes startup opening start",

@@ -21,6 +21,7 @@ import {
   queueMailboxMessageMemory,
 } from "../ai-memory-capture";
 import { hydrateUnsubscribeStatus } from "../gmail-compose";
+import { getGmailMessageDelivery } from "../gmail-open-tracking";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
 import { writeGmailCapturedMessage } from "../mail-capture";
@@ -205,7 +206,7 @@ export const queriesMailOperations = {
       userId: context.userId,
     });
     if (selectedMailbox.provider !== "managed") {
-      return null;
+      return await getGmailMessageDelivery(input);
     }
     return await getManagedMessageDelivery({
       ...input,

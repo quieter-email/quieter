@@ -4,14 +4,13 @@ import type {
   useMailboxOrganizerState,
   useMailboxOrganizerController,
 } from "@quieter/app/features/navigation/components/mailbox-organizer-state";
+import type { ReactNode } from "react";
 
 export type MailboxOrganizerProps = {
   canManage: boolean;
+  headerAction?: ReactNode;
   mailboxId: string;
-  onOpenChange?: (open: boolean) => void;
-  open?: boolean;
   searchQuery: string;
-  showTrigger?: boolean;
 };
 
 export type PendingRowAction = "backfill" | "delete" | "update";

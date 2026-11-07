@@ -971,6 +971,14 @@ export const DesignSystemShowcase = () => {
               Small
             </Button>
             <Button type="button">Default</Button>
+            <Button
+              chrome="toolbar"
+              size="field"
+              type="button"
+              variant="secondary"
+            >
+              Field action
+            </Button>
             <Button size="lg" type="button">
               Large
             </Button>

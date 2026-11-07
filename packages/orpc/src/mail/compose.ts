@@ -253,7 +253,8 @@ export const composeMailOperations = {
         accessToken,
         input.mailboxId,
         input.message,
-        context.signal
+        context.signal,
+        selectedMailbox.organizationId
       );
       await captureMailboxMessageMemory({
         actorUserId: context.userId,

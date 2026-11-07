@@ -46,7 +46,7 @@ export const mailListRowParts = {
   unreadIndicator:
     "pointer-events-none absolute top-1/2 left-0 z-20 h-8 w-0.75 -translate-y-1/2 rounded-r-full bg-primary",
   viewport:
-    "min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))] contain-strict",
+    "min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-1.5 pb-[max(1rem,env(safe-area-inset-bottom))] [scrollbar-gutter:stable_both-edges] contain-strict",
 } as const;
 
 export const MailListRowSelectionMark = ({

@@ -4,6 +4,7 @@ import {
   navigateInputSchema,
   navigateCalendarInputSchema,
   openComposeInputSchema,
+  openInlineComposeInputSchema,
 } from "@quieter/ai/chat-tools";
 import type { WorkspaceBridge } from "@quieter/app/features/chat/components/agent-workspace";
 
@@ -43,6 +44,9 @@ export const executeWorkspaceTool = async (
         openComposeInputSchema.parse(input),
         generation
       );
+      if (!workspace.control.isCurrent(generation)) {
+        throw new Error("The request was stopped.");
+      }
       return { ...draft, generation };
     }
     case "edit_compose": {
@@ -61,6 +65,16 @@ export const executeWorkspaceTool = async (
         draftRevision: compose.read().draftRevision,
         generation,
       };
+    }
+    case "open_inline_compose": {
+      const draft = await workspace.openInlineCompose(
+        openInlineComposeInputSchema.parse(input),
+        generation
+      );
+      if (!workspace.control.isCurrent(generation)) {
+        throw new Error("The request was stopped.");
+      }
+      return { ...draft, generation };
     }
     default: {
       throw new Error("This action is not available.");
