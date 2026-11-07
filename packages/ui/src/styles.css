@@ -60,7 +60,7 @@
   --secondary-fg: oklch(0.205 0.002 264);
   --muted: var(--control-hover);
   --muted-fg: oklch(0.38 0.008 264);
-  --accent: var(--control-hover);
+  --accent: var(--selection);
   --accent-fg: oklch(0.205 0.002 264);
   --destructive: oklch(0.45 0.18 27.33);
   --destructive-fg: oklch(0.985 0.002 264);
@@ -315,6 +315,7 @@
   --control-active: color-mix(in srgb, var(--detail), var(--theme-ink) 18%);
   --muted: var(--control-hover);
   --muted-fg: color-mix(in srgb, var(--theme-ink) 90%, var(--theme-base));
+  --accent: var(--selection);
   --popover: var(--panel);
 }
 

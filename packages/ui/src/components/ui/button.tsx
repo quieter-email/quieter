@@ -112,7 +112,7 @@ export const buttonVariants = cva(
         destructive:
           "bg-destructive text-destructive-fg shadow-sm hover:bg-destructive-hover",
         ghost:
-          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg aria-[current=page]:bg-muted aria-[current=page]:text-fg aria-[current=true]:bg-muted aria-[current=true]:text-fg",
+          "bg-transparent text-muted-fg hover:bg-muted hover:text-fg aria-[current=page]:bg-selection aria-[current=page]:text-fg aria-[current=true]:bg-selection aria-[current=true]:text-fg",
         "inline-edit":
           "h-5 min-w-0 shrink justify-start rounded-none border-0 bg-transparent p-0 text-left text-body font-normal text-fg active:scale-100",
         keycap:

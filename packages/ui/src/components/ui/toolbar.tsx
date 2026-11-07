@@ -65,7 +65,7 @@ const toolbarButtonVariants = cva(
       },
       {
         chrome: "inset",
-        className: "bg-control-hover hover:bg-control-active",
+        className: "bg-accent hover:bg-control-active",
         variant: "selected",
       },
     ],
