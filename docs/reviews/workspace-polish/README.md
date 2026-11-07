@@ -207,3 +207,21 @@ Selection now has its own shared fill across sidebar navigation, mail rows, tabs
 Manual checks covered the five light themes, selected message metadata, settings, calendar, tabs, toggles, menus, and a 390px reading view. The updated secondary-text colors retain at least 5.4:1 contrast against the shared selection fill in these palettes. All five dark palette comparisons were unchanged. Focused checks and the source commit hook passed. Verification used headless Chromium after the request to keep browser windows hidden.
 
 The settings baseline replays the previous palette in the loaded view so the comparison includes the same content. This gallery supersedes earlier light-theme captures below. [Paper component reference](https://app.paper.design/file/01M67920912B7N0WCQ8N924QN0/p-8-0).
+
+## Thread rail transition
+
+Expanding a message can make a conversation overflow and reveal the navigation marks. The gutter now opens and closes over 150ms using the existing feedback motion tokens. Reduced motion changes its layout width immediately. The settled spacing stays the same.
+
+Before, the measured gutter switched directly between 0 and 56px. After, frame samples included intermediate widths in both directions. These screenshots show an actual reveal paused partway through and its settled state; a still image cannot show timing.
+
+| During reveal, paused | Settled |
+| --- | --- |
+| ![Thread rail reveal paused at 28px](https://github.com/user-attachments/assets/dd324474-809b-4a76-8f22-d7c51c6ec51b) | ![Thread rail fully revealed](https://github.com/user-attachments/assets/3e0111f8-fa75-443c-ac13-fd51e3186897) |
+
+[Paper component reference](https://app.paper.design/file/01M67920912B7N0WCQ8N924QN0/p-C-0)
+
+![Paper thread rail states and motion specification](https://github.com/user-attachments/assets/5d1e1c1f-ff9e-45f0-a4f6-30e5a72259a5)
+
+Verified in headless Chromium: reveal and collapse, instant width changes with reduced motion, a 390px reading view, no reserved empty gutter, and the rail preview remaining visible outside the clipped gutter. Focused lint/type checks passed with three pre-existing callback-ref warnings. No new tests were written.
+
+Video capture was unavailable: automatic approval review rejected the recording command with “blocked by policy.” Screenshots and frame measurements provide the motion evidence instead.
