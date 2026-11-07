@@ -155,7 +155,6 @@ type ComposeFormFieldProps = Pick<
   "handleUserDraftChange" | "form"
 > & {
   disabled?: boolean;
-  divided?: boolean;
   label: string;
   name: keyof Pick<ComposeFormValues, "to" | "cc" | "bcc" | "subject">;
   placeholder?: string;
@@ -181,7 +180,6 @@ const composeRecipientMotion = {
 const ComposeFormField = ({
   handleUserDraftChange,
   disabled,
-  divided,
   form,
   label,
   name,
@@ -192,7 +190,6 @@ const ComposeFormField = ({
       const [error] = field.state.meta.errors;
       return (
         <ComposerFieldRow
-          divided={divided}
           error={error ? (error.message ?? "Invalid value") : undefined}
           label={label}
         >
@@ -758,7 +755,7 @@ const ReadyComposeSurface = ({
                                 }
                                 label="From"
                               >
-                                <div className="flex h-8 min-w-0 flex-1 items-center">
+                                <div className="flex h-10 min-w-0 flex-1 items-center">
                                   <Popover
                                     onOpenChange={setSenderDetailsOpen}
                                     open={senderDetailsOpen}
@@ -773,8 +770,9 @@ const ReadyComposeSurface = ({
                                       render={
                                         <Button
                                           className="max-w-full min-w-0 shrink justify-start"
-                                          size="sm"
-                                          variant="ghost"
+                                          chrome="toolbar"
+                                          size="field"
+                                          variant="secondary"
                                         />
                                       }
                                     >
@@ -946,9 +944,12 @@ const ReadyComposeSurface = ({
                       senderMailboxes &&
                       senderEmail ? (
                         <ComposerFieldRow label="From">
-                          <span className="flex h-8 min-w-0 items-center truncate px-2 text-body-sm">
-                            {senderEmail}
-                          </span>
+                          <FieldControl
+                            chrome="composer"
+                            readOnly
+                            tabIndex={-1}
+                            value={senderEmail}
+                          />
                         </ComposerFieldRow>
                       ) : null}
                       <form.Field name="to">
@@ -963,8 +964,9 @@ const ReadyComposeSurface = ({
                               }
                               label="To"
                               trailing={
-                                <div className="flex shrink-0 items-center gap-1.5">
+                                <div className="flex shrink-0 items-center gap-2">
                                   <Button
+                                    chrome="toolbar"
                                     aria-controls="compose-cc-field"
                                     aria-expanded={state.showCc}
                                     aria-pressed={state.showCc}
@@ -972,11 +974,13 @@ const ReadyComposeSurface = ({
                                       toggleRecipientVisibility("cc");
                                     }}
                                     type="button"
+                                    size="field"
                                     variant="secondary"
                                   >
                                     Cc
                                   </Button>
                                   <Button
+                                    chrome="toolbar"
                                     aria-controls="compose-bcc-field"
                                     aria-expanded={state.showBcc}
                                     aria-pressed={state.showBcc}
@@ -984,6 +988,7 @@ const ReadyComposeSurface = ({
                                       toggleRecipientVisibility("bcc");
                                     }}
                                     type="button"
+                                    size="field"
                                     variant="secondary"
                                   >
                                     Bcc
@@ -1066,7 +1071,7 @@ const ReadyComposeSurface = ({
 
                     <ComposeEditorBody
                       chrome="seamless"
-                      className={cn("min-h-0 flex-1", {
+                      className={cn("flex-1", {
                         "[&_.ProseMirror>blockquote]:hidden":
                           hasQuotedContent && !showQuotedContent,
                       })}
@@ -1074,7 +1079,7 @@ const ReadyComposeSurface = ({
                     />
 
                     {hasQuotedContent ? (
-                      <div className="px-3 pb-1">
+                      <div className="px-4 pb-1">
                         <IconButtonTooltip
                           label={
                             showQuotedContent
@@ -1109,7 +1114,7 @@ const ReadyComposeSurface = ({
                               distance: 4,
                               reducedMotion,
                             })}
-                            className="mx-3 rounded-lg border border-dashed border-primary bg-primary/5 p-3 text-body-sm text-fg"
+                            className="mx-4 rounded-lg border border-dashed border-primary bg-primary/5 p-3 text-body-sm text-fg"
                             exit={
                               reducedMotion === true
                                 ? { opacity: 0 }
@@ -1134,7 +1139,7 @@ const ReadyComposeSurface = ({
                     {state.draft.attachments.length > 0 ? (
                       <ul
                         aria-label="Attachments"
-                        className="flex flex-wrap gap-2 px-3 pb-2"
+                        className="flex flex-wrap gap-2 px-4 pb-2"
                       >
                         {state.draft.attachments.map((attachment) => (
                           <li
@@ -1203,7 +1208,7 @@ const ReadyComposeSurface = ({
                           {state.draft.sendUncertain === true
                             ? "Check delivery"
                             : "Send"}
-                          <span className="text-caption text-primary-fg">
+                          <span className="hidden text-caption text-primary-fg @sm:inline">
                             {modKeyLabel}↵
                           </span>
                         </ToolbarButton>

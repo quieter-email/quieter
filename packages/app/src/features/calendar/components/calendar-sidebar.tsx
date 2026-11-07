@@ -292,7 +292,7 @@ const CalendarSidebarContent = ({
           }}
           selected={selectedDate}
         />
-        <div className="space-y-2 px-3">
+        <div className="space-y-2 px-2">
           <Popover>
             <PopoverTrigger
               render={<Button fullWidth size="sm" variant="secondary" />}

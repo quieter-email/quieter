@@ -505,7 +505,9 @@ export const ComposeEditorBody = ({
   if (editor) {
     editorBody = (
       <EditorContent
-        className="absolute inset-0 overflow-y-auto px-4 py-3.5 [&>.ProseMirror]:min-h-full"
+        className={cn("overflow-y-auto p-4 [&>.ProseMirror]:min-h-full", {
+          "absolute inset-0": density === "comfortable",
+        })}
         editor={editor}
       />
     );
@@ -513,7 +515,7 @@ export const ComposeEditorBody = ({
     editorBody = (
       <div
         aria-hidden
-        className={cn("h-full px-4 py-3.5 text-muted-fg", {
+        className={cn("h-full p-4 text-muted-fg", {
           "min-h-28": density === "compact",
           "min-h-48": density === "comfortable",
         })}
@@ -531,6 +533,8 @@ export const ComposeEditorBody = ({
         {
           "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:outline-hidden aria-invalid:border-destructive aria-invalid:focus-within:border-destructive":
             chrome === "default",
+          "min-h-0": chrome === "seamless" && density === "comfortable",
+          "min-h-28": density === "compact",
           "rounded-none border-0 bg-transparent shadow-none":
             chrome === "seamless",
         },
@@ -739,12 +743,16 @@ export const ComposeEditorToolbar = ({
       <div
         className={cn({
           contents: chrome !== "footer",
-          "flex min-w-0 shrink-0 items-center gap-1 @max-2xl:order-last @max-2xl:w-full @max-2xl:overflow-x-auto [&>*]:shrink-0":
+          "flex min-w-0 shrink-0 items-center @max-2xl:order-last @max-2xl:w-full @max-2xl:overflow-x-auto [&>*]:shrink-0":
             chrome === "footer",
         })}
       >
         {formattingControls}
-        {chrome === "selection" ? null : <ToolbarSeparator />}
+        {chrome === "selection" ? null : (
+          <ToolbarSeparator
+            className={cn({ "@max-sm:hidden": chrome === "footer" })}
+          />
+        )}
         {chrome === "selection" ? null : historyControls}
         {onCreateSnippet && toolbarState?.selectedText.trim() ? (
           <IconButtonTooltip label="Save selected text as a snippet">

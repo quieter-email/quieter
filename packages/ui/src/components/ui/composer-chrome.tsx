@@ -83,7 +83,10 @@ export const ComposerFrame = ({
   <div
     className={cn(
       "mx-auto my-auto flex min-h-0 w-full max-w-[58rem] flex-1 flex-col gap-2 p-4 sm:p-6 md:max-h-[28rem]",
-      { "my-0 max-w-none flex-none p-0 sm:p-0": layout === "inline" },
+      {
+        "my-0 max-w-none flex-none p-0 sm:p-0 md:max-h-none":
+          layout === "inline",
+      },
       className
     )}
     {...props}
@@ -102,8 +105,8 @@ export const ComposerFieldGroup = ({
 }) => (
   <div
     className={cn(
-      "flex w-full shrink-0 flex-col gap-2 overflow-hidden rounded-section border border-transparent bg-section p-3",
-      { "rounded-none border-0 bg-transparent shadow-none": bare },
+      "flex w-full shrink-0 flex-col gap-2 overflow-hidden rounded-section border border-transparent bg-section p-4",
+      { "rounded-none border-0 bg-transparent pb-0 shadow-none": bare },
       className
     )}
     {...props}
@@ -118,14 +121,12 @@ const composerFieldRowClassName =
 export const ComposerFieldRow = ({
   children,
   className,
-  divided = true,
   error,
   label,
   trailing,
 }: {
   children: ReactNode;
   className?: string;
-  divided?: boolean;
   error?: string;
   label: string;
   trailing?: ReactNode;
@@ -133,7 +134,6 @@ export const ComposerFieldRow = ({
   <Field
     className={cn(
       "gap-1 [--composer-field-gap:calc(var(--spacing)*2)] [--composer-field-inset:0px] [--composer-field-label-width:calc(var(--spacing)*12)]",
-      { "border-b border-transparent": divided },
       className
     )}
   >

@@ -64,6 +64,11 @@ export const buttonVariants = cva(
         variant: "secondary",
       },
       { chrome: "toolbar", className: "rounded-xl" },
+      {
+        className: "aria-pressed:bg-control-active",
+        size: "field",
+        variant: "secondary",
+      },
     ],
     defaultVariants: {
       auxiliaryPress: false,
@@ -88,6 +93,7 @@ export const buttonVariants = cva(
         // Caption-height action, e.g. retry and approval buttons.
         compact: "h-7 px-2 text-caption font-medium [&_svg]:size-3.5",
         default: "h-8 px-3 text-body-sm [&_svg]:size-4",
+        field: "h-10 px-3 text-body-sm [&_svg]:size-4",
         icon: "size-8 p-0 [&_svg]:size-4",
         "icon-lg": "size-9 p-0 [&_svg]:size-4.5",
         "icon-sm": "size-7 p-0 [&_svg]:size-3.5",
@@ -99,7 +105,7 @@ export const buttonVariants = cva(
       variant: {
         // Large selectable card, e.g. the mailbox-type options.
         card: "group h-auto min-h-32 w-full flex-col items-start justify-start rounded-section bg-section p-4 text-left text-fg whitespace-normal hover:bg-control-hover",
-        // Compact toggle chip, e.g. the Cc/Bcc switches. The pressed look
+        // Compact toggle chip. The pressed look
         // follows aria-pressed so callers only pass the state.
         chip: "h-7 px-1.5 text-caption text-muted-fg active:scale-100 aria-pressed:bg-detail aria-pressed:text-fg",
         default: "bg-primary text-primary-fg shadow-sm hover:bg-primary-hover",

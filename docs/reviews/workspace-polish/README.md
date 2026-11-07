@@ -33,7 +33,14 @@ The editable [Mail](https://app.paper.design/file/01M67920912B7N0WCQ8N924QN0/p-1
 | --- | --- |
 | ![Original composer](before/compose.png) | ![Updated composer](after/compose.png) |
 
-The To and Subject fields have their own rounded Detail fill. Cc/Bcc have normal button dimensions. The assistant control moved to the main view's upper right.
+The To and Subject fields have their own rounded Detail fill. Header fields and Cc/Bcc controls share a 40px height, 14px corners, and 13px type. Labels, body text, attachments, and footer actions share a 16px inset. Field rows and recipient buttons use 8px gaps. The assistant control moved to the main view's upper right.
+
+The spacing review also corrected the inline writing area: it grows with its content, including expanded recipients and attachments. Narrow toolbars keep Send and the attachment actions together; the keyboard shortcut label appears when there is room.
+
+| Spacing review reference | Final geometry |
+| --- | --- |
+| ![User's composer spacing reference](before/composer-spacing-reference.png) | ![Corrected Paper composer detail](paper/composer-detail.png) |
+| ![First implementation before spacing refinement](before/compose-spacing-pass.png) | ![Final aligned composer](after/compose.png) |
 
 ### Calendar
 
@@ -75,7 +82,8 @@ The memory fixture started with 20 items. Scrolling loaded eight more through th
 | --- | --- |
 | Focused composer | ![Focused composer](after/compose-focused.png) |
 | Focused assistant with sample plan access | ![Focused assistant](after/assistant-focused.png) |
-| Inline forward with retained attachment and quote | ![Inline assistant forward](after/inline-ai-forward.png) |
+| Inline forward with a sample attachment and retained quote | ![Inline assistant forward](after/inline-ai-forward.png) |
+| Expanded inline forward on a narrow screen | ![Expanded inline forward](after/inline-forward-expanded-narrow.png) |
 | Active plan fixture | ![Change plan action](after/billing.png) |
 | Plan confirmation | ![Plan confirmation](after/billing-confirmation.png) |
 | Automatic memory page loading fixture | ![Loaded memory page](after/memories-autoload.png) |
@@ -83,6 +91,8 @@ The memory fixture started with 20 items. Scrolling loaded eight more through th
 | Labels header launcher | ![Labels](after/labels.png) |
 | Snippets header launcher | ![Snippets](after/snippets.png) |
 | Narrow composer | ![Narrow composer](after/compose-narrow.png) |
+| Expanded recipient fields at 390px | ![Expanded composer](after/compose-expanded-narrow.png) |
+| Composer at 320px | ![320px composer](after/compose-320.png) |
 | Light composer | ![Light composer](after/compose-light.png) |
 | Narrow organizer | ![Narrow organizer](after/organize-narrow.png) |
 | Light organizer | ![Light organizer](after/organize-light.png) |
@@ -95,7 +105,12 @@ The memory fixture started with 20 items. Scrolling loaded eight more through th
 | View | Export |
 | --- | --- |
 | Composer | ![Paper composer](paper/compose.png) |
+| Composer spacing detail | ![Paper composer detail](paper/composer-detail.png) |
+| Reply | ![Paper reply](paper/reply.png) |
+| Shared composer examples | ![Paper composer components](paper/composer-components.png) |
+| Shared field actions | ![Paper field actions](paper/field-actions.png) |
 | Continuous month, full content | ![Paper continuous month](paper/calendar-month.png) |
+| Calendar visibility popover | ![Paper calendar picker](paper/calendar-picker.png) |
 | Inline organizer | ![Paper organizer](paper/organizer.png) |
 | Preferences | ![Paper preferences](paper/preferences.png) |
 | Connected apps | ![Paper connected apps](paper/connected-apps.png) |

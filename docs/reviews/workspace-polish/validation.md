@@ -45,3 +45,13 @@ An independent Astra review found a missing transition out of the new rules view
 Fix Root Causes led to the editor lifecycle gate. Model the Domain kept tracking scoped to a mailbox and send operation. Type System Discipline kept tool inputs and route views validated. Separate Before Serializing Shared State kept parallel writers in disjoint files. Sequence Work into Verifiable Units grouped checked changes into commits. Prove It Works required interactions in the actual product and native Firefox captures.
 
 Runtime logs remain local because they can contain sensitive operational context. The screenshots contain synthetic data only.
+
+## Spacing review follow-up
+
+The user's composer reference exposed competing 12px header, 16px body, and 10px footer insets, 32px buttons beside 40px fields, and an invisible row border that added a pixel to the gaps. These now use a shared 16px content inset, 8px row gaps, and 40px header controls. The sender, quote toggle, attachments, and drop target follow the same content edge. Paper's composer, reply, shared examples, and field-action reference were updated to match.
+
+Chrome measurements at 390px verified equal 16px label/body/Send/Close insets, 40px fields and buttons, an 8px button gap, a 16px subject-to-body gap, and no page overflow. Expanded fields and a 320px viewport were inspected. The toolbar suppresses its redundant narrow divider and shortcut label before wrapping, so normal mobile widths fit its controls. At 320px, formatting remains horizontally scrollable inside the aligned content area.
+
+The inline forward capture exposed a collapsed writing area when attachments and headers consumed its available height. Compact editors now keep a minimum writing area and grow with their content; the inline frame no longer inherits the main composer's desktop height cap. A forward edited immediately through the actual workspace tool retained its authored text, subject, recipient, and quote. Adding a synthetic local attachment and expanding Cc/Bcc at 390px produced a 245px body, with all body content contained and no page overflow. The final attachment screenshot uses this local sample file; the earlier source-attachment retention check remains separate evidence.
+
+The calendar picker and New event action both measure 224px wide at x=16px. The corresponding six Paper sidebars were aligned, and the open calendar popover was brought in line with the shared title and sizing. Focused lint, formatting, and type checks passed for the changed components.
