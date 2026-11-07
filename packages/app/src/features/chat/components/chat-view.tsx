@@ -94,6 +94,8 @@ const ChatSession = ({
   const [tabId] = useState(() => crypto.randomUUID());
   const threadId = props.chatId ?? props.draftChatKey;
   const [busy, setBusy] = useState(false);
+  const [completedAssistantMessageId, setCompletedAssistantMessageId] =
+    useState<string | null>(null);
   const foregroundRef = useRef<ForegroundSnapshot | null>(null);
   const requestContextRef = useRef<{
     context: ChatMailContext;
@@ -169,6 +171,7 @@ const ChatSession = ({
       toCanonicalTranscript(chatData?.messages ?? [])
     ),
     onError: (error) => {
+      setCompletedAssistantMessageId(null);
       workspace.control.finish();
       toastError(decodeChatStreamError(error), { boundary: "assistant-chat" });
     },
@@ -265,6 +268,9 @@ const ChatSession = ({
         isError ||
         (pending !== true && !needsForegroundContinuation(messages));
       if (terminal) {
+        setCompletedAssistantMessageId(
+          !isAbort && !isError && last?.role === "assistant" ? last.id : null
+        );
         foregroundRef.current = null;
         workspace.control.finish();
       }
@@ -350,6 +356,7 @@ const ChatSession = ({
         return;
       }
       foregroundRef.current = null;
+      setCompletedAssistantMessageId(null);
       void chatRef.current.stop();
       chatRef.current.setMessages(
         cancelForegroundMessages(chatRef.current.messages)
@@ -532,6 +539,7 @@ const ChatSession = ({
       return;
     }
     setBusy(true);
+    setCompletedAssistantMessageId(null);
     const generation = workspace.control.begin();
     const snapshot = workspace.read();
     try {
@@ -596,6 +604,7 @@ const ChatSession = ({
     >
       {chat.messages.length > 0 || errorMessage !== "" ? (
         <ChatTranscript
+          completedAssistantMessageId={completedAssistantMessageId}
           docked={props.docked}
           messages={chat.messages}
           isStreaming={streaming}
@@ -670,6 +679,7 @@ const ChatSession = ({
           }
         }}
         onStop={() => {
+          setCompletedAssistantMessageId(null);
           workspace.control.cancel();
         }}
         onSubmit={(event) => {

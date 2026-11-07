@@ -45,6 +45,7 @@
     "./features/chat/domain/foreground-control": "./src/features/chat/domain/foreground-control.ts",
     "./features/chat/domain/foreground-messages": "./src/features/chat/domain/foreground-messages.ts",
     "./features/chat/domain/mail-reference": "./src/features/chat/domain/mail-reference.ts",
+    "./features/chat/domain/tool-activity": "./src/features/chat/domain/tool-activity.ts",
     "./features/chat/domain/use-chat-dictation": "./src/features/chat/domain/use-chat-dictation.ts",
     "./features/chat/domain/use-chat-mail-context": "./src/features/chat/domain/use-chat-mail-context.ts",
     "./features/chat/domain/workspace-context": "./src/features/chat/domain/workspace-context.ts",
