@@ -3,10 +3,8 @@ import {
   AI_MEMORY_CATEGORIES,
   containsProhibitedMemorySecret,
 } from "@quieter/ai/ai-memory";
-import type {
-  AiMemoryCategory,
-  AiMemoryProvenance,
-} from "@quieter/ai/ai-memory";
+import type { AiMemoryCategory } from "@quieter/ai/ai-memory";
+import type { AiMemoryProvenance } from "@quieter/ai/ai-memory-provenance";
 import { db } from "@quieter/database/client";
 import { aiMemory } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";

@@ -22,16 +22,6 @@ export const AI_MEMORY_CATEGORIES = [
 ] as const;
 export type AiMemoryCategory = (typeof AI_MEMORY_CATEGORIES)[number];
 
-export const aiMemoryProvenanceSchema = z.object({
-  confidence: z.number().min(0).max(1),
-  createdAt: z.iso.datetime(),
-  expiresAt: z.iso.datetime().nullable(),
-  lastConfirmedAt: z.iso.datetime(),
-  reinforcementCount: z.number().int().positive(),
-  source: z.enum(["explicit", "feedback", "inferred", "migration"]),
-});
-export type AiMemoryProvenance = z.infer<typeof aiMemoryProvenanceSchema>;
-
 const AI_MEMORY_UPDATE_TIMEOUT_MS = 60_000;
 const MEMORY_OWNERSHIP_RULES = `Every supplied record belongs privately to the acting user.
 Mailboxes, correspondents, and labels describe evidence or applicability, never a different owner.

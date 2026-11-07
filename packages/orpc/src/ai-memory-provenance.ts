@@ -1,4 +1,4 @@
-import type { AiMemoryProvenance } from "@quieter/ai/ai-memory";
+import type { AiMemoryProvenance } from "@quieter/ai/ai-memory-provenance";
 import type { aiMemory } from "@quieter/database/schema";
 
 export const serializeAiMemoryProvenance = (

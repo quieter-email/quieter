@@ -11,7 +11,7 @@ import { tool } from "ai";
 import type { ToolSet } from "ai";
 import { z } from "zod";
 
-import { aiMemoryProvenanceSchema } from "./ai-memory";
+import { aiMemoryProvenanceSchema } from "./ai-memory-provenance";
 import {
   calendarEventsToolResultSchema,
   calendarEventToolResultSchema,
