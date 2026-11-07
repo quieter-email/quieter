@@ -22,6 +22,8 @@ An additional paid PlanetScale branch/cluster and a permanently running local Po
 
 The development database needs the current committed schema, including pgvector and TIN for shared hybrid search. Search migrations include explicitly marked contract steps for the extension, source invalidation triggers and required columns; review those steps before applying them through the protected workflow. Local and CI replay use the pinned Lead plus pgvector image, not an ordinary PostgreSQL image without TIN support. Reconcile the existing migration ledger before applying changes. Do not rewrite migration checksums or reset the shared database to bypass a mismatch. Existing destructive integration tests require a disposable target; keep them in CI when no disposable local target is available, and report them as unrun locally rather than claiming coverage.
 
+Run files that share a disposable database with `vp test --no-file-parallelism`. Queue integration tests claim globally eligible work and install different provider fixtures per file, so parallel files can consume each other's jobs. Concurrency scenarios inside each file still run as designed. The migration CI lane uses this setting.
+
 ## Shared Gmail accounts
 
 Production and development can read the same Gmail mailbox while keeping their application data separate. They cannot treat Gmail itself as separate state. Changing a label, marking a message read, updating a draft, sending mail, or applying automatic labels affects the same external account.

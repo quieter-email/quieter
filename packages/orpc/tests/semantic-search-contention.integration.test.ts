@@ -1,3 +1,5 @@
+import { setImmediate } from "node:timers/promises";
+
 import { embedSearchTexts } from "@quieter/ai/search-embeddings";
 import type { reportAiUsage } from "@quieter/billing";
 import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
@@ -155,9 +157,10 @@ describe.skipIf(state.databaseUrl === undefined)(
         .delete(semanticIndexRequest)
         .where(eq(semanticIndexRequest.userId, userId));
       vi.mocked(embedSearchTexts).mockReset();
-      vi.mocked(embedSearchTexts).mockImplementation(async ({ values }) =>
-        Promise.resolve(values.map(() => vector))
-      );
+      vi.mocked(embedSearchTexts).mockImplementation(async ({ values }) => {
+        await setImmediate();
+        return values.map(() => vector);
+      });
       const memory = {
         confidence: 1,
         createdAt: now,

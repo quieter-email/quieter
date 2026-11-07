@@ -158,4 +158,4 @@ jobs:
         run: docker exec quieter-search-test psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE quieter_cutover_test'
 
       - name: Test database behavior against migrated PostgreSQL
-        run: vp test integration.test.ts credit-accounting.test.ts
+        run: vp test --no-file-parallelism integration.test.ts credit-accounting.test.ts
