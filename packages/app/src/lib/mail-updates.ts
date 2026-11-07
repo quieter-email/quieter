@@ -18,8 +18,11 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   let openTimer: ReturnType<typeof setTimeout> | undefined;
   let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let codeRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   let reconnectDelay = 1000;
   let refreshing = false;
+  let refreshingCodes = false;
+  const pendingCodeMailboxes = new Set<string>();
   const pending = new Map<
     string,
     {
@@ -29,6 +32,60 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     }
   >();
   const seen = new Set<string>();
+
+  const refreshCodes = async () => {
+    codeRefreshTimer = undefined;
+    if (
+      refreshingCodes ||
+      disposed ||
+      suspended ||
+      pendingCodeMailboxes.size === 0
+    ) {
+      return;
+    }
+    const mailboxIds = new Set(pendingCodeMailboxes);
+    pendingCodeMailboxes.clear();
+    const filters = {
+      predicate: ({ queryKey }: { queryKey: readonly unknown[] }) =>
+        queryKey[0] === "verification-codes" &&
+        (mailboxIds.has("*") || mailboxIds.has(String(queryKey[1]))),
+    };
+    if (
+      queryClient.getQueryCache().findAll({ ...filters, type: "active" })
+        .length === 0
+    ) {
+      return;
+    }
+    refreshingCodes = true;
+    try {
+      await queryClient.cancelQueries(filters);
+      if (!disposed && !suspended) {
+        await queryClient.invalidateQueries(filters);
+      } else if (!disposed) {
+        for (const mailboxId of mailboxIds) {
+          pendingCodeMailboxes.add(mailboxId);
+        }
+      }
+    } finally {
+      refreshingCodes = false;
+      // oxlint-disable-next-line no-use-before-define -- Refresh completion schedules hints received during the request.
+      scheduleCodeRefresh();
+    }
+  };
+  const scheduleCodeRefresh = () => {
+    if (
+      refreshingCodes ||
+      disposed ||
+      suspended ||
+      pendingCodeMailboxes.size === 0 ||
+      codeRefreshTimer !== undefined
+    ) {
+      return;
+    }
+    codeRefreshTimer = setTimeout(() => {
+      void refreshCodes();
+    }, 150);
+  };
 
   const isRevisionSynced = (mailboxId: string, revision: string) => {
     const queries = queryClient.getQueryCache().findAll({
@@ -141,9 +198,6 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
             );
             const types =
               changes.get("*")?.types ?? changes.get(mailboxId)?.types;
-            if (root === "verification-codes") {
-              return changes.has("*") || types?.has("mailbox.changed") === true;
-            }
             if (
               types === undefined ||
               (!types.has("mailbox.changed") && !types.has("labels.changed"))
@@ -204,6 +258,10 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     revision?: string,
     threadIds?: string[]
   ) => {
+    if (type === "mailbox.changed") {
+      pendingCodeMailboxes.add(mailboxId);
+      scheduleCodeRefresh();
+    }
     const change = pending.get(mailboxId);
     if (change === undefined) {
       pending.set(mailboxId, {
@@ -382,6 +440,8 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
       suspended = true;
       clearTimeout(refreshTimer);
       refreshTimer = undefined;
+      clearTimeout(codeRefreshTimer);
+      codeRefreshTimer = undefined;
       backgroundTimer ??= setTimeout(() => {
         backgroundTimer = undefined;
         disconnect();
@@ -392,6 +452,8 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     suspended = true;
     clearTimeout(refreshTimer);
     refreshTimer = undefined;
+    clearTimeout(codeRefreshTimer);
+    codeRefreshTimer = undefined;
     disconnect();
   };
   window.addEventListener("focus", activityChanged);
@@ -414,6 +476,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     disconnect();
     clearTimeout(backgroundTimer);
     clearTimeout(refreshTimer);
+    clearTimeout(codeRefreshTimer);
     clearInterval(recoveryTimer);
     window.removeEventListener("focus", activityChanged);
     window.removeEventListener("blur", activityChanged);

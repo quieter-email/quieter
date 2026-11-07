@@ -5,7 +5,10 @@ import { useRecentConversations } from "@quieter/app/features/mailbox/components
 import type { RecentConversation } from "@quieter/app/features/mailbox/domain/recent-conversations";
 import type { MessageListProps } from "@quieter/app/features/message-list/components/message-list-types";
 import { CopyVerificationCode } from "@quieter/app/features/verification-codes/components/copy-verification-code";
-import { useThreadVerificationCodes } from "@quieter/app/features/verification-codes/use-thread-verification-codes";
+import {
+  useThreadVerificationCodes,
+  useVerificationCodeClock,
+} from "@quieter/app/features/verification-codes/use-thread-verification-codes";
 import { parseSender } from "@quieter/app/lib/gmail/message-utils";
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
 import { Button } from "@quieter/ui/button";
@@ -34,10 +37,13 @@ export const MailboxIdleState = ({
     .filter((entry) => mailboxIds.includes(entry.mailboxId))
     .slice(0, 3);
   const codesByThread = useThreadVerificationCodes(threads, scope);
+  const now = useVerificationCodeClock([...codesByThread.values()]);
   const codes = threads
     .flatMap(({ threadId }) => {
       const code = codesByThread.get(threadId);
-      return code ? [{ code, threadId }] : [];
+      return code && new Date(code.expiresAt).getTime() > now
+        ? [{ code, threadId }]
+        : [];
     })
     .slice(0, 2);
   return (

@@ -40,8 +40,7 @@ export const useVerificationCodeClock = (
 
 export const projectThreadVerificationCodes = (
   buckets: readonly { uiIdByOriginalId: ReadonlyMap<string, string> }[],
-  results: readonly (readonly VerificationCode[])[],
-  now: number
+  results: readonly (readonly VerificationCode[])[]
 ) => {
   const latestCodeByThreadId = new Map<
     string,
@@ -54,11 +53,7 @@ export const projectThreadVerificationCodes = (
     }
     for (const code of items) {
       const uiThreadId = bucket.uiIdByOriginalId.get(code.threadId);
-      if (
-        new Date(code.expiresAt).getTime() > now &&
-        uiThreadId &&
-        !latestCodeByThreadId.has(uiThreadId)
-      ) {
+      if (uiThreadId && !latestCodeByThreadId.has(uiThreadId)) {
         latestCodeByThreadId.set(uiThreadId, code);
       }
     }
@@ -133,36 +128,17 @@ export const useThreadVerificationCodes = (
     list.mailboxProvider,
   ]);
   const codeQueries = useQueries({
-    queries: codeThreadIdBuckets.map(({ mailboxId, threadIds }) => ({
-      ...verificationCodesQueryOptions(
+    queries: codeThreadIdBuckets.map(({ mailboxId, threadIds }) =>
+      verificationCodesQueryOptions(
+        queryClient,
         mailboxId,
         { mode: "threads", threadIds },
         true
-      ),
-      placeholderData: () => {
-        const requestedThreadIds = new Set(threadIds);
-        return {
-          items: queryClient
-            .getQueriesData<RouterOutputs["mail"]["listVerificationCodes"]>({
-              queryKey: ["verification-codes", mailboxId, "threads"],
-            })
-            .toSorted(
-              ([leftKey], [rightKey]) =>
-                (queryClient.getQueryState(rightKey)?.dataUpdatedAt ?? 0) -
-                (queryClient.getQueryState(leftKey)?.dataUpdatedAt ?? 0)
-            )
-            .flatMap(([, data]) => data?.items ?? [])
-            .filter((item) => requestedThreadIds.has(item.threadId)),
-        };
-      },
-    })),
+      )
+    ),
   });
-  const now = useVerificationCodeClock(
-    codeQueries.flatMap((query) => query.data?.items ?? [])
-  );
   return projectThreadVerificationCodes(
     codeThreadIdBuckets,
-    codeQueries.map((query) => query.data?.items ?? []),
-    now
+    codeQueries.map((query) => query.data?.items ?? [])
   );
 };
