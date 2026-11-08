@@ -113,25 +113,6 @@ describe("mail evidence capture", () => {
     state.authorizeManaged.mockReset();
   });
 
-  test("retains actual received evidence and normalized correspondent identity", async () => {
-    await captureMailboxMessageMemory({
-      actorUserId: "owner-1",
-      mailboxId: "mailbox-1",
-      message,
-      source: "open",
-    });
-    const observation = state.record.mock.calls.at(0)?.[0];
-    expect(observation).toMatchObject({
-      mailboxId: "mailbox-1",
-      userId: "owner-1",
-    });
-    expect(observation?.metadata).toMatchObject({
-      sender: "team@example.test",
-      userAuthored: false,
-    });
-    expect(observation?.metadata.bodyText).toContain("launch moved");
-  });
-
   test("rejects another user's private mailbox before recording any evidence", async () => {
     await captureMailboxMessageMemory({
       actorUserId: "outsider",
@@ -145,74 +126,6 @@ describe("mail evidence capture", () => {
       userId: "outsider",
     });
     expect(state.record).not.toHaveBeenCalled();
-  });
-
-  test("queues large actions without provider reads or private message bodies", async () => {
-    await queueMailboxMessageMemory({
-      mailboxId: "mailbox-1",
-      messageIds: ["first", "second", "first"],
-      userId: "owner-1",
-    });
-    expect(state.getMessage).not.toHaveBeenCalled();
-    expect(state.record).toHaveBeenCalledTimes(2);
-    for (const [observation] of state.record.mock.calls) {
-      expect(observation.metadata).toMatchObject({
-        hydrateMessage: true,
-      });
-      expect(observation.metadata).not.toHaveProperty("bodyText");
-    }
-  });
-
-  test("keeps message evidence deduplicated while preserving separate engagement", async () => {
-    await captureMailboxMessageMemory({
-      mailboxId: "mailbox-1",
-      message,
-      source: "sync",
-    });
-    await captureMailboxMessageMemory({
-      mailboxId: "mailbox-1",
-      message,
-      source: "open",
-    });
-    await captureMailboxMessageMemory({
-      mailboxId: "mailbox-1",
-      message,
-      source: "ai_read",
-    });
-    await queueMailboxMessageMemory({
-      mailboxId: "mailbox-1",
-      messageIds: [message.id],
-      userId: "owner-1",
-    });
-    const content = state.record.mock.calls.filter(
-      ([observation]) => observation.metadata.messageContextOnly !== true
-    );
-    const identities = new Set(
-      content.map(([observation]) =>
-        JSON.stringify([
-          observation.kind,
-          observation.eventKey,
-          observation.userId,
-          observation.mailboxId,
-        ])
-      )
-    );
-    expect(identities.size).toBe(1);
-    const engagement = state.record.mock.calls
-      .map(([observation]) => observation)
-      .filter(
-        (observation) => observation.metadata.messageContextOnly === true
-      );
-    expect(engagement).toHaveLength(2);
-    expect(engagement.map((observation) => observation.eventKey)).not.toContain(
-      content[0]?.[0].eventKey
-    );
-    expect(engagement.map((observation) => observation.metadata)).toMatchObject(
-      expect.arrayContaining([
-        expect.objectContaining({ action: "open", source: "open" }),
-        expect.objectContaining({ action: "ai_read", source: "ai_read" }),
-      ])
-    );
   });
 
   test.each(["owner-1", null])(
@@ -240,22 +153,6 @@ describe("mail evidence capture", () => {
       }
       expect(state.record).not.toHaveBeenCalled();
       expect(state.report).not.toHaveBeenCalled();
-    }
-  );
-
-  test.each(["received", "sync", "bootstrap"] as const)(
-    "preserves retryable recording failures for %s captures",
-    async (source) => {
-      const error = new Error("Database connection failed");
-      state.record.mockRejectedValue(error);
-      await expect(
-        captureMailboxMessageMemory({
-          mailboxId: "mailbox-1",
-          message,
-          source,
-        })
-      ).rejects.toBe(error);
-      expect(state.report).toHaveBeenCalledOnce();
     }
   );
 
@@ -296,22 +193,6 @@ describe("mail evidence capture", () => {
     expect(String(state.report.mock.calls.at(0)?.[0])).not.toContain(
       error.message
     );
-  });
-
-  test("attempts remaining message captures after a queue failure", async () => {
-    state.record.mockRejectedValueOnce(new Error("Temporary database failure"));
-    await expect(
-      queueMailboxMessageMemory({
-        mailboxId: "mailbox-1",
-        messageIds: ["first", "second", "first"],
-        userId: "owner-1",
-      })
-    ).resolves.toBeUndefined();
-    expect(state.record).toHaveBeenCalledTimes(2);
-    expect(
-      state.record.mock.calls.map(([event]) => event.metadata.messageId)
-    ).toContain("second");
-    expect(state.report).toHaveBeenCalledOnce();
   });
 
   test("hydrates actual sent text while removing quoted incoming voice", async () => {

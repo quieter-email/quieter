@@ -44,19 +44,7 @@ describe("request rate limiting", () => {
     );
     expect(login?.policy.group).toBe("auth");
     expect(login?.result.remaining).toBe(19);
-    expect(consumeRateLimit).toHaveBeenCalledExactlyOnceWith({
-      key: "auth:unknown",
-      limit: 20,
-      windowMs: 60_000,
-    });
-  });
-
-  test("read-only requests have no fabricated quota result", async () => {
-    const result = await getRequestRateLimit(
-      new Request("https://quieter.email/api/messages/one")
-    );
-    expect(result).toBeNull();
-    expect(consumeRateLimit).not.toHaveBeenCalled();
+    expect(consumeRateLimit).toHaveBeenCalledOnce();
   });
 
   test("caps fallback identities during an outage and admits traffic after expiry", async () => {

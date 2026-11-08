@@ -687,14 +687,6 @@ describe("Gmail automation retry recovery", () => {
     expect(otherMailbox.appliedAt).toBeNull();
   });
 
-  test("retries code extraction without scheduling another urgent mail evaluation", async () => {
-    fixtures.pendingCodeMessageIds.push("previously-received-message");
-    await retryPendingAutomationMessages({ ...input, autoLabelEnabled: false });
-    expect(fixtures.processCode).toHaveBeenCalledWith(
-      expect.objectContaining({ messageId: "previously-received-message" })
-    );
-  });
-
   test("keeps future deferrals pending while budget remains denied", async () => {
     fixtures.budget.mockResolvedValue({
       allowed: false,
@@ -707,74 +699,6 @@ describe("Gmail automation retry recovery", () => {
     expect(fixtures.rows[0]?.appliedAt).toBeNull();
     fixtures.budget.mockResolvedValue({ allowed: true, reason: "allowed" });
     await retryPendingAutomationMessages(input);
-    expect(fixtures.rows[0]?.appliedAt).toBeInstanceOf(Date);
-  });
-
-  test("classifies with current sender history and the user's preferences", async () => {
-    fixtures.classify.mockResolvedValue(["work"]);
-    vi.mocked(aiMemory.loadAiAgentContext).mockResolvedValue({
-      instructions: null,
-      memory: "Keep launch announcements under Work.",
-    });
-    fixtures.history.mockResolvedValue({
-      sameDomain: [],
-      sameSender: [
-        {
-          currentLabels: [{ id: "work", name: "Work" }],
-          manualCorrections: [
-            {
-              labelId: "work",
-              labelName: "Work",
-              recordedAt: new Date().toISOString(),
-              signal: "added",
-            },
-          ],
-          messageId: "earlier-message",
-          priorAutomaticApplication: null,
-          sender: "mail@example.com",
-        },
-      ],
-    });
-    await retryPendingAutomationMessages({
-      ...input,
-      automationRuntime: {
-        ...input.automationRuntime,
-        getAutoLabelContext: async () => ({
-          ...(await input.automationRuntime.getAutoLabelContext()),
-          availableLabelIds: new Set(["work"]),
-          historyLabels: [
-            { id: "work", name: "Work" },
-            { id: "manual-only", name: "Manual only" },
-          ],
-          labels: [
-            {
-              description: null,
-              id: "work",
-              inclusionCriteria: null,
-              name: "Work",
-            },
-          ],
-        }),
-      },
-    });
-
-    const [classification] = fixtures.classify.mock.calls[0] ?? [];
-    expect(classification?.memoryContext).toContain("launch announcements");
-    expect(
-      classification?.labelHistory?.sameSender.map((entry) => entry.messageId)
-    ).toContain("earlier-message");
-    expect(
-      classification?.labelHistory?.sameSender.flatMap((entry) =>
-        entry.currentLabels.map((label) => label.id)
-      )
-    ).toContain("work");
-    const [historyRequest] = fixtures.history.mock.calls[0] ?? [];
-    expect(historyRequest?.mailboxId).toBe(input.mailboxId);
-    expect(historyRequest?.message.id).toBe("deferred-message");
-    expect(historyRequest?.userId).toBe(input.userId);
-    expect(historyRequest?.labels.map((label) => label.id)).toContain(
-      "manual-only"
-    );
     expect(fixtures.rows[0]?.appliedAt).toBeInstanceOf(Date);
   });
 

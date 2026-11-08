@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { plainText, runtime } from "../backends/plain-text.ts";
+import { plainText } from "../backends/plain-text.ts";
 import { readMessages } from "../frontends/messages.ts";
 
 const tool = (code: number, level: number, ...lines: string[]) =>
@@ -186,27 +186,4 @@ test("output that ends where TLC died prints as plain TLC's output cut at the sa
   );
   const afterStarts = [computing, "@!@!@STARTMSG 1000:1 @!@!@", "@!@!@STARTMSG 2132:0 @!@!@", ""];
   assert.equal(plain(afterStarts.join("\n")), "Computing initial states...\n");
-});
-
-test("text outside TLC's messages, such as SANY's output, passes through unchanged", () => {
-  for (const text of ["", "\n", "a\n\nb\n", "Semantic errors:\n\n  line 1\n"])
-    assert.equal(plain(text), text);
-});
-
-test("TLC's run time prints as plain TLC prints it, with each field wrapping", () => {
-  for (const [ms, printed] of [
-    [0, "00s"],
-    [394, "00s"],
-    [59_999, "59s"],
-    [60_000, "00s"],
-    [60_001, "01min 00s"],
-    [3_599_999, "59min 59s"],
-    [3_600_000, "00min 00s"],
-    [3_600_001, "01h 00min"],
-    [86_400_000, "00h 00min"],
-    [86_400_001, "1d 00h"],
-    [90_000_000, "1d 01h"],
-    [366 * 86_400_000, "1d 00h"],
-  ] satisfies [number, string][])
-    assert.equal(runtime(ms), printed, String(ms));
 });

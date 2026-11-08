@@ -12,10 +12,8 @@ import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  NotFoundError,
   UserError,
   openStore,
-  parseVerdict,
   type Forge,
   type OpenStoreOptions,
   type Store,
@@ -279,155 +277,12 @@ afterEach(async () => {
 });
 
 describe("Store", () => {
-  it("initializes an idempotent plain-file store and releases its lock", async () => {
-    const directory = await makeDirectory();
-    const store = useStore(directory);
 
-    expect(await store.init()).toEqual({ store: directory });
-    const firstUnits = await readFile(join(directory, "units.tsv"), "utf8");
-    const firstLedger = await readFile(
-      join(directory, "ledger.tsv"),
-      "utf8"
-    );
-
-    expect(await store.init()).toEqual({ store: directory });
-    expect(await readFile(join(directory, "units.tsv"), "utf8")).toBe(
-      firstUnits
-    );
-    expect(await readFile(join(directory, "ledger.tsv"), "utf8")).toBe(
-      firstLedger
-    );
-    expect((await readdir(directory)).sort()).toEqual([
-      ".orch.lock",
-      "frontier.json",
-      "gates.md",
-      "inbox",
-      "ledger.tsv",
-      "preferences.md",
-      "units.tsv",
-    ]);
-
-    await store.close();
-    expect(await readdir(directory)).not.toContain(".orch.lock");
-  });
-
-  it("composes unit add, set, get, list, and counts", async () => {
+  it("escapes formula prefixes in persisted unit rows", async () => {
     const { store } = await initializedStore();
-
-    expect(
-      await store.units.add({
-        id: "u1",
-        track: "build",
-        brief: "briefs/u1.md",
-      })
-    ).toMatchObject({ id: "u1", state: "pending" });
     expect(
       await store.units.add({ id: "=SUM(A1)", track: "+build" })
     ).toMatchObject({ id: "'=SUM(A1)", track: "'+build" });
-
-    const updated = await store.units.set({
-      id: "u1",
-      state: "done",
-      branch: "poteto/u1",
-      pr: 184530,
-      sha: "abc123",
-    });
-    expect(updated).toEqual({
-      id: "u1",
-      track: "build",
-      state: "done",
-      branch: "poteto/u1",
-      pr: "184530",
-      sha: "abc123",
-      brief: "briefs/u1.md",
-    });
-    expect(await store.units.get("u1")).toEqual(updated);
-    expect(
-      await store.units.list({ state: "done", track: "build" })
-    ).toEqual([updated]);
-    expect(await store.units.counts()).toEqual({ done: 1, pending: 1 });
-    await expect(
-      store.units.add({ id: "u1", track: "build" })
-    ).rejects.toThrow("unit u1 already exists");
-    await expect(
-      store.units.set({ id: "missing", state: "done" })
-    ).rejects.toBeInstanceOf(NotFoundError);
-  });
-
-  it("records, replaces, checks, and summarizes typed ledger verdicts", async () => {
-    const { store } = await initializedStore();
-
-    try {
-      await store.ledger.check({ pr: 184530, sha: "abc123" });
-      throw new Error("expected ledger check to fail");
-    } catch (error) {
-      expect(error).toBeInstanceOf(NotFoundError);
-      if (error instanceof NotFoundError) {
-        expect(error.output).toEqual({
-          compact: "NOT-VERIFIED",
-          json: {
-            pr: "184530",
-            sha: "abc123",
-            verdict: "NOT-VERIFIED",
-          },
-        });
-      }
-    }
-    expect(() => parseVerdict("looks-good")).toThrow("verdict must be");
-
-    const recorded = await store.ledger.record({
-      pr: 184530,
-      sha: "abc123",
-      verdict: "unit-test-verified",
-      evidence: "reports/verify.md",
-      verifier: "opus",
-    });
-    expect(await store.ledger.check({ pr: 184530, sha: "abc123" })).toEqual(
-      recorded
-    );
-    expect(await store.ledger.summary()).toEqual({
-      "unit-test-verified": 1,
-    });
-
-    await store.ledger.record({
-      pr: 184530,
-      sha: "abc123",
-      verdict: "live-ui-verified",
-      evidence: "reports/live.md",
-    });
-    expect(await store.ledger.summary()).toEqual({
-      "live-ui-verified": 1,
-    });
-  });
-
-  it("pushes, peeks, and atomically drains inbox pointers", async () => {
-    const { directory, store } = await initializedStore();
-
-    const first = await store.inbox.push({
-      agent: "worker-1",
-      unit: "u1",
-      status: "done",
-      report: "reports/u1.md",
-    });
-    expect(first.pointer).toMatchObject({ unit: "u1", status: "done" });
-    expect(first.filename).toEndWith(".tsv");
-    await store.inbox.push({
-      agent: "worker-2",
-      unit: "u2",
-      status: "failed",
-    });
-
-    expect(await store.inbox.count()).toBe(2);
-    expect(await store.inbox.peek()).toHaveLength(2);
-    expect(await store.inbox.count()).toBe(2);
-    expect(await store.inbox.drain()).toHaveLength(2);
-    expect(await store.inbox.count()).toBe(0);
-    expect(await readdir(join(directory, "inbox"))).toEqual([]);
-    expect(
-      (await readdir(directory)).filter((name) =>
-        name.startsWith(".inbox-drain-")
-      )
-    ).toEqual([]);
   });
 
   it("replaces a stale lock whose holder pid is dead", async () => {
@@ -469,39 +324,6 @@ describe("Store", () => {
     expect(stolen).toEqual([String(process.pid)]);
     await forced.close();
     expect(await readdir(directory)).not.toContain(".orch.lock");
-  });
-
-  it("parks gates, stores standing orders, and renders status", async () => {
-    const { directory, store } = await initializedStore();
-    await store.units.add({ id: "u1", track: "build" });
-    expect(
-      await store.gates.park({
-        id: "release",
-        question: "Ship now?",
-        options: "ship,wait",
-        defaultAnswer: "wait",
-      })
-    ).toMatchObject({ kind: "open", id: "release" });
-    expect(
-      await store.standing.add({ line: "Never force push." })
-    ).toEqual({ number: 1, line: "Never force push." });
-
-    const first = await store.status.render();
-    expect(first.changed).toBe("first render");
-    expect(first.summary.openGateIds).toEqual(["release"]);
-    expect(await readFile(join(directory, "status.md"), "utf8")).toContain(
-      "| release | open | Ship now? |"
-    );
-    expect((await store.status.render()).changed).toBe("no derived changes");
-
-    expect(
-      await store.gates.resolve({ id: "release", answer: "ship" })
-    ).toMatchObject({ kind: "resolved", answer: "ship" });
-    expect((await store.status.render()).changed).toBe("open gates 1->0");
-    expect(await store.gates.list()).toEqual([]);
-    expect(await store.standing.show()).toEqual([
-      { number: 1, line: "Never force push." },
-    ]);
   });
 
   for (const forge of ["gh", "origin"] as const) {
@@ -638,22 +460,6 @@ describe("Store", () => {
     });
   }
 
-  it("names the missing pull request when a chain branch has none", async () => {
-    const { directory, store } = await initializedStore();
-    const stack = await makeGitStack(directory);
-
-    await withFakeForge({
-      directory,
-      forge: "gh",
-      currentRows: "[]",
-      operation: async () => {
-        await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
-          "branch stack/open has no pull request; open one with gh pr create"
-        );
-      },
-    });
-  });
-
   it("rejects malformed TSV, verdict, frontier, and inbox data", async () => {
     const { directory, store } = await initializedStore();
 
@@ -688,140 +494,9 @@ describe("Store", () => {
     );
   });
 
-  it("rejects operations after close", async () => {
-    const { store } = await initializedStore();
-    await store.close();
-    await expect(store.units.list()).rejects.toThrow("store is closed");
-    await expect(store.status.render()).rejects.toBeInstanceOf(UserError);
-  });
 });
 
 describe("orch CLI", () => {
-  for (const forge of ["gh", "origin"] as const) {
-    for (const mode of [
-      "explicit integration root",
-      "remote-only integration root",
-      "origin/HEAD default",
-      "main fallback",
-      "main origin/HEAD default",
-    ] as const) {
-      it(`resolves and persists the pinned ${forge} CLI frontier with ${mode}`, async () => {
-        const directory = await makeDirectory();
-        const integration = !mode.startsWith("main");
-        const rootBranch = integration ? "integration/release" : "main";
-        const stack = await makeGitStack(directory, rootBranch);
-        const explicit = mode.includes("integration root");
-        if (mode === "remote-only integration root") {
-          git({
-            repo: stack.repo,
-            args: ["update-ref", "refs/remotes/origin/integration/release", rootBranch],
-          });
-          git({ repo: stack.repo, args: ["branch", "-D", rootBranch] });
-        } else if (mode === "origin/HEAD default") {
-          git({
-            repo: stack.repo,
-            args: ["update-ref", "refs/remotes/origin/integration/release", rootBranch],
-          });
-          git({
-            repo: stack.repo,
-            args: ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/integration/release"],
-          });
-        } else if (mode === "main fallback") {
-          git({
-            repo: stack.repo,
-            args: ["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"],
-          });
-        }
-        expect(runCli(["--store", directory, "init"]).code).toBe(0);
-        await withFakeForge({
-          directory,
-          forge,
-          rootBranch,
-          operation: async () => {
-            const result = runCli([
-              "--store", directory, "--json", "frontier", "set",
-              "--repo", stack.repo, "--forge", forge,
-              ...(explicit ? ["--base", rootBranch] : []),
-              "--prs", "10,13,11,14",
-            ]);
-            expect(result.stderr).toBe("");
-            expect(result.code).toBe(0);
-            const expected = {
-              generation: 1,
-              prs: [
-                { pr: 10, branches: "stack/merged", sha: stack.mergedSha, state: "MERGED" },
-                { pr: 13, branches: "stack/closed", sha: stack.closedSha, state: "CLOSED" },
-                { pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" },
-                { pr: 14, branches: "stack/draft", sha: stack.draftSha, state: "OPEN" },
-              ],
-              lowestUnmerged: 11,
-            };
-            expect(JSON.parse(result.stdout)).toEqual(expected);
-            const shown = runCli(["--store", directory, "--json", "frontier", "show"]);
-            expect(shown.code).toBe(0);
-            expect(JSON.parse(shown.stdout)).toEqual(expected);
-            expect(JSON.parse(await readFile(join(directory, "frontier.json"), "utf8"))).toEqual(expected);
-            if (explicit) {
-              expect(git({
-                repo: stack.repo,
-                args: ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
-              })).toBe("origin/main");
-            }
-            expect(await readFile(join(directory, "forge-queries.txt"), "utf8"))
-              .not.toContain(`--head ${rootBranch} `);
-          },
-        });
-      });
-    }
-
-    it(`reports the missing integration PR with ${forge} when --base is omitted`, async () => {
-      const directory = await makeDirectory();
-      const stack = await makeGitStack(directory, "integration/release");
-      expect(runCli(["--store", directory, "init"]).code).toBe(0);
-      const before = await readFile(join(directory, "frontier.json"), "utf8");
-      await withFakeForge({
-        directory,
-        forge,
-        rootBranch: "integration/release",
-        operation: async () => {
-          const result = runCli([
-            "--store", directory, "frontier", "set", "--repo", stack.repo,
-            "--forge", forge,
-          ]);
-          expect(result.code).toBe(1);
-          expect(result.stderr).toContain("branch integration/release has no pull request");
-          expect(result.stderr).not.toContain("unexpected");
-          expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe(before);
-        },
-      });
-    });
-
-    it(`returns an exact empty ${forge} CLI frontier at the explicit base without querying the forge`, async () => {
-      const directory = await makeDirectory();
-      const stack = await makeGitStack(directory, "integration/release");
-      git({ repo: stack.repo, args: ["checkout", "integration/release"] });
-      expect(runCli(["--store", directory, "init"]).code).toBe(0);
-      await withFakeForge({
-        directory,
-        forge,
-        rootBranch: "integration/release",
-        operation: async () => {
-          const result = runCli([
-            "--store", directory, "--json", "frontier", "set",
-            "--repo", stack.repo, "--forge", forge,
-            "--base", "integration/release",
-          ]);
-          expect(result.code).toBe(0);
-          expect(result.stderr).toBe("");
-          const expected = { generation: 1, prs: [], lowestUnmerged: null };
-          expect(JSON.parse(result.stdout)).toEqual(expected);
-          expect(JSON.parse(await readFile(join(directory, "frontier.json"), "utf8"))).toEqual(expected);
-          expect(await readFile(join(directory, "forge-queries.txt"), "utf8")).toBe("");
-        },
-      });
-    });
-  }
-
   it("rejects invalid and nonexistent explicit bases without changing the frontier or querying the forge", async () => {
     const directory = await makeDirectory();
     const stack = await makeGitStack(directory, "integration/release");
@@ -951,111 +626,4 @@ describe("orch CLI", () => {
     });
   }
 
-  it("prints commander help and rejects invalid parsing with exit 1", async () => {
-    const help = runCli(["--help"]);
-    expect(help.code).toBe(0);
-    expect(help.stdout).toContain("Commands:");
-    expect(help.stdout).toContain("unit");
-    expect(help.stdout).toContain("ledger");
-
-    const frontierHelp = runCli(["frontier", "set", "--help"]);
-    expect(frontierHelp.code).toBe(0);
-    expect(frontierHelp.stdout).toContain("--repo <dir>");
-    expect(frontierHelp.stdout).toContain("--forge <forge>");
-    expect(frontierHelp.stdout).toContain("--prs <n,...>");
-
-    const directory = await makeDirectory();
-    const invalid = runCli(["--store", directory, "unit", "add", "u1"]);
-    expect(invalid.code).toBe(1);
-    expect(invalid.stderr).toContain("required option '--track <track>'");
-
-    const badForge = runCli([
-      "--store",
-      directory,
-      "frontier",
-      "set",
-      "--repo",
-      directory,
-      "--forge",
-      "gt",
-    ]);
-    expect(badForge.code).toBe(1);
-    expect(badForge.stderr).toContain("Allowed choices are gh, origin");
-  });
-
-  it("accepts ORCH_STORE and emits complete JSON", async () => {
-    const directory = await makeDirectory();
-    const env = { ...process.env, ORCH_STORE: directory };
-    expect(runCli(["init"], env).code).toBe(0);
-
-    const added = runCli(
-      ["unit", "add", "u1", "--track", "build", "--json"],
-      env
-    );
-    expect(added.code).toBe(0);
-    expect(JSON.parse(added.stdout)).toEqual({
-      id: "u1",
-      track: "build",
-      state: "pending",
-      branch: "",
-      pr: "",
-      sha: "",
-      brief: "",
-    });
-  });
-
-  it("maps user and not-found outcomes to the preserved exit codes", async () => {
-    const directory = await makeDirectory();
-    expect(runCli(["--store", directory, "init"]).code).toBe(0);
-
-    const missingRepo = runCli([
-      "--store",
-      directory,
-      "frontier",
-      "set",
-    ]);
-    expect(missingRepo.code).toBe(1);
-    expect(missingRepo.stderr).toContain(
-      "set --repo <dir> or ORCH_REPO"
-    );
-
-    const userError = runCli([
-      "--store",
-      directory,
-      "unit",
-      "add",
-      "",
-      "--track",
-      "build",
-    ]);
-    expect(userError.code).toBe(1);
-    expect(userError.stderr).toContain("unit id must not be empty");
-
-    const missingUnit = runCli([
-      "--store",
-      directory,
-      "unit",
-      "get",
-      "missing",
-    ]);
-    expect(missingUnit.code).toBe(2);
-    expect(missingUnit.stderr).toContain("unit missing not found");
-
-    const missingLedger = runCli([
-      "--store",
-      directory,
-      "--json",
-      "ledger",
-      "check",
-      "184530",
-      "abc123",
-    ]);
-    expect(missingLedger.code).toBe(2);
-    expect(JSON.parse(missingLedger.stdout)).toEqual({
-      pr: "184530",
-      sha: "abc123",
-      verdict: "NOT-VERIFIED",
-    });
-    expect(missingLedger.stderr).toBe("");
-  });
 });

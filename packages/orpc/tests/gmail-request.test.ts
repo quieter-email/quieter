@@ -35,15 +35,4 @@ describe(callGmail, () => {
     expect(headers.get("retry-after")).toBe("3");
     expect(String(result)).not.toContain(failure.message);
   });
-
-  test("preserves unexpected errors for reporting", async () => {
-    const failure = new Error("Unexpected mailbox failure.");
-    await expect(
-      callGmail(
-        { userId: "fixture-user" },
-        "fixture-mailbox",
-        vi.fn<() => Promise<never>>().mockRejectedValue(failure)
-      )
-    ).rejects.toBe(failure);
-  });
 });

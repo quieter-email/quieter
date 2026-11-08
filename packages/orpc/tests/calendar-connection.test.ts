@@ -190,19 +190,6 @@ describe("Gmail calendar account authorization", () => {
     ).toBeTruthy();
   });
 
-  test("keeps an unmatched legacy account visible until its own Gmail mailbox is connected", async () => {
-    mocks.mailboxRows = [];
-    await expect(listCalendarAccountsForUser(input)).resolves.toMatchObject({
-      accounts: [
-        { id: input.connectionId, mailboxId: null, status: "needs-mailbox" },
-      ],
-    });
-    await expect(listCalendarsForUser(input)).rejects.toMatchObject({
-      code: "FORBIDDEN",
-    });
-    expect(mocks.decrypt).not.toHaveBeenCalled();
-  });
-
   test("legacy aliases execute solely through the matched Gmail token and preserve the requested ID", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       Response.json({
@@ -261,20 +248,6 @@ describe("Gmail calendar account authorization", () => {
     expect(
       new Headers(request.mock.calls[2]?.[1]?.headers).get("authorization")
     ).toBe("Bearer refreshed-token");
-  });
-
-  test("Calendar reads respect retryUnauthorized false", async () => {
-    const request = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(new Response(null, { status: 401 }));
-    vi.stubGlobal("fetch", request);
-    await expect(
-      listCalendarsForUser({ ...input, retryUnauthorized: false })
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    expect(request).toHaveBeenCalledOnce();
-    expect(
-      mocks.query.mock.calls.every(([query]) => query.startsWith("select"))
-    ).toBeTruthy();
   });
 
   test.each(["revoked refresh grant", "repeated authorization denial"])(

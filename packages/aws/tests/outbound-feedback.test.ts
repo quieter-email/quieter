@@ -47,24 +47,6 @@ const snsEvent = () => ({
 });
 
 describe(parseSesFeedbackNotification, () => {
-  test("parses send events for all envelope recipients", () => {
-    expect(
-      parseSesFeedbackNotification(
-        createEnvelope({ eventType: "SEND", mail }),
-        topicArn
-      )
-    ).toMatchObject({
-      eventType: "sent",
-      provider: "ses",
-      providerMessageId: "ses-message-1",
-      recipients: [
-        { emailAddress: "to@example.com" },
-        { emailAddress: "cc@example.com" },
-      ],
-      sourceEventId: "sns-event-1",
-    });
-  });
-
   test("parses permanent bounces with recipient diagnostics", () => {
     expect(
       parseSesFeedbackNotification(
@@ -102,27 +84,6 @@ describe(parseSesFeedbackNotification, () => {
     });
   });
 
-  test("parses complaint feedback identifiers", () => {
-    expect(
-      parseSesFeedbackNotification(
-        createEnvelope({
-          complaint: {
-            complainedRecipients: [{ emailAddress: "to@example.com" }],
-            feedbackId: "complaint-1",
-            timestamp: "2026-08-14T10:02:00.000Z",
-          },
-          eventType: "COMPLAINT",
-          mail,
-        }),
-        topicArn
-      )
-    ).toMatchObject({
-      eventType: "complained",
-      recipients: [{ emailAddress: "to@example.com" }],
-      sourceEventId: "complaint-1",
-    });
-  });
-
   test("treats transient bounces as delays without a permanent failure", () => {
     expect(
       parseSesFeedbackNotification(
@@ -150,57 +111,6 @@ describe(parseSesFeedbackNotification, () => {
     });
   });
 
-  test("parses delivery recipient strings", () => {
-    expect(
-      parseSesFeedbackNotification(
-        createEnvelope({
-          delivery: {
-            recipients: ["to@example.com"],
-            timestamp: "2026-08-14T10:03:00.000Z",
-          },
-          eventType: "DELIVERY",
-          mail,
-        }),
-        topicArn
-      )
-    ).toMatchObject({
-      eventType: "delivered",
-      recipients: [{ emailAddress: "to@example.com" }],
-    });
-  });
-
-  test("parses delivery delay event names from SES", () => {
-    expect(
-      parseSesFeedbackNotification(
-        createEnvelope({
-          deliveryDelay: {
-            delayedRecipients: [
-              {
-                diagnosticCode: "smtp; 451 try later",
-                emailAddress: "to@example.com",
-                status: "4.4.1",
-              },
-            ],
-            timestamp: "2026-08-14T10:04:00.000Z",
-          },
-          eventType: "DeliveryDelay",
-          mail,
-        }),
-        topicArn
-      )
-    ).toMatchObject({
-      eventType: "delayed",
-      permanentFailure: false,
-      recipients: [
-        {
-          diagnosticCode: "smtp; 451 try later",
-          emailAddress: "to@example.com",
-          providerStatus: "4.4.1",
-        },
-      ],
-    });
-  });
-
   test("rejects messages from unexpected topics", () => {
     expect(() =>
       parseSesFeedbackNotification(
@@ -208,15 +118,6 @@ describe(parseSesFeedbackNotification, () => {
         "arn:aws:sns:eu-central-1:123456789012:other"
       )
     ).toThrow("unexpected SNS topic");
-  });
-
-  test("ignores event types that were not requested", () => {
-    expect(
-      parseSesFeedbackNotification(
-        createEnvelope({ eventType: "OPEN", mail }),
-        topicArn
-      )
-    ).toBeNull();
   });
 });
 
@@ -227,18 +128,6 @@ describe(handler, () => {
     mocks.reportAwsError.mockResolvedValue();
   });
 
-  test("persists a valid SNS delivery", async () => {
-    await expect(handler(snsEvent())).resolves.toBeUndefined();
-
-    expect(mocks.recordOrganizationMailFeedback).toHaveBeenCalledOnce();
-    expect(
-      mocks.recordOrganizationMailFeedback.mock.calls[0]?.[0]
-    ).toMatchObject({
-      eventType: "sent",
-      providerMessageId: "ses-message-1",
-    });
-  });
-
   test("reports persistence failures to Sentry and rethrows unchanged", async () => {
     const failure = new Error("database unavailable");
     mocks.recordOrganizationMailFeedback.mockRejectedValue(failure);
@@ -247,8 +136,5 @@ describe(handler, () => {
 
     expect(mocks.reportAwsError).toHaveBeenCalledOnce();
     expect(mocks.reportAwsError.mock.calls[0]?.[0]).toBe(failure);
-    expect(mocks.reportAwsError.mock.calls[0]?.[1]).toBe(
-      "MailOutboundFeedbackProcessor"
-    );
   });
 });

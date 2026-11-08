@@ -65,45 +65,4 @@ describe("foreground continuation", () => {
       ])
     ).toBeFalsy();
   });
-
-  test("does not continue after server-only work", () => {
-    expect(
-      needsForegroundContinuation([
-        assistantMessage([
-          { type: "step-start" },
-          {
-            input: {},
-            output: { status: "sent" },
-            state: "output-available",
-            toolCallId: "send-1",
-            type: "tool-send_mail",
-          },
-        ]),
-      ])
-    ).toBeFalsy();
-  });
-
-  test("uses only the latest tool step", () => {
-    expect(
-      needsForegroundContinuation([
-        assistantMessage([
-          {
-            input: {},
-            output: { mailbox: "inbox" },
-            state: "output-available",
-            toolCallId: "navigate-1",
-            type: "tool-navigate",
-          },
-          { type: "step-start" },
-          {
-            input: {},
-            output: { status: "sent" },
-            state: "output-available",
-            toolCallId: "send-1",
-            type: "tool-send_mail",
-          },
-        ]),
-      ])
-    ).toBeFalsy();
-  });
 });

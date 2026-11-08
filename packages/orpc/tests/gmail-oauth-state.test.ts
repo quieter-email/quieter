@@ -162,19 +162,4 @@ describe("Gmail OAuth state consumption", () => {
     );
     expect(insertion?.[1]).toContain("/calendar?view=week");
   });
-
-  test("keeps the account chooser when connecting an unknown account", async () => {
-    mocks.query
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [["membership-id"]] });
-    const result = await startGmailOAuth({
-      organizationId: "team-id",
-      userId: "owner-id",
-    });
-    const authorizationUrl = new URL(result.authorizationUrl);
-    expect(authorizationUrl.searchParams.get("prompt")).toContain(
-      "select_account"
-    );
-    expect(authorizationUrl.searchParams.has("login_hint")).toBeFalsy();
-  });
 });

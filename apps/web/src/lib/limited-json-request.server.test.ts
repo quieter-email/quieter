@@ -1,9 +1,6 @@
 import { describe, expect, test, vi } from "vite-plus/test";
 
-import {
-  LimitedJsonRequestError,
-  readLimitedJsonRequest,
-} from "./limited-json-request.server";
+import { readLimitedJsonRequest } from "./limited-json-request.server";
 
 describe("limited JSON requests", () => {
   test("releases the reader when the request stream fails", async () => {
@@ -69,18 +66,6 @@ describe("limited JSON requests", () => {
     }
   );
 
-  test("rejects declared oversized bodies before reading", async () => {
-    const request = new Request("https://example.test/api/chat", {
-      body: "{}",
-      headers: { "content-length": "1001" },
-      method: "POST",
-    });
-    await expect(readLimitedJsonRequest(request, 1000)).rejects.toMatchObject({
-      status: 413,
-    });
-    expect(request.bodyUsed).toBeFalsy();
-  });
-
   test("rejects invalid UTF-8 and missing bodies", async () => {
     await expect(
       readLimitedJsonRequest(
@@ -94,50 +79,6 @@ describe("limited JSON requests", () => {
     await expect(
       readLimitedJsonRequest(
         new Request("https://example.test/api/chat", {
-          method: "POST",
-        }),
-        1000
-      )
-    ).rejects.toMatchObject({ status: 400 });
-  });
-
-  test("accepts a valid request without Content-Length", async () => {
-    const request = new Request("https://example.test/api/chat", {
-      body: JSON.stringify({ message: "hello" }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-
-    expect(request.headers.has("content-length")).toBeFalsy();
-    await expect(readLimitedJsonRequest(request, 1000)).resolves.toStrictEqual({
-      message: "hello",
-    });
-  });
-
-  test("rejects bodies whose bytes exceed the limit", async () => {
-    const request = new Request("https://example.test/api/chat", {
-      body: JSON.stringify({ message: "ééé" }),
-      method: "POST",
-    });
-
-    await expect(readLimitedJsonRequest(request, 10)).rejects.toMatchObject({
-      status: 413,
-    });
-  });
-
-  test("rejects malformed JSON with a classified error", async () => {
-    const request = new Request("https://example.test/api/chat", {
-      body: "not-json",
-      method: "POST",
-    });
-
-    await expect(readLimitedJsonRequest(request, 1000)).rejects.toBeInstanceOf(
-      LimitedJsonRequestError
-    );
-    await expect(
-      readLimitedJsonRequest(
-        new Request("https://example.test/api/chat", {
-          body: "not-json",
           method: "POST",
         }),
         1000

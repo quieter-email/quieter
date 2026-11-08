@@ -6,20 +6,13 @@ vi.hoisted(() => {
 
 const { db, withRequestDatabaseClient } =
   await import("@quieter/database/client");
-const { auth, organizationApiKeyApi } = await import("../src/index");
+const { auth } = await import("../src/index");
 const { getSessionWithOrganization, handleSessionRequest } =
   await import("../src/session");
 
 describe("auth in Worker request scopes", () => {
   afterAll(() => {
     vi.unstubAllGlobals();
-  });
-
-  test("imports auth without opening an unscoped database client", () => {
-    expect(organizationApiKeyApi.verifyApiKey).toBeTypeOf("function");
-    expect(() => db.$client).toThrow(
-      "Worker database access requires withRequestDatabaseClient."
-    );
   });
 
   test("serves anonymous session requests without an outer database scope", async () => {

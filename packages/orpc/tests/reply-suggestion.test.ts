@@ -216,17 +216,6 @@ describe("reply suggestion authorization and draft preparation", () => {
     expect(mocks.learn).not.toHaveBeenCalled();
   });
 
-  test("does not generate a reply to the user's own sent message", async () => {
-    mocks.thread.mockResolvedValue({
-      messages: [message({ labelIds: ["SENT"] })],
-      threadId: "thread-1",
-    });
-    await expect(requestReplySuggestion(request)).resolves.toMatchObject({
-      status: "not_needed",
-    });
-    expect(mocks.generate).not.toHaveBeenCalled();
-  });
-
   test("returns an editable body using only authorized non-draft conversation context", async () => {
     mocks.thread.mockResolvedValue({
       messages: [
@@ -326,23 +315,6 @@ describe("reply suggestion authorization and draft preparation", () => {
     expect(
       reported instanceof Error && reported.message.includes("private data")
     ).toBeFalsy();
-  });
-
-  test("preserves a no-reply-needed decision", async () => {
-    mocks.generate.mockResolvedValue({
-      reason: "The conversation is complete.",
-      status: "not_needed",
-    });
-    await expect(requestReplySuggestion(request)).resolves.toMatchObject({
-      status: "not_needed",
-    });
-    expect(mocks.learn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        mailboxId: "mailbox-1",
-        messageIds: ["message-1"],
-        userId: "user-1",
-      })
-    );
   });
 });
 

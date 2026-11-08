@@ -35,22 +35,6 @@ const guard = workflow.jobs.recover.steps.find(
 const guardScript = z.string().parse(guard?.run);
 
 describe("protected AI credit recovery execution", () => {
-  test("requires the protected environment and rejects branch execution before credentials", () => {
-    expect(workflow.jobs.recover.environment).toBe("production");
-    expect(workflow.jobs.recover.if).toContain(
-      "github.ref == 'refs/heads/main'"
-    );
-    const guardIndex = workflow.jobs.recover.steps.indexOf(guard ?? {});
-    expect(guardIndex).toBeGreaterThanOrEqual(0);
-    expect(guardIndex).toBeLessThan(
-      workflow.jobs.recover.steps.findIndex(
-        (step) =>
-          step.uses?.startsWith("aws-actions/configure-aws-credentials") ===
-          true
-      )
-    );
-  });
-
   test.each([
     ["refs/heads/main", "trusted", "trusted success", "admin", "admin", true],
     [

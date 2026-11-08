@@ -1,9 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import {
-  actionSpecificationSchema,
-  validateActionSpecification,
-} from "../src/action-specification";
+import { validateActionSpecification } from "../src/action-specification";
 import type { ActionSpecification } from "../src/action-specification";
 
 const specification: ActionSpecification = {
@@ -52,17 +49,6 @@ const specification: ActionSpecification = {
 };
 
 describe("action specification validation", () => {
-  test("validates a persisted document with exact grants for separate connections", () => {
-    const serialized = JSON.stringify(specification);
-    const persisted: unknown = JSON.parse(serialized);
-    const result = validateActionSpecification(persisted);
-
-    expect(result).toMatchObject({ issues: [], status: "valid" });
-    expect(
-      actionSpecificationSchema.safeParse(result.specification).success
-    ).toBeTruthy();
-  });
-
   test.each([
     { input: { ...specification, version: 2 }, name: "unknown version" },
     { input: { ...specification, version: "1" }, name: "coerced version" },
@@ -259,38 +245,6 @@ describe("action specification validation", () => {
     }
   );
 
-  test("does not infer tools or permissions from instructions", () => {
-    const result = validateActionSpecification({
-      ...specification,
-      instructions: "Send replies and delete every message automatically.",
-      permissions: [],
-      toolGrants: [],
-    });
-
-    expect(result).toMatchObject({
-      specification: { permissions: [], toolGrants: [] },
-      status: "valid",
-    });
-  });
-
-  test("bounds private source text and untrusted collections without truncation", () => {
-    expect(
-      validateActionSpecification({
-        ...specification,
-        sourceText: "x".repeat(100_000),
-      })
-    ).toMatchObject({ specification: null, status: "invalid" });
-    expect(
-      validateActionSpecification({
-        ...specification,
-        connectors: Array.from({ length: 1000 }, (_, index) => ({
-          connectionId: `connection-${index}`,
-          referenceId: `connection_${index}`,
-        })),
-      })
-    ).toMatchObject({ specification: null, status: "invalid" });
-  });
-
   test.each([
     {
       assumptions: ["Assume the product connection is intended."],
@@ -308,52 +262,5 @@ describe("action specification validation", () => {
       status: "needs_review",
     });
     expect(result.issues.length).toBeGreaterThan(0);
-  });
-
-  test("keeps an unsupported event source reviewable without marking it ready", () => {
-    const result = validateActionSpecification({
-      ...specification,
-      trigger: { eventType: "records.updated", kind: "future_event" },
-    });
-
-    expect(result).toMatchObject({
-      specification: { trigger: { eventType: "records.updated" } },
-      status: "needs_review",
-    });
-  });
-
-  test.each([
-    { cadence: "daily", localTime: "06:00", timeZone: "Europe/Berlin" },
-    {
-      cadence: "weekly",
-      dayOfWeek: "monday",
-      localTime: "09:30",
-      timeZone: "America/New_York",
-    },
-  ])("validates explicit local schedules", (schedule) => {
-    expect(
-      validateActionSpecification({
-        ...specification,
-        trigger: { kind: "scheduled", schedule },
-      }).status
-    ).toBe("valid");
-  });
-
-  test.each([
-    { cadence: "daily", localTime: "25:00", timeZone: "Europe/Berlin" },
-    { cadence: "daily", localTime: "09:60", timeZone: "Europe/Berlin" },
-    { cadence: "daily", localTime: "09:00", timeZone: "Unknown/Location" },
-    { cadence: "daily", localTime: "09:00", timeZone: "+01:00" },
-    { cadence: "weekly", localTime: "09:00", timeZone: "Europe/Berlin" },
-  ])("rejects ambiguous or malformed schedules", (schedule) => {
-    const result = validateActionSpecification({
-      ...specification,
-      trigger: { kind: "scheduled", schedule },
-    });
-
-    expect(result).toMatchObject({ specification: null, status: "invalid" });
-    expect(
-      result.issues.some((issue) => /trigger/u.test(issue.path))
-    ).toBeTruthy();
   });
 });

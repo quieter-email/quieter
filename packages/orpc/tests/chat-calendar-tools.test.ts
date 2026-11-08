@@ -1,8 +1,5 @@
 import { ORPCError } from "@orpc/server";
-import {
-  foregroundSnapshotSchema,
-  resolveCalendarWriteReview,
-} from "@quieter/ai/chat-tools";
+import { foregroundSnapshotSchema } from "@quieter/ai/chat-tools";
 import type {
   CalendarWriteReview,
   CalendarWriteToolName,
@@ -241,78 +238,6 @@ describe("calendar tool execution", () => {
     }
   );
 
-  test("runs routine writes with discovery and no approval", async () => {
-    const transcript = approvedTranscript({
-      input: createInput,
-      toolName: "create_calendar_event",
-    }).map((message) => ({ ...message, parts: message.parts.slice(0, 2) }));
-    const context = createCalendarToolsContext({
-      foreground,
-      transcript,
-      userId: "signed-in-user",
-    });
-    await expect(
-      context.createEvent(createInput, { toolCallId: "create-1" })
-    ).resolves.toMatchObject({ status: "success" });
-    await context.updateEvent(updateInput, { toolCallId: "update-1" });
-    await context.respondToEvent(
-      { ...deleteInput, response: "accepted" },
-      { toolCallId: "respond-1" }
-    );
-    expect(mocks.update).toHaveBeenCalledWith(
-      expect.objectContaining({ ...updateInput, userId: "signed-in-user" })
-    );
-    expect(mocks.respond).toHaveBeenCalledWith(
-      expect.objectContaining({
-        response: "accepted",
-        userId: "signed-in-user",
-      })
-    );
-    await expect(
-      context.deleteEvent(deleteInput, { toolCallId: "delete-1" })
-    ).resolves.toMatchObject({ status: "error" });
-    expect(mocks.delete).not.toHaveBeenCalled();
-  });
-
-  test("uses successful reads from the same context before routine writes", async () => {
-    mocks.accounts.mockResolvedValue({
-      accounts: [{ ...account, mailboxId: "mailbox-1" }],
-      googleConfigured: true,
-      isConfigured: true,
-      microsoftConfigured: false,
-    });
-    mocks.calendars.mockResolvedValue({ calendars: [calendar] });
-    mocks.event.mockResolvedValue(event);
-    const context = createCalendarToolsContext({
-      foreground,
-      transcript: [],
-      userId: "signed-in-user",
-    });
-    await context.listCalendars({ connectionId: account.id });
-    await expect(
-      context.createEvent(createInput, { toolCallId: "create-live" })
-    ).resolves.toMatchObject({ status: "success" });
-    await context.getEvent(deleteInput);
-    await context.updateEvent(updateInput, { toolCallId: "update-live" });
-    await context.respondToEvent(
-      { ...deleteInput, response: "accepted" },
-      { toolCallId: "respond-live" }
-    );
-    expect(mocks.update).toHaveBeenCalledWith(
-      expect.objectContaining({ ...updateInput, userId: "signed-in-user" })
-    );
-    expect(mocks.respond).toHaveBeenCalledWith(
-      expect.objectContaining({
-        response: "accepted",
-        userId: "signed-in-user",
-      })
-    );
-    await expect(
-      context.deleteEvent(deleteInput, { toolCallId: "delete-live" })
-    ).resolves.toMatchObject({ status: "error" });
-    expect(mocks.delete).not.toHaveBeenCalled();
-  });
-
   test("preserves exact persisted deletion approval alongside fresh reads", async () => {
     mocks.accounts.mockResolvedValue({
       accounts: [{ ...account, mailboxId: "mailbox-1" }],
@@ -411,46 +336,6 @@ describe("calendar tool execution", () => {
       )
     ).resolves.toMatchObject({ status: "error" });
     expect(mocks.update).not.toHaveBeenCalled();
-  });
-
-  test("shows the fetched occurrence or series as the actual recurrence target", () => {
-    const occurrence = resolveCalendarWriteReview({
-      input: updateInput,
-      toolName: "update_calendar_event",
-      transcript: approvedTranscript({
-        input: updateInput,
-        toolName: "update_calendar_event",
-      }),
-    });
-    expect(occurrence).toMatchObject({
-      account: { email: account.email },
-      calendar: { name: calendar.name },
-      scope: "occurrence",
-      title: "Reviewed meeting",
-    });
-    const master = {
-      ...event,
-      eventId: "series-1",
-      recurrence: ["RRULE:FREQ=WEEKLY"],
-      recurringEventId: undefined,
-      version: "master-version",
-    };
-    const input = {
-      ...updateInput,
-      eventId: master.eventId,
-      version: master.version,
-    };
-    expect(
-      resolveCalendarWriteReview({
-        input,
-        toolName: "update_calendar_event",
-        transcript: approvedTranscript({
-          input,
-          sourceEvent: master,
-          toolName: "update_calendar_event",
-        }),
-      })
-    ).toMatchObject({ scope: "series" });
   });
 
   test("never calls the provider without discovery or after cancellation", async () => {

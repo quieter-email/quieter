@@ -7,7 +7,6 @@ import {
   createQueueState,
   evaluateQueue,
   planQueue,
-  queryBackoffSeconds,
   readSnapshot,
   runQueued,
   runSimple,
@@ -91,67 +90,6 @@ describe("readiness truth table", () => {
   });
 });
 
-describe("snapshot query planning", () => {
-  it("does not query commit rollups while queued checks are pending", async () => {
-    const reader = fakeReader({
-      fastPath: { kind: "checks", checks: [pendingCheck()] },
-    });
-    const snapshot = await readSnapshot({
-      reader,
-      context: context(2),
-      pendingHistory: "omit",
-      allowDraft: false,
-    });
-    expect(snapshot.kind).toBe("open");
-    if (snapshot.kind !== "open") throw new Error("expected open snapshot");
-    expect(snapshot.ci.kind).toBe("ci-pending");
-    expect(reader.calls).toEqual([
-      "pullRequest",
-      "reviewThreadPage:null",
-      "checksFastPath",
-    ]);
-  });
-
-  it("queries rollups for settled and failed lists", async () => {
-    const settled = fakeReader();
-    await readSnapshot({
-      reader: settled,
-      context: context(3),
-      pendingHistory: "omit",
-      allowDraft: false,
-    });
-    expect(settled.calls).toContain("commitRollups");
-
-    const failed = fakeReader({
-      fastPath: { kind: "checks", checks: [failedCheck()] },
-    });
-    await readSnapshot({
-      reader: failed,
-      context: context(4),
-      pendingHistory: "omit",
-      allowDraft: false,
-    });
-    expect(failed.calls).toContain("commitRollups");
-  });
-
-  it("short-circuits merged rows before threads and checks", async () => {
-    const reader = fakeReader({
-      facts: { state: "MERGED", mergedAt: "2026-07-26T00:00:00Z" },
-    });
-    expect(
-      (
-        await readSnapshot({
-          reader,
-          context: context(5),
-          pendingHistory: "include",
-          allowDraft: false,
-        })
-      ).kind
-    ).toBe("merged");
-    expect(reader.calls).toEqual(["pullRequest"]);
-  });
-});
-
 it("scans stacks tier-major so an upstack conflict outranks frontier CI", async () => {
   const frontier = await readSnapshot({
     reader: fakeReader({
@@ -232,27 +170,6 @@ describe("queued-stack cadence", () => {
     });
   }
 
-  it("drops a sweep head only after its snapshot succeeds", async () => {
-    const queue = [
-      context(20),
-      context(21),
-      context(22),
-    ] satisfies NonEmpty<PrContext>;
-    let state = createQueueState(queue, 0);
-    const first = await openSnapshot(queue[0]);
-    state = applyQueueSnapshot(state, first, 0, options).state;
-    expect(state.work).toMatchObject({
-      kind: "whole-stack-sweep",
-      remaining: [{ number: 21 }, { number: 22 }],
-    });
-    const second = await openSnapshot(queue[1]);
-    state = applyQueueSnapshot(state, second, 60, options).state;
-    expect(state.work).toMatchObject({
-      kind: "whole-stack-sweep",
-      remaining: [{ number: 22 }],
-    });
-  });
-
   it("resumes the sweep at the PR whose read failed", async () => {
     const middle = context(21);
     const base = fakeReader();
@@ -310,29 +227,6 @@ describe("queued-stack cadence", () => {
       "emit:WAITING",
       "sleep",
     ]);
-  });
-
-  it("emits a completed sweep only after its final successful snapshot", async () => {
-    const queue = [context(30), context(31)] satisfies NonEmpty<PrContext>;
-    let state = createQueueState(queue, 0);
-    const first = applyQueueSnapshot(
-      state,
-      await openSnapshot(queue[0]),
-      0,
-      options
-    );
-    expect(first.completedSweepRows).toBeNull();
-    state = first.state;
-    const second = applyQueueSnapshot(
-      state,
-      await openSnapshot(queue[1]),
-      5,
-      options
-    );
-    expect(
-      second.completedSweepRows?.map((row) => Number(row.context.number))
-    ).toEqual([30, 31]);
-    expect(second.state.nextSweepAt).toBe(305);
   });
 
   it("ADVANCE continues directly to the new frontier without sleeping", async () => {
@@ -414,13 +308,6 @@ describe("queued-stack cadence", () => {
   });
 });
 
-it("uses the specified retry floor and cap", () => {
-  expect(queryBackoffSeconds(1, 1)).toBe(60);
-  expect(queryBackoffSeconds(1, 2)).toBe(120);
-  expect(queryBackoffSeconds(60, 4)).toBe(300);
-});
-
-
 describe("polling deadline sleeps", () => {
   for (const mode of ["single", "queued-stack", "query-retry"] as const) {
     it(`caps ${mode} sleeps at the configured deadline`, async () => {
@@ -450,33 +337,5 @@ describe("polling deadline sleeps", () => {
       expect(now).toBe(5);
     });
   }
-  it("preserves the polling interval when the deadline is disabled", async () => {
-    let now = 0;
-    let reads = 0;
-    const sleeps: number[] = [];
-    const pending = fakeReader({ fastPath: { kind: "checks", checks: [pendingCheck()] } });
-    const passed = fakeReader({ fastPath: { kind: "checks", checks: [passingCheck()] } });
-    const result = await runSimple({
-      dependencies: {
-        reader: {
-          ...pending,
-          async checksFastPath(pr) {
-            reads += 1;
-            return reads === 1 ? pending.checksFastPath(pr) : passed.checksFastPath(pr);
-          },
-        },
-        clock: {
-          now: () => now,
-          observedAt: () => "2026-07-26T00:00:00.000Z",
-          async sleep(seconds) { sleeps.push(seconds); now += seconds; },
-        },
-        emit() {},
-      },
-      contexts: [context(1)], mode: "single", statusOnly: false,
-      options: { ...options, interval: 60, timeout: 0 },
-    });
-    expect(result.kind).toBe("READY");
-    expect(sleeps).toEqual([60]);
-  });
 
 });

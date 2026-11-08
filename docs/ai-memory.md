@@ -143,35 +143,6 @@ An environment with an older prepared index has partial BGE semantic coverage un
 
 Historical memory vector columns, mailbox ownership columns and retired job tables remain inactive for a later contract release. The new model/version identity excludes unknown legacy vectors. No production migration, extension activation, data cleanup or deployment was performed for this verification. See the [semantic-search evidence](reviews/semantic-search/README.md).
 
-## Synthetic recall evaluation
+## Historical recall evaluation
 
-Run `vp run memory:eval --output /tmp/memory-eval.json` with `MIGRATION_TEST_DATABASE_URL` pointing to a migrated disposable loopback database named `quieter_migration_test`. The command rejects shared development and production targets, and exits unsuccessfully when setup is missing or a contract fails. The default lexical mode never calls a model or external memory service. The optional output file contains the same JSON report as stdout.
-
-Use the pinned Lead plus pgvector image for disposable verification. [Lead](https://planetscale.com/blog/introducing-lead) reproduces TIN SQL behavior for development and CI; it does not establish TIN production performance:
-
-```bash
-docker build -f infra/docker/semantic-search-postgres.Dockerfile \
-  -t quieter-search-test infra/docker
-docker run -d --rm --name quieter-memory-eval \
-  -e POSTGRES_PASSWORD=synthetic-eval -e POSTGRES_DB=quieter_migration_test \
-  -p 127.0.0.1::5432 quieter-search-test
-docker port quieter-memory-eval 5432
-```
-
-Use the printed loopback port in `MIGRATION_TEST_DATABASE_URL`, for example `postgresql://postgres:synthetic-eval@127.0.0.1:<port>/quieter_migration_test`. Wait for PostgreSQL to accept connections, then initialize the disposable database through the existing migration runner:
-
-```bash
-docker exec quieter-memory-eval psql -U postgres -d quieter_migration_test -c 'CREATE EXTENSION vector'
-vp run @quieter/env#build
-vp node --input-type=module -e 'import { runForwardMigrations } from "./packages/database/scripts/run-forward-migrations.ts"; await runForwardMigrations({ databaseUrl: process.env.MIGRATION_TEST_DATABASE_URL, migrationsDirectory: process.cwd() + "/packages/database/drizzle", packageDirectory: process.cwd() + "/packages/database" });'
-vp run memory:eval --output /tmp/memory-eval.json
-docker stop quieter-memory-eval
-```
-
-The scenarios exercise the real SQL loader with synthetic facts, recipients, users, private mailboxes and shared-mailbox grants. Contracts cover voice, relationship references, ownership, mailbox-specific labels, expiry, archived records, explicit-edit freshness and denied mailbox access. The harness also rejects unexpected recall errors instead of treating the loader's empty fallback as successful exclusion. Seeded facts bypass extraction, so passing these cases does not demonstrate learning quality.
-
-Quality probes report hits or misses without failing the contract suite. The word-disjoint travel probe places a lower-priority flight preference behind unrelated preferences to expose lexical candidate misses. Reports identify matched, missing and forbidden synthetic concepts, plus returned characters. They do not measure model tokens, latency, cost, extraction, deletion replay, final answer accuracy or Supermemory performance. The companion [Supermemory comparison](memory-comparison.md) uses the same corpus with a separate local service. This report is a recall baseline, not a full-engine comparison.
-
-Use `vp node --env-file=.env.local scripts/run-memory-eval.ts --semantic --output /tmp/memory-semantic.json` with the approved local configuration and a budget-limited development OpenRouter key to run real embeddings. A linked SST process can instead use `vp run memory:eval --semantic --output /tmp/memory-semantic.json`. This mode prepares the complete eligible synthetic scope before scoring. It records `semantic-live`, `hybrid-embedding`, model identity and source coverage. The CLI defaults to accepting a key cap of at most $5 and requires remaining balance. `--max-key-limit <dollars>` explicitly raises that acceptance ceiling up to $50; it does not change the provider's key limit. The normal command stays lexical and makes no provider calls. The probes cover travel, plant-based food, accessibility and focused work under category pressure. Cross-language probes use German, Spanish, French, Japanese and Arabic queries against English facts, plus an English query against a German fact. Live results remain observations of those cases, not a general accuracy claim.
-
-To diagnose a blocked run, use `vp test run packages/orpc/tests/memory-recall.eval.test.ts` with the same disposable database. The CLI intentionally keeps underlying database diagnostics out of its JSON output. Its test bootstrap overrides only the database fixture binding and disables linked SST database resources. The runner deletes only its synthetic users and related fixtures; it does not reset the schema.
+The database-gated synthetic recall suite and `memory:eval` runner were removed during test cleanup. Existing reports remain historical evidence in [the memory recall review](reviews/memory-recall/README.md) and [the semantic search review](reviews/semantic-search/README.md). The [Supermemory comparison](memory-comparison.md) still uses the shared synthetic corpus.

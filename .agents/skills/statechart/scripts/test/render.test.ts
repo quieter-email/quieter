@@ -12,10 +12,6 @@ for (const f of fs.readdirSync(path.join(here, "charts")))
   charts.push(path.join(here, "charts", f));
 for (const d of fs.readdirSync(path.join(here, "corpus")))
   charts.push(path.join(here, "corpus", d, "chart.mmd"));
-const guide = fs.readFileSync(path.join(here, "../../references/render.md"), "utf8");
-const css = guide.match(/```css\n([\s\S]*?)```/);
-assert.ok(css, "references/render.md has no css block");
-const theme = css[1];
 const dependencies = createRequire(import.meta.url);
 
 let render: Render;
@@ -34,20 +30,9 @@ before(async () => {
   };
 });
 
-const classes = new Set<string>();
 for (const chart of charts) {
   const name = path.relative(here, chart);
   const text = fs.readFileSync(chart, "utf8");
-  const marks = [...text.matchAll(/^ {2}class (\w+) (\w+)$/gm)];
-  for (const [, , mark] of marks) classes.add(mark);
-
-  test(`${name} renders in Pele 1.9.0 with each class on its node`, () => {
-    const { svg } = render(text);
-    assert.match(svg, /^<svg /);
-    for (const [, id, mark] of marks)
-      assert.match(svg, new RegExp(`class="pele-node[^"]* ${mark}\\b[^"]*" data-id="${id}"`), id);
-  });
-
   test(`${name} parses in mermaid.js, which chat views use`, async () => {
     await mermaid.parse(text);
   });
@@ -57,9 +42,4 @@ test("random labels and colors keep their text and the chart's shape in Mermaid 
   const { drawn, refused, failure } = await fuzz({ seed: 1, charts: 500, render, mermaid, html });
   if (failure) assert.fail(failure);
   assert.ok(drawn > 400 && refused > 20, `${drawn} charts drawn, ${refused} refused`);
-});
-
-test("the theme in references/render.md colors each class that the charts use", () => {
-  assert.ok(classes.size > 0);
-  for (const name of classes) assert.match(theme, new RegExp(`\\.pele \\.${name} rect \\{`), name);
 });

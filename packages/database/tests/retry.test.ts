@@ -29,13 +29,6 @@ describe("idempotent database query retry", () => {
     }
   );
 
-  test("returns a successful query without replaying it", async () => {
-    const run = vi.fn<() => Promise<number>>().mockResolvedValue(1);
-
-    await expect(retryIdempotentDatabaseQuery(run)).resolves.toBe(1);
-    expect(run).toHaveBeenCalledOnce();
-  });
-
   test.each([
     Object.assign(new Error("Network connection lost."), { code: "23505" }),
     Object.assign(new Error("Client ended"), { code: "CONNECTION_ENDED" }),

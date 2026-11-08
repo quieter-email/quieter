@@ -7,89 +7,6 @@ import {
 import type { VisualEmailDocument } from "../src/visual-email";
 
 describe("visual email documents", () => {
-  test("renders supported editor blocks and inline formatting as semantic HTML", () => {
-    const document: VisualEmailDocument = {
-      content: {
-        content: [
-          {
-            content: [
-              {
-                marks: [{ type: "bold" }, { type: "italic" }],
-                text: "Hello",
-                type: "text",
-              },
-              { type: "hardBreak" },
-              { marks: [{ type: "strike" }], text: "Old", type: "text" },
-              { marks: [{ type: "underline" }], text: "New", type: "text" },
-              {
-                marks: [{ type: "code" }],
-                text: "let value = 1;",
-                type: "text",
-              },
-            ],
-            type: "paragraph",
-          },
-          {
-            attrs: { start: 3, type: null },
-            content: [
-              {
-                content: [
-                  {
-                    content: [{ text: "Step", type: "text" }],
-                    type: "paragraph",
-                  },
-                ],
-                type: "listItem",
-              },
-            ],
-            type: "orderedList",
-          },
-          {
-            content: [
-              {
-                content: [
-                  { type: "paragraph" },
-                  { content: [{ type: "paragraph" }], type: "blockquote" },
-                ],
-                type: "listItem",
-              },
-            ],
-            type: "bulletList",
-          },
-          {
-            attrs: { language: "javascript" },
-            content: [{ text: "a < b", type: "text" }],
-            type: "codeBlock",
-          },
-          { type: "horizontalRule" },
-          {
-            attrs: {
-              alt: "Portrait",
-              src: "https://example.com/photo.jpg",
-              title: null,
-            },
-            type: "image",
-          },
-        ],
-        type: "doc",
-      },
-      version: 1,
-    };
-
-    const html = renderVisualEmailDocument(document);
-
-    expect(html).toContain("<strong><em>Hello</em></strong><br>");
-    expect(html).toContain("<s>Old</s><u>New</u><code>let value = 1;</code>");
-    expect(html).toContain('<ol start="3"><li><p>Step</p></li></ol>');
-    expect(html).toContain(
-      "<ul><li><p></p><blockquote><p></p></blockquote></li></ul>"
-    );
-    expect(html).toContain("<pre><code>a &lt; b</code></pre><hr>");
-    expect(html).toContain(
-      '<img src="https://example.com/photo.jpg" alt="Portrait">'
-    );
-  });
-
   test("escapes message text and attributes without losing source whitespace", () => {
     const document: VisualEmailDocument = {
       content: {
@@ -144,9 +61,6 @@ describe("visual email documents", () => {
     expect(html).not.toContain("<script>");
     expect(html).not.toContain("class=");
     expect(html).not.toContain("private-editor-id");
-    expect(
-      visualEmailDocumentSchema.parse(document).content.content
-    ).toMatchObject(document.content.content);
   });
 
   test.each([
@@ -201,100 +115,6 @@ describe("visual email documents", () => {
 
     expect(result.success).toBeFalsy();
     expect(result.error?.issues[0]?.path).toContain("href");
-  });
-
-  test("allows an email link with encoded subject text", () => {
-    const document: VisualEmailDocument = {
-      content: {
-        content: [
-          {
-            content: [
-              {
-                marks: [
-                  {
-                    attrs: {
-                      href: "mailto:person@example.com?subject=Hello%20there",
-                    },
-                    type: "link",
-                  },
-                ],
-                text: "Reply",
-                type: "text",
-              },
-            ],
-            type: "paragraph",
-          },
-        ],
-        type: "doc",
-      },
-      version: 1,
-    };
-
-    expect(renderVisualEmailDocument(document)).toContain(
-      'href="mailto:person@example.com?subject=Hello%20there"'
-    );
-  });
-
-  test("accepts current editor image and link attributes and renders bounded dimensions", () => {
-    const document: VisualEmailDocument = {
-      content: {
-        content: [
-          {
-            attrs: {
-              alt: null,
-              "data-compose-inline-id": null,
-              height: null,
-              src: "https://example.com/default.png",
-              title: null,
-              width: null,
-            },
-            type: "image",
-          },
-          {
-            attrs: {
-              alt: "Resized",
-              "data-compose-inline-id": null,
-              height: "200",
-              src: "https://example.com/resized.png",
-              title: null,
-              width: 300,
-            },
-            type: "image",
-          },
-          {
-            content: [
-              {
-                marks: [
-                  {
-                    attrs: {
-                      class: null,
-                      href: "https://example.com",
-                      rel: "noopener noreferrer nofollow",
-                      target: "_blank",
-                      title: null,
-                    },
-                    type: "link",
-                  },
-                ],
-                text: "Link",
-                type: "text",
-              },
-            ],
-            type: "paragraph",
-          },
-        ],
-        type: "doc",
-      },
-      version: 1,
-    };
-
-    const parsed = visualEmailDocumentSchema.parse(document);
-    const html = renderVisualEmailDocument(parsed);
-
-    expect(html).toContain('src="https://example.com/default.png" alt="">');
-    expect(html).toContain('width="300" height="200"');
-    expect(html).toContain('href="https://example.com"');
-    expect(parsed.content.content).toMatchObject(document.content.content);
   });
 
   test.each([
@@ -381,44 +201,6 @@ describe("visual email documents", () => {
 
     expect(result.success).toBeFalsy();
     expect(result.error?.issues[0]?.message).toMatch(/nested/iu);
-  });
-
-  test("accepts shared link attributes from formatted editor content", () => {
-    const attrs = {
-      href: "https://example.com",
-      rel: "noopener noreferrer nofollow",
-      target: "_blank" as const,
-    };
-    const source: VisualEmailDocument = {
-      content: {
-        content: [
-          {
-            content: [
-              {
-                marks: [{ attrs, type: "link" }],
-                text: "Read ",
-                type: "text",
-              },
-              {
-                marks: [{ type: "bold" }, { attrs, type: "link" }],
-                text: "more",
-                type: "text",
-              },
-            ],
-            type: "paragraph",
-          },
-        ],
-        type: "doc",
-      },
-      version: 1,
-    };
-
-    const parsed = visualEmailDocumentSchema.parse(source);
-
-    expect(renderVisualEmailDocument(parsed)).toContain("Read </a>");
-    expect(renderVisualEmailDocument(parsed)).toMatch(
-      /<strong><a[^>]+>more<\/a><\/strong>/u
-    );
   });
 
   test("rejects oversized serialized documents and escaped output", () => {

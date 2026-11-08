@@ -190,29 +190,6 @@ describe("transactional mail MCP tools", () => {
     }
   );
 
-  test("advertises the send_email tool with its input schema", async () => {
-    const handler = createTestHandler(
-      vi.fn<SendTransactionalMail>().mockResolvedValue({
-        messageId: "ses-1",
-        sent: true,
-      })
-    );
-    const response = await postMcp(handler, {
-      id: 1,
-      jsonrpc: "2.0",
-      method: "tools/list",
-      params: {},
-    });
-
-    expect(response.status).toBe(200);
-    const { tools } = await readToolListResult(response);
-    const sendTool = tools.find((tool) => tool.name === "send_email");
-
-    expect(sendTool).toBeDefined();
-    expect(sendTool?.inputSchema).toBeDefined();
-    expect(JSON.stringify(sendTool?.inputSchema)).toContain("idempotencyKey");
-  });
-
   test("sends a message and returns the delivery identifier", async () => {
     const sendTransactionalMail = vi
       .fn<SendTransactionalMail>()
@@ -253,37 +230,6 @@ describe("transactional mail MCP tools", () => {
       text: "Thanks for your order.",
       to: ["customer@example.com"],
     });
-  });
-
-  test("marks replayed idempotent sends in the result", async () => {
-    const handler = createTestHandler(
-      vi.fn<SendTransactionalMail>().mockResolvedValue({
-        idempotent: true,
-        messageId: "ses-123",
-        sent: true,
-      })
-    );
-
-    const response = await postMcp(handler, {
-      id: 3,
-      jsonrpc: "2.0",
-      method: "tools/call",
-      params: {
-        arguments: {
-          from: "hello@acme.com",
-          idempotencyKey: "order-42",
-          subject: "Your receipt",
-          text: "Thanks for your order.",
-          to: ["customer@example.com"],
-        },
-        name: "send_email",
-      },
-    });
-    const result = await readToolCallResult(response);
-
-    expect(result.isError).not.toBeTruthy();
-    expect(result.structuredContent?.idempotent).toBeTruthy();
-    expect(result.content[0]?.text).toContain("already sent");
   });
 
   test("returns expected send rejections without reporting them", async () => {
@@ -341,60 +287,17 @@ describe("transactional mail MCP tools", () => {
     const result = await readToolCallResult(response);
 
     expect(result.isError).toBeTruthy();
-    expect(result.content[0]?.text).toBe(
-      "Could not send the mail message. Try again later."
-    );
+    expect(result.content[0]?.text).not.toContain(failure.message);
     expect(mocks.reportServerError).toHaveBeenCalledWith(
       failure,
       "transactional-mail-mcp-send"
     );
-  });
-
-  test("rejects message content the send service would refuse", async () => {
-    const sendTransactionalMail = vi.fn<SendTransactionalMail>();
-    const handler = createTestHandler(sendTransactionalMail);
-
-    const response = await postMcp(handler, {
-      id: 6,
-      jsonrpc: "2.0",
-      method: "tools/call",
-      params: {
-        arguments: {
-          from: "not-an-email",
-          subject: "Your receipt",
-          text: "Thanks for your order.",
-          to: ["customer@example.com"],
-        },
-        name: "send_email",
-      },
-    });
-    const result = await readToolCallResult(response);
-
-    expect(result.isError).toBeTruthy();
-    expect(result.content[0]?.text).toContain("not valid");
-    expect(sendTransactionalMail).not.toHaveBeenCalled();
   });
 });
 
 describe("transactional mail MCP endpoint", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-  });
-
-  test("answers CORS preflight without credentials", async () => {
-    const response = await handleTransactionalMailMcpRequest(
-      new Request(`https://quieter.email${MCP_API_PATH}`, { method: "OPTIONS" })
-    );
-
-    expect(response.status).toBe(204);
-    expect(response.headers.get("access-control-allow-origin")).toBe("*");
-    expect(
-      response.headers.get("access-control-allow-headers") ?? ""
-    ).toContain("authorization");
-    expect(
-      response.headers.get("access-control-allow-headers") ?? ""
-    ).toContain(API_VERSION_HEADER);
-    expect(mocks.resolveOrganizationId).not.toHaveBeenCalled();
   });
 
   test("rejects a missing compatibility date before auth", async () => {

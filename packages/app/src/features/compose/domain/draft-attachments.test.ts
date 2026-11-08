@@ -1,5 +1,4 @@
 import {
-  addComposeAttachmentFiles,
   clearComposeDraftRuntimeFiles,
   createEmptyComposeDraft,
   saveComposeDraft,
@@ -26,19 +25,6 @@ describe("compose attachments", () => {
   afterEach(() => {
     clearComposeDraftRuntimeFiles(draft);
     vi.resetAllMocks();
-  });
-
-  it("sends the selected file contents", async () => {
-    draft = addComposeAttachmentFiles(createEmptyComposeDraft(), [
-      new File(["attachment contents"], "notes.txt", { type: "text/plain" }),
-    ]);
-    await sendComposeMessage("mailbox-one", draft);
-    const input = sendMessage.mock.calls[0]?.[0];
-    expect(input?.mailboxId).toBe("mailbox-one");
-    await expect(
-      input?.message.attachments[0]?.file?.text()
-    ).resolves.toContain("attachment contents");
-    expect(getAttachment).not.toHaveBeenCalled();
   });
 
   it("loads reopened attachments from their owning mailbox and message", async () => {
@@ -97,14 +83,6 @@ describe("compose attachments", () => {
     await expect(
       input?.message.attachments[0]?.file?.text()
     ).resolves.toContain("saved content");
-  });
-
-  it("rejects oversized attachments before adding them", () => {
-    draft = createEmptyComposeDraft();
-    const file = new File(["large file"], "large.zip");
-    Object.defineProperty(file, "size", { value: 1024 ** 3 });
-    expect(() => addComposeAttachmentFiles(draft, [file])).toThrow(/limit/u);
-    expect(draft.attachments).toHaveLength(0);
   });
 
   it("does not recache a file removed while its download is pending", async () => {

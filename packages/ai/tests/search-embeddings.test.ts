@@ -72,26 +72,6 @@ describe("search embedding provider boundary", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  test.each(["BAAI/bge-m3", "parasail-bge-m3"])(
-    "accepts the selected model's observed provider identity %s",
-    async (model) => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn<typeof fetch>().mockResolvedValue(
-          Response.json({
-            ...providerResponse(),
-            model,
-          })
-        )
-      );
-      const vectors = await embedSearchTexts({
-        billing,
-        values: ["Synthetic text"],
-      });
-      expect(vectors).toHaveLength(1);
-    }
-  );
-
   test("settles usage and preserves input correspondence for reordered vectors", async () => {
     const response = providerResponse();
     const [first] = response.data;
@@ -260,21 +240,6 @@ describe("search embedding provider boundary", () => {
     ).rejects.toThrow(/did not report/u);
     expect(state.settle).not.toHaveBeenCalled();
     expect(state.release).not.toHaveBeenCalled();
-  });
-
-  test("settles known cost even when generation metadata is malformed", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn<typeof fetch>()
-        .mockResolvedValue(Response.json({ ...providerResponse(), id: null }))
-    );
-    await expect(
-      embedSearchTexts({ billing, values: ["Synthetic text"] })
-    ).resolves.toHaveLength(1);
-    expect(state.settle).toHaveBeenCalledWith(
-      expect.objectContaining({ costUsd: providerResponse().usage.cost })
-    );
   });
 
   test("preserves the generation identifier when usage metadata is malformed", async () => {

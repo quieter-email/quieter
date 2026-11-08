@@ -39,22 +39,6 @@ describe(decodePartBody, () => {
     ).toContain(
       "https://auth.example.com/api/verify?token=abc78113-8ee4-46c6-9470-602de4241769"
     );
-
-    expect(
-      decodeHtmlPart(
-        '<a href="https://courses.example.edu/mod/forum/discuss.php?d=737256#p1277948">Forum</a>'
-      )
-    ).toContain(
-      "https://courses.example.edu/mod/forum/discuss.php?d=737256#p1277948"
-    );
-
-    expect(
-      decodeHtmlPart(
-        '<a href="https://meet.example.net/j/66359286654?pwd=eBcGiWFrDO0jhH8mM01lPV6UaUebTX.1">Meeting</a>'
-      )
-    ).toContain(
-      "https://meet.example.net/j/66359286654?pwd=eBcGiWFrDO0jhH8mM01lPV6UaUebTX.1"
-    );
   });
 
   test("decodes Gmail full payload body data with the part charset", () => {

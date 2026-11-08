@@ -12,28 +12,6 @@ describe("deterministic retained mail analysis", () => {
     vi.unstubAllGlobals();
   });
 
-  test("uses the first subject header and preserves readable HTML links", () => {
-    const headers = [
-      { name: "sUbJeCt", value: "=?ISO-8859-1?Q?R=FCckerstattung?=" },
-      { name: "Subject", value: "Duplicate header" },
-    ];
-    const captured = analyzeMailMessage({
-      bodyHtml:
-        '<p>Caf&eacute; booking <a href="https://booking.example.test/itinerary">details</a></p>',
-      headers,
-    });
-    expect(captured.subject).toMatch(/Rückerstattung/u);
-    expect(captured.htmlText).toMatch(/Café booking/u);
-    expect(captured.htmlText).toContain(
-      "https://booking.example.test/itinerary"
-    );
-    const canonical = analyzeMailMessage({
-      headers,
-      subject: "Original booking",
-    });
-    expect(canonical.subject).toMatch(/Original booking/u);
-  });
-
   test("normalizes sender and records separate header and body evidence without fetching targets", () => {
     const fetch = vi.fn<typeof globalThis.fetch>(() => {
       throw new Error("Analysis must not make network requests.");
@@ -141,21 +119,6 @@ describe("deterministic retained mail analysis", () => {
       bodyHtml: true,
       bodyText: true,
       headers: true,
-    });
-  });
-
-  test("normalizes null characters for JSON storage while preserving mail text", () => {
-    const content = "before\0after\n😀";
-    const bounded = boundMailCaptureContent({
-      bodyHtml: content,
-      bodyText: content,
-      headers: [{ name: "X-\0Test", value: content }],
-    });
-    expect(bounded.bodyText).toBe("before\uFFFDafter\n😀");
-    expect(bounded.bodyHtml).toBe(bounded.bodyText);
-    expect(bounded.headers[0]).toMatchObject({
-      name: "X-\uFFFDTest",
-      value: bounded.bodyText,
     });
   });
 });

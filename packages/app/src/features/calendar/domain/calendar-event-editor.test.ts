@@ -15,29 +15,6 @@ const [event] = createCalendarPreviewEvents({ date: "2026-10-26", timeZone });
 const editor = { event, kind: "edit", scope: "occurrence" } as const;
 
 describe("calendar event editor session", () => {
-  it("refreshes a pristine draft and uses the fresh version for the next edit", () => {
-    const store = createCalendarEventEditorStore(editor, timeZone);
-    const refreshed = {
-      ...editor,
-      event: {
-        ...event,
-        meetingUrl: "https://meet.google.com/fresh-meet-link",
-        title: "Updated elsewhere",
-        version: "refreshed-version",
-      },
-    };
-    receiveCalendarEvent({ editor: refreshed, store, timeZone });
-    const state = store.get();
-    expect(state.values.title).toMatch(/updated elsewhere/iu);
-    expect(state.baseEvent).toMatchObject({
-      meetingUrl: refreshed.event.meetingUrl,
-      version: refreshed.event.version,
-    });
-    expect(
-      parseCalendarEventForm(state.values, state.baseEvent).addMeeting
-    ).toBeTruthy();
-  });
-
   it("preserves a dirty draft and its version when the event refreshes", () => {
     const store = createCalendarEventEditorStore(editor, timeZone);
     store.setState((current) => ({

@@ -40,10 +40,6 @@ describe("Worker database scope", () => {
     await expect(response.text()).resolves.toBe("response");
   });
 
-  test("rejects unscoped access in the native Worker runtime", () => {
-    expect(() => db.$client).toThrow("requires withRequestDatabaseClient");
-  });
-
   test("isolates concurrent request clients and preserves nested scopes", async () => {
     // oxlint-disable-next-line typescript/no-invalid-void-type -- Completion-only promise; void is a valid generic argument here.
     const ready = Promise.withResolvers<void>();

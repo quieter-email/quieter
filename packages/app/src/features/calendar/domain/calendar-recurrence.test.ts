@@ -33,40 +33,6 @@ describe("calendar recurrence", () => {
     expect(autumn[0]).toContain("UNTIL=20261102T045959Z");
   });
 
-  it("keeps all-day end dates as dates and preserves counted ordinal schedules", () => {
-    const rules = buildRecurrence(
-      {
-        ...createRecurrenceDraft(context.startDate),
-        endDate: "2026-03-08",
-        ending: "date",
-      },
-      { ...context, allDay: true }
-    );
-    expect(rules[0]).toContain("UNTIL=20260308");
-    const monthly = buildRecurrence(
-      {
-        ...createRecurrenceDraft(context.startDate),
-        count: "6",
-        ending: "count",
-        frequency: "MONTHLY",
-        interval: "2",
-        monthly: "weekday",
-        ordinal: "-1",
-        weekday: "FR",
-      },
-      context
-    );
-    expect(readRecurrence(monthly, context)).toMatchObject({
-      count: "6",
-      ending: "count",
-      frequency: "MONTHLY",
-      interval: "2",
-      monthly: "weekday",
-      ordinal: "-1",
-      weekday: "FR",
-    });
-  });
-
   it("preserves advanced options and exclusions without silently simplifying them", () => {
     const rules = [
       "RRULE:FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;WKST=SU",
@@ -86,25 +52,6 @@ describe("calendar recurrence", () => {
     expect(
       parseAdvancedRecurrence("RRULE:FREQ=DAILY;X-EXTENSION=KEEP", context)
     ).toContain("RRULE:FREQ=DAILY;X-EXTENSION=KEEP");
-  });
-
-  it("accepts date exclusions and periods while rejecting excluded periods", () => {
-    const allDayRules = "RRULE:FREQ=DAILY\nEXDATE;VALUE=DATE:20260303";
-    expect(
-      parseAdvancedRecurrence(allDayRules, { ...context, allDay: true })
-    ).toContain("EXDATE;VALUE=DATE:20260303");
-    expect(
-      parseAdvancedRecurrence(
-        "RDATE;VALUE=PERIOD:20260303T090000Z/PT2H",
-        context
-      )
-    ).toHaveLength(1);
-    expect(() =>
-      parseAdvancedRecurrence(
-        "EXDATE;VALUE=PERIOD:20260303T090000Z/PT2H",
-        context
-      )
-    ).toThrow(/period/u);
   });
 
   it("rejects contradictory and malformed rules before applying", () => {

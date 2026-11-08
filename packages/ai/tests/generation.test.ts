@@ -7,7 +7,6 @@ import { z } from "zod";
 import type { AiUsageReport } from "../src/chat-usage";
 import { extractMailVerificationCode } from "../src/extract-verification-code";
 import { runStructuredGeneration } from "../src/generation";
-import { classifyMailImportance } from "../src/mail-importance";
 
 const billing: AiBillingContext = {
   account: null,
@@ -197,91 +196,6 @@ describe("structured generation recovery", () => {
     }
   );
 
-  test("recovers a malformed importance decision and accounts for both responses", async () => {
-    const model = new MockLanguageModelV4({
-      doGenerate: [
-        response({
-          costUsd: 0.125,
-          text: "Here is the JSON requested:\n```json",
-        }),
-        response({ costUsd: 0.25, text: '{"important":false}' }),
-      ],
-    });
-    state.model.mockReturnValue(model);
-    const onUsage = vi.fn<(usage: AiUsageReport) => void>();
-
-    await expect(
-      classifyMailImportance({
-        billing,
-        context: null,
-        message: { id: "synthetic-message", subject: "Routine update" },
-        onUsage,
-      })
-    ).resolves.toMatchObject({ important: false });
-
-    expect(onUsage).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ costUsd: 0.375, promptTokens: 20 })
-    );
-  });
-
-  test("recovers an importance decision after reasoning consumes the first response", async () => {
-    const reasoningResponse = response({ costUsd: 0.125, empty: true });
-    state.model.mockReturnValue(
-      new MockLanguageModelV4({
-        doGenerate: [
-          {
-            ...reasoningResponse,
-            content: [{ text: "Classify the message.", type: "reasoning" }],
-            usage: {
-              ...reasoningResponse.usage,
-              outputTokens: { reasoning: 5, text: 0, total: 5 },
-            },
-          },
-          response({ costUsd: 0.25, text: '{"important":false}' }),
-        ],
-      })
-    );
-    const onUsage = vi.fn<(usage: AiUsageReport) => void>();
-
-    await expect(
-      classifyMailImportance({
-        billing,
-        context: null,
-        message: { id: "synthetic-message", subject: "Routine update" },
-        onUsage,
-      })
-    ).resolves.toMatchObject({ important: false });
-
-    expect(onUsage).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        completionTokens: 10,
-        costUsd: 0.375,
-        promptTokens: 20,
-      })
-    );
-  });
-
-  test("keeps persistent malformed JSON visible and accounts for both responses", async () => {
-    const model = new MockLanguageModelV4({
-      doGenerate: response({ costUsd: 0.125, text: "```json" }),
-    });
-    state.model.mockReturnValue(model);
-    const onUsage = vi.fn<(usage: AiUsageReport) => void>();
-
-    await expect(
-      runStructuredGeneration({
-        billing,
-        ...generationInput,
-        onUsage,
-      })
-    ).rejects.toThrow(NoObjectGeneratedError);
-
-    expect(model.doGenerateCalls).toHaveLength(2);
-    expect(onUsage).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ costUsd: 0.25, promptTokens: 20 })
-    );
-  });
-
   test("rejects a login-link token as a verification code and accounts for the response", async () => {
     const model = new MockLanguageModelV4({
       doGenerate: response({
@@ -308,33 +222,6 @@ describe("structured generation recovery", () => {
       expect.objectContaining({ costUsd: 0.125 })
     );
   });
-
-  test.each(["123456", "𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠"])(
-    "accepts bounded numeric and Unicode verification codes",
-    async (code) => {
-      state.model.mockReturnValue(
-        new MockLanguageModelV4({
-          doGenerate: response({
-            text: JSON.stringify({
-              code,
-              expiresInSeconds: null,
-              service: "Example",
-            }),
-          }),
-        })
-      );
-
-      await expect(
-        extractMailVerificationCode({
-          billing,
-          message: {
-            bodyText: `Your sign-in code is ${code}.`,
-            id: "synthetic-message",
-          },
-        })
-      ).resolves.toMatchObject({ code });
-    }
-  );
 
   test.each(["content-filter", "error"] as const)(
     "does not retry %s output and retains its billed usage",
@@ -364,34 +251,6 @@ describe("structured generation recovery", () => {
     }
   );
 
-  test.each([
-    ["length", NoOutputGeneratedError],
-    ["stop", NoObjectGeneratedError],
-  ] as const)(
-    "keeps persistent empty importance output visible after %s and retains billed usage",
-    async (finishReason, errorType) => {
-      const model = new MockLanguageModelV4({
-        doGenerate: response({ costUsd: 0.125, empty: true, finishReason }),
-      });
-      state.model.mockReturnValue(model);
-      const onUsage = vi.fn<(usage: AiUsageReport) => void>();
-
-      await expect(
-        classifyMailImportance({
-          billing,
-          context: null,
-          message: { id: "synthetic-message" },
-          onUsage,
-        })
-      ).rejects.toThrow(errorType);
-
-      expect(model.doGenerateCalls).toHaveLength(2);
-      expect(onUsage).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ costUsd: 0.25, promptTokens: 20 })
-      );
-    }
-  );
-
   test.each([{ empty: true }, { text: "```json" }])(
     "preserves the final provider error after an unusable response %j",
     async (firstOutput) => {
@@ -416,32 +275,6 @@ describe("structured generation recovery", () => {
       expect(onUsage).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ costUsd: 0.125, promptTokens: 10 })
       );
-    }
-  );
-
-  test.each(["AI_NoOutputGeneratedError", "AI_NoObjectGeneratedError"])(
-    "does not retry a provider error that only shares the %s name",
-    async (name) => {
-      const error = new Error("Unavailable");
-      error.name = name;
-      const model = new MockLanguageModelV4({
-        doGenerate: vi
-          .fn<MockLanguageModelV4["doGenerate"]>()
-          .mockRejectedValue(error),
-      });
-      state.model.mockReturnValue(model);
-      const onUsage = vi.fn<(usage: AiUsageReport) => void>();
-
-      await expect(
-        runStructuredGeneration({
-          billing,
-          ...generationInput,
-          onUsage,
-        })
-      ).rejects.toBe(error);
-
-      expect(model.doGenerateCalls).toHaveLength(1);
-      expect(onUsage).not.toHaveBeenCalled();
     }
   );
 

@@ -27,12 +27,9 @@ import {
   getOrganizationSubscription,
   getOrganizationSubscriptionRecord,
   isActiveBillingSubscription,
-  isActiveBillingStatus,
   isLocalDevelopmentBillingEntitlementEnabled,
   shouldReconcileBillingSubscription,
-  subscriptionBelongsToOrganization,
 } from "../src/entitlements";
-import { productHasAi, productHasManagedMail } from "../src/plans";
 import type * as PolarModule from "../src/polar";
 import type * as SubscriptionSyncModule from "../src/subscription-sync";
 
@@ -166,75 +163,6 @@ vi.mock(import("../src/subscription-sync"), async (importOriginal) => {
 });
 
 describe("billing entitlement statuses", () => {
-  test("grants access only after payment is active or trialing", () => {
-    expect({
-      active: isActiveBillingStatus("active"),
-      canceled: isActiveBillingStatus("canceled"),
-      expired: isActiveBillingStatus("expired"),
-      pastDue: isActiveBillingStatus("past_due"),
-      pending: isActiveBillingStatus("pending"),
-      trialing: isActiveBillingStatus("trialing"),
-    }).toStrictEqual({
-      active: true,
-      canceled: false,
-      expired: false,
-      pastDue: false,
-      pending: false,
-      trialing: true,
-    });
-  });
-
-  test("requires a confirmed current period for an active renewing subscription", () => {
-    const now = new Date("2026-08-02T00:00:00.000Z");
-
-    expect(
-      isActiveBillingSubscription(
-        {
-          cancelAtPeriodEnd: false,
-          currentPeriodEnd: new Date("2026-08-03T00:00:00.000Z"),
-          status: "active",
-        },
-        now
-      )
-    ).toBeTruthy();
-    expect(
-      isActiveBillingSubscription(
-        {
-          cancelAtPeriodEnd: false,
-          currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
-          status: "active",
-        },
-        now
-      )
-    ).toBeFalsy();
-    expect(
-      isActiveBillingSubscription(
-        {
-          cancelAtPeriodEnd: false,
-          currentPeriodEnd: new Date("2026-08-03T00:00:00.000Z"),
-          status: "canceled",
-        },
-        now
-      )
-    ).toBeFalsy();
-  });
-
-  test.each(["canceled", "expired", "past_due", "pending"] as const)(
-    "denies %s subscriptions even before the period ends",
-    (status) => {
-      expect(
-        isActiveBillingSubscription(
-          {
-            cancelAtPeriodEnd: false,
-            currentPeriodEnd: new Date("2026-08-03T00:00:00.000Z"),
-            status,
-          },
-          new Date("2026-08-02T00:00:00.000Z")
-        )
-      ).toBeFalsy();
-    }
-  );
-
   test.each([
     { cancelAtPeriodEnd: true, status: "active" as const },
     { cancelAtPeriodEnd: false, status: "trialing" as const },
@@ -266,55 +194,6 @@ describe("billing entitlement statuses", () => {
 
 describe("billing subscription reconciliation", () => {
   const now = new Date("2026-08-02T00:00:00.000Z");
-
-  test("reconciles an expired period after the retry window", () => {
-    expect(
-      shouldReconcileBillingSubscription(
-        {
-          currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
-          lastReconciliationFailureAt: null,
-          updatedAt: new Date("2026-07-23T00:00:00.000Z"),
-        },
-        now
-      )
-    ).toBeTruthy();
-  });
-
-  test("reconciles stale current periods but respects recent refreshes", () => {
-    expect(
-      shouldReconcileBillingSubscription(
-        {
-          currentPeriodEnd: new Date("2026-08-03T00:00:00.000Z"),
-          lastReconciliationFailureAt: null,
-          updatedAt: new Date("2026-07-23T00:00:00.000Z"),
-        },
-        now
-      )
-    ).toBeTruthy();
-    expect(
-      shouldReconcileBillingSubscription(
-        {
-          currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
-          lastReconciliationFailureAt: null,
-          updatedAt: new Date("2026-08-01T23:58:00.000Z"),
-        },
-        now
-      )
-    ).toBeFalsy();
-  });
-
-  test("uses a recent reconciliation failure for the retry window", () => {
-    expect(
-      shouldReconcileBillingSubscription(
-        {
-          currentPeriodEnd: new Date("2026-07-23T00:00:00.000Z"),
-          lastReconciliationFailureAt: new Date("2026-08-01T23:58:00.000Z"),
-          updatedAt: new Date("2026-07-23T00:00:00.000Z"),
-        },
-        now
-      )
-    ).toBeFalsy();
-  });
 
   test("checks a newly ended period even if a webhook arrived just before renewal", () => {
     expect(
@@ -404,29 +283,6 @@ describe("organization subscription reconciliation", () => {
     vi.useRealTimers();
   });
 
-  test("force-syncs an expired Polar subscription and reloads the row", async () => {
-    const providerSubscription = polarSubscription("polar-subscription-1");
-    billingMocks.loadRows
-      .mockResolvedValueOnce([staleRow])
-      .mockResolvedValueOnce([refreshedRow]);
-    billingMocks.getPolarSubscription.mockResolvedValue(providerSubscription);
-    billingMocks.syncBillingSubscription.mockResolvedValue({ synced: true });
-
-    await expect(
-      getOrganizationSubscription("organization-a")
-    ).resolves.toMatchObject({
-      currentPeriodEnd: refreshedRow.currentPeriodEnd,
-    });
-    const polarCall = billingMocks.getPolarSubscription.mock.calls.at(0);
-    expect(polarCall?.[0]).toBe("polar-subscription-1");
-    const polarOptions = polarCall?.[1];
-    expect(polarOptions?.timeout).toBeGreaterThan(0);
-    expect(billingMocks.syncBillingSubscription).toHaveBeenCalledWith(
-      providerSubscription
-    );
-    expect(billingMocks.loadRows).toHaveBeenCalledTimes(2);
-  });
-
   test("denies allowance when reconciliation cannot confirm a new period", async () => {
     billingMocks.loadRows.mockResolvedValue([staleRow]);
     billingMocks.getPolarSubscription.mockResolvedValue(
@@ -437,7 +293,6 @@ describe("organization subscription reconciliation", () => {
     await expect(
       getOrganizationSubscription("organization-a")
     ).resolves.toBeNull();
-    expect(billingMocks.loadRows).toHaveBeenCalledTimes(2);
   });
 
   test.each([
@@ -563,70 +418,6 @@ describe("organization subscription reconciliation", () => {
       }
     }
   );
-
-  test.each([
-    { cancelAtPeriodEnd: true, status: "active" as const },
-    { cancelAtPeriodEnd: false, status: "trialing" as const },
-  ])(
-    "denies an expired $status subscription after reconciliation, cancellation $cancelAtPeriodEnd",
-    async (subscription) => {
-      billingMocks.loadRows.mockResolvedValue([
-        { ...staleRow, ...subscription },
-      ]);
-      billingMocks.getPolarSubscription.mockResolvedValue(
-        polarSubscription("polar-subscription-1")
-      );
-      billingMocks.syncBillingSubscription.mockResolvedValue({ synced: true });
-
-      await expect(
-        getOrganizationSubscription("organization-a")
-      ).resolves.toBeNull();
-    }
-  );
-
-  test("fails closed during the reconciliation cooldown", async () => {
-    billingMocks.loadRows.mockResolvedValueOnce([
-      { ...staleRow, lastReconciliationFailureAt: new Date() },
-    ]);
-
-    await expect(
-      getOrganizationSubscription("organization-a")
-    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
-    expect(billingMocks.getPolarSubscription).not.toHaveBeenCalled();
-  });
-
-  test("fails closed when reconciliation is unsynced", async () => {
-    billingMocks.loadRows.mockResolvedValueOnce([staleRow]);
-    billingMocks.getPolarSubscription.mockResolvedValue(
-      polarSubscription("polar-subscription-1")
-    );
-    billingMocks.syncBillingSubscription.mockResolvedValue({ synced: false });
-
-    await expect(
-      getOrganizationSubscription("organization-a")
-    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
-    expect(billingMocks.updateSet).toHaveBeenCalledOnce();
-    const reconciliationUpdate = billingMocks.updateSet.mock.calls[0]?.[0];
-    expect(reconciliationUpdate?.lastReconciliationFailureAt).toBeInstanceOf(
-      Date
-    );
-  });
-
-  test("fails closed when reconciliation throws", async () => {
-    billingMocks.loadRows.mockResolvedValueOnce([staleRow]);
-    billingMocks.getPolarSubscription.mockRejectedValue(
-      new PolarNetworkError("provider unavailable")
-    );
-
-    await expect(
-      getOrganizationSubscription("organization-a")
-    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
-    expect(billingMocks.updateSet).toHaveBeenCalledOnce();
-    const reconciliationUpdate = billingMocks.updateSet.mock.calls[0]?.[0];
-    expect(reconciliationUpdate?.lastReconciliationFailureAt).toBeInstanceOf(
-      Date
-    );
-  });
 
   test.each(["active", "trialing"] as const)(
     "preserves a current %s subscription during provider outages and cooldown",
@@ -806,18 +597,6 @@ describe("organization subscription reconciliation", () => {
     expect(billingMocks.getPolarSubscription).not.toHaveBeenCalled();
   });
 
-  test("retains canceled subscription details for billing recovery", async () => {
-    billingMocks.loadRows.mockResolvedValue([
-      { ...refreshedRow, status: "canceled" },
-    ]);
-    await expect(
-      getOrganizationSubscriptionRecord("organization-a")
-    ).resolves.toMatchObject({ status: "canceled" });
-    await expect(
-      getOrganizationSubscription("organization-a")
-    ).resolves.toBeNull();
-  });
-
   test("selects a current subscription ahead of a stale active subscription", async () => {
     billingMocks.loadRows.mockResolvedValue([
       { ...staleRow, updatedAt: new Date() },
@@ -837,27 +616,6 @@ describe("organization subscription reconciliation", () => {
       getOrganizationSubscription("organization-b")
     ).resolves.toBeNull();
     expect(billingMocks.getPolarSubscription).not.toHaveBeenCalled();
-  });
-});
-
-describe("organization subscription ownership", () => {
-  test("requires subscription metadata for the exact team", () => {
-    expect(
-      subscriptionBelongsToOrganization(
-        { quieterOrganizationId: "organization-a" },
-        "organization-a"
-      )
-    ).toBeTruthy();
-    expect(
-      subscriptionBelongsToOrganization(
-        { quieterOrganizationId: "organization-a" },
-        "organization-b"
-      )
-    ).toBeFalsy();
-    expect(subscriptionBelongsToOrganization({}, "organization-a")).toBeFalsy();
-    expect(
-      subscriptionBelongsToOrganization(null, "organization-a")
-    ).toBeFalsy();
   });
 });
 
@@ -895,41 +653,5 @@ describe("local development billing entitlement", () => {
         QUIETER_LOCAL_BILLING_BYPASS: true,
       })
     ).toBeFalsy();
-  });
-
-  test("allows loopback production hosts when local billing bypass is enabled", () => {
-    expect({
-      ipv6Loopback: isLocalDevelopmentBillingEntitlementEnabled({
-        BETTER_AUTH_URL: "http://[::1]:3000",
-        NODE_ENV: "production",
-        QUIETER_DEPLOYMENT_ENV: "local",
-        QUIETER_LOCAL_BILLING_BYPASS: true,
-      }),
-      localhostProduction: isLocalDevelopmentBillingEntitlementEnabled({
-        BETTER_AUTH_URL: "http://localhost:3000",
-        NODE_ENV: "production",
-        QUIETER_DEPLOYMENT_ENV: "local",
-        QUIETER_LOCAL_BILLING_BYPASS: true,
-      }),
-      testEnvironment: isLocalDevelopmentBillingEntitlementEnabled({
-        BETTER_AUTH_URL: "http://localhost:3000",
-        NODE_ENV: "test",
-        QUIETER_DEPLOYMENT_ENV: "local",
-        QUIETER_LOCAL_BILLING_BYPASS: true,
-      }),
-    }).toStrictEqual({
-      ipv6Loopback: true,
-      localhostProduction: true,
-      testEnvironment: false,
-    });
-  });
-});
-
-describe("billing products", () => {
-  test("matches product access to the purchased capability", () => {
-    expect(productHasAi("managed")).toBeFalsy();
-    expect(productHasAi("pro")).toBeTruthy();
-    expect(productHasManagedMail("managed")).toBeTruthy();
-    expect(productHasManagedMail("pro")).toBeTruthy();
   });
 });

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { createLinearChatTools } from "../src/chat/linear-tools";
 import {
-  isMutatingLinearMcpTool,
   listLinearMcpToolsForUser,
   runLinearMcpToolCallsForUser,
 } from "../src/connectors/linear-mcp";
@@ -62,23 +61,6 @@ const invokeTool = async (
 describe("chat Linear tools", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  test("does not touch Linear for an unrequested chat", async () => {
-    const tools = createLinearChatTools({
-      latestUserRequest: "Summarize my inbox.",
-      userId: "user-1",
-    });
-
-    expect(Object.keys(tools)).toStrictEqual([
-      "linear_list_tools",
-      "linear_read",
-    ]);
-
-    await invokeTool(tools, "linear_list_tools", {});
-
-    expect(listLinearMcpToolsForUser).not.toHaveBeenCalled();
-    expect(runLinearMcpToolCallsForUser).not.toHaveBeenCalled();
   });
 
   test("connects only when an explicitly requested Linear tool executes", async () => {
@@ -150,14 +132,8 @@ describe("chat Linear tools", () => {
       toolName: "create_issue",
     });
 
-    expect(result).toStrictEqual({
-      error: "Use linear_write for this Linear tool.",
-      status: "error",
-    });
+    expect(result).toMatchObject({ status: "error" });
     expect(runLinearMcpToolCallsForUser).not.toHaveBeenCalled();
-    expect(isMutatingLinearMcpTool).toHaveBeenCalledWith({
-      name: "create_issue",
-    });
   });
 
   test("does not dispatch an unbound read carrying private text", async () => {

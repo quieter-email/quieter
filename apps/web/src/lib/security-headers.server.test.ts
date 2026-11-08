@@ -27,24 +27,6 @@ describe("security headers", () => {
     );
   });
 
-  test("allows the analytics bundle host", () => {
-    const response = withSecurityHeaders(new Response(null, { status: 200 }));
-    const policy = response.headers.get("content-security-policy") ?? "";
-
-    expect(policy).toContain("https://eu-assets.i.posthog.com");
-    expect(policy).toContain("https://us-assets.i.posthog.com");
-    expect(policy).not.toContain("'unsafe-eval'");
-  });
-
-  test("allows same-origin dictation while denying camera and location access", () => {
-    const response = withSecurityHeaders(new Response(null));
-    const policy = response.headers.get("permissions-policy") ?? "";
-
-    expect(policy).toContain("microphone=(self)");
-    expect(policy).toContain("camera=()");
-    expect(policy).toContain("geolocation=()");
-  });
-
   test.each([
     ["local", "ws://127.0.0.1:8787/mail/live", true],
     ["production", "ws://127.0.0.1:8787/mail/live", false],

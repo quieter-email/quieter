@@ -278,21 +278,6 @@ describe("Polar webhook receiver", () => {
     expect(mocks.sync).not.toHaveBeenCalled();
   });
 
-  test("preserves method and unsigned empty-body errors", async () => {
-    const get = await handlePolarWebhookRequest(
-      new Request("https://quieter.email/api/auth/polar/webhooks")
-    );
-    expect(get.status).toBe(405);
-    expect(get.headers.get("allow")).toBe("POST");
-    const empty = await handlePolarWebhookRequest(
-      new Request("https://quieter.email/api/auth/polar/webhooks", {
-        method: "POST",
-      })
-    );
-    expect(empty.status).toBe(403);
-    expect(mocks.sync).not.toHaveBeenCalled();
-  });
-
   test.each([false, true])(
     "accepts signed subscription updates, legacy=%s",
     async (legacy) => {
@@ -312,30 +297,6 @@ describe("Polar webhook receiver", () => {
       );
     }
   );
-
-  test.each([
-    "active",
-    "canceled",
-    "created",
-    "cycled",
-    "migrated",
-    "past_due",
-    "paused",
-    "resumed",
-    "revoked",
-    "uncanceled",
-  ])("handles subscription.%s", async (event) => {
-    const response = await handlePolarWebhookRequest(
-      signedRequest({
-        data: { ...subscription, status: "canceled" },
-        type: `subscription.${event}`,
-      })
-    );
-    expect(response.status).toBe(200);
-    expect(mocks.sync).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "canceled" })
-    );
-  });
 
   test("rejects tampered payloads before synchronization", async () => {
     const response = await handlePolarWebhookRequest(

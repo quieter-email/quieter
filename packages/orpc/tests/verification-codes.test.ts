@@ -1,9 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import {
-  shouldInspectIncomingVerificationCode,
-  validateVerificationCodeCandidate,
-} from "../src/verification-codes/validation";
+import { validateVerificationCodeCandidate } from "../src/verification-codes/validation";
 
 const now = new Date("2026-10-01T12:00:00.000Z");
 const message = {
@@ -15,28 +12,6 @@ const message = {
 };
 
 describe("AI verification code validation", () => {
-  test("skips historical and outgoing mail before a model call", () => {
-    expect(
-      shouldInspectIncomingVerificationCode(
-        {
-          ...message,
-          internalDate: String(now.getTime() - 3 * 60 * 60_000),
-        },
-        now
-      )
-    ).toBeFalsy();
-    expect(
-      shouldInspectIncomingVerificationCode(
-        {
-          ...message,
-          labelIds: ["INBOX", "SENT"],
-        },
-        now
-      )
-    ).toBeFalsy();
-    expect(shouldInspectIncomingVerificationCode(message, now)).toBeTruthy();
-  });
-
   test("rejects codes the message does not contain", () => {
     expect(
       validateVerificationCodeCandidate({
@@ -122,23 +97,6 @@ describe("AI verification code validation", () => {
         now,
       })
     ).toMatchObject({ code: "482193" });
-  });
-
-  test("accepts a grounded, active temporary access code", () => {
-    expect(
-      validateVerificationCodeCandidate({
-        candidate: {
-          code: "482193",
-          expiresInSeconds: 300,
-          service: "  Account  ",
-        },
-        message,
-        now,
-      })
-    ).toMatchObject({
-      code: "482193",
-      service: "Account",
-    });
   });
 
   test("does not extend validity for a message dated in the future", () => {

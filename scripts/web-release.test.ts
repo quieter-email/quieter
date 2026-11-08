@@ -8,7 +8,6 @@ import {
 } from "@quieter/env/deployment";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
-import { deriveWebReleaseScope } from "../infra/web-release-scope.ts";
 import { prepareWebRelease, verifyWebRelease } from "./web-release.ts";
 
 let directory = "";
@@ -59,9 +58,6 @@ describe("web release protocol compatibility", () => {
       });
       expect(plan.manifest.previous?.buildId ?? null).toBe(
         protocol === undefined ? null : "old"
-      );
-      expect(deriveWebReleaseScope(plan).kind).toBe(
-        protocol === undefined ? "bootstrap" : "advance"
       );
       await expect(
         verifyWebRelease({

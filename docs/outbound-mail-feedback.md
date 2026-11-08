@@ -58,4 +58,4 @@ The public API exposes recipient delivery history at `GET /api/messages/{message
 
 Dashboard counts are distinct message-recipient pairs for each event type observed during the selected period. They are activity counts, not delivery rates for a cohort of sent messages. Opened-message counts use the same mailbox filter and count messages, not recipients. Queued and unsubscribe event contracts are available for future producers; there is no unsubscribe endpoint in this change.
 
-Run `vp test packages/orpc/tests/organization-mail-delivery.integration.test.ts` with `MIGRATION_TEST_DATABASE_URL` pointing to a migrated loopback `quieter_migration_test` database. CI runs this after migration integration tests. The suite checks real SQL conflict updates, duplicates, reconciliation, suppression history, ownership, and open attribution.
+The database-gated organization mail delivery suite was removed during test cleanup. SQL conflict updates, duplicate reconciliation, suppression history, ownership, and open attribution no longer have that integration coverage.

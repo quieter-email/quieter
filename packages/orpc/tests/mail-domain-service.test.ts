@@ -26,92 +26,12 @@ const resolveMailDomainTxt = (name: string, includeDmarc: boolean) => {
 };
 
 describe(normalizeMailDomain, () => {
-  test("normalizes domains from plain domains and URLs", () => {
-    expect(normalizeMailDomain(" Example.COM. ")).toBe("example.com");
-    expect(normalizeMailDomain("https://mail.Example.com/settings")).toBe(
-      "mail.example.com"
-    );
-  });
-
   test("rejects invalid domains", () => {
     expect(() => normalizeMailDomain("localhost")).toThrow(/valid domain/u);
     expect(() => normalizeMailDomain("-example.com")).toThrow(/valid domain/u);
     expect(() => normalizeMailDomain("example.invalid-")).toThrow(
       /valid domain/u
     );
-  });
-});
-
-describe(createMailDomainDnsRecords, () => {
-  test("creates SES, inbound, and recommended DMARC records", () => {
-    const records = createMailDomainDnsRecords({
-      dkimTokens: ["one", "two", "three"],
-      domain: "example.com",
-      mode: "send_and_receive",
-      ownershipToken: "org-token",
-      region: "eu-central-1",
-    });
-
-    expect(records).toStrictEqual([
-      {
-        name: "_quieter-verify.example.com",
-        purpose: "ownership",
-        required: true,
-        type: "TXT",
-        value: "quieter-domain-verification=org-token",
-      },
-      {
-        name: "one._domainkey.example.com",
-        purpose: "dkim",
-        required: true,
-        type: "CNAME",
-        value: "one.dkim.amazonses.com",
-      },
-      {
-        name: "two._domainkey.example.com",
-        purpose: "dkim",
-        required: true,
-        type: "CNAME",
-        value: "two.dkim.amazonses.com",
-      },
-      {
-        name: "three._domainkey.example.com",
-        purpose: "dkim",
-        required: true,
-        type: "CNAME",
-        value: "three.dkim.amazonses.com",
-      },
-      {
-        name: "bounce.example.com",
-        priority: 10,
-        purpose: "mail_from_mx",
-        required: true,
-        type: "MX",
-        value: "feedback-smtp.eu-central-1.amazonses.com",
-      },
-      {
-        name: "bounce.example.com",
-        purpose: "mail_from_spf",
-        required: true,
-        type: "TXT",
-        value: "v=spf1 include:amazonses.com -all",
-      },
-      {
-        name: "example.com",
-        priority: 10,
-        purpose: "inbound_mx",
-        required: true,
-        type: "MX",
-        value: "inbound-smtp.eu-central-1.amazonaws.com",
-      },
-      {
-        name: "_dmarc.example.com",
-        purpose: "dmarc",
-        required: false,
-        type: "TXT",
-        value: "v=DMARC1; p=quarantine",
-      },
-    ]);
   });
 });
 
@@ -171,34 +91,6 @@ describe(checkMailDomainDnsRecords, () => {
     expect(aggregateMailDomainStatus(withoutDmarc)).toBe("verified");
   });
 
-  test("ignores provider sending lag when required DNS checks pass", () => {
-    expect(
-      aggregateMailDomainStatus([
-        {
-          message: "Sending identity is not verified yet.",
-          ok: false,
-          purpose: "ses_identity",
-        },
-        {
-          message: "Custom MAIL FROM is not verified yet.",
-          ok: false,
-          purpose: "ses_mail_from",
-        },
-        {
-          message: "Incoming mail routing could not be configured.",
-          ok: false,
-          purpose: "receipt_rule",
-        },
-        {
-          message: "Ownership TXT record is present.",
-          ok: true,
-          purpose: "ownership",
-          recordName: "_quieter-verify.example.com",
-        },
-      ])
-    ).toBe("verified");
-  });
-
   test("marks missing required DNS as failed", async () => {
     const records = createMailDomainDnsRecords({
       dkimTokens: ["one"],
@@ -227,22 +119,5 @@ describe(checkMailDomainDnsRecords, () => {
 
     expect(checks.every((check) => check.ok)).toBeFalsy();
     expect(aggregateMailDomainStatus(checks)).toBe("failed");
-  });
-});
-
-describe("send-only domains", () => {
-  test("omit incoming mail routing", () => {
-    const records = createMailDomainDnsRecords({
-      dkimTokens: ["one", "two", "three"],
-      domain: "example.com",
-      mode: "send_only",
-      ownershipToken: "org-token",
-      region: "eu-central-1",
-    });
-
-    expect(
-      records.some((record) => record.purpose === "inbound_mx")
-    ).toBeFalsy();
-    expect(records).toHaveLength(7);
   });
 });

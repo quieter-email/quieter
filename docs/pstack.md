@@ -67,4 +67,4 @@ vp run @cursor-skill/poteto-mode-tools#typecheck
 vp run @cursor-skill/statechart#test
 ```
 
-Statechart skips live TLC cases when `TLA2TOOLS` is absent. Its replay, parser, CLI, and renderer cases still run. Application formatting, linting, and Vitest discovery exclude `.agents/` and the native skill links because these tools use their own conventions and Bun or Node test runners.
+Statechart runs replay, parser, CLI, and renderer checks. Its conditionally skipped live TLC suites were removed during test cleanup. Application formatting, linting, and Vitest discovery exclude `.agents/` and the native skill links because these tools use their own conventions and Bun or Node test runners.

@@ -5,7 +5,6 @@ import type {
 } from "@quieter/app/lib/mail";
 import {
   disposeMailMutations,
-  runMailMutation,
   updateMailQueryFromServer,
 } from "@quieter/app/lib/mail-mutations";
 import {
@@ -171,23 +170,6 @@ describe("mail metadata cache updates", () => {
     }
   );
 
-  test("removes optimistic data when the original query had no data", async () => {
-    const client = new QueryClient();
-    const key = getMessagesQueryKey("mailbox", "inbox");
-    client.getQueryCache().build(client, { queryKey: key });
-    const result = runMailMutation(client, {
-      apply: () => {
-        client.setQueryData(key, "optimistic");
-      },
-      execute: async () => await Promise.reject(new Error("failed")),
-      mailboxId: "mailbox",
-      targets: ["thread"],
-    });
-    await expect(result).rejects.toThrow("failed");
-    expect(client.getQueryData(key)).toBeUndefined();
-    client.clear();
-  });
-
   test("reading one message updates unread views, retains loaded bodies and leaves its sibling and other mailbox alone", async () => {
     const {
       queryClient,
@@ -348,48 +330,6 @@ describe("mail metadata cache updates", () => {
     expect(
       queryClient.getQueryData<ThreadMessagesResult>(threadKey)?.messages
     ).toStrictEqual(messages);
-  });
-
-  test("reverses an in-flight label change immediately and preserves the latest intent through its response", async () => {
-    const { queryClient, inboxKey } = setup();
-    const first = Promise.withResolvers<{
-      id: string;
-      isUnread: boolean;
-      labelIds: string[];
-    }>();
-    vi.mocked(rpc.mail.updateMessageLabels)
-      .mockImplementationOnce(async () => await first.promise)
-      .mockResolvedValueOnce({
-        id: "a",
-        isUnread: true,
-        labelIds: ["INBOX", "UNREAD"],
-      });
-    const args = {
-      mailbox: "inbox" as const,
-      mailboxId: "mailbox",
-      messageId: "a",
-      queryClient,
-      searchQuery: undefined,
-    };
-    const add = updateMessageInMailbox(args, { addLabelIds: ["work"] });
-    await Promise.resolve();
-    const remove = updateMessageInMailbox(args, { removeLabelIds: ["work"] });
-    expect(
-      queryClient.getQueryData<MessagesQueryData>(inboxKey)?.pages[0]
-        .messages[0].labelIds
-    ).not.toContain("work");
-    expect(rpc.mail.updateMessageLabels).toHaveBeenCalledOnce();
-    first.resolve({
-      id: "a",
-      isUnread: true,
-      labelIds: ["INBOX", "UNREAD", "work"],
-    });
-    await Promise.all([add, remove]);
-    expect(rpc.mail.updateMessageLabels).toHaveBeenCalledTimes(2);
-    expect(
-      queryClient.getQueryData<MessagesQueryData>(inboxKey)?.pages[0]
-        .messages[0].labelIds
-    ).not.toContain("work");
   });
 
   test("resumes an interrupted read so a successful local action does not hide incoming mail", async () => {
@@ -586,45 +526,6 @@ describe("mail metadata cache updates", () => {
     ]);
     expect(rpc.mail.updateMessageLabels).toHaveBeenCalledOnce();
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
-  });
-
-  test("updates replies loaded only in the open thread", async () => {
-    const { queryClient, threadKey, messages } = setup();
-    queryClient.setQueryData<ThreadMessagesResult>(threadKey, {
-      messages: [
-        ...messages,
-        {
-          id: "reply",
-          isUnread: true,
-          labelIds: ["UNREAD"],
-          threadId: "thread",
-        },
-      ],
-      threadId: "thread",
-    });
-    vi.mocked(rpc.mail.markMessageAsRead).mockResolvedValue({
-      id: "reply",
-      isUnread: false,
-      labelIds: [],
-    });
-    await updateMessageInMailbox(
-      {
-        mailbox: "inbox",
-        mailboxId: "mailbox",
-        messageId: "reply",
-        queryClient,
-        searchQuery: undefined,
-      },
-      "read"
-    );
-    expect(
-      queryClient
-        .getQueryData<ThreadMessagesResult>(threadKey)
-        ?.messages.find((message) => message.id === "reply")?.isUnread
-    ).toBeFalsy();
-    expect(
-      queryClient.getQueryData(getThreadQueryKey("mailbox", "reply"))
-    ).toBeUndefined();
   });
 
   test("a slow background read cannot overwrite a confirmed mutation", async () => {

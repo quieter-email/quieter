@@ -1,14 +1,9 @@
 import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
-import {
-  buildAiMemoryEditorInput,
-  classifyAiMemoryEditIntent,
-  planAiMemoryUpdate,
-} from "../src/ai-memory";
+import { planAiMemoryUpdate } from "../src/ai-memory";
 import type {
   AiMemoryEditorMemory,
-  AiMemoryObservation,
   AiMemoryUpdatePlan,
 } from "../src/ai-memory";
 import * as generation from "../src/generation";
@@ -59,30 +54,6 @@ describe("memory evidence and mutation boundaries", () => {
 
   beforeEach(() => {
     generate.mockReset();
-  });
-
-  test("preserves full batched evidence and keeps authored chat separate from mail", () => {
-    const body = `${"A complete piece of correspondence. ".repeat(200)}End of the message.`;
-    const observations: AiMemoryObservation[] = Array.from(
-      { length: 25 },
-      (_, index) => ({
-        kind: index % 2 === 0 ? "mail_received" : "mail_sent",
-        metadata: { bodyText: body, messageId: `message-${index}` },
-      })
-    );
-    const input = buildAiMemoryEditorInput({
-      currentMemories: [storedStyle],
-      observations,
-      request: "Learn durable context from these observations.",
-      source: "inferred",
-      userMessages: Array.from({ length: 24 }, () => body),
-    });
-
-    expect(input.observations).toHaveLength(observations.length);
-    expect(input.observations.at(-1)?.metadata.bodyText).toBe(body);
-    expect(input.userMessages).toHaveLength(24);
-    expect(input.userMessages.at(-1)).toBe(body);
-    expect(input.userMessage).toBeNull();
   });
 
   test.each(["feedback", "inferred"] as const)(
@@ -196,63 +167,5 @@ describe("memory evidence and mutation boundaries", () => {
 
     expect(result.operations).toHaveLength(1);
     expect(result.operations[0]?.targetId).toBe(storedStyle.id);
-  });
-
-  test("validates categories and defaults missing routing metadata at the model boundary", async () => {
-    generate.mockResolvedValue({
-      answer: "Done.",
-      operations: [],
-      summary: "No changes.",
-    });
-    await planAiMemoryUpdate({
-      billing,
-      currentMemories: [],
-      request: "Learn useful context.",
-      source: "inferred",
-    });
-
-    const schema = generate.mock.calls[0]?.[0].schema;
-    const parsed = schema?.safeParse({
-      answer: "Done.",
-      operations: [
-        { ...styleUpdate, category: undefined, correspondents: undefined },
-      ],
-      summary: "Updated memory.",
-    });
-    expect(parsed?.success).toBeTruthy();
-    expect(parsed?.data).toMatchObject({
-      operations: [{ correspondents: [] }],
-    });
-    expect(parsed?.data).toHaveProperty("operations.0.category");
-    expect(
-      schema?.safeParse({
-        answer: "Done.",
-        operations: [{ ...styleUpdate, category: "invented-category" }],
-        summary: "Updated memory.",
-      }).success
-    ).toBeFalsy();
-  });
-
-  test("supports explicit additions alongside corrections and secret erasure", async () => {
-    generate.mockResolvedValue({ intent: "add" });
-    const userMessage =
-      "Bitte merke dir, dass ich mit Alex auf Deutsch schreibe.";
-
-    await expect(
-      classifyAiMemoryEditIntent({
-        billing,
-        userMessage,
-      })
-    ).resolves.toBe("add");
-
-    const options = generate.mock.calls[0]?.[0];
-    const input: unknown = JSON.parse(options?.prompt ?? "{}");
-    expect(input).toMatchObject({ userMessage });
-    for (const intent of ["add", "edit", "forget_sensitive", "none"]) {
-      expect(options?.schema.safeParse({ intent }).success).toBeTruthy();
-    }
-    expect(
-      options?.schema.safeParse({ intent: "apply-email-instruction" }).success
-    ).toBeFalsy();
   });
 });

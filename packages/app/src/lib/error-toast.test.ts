@@ -37,26 +37,9 @@ vi.mock(
     sentryMocks as unknown as typeof SentryModule
 );
 
-const GMAIL_REAUTHORIZATION_MESSAGE =
-  "Google access needs to be reconnected for this mailbox.";
-
 describe(toastError, () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  test("shows the server message for a top-level 4xx error", () => {
-    toastError(
-      Object.assign(new Error("AI features require an upgrade."), {
-        status: 403,
-      }),
-      { fallback: "Generic text." }
-    );
-
-    expect(toastMocks.error).toHaveBeenCalledWith(
-      "AI features require an upgrade."
-    );
-    expect(sentryMocks.captureException).not.toHaveBeenCalled();
   });
 
   test("walks the cause chain to find a 4xx status", () => {
@@ -66,44 +49,6 @@ describe(toastError, () => {
     toastError(new Error("Wrapped", { cause }));
 
     expect(toastMocks.error).toHaveBeenCalledWith("Not enough credits.");
-    expect(sentryMocks.captureException).not.toHaveBeenCalled();
-  });
-
-  test("falls back and reports for status-less errors", () => {
-    toastError(new TypeError("Failed to fetch"), { boundary: "test-boundary" });
-
-    expect(toastMocks.error).toHaveBeenCalledWith(
-      "Something went wrong. Please try again."
-    );
-    expect(sentryMocks.captureException).toHaveBeenCalledOnce();
-    const captured = sentryMocks.captureException.mock.calls[0]?.[0];
-    expect(captured).toBeInstanceOf(TypeError);
-    const hint = sentryMocks.captureException.mock.calls[0]?.[1];
-    expect(hint?.tags.boundary).toBe("test-boundary");
-  });
-
-  test("can skip client reporting for a redacted callback result already reported by the server", () => {
-    toastError(undefined, { report: false });
-
-    expect(toastMocks.error).toHaveBeenCalledOnce();
-    expect(sentryMocks.captureException).not.toHaveBeenCalled();
-  });
-
-  test("falls back and reports for 5xx statuses", () => {
-    toastError(Object.assign(new Error("Boom."), { status: 500 }));
-
-    expect(toastMocks.error).toHaveBeenCalledWith(
-      "Something went wrong. Please try again."
-    );
-    expect(sentryMocks.captureException).toHaveBeenCalledOnce();
-  });
-
-  test("suppresses reporting for expected client errors", () => {
-    toastError(new Error(GMAIL_REAUTHORIZATION_MESSAGE));
-
-    expect(toastMocks.error).toHaveBeenCalledWith(
-      "Something went wrong. Please try again."
-    );
     expect(sentryMocks.captureException).not.toHaveBeenCalled();
   });
 

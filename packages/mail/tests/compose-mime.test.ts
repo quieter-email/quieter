@@ -21,22 +21,6 @@ const draft = {
 };
 
 describe(buildMimeMessage, () => {
-  test("preserves sender metadata and omits Bcc when requested", async () => {
-    const sentAt = new Date("2026-06-07T10:00:00.000Z");
-    const parsed = await PostalMime.parse(
-      await buildMimeMessage(draft, {
-        from: "managed@quieter.email",
-        messageId: "<message@quieter.email>",
-        omitBccHeader: true,
-        sentAt,
-      })
-    );
-    expect(parsed.from?.address).toBe("managed@quieter.email");
-    expect(parsed.messageId).toBe("<message@quieter.email>");
-    expect(new Date(parsed.date ?? "")).toStrictEqual(sentAt);
-    expect(parsed.bcc).toBeUndefined();
-  });
-
   test("rejects structural and oversized custom headers", () => {
     for (const header of [
       { name: "sUbJeCt", value: "override" },

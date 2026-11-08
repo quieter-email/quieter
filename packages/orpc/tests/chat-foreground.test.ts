@@ -98,17 +98,6 @@ describe("foreground chat requests", () => {
     }).toThrow(/open mail/iu);
   });
 
-  test("preserves reviewed rich HTML in the mail compose contract", () => {
-    expect(
-      toForegroundComposeMessage(richDraft, "chat-local-id")
-    ).toMatchObject({
-      attachments: [],
-      bodyHtml: richDraft.bodyHtml,
-      bodyText: richDraft.bodyText,
-      inlineImages: [],
-    });
-  });
-
   test("binds persistence to the latest visible draft", () => {
     expect(
       resolveForegroundComposeDraftForPersistence({
@@ -305,7 +294,9 @@ describe("foreground chat requests", () => {
       },
     ];
 
-    expect(normalizeExpiredChatParts(pending, 100)).toBe(pending);
+    expect(normalizeExpiredChatParts(pending, 100)).toMatchObject([
+      { state: "input-available", toolCallId: "tool-1" },
+    ]);
   });
 
   test("terminalizes pending work with an expired foreground lease", () => {
@@ -334,7 +325,9 @@ describe("foreground chat requests", () => {
       },
     ];
 
-    expect(normalizeExpiredChatParts(completed, 100)).toBe(completed);
+    expect(normalizeExpiredChatParts(completed, 100)).toMatchObject([
+      { output: { status: "sent" }, state: "output-available" },
+    ]);
   });
 
   test("records cancellation after approval has already been claimed", () => {

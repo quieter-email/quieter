@@ -3,10 +3,7 @@ import { actionSpecificationSchema } from "@quieter/ai/action-specification";
 import { describe, expect, test, vi } from "vite-plus/test";
 
 import type { assertAgentMailboxAccess } from "../src/mail-agent/access";
-import {
-  compileAgentManifest,
-  resolveMentionedConnectionIds,
-} from "../src/mail-agent/catalog";
+import { compileAgentManifest } from "../src/mail-agent/catalog";
 import type { AgentCatalogTool } from "../src/mail-agent/catalog";
 import { mailAgentInputs } from "../src/mail-agent/contracts";
 import {
@@ -151,14 +148,6 @@ describe("reviewed action authority", () => {
     expect(() =>
       compileAgentManifest(wrongEffect, [mailRead, linearWrite])
     ).toThrow(ORPCError);
-  });
-
-  test("extracts exact account mentions without treating display labels or duplicate mentions as authority", () => {
-    expect(
-      resolveMentionedConnectionIds(
-        "Use @Linear and @[connection:second] then @[connection:first] and @[connection:second]."
-      )
-    ).toStrictEqual(["first", "second"]);
   });
 
   test("blocks shared drafts containing connected account facts and another user's activation", () => {

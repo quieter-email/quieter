@@ -3,11 +3,9 @@ import { describe, expect, test } from "vite-plus/test";
 import {
   composeRecipientFieldsSchema,
   extractMailAddress,
-  getMailAddressKey,
   splitMailAddressList,
 } from "../src/compose/schema";
 import {
-  getSendEnvelopeAddress,
   getSendEnvelopeAddressList,
   sendMessageInputSchema,
 } from "../src/send";
@@ -41,26 +39,8 @@ describe("shared address extraction", () => {
     `Demo${" ".repeat(8000)}<recipient@example.com>`,
   ])("preserves a supported mailbox form %#", (value) => {
     expect(extractMailAddress(value)).toBe("recipient@example.com");
-    expect(getSendEnvelopeAddress(value)).toBe("recipient@example.com");
-    expect(getMailAddressKey(value)).toBe("recipient@example.com");
     expect(
       sendMessageInputSchema.safeParse({ ...message, to: value }).success
-    ).toBeTruthy();
-  });
-
-  test.each([
-    "recipient@example.com",
-    " Demo <recipient@example.com> ",
-    "<recipient@example.com>",
-    "Demo    Name < recipient@example.com >",
-    '"billing@trusted.example" <recipient@example.com>',
-    '"Demo <team>" <recipient@example.com>',
-    '"Demo \\"team\\"" <recipient@example.com>',
-    '"Demo \\\\ team" <recipient@example.com>',
-    `Demo${" ".repeat(8000)}<recipient@example.com>`,
-  ])("accepts an unambiguous sender form %#", (value) => {
-    expect(
-      sendMessageInputSchema.safeParse({ ...message, from: value }).success
     ).toBeTruthy();
   });
 

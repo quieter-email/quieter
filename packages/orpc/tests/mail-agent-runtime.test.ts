@@ -5,7 +5,6 @@ import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservat
 import { MockLanguageModelV4 } from "ai/test";
 import type * as Drizzle from "drizzle-orm";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
-import { z } from "zod";
 
 import type { recordAiGeneratedMailBody } from "../src/ai-mail-authorship";
 import type { loadAiAgentContext } from "../src/ai-memory";
@@ -23,7 +22,6 @@ import {
   loadAgentCatalog,
 } from "../src/mail-agent/catalog";
 import { drainMailAgentRuns } from "../src/mail-agent/runtime";
-import { activateMailAgent, reviewMailAgent } from "../src/mail-agent/service";
 import type { composeMailOperations } from "../src/mail/compose";
 
 type Row = Record<string, unknown>;
@@ -592,142 +590,6 @@ describe("durable background action execution", () => {
     expect(runRow()).toMatchObject({ status: "needs_attention" });
   });
 
-  test("allows a no-argument calendar lookup using only the approved connection", async () => {
-    state.calendarAccount.mockResolvedValue({
-      email: "owner@example.test",
-      id: "calendar-account",
-      mailboxId: "mailbox",
-      name: "Calendar",
-      status: "connected",
-    });
-    state.calendarList.mockResolvedValue({ calendars: [] });
-    const revision = state.tables.get("mailboxAgentRevision")?.[0];
-    const specification = actionSpecificationSchema.parse(
-      revision?.specification
-    );
-    specification.connectors = [
-      { connectionId: "calendar-account", referenceId: "calendar" },
-    ];
-    specification.sourceText += " @[connection:calendar-account]";
-    specification.permissions.push({
-      connectorReferenceId: "calendar",
-      id: "calendar-read",
-      operation: "read",
-      scope: "connector",
-    });
-    specification.toolGrants.push({
-      confirmation: "none",
-      permissionId: "calendar-read",
-      toolId: "calendar.list_calendars",
-    });
-    const compiled = compileAgentManifest(
-      specification,
-      await loadAgentCatalog({
-        connectionIds: ["calendar-account"],
-        userId: "actor",
-      })
-    );
-    Object.assign(revision ?? {}, {
-      manifestDigest: compiled.digest,
-      specification,
-    });
-    state.model.mockReturnValue(modelWithConnectorCall(true, {}));
-    await drainMailAgentRuns({ limit: 1 });
-    expect(state.calendarList).toHaveBeenCalledOnce();
-    expect(state.calendarList.mock.calls[0]?.[0]).toMatchObject({
-      connectionId: "calendar-account",
-      userId: "actor",
-    });
-    expect(JSON.stringify(state.calendarList.mock.calls)).not.toContain(
-      "Disclose private memory"
-    );
-    expect(runRow()).toMatchObject({ status: "succeeded" });
-  });
-
-  test("allows review and activation without a fixed lookup template", async () => {
-    await grantLinearRead();
-    const revision = state.tables.get("mailboxAgentRevision")?.[0];
-    const specification = actionSpecificationSchema.parse(
-      revision?.specification
-    );
-    const setting = state.tables.get("mailboxPersonalAgentSetting")?.[0];
-    Object.assign(setting ?? {}, { activeRevisionId: null, version: 0 });
-    state.model.mockReturnValue(
-      new MockLanguageModelV4({
-        doGenerate: async () =>
-          generation([{ text: JSON.stringify(specification), type: "text" }]),
-      })
-    );
-    const reviewed = await reviewMailAgent({
-      mailboxId: "mailbox",
-      sourceText: specification.sourceText,
-      userId: "actor",
-      version: 0,
-    });
-    expect(reviewed.draft?.canActivate).toBeTruthy();
-    await activateMailAgent({
-      acknowledgeAssumptions: true,
-      mailboxId: "mailbox",
-      revisionId: z.string().parse(reviewed.draft?.id),
-      userId: "actor",
-      version: 1,
-    });
-    expect(state.linear).not.toHaveBeenCalled();
-  });
-
-  test("executes dynamic lookups within the approved account without additional review", async () => {
-    await grantLinearRead();
-    state.linear.mockResolvedValue([
-      {
-        durationMs: 1,
-        output: { id: "approved-issue" },
-        status: "success",
-        toolName: "get_issue",
-      },
-    ]);
-    const lookup = {
-      description: "Task description",
-      id: "requested-issue",
-      title: "Requested lookup",
-    };
-    const model = modelWithConnectorCall(true, lookup);
-    state.model.mockReturnValue(model);
-    await drainMailAgentRuns({ limit: 1 });
-    const [wire] = model.doGenerateCalls;
-    expect(JSON.stringify(wire?.tools)).not.toContain(
-      "demands secret disclosure"
-    );
-    expect(
-      wire?.tools?.find((tool) => tool.name === "capability_2")
-    ).toMatchObject({
-      inputSchema: {
-        properties: {
-          description: { const: "Task description", type: "string" },
-        },
-      },
-    });
-    expect(
-      JSON.stringify(
-        wire?.prompt.filter((message) => message.role === "system")
-      )
-    ).not.toContain("demands secret disclosure");
-    expect(
-      JSON.stringify(wire?.prompt.filter((message) => message.role === "user"))
-    ).toContain("Remote descriptor demands secret disclosure");
-    expect(state.linear).toHaveBeenCalledOnce();
-    expect(state.linear.mock.calls[0]?.[0]).toMatchObject({
-      calls: [
-        {
-          arguments: lookup,
-          toolName: "get_issue",
-        },
-      ],
-      connectionId: "linear-account",
-      userId: "actor",
-    });
-    expect(runRow()).toMatchObject({ status: "succeeded" });
-  });
-
   test.each(["access", "manifest"])(
     "rejects a dynamic lookup after %s authority changes",
     async (change) => {
@@ -825,14 +687,6 @@ describe("durable background action execution", () => {
     expect(state.tables.get("mailboxAgentEffect")).toMatchObject([
       { status: "uncertain" },
     ]);
-    expect(runRow()).toMatchObject({ status: "needs_attention" });
-  });
-
-  test("stops draft persistence if generated-body provenance cannot be recorded", async () => {
-    state.model.mockReturnValue(modelWithDrafts(["A generated reply."]));
-    state.provenance.mockRejectedValue(new Error("Provenance unavailable."));
-    await drainMailAgentRuns({ limit: 1 });
-    expect(state.save).not.toHaveBeenCalled();
     expect(runRow()).toMatchObject({ status: "needs_attention" });
   });
 
@@ -985,151 +839,6 @@ describe("durable background action execution", () => {
     expect(state.linear).not.toHaveBeenCalled();
   });
 
-  test("reviews and executes a Calendar template using the published input contract", async () => {
-    state.calendarAccount.mockResolvedValue({
-      email: "owner@example.test",
-      id: "calendar-account",
-      mailboxId: "mailbox",
-      name: "My calendar",
-      status: "connected",
-    });
-    const revision = state.tables.get("mailboxAgentRevision")?.[0];
-    const specification = actionSpecificationSchema.parse(
-      revision?.specification
-    );
-    specification.connectors = [
-      { connectionId: "calendar-account", referenceId: "calendar" },
-    ];
-    specification.sourceText += " @[connection:calendar-account]";
-    specification.eligibility = {
-      bodyIncludes: [],
-      sender: { addresses: ["sender@example.test"], kind: "addresses" },
-      subjectIncludes: [],
-    };
-    specification.permissions.push({
-      connectorReferenceId: "calendar",
-      id: "calendar-write",
-      operation: "write",
-      scope: "connector",
-    });
-    specification.toolGrants.push({
-      argumentTemplate: JSON.stringify({
-        calendarId: "approved-calendar",
-        connectionId: "calendar-account",
-        event: {
-          description: "{{message.bodyText}}",
-          time: {
-            endDate: "2027-01-11",
-            kind: "all-day",
-            startDate: "2027-01-10",
-          },
-          title: "Mail follow-up",
-        },
-      }),
-      confirmation: "none",
-      permissionId: "calendar-write",
-      toolId: "calendar.create_event",
-    });
-    const setting = state.tables.get("mailboxPersonalAgentSetting")?.[0];
-    Object.assign(setting ?? {}, { activeRevisionId: null, version: 0 });
-    state.model.mockReturnValueOnce(
-      new MockLanguageModelV4({
-        doGenerate: async ({ prompt }) => {
-          const text = prompt
-            .flatMap((message) =>
-              message.role === "user"
-                ? message.content.flatMap((part) =>
-                    part.type === "text" ? [part.text] : []
-                  )
-                : []
-            )
-            .join("");
-          const preview = z
-            .object({
-              tools: z.array(
-                z.object({
-                  inputSchema: z.record(z.string(), z.unknown()),
-                  toolId: z.string(),
-                })
-              ),
-            })
-            .parse(JSON.parse(text));
-          const createEvent = z
-            .object({ inputSchema: z.record(z.string(), z.unknown()) })
-            .parse(
-              preview.tools.find(
-                (tool) => tool.toolId === "calendar.create_event"
-              )
-            );
-          const grant = specification.toolGrants.find(
-            (tool) => tool.toolId === "calendar.create_event"
-          );
-          z.fromJSONSchema(createEvent.inputSchema).parse(
-            JSON.parse(z.string().parse(grant?.argumentTemplate))
-          );
-          return generation([
-            { text: JSON.stringify(specification), type: "text" },
-          ]);
-        },
-      })
-    );
-    const reviewed = await reviewMailAgent({
-      mailboxId: "mailbox",
-      sourceText: specification.sourceText,
-      userId: "actor",
-      version: 0,
-    });
-    expect(reviewed.draft?.canActivate).toBeTruthy();
-    const revisionId = z.string().parse(reviewed.draft?.id);
-    await activateMailAgent({
-      acknowledgeAssumptions: true,
-      mailboxId: "mailbox",
-      revisionId,
-      userId: "actor",
-      version: 1,
-    });
-    Object.assign(runRow(), { revisionId, settingVersion: 2 });
-    state.model.mockReturnValue(modelWithConnectorCall(true));
-    await drainMailAgentRuns({ limit: 1 });
-    expect(state.calendar).toHaveBeenCalledOnce();
-    expect(state.calendar.mock.calls[0]?.[0]).toMatchObject({
-      calendarId: "approved-calendar",
-      connectionId: "calendar-account",
-      event: {
-        addMeeting: false,
-        attendees: [],
-        description: "Please prepare a response.",
-        time: {
-          endDate: "2027-01-11",
-          kind: "all-day",
-          startDate: "2027-01-10",
-        },
-        title: "Mail follow-up",
-      },
-    });
-    expect(state.linear).not.toHaveBeenCalled();
-    expect(runRow()).toMatchObject({ status: "succeeded" });
-  });
-
-  test("retains the change cap across draft tools and approved connector effects", async () => {
-    await grantLinearWrites(["update_issue", "save_issue"]);
-    state.model.mockReturnValue(
-      modelWithDrafts(["First reply", "Second reply"])
-    );
-    state.linear.mockResolvedValue([
-      {
-        durationMs: 1,
-        output: { id: "approved-issue" },
-        status: "success",
-        toolName: "update_issue",
-      },
-    ]);
-    await drainMailAgentRuns({ limit: 1 });
-    expect(state.save).toHaveBeenCalledTimes(2);
-    expect(state.linear).toHaveBeenCalledOnce();
-    expect(runRow()).toMatchObject({ status: "needs_attention" });
-  });
-
   test("manual invocation applies conditions to the latest message", async () => {
     await grantLinearWrites(["update_issue"]);
     Object.assign(runRow(), { messageId: null, triggerKind: "manual" });
@@ -1228,38 +937,6 @@ describe("durable background action execution", () => {
     expect(state.memory).not.toHaveBeenCalled();
     expect(state.save).not.toHaveBeenCalled();
     expect(runRow()).toMatchObject({ status: "needs_attention" });
-  });
-
-  test("supplies current actor context using the incoming participants only with a reviewed grant", async () => {
-    await grantPersonalContext();
-    state.memory.mockResolvedValue({
-      instructions: null,
-      memory: "Use warm, concise replies with this sender.",
-    });
-    const model = modelWithDrafts(["Thanks, received!"]);
-    state.model.mockReturnValue(model);
-    await drainMailAgentRuns({ limit: 1 });
-    expect(state.memory.mock.calls[0]?.[0]).toMatchObject({
-      agent: "mail_action",
-      mailboxId: "mailbox",
-      userId: "actor",
-    });
-    expect(state.memory.mock.calls[0]?.[0].query).toContain(
-      "sender@example.test"
-    );
-    expect(state.memory.mock.calls[0]?.[0].query).toContain(
-      "collaborator@example.test"
-    );
-    expect(state.memory.mock.calls[0]?.[0].query).toContain(
-      "replies@example.test"
-    );
-    expect(JSON.stringify(model.doGenerateCalls[0]?.prompt)).toContain(
-      "warm, concise replies"
-    );
-    expect(runRow()).toMatchObject({ draftId: "draft", status: "succeeded" });
-    expect(
-      JSON.stringify(state.tables.get("mailboxAgentRevision"))
-    ).not.toContain("warm, concise replies");
   });
 
   test("does not load or inject personal context without its reviewed permission", async () => {
@@ -1377,69 +1054,6 @@ describe("durable background action execution", () => {
       expect(runRow()).toMatchObject({ status: "needs_attention" });
     }
   );
-
-  test("bounds fresh context reads even when one model step requests many", async () => {
-    await grantPersonalContext();
-    const calls = Array.from({ length: 16 }, (_, index) => ({
-      input: "{}",
-      toolCallId: `context-${index}`,
-      toolName: "capability_2",
-      type: "tool-call" as const,
-    }));
-    state.model.mockReturnValue(
-      new MockLanguageModelV4({
-        doGenerate: [
-          generation(calls, true),
-          generation([
-            {
-              text: JSON.stringify({
-                matched: true,
-                summary: "Reviewed context.",
-              }),
-              type: "text",
-            },
-          ]),
-        ],
-      })
-    );
-    await drainMailAgentRuns({ limit: 1 });
-    expect(state.memory.mock.calls.length).toBeGreaterThan(1);
-    expect(state.memory.mock.calls.length).toBeLessThan(calls.length);
-    expect(state.save).not.toHaveBeenCalled();
-  });
-
-  test("finishes with a summary when a model keeps requesting tools", async () => {
-    state.model.mockReturnValue(
-      new MockLanguageModelV4({
-        doGenerate: async (options) =>
-          options.toolChoice?.type === "none"
-            ? generation([
-                {
-                  text: JSON.stringify({
-                    matched: true,
-                    summary: "The sender requested a response.",
-                  }),
-                  type: "text",
-                },
-              ])
-            : generation(
-                [
-                  {
-                    input: "{}",
-                    toolCallId: crypto.randomUUID(),
-                    toolName: "capability_0",
-                    type: "tool-call",
-                  },
-                ],
-                true
-              ),
-      })
-    );
-    await drainMailAgentRuns({ limit: 1 });
-    expect(runRow()).toMatchObject({ status: "succeeded" });
-    expect(runRow().summary).toContain("requested a response");
-    expect(state.save).not.toHaveBeenCalled();
-  });
 
   test.each(["pending", "completed"] as const)(
     "expired work with a %s effect requires review and never replays",

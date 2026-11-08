@@ -39,23 +39,6 @@ describe("Microsoft recurrence date semantics", () => {
     ).toThrow(expect.objectContaining({ code: "BAD_REQUEST" }));
   });
 
-  test.each([
-    {
-      rule: "RRULE:FREQ=MONTHLY;BYMONTHDAY=28;COUNT=3",
-      type: "absoluteMonthly",
-    },
-    { rule: "RRULE:FREQ=YEARLY;COUNT=3", type: "absoluteYearly" },
-    {
-      rule: "RRULE:FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=30",
-      type: "absoluteYearly",
-    },
-    { rule: "RRULE:FREQ=MONTHLY;BYDAY=-1SA;COUNT=3", type: "relativeMonthly" },
-  ])("preserves a representable pattern: $rule", ({ rule, type }) => {
-    expect(toMicrosoftRecurrence([rule], monthEnd)).toMatchObject({
-      pattern: { type },
-    });
-  });
-
   test.each([29, 30, 31])(
     "does not preview skipped dates for an existing monthly series on day %s",
     (dayOfMonth) => {

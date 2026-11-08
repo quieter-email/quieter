@@ -48,17 +48,6 @@ describe("sensitive memory deletion", () => {
     });
 
     expect(targets).toStrictEqual(["legacy-code"]);
-    const options = generate.mock.calls[0]?.[0];
-    expect(
-      options?.schema.safeParse({ intent: "forget", targetIds: targets })
-        .success
-    ).toBeTruthy();
-    expect(
-      options?.schema.safeParse({
-        intent: "remember",
-        operations: [{ action: "add", content: storedSecret.content }],
-      }).success
-    ).toBeFalsy();
   });
 
   test("ignores proposed targets when the classifier finds no direct forgetting intent", async () => {

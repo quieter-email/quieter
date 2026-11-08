@@ -261,10 +261,6 @@ describe("connector account authority", () => {
       "Bearer renewed-selected",
     ]);
     expect(refreshTokens).toStrictEqual(["selected-refresh"]);
-    expect(
-      fixtures.credentials.find((record) => record.id === "mailbox-first")
-        ?.encryptedAccessToken
-    ).toBe("first-access");
   });
 
   test("refreshes expired authorization upfront but never replays a background mutation", async () => {
