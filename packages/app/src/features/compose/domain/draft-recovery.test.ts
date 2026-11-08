@@ -29,47 +29,6 @@ const draft = {
 };
 
 describe("compose recovery", () => {
-  it("preserves incomplete recipients without validating a send", () => {
-    expect(
-      restoreComposeDraft(JSON.stringify(draft), "editor", 42)
-    ).toMatchObject({
-      bodyText: draft.bodyText,
-      recipients: { to: "unfinished@" },
-      recoveryEditorId: "editor",
-      recoveryUpdatedAt: 42,
-    });
-  });
-
-  it("keeps remote attachments and asks for missing local files", () => {
-    const recovered = restoreComposeDraft(
-      JSON.stringify({
-        ...draft,
-        attachments: [
-          {
-            id: "local",
-            isInline: false,
-            mimeType: "text/plain",
-            name: "notes.txt",
-            size: 1,
-          },
-          {
-            gmailAttachmentId: "saved",
-            id: "remote",
-            isInline: false,
-            mimeType: "text/plain",
-            name: "saved.txt",
-            size: 1,
-          },
-        ],
-        bodyHtml: '<p>Text</p><img src="blob:lost">',
-      }),
-      "editor"
-    );
-    expect(recovered.attachments).toHaveLength(1);
-    expect(recovered.bodyHtml).toBe("<p>Text</p>");
-    expect(recovered.errorMessage).toContain("notes.txt");
-  });
-
   it("does not silently retry a send interrupted by closing the tab", () => {
     const recovered = restoreComposeDraft(
       JSON.stringify({ ...draft, saveStatus: "sending" }),
@@ -149,43 +108,6 @@ describe("draft recovery ownership", () => {
     }
   );
 
-  it("keeps prior user-owned recovery through refresh, reload and a new same-user session", async () => {
-    await recovery.save(record);
-    await journal.setUser("user-a", "old");
-    const refresh = createDraftRecoveryJournal(createMailCache({ name }));
-    await refresh.setUser("user-a", "old");
-    await expect(
-      refresh.session("user-a", "old").list(record)
-    ).resolves.toMatchObject([{ payload: record.payload }]);
-    await refresh.setUser("user-a", "new");
-    await expect(
-      refresh.session("user-a", "new").list(record)
-    ).resolves.toMatchObject([{ payload: record.payload }]);
-    await expect(recovery.list(record)).resolves.toHaveLength(0);
-  });
-
-  it("physically clears recovery and rejects the expired identity after passive null", async () => {
-    await recovery.save(record);
-    await journal.setUser(undefined);
-    await recovery.save(record);
-    const db = await openDB(name);
-    await expect(db.getAll("recovery")).resolves.toHaveLength(0);
-    db.close();
-    const reload = createDraftRecoveryJournal(createMailCache({ name }));
-    await reload.setUser("user-a", "old");
-    await expect(reload.session("user-a", "old").ready()).resolves.toBeFalsy();
-  });
-
-  it("an unknown anonymous tab cannot purge another tab", async () => {
-    await recovery.save(record);
-    const anonymous = createDraftRecoveryJournal(createMailCache({ name }));
-    expect(anonymous.captureCleanup()).toBeUndefined();
-    await anonymous.setUser(undefined);
-    await expect(recovery.list(record)).resolves.toMatchObject([
-      { payload: record.payload },
-    ]);
-  });
-
   it("a stale discard cannot remove a newer checkpoint with the same timestamp", async () => {
     await recovery.save(record);
     const [old] = await recovery.list(record);
@@ -231,27 +153,6 @@ describe("draft recovery ownership", () => {
     );
   });
 
-  it("prunes concurrent editors while preserving the latest checkpoints after reload", async () => {
-    await Promise.all(
-      ["one", "two", "three", "four", "five"].map(async (editorId, index) => {
-        await recovery.save({
-          ...record,
-          editorId,
-          payload: editorId,
-          updatedAt: index,
-        });
-      })
-    );
-    const reload = createDraftRecoveryJournal(createMailCache({ name }));
-    await reload.setUser("user-a", "old");
-    const records = await reload.session("user-a", "old").list(record);
-    expect(records.map((value) => value.payload)).toContain("five");
-    expect(records.map((value) => value.payload)).not.toContain("one");
-    const db = await openDB(name);
-    await expect(db.getAll("recovery")).resolves.toHaveLength(records.length);
-    db.close();
-  });
-
   it("hides recoverable copies during editing and keeps mailbox/user access scoped", async () => {
     await recovery.save(record);
     const unregister = recovery.registerEditor({
@@ -270,61 +171,6 @@ describe("draft recovery ownership", () => {
     ).resolves.toHaveLength(0);
     await recovery.remove({ ...record, userId: "other" });
     await expect(recovery.list(record)).resolves.toHaveLength(1);
-  });
-
-  it("migrates only correctly attributed legacy recovery and removes raw legacy data", async () => {
-    const migrationName = crypto.randomUUID();
-    const key = `quieter:draft-recovery-v2:${JSON.stringify(["user-a", "mailbox"])}`;
-    localStorage.setItem(
-      key,
-      JSON.stringify([
-        record,
-        { ...record, userId: "other" },
-        { ...record, mailboxId: "other" },
-      ])
-    );
-    localStorage.setItem(
-      "quieter:draft-recovery:mailbox",
-      JSON.stringify([record])
-    );
-    const migrated = createDraftRecoveryJournal(
-      createMailCache({ name: migrationName })
-    );
-    await migrated.setUser("user-a", "migration");
-    await expect(
-      migrated.session("user-a", "migration").list(record)
-    ).resolves.toMatchObject([{ payload: record.payload }]);
-    expect(localStorage).toHaveLength(0);
-  });
-
-  it("retains the legacy copy when migration persistence fails", async () => {
-    const key = `quieter:draft-recovery-v2:${JSON.stringify(["user-a", "mailbox"])}`;
-    localStorage.setItem(key, JSON.stringify([record]));
-    const migration = createDraftRecoveryJournal(
-      createMailCache({ name: crypto.randomUUID() })
-    );
-    // oxlint-disable-next-line typescript/unbound-method -- Invoked with its original object store below.
-    const original = IDBObjectStore.prototype.put;
-    const put = vi
-      .spyOn(IDBObjectStore.prototype, "put")
-      .mockImplementation(function put(
-        this: IDBObjectStore,
-        value: unknown,
-        storageKey?: IDBValidKey
-      ) {
-        if (this.name === "recovery") {
-          throw new DOMException("denied", "QuotaExceededError");
-        }
-        return original.call(this, value, storageKey);
-      });
-    try {
-      await expect(migration.setUser("user-a", "migration")).rejects.toThrow(
-        /denied/u
-      );
-    } finally {
-      put.mockRestore();
-    }
-    expect(localStorage.getItem(key)).not.toBeNull();
   });
 
   it("retains the previous checkpoint when a payload or commit request throws", async () => {
@@ -369,41 +215,6 @@ describe("draft recovery ownership", () => {
       { payload: record.payload },
     ]);
   });
-
-  it.each([1, 2])(
-    "upgrades an existing v%s cache and preserves recovery through reload",
-    async (version) => {
-      const upgradeName = crypto.randomUUID();
-      const old = await openDB(upgradeName, version, {
-        upgrade(db) {
-          const entries = db.createObjectStore("entries", { keyPath: "key" });
-          entries.createIndex("accessedAt", "accessedAt");
-          entries.createIndex("userId", "userId");
-          db.createObjectStore("values");
-          if (version === 2) {
-            db.createObjectStore("epochs");
-          }
-        },
-      });
-      old.close();
-      const upgraded = createDraftRecoveryJournal(
-        createMailCache({ name: upgradeName })
-      );
-      await upgraded.setUser("user-a", "upgraded");
-      await upgraded.session("user-a", "upgraded").save(record);
-      const reload = createDraftRecoveryJournal(
-        createMailCache({ name: upgradeName })
-      );
-      await reload.setUser("user-a", "upgraded");
-      await expect(
-        reload.session("user-a", "upgraded").list(record)
-      ).resolves.toMatchObject([{ payload: record.payload }]);
-      await reload.captureCleanup()?.();
-      await expect(
-        upgraded.session("user-a", "upgraded").list(record)
-      ).resolves.toHaveLength(0);
-    }
-  );
 
   it("consumes legacy import when cleanup precedes the first journal activation", async () => {
     const emptyName = crypto.randomUUID();

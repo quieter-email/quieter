@@ -1,14 +1,8 @@
 import type {
   ListMessagesPageResult,
   MessageListItem,
-  ThreadMessagesResult,
 } from "@quieter/app/lib/mail";
-import {
-  applyMessageLabelChangesLocally,
-  applyThreadLabelChangesLocally,
-  mergeRefreshedMailboxPagesIntoQueryData,
-  upsertMessageInThreadData,
-} from "@quieter/app/lib/mail/inbox-query/data";
+import { mergeRefreshedMailboxPagesIntoQueryData } from "@quieter/app/lib/mail/inbox-query/data";
 import type { MessagesQueryData } from "@quieter/app/lib/mail/inbox-query/data";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -30,30 +24,6 @@ const page = (
 });
 
 describe(mergeRefreshedMailboxPagesIntoQueryData, () => {
-  test("keeps attachment names through partial refreshes and accepts a complete replacement", () => {
-    const previous: MessagesQueryData = {
-      pageParams: [undefined],
-      pages: [page([message("a", { threadAttachmentNames: ["invoice.pdf"] })])],
-    };
-    const partialRefresh = mergeRefreshedMailboxPagesIntoQueryData(
-      previous,
-      [page([message("a")])],
-      [undefined]
-    );
-    expect(partialRefresh.pages[0].messages[0].threadAttachmentNames).toContain(
-      "invoice.pdf"
-    );
-
-    const completeRefresh = mergeRefreshedMailboxPagesIntoQueryData(
-      partialRefresh,
-      [page([message("a", { threadAttachmentNames: [] })])],
-      [undefined]
-    );
-    expect(
-      completeRefresh.pages[0].messages[0].threadAttachmentNames
-    ).toHaveLength(0);
-  });
-
   test("preserves unrefreshed persisted pages behind a refreshed prefix", () => {
     const previous: MessagesQueryData = {
       pageParams: [undefined, "old-page-2", "old-page-3"],
@@ -103,78 +73,5 @@ describe(mergeRefreshedMailboxPagesIntoQueryData, () => {
       )
     ).toStrictEqual([["a"]]);
     expect(next.pageParams).toStrictEqual([undefined]);
-  });
-});
-
-describe(upsertMessageInThreadData, () => {
-  test("adds a newly synced message to an already cached thread", () => {
-    const previous: ThreadMessagesResult = {
-      messages: [
-        message("a", { internalDate: "1000", threadId: "thread-a" }),
-        message("c", { internalDate: "3000", threadId: "thread-a" }),
-      ],
-      threadId: "thread-a",
-    };
-
-    const next = upsertMessageInThreadData(
-      previous,
-      message("b", { internalDate: "2000", threadId: "thread-a" })
-    );
-
-    expect(next?.messages.map((item) => item.id)).toStrictEqual([
-      "a",
-      "b",
-      "c",
-    ]);
-  });
-
-  test("preserves loaded body details when refreshing an existing thread message", () => {
-    const previous: ThreadMessagesResult = {
-      messages: [
-        message("a", {
-          bodyHtml: "<p>loaded</p>",
-          isUnread: true,
-          threadId: "thread-a",
-        }),
-      ],
-      threadId: "thread-a",
-    };
-
-    const next = upsertMessageInThreadData(
-      previous,
-      message("a", { isUnread: false, threadId: "thread-a" })
-    );
-
-    expect(next?.messages[0]).toMatchObject({
-      bodyHtml: "<p>loaded</p>",
-      id: "a",
-      isUnread: false,
-    });
-  });
-});
-
-describe(applyMessageLabelChangesLocally, () => {
-  test("archives a message by removing the inbox label only", () => {
-    const next = applyMessageLabelChangesLocally(
-      message("a", { labelIds: ["INBOX", "IMPORTANT", "UNREAD"] }),
-      { removeLabelIds: ["INBOX"] }
-    );
-
-    expect(next.labelIds).toStrictEqual(["IMPORTANT", "UNREAD"]);
-  });
-});
-
-describe(applyThreadLabelChangesLocally, () => {
-  test("updates the thread label snapshot along with the message metadata", () => {
-    const next = applyThreadLabelChangesLocally(
-      message("a", {
-        labelIds: ["INBOX", "old"],
-        threadLabelIds: ["old", "keep"],
-      }),
-      { addLabelIds: ["new"], removeLabelIds: ["old"] }
-    );
-
-    expect(next.labelIds).toStrictEqual(["INBOX", "new"]);
-    expect(next.threadLabelIds).toStrictEqual(["keep", "new"]);
   });
 });

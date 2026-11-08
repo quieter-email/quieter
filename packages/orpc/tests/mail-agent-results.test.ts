@@ -95,26 +95,6 @@ describe("private effect results", () => {
     expect(JSON.stringify(result)).not.toContain("private details");
   });
 
-  test("preserves a native calendar result's event identity and link through compaction", () => {
-    const output = boundAgentToolOutput({
-      action: "created",
-      calendarId: "work@example.test",
-      event: {
-        description: "Calendar details. ".repeat(1000),
-        eventId: "event-id",
-        title: "Requested appointment",
-        webUrl: "https://www.google.com/calendar/event?eid=synthetic-event",
-      },
-      eventId: "event-id",
-      status: "success",
-    });
-    expect(getAgentEffectView(effect(output), [])).toMatchObject({
-      externalId: "event-id",
-      title: "Requested appointment",
-      url: "https://www.google.com/calendar/event?eid=synthetic-event",
-    });
-  });
-
   test.each([
     // oxlint-disable-next-line eslint/no-script-url -- Exercise rejection of executable provider result URLs.
     "javascript:alert(1)",

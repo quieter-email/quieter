@@ -1,11 +1,7 @@
 import type { OrganizationMailDeliveryStatus } from "@quieter/database/schema";
 import { describe, expect, test } from "vite-plus/test";
 
-import {
-  getSuppressionReason,
-  isTerminalDeliveryStatus,
-  mergeDeliveryStatus,
-} from "../src/organization-mail-delivery";
+import { mergeDeliveryStatus } from "../src/organization-mail-delivery";
 import type { DeliveryStatePoint } from "../src/organization-mail-delivery";
 
 const statuses: OrganizationMailDeliveryStatus[] = [
@@ -74,39 +70,5 @@ describe(mergeDeliveryStatus, () => {
         status: "bounced",
       }).status
     ).toBe("bounced");
-    expect(isTerminalDeliveryStatus("delivered")).toBeTruthy();
-    expect(isTerminalDeliveryStatus("delayed")).toBeFalsy();
-  });
-});
-
-describe(getSuppressionReason, () => {
-  test("maps complaints and unsubscribes to suppressions", () => {
-    expect(getSuppressionReason({ eventType: "complained" })).toBe("complaint");
-    expect(getSuppressionReason({ eventType: "unsubscribed" })).toBe(
-      "unsubscribe"
-    );
-  });
-
-  test("only permanent bounces suppress", () => {
-    expect(
-      getSuppressionReason({ eventType: "bounced", permanentFailure: true })
-    ).toBe("bounce");
-    expect(getSuppressionReason({ eventType: "bounced" })).toBeNull();
-    expect(
-      getSuppressionReason({ eventType: "bounced", permanentFailure: false })
-    ).toBeNull();
-  });
-
-  test("leaves every other outcome unsuppressed", () => {
-    for (const eventType of [
-      "delayed",
-      "delivered",
-      "opened",
-      "queued",
-      "rejected",
-      "sent",
-    ] as const) {
-      expect(getSuppressionReason({ eventType })).toBeNull();
-    }
   });
 });

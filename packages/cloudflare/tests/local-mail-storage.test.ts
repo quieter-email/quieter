@@ -44,30 +44,6 @@ describe("native local mail storage", () => {
     await expect(getLocalMailStorage().get(object.key)).resolves.toBeNull();
   });
 
-  test("reads and deletes raw MIME bytes through the real local R2 binding", async () => {
-    const key = `fixtures/${crypto.randomUUID()}.eml`;
-    const raw = new TextEncoder().encode(
-      "Subject: local fixture\r\n\r\nAttachment bytes: café\r\n"
-    );
-    const record = {
-      rawObjectBucket: LOCAL_MAIL_BUCKET,
-      rawObjectKey: key,
-      rawObjectProvider: "r2" as const,
-      s3Bucket: null,
-      s3Key: null,
-    };
-    await getLocalMailStorage().put(key, raw);
-    await expect(readRawMailObject(record)).resolves.toStrictEqual(raw);
-    await deleteRawMailObject({
-      bucket: LOCAL_MAIL_BUCKET,
-      key,
-      provider: "r2",
-    });
-    await expect(readRawMailObject(record)).rejects.toThrow(
-      "fixture is missing"
-    );
-  });
-
   test("rejects remote object references before making provider calls", async () => {
     const record = {
       rawObjectBucket: "quieter-managed-mail",

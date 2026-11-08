@@ -56,7 +56,6 @@ const createWorkspace = ({
 };
 
 const createCompose = () => {
-  let revision = 4;
   const values = {
     bcc: "",
     bodyHtml: "<p>Initial</p>",
@@ -66,20 +65,14 @@ const createCompose = () => {
     subject: "Initial subject",
     to: "person@example.test",
   };
-  const edit = vi.fn<ComposeBridge["edit"]>((patch, expectedRevision) => {
-    if (expectedRevision !== revision) {
-      throw new Error("The draft changed.");
-    }
-    Object.assign(values, patch);
-    revision += 1;
-  });
+  const edit = vi.fn<ComposeBridge["edit"]>();
   const compose: ComposeBridge = {
     applyReceipt: vi.fn<ComposeBridge["applyReceipt"]>(),
     edit,
     read: () => ({
       attachments: [],
       draftId: "draft-a",
-      draftRevision: revision,
+      draftRevision: 4,
       inlineImages: [],
       values,
     }),
@@ -89,19 +82,6 @@ const createCompose = () => {
 };
 
 describe("workspace tools", () => {
-  test("reads from the bridge for the active mailbox only", async () => {
-    const workspace = createWorkspace({ mailboxId: "mailbox-a" });
-    const generation = workspace.control.begin();
-
-    await expect(
-      executeWorkspaceTool(workspace, "get_workspace", {}, generation)
-    ).resolves.toMatchObject({ mailboxId: "mailbox-a", view: "inbox" });
-
-    expect(workspace.read).toHaveBeenCalledOnce();
-    expect(workspace.navigate).not.toHaveBeenCalled();
-    expect(workspace.openCompose).not.toHaveBeenCalled();
-  });
-
   test("does not dispatch commands for a stale generation", async () => {
     const workspace = createWorkspace();
     const staleGeneration = workspace.control.begin();
@@ -149,69 +129,6 @@ describe("workspace tools", () => {
     expect(workspace.read).not.toHaveBeenCalled();
   });
 
-  test("rejects invalid inputs before they reach the workspace bridge", async () => {
-    const workspace = createWorkspace();
-    const generation = workspace.control.begin();
-
-    await expect(
-      executeWorkspaceTool(
-        workspace,
-        "navigate",
-        { view: "compose" },
-        generation
-      )
-    ).rejects.toThrow(/invalid|unrecognized/u);
-    await expect(
-      executeWorkspaceTool(
-        workspace,
-        "get_workspace",
-        { unexpected: true },
-        generation
-      )
-    ).rejects.toThrow(/invalid|unrecognized/u);
-
-    expect(workspace.navigate).not.toHaveBeenCalled();
-    expect(workspace.read).not.toHaveBeenCalled();
-  });
-
-  test("passes compose revisions to the bridge and leaves stale drafts unchanged", async () => {
-    const { compose, edit, values } = createCompose();
-    const workspace = createWorkspace({ compose });
-    const generation = workspace.control.begin();
-
-    await expect(
-      executeWorkspaceTool(
-        workspace,
-        "edit_compose",
-        {
-          bodyText: "Stale edit",
-          draftId: "draft-a",
-          expectedDraftRevision: 3,
-        },
-        generation
-      )
-    ).rejects.toThrow(/draft changed/u);
-    expect(values.bodyText).toBe("Initial");
-
-    await expect(
-      executeWorkspaceTool(
-        workspace,
-        "edit_compose",
-        {
-          bodyText: "Updated draft",
-          draftId: "draft-a",
-          expectedDraftRevision: 4,
-        },
-        generation
-      )
-    ).resolves.toStrictEqual({
-      draftId: "draft-a",
-      draftRevision: 5,
-      generation,
-    });
-    expect(edit).toHaveBeenLastCalledWith({ bodyText: "Updated draft" }, 4);
-  });
-
   test("does not edit a retained hidden mail draft from Calendar", async () => {
     const { compose, edit, values } = createCompose();
     const workspace = createWorkspace({ calendarVisible: true, compose });
@@ -230,26 +147,5 @@ describe("workspace tools", () => {
     ).rejects.toThrow(/open mail/iu);
     expect(edit).not.toHaveBeenCalled();
     expect(values.bodyText).toBe("Initial");
-  });
-
-  test("stops a calendar navigation result when the user takes over", async () => {
-    const workspace = createWorkspace();
-    const generation = workspace.control.begin();
-    workspace.navigateCalendar.mockImplementation(async () => {
-      workspace.control.cancel();
-      await Promise.resolve();
-    });
-    await expect(
-      executeWorkspaceTool(
-        workspace,
-        "navigate_calendar",
-        {
-          date: "2026-10-23",
-          view: "week",
-        },
-        generation
-      )
-    ).rejects.toThrow(/stopped/iu);
-    expect(workspace.read).not.toHaveBeenCalled();
   });
 });

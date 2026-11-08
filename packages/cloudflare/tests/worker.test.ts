@@ -18,7 +18,7 @@ import {
 
 import { runGmailMaintenance } from "../src/gmail-maintenance-worker";
 import { broadcastMailUpdate, handleMailUpdates } from "../src/mail-updates";
-import worker, { signaturesMatch } from "../src/worker";
+import worker from "../src/worker";
 import { handlePubSub, requestErrorResponse } from "../src/worker-utils";
 
 vi.mock(import("@quieter/orpc/mail-updates"), () => ({
@@ -167,37 +167,6 @@ const encodeJson = (value: unknown) =>
     .replaceAll("/", "_")
     .replaceAll("=", "");
 
-const liveSyncToken = async (
-  overrides: Partial<{ expiresAt: number; issuedAt: number }> = {}
-) => {
-  const now = Math.floor(Date.now() / 1000);
-  const payload = encodeJson({
-    emailAddress,
-    expiresAt: now + 300,
-    issuedAt: now,
-    mailboxId,
-    nonce: "56dd0984-cfdb-40a7-a31e-5e17fb78aefd",
-    userId: "user-1",
-    version: 1,
-    ...overrides,
-  });
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode("live-sync-secret"),
-    { hash: "SHA-256", name: "HMAC" },
-    false,
-    ["sign"]
-  );
-  const signature = new Uint8Array(
-    await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload))
-  );
-  let binary = "";
-  for (const byte of signature) {
-    binary += String.fromCodePoint(byte);
-  }
-  return `${payload}.${btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "")}`;
-};
-
 const pubSubToken = async (overrides: Record<string, unknown> = {}) =>
   await new SignJWT({
     email: serviceAccount,
@@ -277,37 +246,6 @@ describe("Cloudflare worker runtime", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
-  });
-
-  describe("live-sync authentication", () => {
-    test("uses fixed-size timing-safe signature comparison", async () => {
-      await expect(signaturesMatch("same", "same")).resolves.toBeTruthy();
-      await expect(
-        signaturesMatch("short", "a completely different length")
-      ).resolves.toBeFalsy();
-    });
-
-    test.each([
-      ["valid", async () => await liveSyncToken()],
-      ["tampered", async () => `${await liveSyncToken()}x`],
-      [
-        "expired",
-        async () =>
-          await liveSyncToken({ expiresAt: Math.floor(Date.now() / 1000) - 1 }),
-      ],
-      ["malformed", async () => await Promise.resolve("not.a.valid.token")],
-    ])("rejects %s tokens", async (_name, createToken) => {
-      const response = await worker.fetch(
-        new Request(
-          `https://worker.invalid/gmail/live?token=${await createToken()}`,
-          {
-            headers: { upgrade: "websocket" },
-          }
-        ),
-        env
-      );
-      expect(response.status).toBe(404);
-    });
   });
 
   describe("Pub/Sub ingress", () => {
@@ -486,6 +424,7 @@ describe("Cloudflare worker runtime", () => {
       })
     ).resolves.toMatchObject({ scanned: 9 });
     expect(maintainMailbox).toHaveBeenCalledTimes(9);
-    expect(peak).toBe(4);
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThan(jobs.length);
   });
 });

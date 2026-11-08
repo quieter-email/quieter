@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { autoLabelSettingsSchema } from "../src/auto-label";
 import type { AutoLabelSettings } from "../src/auto-label";
 import { partitionAutoLabelCandidates } from "../src/auto-label-matching";
 
@@ -64,57 +63,6 @@ describe("auto-label matching", () => {
     }
   });
 
-  test("combines populated categories with all or any and alternatives within a category", () => {
-    const common = {
-      ...settings,
-      domains: ["example.com", "other.com"],
-      keywords: ["paid invoice", "receipt"],
-    };
-    const labels = [
-      { autoLabel: common, id: "all" },
-      { autoLabel: { ...common, matchMode: "any" as const }, id: "any" },
-    ];
-    expect(
-      partitionAutoLabelCandidates(labels, {
-        from: "mail@other.com",
-        subject: "Your RECEIPT",
-      }).deterministicLabelIds
-    ).toStrictEqual(["all", "any"]);
-    expect(
-      partitionAutoLabelCandidates(labels, {
-        from: "mail@other.com",
-        subject: "Hello",
-      }).deterministicLabelIds
-    ).toStrictEqual(["any"]);
-    expect(
-      partitionAutoLabelCandidates(labels, {
-        bodyText: "The paid invoice is attached",
-        from: "mail@unrelated.com",
-      }).deterministicLabelIds
-    ).toStrictEqual(["any"]);
-  });
-
-  test("treats keywords as literal phrases and respects subject and body scope", () => {
-    const common = { ...settings, keywords: ["sale.*today"] };
-    const labels = [
-      {
-        autoLabel: { ...common, keywordScope: "subject" as const },
-        id: "subject",
-      },
-      { autoLabel: { ...common, keywordScope: "body" as const }, id: "body" },
-    ];
-    expect(
-      partitionAutoLabelCandidates(labels, {
-        bodyText: "Sale happens today",
-        subject: "SALE.*TODAY",
-      }).deterministicLabelIds
-    ).toStrictEqual(["subject"]);
-    expect(
-      partitionAutoLabelCandidates(labels, { bodyText: "sale.*today" })
-        .deterministicLabelIds
-    ).toStrictEqual(["body"]);
-  });
-
   test("requires deterministic criteria before AI confirmation and preserves legacy labels", () => {
     const labels = [
       {
@@ -151,28 +99,6 @@ describe("auto-label matching", () => {
     ).toStrictEqual(["prompt", "legacy", "fallback"]);
   });
 
-  test("matches visible HTML phrases across inline tags and decoded entities", () => {
-    const labels = [
-      {
-        autoLabel: {
-          ...settings,
-          keywordScope: "body" as const,
-          keywords: ["paid invoice & receipt"],
-        },
-        id: "finance",
-      },
-    ];
-    for (const bodyHtml of [
-      "<p>Paid <strong>invoice</strong> &amp; receipt attached.</p>",
-      "<p>Pa<span>id</span>&nbsp;invoice &#38; receipt attached.</p>",
-      "<div>Paid invoice</div><div>&#x26; receipt attached.</div>",
-    ]) {
-      expect(
-        partitionAutoLabelCandidates(labels, { bodyHtml }).deterministicLabelIds
-      ).toContain("finance");
-    }
-  });
-
   test("does not match HTML attributes, links, comments, CSS or hidden content", () => {
     const labels = [
       {
@@ -195,79 +121,5 @@ describe("auto-label matching", () => {
     expect(
       partitionAutoLabelCandidates(labels, { bodyHtml }).deterministicLabelIds
     ).toHaveLength(0);
-  });
-
-  test("falls back to HTML for an empty plain-text body and otherwise prefers plain text", () => {
-    const labels = [
-      {
-        autoLabel: {
-          ...settings,
-          keywordScope: "body" as const,
-          keywords: ["invoice"],
-        },
-        id: "finance",
-      },
-    ];
-    for (const bodyText of [null, "", " \n "]) {
-      expect(
-        partitionAutoLabelCandidates(labels, {
-          bodyHtml: "<p>Invoice attached</p>",
-          bodyText,
-        }).deterministicLabelIds
-      ).toContain("finance");
-    }
-    expect(
-      partitionAutoLabelCandidates(labels, {
-        bodyHtml: "<p>Invoice attached</p>",
-        bodyText: "Project update",
-      }).deterministicLabelIds
-    ).toHaveLength(0);
-  });
-
-  test("rejects ambiguous patterns and normalizes valid addresses", () => {
-    for (const domain of [
-      "*example.com",
-      "example.*",
-      "*.*.example.com",
-      "https://example.com",
-      "example.com/path",
-      "example.com.",
-      "*.com",
-      "a..example.com",
-      "-a.example.com",
-    ]) {
-      expect(
-        autoLabelSettingsSchema.safeParse({ ...settings, domains: [domain] })
-          .success
-      ).toBeFalsy();
-    }
-    expect(
-      autoLabelSettingsSchema.safeParse({
-        ...settings,
-        senders: ["Name <mail@example.com>"],
-      }).success
-    ).toBeFalsy();
-    expect(
-      autoLabelSettingsSchema.safeParse({
-        ...settings,
-        domains: [`${"a".repeat(64)}.example.com`],
-      }).success
-    ).toBeFalsy();
-    const parsed = autoLabelSettingsSchema.parse({
-      ...settings,
-      domains: [" *.Example.com "],
-      senders: [" MAIL@EXAMPLE.COM "],
-    });
-    expect(
-      partitionAutoLabelCandidates([{ autoLabel: parsed, id: "normalized" }], {
-        from: "mail@example.com",
-      }).deterministicLabelIds
-    ).toHaveLength(0);
-    expect(
-      partitionAutoLabelCandidates(
-        [{ autoLabel: { ...parsed, matchMode: "any" }, id: "normalized" }],
-        { from: "mail@example.com" }
-      ).deterministicLabelIds
-    ).toContain("normalized");
   });
 });

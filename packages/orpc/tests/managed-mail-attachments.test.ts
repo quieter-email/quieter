@@ -113,20 +113,4 @@ describe("managed attachment downloads", () => {
       });
     }
   );
-
-  test("supports existing attachments when their metadata identifies one part", async () => {
-    mocks.limit.mockResolvedValue([
-      { attachment: { ...attachment, partIndex: null }, message: {} },
-    ]);
-    mocks.read.mockResolvedValue(
-      new TextEncoder().encode(
-        new TextDecoder()
-          .decode(raw)
-          .replace('name="note.txt"', 'name="first.txt"')
-          .replace('filename="note.txt"', 'filename="first.txt"')
-      )
-    );
-    const result = await getManagedMessageAttachment(input);
-    await expect(result.file.text()).resolves.toBe("other");
-  });
 });

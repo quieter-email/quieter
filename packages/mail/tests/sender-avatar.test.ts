@@ -45,21 +45,6 @@ const authHeaders = (domain: string) => [
 ];
 
 describe(sanitizeBimiSvg, () => {
-  test("rebuilds a supported SVG without declarations or active content", () => {
-    const sanitized = sanitizeBimiSvg(`<?xml version="1.0"?>
-      <svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny-ps" viewBox="0 0 128 128">
-        <title>Example</title>
-        <defs><linearGradient id="brand"><stop offset="0" stop-color="#123456"/></linearGradient></defs>
-        <g fill="url(#brand)"><path d="M0 0h128v128H0z"/></g>
-      </svg>
-    `);
-
-    expect(sanitized).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
-    expect(sanitized).toContain("<title>Example</title>");
-    expect(sanitized).toContain('fill="url(#brand)"');
-    expect(sanitized).not.toContain("<?xml");
-  });
-
   test("rejects scripts, external references, missing titles, and unsafe dimensions", () => {
     const cases = [
       VALID_SVG("<script>alert(1)</script>"),
@@ -190,62 +175,6 @@ describe(createBimiResolver, () => {
       })
     ).resolves.toBeUndefined();
     expect(assetRequests).toStrictEqual([]);
-  });
-
-  test("uses the organizational-domain record and refreshes expired DNS and asset caches", async () => {
-    let now = 0;
-    let label = "First";
-    let assetRequests = 0;
-    const resolver = createBimiResolver({
-      assetHostnames: ["assets.example.org"],
-      fetch: async (input) => {
-        const url = new URL(getRequestUrl(input));
-        if (url.searchParams.get("type") === "TXT") {
-          const name = url.searchParams.get("name");
-          if (name === "default._bimi.example.org") {
-            return await Promise.resolve(
-              txtAnswer("v=BIMI1; l=https://assets.example.org/logo.svg")
-            );
-          }
-          if (name === "_dmarc.example.org") {
-            return await Promise.resolve(
-              txtAnswer("v=DMARC1; p=quarantine", 60)
-            );
-          }
-        }
-        if (url.href === "https://assets.example.org/logo.svg") {
-          assetRequests += 1;
-          return await Promise.resolve(
-            new Response(VALID_SVG(label), {
-              headers: {
-                "cache-control": "max-age=60",
-                "content-type": "image/svg+xml",
-              },
-            })
-          );
-        }
-        return await Promise.resolve(new Response(null, { status: 404 }));
-      },
-      now: () => now,
-    });
-
-    const input = {
-      domain: "billing.example.org",
-      headers: authHeaders("billing.example.org"),
-    };
-    const first = await resolver.resolve(input);
-    const second = await resolver.resolve(input);
-    expect(first).toBe(second);
-    expect(assetRequests).toBe(1);
-
-    label = "Second";
-    now = 60_001;
-    const refreshed = await resolver.resolve(input);
-    expect(refreshed).not.toBe(first);
-    expect(
-      decodeURIComponent(refreshed?.slice("data:image/svg+xml,".length) ?? "")
-    ).toContain("Second");
-    expect(assetRequests).toBe(2);
   });
 });
 

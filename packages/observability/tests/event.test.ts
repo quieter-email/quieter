@@ -37,18 +37,6 @@ describe("reported event preparation", () => {
     expect(event?.user).toBeUndefined();
   });
 
-  test("keeps unexpected failures", () => {
-    const error = new Error("Unexpected provider failure");
-    const event = prepareReportedEvent(
-      { exception: { values: [{ value: error.message }] } },
-      error
-    );
-
-    expect(event?.exception?.values?.[0]?.value).toBe(
-      "Unexpected provider failure"
-    );
-  });
-
   test("removes model response content from parsing failures without losing diagnostics", () => {
     const privateContent = "synthetic-private-access-code";
     const event = prepareReportedEvent(

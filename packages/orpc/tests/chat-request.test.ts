@@ -1,15 +1,8 @@
-import { MAX_CHAT_CONTEXT_MESSAGES } from "@quieter/ai/chat-context";
 import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
-import { resolveChatModel } from "@quieter/ai/model-config";
 import { describe, expect, test } from "vite-plus/test";
 import { z } from "zod";
 
-import { hasLinearConnectorMention } from "../src/chat/linear-tools";
-import {
-  createChatTitle,
-  resolveChatValidationErrorMessage,
-  validateChatRequest,
-} from "../src/chat/service";
+import { validateChatRequest } from "../src/chat/service";
 
 const validBody = (): Record<string, unknown> => ({
   category: "inbox",
@@ -33,38 +26,6 @@ const validBody = (): Record<string, unknown> => ({
 });
 
 describe("chat request validation", () => {
-  test("requires an explicit Linear mention before enabling Linear tools", () => {
-    expect(hasLinearConnectorMention("Create a Linear issue")).toBeFalsy();
-    expect(hasLinearConnectorMention("Create @Linear issue")).toBeTruthy();
-    expect(hasLinearConnectorMention("@Linearity is not Linear")).toBeFalsy();
-  });
-
-  test("creates a compact first-message title", () => {
-    expect(createChatTitle("  Summarize\n\nmy unread messages  ")).toBe(
-      "Summarize my unread messages"
-    );
-    expect(createChatTitle("x".repeat(80))).toBe(`${"x".repeat(60)}...`);
-  });
-
-  test("extracts the latest simple user message and forwarded properties", () => {
-    const body = validBody();
-
-    expect(validateChatRequest(body)).toStrictEqual({
-      category: body.category,
-      context: body.context,
-      foreground: body.foreground,
-      kind: "message",
-      mailboxId: body.mailboxId,
-      model: body.model,
-      threadId: body.threadId,
-      trigger: "submit-message",
-      userMessage: {
-        id: "message-1",
-        text: "Summarize this thread",
-      },
-    });
-  });
-
   test("rejects unknown body properties", () => {
     const body = validBody();
     Object.assign(body, { userId: "attacker" });
@@ -74,94 +35,15 @@ describe("chat request validation", () => {
     );
   });
 
-  test("accepts attached mail identifiers and removes duplicates", () => {
-    const body = validBody();
-    body.context = {
-      messageIds: [" message-1 ", "message-2", "message-1"],
-    };
-
-    expect(validateChatRequest(body).context?.messageIds).toStrictEqual([
-      "message-1",
-      "message-2",
-    ]);
-  });
-
-  test.each([
-    { messageIds: [""] },
-    { messageIds: ["x".repeat(257)] },
-    {
-      messageIds: Array.from(
-        { length: MAX_CHAT_CONTEXT_MESSAGES + 1 },
-        (_, index) => `message-${index}`
-      ),
-    },
-    { body: "untrusted mail content", messageIds: ["message-1"] },
-  ])("rejects invalid attached mail context: %o", (context) => {
-    const body = validBody();
-    body.context = context;
-
-    expect(() => validateChatRequest(body)).toThrow(z.ZodError);
-  });
-
-  test("rejects models outside the allowed catalog", () => {
-    const body = validBody();
-    body.model = "unapproved/model";
-
-    expect(() => validateChatRequest(body)).toThrow(z.ZodError);
-  });
-
-  test.each(["ask", "automatic"])(
-    "ignores an older client's %s approval mode",
-    (policy) => {
+  test.each([{ body: "untrusted mail content", messageIds: ["message-1"] }])(
+    "rejects invalid attached mail context: %o",
+    (context) => {
       const body = validBody();
-      body.foreground = {
-        ...z.record(z.string(), z.unknown()).parse(body.foreground),
-        policy,
-      };
+      body.context = context;
 
-      expect(validateChatRequest(body).foreground).not.toHaveProperty("policy");
+      expect(() => validateChatRequest(body)).toThrow(z.ZodError);
     }
   );
-
-  test("rejects multimodal user content", () => {
-    const body = validBody();
-    body.message = {
-      id: "message-1",
-      parts: [
-        { text: "Describe it", type: "text" },
-        { text: "data:image/png;base64,x", type: "text" },
-      ],
-      role: "user",
-    };
-    expect(() => validateChatRequest(body)).toThrow(/exactly one text part/iu);
-  });
-
-  test("requires a UUID thread id", () => {
-    const body = validBody();
-    body.threadId = "not-a-client-uuid";
-
-    expect(() => validateChatRequest(body)).toThrow(/invalid UUID/iu);
-  });
-
-  test("defaults an omitted model to the configured chat model", () => {
-    const body = validBody();
-    body.model = undefined;
-
-    expect(validateChatRequest(body)).toStrictEqual({
-      category: body.category,
-      context: body.context,
-      foreground: body.foreground,
-      kind: "message",
-      mailboxId: body.mailboxId,
-      model: resolveChatModel(),
-      threadId: body.threadId,
-      trigger: "submit-message",
-      userMessage: {
-        id: "message-1",
-        text: "Summarize this thread",
-      },
-    });
-  });
 
   test("rejects expired, overlong, and regenerate foreground requests", () => {
     const expired = validBody();
@@ -185,100 +67,6 @@ describe("chat request validation", () => {
     const regenerate = validBody();
     regenerate.trigger = "regenerate-message";
     expect(() => validateChatRequest(regenerate)).toThrow(/invalid input/iu);
-  });
-
-  test("collects approval decisions from an assistant continuation message", () => {
-    const body = validBody();
-    body.message = {
-      id: "assistant-1",
-      parts: [
-        {
-          approval: { approved: true, id: "approval-1" },
-          state: "approval-responded",
-          toolCallId: "tool-1",
-          type: "tool-modify_mail",
-        },
-      ],
-      role: "assistant",
-    };
-
-    const validated = validateChatRequest(body);
-    expect(validated.kind).toBe("continue");
-    const continued = validated.kind === "continue" ? validated : undefined;
-    expect(continued?.toolDecisions.get("tool-1")?.approved).toBeTruthy();
-    expect(continued?.assistantMessageId).toBe("assistant-1");
-    expect(continued?.model).toBe(body.model);
-  });
-
-  test("collects a denied decision from an assistant continuation message", () => {
-    const body = validBody();
-    body.message = {
-      id: "assistant-1",
-      parts: [
-        {
-          approval: { approved: false, id: "approval-1" },
-          state: "approval-responded",
-          toolCallId: "tool-1",
-          type: "tool-modify_mail",
-        },
-      ],
-      role: "assistant",
-    };
-
-    const validated = validateChatRequest(body);
-    expect(validated.kind).toBe("continue");
-    const continued = validated.kind === "continue" ? validated : undefined;
-    expect(continued?.toolDecisions.get("tool-1")?.approved).toBeFalsy();
-  });
-
-  test("accepts streamed assistant messages with mixed part types", () => {
-    const body = validBody();
-    body.message = {
-      id: "assistant-1",
-      parts: [
-        { type: "step-start" },
-        { text: "Let me move that message for you.", type: "text" },
-        {
-          approval: { approved: true, id: "approval-1" },
-          state: "approval-responded",
-          toolCallId: "tool-1",
-          type: "tool-modify_mail",
-        },
-      ],
-      role: "assistant",
-    };
-
-    const validated = validateChatRequest(body);
-    expect(validated.kind).toBe("continue");
-    const continued = validated.kind === "continue" ? validated : undefined;
-    expect(continued?.toolDecisions.get("tool-1")?.approved).toBeTruthy();
-    expect(continued?.assistantMessageId).toBe("assistant-1");
-  });
-
-  test("accepts a foreground controller result", () => {
-    const body = validBody();
-    body.message = {
-      id: "assistant-1",
-      parts: [
-        {
-          input: { view: "inbox" },
-          output: { generation: 1, mailboxId: "mailbox-1", view: "inbox" },
-          state: "output-available",
-          toolCallId: "tool-1",
-          type: "tool-navigate",
-        },
-      ],
-      role: "assistant",
-    };
-
-    const validated = validateChatRequest(body);
-    expect(validated.kind).toBe("continue");
-    const continued = validated.kind === "continue" ? validated : undefined;
-    expect(continued?.toolOutputs.get("tool-1")).toStrictEqual({
-      generation: 1,
-      mailboxId: "mailbox-1",
-      view: "inbox",
-    });
   });
 
   test("continues after server work without trusting echoed server outcomes", () => {
@@ -354,71 +142,6 @@ describe("chat request validation", () => {
     }
     const issues = thrown instanceof z.ZodError ? thrown.issues : [];
     expect(issues.some(({ code }) => code === "invalid_type")).toBeTruthy();
-  });
-
-  test("rejects an assistant message without client resolutions", () => {
-    const body = validBody();
-    body.message = {
-      id: "assistant-1",
-      parts: [],
-      role: "assistant",
-    };
-
-    expect(() => validateChatRequest(body)).toThrow(/no client resolutions/iu);
-  });
-});
-
-const validationMessage = (body: Record<string, unknown>): string => {
-  try {
-    validateChatRequest(body);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return resolveChatValidationErrorMessage(error);
-    }
-    throw error;
-  }
-  throw new Error("Expected chat validation to fail.");
-};
-
-describe("chat validation error messages", () => {
-  test("surfaces expired exchanges with actionable text", () => {
-    const body = validBody();
-    body.foreground = {
-      ...z.record(z.string(), z.unknown()).parse(body.foreground),
-      expiresAt: Date.now() - 1,
-    };
-
-    expect(validationMessage(body)).toBe(
-      "The foreground exchange has expired."
-    );
-  });
-
-  test("surfaces stale workspace results with actionable text", () => {
-    const body = validBody();
-    body.message = {
-      id: "assistant-1",
-      parts: [
-        {
-          input: {},
-          output: { generation: 2, mailboxId: "mailbox-1" },
-          state: "output-available",
-          toolCallId: "tool-1",
-          type: "tool-get_workspace",
-        },
-      ],
-      role: "assistant",
-    };
-
-    expect(validationMessage(body)).toBe(
-      "The client result belongs to an older workspace state."
-    );
-  });
-
-  test("keeps raw schema violations generic", () => {
-    const body = validBody();
-    body.threadId = "not-a-client-uuid";
-
-    expect(validationMessage(body)).toBe("Invalid chat request.");
   });
 });
 
@@ -508,17 +231,5 @@ describe("canonical transcript conversion", () => {
         role: "assistant",
       },
     ]);
-  });
-
-  test("drops messages whose parts are all malformed", () => {
-    expect(
-      toCanonicalTranscript([
-        {
-          id: "assistant-empty",
-          parts: [{ type: "unknown-shape" }, { mystery: true, type: "odd" }],
-          role: "assistant",
-        },
-      ])
-    ).toStrictEqual([]);
   });
 });

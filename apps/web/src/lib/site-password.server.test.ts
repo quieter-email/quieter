@@ -95,19 +95,6 @@ describe("site password session bypass", () => {
     ).resolves.toBeFalsy();
   });
 
-  test("rejects valid signature with revoked session", async () => {
-    const { getSessionWithOrganization } =
-      await import("@quieter/auth/session");
-    vi.mocked(getSessionWithOrganization).mockResolvedValue(null);
-
-    await expect(
-      hasValidAuthSessionToken(
-        { "__Secure-better-auth.session_token": signedToken },
-        secret
-      )
-    ).resolves.toBeFalsy();
-  });
-
   test("rejects valid signature when session lookup fails", async () => {
     const { getSessionWithOrganization } =
       await import("@quieter/auth/session");

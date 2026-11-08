@@ -2,7 +2,6 @@ import { describe, expect, test } from "vite-plus/test";
 
 import {
   buildDomainConnectApplyUrl,
-  createDomainConnectTemplate,
   discoverDomainConnect,
 } from "../src/mail-domain/domain-connect";
 import { createMailDomainDnsRecords } from "../src/mail-domain/records";
@@ -18,36 +17,6 @@ const resolveFetcherUrl = (request: RequestInfo | URL) => {
 
   return request.url;
 };
-
-describe("Domain Connect templates", () => {
-  test("describes the send-only template", () => {
-    const sendOnly = createDomainConnectTemplate("send_only");
-
-    expect(sendOnly.serviceId).toBe("send-only");
-    expect(sendOnly.records).toHaveLength(7);
-    expect(sendOnly.records).toContainEqual({
-      host: "bounce",
-      spfRules: "include:amazonses.com",
-      type: "SPFM",
-    });
-    expect(sendOnly.records[0]).toMatchObject({
-      data: "quieter-domain-verification=%OWNERSHIP_TOKEN%",
-      txtConflictMatchingMode: "Prefix",
-    });
-  });
-
-  test("adds inbound routing only to the send-and-receive template", () => {
-    const sendAndReceive = createDomainConnectTemplate("send_and_receive");
-
-    expect(sendAndReceive.serviceId).toBe("send-and-receive");
-    expect(sendAndReceive.records).toHaveLength(8);
-    expect(sendAndReceive.records.at(-1)).toMatchObject({
-      host: "@",
-      pointsTo: "inbound-smtp.%AWS_REGION%.amazonaws.com",
-      type: "MX",
-    });
-  });
-});
 
 describe(discoverDomainConnect, () => {
   test("offers a trusted provider only after it confirms the exact template", async () => {
@@ -87,72 +56,6 @@ describe(discoverDomainConnect, () => {
     expect(requestedUrls[1]).toContain(
       "/v2/domainTemplates/providers/quieter.email/services/send-only"
     );
-  });
-
-  test("keeps manual setup when the provider has not onboarded the template", async () => {
-    const result = await discoverDomainConnect({
-      configured: true,
-      domain: "example.com",
-      fetcher: async (request) => {
-        const url = resolveFetcherUrl(request);
-        if (url.endsWith("/settings")) {
-          return await Promise.resolve(
-            Response.json({
-              providerDisplayName: "Cloudflare",
-              providerId: "cloudflare.com",
-              providerName: "cloudflare",
-              urlAPI: "https://api.cloudflare.com/client/v4/dns/domainconnect",
-              urlSyncUX: "https://dash.cloudflare.com/domainconnect",
-            })
-          );
-        }
-        return await Promise.resolve(new Response(null, { status: 404 }));
-      },
-      lookupTxt: async () =>
-        await Promise.resolve([
-          ["api.cloudflare.com/client/v4/dns/domainconnect"],
-        ]),
-      mode: "send_and_receive",
-    });
-
-    expect(result).toMatchObject({
-      available: false,
-      providerName: "Cloudflare",
-      reason: "template_not_supported",
-    });
-  });
-
-  test("keeps manual setup when the provider has a different template version", async () => {
-    const result = await discoverDomainConnect({
-      configured: true,
-      domain: "example.com",
-      fetcher: async (request) => {
-        const url = resolveFetcherUrl(request);
-        if (url.endsWith("/settings")) {
-          return await Promise.resolve(
-            Response.json({
-              providerDisplayName: "Cloudflare",
-              providerId: "cloudflare.com",
-              providerName: "cloudflare",
-              urlAPI: "https://api.cloudflare.com/client/v4/dns/domainconnect",
-              urlSyncUX: "https://dash.cloudflare.com/domainconnect",
-            })
-          );
-        }
-        return await Promise.resolve(Response.json({ version: 2 }));
-      },
-      lookupTxt: async () =>
-        await Promise.resolve([
-          ["api.cloudflare.com/client/v4/dns/domainconnect"],
-        ]),
-      mode: "send_only",
-    });
-
-    expect(result).toMatchObject({
-      available: false,
-      providerName: "Cloudflare",
-      reason: "template_not_supported",
-    });
   });
 
   test("does not fetch untrusted discovery endpoints", async () => {

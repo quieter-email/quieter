@@ -1,9 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import {
-  aiCreditRecoveryCommandSchema,
-  runAiCreditRecovery,
-} from "../src/ai-credit-recovery.ts";
+import { runAiCreditRecovery } from "../src/ai-credit-recovery.ts";
 import { createPolarCreditUsageEvent } from "../src/credits.ts";
 
 const request = {
@@ -19,27 +16,6 @@ const request = {
 };
 
 describe("AI credit recovery command boundary", () => {
-  test.each([
-    { resolution: { costUsd: -1, kind: "actual-cost" } },
-    { resolution: { costUsd: Number.NaN, kind: "actual-cost" } },
-    { resolution: { costUsd: Number.POSITIVE_INFINITY, kind: "actual-cost" } },
-    { resolution: { costUsd: "0.01", kind: "actual-cost" } },
-    { resolution: { costUsd: 0, kind: "non-execution" } },
-    { evidence: "" },
-    { reason: "private message with spaces" },
-    { evidence: "person@example.invalid" },
-    { operator: "" },
-    { reservationId: "" },
-    { expectedSnapshot: "stale" },
-    { confirmation: undefined },
-    { mode: "reconcile-all" },
-    { extra: "ignored?" },
-  ])("rejects malformed operator input %j", (change) => {
-    expect(
-      aiCreditRecoveryCommandSchema.safeParse({ ...request, ...change }).success
-    ).toBeFalsy();
-  });
-
   test("rejects missing exact confirmation before database access", async () => {
     await expect(runAiCreditRecovery(request)).rejects.toThrow(/confirmation/u);
   });

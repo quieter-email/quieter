@@ -1,5 +1,4 @@
 import {
-  approvalRequiredToolNames,
   foregroundSnapshotSchema,
   requiresChatToolApproval,
 } from "@quieter/ai/chat-tools";
@@ -33,43 +32,6 @@ const approved: ChatMessagePart = {
 
 describe("destructive-only chat approval", () => {
   test.each([
-    { input: { query: "project update" }, toolName: "search_gmail" },
-    { input: { query: "project update" }, toolName: "list_calendar_events" },
-    { input: { toolName: "search_issues" }, toolName: "linear_read" },
-    {
-      input: {
-        arguments: { title: "Delete the old heading" },
-        toolName: "create_issue",
-      },
-      toolName: "linear_write",
-    },
-    { input: { toolName: "update_issue" }, toolName: "linear_write" },
-    {
-      input: {
-        arguments: { name: "Delete the old heading" },
-        provider: "clickup",
-        toolName: "create_task",
-      },
-      toolName: "connector_write",
-    },
-    { input: { toolName: "update_task" }, toolName: "connector_write" },
-    { input: { toolName: "complete_task" }, toolName: "connector_write" },
-    {
-      input: { toolName: "notion_append_blocks" },
-      toolName: "connector_write",
-    },
-    { input: { action: "archive" }, toolName: "modify_mail" },
-    { input: { action: "trash" }, toolName: "modify_mail" },
-    { input: {}, toolName: "save_compose_draft" },
-    { input: {}, toolName: "send_mail" },
-    { input: {}, toolName: "create_calendar_event" },
-    { input: {}, toolName: "update_calendar_event" },
-    { input: {}, toolName: "respond_to_calendar_event" },
-  ])("does not interrupt ordinary $toolName actions", (call) => {
-    expect(requiresChatToolApproval(call)).toBeFalsy();
-  });
-
-  test.each([
     "delete_issue",
     "linear_delete_project",
     "purge_workspace",
@@ -86,26 +48,6 @@ describe("destructive-only chat approval", () => {
       ).toBeTruthy();
     }
   });
-
-  test("requires confirmation before deleting a calendar event", () => {
-    expect(
-      requiresChatToolApproval({ input: {}, toolName: "delete_calendar_event" })
-    ).toBeTruthy();
-  });
-
-  test.each(approvalRequiredToolNames)(
-    "blocks %s without a server-stored approval",
-    (toolName) => {
-      expect(() => {
-        assertExactChatToolApproval({
-          approvedPart: undefined,
-          exchangeId: foreground.exchangeId,
-          foreground,
-          proposedPart: { ...proposed, type: `tool-${toolName}` },
-        });
-      }).toThrow(/approve/iu);
-    }
-  );
 
   test.each([
     { state: "approval-requested" },

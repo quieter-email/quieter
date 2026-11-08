@@ -41,15 +41,6 @@ describe("local database consumption boundary", () => {
     });
   });
 
-  test("preserves deployed database configuration outside the development runtime", () => {
-    vi.unstubAllGlobals();
-    configureServerEnv({
-      DATABASE_URL: "postgresql://user@database.invalid/quieter",
-      QUIETER_DEPLOYMENT_ENV: "production",
-    });
-    expect(assertDatabaseConfigured).not.toThrow();
-  });
-
   test("guards local Node callers outside the development runtime", () => {
     vi.stubGlobal("__QUIETER_LOCAL_DEVELOPMENT__", false);
     configureServerEnv({

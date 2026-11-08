@@ -22,7 +22,7 @@ vp node scripts/run-memory-comparison.ts \
   --output /tmp/supermemory-chunks.json
 ```
 
-The optional `--quieter-report` attaches matching cases from a completed canonical SQL evaluation. Each case retains its SQL metrics under `quieter`, while baseline metadata retains its mode, retrieval method and configured expansion or embedding model. Missing cases and reports from another evaluation layer are marked explicitly. Pairing uses the shared scenario ID; an older report without a corpus digest cannot independently prove that its fixtures match. Produce it with `vp run memory:eval --output /tmp/quieter-memory-eval.json` against the guarded disposable database described in [AI memory](ai-memory.md#synthetic-recall-evaluation). The comparison does not run or modify Quieter databases itself.
+The optional `--quieter-report` attaches matching cases from a completed canonical SQL evaluation. Each case retains its SQL metrics under `quieter`, while baseline metadata retains its mode, retrieval method and configured expansion or embedding model. Missing cases and reports from another evaluation layer are marked explicitly. Pairing uses the shared scenario ID; an older report without a corpus digest cannot independently prove that its fixtures match. The SQL evaluation runner has been removed. Use an existing historical report when pairing results. The comparison does not run or modify Quieter databases itself.
 
 Use memory mode for a selected full corpus when you also want extracted-memory and profile observations:
 

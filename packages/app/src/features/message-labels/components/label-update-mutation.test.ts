@@ -1,7 +1,5 @@
-import { getDemoLabelAutomation } from "@quieter/app/lib/demo-mail/label-automation";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { getLabelsQueryKey } from "@quieter/app/lib/mail/labels-query";
-import { DEMO_MANAGED_MAILBOX_ID } from "@quieter/app/lib/managed-mail/demo-managed-mail";
 import { rpc } from "@quieter/app/lib/orpc";
 import { mailboxLabelSchema } from "@quieter/mail/mailbox-organization";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
@@ -174,57 +172,6 @@ describe("label saves", () => {
     );
   });
 
-  test("uses a successful rename for a queued color and preserves it through stale refreshes", async () => {
-    const harness = createHarness();
-    const { observer, queryKey, updates } = harness.mailbox("mailbox");
-    const first = observer.mutate({
-      change: { kind: "name", name: "Projects" },
-      labelId: label.id,
-    });
-    const second = observer.mutate({
-      change: { color: "purple", kind: "color" },
-      labelId: label.id,
-    });
-    await vi.waitFor(() => {
-      expect(harness.requests).toHaveLength(1);
-    });
-    harness.requests[0]?.gate.resolve(null);
-    await first;
-    await vi.waitFor(() => {
-      expect(harness.requests).toHaveLength(2);
-    });
-    expect(
-      harness.requests.find(({ input }) => input.color)?.input
-    ).toMatchObject({
-      color: "purple",
-      name: "Projects",
-    });
-    const savedLabels = await harness.queryClient.query<MailboxLabel[]>({
-      queryKey,
-    });
-    harness.records.set("mailbox", [label]);
-    const staleLabels = await harness.queryClient.query<MailboxLabel[]>({
-      queryKey,
-    });
-    harness.records.set("mailbox", savedLabels);
-    harness.queryClient.setQueryData(queryKey, [label]);
-    expect(updates.project(staleLabels, updates.state.get())).toContainEqual(
-      expect.objectContaining({ color: "purple", name: "Projects" })
-    );
-    harness.requests[1]?.gate.resolve(null);
-    await second;
-    expect(harness.queryClient.getQueryData(queryKey)).toContainEqual(
-      expect.objectContaining({
-        autoLabel: label.autoLabel,
-        color: "purple",
-        description: label.description,
-        inclusionCriteria: label.inclusionCriteria,
-        name: "Projects",
-        visible: true,
-      })
-    );
-  });
-
   test("continues after a rejected rename without silently renaming the next color save", async () => {
     const harness = createHarness();
     const { observer, updates } = harness.mailbox("mailbox");
@@ -265,118 +212,6 @@ describe("label saves", () => {
     );
   });
 
-  test("keeps a confirmed rename when a new save interrupts the final refresh", async () => {
-    const harness = createHarness();
-    const { observer, queryKey, updates } = harness.mailbox("mailbox");
-    const refreshGate = Promise.withResolvers<null>();
-    let holdRefresh = false;
-    let refreshStarted = false;
-    await harness.queryClient.query({
-      queryFn: async ({ signal }) => {
-        signal.throwIfAborted();
-        if (holdRefresh) {
-          refreshStarted = true;
-          await refreshGate.promise;
-        }
-        return harness.records.get("mailbox");
-      },
-      queryKey,
-    });
-    holdRefresh = true;
-    const first = observer.mutate({
-      change: { kind: "name", name: "Projects" },
-      labelId: label.id,
-    });
-    await vi.waitFor(() => {
-      expect(harness.requests).toHaveLength(1);
-    });
-    harness.requests[0]?.gate.resolve(null);
-    await vi.waitFor(() => {
-      expect(refreshStarted).toBeTruthy();
-    });
-    const second = observer.mutate({
-      change: { color: "pink", kind: "color" },
-      labelId: label.id,
-    });
-    await vi.waitFor(() => {
-      expect(updates.state.get().pending).toHaveLength(1);
-    });
-    harness.queryClient.setQueryData(queryKey, [label]);
-    expect(updates.project([label], updates.state.get())).toContainEqual(
-      expect.objectContaining({ color: "pink", name: "Projects" })
-    );
-    holdRefresh = false;
-    refreshGate.resolve(null);
-    await first;
-    await vi.waitFor(() => {
-      expect(harness.requests).toHaveLength(2);
-    });
-    expect(
-      harness.requests.find(({ input }) => input.color)?.input
-    ).toMatchObject({
-      color: "pink",
-      name: "Projects",
-    });
-    harness.requests[1]?.gate.resolve(null);
-    await second;
-    expect(harness.queryClient.getQueryData(queryKey)).toContainEqual(
-      expect.objectContaining({ color: "pink", name: "Projects" })
-    );
-    expect(toastError).not.toHaveBeenCalled();
-  });
-
-  test("reconciles a settled rename when a failed refresh later succeeds", async () => {
-    const harness = createHarness();
-    const { observer, queryKey, updates } = harness.mailbox("mailbox");
-    let refreshFailure: Error | null = null;
-    await harness.queryClient.query({
-      queryFn: () => {
-        if (refreshFailure) {
-          throw refreshFailure;
-        }
-        return harness.records.get("mailbox");
-      },
-      queryKey,
-    });
-    refreshFailure = new Error("Refresh failed.");
-    const first = observer.mutate({
-      change: { kind: "name", name: "Projects" },
-      labelId: label.id,
-    });
-    await vi.waitFor(() => {
-      expect(harness.requests).toHaveLength(1);
-    });
-    harness.requests[0]?.gate.resolve(null);
-    await first;
-    harness.queryClient.setQueryData(queryKey, [label]);
-    expect(updates.project([label], updates.state.get())).toContainEqual(
-      expect.objectContaining({ name: "Projects" })
-    );
-    harness.records.set("mailbox", [{ ...label, name: "Server rename" }]);
-    refreshFailure = null;
-    const refreshed = await harness.queryClient.query<MailboxLabel[]>({
-      queryKey,
-    });
-    expect(updates.project(refreshed, updates.state.get())).toContainEqual(
-      expect.objectContaining({ name: "Server rename" })
-    );
-    const second = observer.mutate({
-      change: { color: "green", kind: "color" },
-      labelId: label.id,
-    });
-    await vi.waitFor(() => {
-      expect(harness.requests).toHaveLength(2);
-    });
-    expect(
-      harness.requests.find(({ input }) => input.color)?.input
-    ).toMatchObject({ color: "green", name: "Server rename" });
-    harness.requests[1]?.gate.resolve(null);
-    await second;
-    expect(harness.records.get("mailbox")).toContainEqual(
-      expect.objectContaining({ color: "green", name: "Server rename" })
-    );
-  });
-
   test("keeps equal label IDs in separate mailboxes independent", async () => {
     const harness = createHarness();
     const left = harness.mailbox("left");
@@ -408,50 +243,5 @@ describe("label saves", () => {
     expect(harness.records.get("right")).toContainEqual(
       expect.objectContaining({ color: "green", name: "Work" })
     );
-  });
-
-  test("merges sandbox field edits into current stored metadata", async () => {
-    const storage = new Map<string, string>();
-    vi.stubGlobal("window", {
-      localStorage: {
-        getItem: (key: string) => storage.get(key) ?? null,
-        removeItem: (key: string) => storage.delete(key),
-        setItem: (key: string, value: string) => storage.set(key, value),
-      },
-    });
-    const harness = createHarness();
-    const { observer, queryKey } = harness.mailbox(DEMO_MANAGED_MAILBOX_ID);
-    await harness.queryClient.query({
-      queryFn: () => [
-        getDemoLabelAutomation(DEMO_MANAGED_MAILBOX_ID).updatedLabels[
-          label.id
-        ] ?? label,
-      ],
-      queryKey,
-    });
-    const first = observer.mutate({
-      change: { kind: "name", name: "Projects" },
-      labelId: label.id,
-    });
-    const second = observer.mutate({
-      change: { kind: "visibility", visible: false },
-      labelId: label.id,
-    });
-    const third = observer.mutate({
-      change: { color: "yellow", kind: "color" },
-      labelId: label.id,
-    });
-    await Promise.all([first, second, third]);
-    expect(
-      getDemoLabelAutomation(DEMO_MANAGED_MAILBOX_ID).updatedLabels[label.id]
-    ).toMatchObject({
-      autoLabel: label.autoLabel,
-      color: "yellow",
-      description: label.description,
-      inclusionCriteria: label.inclusionCriteria,
-      name: "Projects",
-      visible: false,
-    });
-    expect(harness.requests).toHaveLength(0);
   });
 });

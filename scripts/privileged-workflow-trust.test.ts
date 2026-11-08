@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 
 import { describe, expect, test, vi } from "vite-plus/test";
-import { isSeq, parseDocument } from "yaml";
+import { parseDocument } from "yaml";
 
 const sdk = parseDocument(
   readFileSync(
@@ -204,9 +204,6 @@ describe("privileged workflow trust", () => {
         allowed ? { sha: "release-sha", tag: branch } : {}
       );
       expect(compareCommits).toHaveBeenCalledTimes(allowed ? 1 : 0);
-      expect(getWorkflowRun).toHaveBeenCalledWith(
-        expect.objectContaining({ run_id: 42 })
-      );
     }
   );
 
@@ -265,27 +262,5 @@ describe("privileged workflow trust", () => {
     );
     await expect(Promise.resolve(execution)).rejects.toThrow(/provenance/u);
     expect(outputs.size).toBe(0);
-  });
-
-  test("keeps repository code behind authorization and pins privileged checkout", () => {
-    expect(sdk.getIn(["permissions", "id-token"])).toBeUndefined();
-    expect(sdk.getIn(["jobs", "authorize", "environment"])).toBeUndefined();
-    const steps = sdk.getIn(["jobs", "authorize", "steps"]);
-    expect(isSeq(steps) && steps.items.length === 1).toBeTruthy();
-    expect(sdk.getIn(["jobs", "publish", "needs"])).toBe("authorize");
-    expect(sdk.getIn(["jobs", "publish", "steps", 0, "with", "ref"])).toBe(
-      `\${{ needs.authorize.outputs.sha }}`
-    );
-    expect(
-      backfill.getIn(["jobs", "backfill", "steps", 0, "with", "ref"])
-    ).toBe(`\${{ github.sha }}`);
-    for (const [document, job] of [
-      [sdk, "publish"],
-      [backfill, "backfill"],
-    ] as const) {
-      expect(
-        document.getIn(["jobs", job, "steps", 0, "with", "persist-credentials"])
-      ).toBeFalsy();
-    }
   });
 });

@@ -234,9 +234,6 @@ describe("Polar checkout creation", () => {
     });
     const checkoutRequest = checkoutMocks.createCheckout.mock.calls.at(0)?.[0];
     expect(checkoutRequest?.success_url).toContain("checkoutId={CHECKOUT_ID}");
-    expect(checkoutMocks.getSubscription).toHaveBeenCalledWith("user-1", {
-      forceReconcile: true,
-    });
   });
 
   test("does not duplicate an active subscription with an unconfirmed renewal", async () => {

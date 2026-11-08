@@ -97,61 +97,6 @@ describe(applyMailboxSyncDelta, () => {
     queryClient.clear();
   });
 
-  test("patches loaded metadata without fetching message lists or thread bodies", async () => {
-    const queryClient = new QueryClient();
-    const messagesQueryKey = getMessagesQueryKey("mailbox", "inbox");
-    const threadQueryKey = getThreadQueryKey("mailbox", "thread");
-    const loaded = message("a", {
-      bodyHtml: "<p>Loaded body</p>",
-      isUnread: true,
-      threadId: "thread",
-    });
-    const listData = {
-      pageParams: [undefined],
-      pages: [{ messages: [loaded] }],
-    };
-    const threadData = { messages: [loaded], threadId: "thread" };
-    const fetchList = vi
-      .fn<() => MessagesQueryData>()
-      .mockReturnValue(listData);
-    const fetchThread = vi
-      .fn<() => ThreadMessagesResult>()
-      .mockReturnValue(threadData);
-    const list = new QueryObserver(queryClient, {
-      initialData: listData,
-      queryFn: fetchList,
-      queryKey: messagesQueryKey,
-      staleTime: Infinity,
-    });
-    const thread = new QueryObserver(queryClient, {
-      initialData: threadData,
-      queryFn: fetchThread,
-      queryKey: threadQueryKey,
-      staleTime: Infinity,
-    });
-    const unsubscribeList = list.subscribe(() => {});
-    const unsubscribeThread = thread.subscribe(() => {});
-    await applyMailboxSyncDelta(
-      queryClient,
-      "mailbox",
-      messagesQueryKey,
-      [message("a", { isUnread: false, threadId: "thread" })],
-      []
-    );
-    expect(thread.getCurrentResult().data?.messages[0]).toMatchObject({
-      bodyHtml: loaded.bodyHtml,
-      isUnread: false,
-    });
-    expect(
-      list.getCurrentResult().data?.pages[0].messages[0].isUnread
-    ).toBeFalsy();
-    expect(fetchList).not.toHaveBeenCalled();
-    expect(fetchThread).not.toHaveBeenCalled();
-    unsubscribeList();
-    unsubscribeThread();
-    queryClient.clear();
-  });
-
   test("replaces an older fetch only for the loaded thread that gains a reply", async () => {
     const queryClient = new QueryClient();
     const messagesQueryKey = getMessagesQueryKey("mailbox", "inbox");

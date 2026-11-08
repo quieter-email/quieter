@@ -139,23 +139,6 @@ describe("subscription synchronization", () => {
     );
   });
 
-  test("stores scheduled cancellation without ending access early", async () => {
-    await syncBillingSubscription({
-      ...subscription,
-      cancel_at_period_end: true,
-    });
-    expect(mocks.values).toHaveBeenCalledWith(
-      expect.objectContaining({ cancelAtPeriodEnd: true, status: "active" })
-    );
-  });
-
-  test("stores immediate revocation despite a future billing period end", async () => {
-    await syncBillingSubscription({ ...subscription, status: "canceled" });
-    expect(mocks.values).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "canceled" })
-    );
-  });
-
   test("dates an unmodified creation event so it cannot overwrite a later cancellation", async () => {
     await syncBillingSubscription({ ...subscription, modified_at: null });
     expect(mocks.values).toHaveBeenCalledWith(

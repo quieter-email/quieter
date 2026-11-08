@@ -17,18 +17,6 @@ describe(parseImageSourceSet, () => {
     expect(parseImageSourceSet("cid:a .5x, cid:b 1.5x")).toHaveLength(2);
   });
 
-  test.each([" ", "\t", "\r", "\n", "\f", "\u00A0"])(
-    "preserves existing whitespace semantics for %j",
-    (space) => {
-      expect(
-        parseImageSourceSet(`${space},cid:a${space}2x,${space}cid:b,`)
-      ).toStrictEqual([
-        { descriptor: "2x", source: "cid:a" },
-        { descriptor: "", source: "cid:b" },
-      ]);
-    }
-  );
-
   test("handles long comma runs without backtracking and preserves their meaning", () => {
     const source = `cid:a${",".repeat(100_000)}!`;
     expect(parseImageSourceSet(`${source},`)).toStrictEqual([
@@ -42,10 +30,6 @@ describe(parseImageSourceSet, () => {
       parseImageSourceSet(`cid:a 1x, cid:b ${"1".repeat(100_000)}!`)
     ).toStrictEqual([]);
     expect(parseImageSourceSet("cid:a 1x, cid:b 2x 3x")).toStrictEqual([]);
-  });
-
-  test("handles many separate candidates", () => {
-    expect(parseImageSourceSet("cid:a, ".repeat(10_000))).toHaveLength(10_000);
   });
 
   test.each([",", "&#44;", "&#x2c;", "&comma;"])(

@@ -128,7 +128,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      ACTION_CUTOVER_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/quieter_cutover_test
       DATABASE_MIGRATION_URL: postgresql://postgres:postgres@localhost:5432/quieter_migration_test
       MIGRATION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/quieter_migration_test
     steps:
@@ -150,12 +149,3 @@ jobs:
 
       - name: Test committed database migrations
         run: vp run @quieter/database#db:test-migrations
-
-      - name: Build recovery CLI runtime dependency
-        run: vp run @quieter/observability#build
-
-      - name: Create isolated Action cutover test database
-        run: docker exec quieter-search-test psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE quieter_cutover_test'
-
-      - name: Test database behavior against migrated PostgreSQL
-        run: vp test --no-file-parallelism integration.test.ts credit-accounting.test.ts

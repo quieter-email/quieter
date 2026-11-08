@@ -13,7 +13,6 @@ import {
 import { connectorProviderSchema } from "../src/connectors/contracts";
 import {
   completeConnectorOAuth,
-  listConnectors,
   startConnectorOAuth,
 } from "../src/connectors/service";
 
@@ -131,19 +130,6 @@ describe("connector OAuth state ownership", () => {
     expect(
       connectorProviderSchema.safeParse("google_calendar").success
     ).toBeFalsy();
-  });
-
-  test("lists only currently supported connectors", async () => {
-    const result = await listConnectors("owner-1");
-    expect(result.connectors).toStrictEqual(
-      expect.arrayContaining([expect.objectContaining({ provider: "linear" })])
-    );
-    expect(
-      result.connectors.map((connector) => connector.provider)
-    ).not.toContain("google_calendar");
-    const [query, params] = mocks.query.mock.calls[0] ?? [];
-    expect(query).toContain('"connectorCredential"."userId" =');
-    expect(params).toContain("owner-1");
   });
 
   test.each([

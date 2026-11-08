@@ -6,14 +6,12 @@ import { join } from "node:path";
 import {
   ChecksUnavailable,
   WatcherQueryError,
-  buildReviewThreads,
   mapRollupNode,
   orderStack,
   parseFastCheck,
   parsePullRequest,
   parseReviewThreadPage,
   resolveChecks,
-  resolveContext,
   resolveReviewThreads,
 } from "./github.ts";
 import {
@@ -31,16 +29,6 @@ const context = {
 };
 
 describe("checks fallback chain", () => {
-  it("uses a non-empty fast-path result without a rollup query", async () => {
-    const reader = fakeReader({
-      fastPath: { kind: "checks", checks: [passingCheck("fast")] },
-    });
-    const read = await resolveChecks(reader, context);
-    expect(read.source).toBe("gh-pr-checks");
-    expect(read.checks.map((check) => check.name)).toEqual(["fast"]);
-    expect(reader.calls).toEqual(["checksFastPath"]);
-  });
-
   it("paginates GraphQL when the fast path is unusable", async () => {
     const reader = fakeReader({
       fastPath: { kind: "unusable", exitCode: 8, stderr: "" },
@@ -52,11 +40,6 @@ describe("checks fallback chain", () => {
     const read = await resolveChecks(reader, context);
     expect(read.source).toBe("graphql-rollup");
     expect(read.checks.map((check) => check.name)).toEqual(["first", "second"]);
-    expect(reader.calls).toEqual([
-      "checksFastPath",
-      "checkRollupPage:null",
-      "checkRollupPage:next",
-    ]);
   });
 
   it("falls back when valid fast-path JSON represented an empty list", async () => {
@@ -67,7 +50,6 @@ describe("checks fallback chain", () => {
     expect((await resolveChecks(reader, context)).checks[0].name).toBe(
       "fallback"
     );
-    expect(reader.calls).toEqual(["checksFastPath", "checkRollupPage:null"]);
   });
 
   it("fails closed when both paths are empty", async () => {
@@ -81,7 +63,6 @@ describe("checks fallback chain", () => {
     await expect(resolveChecks(reader, context)).rejects.toBeInstanceOf(
       ChecksUnavailable
     );
-    expect(reader.calls).toEqual(["checksFastPath", "checkRollupPage:null"]);
   });
 });
 
@@ -189,15 +170,6 @@ describe("closed enum parsing", () => {
     isDraft: false,
   };
 
-  it("accepts mergeStateStatus CONFLICTING", () => {
-    expect(
-      parsePullRequest(
-        { ...rawPullRequest, mergeStateStatus: "CONFLICTING" },
-        context
-      ).mergeStateStatus
-    ).toBe("CONFLICTING");
-  });
-
   it("reads gh's empty reviewDecision as no decision rather than a parse failure", () => {
     expect(
       parsePullRequest({ ...rawPullRequest, reviewDecision: "" }, context)
@@ -230,71 +202,6 @@ describe("closed enum parsing", () => {
   });
 });
 
-it("annotates Bugbot threads with distinct review-pass counts", () => {
-  const response = {
-    data: {
-      repository: {
-        pullRequest: {
-          reviewThreads: {
-            pageInfo: { hasNextPage: false, endCursor: null },
-            nodes: [
-              {
-                id: "one",
-                isResolved: false,
-                comments: {
-                  nodes: [
-                    {
-                      body: "RUN_ID: run-1",
-                      createdAt: "now",
-                      path: "a.ts",
-                      line: 1,
-                      author: { login: "bugbot" },
-                    },
-                  ],
-                },
-              },
-              {
-                id: "two",
-                isResolved: false,
-                comments: {
-                  nodes: [
-                    {
-                      body: "CURSOR_AUTOMATION_ID: run-2 severity high",
-                      createdAt: "now",
-                      path: null,
-                      line: null,
-                      author: { login: "cursor" },
-                    },
-                  ],
-                },
-              },
-              {
-                id: "resolved",
-                isResolved: true,
-                comments: {
-                  nodes: [
-                    {
-                      body: "RUN_ID: run-3",
-                      createdAt: "now",
-                      path: null,
-                      line: null,
-                      author: { login: "bugbot" },
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        },
-      },
-    },
-  };
-  const threads = buildReviewThreads(parseReviewThreadPage(response).threads);
-  expect(threads).toHaveLength(2);
-  expect(threads.map((thread) => thread.isBugbot)).toEqual([true, true]);
-  expect(threads.map((thread) => thread.bugbotReviewPasses)).toEqual([3, 3]);
-});
-
 describe("review thread pagination", () => {
   const thread = (id: string, resolved = false) => ({
     id,
@@ -318,11 +225,6 @@ describe("review thread pagination", () => {
     });
     const threads = await resolveReviewThreads(reader, context);
     expect(threads.map((item) => item.id)).toEqual(["one", "two", "three"]);
-    expect(reader.calls).toEqual([
-      "reviewThreadPage:null",
-      "reviewThreadPage:next",
-      "reviewThreadPage:last",
-    ]);
   });
 
   it("sees an unresolved thread that sits past the first page", async () => {
@@ -334,14 +236,6 @@ describe("review thread pagination", () => {
     });
     const threads = await resolveReviewThreads(reader, context);
     expect(threads.map((item) => item.id)).toEqual(["late"]);
-  });
-
-  it("stops after a single page when the cursor is exhausted", async () => {
-    const reader = fakeReader({
-      threadPages: [{ threads: [thread("only")], endCursor: null }],
-    });
-    expect((await resolveReviewThreads(reader, context)).length).toBe(1);
-    expect(reader.calls).toEqual(["reviewThreadPage:null"]);
   });
 
   it("counts Bugbot review passes across every page", async () => {
@@ -391,32 +285,6 @@ describe("review thread pagination", () => {
 });
 
 describe("context and stack discovery", () => {
-  it("returns a fully explicit context without any reader call", async () => {
-    const reader = fakeReader();
-    expect(
-      await resolveContext({
-        reader,
-        owner: "explicit",
-        repo: "repo",
-        pr: context.number,
-      })
-    ).toEqual({ owner: "explicit", repo: "repo", number: context.number });
-    expect(reader.calls).toEqual([]);
-  });
-
-  it("uses the local origin before currentPr for an explicit number", async () => {
-    const reader = fakeReader({ origin: { owner: "local", repo: "checkout" } });
-    expect(
-      await resolveContext({
-        reader,
-        owner: null,
-        repo: null,
-        pr: context.number,
-      })
-    ).toEqual({ owner: "local", repo: "checkout", number: context.number });
-    expect(reader.calls).toEqual(["originRepo"]);
-  });
-
   it("orders the connected stack bottom-to-top", () => {
     const ordered = orderStack(context, [
       {

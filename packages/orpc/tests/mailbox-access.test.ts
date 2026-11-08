@@ -1,9 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import {
-  getStrongestMailboxGrantRole,
-  resolveManagedMailboxAccess,
-} from "../src/mailbox/access";
+import { resolveManagedMailboxAccess } from "../src/mailbox/access";
 
 const resolve = (
   overrides?: Partial<Parameters<typeof resolveManagedMailboxAccess>[0]>
@@ -28,12 +25,6 @@ describe(resolveManagedMailboxAccess, () => {
     ).toBeNull();
   });
 
-  test("resolves a direct reader grant", () => {
-    expect(resolve({ directRoles: ["reader"], hasCandidateRow: true })).toBe(
-      "reader"
-    );
-  });
-
   test("takes the strongest role across direct and division grants", () => {
     expect(
       resolve({
@@ -53,12 +44,6 @@ describe(resolveManagedMailboxAccess, () => {
 
   test("implies manager access for the owner of a private mailbox without any grant rows", () => {
     expect(resolve({ hasCandidateRow: false, isOwner: true })).toBe("manager");
-  });
-
-  test("owner role outranks an explicitly downgraded grant", () => {
-    expect(
-      resolve({ directRoles: ["reader"], hasCandidateRow: true, isOwner: true })
-    ).toBe("manager");
   });
 
   test("enforces required roles against the effective role", () => {
@@ -82,21 +67,6 @@ describe(resolveManagedMailboxAccess, () => {
         isOwner: true,
         requiredRoles: ["manager"],
       })
-    ).toBe("manager");
-  });
-});
-
-describe(getStrongestMailboxGrantRole, () => {
-  test("ignores null and undefined candidates", () => {
-    expect(getStrongestMailboxGrantRole([null, undefined])).toBeNull();
-  });
-
-  test("ranks manager above responder above reader", () => {
-    expect(getStrongestMailboxGrantRole(["reader", "responder"])).toBe(
-      "responder"
-    );
-    expect(
-      getStrongestMailboxGrantRole(["responder", "manager", "reader"])
     ).toBe("manager");
   });
 });

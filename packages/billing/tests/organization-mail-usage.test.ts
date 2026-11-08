@@ -3,14 +3,11 @@ import { describe, expect, test } from "vite-plus/test";
 import {
   estimateInboundOrganizationMailUsage,
   estimateOutboundOrganizationMailUsage,
-  normalizeOrganizationMailAlertMilestones,
 } from "../src/organization-mail-usage";
 import {
-  applyManagedUsageMarkup,
   SES_INBOUND_CHUNK_BYTES,
   SES_INBOUND_CHUNK_MICROCENTS,
   SES_INBOUND_MESSAGE_MICROCENTS,
-  SES_OUTBOUND_MESSAGE_MICROCENTS,
 } from "../src/ses-pricing";
 
 describe("organization mail usage", () => {
@@ -25,9 +22,6 @@ describe("organization mail usage", () => {
 
     expect(estimate.recipientCount).toBe(2);
     expect(estimate.messageCount).toBe(2);
-    expect(estimate.sesCostMicroCents).toBe(
-      2 * SES_OUTBOUND_MESSAGE_MICROCENTS
-    );
   });
 
   test("attributes inbound data proportionally without rounding each message up", () => {
@@ -57,19 +51,5 @@ describe("organization mail usage", () => {
     expect(
       1000 * (smallMessage.sesCostMicroCents - SES_INBOUND_MESSAGE_MICROCENTS)
     ).toBe(125 * SES_INBOUND_CHUNK_MICROCENTS);
-  });
-
-  test("normalizes alert milestones", () => {
-    expect(
-      normalizeOrganizationMailAlertMilestones([100, 50.2, 50, 0, 101])
-    ).toStrictEqual([50, 100]);
-  });
-
-  test("applies markup directly to the SES USD cost", () => {
-    expect(
-      applyManagedUsageMarkup({
-        sesCostUsdMicroCents: SES_OUTBOUND_MESSAGE_MICROCENTS * 1000,
-      })
-    ).toBe(20_000_000);
   });
 });

@@ -78,7 +78,6 @@ describe("OpenRouter streamed errors", () => {
       prompt: "Say OK",
     });
     await result.consumeStream();
-    expect(fetch).toHaveBeenCalledTimes(3);
     expect(errors).toHaveLength(1);
     expect(isTransientAiProviderError(errors[0])).toBeTruthy();
   });

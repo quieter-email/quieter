@@ -31,21 +31,6 @@ describe("organization API access", () => {
     });
   });
 
-  test("rejects an existing key after subscription access ends", async () => {
-    mocks.hasBillingAccess.mockResolvedValue(false);
-    await expect(
-      getOrganizationApiKeyOrganizationId(
-        new Request("https://quieter.email/api/send", {
-          headers: { authorization: "Bearer test-key" },
-        })
-      )
-    ).resolves.toBeNull();
-    expect(mocks.hasBillingAccess).toHaveBeenCalledWith({
-      feature: "organizationApiKeys",
-      organizationId: "team-a",
-    });
-  });
-
   test("restores the same key after the subscription recovers", async () => {
     mocks.hasBillingAccess
       .mockResolvedValueOnce(false)

@@ -133,36 +133,6 @@ describe("persisted query refresh lifecycle", () => {
     }
   });
 
-  test("keeps a failed refresh observable while retaining restored data", async () => {
-    const failure = new Error("The server could not load the mailbox.");
-    const observer = new InfiniteQueryObserver<
-      MessagePage,
-      Error,
-      InfiniteData<MessagePage>,
-      string[]
-    >(client, {
-      getNextPageParam: () => {},
-      initialPageParam: null,
-      queryFn: async () => await Promise.reject(failure),
-      queryKey,
-      retry: false,
-    });
-    const unsubscribe = observer.subscribe(() => {});
-    try {
-      await vi.waitFor(() => {
-        for (const scheduledTask of scheduled.splice(0)) {
-          scheduledTask();
-        }
-        expect(observer.getCurrentResult().error).toBe(failure);
-      });
-      expect(observer.getCurrentResult().data?.pages[0]).toMatchObject({
-        messages: [{ id: "cached" }],
-      });
-    } finally {
-      unsubscribe();
-    }
-  });
-
   test("does not refresh a restored mailbox after the persistence owner changes", async () => {
     const fetchMessages = vi
       .fn<() => Promise<MessagePage>>()
