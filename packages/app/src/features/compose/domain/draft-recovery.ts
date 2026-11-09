@@ -7,6 +7,7 @@ import {
   composeDraftAnchorSchema,
   composeSenderNameSchema,
 } from "@quieter/mail/compose/schema";
+import { followUpReminderIntentSchema } from "@quieter/mail/reminders";
 import { z } from "zod";
 
 const assetSchema = z.object({
@@ -27,6 +28,7 @@ export const recoverableDraftSchema = z.object({
   draftAnchor: composeDraftAnchorSchema.nullable().optional(),
   draftId: z.string().optional(),
   errorMessage: z.string().nullable(),
+  followUpReminder: followUpReminderIntentSchema.nullable().optional(),
   inlineImages: z.array(
     assetSchema.extend({ contentId: z.string(), isInline: z.literal(true) })
   ),

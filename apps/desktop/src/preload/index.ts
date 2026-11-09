@@ -1,7 +1,13 @@
 import { setupRenderer } from "@better-auth/electron/preload";
 import { contextBridge, ipcRenderer } from "electron";
 
-import { DESKTOP_APP_ORIGIN, signOutCleanupCommand } from "../shared/bridge";
+import {
+  DESKTOP_APP_ORIGIN,
+  reminderNotificationEvent,
+  reminderNotificationResult,
+  reminderNotificationStatus,
+  signOutCleanupCommand,
+} from "../shared/bridge";
 import type { DesktopBridge } from "../shared/bridge";
 
 setupRenderer();
@@ -49,6 +55,41 @@ contextBridge.exposeInMainWorld("quieterDesktop", {
     await ipcRenderer.invoke("quieter:open-external", url);
   },
   platform: process.platform,
+  reminderNotifications: {
+    getStatus: async () =>
+      reminderNotificationStatus.parse(
+        await ipcRenderer.invoke("quieter:reminder-notification-status")
+      ),
+    onOpen: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, input: unknown) => {
+        const parsed = reminderNotificationEvent.safeParse(input);
+        if (parsed.success) {
+          listener(parsed.data);
+        }
+      };
+      ipcRenderer.on("quieter:reminder-notification-open", receive);
+      return () => {
+        ipcRenderer.removeListener(
+          "quieter:reminder-notification-open",
+          receive
+        );
+      };
+    },
+    setEnabled: async (enabled) =>
+      reminderNotificationStatus.parse(
+        await ipcRenderer.invoke(
+          "quieter:reminder-notification-enabled",
+          enabled
+        )
+      ),
+    show: async (event) =>
+      reminderNotificationResult.parse(
+        await ipcRenderer.invoke("quieter:reminder-notification-show", event)
+      ),
+  },
+  setReminderNotificationUser: async (userId) => {
+    await ipcRenderer.invoke("quieter:reminder-notification-user", userId);
+  },
   setTitleBarColors: async (colors: {
     background: string;
     foreground: string;

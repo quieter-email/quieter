@@ -43,6 +43,7 @@ import {
   appMotionDuration,
   getAppPresenceMotion,
 } from "@quieter/app/features/motion/app-motion";
+import { ComposeFollowUp } from "@quieter/app/features/reminders/compose-follow-up";
 import { USER_BILLING_QUERY_KEY } from "@quieter/app/features/settings/domain/billing";
 import { useAudioRecorder } from "@quieter/app/lib/audio-recorder";
 import {
@@ -1403,6 +1404,14 @@ const ReadyComposeSurface = ({
                             </ToolbarButton>
                           </IconButtonTooltip>
                           <ComposeEditorDictationButton />
+                          <ComposeFollowUp
+                            value={state.draft.followUpReminder}
+                            subject={state.draft.subject}
+                            disabled={
+                              !canEditBody || demoMode || managedDemoMode
+                            }
+                            onChange={compose.handleFollowUpReminderChange}
+                          />
                           <IconButtonTooltip
                             label={
                               state.draft.draftId ? "Discard draft" : "Discard"
@@ -1472,6 +1481,18 @@ const ReadyComposeSurface = ({
               This sending address is no longer available. You can keep editing,
               but sending is disabled.
             </Text>
+          ) : null}
+          {state.draft.followUpReminder ? (
+            <output className="px-4 py-2 text-caption text-muted-fg">
+              Follow-up reminder,{" "}
+              {new Intl.DateTimeFormat(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short",
+                timeZone: state.draft.followUpReminder.timeZone,
+              }).format(new Date(state.draft.followUpReminder.dueAt))}
+              , {state.draft.followUpReminder.timeZone}. Waiting for{" "}
+              {state.draft.followUpReminder.condition}
+            </output>
           ) : null}
           {state.draft.errorMessage ? (
             <Text

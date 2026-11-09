@@ -1,6 +1,7 @@
 import type { MessageAttachment } from "@quieter/app/lib/mail";
 import { rpc } from "@quieter/app/lib/orpc";
 import type { ComposeDraftAnchor } from "@quieter/mail/compose/schema";
+import type { FollowUpReminderIntent } from "@quieter/mail/reminders";
 
 const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;
 const CONTENT_ID_PREFIX = "quieter-inline";
@@ -38,6 +39,7 @@ type ComposeInlineImage = ComposeAssetBase & {
 };
 
 export type ComposeDraftState = {
+  followUpReminder?: FollowUpReminderIntent | null;
   assistantUnsaved?: boolean;
   localId: string;
   baseRevision?: string;
@@ -199,6 +201,8 @@ export const haveComposeDraftPersistedFieldsChanged = (
     current.recipients.cc === next.recipients.cc &&
     current.recipients.bcc === next.recipients.bcc &&
     current.subject === next.subject &&
+    JSON.stringify(current.followUpReminder ?? null) ===
+      JSON.stringify(next.followUpReminder ?? null) &&
     (current.senderName?.trim() ?? "") === (next.senderName?.trim() ?? "") &&
     current.bodyHtml === next.bodyHtml &&
     current.bodyText === next.bodyText &&
@@ -712,6 +716,7 @@ const serializeDraft = async (
   return {
     ...draft,
     attachments,
+    followUpReminder: draft.followUpReminder ?? undefined,
     inlineImages,
   };
 };

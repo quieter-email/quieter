@@ -20,6 +20,7 @@ import type {
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
 import { MessageList } from "@quieter/app/features/message-list/components/message-list";
 import type { MessageListMailboxContext } from "@quieter/app/features/message-list/components/message-list-types";
+import { ReminderDueStrip } from "@quieter/app/features/reminders/reminder-due-strip";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
@@ -510,6 +511,14 @@ export const UnifiedInboxPanel = ({
       : null;
   const listNotices = (
     <>
+      <ReminderDueStrip
+        scopes={selectedMailboxes.map((mailbox) => ({
+          demo:
+            isGmailSandboxMailboxId(mailbox.id) ||
+            isManagedSandboxMailboxId(mailbox.id),
+          mailboxId: mailbox.id,
+        }))}
+      />
       {hasUnsupportedSearch && (
         <div
           className="flex items-center justify-between gap-3 rounded-md bg-muted px-3 py-2 text-body-sm"

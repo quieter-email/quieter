@@ -61,6 +61,7 @@ import {
   composeDraftFormValuesSchema,
   composeSendFormValuesSchema,
 } from "@quieter/mail/compose/schema";
+import type { FollowUpReminderIntent } from "@quieter/mail/reminders";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
@@ -238,6 +239,7 @@ export const useComposeDialogController = ({
       draftAnchor: draft.draftAnchor,
       draftId: draft.draftId,
       errorMessage: null,
+      followUpReminder: draft.followUpReminder,
       inlineImages: draft.inlineImages,
       lastSavedAt: draft.lastSavedAt,
       localId: draft.localId,
@@ -1560,6 +1562,26 @@ export const useComposeDialogController = ({
     recovery.checkpoint();
   };
 
+  const handleFollowUpReminderChange = (
+    followUpReminder: FollowUpReminderIntent | null
+  ) => {
+    if (
+      finishingRef.current ||
+      activeDraftRef.current.sendUncertain === true ||
+      activeDraftRef.current.saveStatus === "sending"
+    ) {
+      return;
+    }
+    handleUserDraftChange();
+    draftRevisionRef.current += 1;
+    setDraft((current) => ({
+      ...current,
+      followUpReminder,
+      updatedAt: Date.now(),
+    }));
+    recovery.checkpoint();
+  };
+
   return {
     addAttachmentFiles,
     addInlineImageFiles,
@@ -1585,6 +1607,7 @@ export const useComposeDialogController = ({
     discardActiveDraft,
     form,
     handleDialogOpenChange,
+    handleFollowUpReminderChange,
     handleUserDraftChange,
     prepareSenderSwitch,
     removeAttachment,

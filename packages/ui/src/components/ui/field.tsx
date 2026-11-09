@@ -53,10 +53,19 @@ export const Field = ({
 
 export const FieldLabel = ({
   className,
+  size = "default",
   ...props
-}: ComponentPropsWithoutRef<typeof FieldPrimitive.Label>) => (
+}: ComponentPropsWithoutRef<typeof FieldPrimitive.Label> & {
+  size?: "default" | "caption";
+}) => (
   <FieldPrimitive.Label
-    className={cn("text-body font-medium text-fg", className)}
+    className={cn(
+      {
+        "text-body font-medium text-fg": size === "default",
+        "text-caption font-normal text-muted-fg": size === "caption",
+      },
+      className
+    )}
     {...props}
   />
 );

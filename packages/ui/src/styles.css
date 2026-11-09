@@ -578,7 +578,7 @@
 }
 
 .card-stack-row {
-  @apply group relative flex h-10 min-w-0 items-center gap-2 rounded-md bg-section px-3;
+  @apply relative flex h-10 min-w-0 items-center gap-2 rounded-md bg-section px-3;
 }
 
 .card-stack-row-summary {
@@ -603,6 +603,13 @@
 
 .card-stack-footer {
   @apply flex justify-center;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card-stack-row:not(:hover, :focus-within, :has([data-popup-open]))
+    [data-card-stack-actions] {
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -34,9 +34,11 @@ import { LabelsWorkspacePanel } from "@quieter/app/features/message-labels/compo
 import { MailSidebar } from "@quieter/app/features/navigation/components/mail-sidebar";
 import { MailboxOrganizer } from "@quieter/app/features/navigation/components/mailbox-organizer";
 import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/components/mailbox-switcher";
+import type { ReminderOpenRequest } from "@quieter/app/features/reminders/reminders-panel";
 import { useMailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
+import { appRuntime } from "@quieter/app/runtime";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
@@ -508,9 +510,51 @@ const MailboxWorkspaceContentInner = ({
   const composeMailbox = mailboxes.find(
     (mailbox) => mailbox.id === selectedMailboxId
   );
+  const reminderRouteId = inboxRouteApi.useSearch({
+    select: (search) => search.reminderId,
+  });
+  const [assistantTab, setAssistantTab] = useState<"chat" | "reminders">(
+    "chat"
+  );
+  const [reminderRequest, setReminderRequest] =
+    useState<ReminderOpenRequest | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantOpened, setAssistantOpened] = useState(false);
   const [assistantFocusRequest, setAssistantFocusRequest] = useState(0);
+  useEffect(
+    () =>
+      appRuntime.reminderNotifications?.onOpen((event) => {
+        void setMailboxSearch({
+          mailbox: "inbox",
+          mailboxId: event.mailboxId,
+          messageId: null,
+          reminderId: event.reminderId,
+          threadId: null,
+          workspace: null,
+        });
+      }),
+    [setMailboxSearch]
+  );
+  useEffect((): (() => void) | undefined => {
+    if (reminderRouteId) {
+      const frame = requestAnimationFrame(() => {
+        setAssistantTab("reminders");
+        setReminderRequest({
+          id: crypto.randomUUID(),
+          mailboxId: selectedMailboxId ?? "",
+          reminderId: reminderRouteId,
+        });
+        setAssistantOpened(true);
+        setAssistantFocusRequest((current) => current + 1);
+        setAssistantOpen(true);
+        void setMailboxSearch({ reminderId: null });
+      });
+      return () => {
+        cancelAnimationFrame(frame);
+      };
+    }
+    return undefined;
+  }, [reminderRouteId, selectedMailboxId, setMailboxSearch]);
   const [combinedFocusTarget, setCombinedFocusTarget] = useState<{
     mailboxId: string;
     messageId: string;
@@ -869,6 +913,30 @@ const MailboxWorkspaceContentInner = ({
         value={
           selectedMailboxId && selectedMailboxProvider !== "api"
             ? {
+                onCreateReminder: async (input) => {
+                  const show = () => {
+                    assistantAutoCollapsedRef.current = false;
+                    setAssistantTab("reminders");
+                    setReminderRequest({
+                      id: crypto.randomUUID(),
+                      mailboxId: input.mailboxId,
+                      target: input.target,
+                      title: input.title,
+                    });
+                    setAssistantOpened(true);
+                    setAssistantFocusRequest((current) => current + 1);
+                    setAssistantOpen(true);
+                  };
+                  if (input.mailboxId !== selectedMailboxId) {
+                    await setMailboxSearch({
+                      mailbox: "inbox",
+                      mailboxId: input.mailboxId,
+                      messageId: null,
+                      threadId: null,
+                    });
+                  }
+                  show();
+                },
                 onOpen: (trigger) => {
                   assistantTriggerRef.current = trigger;
                   assistantAutoCollapsedRef.current = false;
@@ -883,6 +951,36 @@ const MailboxWorkspaceContentInner = ({
                   } catch {
                     // Opening remains available without persistent storage.
                   }
+                },
+                onOpenReminders: async (trigger, mailboxId, reminderId) => {
+                  if (trigger) {
+                    assistantTriggerRef.current = trigger;
+                  }
+                  const show = () => {
+                    assistantAutoCollapsedRef.current = false;
+                    setAssistantTab("reminders");
+                    setReminderRequest(
+                      reminderId
+                        ? {
+                            id: crypto.randomUUID(),
+                            mailboxId: mailboxId ?? selectedMailboxId,
+                            reminderId,
+                          }
+                        : null
+                    );
+                    setAssistantOpened(true);
+                    setAssistantFocusRequest((current) => current + 1);
+                    setAssistantOpen(true);
+                  };
+                  if (mailboxId && mailboxId !== selectedMailboxId) {
+                    await setMailboxSearch({
+                      mailbox: "inbox",
+                      mailboxId,
+                      messageId: null,
+                      threadId: null,
+                    });
+                  }
+                  show();
                 },
                 open: assistantOpen,
                 panelId: assistantPanelId,
@@ -947,6 +1045,14 @@ const MailboxWorkspaceContentInner = ({
               sidebar={
                 selectedMailboxId && selectedMailboxProvider !== "api" ? (
                   <AssistantSidebar
+                    tab={assistantTab}
+                    onTabChange={setAssistantTab}
+                    reminderRequest={
+                      reminderRequest?.mailboxId === selectedMailboxId
+                        ? reminderRequest
+                        : null
+                    }
+                    demo={isDemoMode || isManagedDemoMode}
                     mailboxId={selectedMailboxId}
                     id={assistantPanelId}
                     focusRequest={assistantFocusRequest}
@@ -998,7 +1104,7 @@ const MailboxWorkspaceContentInner = ({
                         )}
                         <ChatView
                           docked
-                          visible={assistantOpen}
+                          visible={assistantOpen && assistantTab === "chat"}
                           activeMailbox={activeMailbox ?? "inbox"}
                           mailContext={chatContext}
                           chatId={chatId}

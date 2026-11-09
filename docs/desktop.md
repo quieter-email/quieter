@@ -32,6 +32,12 @@ Electron keeps sessions in the main process. Its storage is encrypted using the 
 
 Gmail connection, external connectors, checkout, legal pages, and passkey management open in the system browser. Returning to the desktop refreshes server state. Browser analytics and consent scripts are not initialized by the desktop entrypoint.
 
+## Reminder notifications
+
+Enable native notifications from the Reminders tab. The preference belongs to the signed-in account. Notifications contain generic text rather than reminder titles or mail content. Clicking one restores the app and opens its mailbox and reminder. Sign-out clears active notifications.
+
+Delivery requires the app to be running or minimized. Fully quitting the app stops delivery until it opens again. Missed reminders remain in the reminder list. Operating-system notification settings can block popups. Unsigned macOS development builds cannot prove native notification delivery. See [personal mailbox reminders](reminders.md) for scheduling and retry behavior.
+
 ## Build and package
 
 ```sh

@@ -5,6 +5,7 @@ import {
   FileAttachmentIcon,
   LayoutRightIcon,
   Mail01Icon,
+  MoreVerticalIcon,
   Refresh01Icon,
   Search01Icon,
   Tick01Icon,
@@ -36,6 +37,7 @@ import {
 } from "@quieter/ui/alert-dialog";
 import { Autocomplete } from "@quieter/ui/autocomplete";
 import { Button, LinkButton } from "@quieter/ui/button";
+import { CardStack } from "@quieter/ui/card-stack";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -616,6 +618,7 @@ export const DesignSystemShowcase = () => {
   }, []);
   const [labelColor, setLabelColor] = useState<MailboxLabelColor>("blue");
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [cardStackOpen, setCardStackOpen] = useState(false);
   const [showPromptContext, setShowPromptContext] = useState(true);
   const [location, setLocation] = useState("");
   const [date, setDate] = useState("2026-10-27");
@@ -683,6 +686,14 @@ export const DesignSystemShowcase = () => {
                 <Text size="sm">Dense section content</Text>
               </Surface>
             </div>
+          </Surface>
+          <Surface chrome="compact" padding="snug" variant="section">
+            <Text size="sm" weight="medium">
+              Compact section
+            </Text>
+            <Text size="caption" tone="muted">
+              A quiet summary with twelve pixel content padding.
+            </Text>
           </Surface>
           <Surface padding="compact" variant="panel">
             <Surface padding="compact">
@@ -1645,6 +1656,11 @@ export const DesignSystemShowcase = () => {
         </Section>
 
         <Section title="Selection and keyboard controls">
+          <Row label="Inline text action">
+            <Button size="text" variant="ghost">
+              Open mail
+            </Button>
+          </Row>
           <Row label="Tabs">
             <Tabs defaultValue="mail">
               <TabsList aria-label="Example workspace tabs">
@@ -1654,6 +1670,103 @@ export const DesignSystemShowcase = () => {
               <TabsPanel value="mail">Mail content</TabsPanel>
               <TabsPanel value="calendar">Calendar content</TabsPanel>
             </Tabs>
+          </Row>
+          <Row label="Compact reminder stack">
+            <div className="w-80 max-w-full">
+              <CardStack
+                items={[
+                  {
+                    id: "proposal",
+                    time: "Due now",
+                    title: "Follow up on the proposal",
+                  },
+                  {
+                    id: "renewal",
+                    time: "In 20 minutes",
+                    title: "Review the renewal",
+                  },
+                  {
+                    id: "application",
+                    time: "In 30 minutes",
+                    title: "Submit the application",
+                  },
+                ].map((card) => ({
+                  content: (
+                    <>
+                      <Checkbox aria-label={`Complete ${card.title}`}>
+                        <CheckboxIndicator />
+                      </Checkbox>
+                      <Button
+                        className="min-w-0 flex-1"
+                        onClick={() => {
+                          toast(card.title);
+                        }}
+                        variant="inline-edit"
+                      >
+                        <span className="truncate">{card.title}</span>
+                      </Button>
+                      <span className="shrink-0 text-caption text-muted-fg">
+                        {card.time}
+                      </span>
+                      <div className="shrink-0" data-card-stack-actions>
+                        <DropdownMenu>
+                          <IconButtonTooltip label="Reminder actions">
+                            <DropdownMenuTrigger
+                              appearance="icon-transparent"
+                              aria-label="Reminder actions"
+                            >
+                              <Icon icon={MoreVerticalIcon} size={14} />
+                            </DropdownMenuTrigger>
+                          </IconButtonTooltip>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                toast("Reminder snoozed");
+                              }}
+                            >
+                              Snooze
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                toast("Edit reminder");
+                              }}
+                            >
+                              Edit reminder
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </>
+                  ),
+                  id: card.id,
+                }))}
+                label="Due reminders"
+                onOpenChange={setCardStackOpen}
+                open={cardStackOpen}
+                totalCount={3}
+              />
+            </div>
+          </Row>
+          <Row label="Plain tabs">
+            <Tabs defaultValue="reminders">
+              <TabsList
+                aria-label="Example plain workspace tabs"
+                variant="plain"
+              >
+                <TabsTab value="chat">Chat</TabsTab>
+                <TabsTab value="reminders">
+                  Reminders<span className="text-caption text-muted-fg">4</span>
+                </TabsTab>
+              </TabsList>
+              <TabsPanel value="chat">Chat content</TabsPanel>
+              <TabsPanel value="reminders">Reminder content</TabsPanel>
+            </Tabs>
+          </Row>
+          <Row label="Caption field label">
+            <Field>
+              <FieldLabel size="caption">Reminder</FieldLabel>
+              <Input defaultValue="Review the proposal" />
+            </Field>
           </Row>
           <Row label="Vertical tabs">
             <Tabs defaultValue="account" orientation="vertical">

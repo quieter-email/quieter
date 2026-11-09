@@ -37,6 +37,10 @@ import {
   useMessageViewFocus,
   useMessageViewHotkeys,
 } from "@quieter/app/features/message-thread/components/use-message-view";
+import {
+  MessageReminderQuickAction,
+  MessageReminderSuggestion,
+} from "@quieter/app/features/reminders/message-reminders";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { parseSender } from "@quieter/app/lib/gmail/message-utils";
 import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
@@ -355,6 +359,12 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             labelIds={threadLabelIds}
             labels={gmailLabels}
           />
+          {mailboxProvider === "api" || activeMailbox === "drafts" ? null : (
+            <MessageReminderQuickAction
+              mailboxId={mailboxId}
+              message={hotkeyMessage}
+            />
+          )}
           {canSetThreadImportance && (
             <IconButtonTooltip label={importanceLabel}>
               <Button
@@ -410,6 +420,16 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           </div>
         )}
 
+        {mailboxProvider === "api" ||
+        activeMailbox === "drafts" ||
+        composeDemoMode === true ||
+        composeManagedDemoMode === true ? null : (
+          <MessageReminderSuggestion
+            key={`${mailboxId}:${hotkeyMessage.id}`}
+            mailboxId={mailboxId}
+            message={hotkeyMessage}
+          />
+        )}
         <MessageAttachments
           attachments={threadAttachments}
           className="mt-3"

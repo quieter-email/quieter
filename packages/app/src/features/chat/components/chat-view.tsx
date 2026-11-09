@@ -36,6 +36,7 @@ import { rpc } from "@quieter/app/lib/orpc";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appFetch, getApiUrl } from "@quieter/app/runtime";
 import { calendarMutationResultSchema } from "@quieter/calendar";
+import { reminderSchema } from "@quieter/mail/reminders";
 import type { RouterOutputs } from "@quieter/orpc";
 import { decodeChatStreamError } from "@quieter/orpc/chat-errors";
 import { Button } from "@quieter/ui/button";
@@ -186,6 +187,25 @@ const ChatSession = ({
             continue;
           }
           const toolName = part.type.replace("tool-", "");
+          if (
+            toolName === "create_reminder" ||
+            toolName === "change_reminder"
+          ) {
+            const receipt = reminderSchema.safeParse(part.output);
+            if (
+              receipt.success &&
+              receipt.data.mailboxId === workspace.mailboxId
+            ) {
+              appliedReceipts.current.add(part.toolCallId);
+              void queryClient.invalidateQueries({
+                queryKey: ["reminders", workspace.mailboxId, "remote"],
+              });
+              void queryClient.invalidateQueries({
+                queryKey: ["reminder-suggestion", workspace.mailboxId],
+              });
+            }
+            continue;
+          }
           if (isCalendarWriteToolName(toolName)) {
             const receipt = calendarMutationResultSchema.safeParse(part.output);
             const command = calendarWriteInputSchemas[toolName].safeParse(

@@ -35,6 +35,7 @@ export type MailboxSearchPatch = {
   mailbox?: MailboxRouteCategory;
   mailboxId?: string | null;
   messageId?: string | null;
+  reminderId?: string | null;
   threadId?: string | null;
   query?: string | null;
   view?: MailboxWorkspaceView;
@@ -58,6 +59,7 @@ export type MailboxRouteState = {
   mailboxId?: string;
   mailto?: string;
   messageId?: string;
+  reminderId?: string;
   query: string;
   threadId?: string;
   view?: MailboxWorkspaceView;
@@ -105,6 +107,10 @@ export const applyMailboxSearchPatch = (
         : normalizeSearchValue(patch.messageId),
     query:
       patch.query === undefined ? state.query : (patch.query?.trim() ?? ""),
+    reminderId:
+      patch.reminderId === undefined
+        ? state.reminderId
+        : normalizeSearchValue(patch.reminderId),
     threadId,
     view: patch.view ?? state.view,
   };

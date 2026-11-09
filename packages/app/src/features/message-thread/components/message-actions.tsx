@@ -2,6 +2,7 @@
 
 import {
   Archive02Icon,
+  Clock01Icon,
   Flag01Icon,
   Delete01Icon,
   Delete02Icon,
@@ -14,6 +15,7 @@ import {
   NotificationOff01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
+import { AssistantSidebarContext } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { MessageLabelsSubmenu } from "@quieter/app/features/message-labels/components/message-labels-menu";
 import type {
   MessageLabelsTarget,
@@ -44,7 +46,10 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { use } from "react";
 import type { CSSProperties, PropsWithChildren } from "react";
+
+import { useQuickReminder } from "../../reminders/quick-reminder";
 
 type MessageActionsSharedProps = {
   actions: ThreadActionHandlers;
@@ -396,7 +401,14 @@ const createMessageActionEntries = ({
   return entries;
 };
 
-const useMessageActionEntries = (props: MessageActionsSharedProps) => {
+const useMessageActionEntries = (
+  props: MessageActionsSharedProps
+): { entries: MenuEntry[]; isBusy: boolean } => {
+  const sidebar = use(AssistantSidebarContext);
+  const quickReminder = useQuickReminder({
+    mailboxId: props.mailboxId,
+    message: props.message,
+  });
   const isUnread = props.isUnread ?? isMessageUnread(props.message);
   const isBusy = props.isPending === true;
 
@@ -405,12 +417,66 @@ const useMessageActionEntries = (props: MessageActionsSharedProps) => {
   }
 
   return {
-    entries: createMessageActionEntries({
-      isBusy,
-      isUnread,
-      props,
-      unsubscribeTarget: getMessageUnsubscribeTarget(props.message),
-    }),
+    entries: [
+      {
+        disabled: quickReminder.isPending,
+        icon: Clock01Icon,
+        id: "reminder-tomorrow",
+        label: "Remind me tomorrow morning",
+        onAction: () => {
+          quickReminder.mutate("tomorrow");
+        },
+        type: "item",
+      },
+      {
+        disabled: quickReminder.isPending,
+        icon: Clock01Icon,
+        id: "reminder-week",
+        label: "Remind me next week",
+        onAction: () => {
+          quickReminder.mutate("week");
+        },
+        type: "item",
+      },
+      {
+        disabled: quickReminder.isPending,
+        icon: Clock01Icon,
+        id: "reminder-reply",
+        label: "Remind me if no reply in a week",
+        onAction: () => {
+          quickReminder.mutate("reply");
+        },
+        type: "item",
+      },
+      ...(sidebar
+        ? [
+            {
+              icon: Clock01Icon,
+              id: "reminder",
+              label: "Choose reminder date…",
+              onAction: () => {
+                void sidebar.onCreateReminder({
+                  mailboxId: props.mailboxId,
+                  target: {
+                    anchorMessageId: props.message.id,
+                    condition: null,
+                    kind: "thread",
+                    threadId: props.message.threadId,
+                  },
+                  title: props.message.subject || "Follow up",
+                });
+              },
+              type: "item",
+            } satisfies MenuEntry,
+          ]
+        : []),
+      ...createMessageActionEntries({
+        isBusy,
+        isUnread,
+        props,
+        unsubscribeTarget: getMessageUnsubscribeTarget(props.message),
+      }),
+    ],
     isBusy,
   };
 };
