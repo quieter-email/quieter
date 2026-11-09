@@ -97,10 +97,21 @@ export default {
           await import("@quieter/orpc/gmail-pubsub");
         const result = await withRequestDatabaseClient(
           async () =>
-            await processGmailPubSubNotification({
-              ...notification,
-              pubSubMessageId: delivery.data.message.messageId,
-            })
+            await processGmailPubSubNotification(
+              {
+                ...notification,
+                pubSubMessageId: delivery.data.message.messageId,
+              },
+              {
+                onAccepted: async () => {
+                  await broadcastGmailUpdate(
+                    env,
+                    notification.emailAddress,
+                    "mailbox.changed"
+                  );
+                },
+              }
+            )
         );
         if (!result.ignored) {
           await broadcastGmailUpdate(

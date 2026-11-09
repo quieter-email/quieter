@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { withRequestDatabaseClient } from "@quieter/database/client";
 import {
   getMailboxSyncDelta,
   getMessageAttachment,
@@ -11,9 +12,11 @@ import {
   listLabels,
 } from "@quieter/gmail";
 import { parseDraftMessage } from "@quieter/gmail/compose";
-import type { MailboxSyncDelta } from "@quieter/mail/messages";
+import type { CapturedMailSnapshot } from "@quieter/mail/capture";
+import type { MailboxSyncDelta, MessageListItem } from "@quieter/mail/messages";
 import type { MailSearchFilter } from "@quieter/mail/search";
 import type { MailSearchExpression } from "@quieter/mail/search-expression";
+import { reportError } from "@quieter/observability";
 
 import {
   captureMailboxDraftMemory,
@@ -53,6 +56,22 @@ import {
 } from "../organization-api-mail";
 import { loadDraftReminderIntent } from "../reminders/draft-state";
 import type { MailInputs } from "./inputs";
+
+const hydrateGmailMessageMetadata = async <T extends MessageListItem>(
+  mailboxId: string,
+  messages: T[]
+) => {
+  const [importance, unsubscribe] = await Promise.all([
+    hydrateMailImportance(mailboxId, messages),
+    hydrateUnsubscribeStatus(mailboxId, messages),
+  ]);
+  return importance.map((message, index) => {
+    const unsubscribeStatus = unsubscribe[index]?.unsubscribeStatus;
+    return unsubscribeStatus === undefined
+      ? message
+      : { ...message, unsubscribeStatus };
+  });
+};
 
 export const queriesMailOperations = {
   getAttachment: async ({
@@ -278,6 +297,7 @@ export const queriesMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    const snapshots: CapturedMailSnapshot[] = [];
     const thread =
       selectedMailbox.provider === "managed"
         ? await getManagedThread({ ...input, userId: context.userId })
@@ -289,12 +309,8 @@ export const queriesMailOperations = {
                 accessToken,
                 input.threadId,
                 signal,
-                async (snapshot) => {
-                  await writeGmailCapturedMessage({
-                    mailboxId: input.mailboxId,
-                    snapshot,
-                    source: "on_demand",
-                  });
+                (snapshot) => {
+                  snapshots.push(snapshot);
                 }
               )
           ).catch((error: unknown) => {
@@ -305,35 +321,76 @@ export const queriesMailOperations = {
             }
             throw error;
           });
-    const capture = Promise.all(
-      thread.messages.map(
-        async (message) =>
-          await captureMailboxMessageMemory({
-            actorUserId: context.userId,
-            mailboxId: input.mailboxId,
-            message,
-            source: "open",
-          })
-      )
-    );
+    const result =
+      selectedMailbox.provider === "managed"
+        ? thread
+        : {
+            ...thread,
+            messages: await hydrateGmailMessageMetadata(
+              input.mailboxId,
+              thread.messages
+            ),
+          };
+    const capture = (async () => {
+      try {
+        await withRequestDatabaseClient(async () => {
+          const failures: unknown[] = [];
+          for (const snapshot of snapshots) {
+            try {
+              await writeGmailCapturedMessage({
+                mailboxId: input.mailboxId,
+                snapshot,
+                source: "on_demand",
+              });
+            } catch (error) {
+              failures.push(error);
+            }
+          }
+          for (let offset = 0; offset < thread.messages.length; offset += 4) {
+            const outcomes = await Promise.allSettled(
+              thread.messages.slice(offset, offset + 4).map(
+                async (message) =>
+                  await captureMailboxMessageMemory({
+                    actorUserId: context.userId,
+                    mailboxId: input.mailboxId,
+                    message,
+                    source: "open",
+                  })
+              )
+            );
+            for (const outcome of outcomes) {
+              if (outcome.status === "rejected") {
+                failures.push(outcome.reason);
+              }
+            }
+          }
+          if (selectedMailbox.provider !== "managed") {
+            try {
+              await processPendingMailImportance({
+                limit: 4,
+                mailboxId: input.mailboxId,
+              });
+            } catch (error) {
+              failures.push(error);
+            }
+          }
+          if (failures.length > 0) {
+            throw new AggregateError(failures, "Thread capture failed.");
+          }
+        });
+      } catch (error) {
+        if (!context.scheduleBackgroundTask) {
+          throw error;
+        }
+        reportError(error, { operation: "mail:capture-open-thread" });
+      }
+    })();
     if (context.scheduleBackgroundTask) {
       context.scheduleBackgroundTask(capture);
     } else {
       await capture;
     }
-    if (selectedMailbox.provider === "managed") {
-      return thread;
-    }
-    context.scheduleBackgroundTask?.(
-      processPendingMailImportance({ limit: 4, mailboxId: input.mailboxId })
-    );
-    return {
-      ...thread,
-      messages: await hydrateUnsubscribeStatus(
-        input.mailboxId,
-        await hydrateMailImportance(input.mailboxId, thread.messages)
-      ),
-    };
+    return result;
   },
   listMessageDeliveryStatuses: async ({
     context,
@@ -457,9 +514,9 @@ export const queriesMailOperations = {
       historyId: page.historyId
         ? `gmail:${page.historyId}:${selectedMailbox.contentRevision}`
         : undefined,
-      messages: await hydrateUnsubscribeStatus(
+      messages: await hydrateGmailMessageMetadata(
         input.mailboxId,
-        await hydrateMailImportance(input.mailboxId, page.messages)
+        page.messages
       ),
     };
   },
@@ -542,9 +599,9 @@ export const queriesMailOperations = {
         : undefined,
       refreshFirstPage: delta.refreshFirstPage || appChanged,
       requiresFullRefresh: delta.requiresFullRefresh || appChanged,
-      updatedMessages: await hydrateUnsubscribeStatus(
+      updatedMessages: await hydrateGmailMessageMetadata(
         input.mailboxId,
-        await hydrateMailImportance(input.mailboxId, delta.updatedMessages)
+        delta.updatedMessages
       ),
     };
   },
