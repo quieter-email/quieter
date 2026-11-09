@@ -27,19 +27,17 @@ export const ReminderDetails = ({
   const active = reminder.status === "active";
   return (
     <article aria-label="Reminder details" className="space-y-5">
-      <div className="flex items-start gap-3">
-        <div className="shrink-0 pt-0.5">
-          <Checkbox
-            aria-label={active ? `Complete ${reminder.title}` : reminder.status}
-            checked={reminder.status === "completed"}
-            disabled={!active || change.isPending}
-            onCheckedChange={() => {
-              change.mutate({ kind: "complete" });
-            }}
-          >
-            <CheckboxIndicator />
-          </Checkbox>
-        </div>
+      <div className="flex items-center gap-3">
+        <Checkbox
+          aria-label={active ? `Complete ${reminder.title}` : reminder.status}
+          checked={reminder.status === "completed"}
+          disabled={!active || change.isPending}
+          onCheckedChange={() => {
+            change.mutate({ kind: "complete" });
+          }}
+        >
+          <CheckboxIndicator />
+        </Checkbox>
         <Text as="h2" size="sm" weight="normal">
           {reminder.title}
         </Text>
