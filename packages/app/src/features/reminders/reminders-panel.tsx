@@ -301,18 +301,27 @@ export const RemindersPanel = ({
   }
   return (
     <section aria-label="Reminders" className="flex min-h-0 flex-1 flex-col">
-      <div
-        className={cn("flex items-center gap-2 px-4 pt-4 pb-4", {
-          "justify-between": entry !== null,
-          "justify-end": entry === null,
-        })}
-      >
+      <div className="flex items-center justify-between gap-2 px-4 py-4">
         {entry ? (
           <Text as="h2" size="lg" weight="medium">
             {title}
           </Text>
-        ) : null}
-        <div className="flex items-center gap-1">
+        ) : (
+          <Tabs
+            value={view}
+            onValueChange={(value: unknown) => {
+              if (value === "active" || value === "history") {
+                setView(value);
+              }
+            }}
+          >
+            <TabsList aria-label="Reminder view" variant="plain">
+              <TabsTab value="active">Upcoming</TabsTab>
+              <TabsTab value="history">History</TabsTab>
+            </TabsList>
+          </Tabs>
+        )}
+        <div className="flex shrink-0 items-center gap-1">
           {demo || entry ? null : <ReminderOptions mailboxId={mailboxId} />}
           {entry ? null : (
             <Button
@@ -373,19 +382,6 @@ export const RemindersPanel = ({
         ) : null}
         {entry === null ? (
           <>
-            <Tabs
-              value={view}
-              onValueChange={(value: unknown) => {
-                if (value === "active" || value === "history") {
-                  setView(value);
-                }
-              }}
-            >
-              <TabsList aria-label="Reminder view" variant="plain">
-                <TabsTab value="active">Upcoming</TabsTab>
-                <TabsTab value="history">History</TabsTab>
-              </TabsList>
-            </Tabs>
             {reminders.isPending ? (
               <output className="block py-6 text-body-sm text-muted-fg">
                 Loading reminders...
