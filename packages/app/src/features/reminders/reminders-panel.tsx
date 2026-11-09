@@ -90,7 +90,7 @@ const ReminderItem = ({
       </div>
       <div className="min-w-0 flex-1 space-y-1">
         <Button className="max-w-full" onClick={onOpen} variant="inline-edit">
-          <Text as="span" size="sm" tone="default" truncate weight="medium">
+          <Text as="span" size="sm" tone="default" truncate weight="normal">
             {reminder.title}
           </Text>
         </Button>
@@ -369,7 +369,7 @@ export const RemindersPanel = ({
         ) : null}
         {screen.kind === "new" || screen.kind === "edit" ? (
           <div className="space-y-5">
-            <Text as="h2" size="lg" weight="medium">
+            <Text as="h2" size="sm" weight="normal">
               {screen.kind === "edit" ? "Edit reminder" : "New reminder"}
             </Text>
             <ReminderEditor

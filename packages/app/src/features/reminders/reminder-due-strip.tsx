@@ -7,6 +7,7 @@ import { Button } from "@quieter/ui/button";
 import { CardStack } from "@quieter/ui/card-stack";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { useDateTimePreferences } from "@quieter/ui/date-time-preferences";
+import { Text } from "@quieter/ui/text";
 import { useQueries } from "@tanstack/react-query";
 import { use, useState } from "react";
 
@@ -48,7 +49,9 @@ const ReminderDueRow = ({
         title={reminder.title}
         variant="inline-edit"
       >
-        <span className="truncate">{reminder.title}</span>
+        <Text as="span" size="sm" truncate weight="normal">
+          {reminder.title}
+        </Text>
       </Button>
       <time
         className="shrink-0 text-caption text-muted-fg"

@@ -28,7 +28,7 @@ export const ReminderDetails = ({
   return (
     <article aria-label="Reminder details" className="space-y-5">
       <div className="flex items-start gap-3">
-        <div className="shrink-0 pt-1">
+        <div className="shrink-0 pt-0.5">
           <Checkbox
             aria-label={active ? `Complete ${reminder.title}` : reminder.status}
             checked={reminder.status === "completed"}
@@ -40,7 +40,7 @@ export const ReminderDetails = ({
             <CheckboxIndicator />
           </Checkbox>
         </div>
-        <Text as="h2" size="lg" weight="medium">
+        <Text as="h2" size="sm" weight="normal">
           {reminder.title}
         </Text>
       </div>

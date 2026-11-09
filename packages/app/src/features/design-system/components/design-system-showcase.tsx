@@ -1714,7 +1714,9 @@ export const DesignSystemShowcase = () => {
                         }}
                         variant="inline-edit"
                       >
-                        <span className="truncate">{card.title}</span>
+                        <Text as="span" size="sm" truncate weight="normal">
+                          {card.title}
+                        </Text>
                       </Button>
                       <span className="shrink-0 text-caption text-muted-fg">
                         {card.time}
