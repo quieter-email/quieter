@@ -3,7 +3,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { serverEnv } from "@quieter/env/server";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { Resource } from "sst";
+// Workers resolve this entry to the Cloudflare loader, which can see linked
+// Hyperdrive bindings inside Durable Objects. The package root cannot.
+import { Resource } from "sst/resource";
 
 import { assertLocalDevelopmentDatabaseUrl } from "../scripts/local-development.ts";
 import { authRelations } from "./schema.ts";

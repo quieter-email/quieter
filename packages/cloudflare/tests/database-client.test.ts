@@ -1,6 +1,22 @@
 import { db, withRequestDatabaseClient } from "@quieter/database/client";
 import { describe, expect, test, vi } from "vite-plus/test";
 
+// These tests supply a loopback URL. Hide the worker Hyperdrive proxy so the
+// local development guard keeps validating that URL.
+vi.mock(import("sst/resource"), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    Resource: new Proxy(actual.Resource, {
+      get(target, property): unknown {
+        return property === "AppDatabaseV2"
+          ? undefined
+          : Reflect.get(target, property);
+      },
+    }),
+  };
+});
+
 vi.mock(import("@quieter/env/server"), async (original) => {
   const actual = await original();
   return {
