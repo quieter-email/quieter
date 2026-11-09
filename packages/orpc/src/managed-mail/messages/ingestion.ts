@@ -34,6 +34,7 @@ import {
   processPendingMailImportance,
 } from "../../mail-importance";
 import { publishMailUpdate } from "../../mail-updates";
+import { observeReminderMail } from "../../reminders/service";
 import {
   processMailVerificationCode,
   reportPendingMailboxVerificationCodeUsage,
@@ -226,6 +227,7 @@ const finishIngestion = async (input: {
   receivedAt: Date;
   threadId: string;
 }) => {
+  await observeReminderMail(input);
   await enqueueMailAgentMessage({
     mailboxId: input.mailboxId,
     messageId: input.messageId,

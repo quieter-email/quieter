@@ -3,9 +3,16 @@ import { z } from "zod";
 export const mailUpdateSchema = z.object({
   eventId: z.uuid(),
   mailboxId: z.string().min(1),
+  reminderId: z.uuid().optional(),
   revision: z.string().regex(/^\d+$/u).optional(),
+  scheduleVersion: z.number().int().positive().optional(),
   threadIds: z.array(z.string().min(1)).max(100).optional(),
-  type: z.enum(["mailbox.changed", "labels.changed", "details.changed"]),
+  type: z.enum([
+    "mailbox.changed",
+    "labels.changed",
+    "details.changed",
+    "reminders.changed",
+  ]),
 });
 export type MailUpdate = z.infer<typeof mailUpdateSchema>;
 

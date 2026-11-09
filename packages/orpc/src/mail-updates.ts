@@ -108,11 +108,21 @@ export const createMailUpdateConnection = async (userId: string) => {
 // Delivery is a hint. A committed mail operation remains successful if broadcasting fails.
 export const publishMailUpdate = async (
   input: Omit<MailUpdate, "eventId">,
-  options?: { recipientUserIds: readonly string[] }
+  options?: {
+    recipientUserIds: readonly string[];
+    eventId?: string;
+    reliable?: boolean;
+  }
 ) => {
+  if (input.type === "reminders.changed" && options === undefined) {
+    throw new Error("Personal reminder updates require explicit recipients.");
+  }
   const base = serverEnv.MAIL_UPDATES_URL ?? serverEnv.GMAIL_LIVE_SYNC_URL;
   const secret = serverEnv.GMAIL_LIVE_SYNC_TOKEN_SECRET;
   if (!base || !secret) {
+    if (options?.reliable === true) {
+      throw new Error("Mail update transport is not configured.");
+    }
     return;
   }
   try {
@@ -120,7 +130,10 @@ export const publishMailUpdate = async (
     url.protocol = url.protocol === "wss:" ? "https:" : "http:";
     url.pathname = "/mail/events";
     url.search = "";
-    const event = { ...input, eventId: crypto.randomUUID() };
+    const event = {
+      ...input,
+      eventId: options?.eventId ?? crypto.randomUUID(),
+    };
     const recipients =
       options === undefined
         ? undefined
@@ -146,10 +159,16 @@ export const publishMailUpdate = async (
           throw new Error("Mail update delivery failed.");
         }
       } catch (error) {
+        if (options?.reliable === true) {
+          throw error;
+        }
         reportError(error, { boundary: "mail-updates" });
       }
     }
   } catch (error) {
+    if (options?.reliable === true) {
+      throw error;
+    }
     reportError(error, { boundary: "mail-updates" });
   }
 };

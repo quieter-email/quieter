@@ -77,6 +77,12 @@ export const appRouter = {
         })
       )
   ),
+  reminders: lazy(
+    async () =>
+      await import("./reminders").then(({ remindersRouter }) => ({
+        default: remindersRouter,
+      }))
+  ),
   search: lazy(
     async () =>
       await import("./search").then(({ searchRouter }) => ({

@@ -40,6 +40,7 @@ export const runStructuredGeneration = async <TOutput>(input: {
   abortSignal?: AbortSignal;
   maxOutputTokens: number;
   maxRetries?: number;
+  outputRetries?: 0 | 1;
   retryEmptyOutput?: boolean;
   model?: ChatModel;
   onUsage?: (usage: AiUsageReport) => void;
@@ -84,7 +85,7 @@ export const runStructuredGeneration = async <TOutput>(input: {
               (error.text?.trim().length ?? 0) > 0) &&
             (error.finishReason === "stop" || error.finishReason === "length"));
         if (
-          attempt > 0 ||
+          attempt >= (input.outputRetries ?? 1) ||
           input.abortSignal?.aborted === true ||
           !retryableOutput
         ) {

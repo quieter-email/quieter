@@ -5,19 +5,36 @@ assertLocalEnvFile(".env.local");
 const [ownerEmail, ...flags] = process.argv.slice(2);
 if (ownerEmail === undefined || !ownerEmail.includes("@")) {
   throw new Error(
-    "Use dev:fixtures <email-of-your-local-login> [--fresh | --rendering]."
+    "Use dev:fixtures <email-of-your-local-login> [--fresh | --rendering | --reminders | --reminder-ack | --reminder-answer]."
   );
 }
 if (
-  flags.some((flag) => flag !== "--fresh" && flag !== "--rendering") ||
-  (flags.includes("--fresh") && flags.includes("--rendering"))
+  flags.some(
+    (flag) =>
+      ![
+        "--fresh",
+        "--rendering",
+        "--reminders",
+        "--reminder-ack",
+        "--reminder-answer",
+      ].includes(flag)
+  ) ||
+  flags.length > 1
 ) {
-  throw new Error("Choose either --fresh or --rendering.");
+  throw new Error("Choose one fixture mode.");
+}
+let reminderReply: "acknowledgement" | "fulfilled" | undefined;
+if (flags.includes("--reminder-ack")) {
+  reminderReply = "acknowledgement";
+} else if (flags.includes("--reminder-answer")) {
+  reminderReply = "fulfilled";
 }
 const response = await fetch("http://127.0.0.1:8787/__dev/mail/seed", {
   body: JSON.stringify({
     fresh: flags.includes("--fresh"),
     ownerEmail,
+    reminderReply,
+    reminders: flags.includes("--reminders"),
     rendering: flags.includes("--rendering"),
   }),
   headers: {

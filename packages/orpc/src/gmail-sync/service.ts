@@ -73,6 +73,7 @@ import {
 import { loadMailAutoLabelHistory } from "../mail-automation/history";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
 import { processGmailMailCapture } from "../mail-capture";
+import { observeReminderMail } from "../reminders/service";
 import {
   listPendingMailboxVerificationCodeMessageIds,
   processMailVerificationCode,
@@ -585,6 +586,12 @@ const processMessageIds = async ({
           throw new Error("Gmail message is missing its arrival time.");
         }
         await enqueueMailAgentMessage({
+          mailboxId,
+          messageId: message.id,
+          receivedAt: new Date(receivedAt),
+          threadId: message.threadId,
+        });
+        await observeReminderMail({
           mailboxId,
           messageId: message.id,
           receivedAt: new Date(receivedAt),

@@ -23,3 +23,4 @@ export default withSentryReporting({
 } satisfies ExportedHandler<Env>);
 
 export { MailLiveUser } from "./mail-live-user";
+export { ReminderMailbox } from "./reminder-mailbox";

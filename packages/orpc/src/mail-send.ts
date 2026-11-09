@@ -35,6 +35,7 @@ import {
   assertOrganizationOwnsVerifiedSenderDomain,
   OrganizationMailSendError,
 } from "./organization-mail-policy";
+import { materializeSentReminder } from "./reminders/sent";
 
 type MailSend = typeof organizationMailSendIdempotency.$inferSelect;
 const UNCERTAIN_DELIVERY_MESSAGE =
@@ -119,6 +120,15 @@ const completeMailSend = async (operation: MailSend) => {
     snapshot.mailboxId &&
     snapshot.actorUserId
   ) {
+    if (snapshot.followUpReminder) {
+      await materializeSentReminder({
+        intent: snapshot.followUpReminder,
+        mailboxId: snapshot.mailboxId,
+        messageId: operation.id,
+        threadId: snapshot.threadId ?? operation.id,
+        userId: snapshot.actorUserId,
+      });
+    }
     await captureManagedMessageMemory({
       actorUserId: snapshot.actorUserId,
       failureMode: "retry",

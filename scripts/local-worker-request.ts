@@ -12,10 +12,11 @@ if (
     "memory",
     "semantic-index",
     "actions",
+    "reminders",
   ].includes(action)
 ) {
   throw new Error(
-    "Use dev:trigger health, maintenance, mail-recovery, importance, memory, semantic-index <user-id> <mailbox-id> <memory|chat|mail>, or actions."
+    "Use dev:trigger health, maintenance, mail-recovery, importance, memory, semantic-index <user-id> <mailbox-id> <memory|chat|mail>, actions, or reminders."
   );
 }
 const response = await fetch(`http://127.0.0.1:8787/__dev/${action}`, {
@@ -36,7 +37,9 @@ const response = await fetch(`http://127.0.0.1:8787/__dev/${action}`, {
   },
   method: action === "health" ? "GET" : "POST",
   signal: AbortSignal.timeout(
-    ["importance", "memory", "actions", "semantic-index"].includes(action)
+    ["importance", "memory", "actions", "semantic-index", "reminders"].includes(
+      action
+    )
       ? 180_000
       : 30_000
   ),

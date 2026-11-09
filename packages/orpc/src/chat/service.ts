@@ -57,6 +57,10 @@ import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
 import { decodeMimeHeaderValue } from "@quieter/mail/message-content";
 import type { MailboxCategory } from "@quieter/mail/messages";
+import {
+  createReminderSchema,
+  changeReminderSchema,
+} from "@quieter/mail/reminders";
 import { reportError } from "@quieter/observability";
 import {
   convertToModelMessages,
@@ -66,8 +70,9 @@ import {
   streamText,
   RetryError,
   toUIMessageStream,
+  tool,
 } from "ai";
-import type { TextStreamPart, UIMessage, UIMessageChunk } from "ai";
+import type { TextStreamPart, ToolSet, UIMessage, UIMessageChunk } from "ai";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
@@ -91,6 +96,13 @@ import {
 } from "../gmail-chat-search";
 import { composeMailOperations } from "../mail/compose";
 import { assertAccessibleMailbox } from "../mailbox/service";
+import {
+  createReminder,
+  changeReminder,
+  listReminders,
+  getReminder,
+} from "../reminders/service";
+import { hashRequest } from "../request-hash";
 import { createCalendarToolsContext } from "./calendar-tools";
 import {
   connectorToolsPrompt,
@@ -107,7 +119,11 @@ const CHAT_MAX_COMPLETION_TOKENS = 2048;
 const CHAT_MAX_STEPS = 6;
 const MAIL_TOOL_TIMEOUT_MS = 25_000;
 const FOREGROUND_EXCHANGE_MAX_MS = 5 * 60_000;
-const MUTATING_CHAT_TOOLS = new Set(mutatingChatToolNames);
+const MUTATING_CHAT_TOOLS = new Set<string>([
+  ...mutatingChatToolNames,
+  "create_reminder",
+  "change_reminder",
+]);
 const UNCERTAIN_ACTION_ERROR =
   "The action could not be confirmed. Check the affected item before trying again.";
 
@@ -1377,7 +1393,65 @@ const createAiChatResponseInRequest = async (
     userId: input.userId,
   });
 
-  const tools = {
+  const tools: ToolSet = {
+    change_reminder: tool({
+      description:
+        "Change a personal reminder only as the user requests, using its current version. Snooze creates a fresh occurrence. Complete and cancel stop it. Reactivate resumes a stopped reminder.",
+      execute: async (value) => {
+        await assertForegroundExchangeActive({
+          assistantMessageId,
+          chatId: threadId,
+          userId: input.userId,
+        });
+        return await changeReminder({
+          ...value,
+          mailboxId,
+          userId: input.userId,
+        });
+      },
+      inputSchema: changeReminderSchema.omit({ mailboxId: true }),
+    }),
+    create_reminder: tool({
+      description: `Create a personal reminder in the current mailbox only when the user requests it. Current UTC time is ${new Date().toISOString()}. Require an exact ISO instant with offset and the user's IANA time zone. Ask when a time or condition is ambiguous. Standalone reminders need no email; thread reminders must use real thread and anchor message IDs read from mail tools. A condition describes the actual response that fulfills the follow-up.`,
+      execute: async (value, options) => {
+        await assertForegroundExchangeActive({
+          assistantMessageId,
+          chatId: threadId,
+          userId: input.userId,
+        });
+        const identity = hashRequest({
+          assistantMessageId,
+          toolCallId: options.toolCallId,
+        });
+        const requestId = `${identity.slice(0, 8)}-${identity.slice(8, 12)}-4${identity.slice(13, 16)}-a${identity.slice(17, 20)}-${identity.slice(20, 32)}`;
+        return await createReminder({
+          ...value,
+          mailboxId,
+          requestId,
+          userId: input.userId,
+        });
+      },
+      inputSchema: createReminderSchema.omit({
+        mailboxId: true,
+        requestId: true,
+      }),
+    }),
+    get_reminder: tool({
+      description: "Read one personal reminder in the current mailbox.",
+      execute: async (value) =>
+        await getReminder({ ...value, mailboxId, userId: input.userId }),
+      inputSchema: z.strictObject({ reminderId: z.uuid() }),
+    }),
+    list_reminders: tool({
+      description:
+        "List the user's personal reminders in the current mailbox. Read the reminder and its current version before editing it.",
+      execute: async (value) =>
+        await listReminders({ ...value, mailboxId, userId: input.userId }),
+      inputSchema: z.strictObject({
+        cursor: z.string().optional(),
+        view: z.enum(["active", "history"]),
+      }),
+    }),
     ...createChatSuggestionTool(),
     ...createPersonalContextChatTool({
       readPersonalContext: async ({ cursor, query }) =>

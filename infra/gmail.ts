@@ -63,6 +63,7 @@ export const createGmailResources = (
           GMAIL_PUBSUB_SUBSCRIPTION:
             context.gmailPubSubEnvironment.GMAIL_PUBSUB_SUBSCRIPTION,
           GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
+          MAIL_UPDATES_URL: updates.url,
           ...context.billingEnvironment,
           ...context.releaseEnvironment,
           QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
@@ -72,6 +73,7 @@ export const createGmailResources = (
         link: [
           gmailLiveSyncMailbox,
           mailLiveUser,
+          updates.reminders,
           gmailLiveSyncTokenSecret,
           appDatabase,
           sentryDsnBinding,
@@ -91,7 +93,8 @@ export const createGmailResources = (
               .all([args.bindings, updates.worker.nodes.worker.scriptName])
               .apply(([bindings, scriptName]) =>
                 (bindings ?? []).map((binding) =>
-                  binding.name === "MailLiveUser"
+                  binding.name === "MailLiveUser" ||
+                  binding.name === "ReminderMailbox"
                     ? { ...binding, scriptName }
                     : binding
                 )

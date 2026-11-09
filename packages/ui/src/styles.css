@@ -569,6 +569,42 @@
   corner-shape: round;
 }
 
+.card-stack {
+  @apply pb-2;
+}
+
+.card-stack-summary {
+  @apply relative;
+}
+
+.card-stack-row {
+  @apply group relative flex h-10 min-w-0 items-center gap-2 rounded-md bg-section px-3;
+}
+
+.card-stack-row-summary {
+  @apply h-8;
+}
+
+.card-stack-peek {
+  @apply pointer-events-none absolute h-8 rounded-md bg-section;
+}
+
+.card-stack-peek-front {
+  @apply inset-x-1 top-1;
+}
+
+.card-stack-peek-back {
+  @apply inset-x-2 top-2;
+}
+
+.card-stack-continuation {
+  @apply flex flex-col gap-1 pt-1;
+}
+
+.card-stack-footer {
+  @apply flex justify-center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .toast-shake-odd,
   .toast-shake-even {
