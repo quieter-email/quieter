@@ -422,13 +422,29 @@ export const processReminderJobs = async (
       });
       await finishReminderJob({ id: job.id, token });
     } catch (error) {
+      const admissionBusy =
+        job.usageModel === null &&
+        usage === undefined &&
+        isAiCreditAdmissionBusy(error);
       if (
         !(error instanceof ORPCError && error.status < 500) &&
-        !isAiCreditAdmissionBusy(error)
+        !admissionBusy
       ) {
         reportError(new Error("Reminder reply check failed."), {
           operation: "reminder-evaluation",
         });
+      }
+      if (admissionBusy) {
+        await db
+          .update(mailReminderJob)
+          .set({ usageModel: null })
+          .where(
+            and(
+              eq(mailReminderJob.id, job.id),
+              eq(mailReminderJob.leaseToken, token),
+              sql`${mailReminderJob.leaseUntil} > now()`
+            )
+          );
       }
       await applyReminderEvaluation({
         jobId: job.id,
@@ -441,7 +457,10 @@ export const processReminderJobs = async (
       });
       await finishReminderJob({
         id: job.id,
-        retry: !submitted && usage === undefined && job.attempts < 3,
+        retry:
+          (!submitted || admissionBusy) &&
+          usage === undefined &&
+          job.attempts < 3,
         token,
       });
     } finally {

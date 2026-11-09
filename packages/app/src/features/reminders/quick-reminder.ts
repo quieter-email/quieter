@@ -75,13 +75,7 @@ export const useQuickReminder = ({
             ? ({
                 dueAt: input.dueAt,
                 kind: "edit",
-                target: {
-                  ...existing.target,
-                  condition:
-                    input.target.kind === "thread"
-                      ? input.target.condition
-                      : null,
-                },
+                target: input.target,
                 timeZone: input.timeZone,
                 title: existing.title,
               } satisfies ChangeReminder["command"])
