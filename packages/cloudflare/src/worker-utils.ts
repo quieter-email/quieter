@@ -109,13 +109,23 @@ export const handlePubSub = async (
       pubSubMessageId: string;
     },
     bindings: Env
-  ) => Promise<unknown> = async (message, _bindings) => {
+  ) => Promise<unknown> = async (message, bindings) => {
     const { withRequestDatabaseClient } =
       await import("@quieter/database/client");
     const { processGmailPubSubNotification } =
       await import("@quieter/orpc/gmail-pubsub");
     const result = await withRequestDatabaseClient(
-      async () => await processGmailPubSubNotification(message)
+      async () =>
+        await processGmailPubSubNotification(message, {
+          onAccepted: async () => {
+            await broadcastGmailUpdate(
+              bindings,
+              message.emailAddress,
+              "mailbox.changed",
+              message.historyId
+            );
+          },
+        })
     );
     return {
       retry:

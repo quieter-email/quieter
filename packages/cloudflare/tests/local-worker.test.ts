@@ -193,11 +193,14 @@ describe("local background entrypoint", () => {
       env
     );
     expect(response.status).toBe(204);
-    expect(processGmailPubSubNotification).toHaveBeenCalledExactlyOnceWith({
-      emailAddress: "test@example.invalid",
-      historyId: "42",
-      pubSubMessageId: "local-test-delivery",
-    });
+    expect(processGmailPubSubNotification).toHaveBeenCalledExactlyOnceWith(
+      {
+        emailAddress: "test@example.invalid",
+        historyId: "42",
+        pubSubMessageId: "local-test-delivery",
+      },
+      expect.any(Object)
+    );
   });
 
   test("returns 503 while mailbox processing is leased", async () => {

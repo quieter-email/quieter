@@ -1055,6 +1055,7 @@ export const createBimiResolver = (
   }): Promise<string | undefined> => {
     const domain = normalizeDomain(input.domain);
     if (
+      assetHostnames.size === 0 ||
       domain === undefined ||
       !hasAuthenticatedSender(domain, input.headers)
     ) {

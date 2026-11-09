@@ -1761,10 +1761,13 @@ export const listMessagesWithDetails = async (
       },
     ];
   });
-  const profile = await getGmailProfile(accessToken, options?.signal);
-  const historyId =
-    threads.find((thread) => isNonEmptyString(thread?.historyId))?.historyId ??
-    profile.historyId;
+  let historyId = threads.find((thread) =>
+    isNonEmptyString(thread?.historyId)
+  )?.historyId;
+  if (historyId === undefined) {
+    const profile = await getGmailProfile(accessToken, options?.signal);
+    ({ historyId } = profile);
+  }
 
   return {
     historyId,
@@ -1977,7 +1980,7 @@ export const getThreadWithDetails = async (
   accessToken: string,
   threadId: string,
   signal?: AbortSignal,
-  onSnapshot?: (snapshot: CapturedMailSnapshot) => Promise<void>
+  onSnapshot?: (snapshot: CapturedMailSnapshot) => void | Promise<void>
 ): Promise<ThreadMessagesResult> => {
   const thread = await requestGmail(
     accessToken,
@@ -1992,53 +1995,55 @@ export const getThreadWithDetails = async (
     }
   );
 
-  const messageItems = await Promise.all(
-    (thread.messages ?? []).map(async (message) => {
-      const item = await toMessageListItem(
-        accessToken,
-        message,
-        { includeBody: true },
-        signal
-      );
-      if (
-        onSnapshot &&
-        message.labelIds?.includes(MAILBOX_LABELS.drafts) !== true
-      ) {
-        await onSnapshot(
-          toGmailCapturedSnapshot(message, {
-            html: item.bodyHtml,
-            text: item.bodyText,
-          })
+  const [messageItems, draftIdEntries] = await Promise.all([
+    Promise.all(
+      (thread.messages ?? []).map(async (message) => {
+        const item = await toMessageListItem(
+          accessToken,
+          message,
+          { includeBody: true },
+          signal
         );
-      }
-      return item;
-    })
-  );
+        if (
+          onSnapshot &&
+          message.labelIds?.includes(MAILBOX_LABELS.drafts) !== true
+        ) {
+          await onSnapshot(
+            toGmailCapturedSnapshot(message, {
+              html: item.bodyHtml,
+              text: item.bodyText,
+            })
+          );
+        }
+        return item;
+      })
+    ),
+    Promise.all(
+      (thread.messages ?? [])
+        .filter((message) => {
+          const headerId = getHeader(message, "Message-ID")?.trim() ?? "";
+          return (
+            message.labelIds !== undefined &&
+            message.labelIds.includes(MAILBOX_LABELS.drafts) &&
+            headerId !== ""
+          );
+        })
+        .map(async (message) => {
+          const headerId = getHeader(message, "Message-ID")?.trim() ?? "";
+          return [
+            message.id,
+            await getDraftIdForMessageHeaderId(
+              accessToken,
+              headerId,
+              message.threadId,
+              signal
+            ),
+          ] as const;
+        })
+    ),
+  ]);
   const messages = messageItems.toSorted(
     (left, right) => getMessageTimestamp(left) - getMessageTimestamp(right)
-  );
-  const draftIdEntries = await Promise.all(
-    messages
-      .filter((message) => {
-        const headerId = message.messageHeaderId?.trim() ?? "";
-        return (
-          message.labelIds !== undefined &&
-          message.labelIds.includes(MAILBOX_LABELS.drafts) &&
-          headerId !== ""
-        );
-      })
-      .map(async (message) => {
-        const headerId = message.messageHeaderId?.trim() ?? "";
-        return [
-          message.id,
-          await getDraftIdForMessageHeaderId(
-            accessToken,
-            headerId,
-            message.threadId,
-            signal
-          ),
-        ] as const;
-      })
   );
   const draftIdsByMessageId = new Map(
     draftIdEntries.filter(

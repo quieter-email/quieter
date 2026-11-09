@@ -275,7 +275,12 @@ export const hydrateMailImportance = async <T extends MessageListItem>(
   }
   const threadIds = [...new Set(messages.map((message) => message.threadId))];
   const rows = await db
-    .select()
+    .select({
+      aiImportant: mailMessageImportance.aiImportant,
+      manualImportant: mailMessageImportance.manualImportant,
+      messageId: mailMessageImportance.messageId,
+      threadId: mailMessageImportance.threadId,
+    })
     .from(mailMessageImportance)
     .where(
       and(
@@ -283,13 +288,54 @@ export const hydrateMailImportance = async <T extends MessageListItem>(
         inArray(mailMessageImportance.threadId, threadIds)
       )
     );
-  const sources = await loadImportanceSources(
-    db,
-    mailboxId,
-    rows.map((row) => row.messageId)
-  );
+  if (rows.length === 0) {
+    return messages.map((message) => ({
+      ...message,
+      isImportant: false,
+      threadIsImportant: false,
+    }));
+  }
+  const messageIds = rows.map((row) => row.messageId);
+  const [gmail, managed] = await Promise.all([
+    db
+      .select({
+        id: sql<string>`${gmailCapturedMessage.snapshot}->>'id'`,
+        labelIds: sql<
+          CapturedMailSnapshot["labelIds"]
+        >`${gmailCapturedMessage.snapshot}->'labelIds'`,
+      })
+      .from(gmailCapturedMessage)
+      .where(
+        and(
+          eq(gmailCapturedMessage.mailboxId, mailboxId),
+          isNull(gmailCapturedMessage.deletedAt),
+          isNotNull(gmailCapturedMessage.snapshot),
+          sql`${gmailCapturedMessage.snapshot} <> 'null'::jsonb`,
+          inArray(gmailCapturedMessage.messageId, messageIds)
+        )
+      ),
+    db
+      .select({ id: managedMailMessage.id })
+      .from(managedMailMessage)
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, mailboxId),
+          inArray(managedMailMessage.id, messageIds),
+          eq(managedMailMessage.direction, "inbound"),
+          inArray(managedMailMessage.mailboxState, ["active", "archived"])
+        )
+      ),
+  ]);
   const eligible = new Set(
-    sources.filter((source) => source.eligible).map(({ message }) => message.id)
+    [
+      ...gmail.filter(
+        ({ labelIds }) =>
+          !labelIds.some((label) =>
+            ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
+          )
+      ),
+      ...managed,
+    ].map(({ id }) => id)
   );
   const byId = new Map(
     rows.map((row) => [

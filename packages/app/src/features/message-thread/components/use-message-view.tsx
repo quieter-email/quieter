@@ -24,12 +24,19 @@ import {
   MAILBOX_LABELS,
 } from "@quieter/app/lib/mail";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
-import { mergeMessagePreservingLoadedDetails } from "@quieter/app/lib/mail/inbox-query/data";
+import {
+  mergeMessagePreservingLoadedDetails,
+  upsertMessageInThreadData,
+} from "@quieter/app/lib/mail/inbox-query/data";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
-import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
+import {
+  getThreadWithDetailsOptions,
+  shouldRefreshThreadContent,
+} from "@quieter/app/lib/mail/thread-query";
 import { verificationCodesQueryOptions } from "@quieter/app/lib/mail/verification-codes-query";
 import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { orpc } from "@quieter/app/lib/orpc";
+import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import {
@@ -108,6 +115,9 @@ export const useMessageViewData = ({
   const { data: gmailLabels = [] } = useQuery(
     labelsQueryOptions(mailboxId, mailboxProvider !== "api")
   );
+  const includeDraftsInThreadCount =
+    (mailboxProvider !== "gmail" && !isSandboxMailboxId(mailboxId)) ||
+    isDraftMessage(message);
   const {
     data: threadData,
     isSuccess: isThreadSuccess,
@@ -116,7 +126,11 @@ export const useMessageViewData = ({
     isPending: isThreadPending,
   } = useQuery({
     // react-doctor-disable-next-line react-doctor/no-event-handler
-    ...getThreadWithDetailsOptions(mailboxId, message.threadId),
+    ...getThreadWithDetailsOptions(mailboxId, message.threadId, true, {
+      id: message.id,
+      includeDrafts: includeDraftsInThreadCount,
+      threadMessageCount: message.threadMessageCount,
+    }),
     placeholderData: {
       messages: [message],
       snippet: message.snippet,
@@ -136,6 +150,48 @@ export const useMessageViewData = ({
         : false;
     },
   });
+  useEffect(() => {
+    let cancelled = false;
+    const expectedMessage = {
+      id: message.id,
+      includeDrafts: includeDraftsInThreadCount,
+      threadMessageCount: message.threadMessageCount,
+    };
+    const options = getThreadWithDetailsOptions(
+      mailboxId,
+      message.threadId,
+      true,
+      expectedMessage
+    );
+    if (
+      shouldRefreshThreadContent(
+        queryClient.getQueryData(options.queryKey),
+        expectedMessage
+      )
+    ) {
+      void Promise.allSettled([
+        (async () => {
+          const thread = await queryClient.query(options);
+          if (
+            !cancelled &&
+            shouldRefreshThreadContent(thread, expectedMessage)
+          ) {
+            await queryClient.query({ ...options, staleTime: 0 });
+          }
+        })(),
+      ]);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    includeDraftsInThreadCount,
+    mailboxId,
+    message.id,
+    message.threadId,
+    message.threadMessageCount,
+    queryClient,
+  ]);
   const createApiMailboxMutation = useMutation({
     ...orpc.mail.createManagedMailboxForApiMessage.mutationOptions(),
     onError: (error) => {
@@ -152,10 +208,15 @@ export const useMessageViewData = ({
       toast.success("Mailbox created.");
     },
   });
-  const threadMessages =
-    threadData?.messages !== undefined && threadData.messages.length > 0
-      ? threadData.messages
-      : [message];
+  const selectedThreadMessage = threadData?.messages.find(
+    (entry) => entry.id === message.id
+  );
+  const threadMessages = upsertMessageInThreadData(
+    threadData,
+    selectedThreadMessage
+      ? mergeMessagePreservingLoadedDetails(message, selectedThreadMessage)
+      : message
+  )?.messages ?? [message];
   const threadLabelIds = getThreadLabelIds(threadMessages);
   const messages = threadMessages.filter(
     (threadMessage) => !isDraftMessage(threadMessage)

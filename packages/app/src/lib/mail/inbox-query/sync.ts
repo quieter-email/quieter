@@ -149,17 +149,6 @@ export const refreshLoadedMessagesPages = async (
 
   await refreshNextPage(0);
   options.signal?.throwIfAborted();
-  if (options.refreshThreads === true) {
-    await queryClient.invalidateQueries(
-      {
-        predicate: ({ queryKey }) =>
-          queryKey[0] === "message-thread" && queryKey[2] === mailboxId,
-      },
-      { cancelRefetch: true }
-    );
-    options.signal?.throwIfAborted();
-  }
-
   updateMailQueryFromServer<MessagesQueryData>(
     queryClient,
     messagesQueryKey,
@@ -181,7 +170,42 @@ export const refreshLoadedMessagesPages = async (
         }
       )
   );
-  await persistQueryByKey(messagesQueryKey, queryClient);
+  const touchedThreadQueryKeys = new Map<
+    string,
+    ReturnType<typeof getThreadQueryKey>
+  >();
+  for (const page of refreshedPages) {
+    for (const message of page.messages) {
+      const threadQueryKey = getThreadQueryKey(mailboxId, message.threadId);
+      if (queryClient.getQueryData(threadQueryKey) === undefined) {
+        continue;
+      }
+      touchedThreadQueryKeys.set(message.threadId, threadQueryKey);
+      updateMailQueryFromServer<ThreadMessagesResult>(
+        queryClient,
+        threadQueryKey,
+        (data) => upsertMessageInThreadData(data, message)
+      );
+    }
+  }
+  await Promise.all([
+    persistQueryByKey(messagesQueryKey, queryClient),
+    ...Array.from(touchedThreadQueryKeys.values(), async (threadQueryKey) => {
+      await persistQueryByKey(threadQueryKey, queryClient);
+    }),
+    ...(options.refreshThreads === true
+      ? [
+          queryClient.invalidateQueries(
+            {
+              predicate: ({ queryKey }) =>
+                queryKey[0] === "message-thread" && queryKey[2] === mailboxId,
+            },
+            { cancelRefetch: true }
+          ),
+        ]
+      : []),
+  ]);
+  options.signal?.throwIfAborted();
   return refreshedPages[0];
 };
 
@@ -246,9 +270,6 @@ export const applyMailboxSyncDelta = async (
     );
   }
 
-  await persistQueryByKey(messagesQueryKey, queryClient);
-  signal?.throwIfAborted();
-
   const touchedThreadQueryKeys = new Map<
     string,
     ReturnType<typeof getThreadQueryKey>
@@ -280,11 +301,12 @@ export const applyMailboxSyncDelta = async (
     );
   }
 
-  await Promise.all(
-    Array.from(touchedThreadQueryKeys.values(), async (threadQueryKey) => {
+  await Promise.all([
+    persistQueryByKey(messagesQueryKey, queryClient),
+    ...Array.from(touchedThreadQueryKeys.values(), async (threadQueryKey) => {
       await persistQueryByKey(threadQueryKey, queryClient);
-    })
-  );
+    }),
+  ]);
   signal?.throwIfAborted();
   await Promise.all(
     [...threadsNeedingRefresh].map(async (threadId) => {
