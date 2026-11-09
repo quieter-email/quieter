@@ -13,7 +13,7 @@ import { assertDatabaseConfigured } from "./client.ts";
 const resources = vi.hoisted<{ AppDatabaseV2: unknown }>(() => ({
   AppDatabaseV2: undefined,
 }));
-vi.mock(import("sst"), async (original) => {
+vi.mock(import("sst/resource"), async (original) => {
   const actual = await original();
   return {
     ...actual,
