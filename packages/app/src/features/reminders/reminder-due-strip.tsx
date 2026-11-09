@@ -133,11 +133,10 @@ export const ReminderDueStrip = ({
             )}
             now={now}
             onEdit={() => {
-              void sidebar.onOpenReminders(
-                undefined,
-                reminder.mailboxId,
-                reminder.id
-              );
+              void sidebar.onOpenReminders(undefined, reminder.mailboxId, {
+                kind: "edit",
+                reminder,
+              });
             }}
             onOpen={() => {
               if (reminder.target.kind === "thread") {
@@ -149,11 +148,10 @@ export const ReminderDueStrip = ({
                   workspace: null,
                 });
               } else {
-                void sidebar.onOpenReminders(
-                  undefined,
-                  reminder.mailboxId,
-                  reminder.id
-                );
+                void sidebar.onOpenReminders(undefined, reminder.mailboxId, {
+                  kind: "detail",
+                  reminderId: reminder.id,
+                });
               }
             }}
             reminder={reminder}

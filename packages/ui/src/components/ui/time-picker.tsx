@@ -10,8 +10,8 @@ import { formatTimeMinute, parseTimeValue } from "../../lib/date-time";
 import { useDateTimePreferences } from "./date-time-preferences";
 import { Icon } from "./icon";
 import { CheckIcon } from "./icons";
-import { inputVariants } from "./input";
-import type { Input } from "./input";
+import { Input } from "./input";
+import { InputAddon, InputGroup } from "./input-group";
 import { anchoredPopupMotionClassName } from "./overlay-chrome";
 import { selectTriggerVariants } from "./select";
 
@@ -124,17 +124,25 @@ export const TimePicker = ({
             )}
           >
             <div className="shrink-0 border-b border-border p-2">
-              <ComboboxPrimitive.Input
-                aria-label="Type a time"
-                id={props.id ? `${props.id}-input` : undefined}
-                placeholder={
-                  timeFormat === "12h" ? "e.g. 2:35 PM" : "e.g. 14:35"
-                }
-                className={inputVariants()}
-              />
+              <InputGroup>
+                <InputAddon
+                  aria-hidden
+                  className="ml-3 flex shrink-0 items-center"
+                >
+                  <Icon icon={Clock01Icon} size={14} tone="muted" />
+                </InputAddon>
+                <ComboboxPrimitive.Input
+                  aria-label="Type a time"
+                  id={props.id ? `${props.id}-input` : undefined}
+                  placeholder={
+                    timeFormat === "12h" ? "e.g. 2:35 PM" : "e.g. 14:35"
+                  }
+                  render={<Input chrome="attached" />}
+                />
+              </InputGroup>
             </div>
-            <ComboboxPrimitive.Empty className="px-3 py-4 text-body-sm text-muted-fg">
-              Enter a valid time.
+            <ComboboxPrimitive.Empty className="text-body-sm text-muted-fg">
+              <p className="px-3 py-4">Enter a valid time.</p>
             </ComboboxPrimitive.Empty>
             <ComboboxPrimitive.List className="min-h-0 overflow-y-auto overscroll-contain p-1 empty:p-0">
               {(option: TimeOption) => (

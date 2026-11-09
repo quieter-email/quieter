@@ -73,10 +73,10 @@ export const CardStack = ({
           triggerRef.current?.focus({ preventScroll: true });
         }
       }}
-      onOpenChange={() => {
+      onOpenChange={(open) => {
         window.clearTimeout(hoverTimerRef.current);
-        setHover(pinned ? "dismissed" : "inactive");
-        onPinnedChange(!pinned);
+        setHover(open ? "inactive" : "dismissed");
+        onPinnedChange(open);
       }}
       onPointerDownCapture={(event) => {
         if (
@@ -92,6 +92,7 @@ export const CardStack = ({
           event.pointerType !== "mouse" ||
           !window.matchMedia("(hover: hover) and (pointer: fine)").matches ||
           totalCount < 2 ||
+          pinned ||
           hover === "dismissed"
         ) {
           return;
@@ -110,43 +111,35 @@ export const CardStack = ({
       open={expanded}
     >
       <div className="card-stack-summary">
-        {!expanded && totalCount > 2 ? (
+        {totalCount > 2 ? (
           <div aria-hidden className="card-stack-peek card-stack-peek-back" />
         ) : null}
-        {!expanded && totalCount > 1 ? (
+        {totalCount > 1 ? (
           <div aria-hidden className="card-stack-peek card-stack-peek-front" />
         ) : null}
-        <div className="card-stack-row card-stack-row-summary" key={first.id}>
+        <div className="card-stack-row" key={first.id}>
           {first.content}
           {totalCount > 1 ? (
             <CollapsibleTrigger
-              aria-label={
-                hover === "preview" && !pinned
-                  ? `Keep ${label.toLowerCase()} expanded`
-                  : `${pinned ? "Hide" : "Show"} ${totalCount - 1} more ${label.toLowerCase()}`
-              }
+              aria-label={`${expanded ? "Hide" : "Show"} ${totalCount - 1} more ${label.toLowerCase()}`}
               render={<Button ref={triggerRef} size="xs" variant="option" />}
             >
               +{totalCount - 1}
-              <ChevronDownIcon
-                className={expanded ? "rotate-180" : undefined}
-              />
+              <ChevronDownIcon className="card-stack-indicator" />
             </CollapsibleTrigger>
           ) : null}
         </div>
       </div>
       <CollapsiblePanel>
-        <div className="min-h-0">
-          <div className="card-stack-continuation">
-            {rest.map((item) => (
-              <div className="card-stack-row" key={item.id}>
-                {item.content}
-              </div>
-            ))}
-            {totalCount > 3 && footer !== undefined ? (
-              <div className="card-stack-footer">{footer}</div>
-            ) : null}
-          </div>
+        <div className="card-stack-continuation">
+          {rest.map((item) => (
+            <div className="card-stack-row" key={item.id}>
+              {item.content}
+            </div>
+          ))}
+          {totalCount > 3 && footer !== undefined ? (
+            <div className="card-stack-footer">{footer}</div>
+          ) : null}
         </div>
       </CollapsiblePanel>
     </Collapsible>

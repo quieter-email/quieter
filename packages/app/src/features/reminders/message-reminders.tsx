@@ -16,13 +16,6 @@ import {
 import type { Reminder } from "@quieter/mail/reminders";
 import { Button } from "@quieter/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-} from "@quieter/ui/dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -34,11 +27,10 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
 import { Surface } from "@quieter/ui/surface";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { use, useState } from "react";
+import { use } from "react";
 
 import { useQuickReminder } from "./quick-reminder";
 import { ReminderSnoozeMenu } from "./reminder-actions";
-import { ReminderEditor } from "./reminder-editor";
 import { useReminderMutation, cacheReminder } from "./reminder-mutations";
 import {
   reminderPreferencesOptions,
@@ -58,7 +50,7 @@ const ExistingMessageReminder = ({
   reminder: Reminder;
   demo: boolean;
 }) => {
-  const [editing, setEditing] = useState(false);
+  const sidebar = use(AssistantSidebarContext);
   const mutation = useReminderMutation({ demo, reminder });
   const date = new Intl.DateTimeFormat(undefined, {
     day: "numeric",
@@ -68,72 +60,50 @@ const ExistingMessageReminder = ({
     timeZone: reminder.timeZone,
   }).format(new Date(reminder.dueAt));
   return (
-    <>
-      <DropdownMenu>
-        <IconButtonTooltip label={`Reminder set for ${date}`}>
-          <DropdownMenuTrigger
-            appearance="row-strong"
-            aria-label={`Reminder set for ${date}`}
-            disabled={mutation.isPending}
-          >
-            <Icon icon={Clock01Icon} />
-            <span className="text-caption">{date}</span>
-          </DropdownMenuTrigger>
-        </IconButtonTooltip>
-        <DropdownMenuContent align="end">
-          <ReminderSnoozeMenu
-            demo={demo}
-            onCustom={() => {
-              setEditing(true);
-            }}
-            reminder={reminder}
-          />
-          <DropdownMenuItem
-            onSelect={() => {
-              setEditing(true);
-            }}
-          >
-            Edit reminder
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onSelect={() => {
-              mutation.mutate({ kind: "cancel" });
-            }}
-            tone="destructive"
-          >
-            Cancel reminder
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Dialog onOpenChange={setEditing} open={editing}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit reminder</DialogTitle>
-          </DialogHeader>
-          <DialogBody>
-            <ReminderEditor
-              initial={reminder}
-              key={`${reminder.id}:${reminder.version}:${editing}`}
-              onCancel={() => {
-                setEditing(false);
-              }}
-              onSave={({ title, dueAt, timeZone, target }) => {
-                mutation.mutate(
-                  { dueAt, kind: "edit", target, timeZone, title },
-                  {
-                    onSuccess: () => {
-                      setEditing(false);
-                    },
-                  }
-                );
-              }}
-              pending={mutation.isPending}
-            />
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-    </>
+    <DropdownMenu>
+      <IconButtonTooltip label={`Reminder set for ${date}`}>
+        <DropdownMenuTrigger
+          appearance="row-strong"
+          aria-label={`Reminder set for ${date}`}
+          disabled={mutation.isPending}
+        >
+          <Icon icon={Clock01Icon} />
+          <span className="text-caption">{date}</span>
+        </DropdownMenuTrigger>
+      </IconButtonTooltip>
+      <DropdownMenuContent align="end">
+        <ReminderSnoozeMenu
+          demo={demo}
+          onCustom={() => {
+            void sidebar?.onOpenReminders(undefined, reminder.mailboxId, {
+              kind: "edit",
+              reminder,
+            });
+          }}
+          reminder={reminder}
+        />
+        <DropdownMenuItem
+          disabled={!sidebar}
+          onSelect={() => {
+            void sidebar?.onOpenReminders(undefined, reminder.mailboxId, {
+              kind: "edit",
+              reminder,
+            });
+          }}
+        >
+          Edit reminder
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={() => {
+            mutation.mutate({ kind: "cancel" });
+          }}
+          tone="destructive"
+        >
+          Cancel reminder
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 

@@ -1,6 +1,10 @@
 "use client";
 
-import { Add01Icon, Clock01Icon } from "@hugeicons/core-free-icons";
+import {
+  Add01Icon,
+  ArrowLeft01Icon,
+  Clock01Icon,
+} from "@hugeicons/core-free-icons";
 import { useMailboxSearchActions } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { rpc } from "@quieter/app/lib/orpc";
@@ -8,7 +12,6 @@ import { getZonedDateTimeFields } from "@quieter/calendar/time";
 import type { Reminder, ReminderTarget } from "@quieter/mail/reminders";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
-import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { Tabs, TabsList, TabsTab } from "@quieter/ui/tabs";
 import { Text } from "@quieter/ui/text";
@@ -28,21 +31,19 @@ import {
   demoReminderSession,
   useReminderList,
 } from "./reminder-query";
-import { ReminderQuickEntry } from "./reminder-quick-entry";
 import { ReminderRowTime } from "./reminder-row-time";
+import { getReminderPresetTime } from "./reminder-time";
 
 export type ReminderOpenRequest =
   | { id: string; mailboxId: string; title: string; target: ReminderTarget }
-  | { id: string; mailboxId: string; reminderId: string };
+  | { id: string; mailboxId: string; reminderId: string }
+  | { id: string; mailboxId: string; reminder: Reminder };
 
-type ReminderEntry =
-  | { kind: "quick"; requestId: string }
-  | {
-      kind: "details";
-      initial: ReminderEditorValues;
-      reminder?: Reminder;
-      requestId: string;
-    };
+type ReminderScreen =
+  | { kind: "list" }
+  | { kind: "detail"; reminderId: string }
+  | { kind: "new"; initial: ReminderEditorValues; requestId: string }
+  | { kind: "edit"; reminder: Reminder; requestId: string };
 
 const ReminderItem = ({
   reminder,
@@ -88,12 +89,7 @@ const ReminderItem = ({
         </Checkbox>
       </div>
       <div className="min-w-0 flex-1 space-y-1">
-        <Button
-          className="max-w-full"
-          onClick={onOpen}
-          size="text"
-          variant="ghost"
-        >
+        <Button className="max-w-full" onClick={onOpen} variant="inline-edit">
           <Text as="span" size="sm" tone="default" truncate weight="medium">
             {reminder.title}
           </Text>
@@ -136,58 +132,63 @@ export const RemindersPanel = ({
   const navigate = useMailboxSearchActions();
   const mode = demo ? "demo" : "remote";
   const [view, setView] = useState<"active" | "history">("active");
-  const [details, setDetails] = useState<Reminder | null>(null);
-  const [requestDismissed, setRequestDismissed] = useState(false);
-  const [entry, setEntry] = useState<ReminderEntry | null>(() =>
-    request && "target" in request
-      ? {
-          initial: {
-            dueAt: new Date(Date.now() + 60 * 60_000).toISOString(),
-            target: request.target,
-            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            title: request.title,
-          },
-          kind: "details",
-          requestId: request.id,
-        }
-      : null
-  );
+  const [screen, setScreen] = useState<ReminderScreen>(() => {
+    if (!request) {
+      return { kind: "list" };
+    }
+    if ("reminder" in request) {
+      return {
+        kind: "edit",
+        reminder: request.reminder,
+        requestId: request.id,
+      };
+    }
+    if ("reminderId" in request) {
+      return { kind: "detail", reminderId: request.reminderId };
+    }
+    const { timeZone } = Intl.DateTimeFormat().resolvedOptions();
+    return {
+      initial: {
+        dueAt: getReminderPresetTime({ days: 1, timeZone }),
+        target: request.target,
+        timeZone,
+        title: request.title,
+      },
+      kind: "new",
+      requestId: request.id,
+    };
+  });
   const reminders = useReminderList(mailboxId, view, demo);
+  const selectedId = screen.kind === "detail" ? screen.reminderId : null;
   const selected = useQuery({
-    enabled: Boolean(request && "reminderId" in request),
+    enabled: selectedId !== null,
     queryFn: async ({ signal }) => {
-      if (!request || !("reminderId" in request)) {
+      if (selectedId === null) {
         return null;
       }
       if (demo) {
         return (
           demoReminderSession
             .get(mailboxId)
-            ?.find((item) => item.id === request.reminderId) ?? null
+            ?.find((item) => item.id === selectedId) ?? null
         );
       }
       return await rpc.reminders.get(
-        { mailboxId, reminderId: request.reminderId },
+        { mailboxId, reminderId: selectedId },
         { signal }
       );
     },
-    queryKey: [
-      "reminders",
-      mailboxId,
-      mode,
-      "detail",
-      request && "reminderId" in request ? request.reminderId : null,
-    ],
+    queryKey: ["reminders", mailboxId, mode, "detail", selectedId],
   });
   const save = useMutation({
     mutationFn: async (values: ReminderEditorValues) => {
-      if (entry?.kind === "details" && entry.reminder) {
+      if (screen.kind === "edit") {
         return await changeUiReminder(
           {
             command: { kind: "edit", ...values },
-            expectedVersion: entry.reminder.version,
+            expectedVersion: screen.reminder.version,
             mailboxId,
-            reminderId: entry.reminder.id,
+            reminderId: screen.reminder.id,
           },
           demo
         );
@@ -196,7 +197,8 @@ export const RemindersPanel = ({
         {
           ...values,
           mailboxId,
-          requestId: entry?.requestId ?? crypto.randomUUID(),
+          requestId:
+            screen.kind === "new" ? screen.requestId : crypto.randomUUID(),
         },
         demo
       );
@@ -209,7 +211,7 @@ export const RemindersPanel = ({
     },
     onSuccess: async (reminder) => {
       cacheReminder({ client, demo, reminder });
-      setEntry(null);
+      setScreen({ kind: "detail", reminderId: reminder.id });
       await client.invalidateQueries({
         queryKey: ["reminders", mailboxId, mode],
       });
@@ -271,16 +273,17 @@ export const RemindersPanel = ({
           },
         ];
   const handleEdit = (reminder: Reminder) => {
-    setDetails(null);
-    setRequestDismissed(true);
-    setEntry({
-      initial: reminder,
-      kind: "details",
+    setScreen({
+      kind: "edit",
       reminder,
       requestId: crypto.randomUUID(),
     });
   };
   const open = (reminder: Reminder) => {
+    cacheReminder({ client, demo, reminder });
+    setScreen({ kind: "detail", reminderId: reminder.id });
+  };
+  const openMail = (reminder: Reminder) => {
     if (reminder.target.kind === "thread") {
       void navigate({
         mailbox: "inbox",
@@ -289,24 +292,12 @@ export const RemindersPanel = ({
         threadId: reminder.target.threadId,
         workspace: null,
       });
-    } else {
-      setDetails(reminder);
     }
   };
-  let title = "Reminders";
-  if (entry?.kind === "quick") {
-    title = "New reminder";
-  } else if (entry?.kind === "details") {
-    title = entry.reminder ? "Edit reminder" : "New reminder";
-  }
   return (
     <section aria-label="Reminders" className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between gap-2 px-4 py-4">
-        {entry ? (
-          <Text as="h2" size="lg" weight="medium">
-            {title}
-          </Text>
-        ) : (
+      <div className="flex items-center justify-between gap-2 px-4 py-3">
+        {screen.kind === "list" ? (
           <Tabs
             value={view}
             onValueChange={(value: unknown) => {
@@ -320,67 +311,122 @@ export const RemindersPanel = ({
               <TabsTab value="history">History</TabsTab>
             </TabsList>
           </Tabs>
+        ) : (
+          <Button
+            disabled={save.isPending}
+            onClick={() => {
+              setScreen({ kind: "list" });
+            }}
+            size="sm"
+            variant="ghost"
+          >
+            <Icon icon={ArrowLeft01Icon} />
+            Reminders
+          </Button>
         )}
         <div className="flex shrink-0 items-center gap-1">
-          {demo || entry ? null : <ReminderOptions mailboxId={mailboxId} />}
-          {entry ? null : (
+          {demo || screen.kind !== "list" ? null : (
+            <ReminderOptions mailboxId={mailboxId} />
+          )}
+          {screen.kind === "detail" && selected.data ? (
+            <ReminderActions
+              demo={demo}
+              onEdit={() => {
+                if (selected.data) {
+                  handleEdit(selected.data);
+                }
+              }}
+              reminder={selected.data}
+            />
+          ) : null}
+          {screen.kind === "list" ? (
             <Button
               onClick={() => {
-                setEntry({ kind: "quick", requestId: crypto.randomUUID() });
+                const { timeZone } = Intl.DateTimeFormat().resolvedOptions();
+                setScreen({
+                  initial: {
+                    dueAt: getReminderPresetTime({ days: 1, timeZone }),
+                    target: { kind: "standalone" },
+                    timeZone,
+                    title: "",
+                  },
+                  kind: "new",
+                  requestId: crypto.randomUUID(),
+                });
               }}
             >
               <Icon icon={Add01Icon} />
               New
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
-      <div
-        className={cn("min-h-0 flex-1 px-4 pb-4", {
-          flex: entry?.kind === "details",
-          "flex-col": entry?.kind === "details",
-          "overflow-y-auto": entry?.kind !== "details",
-        })}
-      >
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         {demo ? (
           <p className="mb-3 text-caption text-muted-fg">
             Demo reminders stay in this browser session.
           </p>
         ) : null}
-        {entry?.kind === "quick" ? (
-          <ReminderQuickEntry
-            onCancel={() => {
-              setEntry(null);
+        {screen.kind === "new" || screen.kind === "edit" ? (
+          <div className="space-y-5">
+            <Text as="h2" size="lg" weight="medium">
+              {screen.kind === "edit" ? "Edit reminder" : "New reminder"}
+            </Text>
+            <ReminderEditor
+              focusTitleOnOpen
+              initial={
+                screen.kind === "edit" ? screen.reminder : screen.initial
+              }
+              key={screen.requestId}
+              mailboxId={mailboxId}
+              onCancel={() => {
+                setScreen(
+                  screen.kind === "edit"
+                    ? { kind: "detail", reminderId: screen.reminder.id }
+                    : { kind: "list" }
+                );
+              }}
+              onSave={({ title: nextTitle, dueAt, timeZone, target }) => {
+                save.mutate({ dueAt, target, timeZone, title: nextTitle });
+              }}
+              pending={save.isPending}
+              submitLabel={
+                screen.kind === "edit" ? "Save changes" : "Set reminder"
+              }
+            />
+          </div>
+        ) : null}
+        {screen.kind === "detail" && selected.isPending ? (
+          <output className="block py-4 text-body-sm text-muted-fg">
+            Loading reminder...
+          </output>
+        ) : null}
+        {screen.kind === "detail" && selected.data ? (
+          <ReminderDetails
+            demo={demo}
+            onEdit={handleEdit}
+            onOpenMail={() => {
+              if (selected.data) {
+                openMail(selected.data);
+              }
             }}
-            onChooseDate={(initial) => {
-              setEntry({
-                initial,
-                kind: "details",
-                requestId: entry.requestId,
-              });
-            }}
-            onSave={(values) => {
-              save.mutate(values);
-            }}
-            pending={save.isPending}
+            reminder={selected.data}
           />
         ) : null}
-        {entry?.kind === "details" ? (
-          <ReminderEditor
-            docked
-            initial={entry.initial}
-            key={entry.requestId}
-            mailboxId={mailboxId}
-            onCancel={() => {
-              setEntry(null);
-            }}
-            onSave={({ title: nextTitle, dueAt, timeZone, target }) => {
-              save.mutate({ dueAt, target, timeZone, title: nextTitle });
-            }}
-            pending={save.isPending}
-          />
+        {screen.kind === "detail" && !selected.isPending && !selected.data ? (
+          <div className="space-y-3 py-4" role="alert">
+            <p className="text-body-sm">Could not load this reminder.</p>
+            <Button
+              onClick={() => {
+                void selected.refetch();
+              }}
+              variant="secondary"
+            >
+              Try again
+            </Button>
+          </div>
         ) : null}
-        {entry === null ? (
+        {screen.kind === "list" ? (
           <>
             {reminders.isPending ? (
               <output className="block py-6 text-body-sm text-muted-fg">
@@ -416,7 +462,10 @@ export const RemindersPanel = ({
               ? groups
                   .filter((group) => group.items.length > 0)
                   .map((group) => (
-                    <div className="mt-4 space-y-2.5" key={group.title}>
+                    <div
+                      className="mt-5 space-y-2.5 first:mt-0"
+                      key={group.title}
+                    >
                       <h3 className="text-caption text-muted-fg">
                         {group.title}
                       </h3>
@@ -432,7 +481,7 @@ export const RemindersPanel = ({
                               key={reminder.id}
                               now={reminders.now}
                               onDetails={() => {
-                                setDetails(reminder);
+                                open(reminder);
                               }}
                               onEdit={() => {
                                 handleEdit(reminder);
@@ -450,16 +499,6 @@ export const RemindersPanel = ({
           </>
         ) : null}
       </div>
-      <ReminderDetails
-        onClose={() => {
-          setDetails(null);
-          setRequestDismissed(true);
-        }}
-        onEdit={handleEdit}
-        reminder={
-          details ?? (requestDismissed ? null : (selected.data ?? null))
-        }
-      />
     </section>
   );
 };
