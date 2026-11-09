@@ -376,39 +376,48 @@ const ThreadMessageBody = ({
   isLoading?: boolean;
   mailboxId: string;
   message: MessageListItem;
-}) => (
-  <div
-    aria-hidden={!expanded}
-    // oxlint-disable-next-line shadcn/no-arbitrary-values -- Grid-rows collapse animation needs the exact property.
-    className="grid overflow-hidden transition-[grid-template-rows] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-in-out) motion-reduce:transition-none"
-    data-conversation-expansion
-    style={{
-      // oxlint-disable-next-line shadcn/no-inline-styles -- Collapse animation is driven by measured state.
-      gridTemplateRows: expanded ? "1fr" : "0fr",
-      // oxlint-disable-next-line shadcn/no-inline-styles -- Collapse animation is driven by measured state.
-      pointerEvents: expanded ? "auto" : "none",
-    }}
-  >
-    <div className="min-h-0 overflow-hidden">
-      <div
-        className={cn(
-          // oxlint-disable-next-line shadcn/no-arbitrary-values -- Enter animation needs the exact property list.
-          "mx-auto w-full max-w-3xl px-4 pb-4 transition-[opacity,translate] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) motion-reduce:transition-none @sm:px-5 @sm:pb-5",
-          {
-            "-translate-y-1 opacity-0": !expanded,
-            "translate-y-0 opacity-100": expanded,
-          }
-        )}
-      >
-        <MessageBody
-          isLoading={isLoading}
-          mailboxId={mailboxId}
-          message={message}
-        />
+}) => {
+  const [hasExpanded, setHasExpanded] = useState(expanded);
+  if (expanded && !hasExpanded) {
+    setHasExpanded(true);
+  }
+
+  return (
+    <div
+      aria-hidden={!expanded}
+      // oxlint-disable-next-line shadcn/no-arbitrary-values -- Grid-rows collapse animation needs the exact property.
+      className="grid overflow-hidden transition-[grid-template-rows] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-in-out) motion-reduce:transition-none"
+      data-conversation-expansion
+      style={{
+        // oxlint-disable-next-line shadcn/no-inline-styles -- Collapse animation is driven by measured state.
+        gridTemplateRows: expanded ? "1fr" : "0fr",
+        // oxlint-disable-next-line shadcn/no-inline-styles -- Collapse animation is driven by measured state.
+        pointerEvents: expanded ? "auto" : "none",
+      }}
+    >
+      <div className="min-h-0 overflow-hidden">
+        <div
+          className={cn(
+            // oxlint-disable-next-line shadcn/no-arbitrary-values -- Enter animation needs the exact property list.
+            "mx-auto w-full max-w-3xl px-4 pb-4 transition-[opacity,translate] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) motion-reduce:transition-none @sm:px-5 @sm:pb-5",
+            {
+              "-translate-y-1 opacity-0": !expanded,
+              "translate-y-0 opacity-100": expanded,
+            }
+          )}
+        >
+          {hasExpanded && (
+            <MessageBody
+              isLoading={isLoading}
+              mailboxId={mailboxId}
+              message={message}
+            />
+          )}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const MessageExpandButton = ({
   expanded,
@@ -664,11 +673,21 @@ export const ThreadMessageList = ({
   onUnsubscribe?: (messageId: string) => Promise<boolean>;
   verificationCodes: RouterOutputs["mail"]["listVerificationCodes"]["items"];
 }) => {
-  const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>(() => {
+  const [messageExpansion, setMessageExpansion] = useState<
+    Record<string, boolean>
+  >(() => {
     const lastMessage = messages.at(-1);
-    return lastMessage ? [lastMessage.id] : [];
+    return lastMessage ? { [lastMessage.id]: true } : {};
   });
-  const expandedMessageIdSet = new Set(expandedMessageIds);
+  const lastMessageId = messages.at(-1)?.id;
+  const expandedMessageIdSet = new Set(
+    messages
+      .filter(
+        (message) =>
+          messageExpansion[message.id] ?? message.id === lastMessageId
+      )
+      .map((message) => message.id)
+  );
   const navigationItems = useMemo(
     () =>
       messages.map((message) => {
@@ -690,9 +709,7 @@ export const ThreadMessageList = ({
     if (!expandedMessageIdSet.has(id)) {
       // oxlint-disable-next-line node/no-sync -- Commit the selected card before reading its browser expansion transition.
       flushSync(() => {
-        setExpandedMessageIds((current) =>
-          current.includes(id) ? current : [...current, id]
-        );
+        setMessageExpansion((current) => ({ ...current, [id]: true }));
       });
     }
     const content = navigationScope?.contentRef.current;
@@ -754,11 +771,10 @@ export const ThreadMessageList = ({
             onComposeDraftRequested={onComposeDraftRequested}
             onUnsubscribe={onUnsubscribe}
             onToggleExpanded={() => {
-              setExpandedMessageIds((current) =>
-                isExpanded
-                  ? current.filter((id) => id !== threadMessage.id)
-                  : [...current, threadMessage.id]
-              );
+              setMessageExpansion((current) => ({
+                ...current,
+                [threadMessage.id]: !isExpanded,
+              }));
             }}
             verificationCode={
               verificationCodes.find(
