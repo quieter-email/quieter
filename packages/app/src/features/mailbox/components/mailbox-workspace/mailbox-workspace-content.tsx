@@ -952,7 +952,7 @@ const MailboxWorkspaceContentInner = ({
                     // Opening remains available without persistent storage.
                   }
                 },
-                onOpenReminders: async (trigger, mailboxId, reminderId) => {
+                onOpenReminders: async (trigger, mailboxId, selection) => {
                   if (trigger) {
                     assistantTriggerRef.current = trigger;
                   }
@@ -960,11 +960,13 @@ const MailboxWorkspaceContentInner = ({
                     assistantAutoCollapsedRef.current = false;
                     setAssistantTab("reminders");
                     setReminderRequest(
-                      reminderId
+                      selection
                         ? {
                             id: crypto.randomUUID(),
                             mailboxId: mailboxId ?? selectedMailboxId,
-                            reminderId,
+                            ...(selection.kind === "edit"
+                              ? { reminder: selection.reminder }
+                              : { reminderId: selection.reminderId }),
                           }
                         : null
                     );

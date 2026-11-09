@@ -92,7 +92,11 @@ Use shared `Text` props for repeated product headings and text treatments. Speci
 | `text-caption`    | 12px | Metadata                               |
 | `text-micro`      | 11px | Small labels and pills                 |
 
-The type tokens include line heights and heading tracking. Prefer those defaults before adding leading or tracking. `font-sans` uses self-hosted Geist and `font-mono` uses self-hosted Geist Mono in web and desktop. Compact workspace headings use 16px, dense UI uses 13px, and metadata uses 12px. Use medium weight for headings and row labels, regular weight for supporting text, and semantic colors to distinguish their roles. Truncate workspace and row titles to one line when space is limited. Help and instructions wrap normally, with 20px line height for settings descriptions. New scale steps must also be registered in `lib/cn.ts` so text colors do not evict font sizes during merging.
+The type tokens include line heights and heading tracking. Prefer those defaults before adding leading or tracking. `font-sans` uses self-hosted Geist and `font-mono` uses self-hosted Geist Mono in web and desktop.
+
+Compact product UI defaults to 13px regular text and 12px metadata. Item titles, sidebar details, compact section headings, and row labels use the surrounding control text size, including when their semantic element is a heading. For example, a reminder title uses `Text size="sm" weight="normal"`, not `size="lg" weight="medium"`. Establish hierarchy with placement, spacing, and tone. Reserve larger or heavier text for an established page-heading treatment or an explicit design requirement; do not enlarge ordinary titles to make them feel important. Existing reading text and marketing display type keep their own roles.
+
+Truncate workspace and row titles to one line when space is limited. Help and instructions wrap normally, with 20px line height for settings descriptions. New scale steps must also be registered in `lib/cn.ts` so text colors do not evict font sizes during merging.
 
 ### Colors
 

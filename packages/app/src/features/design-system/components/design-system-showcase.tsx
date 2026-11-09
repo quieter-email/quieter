@@ -14,6 +14,7 @@ import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
 import { ChatMessage } from "@quieter/app/features/chat/components/chat-message";
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
+import { ReminderEditor } from "@quieter/app/features/reminders/reminder-editor";
 import { ManagedUsageSummary } from "@quieter/app/features/settings/components/organization-settings/organization-mail-usage-settings";
 import { toastError } from "@quieter/app/lib/error-toast";
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
@@ -97,6 +98,12 @@ import {
 import { entranceMotionVariants } from "@quieter/ui/motion";
 import { Pill } from "@quieter/ui/pill";
 import type { PillTone } from "@quieter/ui/pill";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@quieter/ui/popover";
 import { Schedule } from "@quieter/ui/schedule";
 import type { ScheduleItem, ScheduleProps } from "@quieter/ui/schedule";
 import {
@@ -623,6 +630,10 @@ export const DesignSystemShowcase = () => {
   const [location, setLocation] = useState("");
   const [date, setDate] = useState("2026-10-27");
   const [time, setTime] = useState("14:35");
+  const [reminderEditorOpen, setReminderEditorOpen] = useState(false);
+  const [reminderDueAt, setReminderDueAt] = useState(() =>
+    new Date(Date.now() + 86_400_000).toISOString()
+  );
   const [timeZone, setTimeZone] = useState("Europe/Berlin");
 
   return (
@@ -1703,7 +1714,9 @@ export const DesignSystemShowcase = () => {
                         }}
                         variant="inline-edit"
                       >
-                        <span className="truncate">{card.title}</span>
+                        <Text as="span" size="sm" truncate weight="normal">
+                          {card.title}
+                        </Text>
                       </Button>
                       <span className="shrink-0 text-caption text-muted-fg">
                         {card.time}
@@ -1767,6 +1780,40 @@ export const DesignSystemShowcase = () => {
               <FieldLabel size="caption">Reminder</FieldLabel>
               <Input defaultValue="Review the proposal" />
             </Field>
+          </Row>
+          <Row label="Scrollable anchored editor">
+            <Popover
+              open={reminderEditorOpen}
+              onOpenChange={setReminderEditorOpen}
+            >
+              <PopoverTrigger render={<Button variant="secondary" />}>
+                Edit follow-up
+              </PopoverTrigger>
+              <PopoverContent size="sm" scrollable>
+                <div className="space-y-4">
+                  <PopoverTitle>Follow-up reminder</PopoverTitle>
+                  <ReminderEditor
+                    followUp
+                    initial={{
+                      dueAt: reminderDueAt,
+                      target: { kind: "standalone" },
+                      timeZone: "Europe/Berlin",
+                      title: "Follow up on the proposal",
+                    }}
+                    initialCondition="The recipient gives a substantive reply"
+                    onCancel={() => {
+                      setReminderEditorOpen(false);
+                    }}
+                    onSave={(values) => {
+                      setReminderDueAt(values.dueAt);
+                      setReminderEditorOpen(false);
+                      toast("Follow-up updated");
+                    }}
+                    submitLabel="Save"
+                  />
+                </div>
+              </PopoverContent>
+            </Popover>
           </Row>
           <Row label="Vertical tabs">
             <Tabs defaultValue="account" orientation="vertical">

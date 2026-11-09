@@ -33,6 +33,7 @@ export const PopoverContent = ({
   side = "bottom",
   sideOffset = 8,
   size = "default",
+  scrollable = false,
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Popup> &
   Pick<
@@ -40,6 +41,7 @@ export const PopoverContent = ({
     "align" | "alignOffset" | "collisionPadding" | "side" | "sideOffset"
   > & {
     size?: "default" | "sm";
+    scrollable?: boolean;
   }) => (
   <PopoverPortal>
     <PopoverPrimitive.Positioner
@@ -55,7 +57,10 @@ export const PopoverContent = ({
           anchoredPopupMotionClassName,
           popupSurfaceClassName,
           "z-50 max-w-sm min-w-52 rounded-xl p-4",
-          { "w-80 max-w-(--available-width)": size === "sm" },
+          {
+            "max-h-(--available-height) overflow-y-auto": scrollable,
+            "w-80 max-w-(--available-width)": size === "sm",
+          },
           className
         )}
         {...props}
