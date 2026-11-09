@@ -361,6 +361,9 @@ export const createRecoveredComposeCopy = (
       recoveryMissingFiles.length > 0
         ? `Your text was recovered. Reattach these files before sending: ${recoveryMissingFiles.join(", ")}.`
         : draft.errorMessage,
+    followUpReminder: draft.followUpReminder
+      ? { ...draft.followUpReminder, requestId: crypto.randomUUID() }
+      : draft.followUpReminder,
     inlineImages: draft.inlineImages
       .filter((asset) => runtimeBinaryById.has(asset.id))
       .map((asset) => ({

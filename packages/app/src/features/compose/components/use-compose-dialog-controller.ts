@@ -1069,6 +1069,9 @@ export const useComposeDialogController = ({
         baseRevision: undefined,
         draftId: undefined,
         errorMessage: null,
+        followUpReminder: original.followUpReminder
+          ? { ...original.followUpReminder, requestId: crypto.randomUUID() }
+          : original.followUpReminder,
         inlineImages: original.inlineImages.map((asset) => ({
           ...asset,
           sourceMessageId: asset.sourceMessageId ?? original.messageId,

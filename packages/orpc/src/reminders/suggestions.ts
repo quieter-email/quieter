@@ -380,10 +380,8 @@ const processSuggestion = async (
       await createSuggestedReminder({ ...ready, result }, true);
     }
   } catch (error) {
-    if (
-      !(error instanceof ORPCError && error.status < 500) &&
-      !isAiCreditAdmissionBusy(error)
-    ) {
+    const admissionBusy = usage === undefined && isAiCreditAdmissionBusy(error);
+    if (!(error instanceof ORPCError && error.status < 500) && !admissionBusy) {
       reportError(new Error("Reminder suggestion could not finish."), {
         operation: "reminder-suggestion",
       });
@@ -391,12 +389,13 @@ const processSuggestion = async (
     const retry =
       usage === undefined &&
       row.attempts < 3 &&
-      !(error instanceof ORPCError && error.status < 500);
+      (admissionBusy || !(error instanceof ORPCError && error.status < 500));
     await db
       .update(mailReminderSuggestion)
       .set({
         availableAt: new Date(Date.now() + 30_000),
         status: retry ? "pending" : "none",
+        ...(admissionBusy ? { fingerprint: null } : {}),
         ...(usage ? { usage, usageModel: resolveBackgroundModel() } : {}),
       })
       .where(lease);
