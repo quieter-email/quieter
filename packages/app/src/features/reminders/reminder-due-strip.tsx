@@ -78,7 +78,7 @@ export const ReminderDueStrip = ({
 }) => {
   const sidebar = use(AssistantSidebarContext);
   const navigate = useMailboxSearchActions();
-  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [pinnedScope, setPinnedScope] = useState<string | null>(null);
   const mailboxScopes = scopes ?? (mailboxId ? [{ demo, mailboxId }] : []);
   const scopeKey = mailboxScopes
     .map((scope) => `${scope.mailboxId}:${scope.demo}`)
@@ -159,10 +159,10 @@ export const ReminderDueStrip = ({
         id: reminder.id,
       }))}
       label="Due reminders"
-      onOpenChange={(next) => {
-        setOpenKey(next ? scopeKey : null);
+      onPinnedChange={(next) => {
+        setPinnedScope(next ? scopeKey : null);
       }}
-      open={openKey === scopeKey}
+      pinned={pinnedScope === scopeKey}
       totalCount={due.length}
     />
   );

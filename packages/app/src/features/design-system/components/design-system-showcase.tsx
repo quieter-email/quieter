@@ -618,7 +618,7 @@ export const DesignSystemShowcase = () => {
   }, []);
   const [labelColor, setLabelColor] = useState<MailboxLabelColor>("blue");
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const [cardStackOpen, setCardStackOpen] = useState(false);
+  const [cardStackPinned, setCardStackPinned] = useState(false);
   const [showPromptContext, setShowPromptContext] = useState(true);
   const [location, setLocation] = useState("");
   const [date, setDate] = useState("2026-10-27");
@@ -1741,8 +1741,8 @@ export const DesignSystemShowcase = () => {
                   id: card.id,
                 }))}
                 label="Due reminders"
-                onOpenChange={setCardStackOpen}
-                open={cardStackOpen}
+                onPinnedChange={setCardStackPinned}
+                pinned={cardStackPinned}
                 totalCount={3}
               />
             </div>
