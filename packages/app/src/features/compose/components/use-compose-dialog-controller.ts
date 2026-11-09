@@ -648,6 +648,7 @@ export const useComposeDialogController = ({
         draftAnchor: activeDraftRef.current.draftAnchor,
         draftId: activeDraftRef.current.localId,
         draftRevision: draftRevisionRef.current,
+        followUpReminder: activeDraftRef.current.followUpReminder,
         inlineImages: activeDraftRef.current.inlineImages,
         messageId: activeDraftRef.current.messageId,
         providerDraftId: activeDraftRef.current.draftId,
@@ -869,6 +870,7 @@ export const useComposeDialogController = ({
           bodyHtml: copied.bodyHtml,
           bodyText: current.bodyText,
           errorMessage: current.errorMessage,
+          followUpReminder: current.followUpReminder,
           inlineImages: copied.inlineImages,
           recipients: { ...current.recipients },
           recoveryMissingFiles: current.recoveryMissingFiles,
@@ -892,6 +894,7 @@ export const useComposeDialogController = ({
   useDraftAutosave({
     attachments: state.draft.attachments,
     enabled: persistDrafts && !autosavePaused && state.open,
+    followUpReminder: state.draft.followUpReminder,
     mailboxId,
     save: async () => {
       if (

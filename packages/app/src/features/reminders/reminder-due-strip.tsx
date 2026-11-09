@@ -6,6 +6,7 @@ import type { Reminder } from "@quieter/mail/reminders";
 import { Button } from "@quieter/ui/button";
 import { CardStack } from "@quieter/ui/card-stack";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
+import { useDateTimePreferences } from "@quieter/ui/date-time-preferences";
 import { useQueries } from "@tanstack/react-query";
 import { use, useState } from "react";
 
@@ -26,6 +27,7 @@ const ReminderDueRow = ({
   onOpen: () => void;
   onEdit: () => void;
 }) => {
+  const { timeFormat } = useDateTimePreferences();
   const change = useReminderMutation({ demo, reminder });
 
   return (
@@ -56,6 +58,7 @@ const ReminderDueRow = ({
           ? "Due now"
           : new Intl.DateTimeFormat(undefined, {
               hour: "numeric",
+              hour12: timeFormat === "12h",
               minute: "2-digit",
               timeZone: reminder.timeZone,
             }).format(new Date(reminder.dueAt))}

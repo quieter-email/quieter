@@ -1921,6 +1921,7 @@ export const ComposeWorkspace = ({
                   bodyHtml: transferDraft.bodyHtml,
                   bodyText: transferDraft.bodyText,
                   errorMessage: null,
+                  followUpReminder: transferDraft.followUpReminder,
                   inlineImages: transferDraft.inlineImages,
                   recipients: transferDraft.recipients,
                   saveStatus: "idle",

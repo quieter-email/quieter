@@ -88,7 +88,7 @@ export const processReminderNotifications = async (
       await finishReminderJob({ id: job.id, token });
     } catch (error) {
       reportError(error, { operation: "reminder-notification" });
-      await finishReminderJob({ id: job.id, retry: true, token });
+      await finishReminderJob({ id: job.id, retry: job.attempts < 10, token });
     }
   }
   return count;

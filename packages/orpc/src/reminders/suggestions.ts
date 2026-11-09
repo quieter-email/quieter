@@ -307,7 +307,14 @@ const processSuggestion = async (
       ]
         .map((byte) => byte.toString(16).padStart(2, "0"))
         .join("");
-      await db.update(mailReminderSuggestion).set({ fingerprint }).where(lease);
+      const [submission] = await db
+        .update(mailReminderSuggestion)
+        .set({ fingerprint })
+        .where(lease)
+        .returning({ id: mailReminderSuggestion.id });
+      if (submission === undefined) {
+        return;
+      }
       const extracted = await extractReminderSuggestion({
         billing: await createMailboxAiBillingContext({
           externalId: `reminder-suggestion:${row.id}`,
@@ -360,13 +367,17 @@ const processSuggestion = async (
     }
     await assertAccessibleMailbox(row);
     const current = await getReminderPreferences(row);
-    if (row.automatic && current.automatic && result.automaticEligible) {
-      await createSuggestedReminder({ ...row, result }, true);
-    } else {
-      await db
-        .update(mailReminderSuggestion)
-        .set({ status: current.suggestions ? "suggested" : "none" })
-        .where(lease);
+    const [ready] = await db
+      .update(mailReminderSuggestion)
+      .set({
+        status: sql`case when ${mailReminderSuggestion.automatic}
+          and ${current.automatic} and ${result.automaticEligible}
+          then 'pending' else ${current.suggestions ? "suggested" : "none"} end`,
+      })
+      .where(lease)
+      .returning();
+    if (ready?.automatic && current.automatic && result.automaticEligible) {
+      await createSuggestedReminder({ ...ready, result }, true);
     }
   } catch (error) {
     if (

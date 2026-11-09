@@ -36,8 +36,8 @@ const applyReminderEvaluation = async (input: {
   version: number;
   status: "unfulfilled" | "uncertain" | "fulfilled" | "failed";
   summary: string;
-}) =>
-  await db.transaction(async (tx) => {
+}) => {
+  const changed = await db.transaction(async (tx) => {
     const [lease] = await tx
       .select()
       .from(mailReminderJob)
@@ -50,9 +50,9 @@ const applyReminderEvaluation = async (input: {
       )
       .for("update");
     if (lease === undefined) {
-      return false;
+      return null;
     }
-    const changed = await tx
+    const [updated] = await tx
       .update(mailReminder)
       .set({
         evaluationStatus: input.status,
@@ -73,9 +73,28 @@ const applyReminderEvaluation = async (input: {
           eq(mailReminder.status, "active")
         )
       )
-      .returning({ id: mailReminder.id });
-    return changed.length > 0;
+      .returning({
+        id: mailReminder.id,
+        mailboxId: mailReminder.mailboxId,
+        scheduleVersion: mailReminder.scheduleVersion,
+        userId: mailReminder.userId,
+      });
+    return updated ?? null;
   });
+  if (changed === null) {
+    return false;
+  }
+  await publishMailUpdate(
+    {
+      mailboxId: changed.mailboxId,
+      reminderId: changed.id,
+      scheduleVersion: changed.scheduleVersion,
+      type: "reminders.changed",
+    },
+    { recipientUserIds: [changed.userId] }
+  );
+  return true;
+};
 
 const reportPendingReminderUsage = async () => {
   const rows = await db
@@ -135,7 +154,21 @@ export const recoverSentReminderIntents = async (
     .orderBy(gmailComposeOperation.updatedAt, gmailComposeOperation.id)
     .limit(Math.min(input.limit ?? 20, 50));
   for (const operation of operations) {
-    if (!operation.followUpReminder || !operation.response?.threadId) {
+    if (!operation.followUpReminder) {
+      continue;
+    }
+    if (!operation.response?.threadId) {
+      await db
+        .update(gmailComposeOperation)
+        .set({ followUpReminder: null })
+        .where(
+          and(
+            eq(gmailComposeOperation.id, operation.id),
+            eq(gmailComposeOperation.kind, "send"),
+            eq(gmailComposeOperation.status, "accepted"),
+            sql`nullif(${gmailComposeOperation.response}->>'threadId', '') is null`
+          )
+        );
       continue;
     }
     await db
@@ -387,15 +420,6 @@ export const processReminderJobs = async (
         token,
         version: row.version,
       });
-      await publishMailUpdate(
-        {
-          mailboxId: row.mailboxId,
-          reminderId: row.id,
-          scheduleVersion: row.scheduleVersion,
-          type: "reminders.changed",
-        },
-        { recipientUserIds: [row.userId] }
-      );
       await finishReminderJob({ id: job.id, token });
     } catch (error) {
       if (

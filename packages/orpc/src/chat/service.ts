@@ -437,6 +437,7 @@ export const toForegroundComposeMessage = (
   draftAnchor: draft.draftAnchor ?? null,
   draftId: draft.providerDraftId ?? null,
   errorMessage: null,
+  followUpReminder: draft.followUpReminder ?? undefined,
   inlineImages: draft.inlineImages,
   localId,
   messageId: draft.messageId ?? null,

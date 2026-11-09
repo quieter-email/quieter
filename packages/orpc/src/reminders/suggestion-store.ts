@@ -24,7 +24,25 @@ export const enqueueReminderSuggestion = async (input: {
       id: crypto.randomUUID(),
       status: "pending",
     })
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      set: {
+        automatic: sql`${mailReminderSuggestion.automatic} or ${input.automatic}`,
+        status: sql`case
+          when ${input.automatic} and not ${mailReminderSuggestion.automatic}
+            and ${mailReminderSuggestion.status} = 'suggested'
+            and ${mailReminderSuggestion.result}->>'automaticEligible' = 'true'
+          then 'pending' else ${mailReminderSuggestion.status} end`,
+      },
+      setWhere: or(
+        eq(mailReminderSuggestion.status, "pending"),
+        eq(mailReminderSuggestion.status, "suggested")
+      ),
+      target: [
+        mailReminderSuggestion.userId,
+        mailReminderSuggestion.mailboxId,
+        mailReminderSuggestion.messageId,
+      ],
+    });
   const [row] = await db
     .select()
     .from(mailReminderSuggestion)

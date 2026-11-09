@@ -23,7 +23,7 @@ export const useQuickReminder = ({
   message,
 }: {
   mailboxId: string;
-  message: Pick<MessageListItem, "id" | "threadId" | "subject">;
+  message: Pick<MessageListItem, "id" | "threadId" | "subject"> | null;
 }) => {
   const queryClient = useQueryClient();
   const demo =
@@ -31,6 +31,9 @@ export const useQuickReminder = ({
   const attempts = useRef(new Map<string, CreateReminder>());
   return useMutation({
     mutationFn: async (preset: QuickReminderPreset) => {
+      if (message === null) {
+        throw new Error("The reminder message is unavailable.");
+      }
       const key = JSON.stringify([demo, mailboxId, message.id, preset]);
       let input = attempts.current.get(key);
       if (input === undefined) {

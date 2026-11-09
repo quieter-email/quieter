@@ -13,6 +13,7 @@ import { analyzeMailMessage } from "@quieter/mail/capture";
 import { getReplyReferenceIds } from "@quieter/mail/message-id";
 import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import type { ParsedRawMailMessage } from "@quieter/mail/raw-message";
+import { reportError } from "@quieter/observability";
 import {
   and,
   desc,
@@ -227,7 +228,6 @@ const finishIngestion = async (input: {
   receivedAt: Date;
   threadId: string;
 }) => {
-  await observeReminderMail(input);
   await enqueueMailAgentMessage({
     mailboxId: input.mailboxId,
     messageId: input.messageId,
@@ -235,6 +235,7 @@ const finishIngestion = async (input: {
     threadId: input.threadId,
   });
   const results = await Promise.allSettled([
+    observeReminderMail(input),
     captureManagedMessageMemory({
       mailboxId: input.mailboxId,
       messageId: input.messageId,
@@ -247,6 +248,18 @@ const finishIngestion = async (input: {
     }),
     runPostIngestionProcessing(input),
   ]);
+  for (const [index, result] of results.entries()) {
+    if (result.status === "rejected") {
+      reportError(result.reason, {
+        operation: [
+          "managed-ingestion-reminders",
+          "managed-ingestion-memory",
+          "managed-ingestion-publish",
+          "managed-ingestion-processing",
+        ][index],
+      });
+    }
+  }
   const failed = results.find((result) => result.status === "rejected");
   if (failed) {
     throw failed.reason;
