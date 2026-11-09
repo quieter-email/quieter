@@ -37,6 +37,10 @@ import {
   useMessageViewFocus,
   useMessageViewHotkeys,
 } from "@quieter/app/features/message-thread/components/use-message-view";
+import {
+  MessageReminderQuickAction,
+  MessageReminderSuggestion,
+} from "@quieter/app/features/reminders/message-reminders";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { parseSender } from "@quieter/app/lib/gmail/message-utils";
 import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
@@ -126,6 +130,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     viewRef,
     visibleMessages,
   } = props;
+  const { contentRef, gutterRef, viewportRef } = navigationScope ?? {};
   const [inlineDraft, setInlineDraft] = useState<ComposeDraftState | null>(
     null
   );
@@ -355,6 +360,12 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             labelIds={threadLabelIds}
             labels={gmailLabels}
           />
+          {mailboxProvider === "api" || activeMailbox === "drafts" ? null : (
+            <MessageReminderQuickAction
+              mailboxId={mailboxId}
+              message={hotkeyMessage}
+            />
+          )}
           {canSetThreadImportance && (
             <IconButtonTooltip label={importanceLabel}>
               <Button
@@ -410,6 +421,16 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           </div>
         )}
 
+        {mailboxProvider === "api" ||
+        activeMailbox === "drafts" ||
+        composeDemoMode === true ||
+        composeManagedDemoMode === true ? null : (
+          <MessageReminderSuggestion
+            key={`${mailboxId}:${hotkeyMessage.id}`}
+            mailboxId={mailboxId}
+            message={hotkeyMessage}
+          />
+        )}
         <MessageAttachments
           attachments={threadAttachments}
           className="mt-3"
@@ -423,7 +444,9 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             // oxlint-disable-next-line shadcn/no-arbitrary-values -- Animate the measured rail gutter's layout space and visibility, not unrelated properties.
             className="flex w-14 shrink-0 items-center justify-center overflow-x-clip py-4 pl-4 transition-[width,padding-left,opacity] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) empty:w-0 empty:pl-0 empty:opacity-0 motion-reduce:transition-none pointer-coarse:w-16 pointer-coarse:empty:w-0"
             ref={(element) => {
-              navigationScope.gutterRef.current = element;
+              if (gutterRef !== undefined) {
+                gutterRef.current = element;
+              }
             }}
           />
         )}
@@ -431,16 +454,16 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
           data-message-detail-scroll-container
           ref={(element) => {
-            if (navigationScope !== undefined) {
-              navigationScope.viewportRef.current = element;
+            if (viewportRef !== undefined) {
+              viewportRef.current = element;
             }
           }}
         >
           <div
             className="@container min-h-full min-w-0"
             ref={(element) => {
-              if (navigationScope !== undefined) {
-                navigationScope.contentRef.current = element;
+              if (contentRef !== undefined) {
+                contentRef.current = element;
               }
             }}
           >

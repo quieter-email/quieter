@@ -12,6 +12,7 @@ import {
 import { z } from "zod";
 
 import { readBoundedJson } from "./bounded-json";
+import { handleReminderWake } from "./reminder-wake";
 import { retryMailBroadcast } from "./retry-mail-broadcast";
 import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
 
@@ -57,6 +58,9 @@ export const broadcastMailUpdate = async (
 
 export const handleMailUpdates = async (request: Request, env: Env) => {
   const url = new URL(request.url);
+  if (url.pathname === "/mail/reminders/wake") {
+    return await handleReminderWake(request, env);
+  }
   const secret = readLinkedSecret(env.SST_RESOURCE_GmailLiveSyncTokenSecret);
   if (url.pathname === "/mail/live") {
     if (

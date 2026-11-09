@@ -26,8 +26,15 @@ import {
 } from "electron";
 import type { IpcMainInvokeEvent } from "electron";
 
-import { DESKTOP_APP_ORIGIN, DESKTOP_TITLE_BAR_HEIGHT } from "../shared/bridge";
+import {
+  DESKTOP_APP_ORIGIN,
+  DESKTOP_TITLE_BAR_HEIGHT,
+  reminderNotificationEvent,
+  reminderNotificationsEnabled,
+  reminderNotificationUser,
+} from "../shared/bridge";
 import { createAuthStorage } from "./auth-storage";
+import { ReminderNotificationService } from "./reminder-notifications";
 import {
   getAuthCallbackToken,
   getExternalURL,
@@ -129,6 +136,34 @@ authClient.setupMain({
   scheme: false,
 });
 
+let reminderSignOut = false;
+let reminderSessionBinding = Promise.resolve();
+const reminderNotifications = new ReminderNotificationService({
+  getSession: async () => {
+    const result = await authClient.getSession();
+    return result.data
+      ? { sessionId: result.data.session.id, userId: result.data.user.id }
+      : null;
+  },
+  onError: (error) => {
+    Sentry.captureException(error, {
+      tags: { boundary: "desktop-reminder-notifications" },
+    });
+  },
+  onOpen: (event) => {
+    if (!mainWindow || reminderSignOut) {
+      return;
+    }
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send("quieter:reminder-notification-open", event);
+  },
+  origin: new URL(env.DESKTOP_SERVER_URL).origin,
+});
+
 const assertTrustedSender = (event: IpcMainInvokeEvent): void => {
   if (
     !mainWindow ||
@@ -139,6 +174,46 @@ const assertTrustedSender = (event: IpcMainInvokeEvent): void => {
     throw new Error("This window cannot access quieter.");
   }
 };
+
+ipcMain.handle(
+  "quieter:reminder-notification-user",
+  async (event, input: unknown) => {
+    assertTrustedSender(event);
+    const userId = reminderNotificationUser.parse(input);
+    if (!reminderSignOut) {
+      reminderSessionBinding = reminderNotifications.setUser(userId);
+      await reminderSessionBinding;
+    }
+  }
+);
+ipcMain.handle("quieter:reminder-notification-status", async (event) => {
+  assertTrustedSender(event);
+  await reminderSessionBinding;
+  assertTrustedSender(event);
+  return reminderNotifications.getStatus();
+});
+ipcMain.handle(
+  "quieter:reminder-notification-enabled",
+  async (event, input: unknown) => {
+    assertTrustedSender(event);
+    await reminderSessionBinding;
+    assertTrustedSender(event);
+    return await reminderNotifications.setEnabled(
+      reminderNotificationsEnabled.parse(input)
+    );
+  }
+);
+ipcMain.handle(
+  "quieter:reminder-notification-show",
+  async (event, input: unknown) => {
+    assertTrustedSender(event);
+    await reminderSessionBinding;
+    assertTrustedSender(event);
+    return await reminderNotifications.show(
+      reminderNotificationEvent.parse(input)
+    );
+  }
+);
 
 ipcMain.handle("better-auth:getUser", async (event) => {
   assertTrustedSender(event);
@@ -160,6 +235,7 @@ ipcMain.handle("better-auth:authenticate", async (event, data: unknown) => {
   ) {
     throw new Error("Enter the sign-in code from your browser.");
   }
+  reminderNotifications.clearSession();
   const result = await authClient.authenticate({ token: data.token });
   if (result.error) {
     throw new Error(
@@ -175,37 +251,63 @@ ipcMain.handle("quieter:sign-out-cleanup-ack", (event, input: unknown) => {
 });
 ipcMain.handle("better-auth:signOut", async (event) => {
   assertTrustedSender(event);
+  if (reminderSignOut) {
+    throw new Error("Sign-out is already in progress.");
+  }
+  reminderSignOut = true;
+  reminderNotifications.clearSession();
   const frame = event.senderFrame;
-  await signOutCleanup.run({
-    onCompletionError: () => {
-      Sentry.captureException(
-        new Error("Desktop sign-out completion failed."),
-        {
-          tags: { boundary: "desktop-sign-out-cache" },
-        }
-      );
-    },
-    onSignedOut: () => {
-      if (!event.sender.isDestroyed() && event.sender.mainFrame === frame) {
-        event.sender.send("better-auth:user-updated", null);
-      }
-    },
-    send: (command) => {
-      assertTrustedSender(event);
-      if (event.sender.mainFrame !== frame) {
-        throw new Error("The sign-out window changed. Try again.");
-      }
-      event.sender.send("quieter:sign-out-cleanup", command);
-    },
-    signOut: async () => {
-      const result = await authClient.signOut();
-      if (result.error) {
-        throw new Error(
-          result.error.message ?? "Sign-out could not be completed. Try again."
+  let signedOut = false;
+  try {
+    await signOutCleanup.run({
+      onCompletionError: () => {
+        Sentry.captureException(
+          new Error("Desktop sign-out completion failed."),
+          {
+            tags: { boundary: "desktop-sign-out-cache" },
+          }
         );
+      },
+      onSignedOut: () => {
+        reminderNotifications.clearSession();
+        if (!event.sender.isDestroyed() && event.sender.mainFrame === frame) {
+          event.sender.send("better-auth:user-updated", null);
+        }
+      },
+      send: (command) => {
+        assertTrustedSender(event);
+        if (event.sender.mainFrame !== frame) {
+          throw new Error("The sign-out window changed. Try again.");
+        }
+        event.sender.send("quieter:sign-out-cleanup", command);
+      },
+      signOut: async () => {
+        const result = await authClient.signOut();
+        if (result.error) {
+          throw new Error(
+            result.error.message ??
+              "Sign-out could not be completed. Try again."
+          );
+        }
+        signedOut = true;
+      },
+    });
+  } finally {
+    reminderSignOut = false;
+    if (!signedOut) {
+      try {
+        const result = await authClient.getSession();
+        reminderSessionBinding = reminderNotifications.setUser(
+          result.data?.user.id ?? null
+        );
+        await reminderSessionBinding;
+      } catch (error) {
+        Sentry.captureException(error, {
+          tags: { boundary: "desktop-reminder-notifications" },
+        });
       }
-    },
-  });
+    }
+  }
 });
 ipcMain.handle("quieter:open-external", async (event, input: unknown) => {
   assertTrustedSender(event);
@@ -242,6 +344,7 @@ const completeAuthentication = async (token: string): Promise<void> => {
     pendingTokens.push(token);
     return;
   }
+  reminderNotifications.clearSession();
   try {
     const result = await authClient.authenticate({ token });
     if (result.error) {
@@ -454,6 +557,7 @@ const createWindow = async (): Promise<void> => {
     },
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
     webPreferences: {
+      backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.join(directory, "../preload/index.cjs"),
@@ -472,14 +576,17 @@ const createWindow = async (): Promise<void> => {
     (_event, _url, _inPlace, isMainFrame) => {
       if (isMainFrame) {
         signOutCleanup.cancel();
+        reminderNotifications.clearSession();
       }
     }
   );
   window.webContents.on("render-process-gone", () => {
     signOutCleanup.cancel();
+    reminderNotifications.clearSession();
   });
   window.on("closed", () => {
     signOutCleanup.cancel();
+    reminderNotifications.clearSession();
     if (mainWindow === window) {
       mainWindow = null;
     }
@@ -516,6 +623,7 @@ const startApp = async (): Promise<void> => {
     await app.whenReady();
     app.setAppUserModelId(DESKTOP_AUTH_PROTOCOL_SCHEME);
     await credentials.initialize();
+    await reminderNotifications.initialize();
     // oxlint-disable promise/prefer-await-to-callbacks -- Electron's permission API requires callbacks.
     session.defaultSession.setPermissionRequestHandler(
       (contents, permission, callback, details) => {
@@ -622,7 +730,9 @@ app.on("window-all-closed", () => {
 });
 const flushCredentialsAndQuit = async (): Promise<void> => {
   try {
+    reminderNotifications.clearSession();
     await credentials.flush();
+    await reminderNotifications.flush();
   } catch {
     dialog.showErrorBox(
       "Sign-in could not be saved",

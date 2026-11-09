@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { followUpReminderIntentSchema } from "../reminders";
+
 const normalizeMailAddressValue = (value: string | undefined) =>
   value?.replaceAll(/\r?\n\s+/gu, " ").trim() ?? "";
 
@@ -281,6 +283,7 @@ export const composeDraftInputSchema = z.object({
   draftAnchor: composeDraftAnchorSchema.nullable().optional(),
   draftId: z.string().nullable().optional(),
   errorMessage: z.string().nullable().optional(),
+  followUpReminder: followUpReminderIntentSchema.optional(),
   headers: z.array(composeHeaderSchema).max(32).optional(),
   inlineImages: z.array(composeInlineImageSchema),
   lastSavedAt: z.number().nullable().optional(),

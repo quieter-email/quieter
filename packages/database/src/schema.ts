@@ -10,6 +10,13 @@ import type {
   DeliveryStatus,
   RecipientSuppression,
 } from "@quieter/mail/delivery";
+import type {
+  FollowUpReminderIntent,
+  Reminder,
+  ReminderSuggestion,
+  ReminderSource,
+  ReminderTarget,
+} from "@quieter/mail/reminders";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -158,6 +165,7 @@ export type OrganizationMailUsageAlertTarget =
 export type OrganizationMailUsageDirection = "inbound" | "outbound";
 
 export type MailSendSnapshot = {
+  followUpReminder?: FollowUpReminderIntent;
   actorUserId?: string;
   rawSizeBytes: number;
   billingAccount?: {
@@ -3259,11 +3267,193 @@ export const organizationMailUsageEvent = pgTable(
   ]
 );
 
+export const mailReminder = pgTable(
+  "mailReminder",
+  {
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    dueAt: timestamp("dueAt", { withTimezone: true }).notNull(),
+    evaluationStatus: text("evaluationStatus")
+      .$type<Reminder["evaluationStatus"]>()
+      .notNull(),
+    evaluationSummary: text("evaluationSummary"),
+    firedAt: timestamp("firedAt", { withTimezone: true }),
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    requestId: text("requestId").notNull(),
+    resolution: text("resolution"),
+    scheduleVersion: integer("scheduleVersion").notNull(),
+    source: jsonb("source").$type<ReminderSource>(),
+    status: text("status").$type<Reminder["status"]>().notNull(),
+    target: jsonb("target").$type<ReminderTarget>().notNull(),
+    threadId: text("threadId"),
+    timeZone: text("timeZone").notNull(),
+    title: text("title").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+  },
+  (table) => [
+    unique("mail_reminder_request_unique").on(
+      table.mailboxId,
+      table.userId,
+      table.requestId
+    ),
+    index("mail_reminder_owner_due_idx").on(
+      table.userId,
+      table.mailboxId,
+      table.status,
+      table.dueAt,
+      table.id
+    ),
+    index("mail_reminder_thread_idx").on(
+      table.mailboxId,
+      table.threadId,
+      table.status
+    ),
+    check(
+      "mail_reminder_status_check",
+      sql`${table.status} in ('active', 'completed', 'cancelled', 'suspended')`
+    ),
+    check(
+      "mail_reminder_target_check",
+      sql`(${table.target}->>'kind' = 'standalone' and ${table.threadId} is null) or (${table.target}->>'kind' = 'thread' and ${table.threadId} = ${table.target}->>'threadId' and ${table.target}->>'anchorMessageId' is not null)`
+    ),
+  ]
+);
+
+export const mailReminderJob = pgTable(
+  "mailReminderJob",
+  {
+    attempts: integer("attempts").notNull(),
+    availableAt: timestamp("availableAt", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completedAt", { withTimezone: true }),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    eventId: text("eventId").notNull(),
+    id: text("id").primaryKey(),
+    kind: text("kind").$type<"schedule" | "evaluate" | "notify">().notNull(),
+    leaseToken: text("leaseToken"),
+    leaseUntil: timestamp("leaseUntil", { withTimezone: true }),
+    operationKey: text("operationKey").notNull().unique(),
+    reminderId: text("reminderId")
+      .notNull()
+      .references(() => mailReminder.id, { onDelete: "cascade" }),
+    reminderVersion: integer("reminderVersion").notNull(),
+    scheduleVersion: integer("scheduleVersion").notNull(),
+    usage: jsonb("usage").$type<{
+      cacheWriteTokens: number;
+      cachedTokens: number;
+      completionTokens: number;
+      costUsd?: number;
+      promptTokens: number;
+      result?: {
+        kind: "fulfilled" | "unfulfilled" | "uncertain";
+        evidenceMessageIds: string[];
+        explanation: string;
+      };
+    }>(),
+    usageModel: text("usageModel"),
+    usageReportedAt: timestamp("usageReportedAt", { withTimezone: true }),
+  },
+  (table) => [
+    index("mail_reminder_job_ready_idx").on(
+      table.kind,
+      table.completedAt,
+      table.availableAt,
+      table.leaseUntil
+    ),
+  ]
+);
+
+export const mailReminderPreference = pgTable(
+  "mailReminderPreference",
+  {
+    automatic: boolean("automatic").notNull().default(false),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    suggestions: boolean("suggestions").notNull().default(true),
+    timeZone: text("timeZone").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.mailboxId] })]
+);
+
+export const mailReminderSuggestion = pgTable(
+  "mailReminderSuggestion",
+  {
+    attempts: integer("attempts").notNull().default(0),
+    automatic: boolean("automatic").notNull(),
+    availableAt: timestamp("availableAt", { withTimezone: true }).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    fingerprint: text("fingerprint"),
+    id: text("id").primaryKey(),
+    leaseToken: text("leaseToken"),
+    leaseUntil: timestamp("leaseUntil", { withTimezone: true }),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    messageId: text("messageId").notNull(),
+    reminderId: text("reminderId").references(() => mailReminder.id, {
+      onDelete: "set null",
+    }),
+    result: jsonb("result").$type<
+      Pick<
+        ReminderSuggestion,
+        "title" | "dueAt" | "condition" | "reason" | "confidence"
+      > & { automaticEligible: boolean }
+    >(),
+    status: text("status")
+      .$type<"pending" | "none" | "suggested" | "accepted" | "dismissed">()
+      .notNull(),
+    threadId: text("threadId").notNull(),
+    timeZone: text("timeZone").notNull(),
+    usage: jsonb("usage").$type<{
+      cacheWriteTokens: number;
+      cachedTokens: number;
+      completionTokens: number;
+      costUsd?: number;
+      promptTokens: number;
+    }>(),
+    usageModel: text("usageModel"),
+    usageReportedAt: timestamp("usageReportedAt", { withTimezone: true }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    unique("mail_reminder_suggestion_source_unique").on(
+      table.userId,
+      table.mailboxId,
+      table.messageId
+    ),
+    index("mail_reminder_suggestion_work_idx").on(
+      table.status,
+      table.availableAt,
+      table.leaseUntil
+    ),
+    check(
+      "mail_reminder_suggestion_status_check",
+      sql`${table.status} in ('pending', 'none', 'suggested', 'accepted', 'dismissed')`
+    ),
+  ]
+);
+
 export const gmailComposeOperation = pgTable(
   "gmailComposeOperation",
   {
     createdAt: timestamp("createdAt").notNull(),
     draftId: text("draftId"),
+    followUpReminder: jsonb("followUpReminder").$type<{
+      userId: string;
+      intent: FollowUpReminderIntent;
+    }>(),
     id: text("id").primaryKey(),
     kind: text("kind").$type<"save" | "send">().notNull(),
     mailboxId: text("mailboxId")

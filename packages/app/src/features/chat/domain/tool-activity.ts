@@ -38,7 +38,9 @@ import type {
 import { parseMailReference } from "@quieter/app/features/chat/domain/mail-reference";
 import { calendarMutationResultSchema } from "@quieter/calendar";
 import type { CalendarEventTime } from "@quieter/calendar";
+import { reminderSchema } from "@quieter/mail/reminders";
 import type { UIMessage } from "ai";
+import { z } from "zod";
 
 type ActivityCategory =
   | "mail"
@@ -95,6 +97,13 @@ const operations: Record<
     subject: string;
   }
 > = {
+  change_reminder: {
+    category: "workspace",
+    complete: "Updated your reminder",
+    failed: "Couldn't update your reminder",
+    pending: "Updating your reminder…",
+    subject: "Reminder",
+  },
   connector_list_tools: {
     category: "connection",
     complete: "Checked your connected account",
@@ -123,6 +132,13 @@ const operations: Record<
     pending: "Creating an event…",
     subject: "Calendar event",
   },
+  create_reminder: {
+    category: "workspace",
+    complete: "Set your reminder",
+    failed: "Couldn't set your reminder",
+    pending: "Setting your reminder…",
+    subject: "Reminder",
+  },
   delete_calendar_event: {
     category: "calendar",
     complete: "Deleted the event",
@@ -150,6 +166,13 @@ const operations: Record<
     failed: "Couldn't check your mailbox",
     pending: "Checking your mailbox…",
     subject: "Mailbox overview",
+  },
+  get_reminder: {
+    category: "workspace",
+    complete: "Checked your reminder",
+    failed: "Couldn't load your reminder",
+    pending: "Checking your reminder…",
+    subject: "Reminder",
   },
   get_workspace: {
     category: "workspace",
@@ -199,6 +222,13 @@ const operations: Record<
     failed: "Couldn't load your mail labels",
     pending: "Checking your mail labels…",
     subject: "Mail labels",
+  },
+  list_reminders: {
+    category: "workspace",
+    complete: "Checked your reminders",
+    failed: "Couldn't load your reminders",
+    pending: "Checking your reminders…",
+    subject: "Reminders",
   },
   modify_mail: {
     category: "mail",
@@ -263,6 +293,13 @@ const operations: Record<
     pending: "Reading the conversation…",
     subject: "Conversation",
   },
+  read_mail_thread: {
+    category: "mail",
+    complete: "Read the conversation",
+    failed: "Couldn't load this conversation",
+    pending: "Reading the conversation…",
+    subject: "Conversation",
+  },
   respond_to_calendar_event: {
     category: "calendar",
     complete: "Responded to the invitation",
@@ -284,6 +321,13 @@ const operations: Record<
     pending: "Searching your mail…",
     subject: "Mail search",
   },
+  search_mail: {
+    category: "search",
+    complete: "Searched your mail",
+    failed: "Couldn't search your mail",
+    pending: "Searching your mail…",
+    subject: "Mail search",
+  },
   send_mail: {
     category: "draft",
     complete: "Sent your email",
@@ -299,6 +343,20 @@ const operations: Record<
     subject: "Calendar event",
   },
 };
+
+const mailReadActivitySchema = z.object({
+  messages: z.array(
+    z.object({
+      from: z.string().optional(),
+      id: z.string(),
+      subject: z.string().optional(),
+      threadId: z.string(),
+    })
+  ),
+  nextPageToken: z.string().optional(),
+  status: z.literal("success"),
+  subject: z.string().optional(),
+});
 
 const mailSources = (
   messages: { id: string; threadId: string; subject?: string; from?: string }[]
@@ -408,6 +466,62 @@ const describeActivity = (
     return activity;
   }
   switch (name) {
+    case "create_reminder":
+    case "change_reminder":
+    case "get_reminder": {
+      const result = reminderSchema.safeParse(part.output);
+      if (result.success) {
+        activity.phase = "complete";
+        activity.title = operation.complete;
+        activity.context = [result.data.title];
+        if (result.data.target.kind === "thread") {
+          activity.sources = mailSources([
+            {
+              id: result.data.target.anchorMessageId,
+              subject: result.data.title,
+              threadId: result.data.target.threadId,
+            },
+          ]);
+        }
+      }
+      break;
+    }
+    case "list_reminders": {
+      const result = z
+        .object({
+          items: z.array(reminderSchema),
+          nextCursor: z.string().nullable(),
+        })
+        .safeParse(part.output);
+      if (result.success) {
+        activity.phase = "complete";
+        activity.title =
+          result.data.items.length === 0
+            ? "No reminders found"
+            : operation.complete;
+        activity.context = result.data.nextCursor
+          ? ["More reminders are available."]
+          : [];
+      }
+      break;
+    }
+    case "search_mail":
+    case "read_mail_thread": {
+      const result = mailReadActivitySchema.safeParse(part.output);
+      if (result.success) {
+        activity.phase = "complete";
+        activity.title =
+          name === "search_mail" && result.data.messages.length === 0
+            ? "No matching emails"
+            : operation.complete;
+        activity.context = [
+          ...(result.data.subject ? [result.data.subject] : []),
+          ...(result.data.nextPageToken ? ["More matches are available."] : []),
+        ];
+        activity.sources = mailSources(result.data.messages);
+      }
+      break;
+    }
     case "search_gmail": {
       const result = gmailSearchResultSchema.options[0].safeParse(part.output);
       if (result.success) {

@@ -115,6 +115,7 @@ vp run dev:trigger maintenance
 vp run dev:trigger mail-recovery
 vp run dev:trigger importance
 vp run dev:trigger actions
+vp run dev:trigger reminders
 ```
 
 The local Worker handles Gmail notifications, realtime updates, managed-mail fixtures, and maintenance in one process. Production deploys separate Workers. Local maintenance uses manual triggers, not an automatically running cron. The Pub/Sub bridge uses `gcloud auth print-access-token`, pulls one message at a time from its own subscription, extends the acknowledgment deadline during processing, and acknowledges only after the local Worker finishes.
@@ -122,6 +123,8 @@ The local Worker handles Gmail notifications, realtime updates, managed-mail fix
 Important classification has a manual maintenance trigger. Use `vp run dev:trigger importance` to process pending incoming mail with development model credentials and billing controls. See [Mail importance](mail-importance.md) for classification, manual overrides, and privacy rules. The trigger preserves Gmail watch ownership and provider data.
 
 Mailbox Actions use `vp run dev:trigger actions` to drain one queued incoming-mail or manual run. Review and activate a mailbox prompt first, then ingest fresh fixture mail. The command uses the same authorization, usage controls, and effect journal as scheduled maintenance. See [Action specifications](action-specifications.md#development-walkthrough) for exact account mentions, private results, draft review, and uncertain-effect recovery.
+
+Reminder maintenance uses `vp run dev:trigger reminders` to process deadline suggestions, condition reviews, and missed clock wakes. The local Worker retains Durable Object alarms and SQLite state in `.wrangler/state`; PostgreSQL stores reminders and their durable jobs in `quieter_dev`. See [Personal mailbox reminders](reminders.md) for scheduling and notification limits.
 
 Shared Gmail accounts default to `QUIETER_LOCAL_PROVIDER_MODE=observe` and `QUIETER_LOCAL_GMAIL_WATCH_OWNER=production`. Mail reads and AI results stored in `quieter_dev` work in this mode. Gmail, Calendar and Linear writes are rejected server-side. Auto-label classification is saved without applying labels. Write tests require a dedicated mailbox or a verified ownership handoff, plus the explicit Gmail account allowlist. Never start a competing consumer on the production subscription.
 
@@ -183,6 +186,32 @@ The fixture endpoint requires the local Worker bearer token and rejects browser 
 
 For public, synthetic rendering examples, run `vp run dev:fixtures your-local-login@example.com --rendering`. This seeds four stable messages covering table spacing, constrained widths, image dimensions, owned CID images, body typography and direction, quotations, and content/resource policy. Sign in with a local account and disable either demo-mailbox switch in Development settings to use the printed mailbox URL. The managed-mail preview persona uses `managed.preview@quieter.email`. Bump a fixture's `messageKey` when changing its content, then re-run the command and reload the page; ingestion preserves existing messages. See [mail rendering](mail-rendering.md) for the rendering boundary and manual checks.
 
+For reminder checks, sign in with a local account, disable demo-mailbox mode, and seed the synthetic messages:
+
+```bash
+vp run dev:fixtures your-local-login@example.com --reminders
+```
+
+Open the printed mailbox URL. The messages cover an exact deadline, a date-only deadline, a promotion, and a conversation awaiting a revised quote. With the default preferences, check that deadline suggestions require one click, dismissal survives reopening, and promotional mail has no suggestion. Enable automatic reminders in the sidebar options before seeding new incoming mail to check automatic creation. Only the exact date and time qualifies. The date-only message still requires acceptance.
+
+Create a conditional reminder on **Revised quote with installation** that asks for a revised quote including installation. Then add an acknowledgement and run its review:
+
+```bash
+vp run dev:fixtures your-local-login@example.com --reminder-ack
+vp run dev:trigger reminders
+```
+
+The acknowledgement leaves the reminder active because it does not provide the quote. Add the substantive answer and review again:
+
+```bash
+vp run dev:fixtures your-local-login@example.com --reminder-answer
+vp run dev:trigger reminders
+```
+
+The answer includes equipment and installation prices, so the condition review can complete the reminder. Semantic checks require development model credentials and available credits. Fixture messages and replies have stable IDs, so repeating a command does not create new arrivals. Enable automatic reminders before the first seed to exercise incoming-mail creation.
+
+For delivery checks, create a reminder a few minutes ahead. Check the inbox stack's hover preview and click-to-pin behavior, plus the sidebar's **Upcoming** and **History** views. Opt in to desktop reminder notifications and leave the desktop running or minimized. A fully quit desktop receives no OS notification; the reminder remains available after reopening. Keep provider writes disabled throughout these fixture checks.
+
 The old `dev:mail` and AWS package `dev` commands were removed because they evaluated cloud infrastructure. Local development must not create mail domains, DNS records, SES identities, Lambda functions, SNS topics or remote mail buckets. Real managed-mail domain changes and external sending are blocked in the local application.
 
 SES has no native local delivery service. Fixtures cover MIME, routing, request validation and feedback processing. They do not prove real MX routing, IAM permissions, SES delivery or cloud retries. Those are deployment-only checks, outside this local setup. SST Lambda Live still uses cloud resources and is not a local-only substitute. `dev:cloud` is only an alias for the Secret-linked local session described above.
@@ -242,6 +271,13 @@ vp test packages/orpc/tests/mailbox-service.test.ts
 vp check apps/web
 vp lint packages/database
 vp run db:check
+```
+
+On Windows, the AI credit recovery tests need Git Bash on `PATH` ahead of the WSL `bash.exe` launcher. Set this for the current PowerShell session:
+
+```powershell
+$env:PATH = 'C:\Program Files\Git\bin;' + $env:PATH
+vp test scripts/ai-credit-recovery.test.ts
 ```
 
 The pre-commit hook runs formatting and linting on staged files. Pull requests to `main` must pass the quality and migration checks.

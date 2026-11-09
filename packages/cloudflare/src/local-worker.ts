@@ -13,6 +13,7 @@ import {
 } from "./worker-utils";
 
 export { MailLiveUser } from "./mail-live-user";
+export { ReminderMailbox } from "./reminder-mailbox";
 export { GmailLiveSyncMailboxV2 } from "./gmail-live-sync-mailbox";
 
 const deliverySchema = z.object({
@@ -55,6 +56,8 @@ export default {
           .object({
             fresh: z.boolean().optional(),
             ownerEmail: z.email(),
+            reminderReply: z.enum(["acknowledgement", "fulfilled"]).optional(),
+            reminders: z.boolean().optional(),
             rendering: z.boolean().optional(),
           })
           .safeParse(await readBoundedJson(request, 4096));
@@ -68,6 +71,8 @@ export default {
             async () =>
               await seedLocalManagedMail(input.data.ownerEmail, {
                 fresh: input.data.fresh,
+                reminderReply: input.data.reminderReply,
+                reminders: input.data.reminders,
                 rendering: input.data.rendering,
               })
           )
@@ -144,6 +149,26 @@ export default {
         );
       } catch (error) {
         return requestErrorResponse(error, "local-mail-agent");
+      }
+    }
+    if (url.pathname === "/__dev/reminders") {
+      try {
+        const { reconcileReminderSchedules } =
+          await import("@quieter/orpc/reminders/clock");
+        const { processReminderJobs } =
+          await import("@quieter/orpc/reminders/runtime");
+        return Response.json(
+          await withRequestDatabaseClient(async () => {
+            const schedules = await reconcileReminderSchedules({ limit: 20 });
+            const jobs = await processReminderJobs({
+              allowLocal: true,
+              limit: 4,
+            });
+            return { jobs, schedules };
+          })
+        );
+      } catch (error) {
+        return requestErrorResponse(error, "local-reminders");
       }
     }
     if (url.pathname === "/__dev/semantic-index") {

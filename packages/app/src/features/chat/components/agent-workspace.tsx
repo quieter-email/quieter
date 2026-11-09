@@ -47,6 +47,7 @@ type ComposeBridge = {
     attachments: ComposeDraftState["attachments"];
     baseRevision?: string;
     draftAnchor?: ComposeDraftState["draftAnchor"];
+    followUpReminder?: ComposeDraftState["followUpReminder"];
     inlineImages: ComposeDraftState["inlineImages"];
     draftId: string;
     draftRevision: number;
@@ -248,6 +249,7 @@ export type WorkspaceBridge = Omit<
       attachments: ComposeDraftState["attachments"];
       baseRevision?: string;
       draftAnchor?: ComposeDraftState["draftAnchor"];
+      followUpReminder?: ComposeDraftState["followUpReminder"];
       inlineImages: ComposeDraftState["inlineImages"];
       bodyHtml: string;
       draftId: string;
@@ -583,6 +585,7 @@ export const AgentWorkspaceProvider = ({
                   draftAnchor: draft.draftAnchor,
                   draftId: draft.draftId,
                   draftRevision: draft.draftRevision,
+                  followUpReminder: draft.followUpReminder,
                   inlineImages: draft.inlineImages,
                   messageId: draft.messageId,
                   providerDraftId: draft.providerDraftId,

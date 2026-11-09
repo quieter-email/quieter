@@ -10,6 +10,8 @@ import { recoverMailSends } from "@quieter/orpc/mail-send";
 import { retryPendingManagedVerificationCodes } from "@quieter/orpc/managed-mail/ingestion";
 import { processManagedRuleBackfills } from "@quieter/orpc/managed-mail/rule-backfills";
 import { cleanupMailObjects } from "@quieter/orpc/managed-mail/storage";
+import { reconcileReminderSchedules } from "@quieter/orpc/reminders/clock";
+import { processReminderJobs } from "@quieter/orpc/reminders/runtime";
 import { processPendingSemanticIndexes } from "@quieter/orpc/semantic-index";
 import { cleanupMailboxVerificationCodes } from "@quieter/orpc/verification-codes";
 
@@ -33,6 +35,8 @@ export default withSentryReporting({
           cleanupMailboxVerificationCodes(),
           drainMailAgentRuns({ limit: 2 }),
           processPendingMailImportance({ limit: 20 }),
+          reconcileReminderSchedules({ limit: 20 }),
+          processReminderJobs({ limit: 4 }),
         ]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed !== undefined) {

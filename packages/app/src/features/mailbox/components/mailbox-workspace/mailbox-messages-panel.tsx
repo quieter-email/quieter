@@ -14,6 +14,7 @@ import {
 import { useRecordRecentConversation } from "@quieter/app/features/mailbox/components/recent-conversations-provider";
 import { MessageList } from "@quieter/app/features/message-list/components/message-list";
 import { MessageDetail } from "@quieter/app/features/message-thread/components/message-detail";
+import { ReminderDueStrip } from "@quieter/app/features/reminders/reminder-due-strip";
 import type { MailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
@@ -209,6 +210,14 @@ export const MailboxMessagesPanel = ({
           layout="cell"
         >
           <MessageList
+            listNotices={
+              mailboxProvider === "api" ? null : (
+                <ReminderDueStrip
+                  mailboxId={mailboxId}
+                  demo={isDemoMode || isManagedDemoMode}
+                />
+              )
+            }
             wideCompactRows={onePanelDesktop}
             activeMailbox={activeMailbox}
             activeMessageId={messageId}

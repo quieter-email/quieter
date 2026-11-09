@@ -16,6 +16,7 @@ import type {
 import type { inheritManagedThreadLabels } from "../src/managed-mail/labels/repository";
 import { recordInboundManagedMessage } from "../src/managed-mail/messages/ingestion";
 import type { applyManagedRulesToMessage } from "../src/managed-mail/rules/evaluator";
+import type { observeReminderMail } from "../src/reminders/service";
 import type {
   processMailVerificationCode,
   reportPendingMailboxVerificationCodeUsage,
@@ -85,6 +86,9 @@ vi.mock("@quieter/database/client", async () => {
 
 vi.mock(import("../src/mail-agent/inbox"), () => ({
   enqueueMailAgentMessage: fixtures.enqueue,
+}));
+vi.mock(import("../src/reminders/service"), () => ({
+  observeReminderMail: vi.fn<typeof observeReminderMail>().mockResolvedValue(),
 }));
 vi.mock(import("../src/ai-memory-capture"), () => ({
   captureManagedMessageMemory: vi.fn<typeof captureManagedMessageMemory>(),

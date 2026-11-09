@@ -8,6 +8,7 @@ import { cn } from "../../lib/cn";
 
 export const surfaceVariants = cva("", {
   compoundVariants: [
+    { chrome: "compact", className: "rounded-lg" },
     {
       chrome: "bubble",
       className: "rounded-section",
@@ -25,6 +26,7 @@ export const surfaceVariants = cva("", {
   variants: {
     chrome: {
       bubble: null,
+      compact: null,
       default: null,
       inset: null,
     },
@@ -34,6 +36,7 @@ export const surfaceVariants = cva("", {
       default: "p-4",
       dense: "p-2",
       none: "p-0",
+      snug: "p-3",
     },
     variant: {
       detail: "rounded-md bg-detail",

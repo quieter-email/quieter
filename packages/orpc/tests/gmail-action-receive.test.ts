@@ -16,6 +16,7 @@ import {
 import type { captureMailboxMessageMemory } from "../src/ai-memory-capture";
 import { processGmailPubSubNotification } from "../src/gmail-sync/service";
 import type { enqueueMailAgentMessage } from "../src/mail-agent/inbox";
+import type { observeReminderMail } from "../src/reminders/service";
 import type { processMailVerificationCode } from "../src/verification-codes";
 
 const fixtures = vi.hoisted(() => ({
@@ -90,6 +91,9 @@ vi.mock("../src/gmail-mailbox-access", () => ({
 }));
 vi.mock(import("../src/mail-agent/inbox"), () => ({
   enqueueMailAgentMessage: fixtures.enqueue,
+}));
+vi.mock(import("../src/reminders/service"), () => ({
+  observeReminderMail: vi.fn<typeof observeReminderMail>().mockResolvedValue(),
 }));
 vi.mock(import("../src/ai-memory-capture"), async (original) => ({
   ...(await original()),

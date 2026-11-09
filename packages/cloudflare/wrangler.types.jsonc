@@ -38,6 +38,7 @@
   "durable_objects": {
     "bindings": [
       { "name": "MailLiveUser", "class_name": "MailLiveUser" },
+      { "name": "ReminderMailbox", "class_name": "ReminderMailbox" },
       {
         "name": "GmailLiveSyncMailboxV2",
         "class_name": "GmailLiveSyncMailboxV2",
@@ -50,6 +51,7 @@
       "new_sqlite_classes": ["GmailLiveSyncMailboxV2"],
     },
     { "tag": "mail-user-v1", "new_sqlite_classes": ["MailLiveUser"] },
+    { "tag": "reminders-v1", "new_sqlite_classes": ["ReminderMailbox"] },
   ],
   "observability": {
     "enabled": true,

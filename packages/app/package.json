@@ -310,7 +310,15 @@
     "./features/calendar/domain/calendar-preview": "./src/features/calendar/domain/calendar-preview.ts",
     "./features/calendar/domain/calendar-schedule": "./src/features/calendar/domain/calendar-schedule.ts",
     "./lib/calendar-query": "./src/lib/calendar-query.ts",
-    "./lib/calendar-cache-lifecycle": "./src/lib/calendar-cache-lifecycle.ts"
+    "./lib/calendar-cache-lifecycle": "./src/lib/calendar-cache-lifecycle.ts",
+    "./features/reminders/reminder-actions": "./src/features/reminders/reminder-actions.tsx",
+    "./features/reminders/reminder-mutations": "./src/features/reminders/reminder-mutations.ts",
+    "./features/reminders/message-reminders": "./src/features/reminders/message-reminders.tsx",
+    "./features/reminders/compose-follow-up": "./src/features/reminders/compose-follow-up.tsx",
+    "./features/reminders/reminder-query": "./src/features/reminders/reminder-query.ts",
+    "./features/reminders/reminder-editor": "./src/features/reminders/reminder-editor.tsx",
+    "./features/reminders/reminders-panel": "./src/features/reminders/reminders-panel.tsx",
+    "./features/reminders/reminder-due-strip": "./src/features/reminders/reminder-due-strip.tsx"
   },
   "dependencies": {
     "@ai-sdk/provider-utils": "5.0.59",

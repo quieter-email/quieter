@@ -100,6 +100,7 @@ export const buttonVariants = cva(
         "icon-xs": "size-6 p-0 [&_svg]:size-3.5",
         lg: "h-10 px-5 text-body-lg [&_svg]:size-4.5",
         sm: "h-7 px-2.5 text-body-sm [&_svg]:size-3.5",
+        text: "h-auto min-h-4 p-0 text-caption font-normal [&_svg]:size-3",
         xs: "h-6 px-2 text-caption [&_svg]:size-3",
       },
       variant: {

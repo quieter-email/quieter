@@ -1,7 +1,11 @@
+import { demoReminderSession } from "@quieter/app/features/reminders/reminder-query";
+import { isExpectedClientError } from "@quieter/app/lib/client-error-reporting";
 import type { ListMessagesPageResult } from "@quieter/app/lib/mail";
 import { orpc, rpc } from "@quieter/app/lib/orpc";
+import { appRuntime } from "@quieter/app/runtime";
 import { mailUpdateSchema } from "@quieter/mail/updates";
 import type { MailUpdate } from "@quieter/mail/updates";
+import * as Sentry from "@sentry/react";
 import type { QueryClient } from "@tanstack/react-query";
 import { partialMatchKey } from "@tanstack/react-query";
 import { useEffect } from "react";
@@ -9,6 +13,7 @@ import { useEffect } from "react";
 export const connectMailUpdates = (queryClient: QueryClient) => {
   let disposed = false;
   let suspended = true;
+  let keepBackground = false;
   let socket: WebSocket | undefined;
   let connecting = false;
   let handshake: AbortController | undefined;
@@ -32,6 +37,97 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     }
   >();
   const seen = new Set<string>();
+  const notifyReminder = async (
+    mailboxId: string,
+    reminderId: string,
+    scheduleVersion: number,
+    eventId: string
+  ) => {
+    const native = appRuntime.reminderNotifications;
+    if (!native || disposed) {
+      return;
+    }
+    try {
+      if ((await native.getStatus()) !== "enabled") {
+        return;
+      }
+      const reminder = await rpc.reminders.get({ mailboxId, reminderId });
+      if (
+        disposed ||
+        reminder.status !== "active" ||
+        reminder.firedAt === null ||
+        reminder.scheduleVersion !== scheduleVersion ||
+        Date.parse(reminder.dueAt) > Date.now()
+      ) {
+        return;
+      }
+      await native.show({
+        id: eventId,
+        mailboxId,
+        reminderId,
+        scheduleVersion,
+        ...(reminder.target.kind === "thread"
+          ? { threadId: reminder.target.threadId }
+          : {}),
+      });
+    } catch (error) {
+      if (!disposed && !isExpectedClientError(error)) {
+        Sentry.captureException(error, {
+          tags: { boundary: "reminder-notification" },
+        });
+      }
+    }
+  };
+  const recoverReminderNotifications = async () => {
+    if (!appRuntime.reminderNotifications || disposed) {
+      return;
+    }
+    const mailboxIds = new Set(
+      queryClient
+        .getQueryCache()
+        .findAll({
+          predicate: ({ queryKey }) =>
+            queryKey[0] === "reminders" && queryKey[2] === "remote",
+        })
+        .map((query) => String(query.queryKey[1]))
+    );
+    for (const mailboxId of mailboxIds) {
+      try {
+        let cursor: string | undefined;
+        do {
+          const page = await rpc.reminders.list({
+            cursor,
+            mailboxId,
+            view: "active",
+          });
+          if (disposed) {
+            return;
+          }
+          for (const reminder of page.items) {
+            if (
+              reminder.status === "active" &&
+              reminder.firedAt !== null &&
+              Date.parse(reminder.dueAt) <= Date.now()
+            ) {
+              await notifyReminder(
+                mailboxId,
+                reminder.id,
+                reminder.scheduleVersion,
+                crypto.randomUUID()
+              );
+            }
+          }
+          cursor = page.nextCursor ?? undefined;
+        } while (cursor !== undefined);
+      } catch (error) {
+        if (!disposed && !isExpectedClientError(error)) {
+          Sentry.captureException(error, {
+            tags: { boundary: "reminder-reconnect" },
+          });
+        }
+      }
+    }
+  };
 
   const refreshCodes = async () => {
     codeRefreshTimer = undefined;
@@ -183,6 +279,20 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
               return false;
             }
             const [root] = queryKey;
+            if (root === "reminder-suggestion") {
+              return (
+                changes
+                  .get(String(queryKey[1]))
+                  ?.types.has("reminders.changed") === true
+              );
+            }
+            if (root === "reminders") {
+              const mailboxId = String(queryKey[1]);
+              return (
+                changes.has("*") ||
+                changes.get(mailboxId)?.types.has("reminders.changed") === true
+              );
+            }
             if (root === "mailboxes") {
               return [...changes.values()].some((change) =>
                 change.types.has("mailbox.changed")
@@ -364,6 +474,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
         clearTimeout(openTimer);
         reconnectDelay = 1000;
         requestRefresh();
+        void recoverReminderNotifications();
         heartbeatTimer = setInterval(() => {
           if (Date.now() - lastMessage > 90_000) {
             next.close();
@@ -389,6 +500,18 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
           seen.add(event.data.eventId);
           if (seen.size > 500) {
             seen.delete(seen.values().next().value ?? "");
+          }
+          if (
+            event.data.type === "reminders.changed" &&
+            event.data.reminderId &&
+            event.data.scheduleVersion !== undefined
+          ) {
+            void notifyReminder(
+              event.data.mailboxId,
+              event.data.reminderId,
+              event.data.scheduleVersion,
+              event.data.eventId
+            );
           }
           requestRefresh(
             event.data.mailboxId,
@@ -426,7 +549,8 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   };
   const activityChanged = () => {
     const active =
-      document.visibilityState === "visible" && document.hasFocus();
+      keepBackground ||
+      (document.visibilityState === "visible" && document.hasFocus());
     if (active && navigator.onLine) {
       clearTimeout(backgroundTimer);
       backgroundTimer = undefined;
@@ -456,6 +580,45 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     codeRefreshTimer = undefined;
     disconnect();
   };
+  const unsubscribeNotificationSettings =
+    appRuntime.keepMailUpdatesInBackground === true
+      ? queryClient.getQueryCache().subscribe((event) => {
+          const rawKey: unknown = event.query.queryKey;
+          if (!Array.isArray(rawKey)) {
+            return;
+          }
+          const key: readonly unknown[] = rawKey;
+          if (
+            event.type === "updated" &&
+            event.action.type === "success" &&
+            key[0] === "reminder-notifications"
+          ) {
+            keepBackground = event.query.state.data === "enabled";
+            activityChanged();
+          }
+        })
+      : undefined;
+  const loadNotificationStatus = async () => {
+    if (
+      !appRuntime.reminderNotifications ||
+      appRuntime.keepMailUpdatesInBackground !== true
+    ) {
+      return;
+    }
+    try {
+      const status = await appRuntime.reminderNotifications.getStatus();
+      if (!disposed) {
+        queryClient.setQueryData(["reminder-notifications"], status);
+      }
+    } catch (error) {
+      if (!disposed && !isExpectedClientError(error)) {
+        Sentry.captureException(error, {
+          tags: { boundary: "reminder-notification-status" },
+        });
+      }
+    }
+  };
+  void loadNotificationStatus();
   window.addEventListener("focus", activityChanged);
   window.addEventListener("blur", activityChanged);
   window.addEventListener("online", activityChanged);
@@ -473,6 +636,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   }, 60_000);
   return () => {
     disposed = true;
+    unsubscribeNotificationSettings?.();
     disconnect();
     clearTimeout(backgroundTimer);
     clearTimeout(refreshTimer);
@@ -490,8 +654,17 @@ export const useMailUpdates = (
   queryClient: QueryClient,
   userId: string | undefined
 ) => {
-  useEffect(
-    () => (userId ? connectMailUpdates(queryClient) : undefined),
-    [queryClient, userId]
-  );
+  useEffect((): (() => void) | undefined => {
+    if (!userId) {
+      return undefined;
+    }
+    const disconnect = connectMailUpdates(queryClient);
+    return () => {
+      disconnect();
+      demoReminderSession.clear();
+      queryClient.removeQueries({ queryKey: ["reminders"] });
+      queryClient.removeQueries({ queryKey: ["reminder-suggestion"] });
+      queryClient.removeQueries({ queryKey: ["reminder-notifications"] });
+    };
+  }, [queryClient, userId]);
 };

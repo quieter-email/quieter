@@ -33,8 +33,10 @@ Sentry.init({
 
 configureAppRuntime({
   apiBaseURL: window.quieterDesktop.apiBaseURL,
+  keepMailUpdatesInBackground: true,
   openExternal: window.quieterDesktop.openExternal,
   platform: "desktop",
+  reminderNotifications: window.quieterDesktop.reminderNotifications,
 });
 configureAppAuthClient({ baseURL: window.quieterDesktop.apiBaseURL });
 document.documentElement.dataset.platform = window.quieterDesktop.platform;
@@ -44,11 +46,31 @@ document.documentElement.style.setProperty(
 );
 
 const SessionEvents = () => {
-  const { refetch } = authClient.useSession();
+  const { data, refetch } = authClient.useSession();
+  const userId = data?.user.id ?? null;
+  useEffect(() => {
+    void (async () => {
+      try {
+        await window.quieterDesktop.setReminderNotificationUser(userId);
+      } catch (error) {
+        toastError(error, { boundary: "desktop-reminder-session" });
+      }
+    })();
+    return () => {
+      void (async () => {
+        try {
+          await window.quieterDesktop.setReminderNotificationUser(null);
+        } catch {
+          // The renderer may disappear during session cleanup.
+        }
+      })();
+    };
+  }, [userId]);
   useEffect(() => {
     const refreshSession = async () => {
       try {
         await refetch({ query: { disableCookieCache: true } });
+        await window.quieterDesktop.setReminderNotificationUser(userId);
         await router.invalidate();
       } catch (error) {
         toastError(error);
@@ -67,7 +89,7 @@ const SessionEvents = () => {
       stopCleanup();
       window.removeEventListener("focus", refresh);
     };
-  }, [refetch]);
+  }, [refetch, userId]);
   return null;
 };
 

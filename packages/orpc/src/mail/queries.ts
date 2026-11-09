@@ -51,6 +51,7 @@ import {
   listOrganizationApiMailMessages,
   parseOrganizationApiMailboxId,
 } from "../organization-api-mail";
+import { loadDraftReminderIntent } from "../reminders/draft-state";
 import type { MailInputs } from "./inputs";
 
 export const queriesMailOperations = {
@@ -111,6 +112,11 @@ export const queriesMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    const followUpReminder = await loadDraftReminderIntent({
+      draftId: input.draftId,
+      mailboxId: input.mailboxId,
+      userId: context.userId,
+    });
     if (selectedMailbox.provider === "managed") {
       const draft = await getManagedDraft({ ...input, userId: context.userId });
       await captureMailboxDraftMemory({
@@ -119,7 +125,10 @@ export const queriesMailOperations = {
         mailboxId: input.mailboxId,
         userId: context.userId,
       });
-      return draft;
+      return {
+        ...draft,
+        ...(followUpReminder === undefined ? {} : { followUpReminder }),
+      };
     }
     return await callGmail(
       context,
@@ -168,6 +177,7 @@ export const queriesMailOperations = {
           bodyHtml: bodyHtml ?? parsed.bodyHtml,
           bodyText: bodyText ?? parsed.bodyText,
           draftId: draft.id,
+          ...(followUpReminder === undefined ? {} : { followUpReminder }),
           inlineImages: parsed.inlineImages.map((asset) => ({
             contentId: asset.contentId,
             gmailAttachmentId: asset.attachmentId,

@@ -7,11 +7,17 @@ import { and, asc, eq } from "drizzle-orm";
 
 import { getLocalMailStorage, LOCAL_MAIL_BUCKET } from "./local-storage";
 import { recordInboundManagedMessage } from "./messages/ingestion";
+import { buildLocalReminderFixtures } from "./reminder-fixtures";
 import { buildLocalRenderingFixtures } from "./rendering-fixtures";
 
 export const seedLocalManagedMail = async (
   ownerEmail: string,
-  options: { fresh?: boolean; rendering?: boolean } = {}
+  options: {
+    fresh?: boolean;
+    rendering?: boolean;
+    reminders?: boolean;
+    reminderReply?: "acknowledgement" | "fulfilled";
+  } = {}
 ) => {
   if (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local") {
     throw new Error("Mail fixtures are only available in local development.");
@@ -85,13 +91,27 @@ export const seedLocalManagedMail = async (
       "The existing fixture mailbox no longer matches this local account."
     );
   }
-  if (options.rendering === true) {
-    const messages = [];
-    for (const fixture of buildLocalRenderingFixtures({
+  let fixtures:
+    | ReturnType<typeof buildLocalRenderingFixtures>
+    | ReturnType<typeof buildLocalReminderFixtures>
+    | null = null;
+  if (options.reminders === true || options.reminderReply) {
+    fixtures = buildLocalReminderFixtures({
+      address,
+      receivedAt: now,
+      reply: options.reminderReply,
+      suffix,
+    });
+  } else if (options.rendering === true) {
+    fixtures = buildLocalRenderingFixtures({
       address,
       receivedAt: now,
       suffix,
-    })) {
+    });
+  }
+  if (fixtures !== null) {
+    const messages = [];
+    for (const fixture of fixtures) {
       const key = `fixtures/${suffix}/${fixture.messageKey}.eml`;
       const providerMessageId = `local-${fixture.messageKey}-${suffix}`;
       await storage.put(key, fixture.raw);

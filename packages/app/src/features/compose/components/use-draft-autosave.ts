@@ -1,15 +1,18 @@
+import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { useEffect, useEffectEvent } from "react";
 
 export const useDraftAutosave = ({
   attachments,
   mailboxId,
   enabled,
+  followUpReminder,
   save,
   subscribe,
 }: {
   attachments: readonly { id: string }[];
   mailboxId: string | null;
   enabled: boolean;
+  followUpReminder: ComposeDraftState["followUpReminder"];
   save: () => Promise<boolean>;
   subscribe: (changed: () => void) => { unsubscribe: () => void };
 }) => {
@@ -68,5 +71,5 @@ export const useDraftAutosave = ({
       window.removeEventListener("online", changed);
       subscription.unsubscribe();
     };
-  }, [attachments, enabled, mailboxId]);
+  }, [attachments, enabled, followUpReminder, mailboxId]);
 };

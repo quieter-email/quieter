@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./reminders": "./src/reminders.ts",
     "./compile-action-specification": "./src/compile-action-specification.ts",
     "./action-specification": "./src/action-specification.ts",
     "./ai-memory": "./src/ai-memory.ts",

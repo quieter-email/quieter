@@ -61,6 +61,7 @@ import {
   composeDraftFormValuesSchema,
   composeSendFormValuesSchema,
 } from "@quieter/mail/compose/schema";
+import type { FollowUpReminderIntent } from "@quieter/mail/reminders";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
@@ -238,6 +239,7 @@ export const useComposeDialogController = ({
       draftAnchor: draft.draftAnchor,
       draftId: draft.draftId,
       errorMessage: null,
+      followUpReminder: draft.followUpReminder,
       inlineImages: draft.inlineImages,
       lastSavedAt: draft.lastSavedAt,
       localId: draft.localId,
@@ -646,6 +648,7 @@ export const useComposeDialogController = ({
         draftAnchor: activeDraftRef.current.draftAnchor,
         draftId: activeDraftRef.current.localId,
         draftRevision: draftRevisionRef.current,
+        followUpReminder: activeDraftRef.current.followUpReminder,
         inlineImages: activeDraftRef.current.inlineImages,
         messageId: activeDraftRef.current.messageId,
         providerDraftId: activeDraftRef.current.draftId,
@@ -867,6 +870,7 @@ export const useComposeDialogController = ({
           bodyHtml: copied.bodyHtml,
           bodyText: current.bodyText,
           errorMessage: current.errorMessage,
+          followUpReminder: current.followUpReminder,
           inlineImages: copied.inlineImages,
           recipients: { ...current.recipients },
           recoveryMissingFiles: current.recoveryMissingFiles,
@@ -890,6 +894,7 @@ export const useComposeDialogController = ({
   useDraftAutosave({
     attachments: state.draft.attachments,
     enabled: persistDrafts && !autosavePaused && state.open,
+    followUpReminder: state.draft.followUpReminder,
     mailboxId,
     save: async () => {
       if (
@@ -1064,6 +1069,9 @@ export const useComposeDialogController = ({
         baseRevision: undefined,
         draftId: undefined,
         errorMessage: null,
+        followUpReminder: original.followUpReminder
+          ? { ...original.followUpReminder, requestId: crypto.randomUUID() }
+          : original.followUpReminder,
         inlineImages: original.inlineImages.map((asset) => ({
           ...asset,
           sourceMessageId: asset.sourceMessageId ?? original.messageId,
@@ -1560,6 +1568,26 @@ export const useComposeDialogController = ({
     recovery.checkpoint();
   };
 
+  const handleFollowUpReminderChange = (
+    followUpReminder: FollowUpReminderIntent | null
+  ) => {
+    if (
+      finishingRef.current ||
+      activeDraftRef.current.sendUncertain === true ||
+      activeDraftRef.current.saveStatus === "sending"
+    ) {
+      return;
+    }
+    handleUserDraftChange();
+    draftRevisionRef.current += 1;
+    setDraft((current) => ({
+      ...current,
+      followUpReminder,
+      updatedAt: Date.now(),
+    }));
+    recovery.checkpoint();
+  };
+
   return {
     addAttachmentFiles,
     addInlineImageFiles,
@@ -1585,6 +1613,7 @@ export const useComposeDialogController = ({
     discardActiveDraft,
     form,
     handleDialogOpenChange,
+    handleFollowUpReminderChange,
     handleUserDraftChange,
     prepareSenderSwitch,
     removeAttachment,

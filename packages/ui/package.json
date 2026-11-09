@@ -19,6 +19,7 @@
     "./brand-geometry": "./src/lib/brand-geometry.ts",
     "./button": "./src/components/ui/button.tsx",
     "./calendar": "./src/components/ui/calendar.tsx",
+    "./card-stack": "./src/components/ui/card-stack.tsx",
     "./checkbox": "./src/components/ui/checkbox.tsx",
     "./cn": "./src/lib/cn.ts",
     "./collapsible": "./src/components/ui/collapsible.tsx",

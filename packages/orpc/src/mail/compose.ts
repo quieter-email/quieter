@@ -32,6 +32,7 @@ import {
   deleteManagedDraft,
 } from "../managed-mail/messages/drafts";
 import { sendManagedMailboxMessage } from "../managed-mail/messages/send";
+import { saveDraftReminderIntent } from "../reminders/draft-state";
 import { learnAiMemoryFromMailAction } from "./feedback";
 import type { MailInputs } from "./inputs";
 
@@ -194,13 +195,24 @@ export const composeMailOperations = {
         privateContext,
         userId: context.userId,
       });
+      await saveDraftReminderIntent({
+        draftId: saved.draftId,
+        intent: input.draft.followUpReminder,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
       await captureMailboxDraftMemory({
         draft: input.draft,
         draftId: saved.draftId,
         mailboxId: input.mailboxId,
         userId: context.userId,
       });
-      return saved;
+      return {
+        ...saved,
+        ...(input.draft.followUpReminder === undefined
+          ? {}
+          : { followUpReminder: input.draft.followUpReminder }),
+      };
     }
 
     return await callGmail(context, input.mailboxId, async (accessToken) => {
@@ -210,13 +222,24 @@ export const composeMailOperations = {
         input.draft,
         context.signal
       );
+      await saveDraftReminderIntent({
+        draftId: saved.draftId,
+        intent: input.draft.followUpReminder,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
       await captureMailboxDraftMemory({
         draft: input.draft,
         draftId: saved.draftId,
         mailboxId: input.mailboxId,
         userId: context.userId,
       });
-      return saved;
+      return {
+        ...saved,
+        ...(input.draft.followUpReminder === undefined
+          ? {}
+          : { followUpReminder: input.draft.followUpReminder }),
+      };
     });
   },
   sendDraft: async ({
@@ -254,7 +277,8 @@ export const composeMailOperations = {
         input.mailboxId,
         input.message,
         context.signal,
-        selectedMailbox.organizationId
+        selectedMailbox.organizationId,
+        context.userId
       );
       await captureMailboxMessageMemory({
         actorUserId: context.userId,

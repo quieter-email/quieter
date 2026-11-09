@@ -1,6 +1,7 @@
 "use client";
 
 import { LayoutRightIcon } from "@hugeicons/core-free-icons";
+import type { ReminderTarget } from "@quieter/mail/reminders";
 import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
@@ -9,6 +10,16 @@ import { createContext, use } from "react";
 
 export const AssistantSidebarContext = createContext<{
   onOpen: (trigger: HTMLButtonElement) => void;
+  onOpenReminders: (
+    trigger?: HTMLButtonElement,
+    mailboxId?: string,
+    reminderId?: string
+  ) => Promise<void>;
+  onCreateReminder: (input: {
+    mailboxId: string;
+    title: string;
+    target: ReminderTarget;
+  }) => Promise<void>;
   open: boolean;
   panelId: string;
 } | null>(null);

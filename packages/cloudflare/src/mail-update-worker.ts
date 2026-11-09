@@ -3,6 +3,7 @@ import { requestErrorResponse } from "./request-error";
 import { withSentryReporting } from "./worker-runtime";
 
 export { MailLiveUser } from "./mail-live-user";
+export { ReminderMailbox } from "./reminder-mailbox";
 
 export default withSentryReporting({
   async fetch(request, env) {

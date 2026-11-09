@@ -17,21 +17,30 @@ export const createMailUpdateResources = (
   const user = new sst.cloudflare.DurableObject("MailLiveUser", {
     className: "MailLiveUser",
   });
+  const reminders = new sst.cloudflare.DurableObject("ReminderMailbox", {
+    className: "ReminderMailbox",
+  });
   const worker = new sst.cloudflare.Worker("MailUpdatesWorker", {
     compatibility: { date: COMPATIBILITY_DATE, flags: ["nodejs_compat"] },
     domain,
     environment: {
+      MAIL_UPDATES_URL: `wss://${domain}/mail/live`,
       QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
       SENTRY_ENVIRONMENT: stage,
     },
     handler: "packages/cloudflare/src/mail-update-worker.ts",
     link: [
       user,
+      reminders,
       appDatabase,
       requireSecretResource(secretResources, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
+      requireSecretBinding(secretBindings, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
       requireSecretBinding(secretBindings, "SENTRY_DSN"),
     ],
-    migrations: [{ newSqliteClasses: [user.className], tag: "v1" }],
+    migrations: [
+      { newSqliteClasses: [user.className], tag: "v1" },
+      { newSqliteClasses: [reminders.className], tag: "reminders-v1" },
+    ],
     transform: {
       worker(args) {
         args.observability = {
@@ -46,6 +55,7 @@ export const createMailUpdateResources = (
     url: true,
   });
   return {
+    reminders,
     url: worker.url.apply(() => `wss://${domain}/mail/live`),
     user,
     worker,

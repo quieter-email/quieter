@@ -1,4 +1,30 @@
+import type { ReminderNotifications } from "@quieter/app/runtime";
 import { z } from "zod";
+
+export const reminderNotificationEvent = z.strictObject({
+  id: z.uuid(),
+  mailboxId: z.string().min(1).max(500),
+  reminderId: z.uuid(),
+  scheduleVersion: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  threadId: z.string().min(1).max(500).optional(),
+});
+
+export const reminderNotificationUser = z.string().min(1).max(500).nullable();
+export const reminderNotificationsEnabled = z.boolean();
+export const reminderNotificationStatus = z.enum([
+  "enabled",
+  "disabled",
+  "unsupported",
+  "blocked",
+]);
+export const reminderNotificationResult = z.enum([
+  "shown",
+  "duplicate",
+  "inactive",
+  "disabled",
+  "unsupported",
+  "blocked",
+]);
 
 export const signOutCleanupCommand = z.object({
   phase: z.enum(["capture", "cleanup", "release"]),
@@ -22,6 +48,8 @@ export type DesktopBridge = Readonly<{
     listener: (command: SignOutCleanupCommand) => Promise<void>
   ) => () => void;
   platform: string;
+  reminderNotifications: ReminderNotifications;
+  setReminderNotificationUser: (userId: string | null) => Promise<void>;
   openExternal: (url: string) => Promise<void>;
   setTitleBarColors: (colors: {
     background: string;

@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./reminders": "./src/reminders/runtime.ts",
+    "./reminders/runtime": "./src/reminders/runtime.ts",
+    "./reminders/clock": "./src/reminders/clock.ts",
+    "./reminders/service": "./src/reminders/service.ts",
     "./ai-mail-authorship": "./src/ai-mail-authorship.ts",
     "./ai-memory": "./src/ai-memory.ts",
     "./semantic-index": "./src/semantic-index.ts",

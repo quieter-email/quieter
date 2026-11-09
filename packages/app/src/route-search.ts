@@ -104,6 +104,7 @@ export const mailboxSearchSchema = z.object({
   mailto: optionalMinLengthSearchString(),
   messageId: optionalMinLengthSearchString(),
   query: searchQueryParam(),
+  reminderId: optionalMinLengthSearchString(),
   threadId: optionalMinLengthSearchString(),
   view: mailboxWorkspaceViewSearch(),
   workspace: optionalLiteralSearchValue("calendar"),

@@ -136,6 +136,7 @@ type MessageRowProps = {
   deliveryStatus?: MessageDeliveryStatus | null;
   gmailLabels: MailboxLabel[];
   mailboxActions: MessageListProps["mailboxActions"];
+  mailboxContextsByThreadId?: MessageListProps["mailboxContextsByThreadId"];
   mailboxEmailAddress?: string;
   mailboxDisplayName?: string | null;
   mailboxId: string;
@@ -374,6 +375,7 @@ type MessageRowSurfaceProps = {
   isPressed: boolean;
   isSelected: boolean;
   mailboxActions: MessageListProps["mailboxActions"];
+  mailboxContextsByThreadId?: MessageListProps["mailboxContextsByThreadId"];
   mailboxId: string;
   mailboxProvider: MessageListProps["mailboxProvider"];
   onKeyboardOpen?: () => void;
@@ -414,6 +416,7 @@ const MessageRowSurface = ({
   isPressed,
   isSelected,
   mailboxActions,
+  mailboxContextsByThreadId,
   mailboxId,
   mailboxProvider,
   onKeyboardOpen,
@@ -529,6 +532,7 @@ const MessageRowSurface = ({
             supportsUnsubscribe: mailboxProvider === "gmail",
           })}
           isPending={isActionPending}
+          mailboxContextsByThreadId={mailboxContextsByThreadId}
           mailboxId={mailboxId}
           mailbox={activeMailbox}
           message={{ ...anchorMessage, threadIsImportant: thread.isImportant }}
@@ -588,6 +592,7 @@ const MessageRowContent = ({
   deliveryStatus,
   gmailLabels,
   mailboxActions,
+  mailboxContextsByThreadId,
   mailboxEmailAddress,
   mailboxDisplayName,
   mailboxId,
@@ -654,6 +659,7 @@ const MessageRowContent = ({
       isPressed={isPressed}
       isSelected={isSelected}
       mailboxActions={mailboxActions}
+      mailboxContextsByThreadId={mailboxContextsByThreadId}
       mailboxId={mailboxId}
       mailboxProvider={mailboxProvider}
       onKeyboardOpen={onKeyboardOpen}
@@ -691,6 +697,7 @@ export const MessageRow = ({
   deliveryStatus,
   gmailLabels,
   mailboxActions,
+  mailboxContextsByThreadId,
   mailboxEmailAddress,
   mailboxDisplayName,
   mailboxId,
@@ -720,6 +727,7 @@ export const MessageRow = ({
       deliveryStatus={deliveryStatus}
       gmailLabels={gmailLabels}
       mailboxActions={mailboxActions}
+      mailboxContextsByThreadId={mailboxContextsByThreadId}
       mailboxEmailAddress={mailboxEmailAddress}
       mailboxDisplayName={mailboxDisplayName}
       mailboxId={mailboxId}

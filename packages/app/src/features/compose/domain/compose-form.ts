@@ -18,6 +18,7 @@ type ComposeFormWriter = {
 
 type ComposeDraftFormMeta = Pick<
   ComposeDraftState,
+  | "followUpReminder"
   | "localId"
   | "baseRevision"
   | "draftId"

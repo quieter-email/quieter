@@ -35,6 +35,7 @@ import {
   buildOpenTrackingHtmlTransform,
   resolveOrganizationMailOpenTracking,
 } from "./organization-mail-delivery";
+import { materializeSentReminder } from "./reminders/sent";
 import { hashRequest } from "./request-hash";
 
 type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
@@ -73,6 +74,7 @@ const hashComposeRequest = async (draft: ComposeDraftInput) => {
     bodyText: draft.bodyText,
     draftAnchor: draft.draftAnchor,
     files,
+    followUpReminder: draft.followUpReminder,
     headers: draft.headers,
     recipients: draft.recipients,
     replyContext: draft.replyContext,
@@ -86,6 +88,7 @@ const prepareComposeOperation = async (input: {
   mailboxId: string;
   operationKey: string;
   requestHash: string;
+  followUpReminder?: ComposeOperation["followUpReminder"];
 }): Promise<ComposeOperation> => {
   const now = new Date();
   const id = randomUUID();
@@ -120,6 +123,7 @@ const prepareComposeOperation = async (input: {
     const [updated] = await db
       .update(gmailComposeOperation)
       .set({
+        followUpReminder: input.followUpReminder ?? null,
         requestHash: input.requestHash,
         status: "prepared",
         updatedAt: new Date(),
@@ -303,6 +307,26 @@ const acceptComposeOperation = async (
         throw error;
       }
     });
+  if (
+    operation.kind === "send" &&
+    operation.followUpReminder &&
+    response.threadId
+  ) {
+    try {
+      await materializeSentReminder({
+        ...operation.followUpReminder,
+        mailboxId: operation.mailboxId,
+        messageId: response.id,
+        threadId: response.threadId,
+      });
+      await db
+        .update(gmailComposeOperation)
+        .set({ followUpReminder: null })
+        .where(eq(gmailComposeOperation.id, operation.id));
+    } catch (error) {
+      reportError(error, { operation: "compose:reminder-recovery" });
+    }
+  }
 };
 
 const toSavedComposeDraft = async (
@@ -598,7 +622,8 @@ export const sendGmailMessage = async (
   mailboxId: string,
   inputMessage: ComposeDraftInput,
   signal?: AbortSignal,
-  organizationId?: string | null
+  organizationId?: string | null,
+  actorUserId?: string
 ): Promise<{
   id: string;
   threadId?: string;
@@ -704,6 +729,10 @@ export const sendGmailMessage = async (
       }
       const operation = await prepareComposeOperation({
         draftId: message.draftId,
+        followUpReminder:
+          message.followUpReminder && actorUserId
+            ? { intent: message.followUpReminder, userId: actorUserId }
+            : undefined,
         kind: "send",
         mailboxId,
         operationKey: `send:${message.sendOperationId ?? message.localId}`,

@@ -22,6 +22,7 @@ import {
   composeDraftAnchorSchema,
   composeSenderNameSchema,
 } from "@quieter/mail/compose/schema";
+import { followUpReminderIntentSchema } from "@quieter/mail/reminders";
 import { tool } from "ai";
 import type { ToolSet, UIMessage } from "ai";
 import { z } from "zod";
@@ -117,6 +118,7 @@ export const foregroundComposeDraftSchema = z
     draftAnchor: composeDraftAnchorSchema.nullable().optional(),
     draftId: z.string().trim().min(1).max(256),
     draftRevision: z.number().int().nonnegative(),
+    followUpReminder: followUpReminderIntentSchema.nullable().optional(),
     inlineImages: z.array(foregroundComposeInlineImageSchema).max(100),
     messageId: optionalIdentifier,
     providerDraftId: z.string().trim().min(1).max(256).optional(),
