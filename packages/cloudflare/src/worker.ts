@@ -26,3 +26,4 @@ export default withSentryReporting({
 
 export { MailLiveUser } from "./mail-live-user";
 export { ReminderMailbox } from "./reminder-mailbox";
+export { ScheduledSend } from "./scheduled-send";

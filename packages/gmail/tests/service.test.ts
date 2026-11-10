@@ -9,7 +9,6 @@ import {
   mutateGmailMessage,
   mutateGmailThread,
   listGmailAddedMessageHistoryPage,
-  listMessagesWithDetails,
   isGmailRateLimitedError,
 } from "../src/service";
 
@@ -512,40 +511,6 @@ describe("Gmail metadata mutations", () => {
         },
         { body: "", path: "/gmail/v1/users/me/threads/thread%2Fa/untrash" },
       ]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-});
-
-describe(listMessagesWithDetails, () => {
-  test("compiles negated Archive to Gmail system-category membership", async () => {
-    const originalFetch = globalThis.fetch;
-    let requestedUrl = "";
-
-    setFetch(async (input) => {
-      const url = getRequestUrl(input);
-      if (url.includes("/profile")) {
-        return await resolveJson({
-          emailAddress: "user@example.com",
-          historyId: "10",
-        });
-      }
-      requestedUrl = url;
-      return await resolveJson({ resultSizeEstimate: 0, threads: [] });
-    });
-
-    try {
-      await listMessagesWithDetails("token", {
-        mailbox: "inbox",
-        query: "-is:archived from:alex@example.com",
-      });
-      const query = new URL(requestedUrl).searchParams.get("q");
-
-      expect(query).toContain(
-        "{in:inbox in:sent label:drafts in:spam in:trash}"
-      );
-      expect(query).not.toContain("is:archived");
     } finally {
       globalThis.fetch = originalFetch;
     }

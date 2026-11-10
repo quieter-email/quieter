@@ -14,11 +14,7 @@ import {
   extractMessageContent,
   findRenderablePart,
 } from "@quieter/mail/message-content";
-import {
-  MAILBOX_LABELS,
-  MAIL_UNREAD_LABEL,
-  isMessageArchived,
-} from "@quieter/mail/messages";
+import { MAILBOX_LABELS, MAIL_UNREAD_LABEL } from "@quieter/mail/messages";
 import type {
   MessageListItem,
   MessageInspectorResult,
@@ -319,9 +315,6 @@ const isMessageInMailbox = (
   if (mailbox === "important") {
     return false;
   }
-  if (mailbox === "archive") {
-    return isMessageArchived(labelIds);
-  }
   if (labelIds === undefined || !labelIds.includes(MAILBOX_LABELS[mailbox])) {
     return false;
   }
@@ -379,42 +372,10 @@ const getListMessagesQuery = (
   if (mailbox === "unread") {
     return appendGmailQueryTerms(query, ["-in:spam", "-in:trash"]);
   }
-  if (mailbox === "archive") {
-    return appendGmailQueryTerms(query, [
-      "-in:inbox",
-      "-in:sent",
-      "-label:drafts",
-      "-in:spam",
-      "-in:trash",
-    ]);
-  }
   const trimmedQuery = query?.trim();
   return trimmedQuery === undefined || trimmedQuery === ""
     ? undefined
     : trimmedQuery;
-};
-
-const compileGmailSearchQuery = (
-  mailbox: MailboxCategory | undefined,
-  query: string | undefined
-) => {
-  const providerQuery = query?.replaceAll(
-    /"(?:\\.|[^"\\])*"|(?<prefix>^|[\s({])(?<archive>-?is:archived)(?=$|[\s)}])/giu,
-    (
-      match: string,
-      prefix: string | undefined,
-      archive: string | undefined
-    ) => {
-      if (archive === undefined) {
-        return match;
-      }
-      const terms = archive.startsWith("-")
-        ? "{in:inbox in:sent label:drafts in:spam in:trash}"
-        : "(-in:inbox -in:sent -label:drafts -in:spam -in:trash)";
-      return (prefix ?? "") + terms;
-    }
-  );
-  return getListMessagesQuery(mailbox, providerQuery);
 };
 
 const isKnownGmailRateLimit = (details: {
@@ -1083,14 +1044,12 @@ const listMessages = async (
         fields: GMAIL_MESSAGE_LIST_FIELDS,
         includeSpamTrash: includesSpamTrash ? true : undefined,
         labelIds:
-          options?.mailbox !== undefined &&
-          options.mailbox !== "archive" &&
-          options.mailbox !== "important"
+          options?.mailbox !== undefined && options.mailbox !== "important"
             ? [MAILBOX_LABELS[options.mailbox]]
             : undefined,
         maxResults: options?.maxResults ?? 20,
         pageToken: options?.pageToken,
-        q: compileGmailSearchQuery(options?.mailbox, options?.query),
+        q: getListMessagesQuery(options?.mailbox, options?.query),
       },
       signal: options?.signal,
     }
@@ -1118,14 +1077,12 @@ const listThreads = async (
         fields: GMAIL_THREAD_LIST_FIELDS,
         includeSpamTrash: includesSpamTrash ? true : undefined,
         labelIds:
-          options?.mailbox !== undefined &&
-          options.mailbox !== "archive" &&
-          options.mailbox !== "important"
+          options?.mailbox !== undefined && options.mailbox !== "important"
             ? [MAILBOX_LABELS[options.mailbox]]
             : undefined,
         maxResults: options?.maxResults ?? 15,
         pageToken: options?.pageToken,
-        q: compileGmailSearchQuery(options?.mailbox, options?.query),
+        q: getListMessagesQuery(options?.mailbox, options?.query),
       },
       signal: options?.signal,
     }
@@ -2444,7 +2401,7 @@ export const getMailboxSyncDelta = async (
   }
 ): Promise<MailboxSyncDelta> => {
   const mailboxLabel =
-    options.mailbox === "archive" || options.mailbox === "important"
+    options.mailbox === "important"
       ? undefined
       : MAILBOX_LABELS[options.mailbox];
   const state: MailboxSyncDeltaState = {

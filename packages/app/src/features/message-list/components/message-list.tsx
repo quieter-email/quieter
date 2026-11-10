@@ -1,11 +1,9 @@
 "use client";
 
 import {
-  Archive02Icon,
   Flag01Icon,
   Delete01Icon,
   Delete02Icon,
-  InboxIcon,
   Mail01Icon,
   MailOpen02Icon,
 } from "@hugeicons/core-free-icons";
@@ -71,8 +69,6 @@ const formatConversationCount = (count: number) =>
  * shortcut always confirm the same thing.
  */
 const threadActionSuccessMessage = {
-  archive: (threads: ThreadListEntry[]) =>
-    `${formatConversationCount(threads.length)} archived.`,
   deleteDrafts: (threads: ThreadListEntry[]) =>
     `${threads.length} ${threads.length === 1 ? "draft" : "drafts"} deleted.`,
   markRead: (threads: ThreadListEntry[]) =>
@@ -81,8 +77,6 @@ const threadActionSuccessMessage = {
     `${formatConversationCount(threads.length)} marked as Spam.`,
   markUnread: (threads: ThreadListEntry[]) =>
     `${formatConversationCount(threads.length)} marked as Unread.`,
-  moveToInbox: (threads: ThreadListEntry[]) =>
-    `${formatConversationCount(threads.length)} moved to Inbox.`,
   moveToTrash: (threads: ThreadListEntry[]) =>
     `${formatConversationCount(threads.length)} moved to Trash.`,
   unmarkSpam: (threads: ThreadListEntry[]) =>
@@ -195,25 +189,6 @@ const buildMessageListHotkeys = (
       enabled:
         context.threadedMessages.length > 0 ||
         (context.activeMessageId?.trim() ?? "") !== "",
-    },
-  },
-  {
-    callback: (event: KeyboardEvent) => {
-      if (shouldIgnoreAppShortcut(event)) {
-        return;
-      }
-      void context.runActionThreads(
-        context.mailboxActions.archiveThreads,
-        threadActionSuccessMessage.archive
-      );
-    },
-    hotkey: "E",
-    options: {
-      enabled:
-        context.actionHotkeysEnabled &&
-        (context.activeMailbox === "inbox" ||
-          context.activeMailbox === "unread" ||
-          context.activeMailbox === "important"),
     },
   },
   {
@@ -363,40 +338,6 @@ const buildMessageListBulkActions = ({
           },
           (threads) =>
             `${formatConversationCount(threads.length)} marked as ${important ? "not important" : "important"}.`
-        );
-      },
-      promoted: true,
-    });
-  }
-
-  if (
-    activeMailbox === "inbox" ||
-    activeMailbox === "unread" ||
-    activeMailbox === "important"
-  ) {
-    actions.push({
-      icon: Archive02Icon,
-      id: "archive-threads",
-      label: "Archive",
-      onSelect: async () => {
-        await runActionThreads(
-          mailboxActions.archiveThreads,
-          threadActionSuccessMessage.archive
-        );
-      },
-      promoted: true,
-    });
-  }
-
-  if (activeMailbox === "archive") {
-    actions.push({
-      icon: InboxIcon,
-      id: "move-threads-inbox",
-      label: "Move to Inbox",
-      onSelect: async () => {
-        await runActionThreads(
-          mailboxActions.untrashThreads,
-          threadActionSuccessMessage.moveToInbox
         );
       },
       promoted: true,

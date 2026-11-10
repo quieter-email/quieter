@@ -41,6 +41,10 @@ export default defineConfig({
         exportName: "ReminderMailbox",
         worker: "quieter-local-background",
       }),
+      ScheduledSend: bindings.durableObject({
+        exportName: "ScheduledSend",
+        worker: "quieter-local-background",
+      }),
     },
     exports: {
       GmailLiveSyncMailboxV2: workerExports.durableObject({
@@ -48,6 +52,7 @@ export default defineConfig({
       }),
       MailLiveUser: workerExports.durableObject({ storage: "sqlite" }),
       ReminderMailbox: workerExports.durableObject({ storage: "sqlite" }),
+      ScheduledSend: workerExports.durableObject({ storage: "sqlite" }),
     },
     name: "quieter-local-background",
     triggers: [

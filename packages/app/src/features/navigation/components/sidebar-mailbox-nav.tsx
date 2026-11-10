@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Archive02Icon,
   Delete01Icon,
   Delete02Icon,
   Edit01Icon,
@@ -9,6 +8,7 @@ import {
   Mail01Icon,
   MailSend02Icon,
   Flag01Icon,
+  Clock01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
 import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
@@ -16,10 +16,11 @@ import type { KeyboardShortcutId } from "@quieter/app/features/hotkeys/domain/ke
 import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
+import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { Icon } from "@quieter/ui/icon";
 
 const SIDEBAR_MAILBOX_ITEMS: readonly {
-  id: MailboxCategory;
+  id: MailboxCategory | "scheduled";
   icon: IconSvgElement;
   label: string;
   shortcutId?: KeyboardShortcutId;
@@ -27,13 +28,8 @@ const SIDEBAR_MAILBOX_ITEMS: readonly {
   { icon: Flag01Icon, id: "important", label: "Important" },
   { icon: InboxIcon, id: "inbox", label: "Inbox", shortcutId: "go-inbox" },
   { icon: Mail01Icon, id: "unread", label: "Unread", shortcutId: "go-unread" },
-  {
-    icon: Archive02Icon,
-    id: "archive",
-    label: "Archive",
-    shortcutId: "go-archive",
-  },
   { icon: MailSend02Icon, id: "sent", label: "Sent", shortcutId: "go-sent" },
+  { icon: Clock01Icon, id: "scheduled", label: "Scheduled" },
   { icon: Edit01Icon, id: "drafts", label: "Drafts", shortcutId: "go-drafts" },
   { icon: Delete01Icon, id: "trash", label: "Trash", shortcutId: "go-trash" },
   { icon: Delete02Icon, id: "spam", label: "Spam", shortcutId: "go-spam" },
@@ -63,8 +59,19 @@ export const SidebarMailboxNav = ({
   onSelectMailbox,
   selectedMailbox,
 }: SidebarMailboxNavProps) => {
+  const isScheduledMailbox = inboxRouteApi.useSearch({
+    select: (search) => search.mailbox === "scheduled",
+  });
   const mailboxItems =
-    mailboxProvider === "api" ? API_MAILBOX_ITEMS : SIDEBAR_MAILBOX_ITEMS;
+    mailboxProvider === "api"
+      ? API_MAILBOX_ITEMS
+      : SIDEBAR_MAILBOX_ITEMS.filter(
+          (item) =>
+            item.id !== "scheduled" ||
+            (!embedded &&
+              mailboxId !== null &&
+              (mailboxProvider === "gmail" || mailboxProvider === "managed"))
+        );
 
   return (
     <nav aria-label="Mailboxes" className="flex flex-col">
@@ -76,7 +83,10 @@ export const SidebarMailboxNav = ({
         <p className="text-caption font-medium text-muted-fg">Mail</p>
       </SidebarEntrance>
       {mailboxItems.map((item, index) => {
-        const isActive = selectedMailbox === item.id;
+        const isActive =
+          item.id === "scheduled"
+            ? isScheduledMailbox
+            : !isScheduledMailbox && selectedMailbox === item.id;
 
         return (
           <SidebarEntrance
@@ -98,12 +108,17 @@ export const SidebarMailboxNav = ({
                       mailbox: item.id,
                       mailboxId,
                       messageId: null,
-                      view: allInboxesActive ? "all-inboxes" : "inbox",
+                      query: item.id === "scheduled" ? null : undefined,
+                      threadId: null,
+                      view:
+                        item.id !== "scheduled" && allInboxesActive
+                          ? "all-inboxes"
+                          : "inbox",
                       workspace: null,
                     }
               }
               onClick={() => {
-                if (embedded) {
+                if (embedded && item.id !== "scheduled") {
                   onSelectMailbox(item.id);
                 }
                 onRequestClose?.();

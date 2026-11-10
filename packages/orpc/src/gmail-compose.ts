@@ -27,10 +27,11 @@ import {
 import type { composeDraftInputSchema } from "@quieter/mail/compose/schema";
 import type { MessageListItem } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
-import { and, eq, inArray, lt, or } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { z } from "zod";
 
 import { prepareGmailOpenTracking } from "./gmail-open-tracking";
+import { withMailComposeLock } from "./mail/compose-lock";
 import {
   buildOpenTrackingHtmlTransform,
   resolveOrganizationMailOpenTracking,
@@ -153,66 +154,6 @@ const prepareComposeOperation = async (input: {
     });
   }
   return operation;
-};
-
-const withComposeDraftLock = async <Result>(
-  mailboxId: string,
-  identity: string,
-  run: () => Promise<Result>
-): Promise<Result> => {
-  const now = new Date();
-  const owner = randomUUID();
-  const operationKey = `lock:${identity}`;
-  await db
-    .insert(gmailComposeOperation)
-    .values({
-      createdAt: now,
-      id: randomUUID(),
-      kind: "save",
-      mailboxId,
-      messageHeaderId: "",
-      operationKey,
-      requestHash: "",
-      status: "prepared",
-      updatedAt: now,
-    })
-    .onConflictDoNothing();
-  const [lock] = await db
-    .update(gmailComposeOperation)
-    .set({ requestHash: owner, status: "submitting", updatedAt: now })
-    .where(
-      and(
-        eq(gmailComposeOperation.mailboxId, mailboxId),
-        eq(gmailComposeOperation.operationKey, operationKey),
-        or(
-          inArray(gmailComposeOperation.status, ["prepared", "accepted"]),
-          lt(gmailComposeOperation.updatedAt, new Date(now.getTime() - 120_000))
-        )
-      )
-    )
-    .returning({ id: gmailComposeOperation.id });
-  if (lock === undefined) {
-    throw new ORPCError("CONFLICT", {
-      message:
-        "This draft is being saved or sent elsewhere. Try again in a moment.",
-    });
-  }
-  try {
-    return await run();
-  } finally {
-    await db
-      .update(gmailComposeOperation)
-      .set({ status: "accepted", updatedAt: new Date() })
-      .where(
-        and(
-          eq(gmailComposeOperation.id, lock.id),
-          eq(gmailComposeOperation.requestHash, owner)
-        )
-      )
-      .catch((error: unknown) => {
-        reportError(error, { operation: "compose:gmail-release-draft-lock" });
-      });
-  }
 };
 
 const claimComposeOperation = async (operation: ComposeOperation) => {
@@ -471,7 +412,7 @@ export const saveGmailDraft = async (
       message: DRAFT_CONFLICT_MESSAGE,
     });
   }
-  return await withComposeDraftLock(
+  return await withMailComposeLock(
     mailboxId,
     draft.draftId ?? `local:${draft.localId}`,
     async () => {
@@ -693,7 +634,7 @@ export const sendGmailMessage = async (
       };
     }
   }
-  return await withComposeDraftLock(
+  return await withMailComposeLock(
     mailboxId,
     message.draftId ?? `local:${message.localId}`,
     async () => {
@@ -837,13 +778,13 @@ export const sendGmailMessage = async (
 export const deleteGmailComposeDraft = async (
   accessToken: string,
   mailboxId: string,
-  input: { draftId: string; baseRevision?: string },
+  input: { draftId: string; baseRevision?: string; requireExisting?: boolean },
   signal?: AbortSignal
 ) => {
   const requestSignal = signal
     ? AbortSignal.any([signal, AbortSignal.timeout(45_000)])
     : AbortSignal.timeout(45_000);
-  return await withComposeDraftLock(mailboxId, input.draftId, async () => {
+  return await withMailComposeLock(mailboxId, input.draftId, async () => {
     const [pendingSend] = await db
       .select({ id: gmailComposeOperation.id })
       .from(gmailComposeOperation)
@@ -872,6 +813,17 @@ export const deleteGmailComposeDraft = async (
       }
       await deleteDraft(accessToken, input.draftId, requestSignal);
     } catch (error) {
+      if (
+        input.requireExisting === true &&
+        isGmailServiceError(error) &&
+        error.status === 404
+      ) {
+        throw new ORPCError("CONFLICT", {
+          data: { draftConflict: true },
+          message:
+            "The original draft is no longer available. Check Sent before scheduling it again.",
+        });
+      }
       if (!(isGmailServiceError(error) && error.status === 404)) {
         throw error;
       }
@@ -887,6 +839,7 @@ export const getGmailComposeSendStatus = async (
   signal?: AbortSignal
 ): Promise<{
   status: "pending" | "sent" | "rejected";
+  definitiveRejection?: boolean;
   id?: string;
   messageId?: string;
   threadId?: string;
@@ -907,7 +860,10 @@ export const getGmailComposeSendStatus = async (
     operation.status === "rejected" ||
     operation.status === "prepared"
   ) {
-    return { status: "rejected" };
+    return {
+      definitiveRejection: operation?.status === "rejected",
+      status: "rejected",
+    };
   }
   if (operation.status === "accepted" && operation.response) {
     return {

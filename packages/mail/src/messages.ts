@@ -5,7 +5,6 @@ import type { OtpToken } from "./otp-token";
 export type { MailCategory as MailboxCategory } from "./data-plane";
 
 export const MAILBOX_LABELS = {
-  archive: "ARCHIVE",
   drafts: "DRAFT",
   inbox: "INBOX",
   sent: "SENT",
@@ -126,19 +125,6 @@ export type MailboxSyncDelta = {
   updatedMessages: MessageListItem[];
 };
 
-export const isMessageArchived = (
-  labelIds: readonly string[] | undefined
-): boolean =>
-  labelIds !== undefined &&
-  labelIds.length > 0 &&
-  ![
-    MAILBOX_LABELS.inbox,
-    MAILBOX_LABELS.sent,
-    MAILBOX_LABELS.drafts,
-    MAILBOX_LABELS.spam,
-    MAILBOX_LABELS.trash,
-  ].some((labelId) => labelIds.includes(labelId));
-
 const normalizeLabelIds = (
   labelIds: readonly string[] | undefined
 ): string[] | undefined => {
@@ -222,9 +208,6 @@ export const isMessageInMailbox = (
         ["SPAM", "TRASH", "DRAFT", "SENT"].includes(label)
       ) !== true
     );
-  }
-  if (mailbox === "archive") {
-    return isMessageArchived(labelIds);
   }
   if (labelIds?.includes(MAILBOX_LABELS[mailbox]) !== true) {
     return false;

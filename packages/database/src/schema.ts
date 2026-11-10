@@ -17,6 +17,7 @@ import type {
   ReminderSource,
   ReminderTarget,
 } from "@quieter/mail/reminders";
+import type { ScheduledSendStatus } from "@quieter/mail/scheduled-send";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -123,12 +124,7 @@ export type GmailUsefulDetailFeedbackSignal = "not_useful" | "useful";
 export type MailAutomationAgent = "auto_label" | "useful_detail";
 export type MailAutoLabelFeedbackSignal = "added" | "removed";
 export type ManagedMailDirection = "inbound" | "outbound";
-export type ManagedMailMailboxState =
-  | "active"
-  | "archived"
-  | "draft"
-  | "spam"
-  | "trash";
+export type ManagedMailMailboxState = "active" | "draft" | "spam" | "trash";
 export type ManagedMailRawObjectProvider = "r2" | "s3";
 export type ManagedMailLabelAssignmentSource =
   | "ai_auto_label"
@@ -2392,7 +2388,7 @@ export const managedMailMessage = pgTable(
     ),
     check(
       "managed_mail_message_mailbox_state_check",
-      sql`${table.mailboxState} in ('active', 'archived', 'draft', 'spam', 'trash')`
+      sql`${table.mailboxState} in ('active', 'draft', 'spam', 'trash')`
     ),
     check(
       "managed_mail_message_raw_object_provider_check",
@@ -2751,6 +2747,10 @@ export const managedMailRule = pgTable(
       "managed_mail_rule_match_mode_check",
       sql`${table.matchMode} in ('all', 'any')`
     ),
+    check(
+      "managed_mail_rule_archive_removed_check",
+      sql`not (${table.actions} @> '[{"kind":"move","destination":"archive"}]'::jsonb)`
+    ),
     index("managed_mail_rule_mailbox_enabled_priority_idx").on(
       table.mailboxId,
       table.enabled,
@@ -2886,6 +2886,10 @@ export const managedMailRuleRun = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
+    check(
+      "managed_mail_rule_run_archive_removed_check",
+      sql`not (${table.definition}->'actions' @> '[{"kind":"move","destination":"archive"}]'::jsonb)`
+    ),
     unique("managed_mail_rule_run_revision_unique").on(
       table.ruleId,
       table.messageId,
@@ -2931,6 +2935,10 @@ export const managedMailRuleBackfill = pgTable(
     check(
       "managed_mail_rule_backfill_status_check",
       sql`${table.status} in ('pending', 'running', 'completed', 'failed', 'cancelled')`
+    ),
+    check(
+      "managed_mail_rule_backfill_archive_removed_check",
+      sql`${table.status} in ('completed', 'cancelled') or not (${table.definition}->'actions' @> '[{"kind":"move","destination":"archive"}]'::jsonb)`
     ),
     index("managed_mail_rule_backfill_rule_status_idx").on(
       table.ruleId,
@@ -3959,6 +3967,88 @@ export const semanticIndexRequest = pgTable(
   ]
 );
 
+export const scheduledMailSend = pgTable(
+  "scheduledMailSend",
+  {
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    draftRemovedAt: timestamp("draftRemovedAt", { withTimezone: true }),
+    errorMessage: text("errorMessage"),
+    id: text("id").primaryKey(),
+    leaseToken: text("leaseToken"),
+    leaseUntil: timestamp("leaseUntil", { withTimezone: true }),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    nextWakeAt: timestamp("nextWakeAt", { withTimezone: true }),
+    payloadRetiredAt: timestamp("payloadRetiredAt", { withTimezone: true }),
+    rawObjectBucket: text("rawObjectBucket").notNull(),
+    rawObjectKey: text("rawObjectKey").notNull(),
+    rawObjectProvider: text("rawObjectProvider").$type<"r2" | "s3">().notNull(),
+    requestHash: text("requestHash").notNull(),
+    restoredDraftId: text("restoredDraftId"),
+    sendAt: timestamp("sendAt", { withTimezone: true }).notNull(),
+    sendOperationId: text("sendOperationId").notNull(),
+    sentAt: timestamp("sentAt", { withTimezone: true }),
+    sourceDraftId: text("sourceDraftId"),
+    sourceLocalId: text("sourceLocalId").notNull(),
+    status: text("status").$type<ScheduledSendStatus>().notNull(),
+    subject: text("subject").notNull(),
+    timeZone: text("timeZone").notNull(),
+    to: text("to").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    unique("scheduled_mail_send_operation_unique").on(
+      table.mailboxId,
+      table.userId,
+      table.sendOperationId
+    ),
+    index("scheduled_mail_send_owner_idx").on(
+      table.userId,
+      table.mailboxId,
+      table.status,
+      table.sendAt
+    ),
+    index("scheduled_mail_send_wake_idx").on(table.nextWakeAt),
+    uniqueIndex("scheduled_mail_send_source_local_unique")
+      .on(table.mailboxId, table.sourceLocalId)
+      .where(
+        sql`${table.status} in ('preparing', 'scheduled', 'sending', 'failed', 'uncertain')`
+      ),
+    uniqueIndex("scheduled_mail_send_source_draft_unique")
+      .on(table.mailboxId, table.sourceDraftId)
+      .where(
+        sql`${table.status} in ('preparing', 'scheduled', 'sending', 'failed', 'uncertain')`
+      ),
+    check(
+      "scheduled_mail_send_status_check",
+      sql`${table.status} in ('preparing', 'scheduled', 'sending', 'sent', 'failed', 'uncertain', 'cancelled')`
+    ),
+  ]
+);
+
+export const scheduledMailSendAbandonment = pgTable(
+  "scheduledMailSendAbandonment",
+  {
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    sendOperationId: text("sendOperationId").notNull(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.mailboxId, table.userId, table.sendOperationId],
+    }),
+  ]
+);
+
 export const tables = {
   account,
   aiGeneratedMailBody,
@@ -4042,6 +4132,8 @@ export const tables = {
   organizationMailUsageSettings,
   passkey,
   rateLimitBucket,
+  scheduledMailSend,
+  scheduledMailSendAbandonment,
   semanticEmbedding,
   semanticIndexRequest,
   semanticSearchLease,

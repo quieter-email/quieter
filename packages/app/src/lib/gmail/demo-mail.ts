@@ -242,7 +242,7 @@ const createInitialDemoState = (): DemoMailState => ({
       date: daysAgo(4.1),
       from: "Dropbox <no-reply@dropbox.com>",
       isImportant: true,
-      labelIds: [MAILBOX_LABELS.archive],
+      labelIds: [MAILBOX_LABELS.inbox],
       snippet:
         "Milo shared the Q2 launch folder with you. It contains the press screenshots, brand exports, and approvals.",
       subject: "Q2 launch folder shared with you",

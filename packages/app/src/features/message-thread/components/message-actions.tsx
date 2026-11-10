@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Archive02Icon,
   Flag01Icon,
   Delete01Icon,
   Delete02Icon,
@@ -273,28 +272,11 @@ const createFolderEntries = (
   isBusy: boolean
 ): MenuEntry[] => {
   const entries: MenuEntry[] = [];
-  const showArchive =
-    props.mailbox === "inbox" ||
-    props.mailbox === "unread" ||
-    props.mailbox === "important";
   const showMarkAsSpam =
     props.mailbox === "inbox" || props.mailbox === "important";
-  const isArchiveMailbox = props.mailbox === "archive";
   const isSpamMailbox = props.mailbox === "spam";
   const isTrashMailbox = props.mailbox === "trash";
 
-  if (showArchive && props.actions.onArchive) {
-    entries.push({
-      disabled: isBusy,
-      icon: Archive02Icon,
-      id: "archive",
-      label: "Archive",
-      onAction: () => {
-        void props.actions.onArchive?.(props.message.threadId);
-      },
-      type: "item",
-    });
-  }
   if (showMarkAsSpam && props.actions.onMarkAsSpam) {
     entries.push({
       destructive: true,
@@ -320,7 +302,7 @@ const createFolderEntries = (
       type: "item",
     });
   }
-  if ((isTrashMailbox || isArchiveMailbox) && props.actions.onUntrash) {
+  if (isTrashMailbox && props.actions.onUntrash) {
     entries.push({
       disabled: isBusy,
       icon: InboxIcon,

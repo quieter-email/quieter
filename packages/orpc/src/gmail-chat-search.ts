@@ -154,7 +154,6 @@ const TEXT_ATTACHMENT_EXTENSIONS = new Set([
   "yml",
 ]);
 const GMAIL_STARRED_LABEL = "STARRED";
-const GMAIL_INBOX_LABEL = "INBOX";
 const GMAIL_NON_SPAM_TRASH_UNREAD_QUERY = "is:unread -in:spam -in:trash";
 
 const getUnreadOverviewQuery = (category: MailboxCategory) =>
@@ -429,7 +428,6 @@ export const modifyMailForUser = async (
     const { action, id, target } = input;
 
     const changes = {
-      archive: { removeLabelIds: [GMAIL_INBOX_LABEL] },
       mark_read: { removeLabelIds: ["UNREAD"] },
       mark_unread: { addLabelIds: ["UNREAD"] },
       star: { addLabelIds: [GMAIL_STARRED_LABEL] },

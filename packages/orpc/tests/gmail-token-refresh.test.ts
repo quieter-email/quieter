@@ -14,6 +14,7 @@ import {
   refreshAuthorizedGmailAccessToken,
   runAuthorizedGmailMailbox,
 } from "../src/gmail-mailbox-access";
+import { callGmail } from "../src/gmail-request";
 
 const fixtures = vi.hoisted(() => ({
   expiresAt: new Date(0),
@@ -169,5 +170,39 @@ describe("Gmail token refresh grants", () => {
       )
     ).rejects.toMatchObject({ code: "MAILBOX_SCOPE_REPAIR_REQUIRED" });
     expect(fixtures.status).toBe("needs_reconnect");
+  });
+
+  test("allows a send to retry after a temporary token refresh failure without submitting first", async () => {
+    const send = vi.fn<() => Promise<string>>().mockResolvedValue("sent");
+    const refresh = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({ error: "server_error" }, { status: 500 })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: "renewed-access",
+          expires_in: 3600,
+          token_type: "Bearer",
+        })
+      );
+    vi.stubGlobal("fetch", refresh);
+
+    await expect(
+      callGmail({ userId: mailboxInput.userId }, mailboxInput.mailboxId, send, {
+        kind: "send",
+      })
+    ).rejects.toMatchObject({
+      data: { sendNotStarted: true },
+      status: 500,
+    });
+    expect(send).not.toHaveBeenCalled();
+    expect(fixtures.status).toBe("connected");
+    await expect(
+      callGmail({ userId: mailboxInput.userId }, mailboxInput.mailboxId, send, {
+        kind: "send",
+      })
+    ).resolves.toBe("sent");
+    expect(send).toHaveBeenCalledOnce();
   });
 });

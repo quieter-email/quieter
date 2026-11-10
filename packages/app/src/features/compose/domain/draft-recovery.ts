@@ -8,6 +8,7 @@ import {
   composeSenderNameSchema,
 } from "@quieter/mail/compose/schema";
 import { followUpReminderIntentSchema } from "@quieter/mail/reminders";
+import { scheduledSendTimeSchema } from "@quieter/mail/scheduled-send";
 import { z } from "zod";
 
 const assetSchema = z.object({
@@ -47,6 +48,7 @@ export const recoverableDraftSchema = z.object({
     .nullable()
     .optional(),
   saveStatus: z.enum(["idle", "saving", "saved", "error", "sending"]),
+  scheduleAttempt: scheduledSendTimeSchema.optional(),
   sendOperationId: z.uuid().optional(),
   sendUncertain: z.boolean().optional(),
   senderName: composeSenderNameSchema.optional(),
@@ -110,14 +112,15 @@ export const restoreComposeDraft = (
   ];
   let { errorMessage } = draft;
   if (draft.saveStatus === "sending") {
-    errorMessage =
-      "Delivery was interrupted. Check Sent before sending this message again.";
+    errorMessage = draft.scheduleAttempt
+      ? "Scheduling was interrupted. Check the schedule before sending this message again."
+      : "Delivery was interrupted. Check Sent before sending this message again.";
   }
   if (recoveryMissingFiles.length > 0) {
     const fileWarning = `Your text was recovered. Reattach these files before sending: ${recoveryMissingFiles.join(", ")}.`;
     errorMessage =
       draft.sendUncertain === true || draft.saveStatus === "sending"
-        ? `Delivery could not be confirmed. Check Sent before sending again. ${fileWarning}`
+        ? `${draft.scheduleAttempt ? "Scheduling could not be confirmed. Check the schedule before sending again." : "Delivery could not be confirmed. Check Sent before sending again."} ${fileWarning}`
         : fileWarning;
   }
   const bodyHtml = draft.bodyHtml.replaceAll(
@@ -152,7 +155,9 @@ export const restoreComposeDraft = (
     recoveryUpdatedAt: updatedAt,
     saveStatus: errorMessage === null ? "idle" : "error",
     sendUncertain:
-      draft.sendUncertain === true || draft.saveStatus === "sending",
+      draft.sendUncertain === true ||
+      draft.saveStatus === "sending" ||
+      draft.scheduleAttempt !== undefined,
   };
 };
 

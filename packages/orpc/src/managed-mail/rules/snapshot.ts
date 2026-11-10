@@ -10,7 +10,7 @@ import { hashRequest } from "../../request-hash";
 
 export const managedRuleSnapshotSchema =
   managedMailboxRuleDefinitionSchema.extend({
-    actions: managedMailboxRuleActionSchema.array().min(1).max(20),
+    actions: managedMailboxRuleActionSchema.array().max(20),
     id: z.string(),
     ownerUserId: z.string().nullable(),
     revision: z.string(),

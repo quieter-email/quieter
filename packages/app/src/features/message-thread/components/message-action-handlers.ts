@@ -12,7 +12,6 @@ export type ThreadActionHandlers = {
     threadId: string,
     important: boolean
   ) => void | Promise<void>;
-  onArchive?: (threadId: string) => void | Promise<void>;
   onDeleteDraft?: (message: MessageListItem) => void | Promise<void>;
   onMarkAsRead?: (threadId: string) => void | Promise<void>;
   onMarkAsSpam?: (threadId: string) => void | Promise<void>;
@@ -32,7 +31,6 @@ export const createMailboxThreadMessageActionHandlers = ({
   mailboxActions,
   onBackToList,
   onOpenDraft,
-  supportsArchive = true,
   supportsFolders = true,
   supportsLabels = true,
   supportsReadState = true,
@@ -41,7 +39,6 @@ export const createMailboxThreadMessageActionHandlers = ({
   mailboxActions: MailboxActions;
   onBackToList?: () => void;
   onOpenDraft?: (message: MessageListItem) => void | Promise<void>;
-  supportsArchive?: boolean;
   supportsFolders?: boolean;
   supportsLabels?: boolean;
   supportsReadState?: boolean;
@@ -55,14 +52,6 @@ export const createMailboxThreadMessageActionHandlers = ({
           } catch (error) {
             toastError(error, { boundary: "message-importance" });
           }
-        },
-      }
-    : {}),
-  ...(supportsArchive
-    ? {
-        onArchive: async (threadId: string) => {
-          await mailboxActions.archiveThread(threadId);
-          onBackToList?.();
         },
       }
     : {}),

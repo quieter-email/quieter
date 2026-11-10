@@ -627,11 +627,6 @@ export const getMailCommandUpdater =
     if (command.kind === "delete-permanently") {
       return message;
     }
-    if (command.destination === "archive") {
-      return applyMessageLabelChangesLocally(message, {
-        removeLabelIds: [MAILBOX_LABELS.inbox],
-      });
-    }
     if (command.destination === "spam") {
       return applyMessageLabelChangesLocally(message, {
         addLabelIds: [MAILBOX_LABELS.spam],
@@ -651,10 +646,6 @@ export const getMailCommandUpdater =
     }
     return applyMessageLabelChangesLocally(message, {
       addLabelIds: [MAILBOX_LABELS.inbox],
-      removeLabelIds: [
-        MAILBOX_LABELS.archive,
-        MAILBOX_LABELS.spam,
-        MAILBOX_LABELS.trash,
-      ],
+      removeLabelIds: [MAILBOX_LABELS.spam, MAILBOX_LABELS.trash],
     });
   };

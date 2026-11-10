@@ -12,6 +12,7 @@ import { processManagedRuleBackfills } from "@quieter/orpc/managed-mail/rule-bac
 import { cleanupMailObjects } from "@quieter/orpc/managed-mail/storage";
 import { reconcileReminderSchedules } from "@quieter/orpc/reminders/clock";
 import { processReminderJobs } from "@quieter/orpc/reminders/runtime";
+import { reconcileScheduledSends } from "@quieter/orpc/scheduled-send/repair";
 import { processPendingSemanticIndexes } from "@quieter/orpc/semantic-index";
 import { cleanupMailboxVerificationCodes } from "@quieter/orpc/verification-codes";
 
@@ -37,6 +38,7 @@ export default withSentryReporting({
           processPendingMailImportance({ limit: 20 }),
           reconcileReminderSchedules({ limit: 20 }),
           processReminderJobs({ limit: 4 }),
+          reconcileScheduledSends({ limit: 20 }),
         ]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed !== undefined) {

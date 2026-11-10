@@ -4,6 +4,7 @@ import { withSentryReporting } from "./worker-runtime";
 
 export { MailLiveUser } from "./mail-live-user";
 export { ReminderMailbox } from "./reminder-mailbox";
+export { ScheduledSend } from "./scheduled-send";
 
 export default withSentryReporting({
   async fetch(request, env) {

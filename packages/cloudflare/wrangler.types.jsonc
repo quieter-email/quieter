@@ -22,6 +22,7 @@
     ],
   },
   "vars": {
+    "BETTER_AUTH_URL": "https://quieter.example",
     "CONNECTOR_TOKEN_ENCRYPTION_KEY": "connector-token-key",
     "GMAIL_TOKEN_ENCRYPTION_KEY": "gmail-token-key",
     "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT": "gmail-token-key-current",
@@ -55,6 +56,7 @@
     "bindings": [
       { "name": "MailLiveUser", "class_name": "MailLiveUser" },
       { "name": "ReminderMailbox", "class_name": "ReminderMailbox" },
+      { "name": "ScheduledSend", "class_name": "ScheduledSend" },
       {
         "name": "GmailLiveSyncMailboxV2",
         "class_name": "GmailLiveSyncMailboxV2",
@@ -68,6 +70,7 @@
     },
     { "tag": "mail-user-v1", "new_sqlite_classes": ["MailLiveUser"] },
     { "tag": "reminders-v1", "new_sqlite_classes": ["ReminderMailbox"] },
+    { "tag": "scheduled-send-v1", "new_sqlite_classes": ["ScheduledSend"] },
   ],
   "observability": {
     "enabled": true,
