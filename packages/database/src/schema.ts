@@ -2700,6 +2700,10 @@ export const managedMailRule = pgTable(
       "managed_mail_rule_match_mode_check",
       sql`${table.matchMode} in ('all', 'any')`
     ),
+    check(
+      "managed_mail_rule_archive_removed_check",
+      sql`not (${table.actions} @> '[{"kind":"move","destination":"archive"}]'::jsonb)`
+    ),
     index("managed_mail_rule_mailbox_enabled_priority_idx").on(
       table.mailboxId,
       table.enabled,
@@ -2835,6 +2839,10 @@ export const managedMailRuleRun = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
+    check(
+      "managed_mail_rule_run_archive_removed_check",
+      sql`not (${table.definition}->'actions' @> '[{"kind":"move","destination":"archive"}]'::jsonb)`
+    ),
     unique("managed_mail_rule_run_revision_unique").on(
       table.ruleId,
       table.messageId,
@@ -2880,6 +2888,10 @@ export const managedMailRuleBackfill = pgTable(
     check(
       "managed_mail_rule_backfill_status_check",
       sql`${table.status} in ('pending', 'running', 'completed', 'failed', 'cancelled')`
+    ),
+    check(
+      "managed_mail_rule_backfill_archive_removed_check",
+      sql`${table.status} in ('completed', 'cancelled') or not (${table.definition}->'actions' @> '[{"kind":"move","destination":"archive"}]'::jsonb)`
     ),
     index("managed_mail_rule_backfill_rule_status_idx").on(
       table.ruleId,
