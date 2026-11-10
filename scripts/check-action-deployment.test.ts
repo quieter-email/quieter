@@ -15,7 +15,7 @@ import {
 
 import {
   checkActionDeployment,
-  disablePrivateReleaseUrls,
+  securePrivateReleaseWorkers,
 } from "./check-action-deployment.ts";
 
 const lambda = vi.hoisted(() => ({ buildId: "new-build" }));
@@ -51,6 +51,8 @@ let processorRegion = "aws:eu-central-1";
 let processorScript = "gmail-processing";
 let extraPlacementTarget = false;
 let publicProcessor = false;
+let placementMissing = false;
+let placementWriteFails = false;
 
 const verify = async () => {
   await checkActionDeployment({
@@ -74,6 +76,8 @@ describe("deployed Action consumer verification", () => {
     processorScript = "gmail-processing";
     extraPlacementTarget = false;
     publicProcessor = false;
+    placementMissing = false;
+    placementWriteFails = false;
     lambda.buildId = "new-build";
     await writeFile(
       path.join(directory, "outputs.json"),
@@ -92,8 +96,15 @@ describe("deployed Action consumer verification", () => {
     );
     vi.stubGlobal(
       "fetch",
-      vi.fn((url: string) => {
+      vi.fn((url: string, init?: RequestInit) => {
         let result: unknown;
+        if (url.endsWith("/settings") && init?.method === "PATCH") {
+          if (placementWriteFails) {
+            return Response.json({ success: false }, { status: 500 });
+          }
+          placementMissing = false;
+          return Response.json({ success: true });
+        }
         if (url.endsWith("deployment.json")) {
           return Response.json({
             current: {
@@ -127,15 +138,17 @@ describe("deployed Action consumer verification", () => {
             { id: "unrelated-worker" },
             {
               id: processorScript,
-              placement: {
-                mode: "targeted",
-                target: [
-                  { id: 39, region: processorRegion, type: "region" },
-                  ...(extraPlacementTarget
-                    ? [{ region: "aws:us-east-1", type: "region" }]
-                    : []),
-                ],
-              },
+              placement: placementMissing
+                ? undefined
+                : {
+                    mode: "targeted",
+                    target: [
+                      { id: 39, region: processorRegion, type: "region" },
+                      ...(extraPlacementTarget
+                        ? [{ region: "aws:us-east-1", type: "region" }]
+                        : []),
+                    ],
+                  },
             },
           ];
         } else if (url.endsWith("/settings")) {
@@ -218,7 +231,7 @@ describe("deployed Action consumer verification", () => {
   });
 
   test("disables direct and preview access to the deployed processor", async () => {
-    await disablePrivateReleaseUrls({
+    await securePrivateReleaseWorkers({
       account: "a".repeat(32),
       outputsFile: path.join(directory, "outputs.json"),
       token: "test",
@@ -230,6 +243,41 @@ describe("deployed Action consumer verification", () => {
         method: "POST",
       })
     );
+  });
+
+  test("restores upload-cleared placement before release verification", async () => {
+    placementMissing = true;
+    await expect(verify()).rejects.toThrow(/./u);
+    await securePrivateReleaseWorkers({
+      account: "a".repeat(32),
+      outputsFile: path.join(directory, "outputs.json"),
+      token: "test",
+    });
+    const settingsCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([url, init]) =>
+          typeof url === "string" &&
+          url.endsWith("/scripts/gmail-processing/settings") &&
+          init?.method === "PATCH"
+      );
+    expect(settingsCall?.[1]?.body).toBeInstanceOf(FormData);
+    await verify();
+  });
+
+  test("fails the release when placement cannot be restored", async () => {
+    placementMissing = true;
+    placementWriteFails = true;
+    await expect(
+      securePrivateReleaseWorkers({
+        account: "a".repeat(32),
+        outputsFile: path.join(directory, "outputs.json"),
+        token: "test",
+      })
+    ).rejects.toThrow("placement");
+    await expect(
+      readFile(path.join(directory, "evidence.json"))
+    ).rejects.toThrow(/./u);
   });
 
   test("rejects a queue consumer bound to another processor", async () => {
