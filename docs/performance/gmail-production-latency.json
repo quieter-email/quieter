@@ -1,0 +1,36 @@
+{
+  "baselineBuild": "ea9b8754c88fd4a7703004a61a40ce4f21c92b22-42829018963-1",
+  "date": "2026-11-10",
+  "cohort": "Two naturally arriving Gmail messages with new AI classification and completed code screening after the initial rollout drained.",
+  "sampleCount": 2,
+  "retriedMessages": 0,
+  "positiveCodes": 0,
+  "notificationToSavedLabelsAndCodeScreenSeconds": {
+    "mean": 28.378,
+    "min": 25.759,
+    "max": 30.997
+  },
+  "gmailReceivedToSavedLabelsAndCodeScreenSeconds": { "mean": 31.8055 },
+  "processingSamples": [
+    {
+      "autoLabelMs": 21397,
+      "verificationCodeMs": 7751,
+      "notificationToCriticalMs": 31935,
+      "workWaitMs": 6465
+    },
+    {
+      "autoLabelMs": 21756,
+      "verificationCodeMs": 7932,
+      "notificationToCriticalMs": 26727,
+      "workWaitMs": 2857
+    }
+  ],
+  "source": "Production structured Worker logs and read-only aggregate joins of durable label, code, work and capture records.",
+  "limitations": [
+    "Two samples do not establish a steady-state average.",
+    "Code screening completed but neither message contained a code.",
+    "Critical callback timing includes reporting after label application and differs from the saved-result interval.",
+    "Work wait includes preparation and is not pure queue transport latency.",
+    "The earlier controlled benchmark used empty sender history and no stored memories, so it did not represent this production workload."
+  ]
+}

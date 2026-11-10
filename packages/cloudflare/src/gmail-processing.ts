@@ -93,31 +93,98 @@ export const processGmailQueue = async (batch: MessageBatch, env: Env) => {
     try {
       const parsed = queueMessageSchema.parse(message.body);
       if (!("kind" in parsed)) {
-        const discovery = await withRequestDatabaseClient(
-          async () => await discoverFreshGmailMessages(parsed)
-        );
-        if (!discovery.ignored) {
-          await Promise.all(
-            Array.from(
-              { length: Math.max(1, Math.min(4, discovery.queued)) },
-              async () => {
-                await enqueueGmailMessageWork(env, {
-                  mailboxId: discovery.mailboxId,
-                  priority: "fresh",
-                });
-              }
-            )
+        const discoveryStartedAt = performance.now();
+        const notificationAgeMs =
+          parsed.notificationReceivedAt === undefined
+            ? null
+            : Date.now() - parsed.notificationReceivedAt;
+        let discoveryMs: number | undefined;
+        let schedulingMs: number | undefined;
+        let listedMessageCount: number | undefined;
+        let wakeCallCount = 0;
+        let outcome: "queued" | "ignored" | "retry" | "error" = "error";
+        try {
+          const discovery = await withRequestDatabaseClient(
+            async () => await discoverFreshGmailMessages(parsed)
           );
-          await env.GmailCatchupProcessingQueue.send({
-            kind: "capture",
-            notification: parsed,
-          });
+          discoveryMs = performance.now() - discoveryStartedAt;
+          outcome = discovery.ignored ? "ignored" : "queued";
+          if (!discovery.ignored) {
+            listedMessageCount = discovery.queued;
+            const schedulingStartedAt = performance.now();
+            try {
+              await Promise.all(
+                Array.from(
+                  { length: Math.max(1, Math.min(4, discovery.queued)) },
+                  async () => {
+                    wakeCallCount += 1;
+                    await enqueueGmailMessageWork(env, {
+                      mailboxId: discovery.mailboxId,
+                      priority: "fresh",
+                    });
+                  }
+                )
+              );
+              await env.GmailCatchupProcessingQueue.send({
+                kind: "capture",
+                notification: parsed,
+              });
+            } finally {
+              schedulingMs = performance.now() - schedulingStartedAt;
+            }
+          }
+        } catch (error) {
+          outcome = isGmailRateLimitedError(error) ? "retry" : "error";
+          throw error;
+        } finally {
+          try {
+            // oxlint-disable-next-line no-console -- Fixed numeric discovery diagnostics exclude notification and mailbox data.
+            console.info({
+              discoveryMs:
+                discoveryMs ?? performance.now() - discoveryStartedAt,
+              event: "gmail_fresh_discovery_attempt",
+              listedMessageCount,
+              notificationAgeMs,
+              outcome,
+              schedulingMs,
+              totalMs: performance.now() - discoveryStartedAt,
+              wakeCallCount,
+            });
+          } catch {
+            // Ignore diagnostic logging failures.
+          }
         }
       } else if (parsed.kind === "work") {
         const result = await withRequestDatabaseClient(
           async () =>
             await processNextGmailMessageWork({
               mailboxId: parsed.mailboxId,
+              onAttemptComplete: (attempt) => {
+                // oxlint-disable-next-line no-console -- Attempt snapshots contain only fixed numeric measurements and finite outcomes.
+                console.info({
+                  accountMs: attempt.accountMs,
+                  actionsComplete: attempt.actionsComplete,
+                  attemptKind: attempt.attemptKind,
+                  attempts: attempt.attempts,
+                  authorizationMs: attempt.authorizationMs,
+                  claimMs: attempt.claimMs,
+                  criticalComplete: attempt.criticalComplete,
+                  criticalPreviouslyComplete:
+                    attempt.criticalPreviouslyComplete,
+                  dueLatenessMs: attempt.dueLatenessMs,
+                  event: "gmail_processing_attempt",
+                  failedStage: attempt.failedStage,
+                  finishMs: attempt.finishMs,
+                  messageAttempts: attempt.messageAttempts,
+                  messageCallCount: attempt.messageCallCount,
+                  notificationAgeMs: attempt.notificationAgeMs,
+                  outcome: attempt.outcome,
+                  priority: attempt.priority,
+                  queueMs: attempt.queueMs,
+                  totalMs: attempt.totalMs,
+                  workAgeMs: attempt.workAgeMs,
+                });
+              },
               onCriticalComplete: async (timings) => {
                 // oxlint-disable-next-line no-console -- Worker logs record numeric successful processing latency without message or account identifiers.
                 console.info({
