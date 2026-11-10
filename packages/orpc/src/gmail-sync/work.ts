@@ -36,6 +36,40 @@ export {
 } from "./work-store";
 export { isGmailRateLimitedError } from "@quieter/gmail";
 
+type MessageAttempt = Parameters<
+  NonNullable<Parameters<typeof processGmailMessage>[0]["onAttemptComplete"]>
+>[0];
+type ClaimedWork = NonNullable<
+  Awaited<ReturnType<typeof claimGmailMessageWork>>
+>;
+export type GmailWorkAttempt = {
+  accountMs?: number;
+  actionsComplete: number;
+  attemptKind: "first" | "retry";
+  attempts: ClaimedWork["attempts"];
+  authorizationMs?: number;
+  claimMs: number;
+  criticalComplete: number;
+  criticalPreviouslyComplete: number;
+  dueLatenessMs: number;
+  failedStage:
+    | "lease"
+    | "account"
+    | "authorizedMessage"
+    | "finish"
+    | "wake"
+    | null;
+  finishMs?: number;
+  messageAttempts: MessageAttempt[];
+  messageCallCount: number;
+  notificationAgeMs: number | null;
+  outcome: "complete" | "retry" | "error";
+  priority: ClaimedWork["source"];
+  queueMs?: number;
+  totalMs: number;
+  workAgeMs: number;
+};
+
 export const createGmailAutomationRuntime = (input: {
   accessToken: string;
   mailboxId: string;
@@ -150,6 +184,7 @@ export const discoverFreshGmailMessages = async (
 export const processNextGmailMessageWork = async (input: {
   priority: GmailWorkPriority;
   mailboxId?: string;
+  onAttemptComplete?: (attempt: GmailWorkAttempt) => void;
   onCriticalComplete?: (
     timings: GmailMessageCriticalTimings & {
       queueMs: number;
@@ -157,7 +192,10 @@ export const processNextGmailMessageWork = async (input: {
     }
   ) => void | Promise<void>;
 }) => {
+  const attemptStartedAt = performance.now();
+  const handlerStartedAt = Date.now();
   const work = await claimGmailMessageWork(input);
+  const claimMs = performance.now() - attemptStartedAt;
   if (work === null) {
     const wake = await getGmailMessageWorkWake(input);
     return {
@@ -169,109 +207,191 @@ export const processNextGmailMessageWork = async (input: {
       status: "idle" as const,
     };
   }
-  if (work.leaseToken === null) {
-    throw new Error("Gmail work claim is missing its lease.");
-  }
-  const { leaseToken } = work;
-  let criticalComplete = work.completedAt !== null;
-  let actionsComplete = false;
-  let retryAt: Date | null = null;
-  let lastError: string | null = null;
+  const claimedAt = Date.now();
+  const attempt: GmailWorkAttempt = {
+    actionsComplete: 0,
+    attemptKind: work.attempts <= 1 ? "first" : "retry",
+    attempts: work.attempts,
+    claimMs,
+    criticalComplete: Number(work.completedAt !== null),
+    criticalPreviouslyComplete: Number(work.completedAt !== null),
+    dueLatenessMs: Math.max(0, claimedAt - work.dueAt.getTime()),
+    failedStage: null,
+    messageAttempts: [],
+    messageCallCount: 0,
+    notificationAgeMs:
+      work.notificationReceivedAt === null
+        ? null
+        : handlerStartedAt - work.notificationReceivedAt.getTime(),
+    outcome: "error",
+    priority: work.source,
+    totalMs: 0,
+    workAgeMs: claimedAt - work.createdAt.getTime(),
+  };
+  let stage: NonNullable<GmailWorkAttempt["failedStage"]> = "lease";
   try {
-    const [account] = await db
-      .select({ account: mailbox, settings: mailboxAutomationSettings })
-      .from(mailbox)
-      .leftJoin(
-        mailboxAutomationSettings,
-        eq(mailboxAutomationSettings.mailboxId, mailbox.id)
-      )
-      .where(and(eq(mailbox.id, work.mailboxId), eq(mailbox.provider, "gmail")))
-      .limit(1);
-    if (
-      !account?.account.ownerUserId ||
-      account.account.status !== "connected"
-    ) {
-      criticalComplete = true;
-      actionsComplete = true;
-    } else {
-      const userId = account.account.ownerUserId;
-      const { organizationId } = account.account;
-      const startedAt = Date.now();
-      const outcome = await runAuthorizedGmailMailbox(
-        { mailboxId: work.mailboxId, userId },
-        async (accessToken) =>
-          await processGmailMessage({
-            accessToken,
-            autoLabelEnabled:
-              !criticalComplete &&
-              (account.settings?.autoLabelEnabled ?? false),
-            automationRuntime: createGmailAutomationRuntime({
-              accessToken,
-              mailboxId: work.mailboxId,
-              organizationId,
-              userId,
-            }),
-            extractCodes: !criticalComplete,
-            gmailMessageId: work.gmailMessageId,
-            mailboxId: work.mailboxId,
-            onCriticalComplete: async (timings) => {
-              criticalComplete = true;
-              if (work.completedAt !== null) {
-                return;
+    if (work.leaseToken === null) {
+      throw new Error("Gmail work claim is missing its lease.");
+    }
+    const { leaseToken } = work;
+    let criticalComplete = work.completedAt !== null;
+    let actionsComplete = false;
+    let retryAt: Date | null = null;
+    let lastError: string | null = null;
+    const accountStartedAt = performance.now();
+    try {
+      stage = "account";
+      const [account] = await db
+        .select({ account: mailbox, settings: mailboxAutomationSettings })
+        .from(mailbox)
+        .leftJoin(
+          mailboxAutomationSettings,
+          eq(mailboxAutomationSettings.mailboxId, mailbox.id)
+        )
+        .where(
+          and(eq(mailbox.id, work.mailboxId), eq(mailbox.provider, "gmail"))
+        )
+        .limit(1);
+      attempt.accountMs = performance.now() - accountStartedAt;
+      if (
+        !account?.account.ownerUserId ||
+        account.account.status !== "connected"
+      ) {
+        criticalComplete = true;
+        actionsComplete = true;
+      } else {
+        const userId = account.account.ownerUserId;
+        const { organizationId } = account.account;
+        const startedAt = Date.now();
+        attempt.queueMs = startedAt - work.createdAt.getTime();
+        stage = "authorizedMessage";
+        let authorizationStartedAt = performance.now();
+        try {
+          const outcome = await runAuthorizedGmailMailbox(
+            { mailboxId: work.mailboxId, userId },
+            async (accessToken) => {
+              attempt.authorizationMs =
+                (attempt.authorizationMs ?? 0) +
+                performance.now() -
+                authorizationStartedAt;
+              attempt.messageCallCount += 1;
+              try {
+                return await processGmailMessage({
+                  accessToken,
+                  autoLabelEnabled:
+                    !criticalComplete &&
+                    (account.settings?.autoLabelEnabled ?? false),
+                  automationRuntime: createGmailAutomationRuntime({
+                    accessToken,
+                    mailboxId: work.mailboxId,
+                    organizationId,
+                    userId,
+                  }),
+                  extractCodes: !criticalComplete,
+                  gmailMessageId: work.gmailMessageId,
+                  mailboxId: work.mailboxId,
+                  onAttemptComplete: (messageAttempt) => {
+                    attempt.messageAttempts.push(messageAttempt);
+                  },
+                  onCriticalComplete: async (timings) => {
+                    criticalComplete = true;
+                    if (work.completedAt !== null) {
+                      return;
+                    }
+                    await input.onCriticalComplete?.({
+                      ...timings,
+                      notificationToCriticalMs:
+                        work.notificationReceivedAt === null
+                          ? null
+                          : Date.now() - work.notificationReceivedAt.getTime(),
+                      queueMs: startedAt - work.createdAt.getTime(),
+                    });
+                  },
+                  organizationId,
+                  triggerActions: work.triggerActions,
+                  userId,
+                });
+              } finally {
+                authorizationStartedAt = performance.now();
               }
-              await input.onCriticalComplete?.({
-                ...timings,
-                notificationToCriticalMs:
-                  work.notificationReceivedAt === null
-                    ? null
-                    : Date.now() - work.notificationReceivedAt.getTime(),
-                queueMs: startedAt - work.createdAt.getTime(),
-              });
-            },
-            organizationId,
-            triggerActions: work.triggerActions,
-            userId,
-          })
-      );
-      const retries = [outcome.autoLabel, outcome.verificationCode].filter(
-        (result) => result?.status === "retry"
-      );
-      for (const { retryAt: nextRetryAt } of retries) {
-        if (retryAt === null || nextRetryAt < retryAt) {
-          retryAt = nextRetryAt;
+            }
+          );
+          const retries = [outcome.autoLabel, outcome.verificationCode].filter(
+            (result) => result?.status === "retry"
+          );
+          for (const { retryAt: nextRetryAt } of retries) {
+            if (retryAt === null || nextRetryAt < retryAt) {
+              retryAt = nextRetryAt;
+            }
+          }
+          criticalComplete ||= retries.length === 0;
+          actionsComplete = work.triggerActions;
+        } finally {
+          attempt.authorizationMs =
+            (attempt.authorizationMs ?? 0) +
+            performance.now() -
+            authorizationStartedAt;
         }
       }
-      criticalComplete ||= retries.length === 0;
-      actionsComplete = work.triggerActions;
+    } catch (error) {
+      if (stage === "account") {
+        attempt.accountMs = performance.now() - accountStartedAt;
+      }
+      attempt.failedStage = stage;
+      lastError =
+        error instanceof Error
+          ? error.message.slice(0, 2000)
+          : "Gmail work failed.";
+      retryAt = new Date(
+        Date.now() +
+          (isGmailRateLimitedError(error)
+            ? Math.max(1000, error.retryAfterMs ?? 60_000)
+            : 60_000)
+      );
+      if (isGmailRateLimitedError(error)) {
+        retryAt = await deferGmailMailboxProvider(work.mailboxId, retryAt);
+      }
+      throw error;
+    } finally {
+      const finishStartedAt = performance.now();
+      stage = "finish";
+      let finishReturned = false;
+      try {
+        await finishGmailMessageWork({
+          actionsComplete,
+          criticalComplete,
+          id: work.id,
+          lastError,
+          leaseToken,
+          retryAt,
+        });
+        finishReturned = true;
+      } finally {
+        if (!finishReturned) {
+          attempt.failedStage = "finish";
+        }
+        attempt.finishMs = performance.now() - finishStartedAt;
+        attempt.actionsComplete = Number(actionsComplete);
+        attempt.criticalComplete = Number(criticalComplete);
+      }
     }
+    stage = "wake";
+    const result = {
+      ...(await getGmailMessageWorkWake(input)),
+      mailboxId: work.mailboxId,
+      status: retryAt === null ? ("complete" as const) : ("retry" as const),
+    };
+    attempt.outcome = result.status;
+    return result;
   } catch (error) {
-    lastError =
-      error instanceof Error
-        ? error.message.slice(0, 2000)
-        : "Gmail work failed.";
-    retryAt = new Date(
-      Date.now() +
-        (isGmailRateLimitedError(error)
-          ? Math.max(1000, error.retryAfterMs ?? 60_000)
-          : 60_000)
-    );
-    if (isGmailRateLimitedError(error)) {
-      retryAt = await deferGmailMailboxProvider(work.mailboxId, retryAt);
-    }
+    attempt.failedStage ??= stage;
     throw error;
   } finally {
-    await finishGmailMessageWork({
-      actionsComplete,
-      criticalComplete,
-      id: work.id,
-      lastError,
-      leaseToken,
-      retryAt,
-    });
+    attempt.totalMs = performance.now() - attemptStartedAt;
+    try {
+      input.onAttemptComplete?.(attempt);
+    } catch {
+      // Ignore diagnostic observer failures.
+    }
   }
-  return {
-    ...(await getGmailMessageWorkWake(input)),
-    mailboxId: work.mailboxId,
-    status: retryAt === null ? ("complete" as const) : ("retry" as const),
-  };
 };
