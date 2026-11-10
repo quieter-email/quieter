@@ -28,6 +28,7 @@ import { assertAccessibleMailbox } from "../mailbox/service";
 const EXAMPLE_LIMIT = 6;
 const LABEL_LIMIT = 16;
 const CORRECTION_LIMIT = 12;
+const MAILBOX_RATE_LIMIT_RETRY_MS = 60_000;
 const excludedGmailLabels = new Set<string>([
   MAILBOX_LABELS.sent,
   MAILBOX_LABELS.drafts,
@@ -56,8 +57,7 @@ const listGmailHistory = async (
   domain: string
 ) => {
   const quotedSender = sender.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
-  const lanes: HistoryMessage[][] = [];
-  for (const [laneIndex, queryValue] of [sender, `@${domain}`].entries()) {
+  const listLane = async (queryValue: string, laneIndex: 0 | 1) => {
     const matches = new Map<string, HistoryMessage>();
     let pageToken: string | undefined;
     for (let page = 0; page < 2; page += 1) {
@@ -98,9 +98,54 @@ const listGmailHistory = async (
       }
       pageToken = result.nextPageToken;
     }
-    lanes.push([...matches.values()].slice(0, EXAMPLE_LIMIT));
+    return [...matches.values()].slice(0, EXAMPLE_LIMIT);
+  };
+  const [sameSender, sameDomain] = await Promise.allSettled([
+    listLane(sender, 0),
+    listLane(`@${domain}`, 1),
+  ]);
+  input.signal?.throwIfAborted();
+  if (sameSender.status === "rejected" && sameDomain.status === "rejected") {
+    const senderError: unknown = sameSender.reason;
+    const domainError: unknown = sameDomain.reason;
+    const domainTakesPrecedence =
+      isGmailRateLimitedError(domainError) &&
+      (!isGmailRateLimitedError(senderError) ||
+        (domainError.retryAfterMs ?? MAILBOX_RATE_LIMIT_RETRY_MS) >
+          (senderError.retryAfterMs ?? MAILBOX_RATE_LIMIT_RETRY_MS));
+    const error = domainTakesPrecedence ? domainError : senderError;
+    const sibling = domainTakesPrecedence ? senderError : domainError;
+    if (
+      error !== sibling &&
+      (isGmailRateLimitedError(error) ||
+        (error instanceof ORPCError &&
+          (error.code === "FORBIDDEN" ||
+            error.code === "NOT_FOUND" ||
+            error.code === "UNAUTHORIZED"))) &&
+      !isGmailRateLimitedError(sibling) &&
+      !(
+        sibling instanceof ORPCError &&
+        (sibling.code === "FORBIDDEN" ||
+          sibling.code === "NOT_FOUND" ||
+          sibling.code === "UNAUTHORIZED")
+      )
+    ) {
+      reportError(new Error("Mail label history could not be loaded."), {
+        errorType: sibling instanceof Error ? sibling.name : typeof sibling,
+        operation: "mail-automation:load-label-history",
+        provider: input.provider,
+        statusCode: isGmailServiceError(sibling) ? sibling.status : undefined,
+      });
+    }
+    throw error;
   }
-  return { sameDomain: lanes[1] ?? [], sameSender: lanes[0] ?? [] };
+  if (sameSender.status === "rejected") {
+    throw sameSender.reason;
+  }
+  if (sameDomain.status === "rejected") {
+    throw sameDomain.reason;
+  }
+  return { sameDomain: sameDomain.value, sameSender: sameSender.value };
 };
 
 const listManagedHistory = async (
