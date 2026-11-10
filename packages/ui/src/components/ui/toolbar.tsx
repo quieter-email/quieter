@@ -59,6 +59,10 @@ const toolbarButtonVariants = cva(
   {
     compoundVariants: [
       {
+        className: "[&_[data-slot=shortcut-hint]]:hidden",
+        size: ["icon", "icon-sm"],
+      },
+      {
         chrome: "inset",
         className: "hover:bg-control-hover",
         variant: "default",

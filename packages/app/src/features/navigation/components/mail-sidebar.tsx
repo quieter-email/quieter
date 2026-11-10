@@ -7,6 +7,7 @@ import {
   NoteEditIcon,
   Sorting05Icon,
 } from "@hugeicons/core-free-icons";
+import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
 import {
   loadComposeWorkspace,
   loadSnippetWorkspace,
@@ -165,6 +166,11 @@ const SidebarInboxSection = ({
         >
           <Icon icon={Edit01Icon} />
           Compose
+          {embedded !== true &&
+          selectedMailboxProvider !== "api" &&
+          selectedMailboxId ? (
+            <ShortcutHint className="ml-auto" shortcutId="compose" />
+          ) : null}
         </Button>
       </SidebarEntrance>
 

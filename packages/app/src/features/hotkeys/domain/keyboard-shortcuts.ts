@@ -1,3 +1,4 @@
+import { formatForDisplay } from "@tanstack/react-hotkeys";
 import type {
   HotkeySequence,
   RegisterableHotkey,
@@ -37,7 +38,7 @@ export const KEYBOARD_SHORTCUT_CATEGORIES = [
   "Compose",
 ] as const satisfies readonly KeyboardShortcutCategory[];
 
-export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
+export const KEYBOARD_SHORTCUTS = [
   {
     category: "Global",
     id: "show-keyboard-shortcuts",
@@ -255,4 +256,22 @@ export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
     label: "Send",
     scope: "compose",
   },
-] as const;
+] as const satisfies readonly KeyboardShortcut[];
+
+export type KeyboardShortcutId = (typeof KEYBOARD_SHORTCUTS)[number]["id"];
+
+export const getShortcutDisplay = (
+  shortcut: KeyboardShortcut,
+  platform?: "mac" | "windows" | "linux"
+): string[][] => {
+  const bindings = shortcut.sequence
+    ? [shortcut.sequence]
+    : shortcut.keys.map((key) => [key]);
+  return bindings.map((binding) =>
+    binding.map((hotkey) =>
+      typeof hotkey === "object" && hotkey.key === "/" && hotkey.shift === true
+        ? "?"
+        : formatForDisplay(hotkey, { platform, separatorToken: "+" })
+    )
+  );
+};
