@@ -10,6 +10,7 @@ import {
 } from "@quieter/env/deployment";
 import { z } from "zod";
 
+import { GMAIL_PROCESSING_REGION } from "../infra/gmail-processing-region.ts";
 import { WEB_RELEASE_SLOTS } from "../infra/web-release-scope.ts";
 
 const targetsSchema = z.object({
@@ -181,7 +182,7 @@ export const checkActionDeployment = async (input: {
           placement: z.object({
             mode: z.literal("targeted"),
             target: z.tuple([
-              z.object({ region: z.literal("aws:eu-central-1") }),
+              z.object({ region: z.literal(GMAIL_PROCESSING_REGION) }),
             ]),
           }),
         }).parse(scripts.find((script) => script.id === target.script));
@@ -275,7 +276,7 @@ export const checkActionDeployment = async (input: {
   return evidence;
 };
 
-export const disablePrivateReleaseUrls = async (input: {
+export const securePrivateReleaseWorkers = async (input: {
   account: string;
   outputsFile: string;
   token: string;
@@ -310,13 +311,36 @@ export const disablePrivateReleaseUrls = async (input: {
       }
     })
   );
+  const settings = new FormData();
+  settings.set(
+    "settings",
+    new Blob(
+      [JSON.stringify({ placement: { region: GMAIL_PROCESSING_REGION } })],
+      { type: "application/json" }
+    )
+  );
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${input.account}/workers/scripts/${targets.workers.gmailProcessing}/settings`,
+    {
+      body: settings,
+      headers: { authorization: `Bearer ${input.token}` },
+      method: "PATCH",
+      signal: AbortSignal.timeout(20_000),
+    }
+  );
+  const result = z
+    .object({ success: z.boolean() })
+    .parse(await response.json());
+  if (!response.ok || !result.success) {
+    throw new Error("Cannot configure private Gmail processor placement.");
+  }
 };
 
 if (import.meta.main) {
   const env = createDeploymentVerificationEnv();
   const [mode, outputsFile, evidenceFile] = process.argv.slice(2);
   if (mode === "secure-private-releases") {
-    await disablePrivateReleaseUrls({
+    await securePrivateReleaseWorkers({
       account: env.CLOUDFLARE_DEFAULT_ACCOUNT_ID,
       outputsFile: outputsFile ?? ".sst/outputs.json",
       token: env.CLOUDFLARE_API_TOKEN,

@@ -1,6 +1,7 @@
 import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
 
 import type { createAppDatabase } from "./database";
+import { GMAIL_PROCESSING_REGION } from "./gmail-processing-region";
 import type { createMailUpdateResources } from "./mail-updates";
 import { cloudflareWorkerObservability } from "./runtime";
 import type { DeploymentContext } from "./runtime";
@@ -90,7 +91,7 @@ export const createGmailResources = (
           sentryDsnBinding,
           ...processingSecretBindings,
         ],
-        placement: { region: "aws:eu-central-1" },
+        placement: { region: GMAIL_PROCESSING_REGION },
         transform: {
           worker(args) {
             args.bindings = $util

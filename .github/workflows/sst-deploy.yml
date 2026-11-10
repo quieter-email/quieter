@@ -305,6 +305,9 @@ jobs:
         id: deploy
         run: vp run sst deploy --config sst.config.ts --stage "$SST_STAGE"
 
+      - name: Disable direct private release URLs
+        run: vp exec node scripts/check-action-deployment.ts secure-private-releases
+
       - name: Inspect database connections after deployment
         if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
         continue-on-error: true
@@ -321,9 +324,6 @@ jobs:
         if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
         timeout-minutes: 5
         run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID" https://updates.quieter.email/mail/live
-
-      - name: Disable direct private release URLs
-        run: vp exec node scripts/check-action-deployment.ts secure-private-releases
 
       - name: Verify every deployed Action consumer
         id: action-consumers

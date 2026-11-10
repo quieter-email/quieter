@@ -107,6 +107,8 @@ Repository checks cannot validate account-level state. After changing Worker inf
 
 The private Gmail processor is part of `actionDeploymentTargets.workers`. Release verification checks its current build and Frankfurt placement, confirms both workers.dev and version preview URLs are disabled, and verifies the realtime Worker's service binding targets that processor. The private URL step reapplies disabled URL settings to the processor and retained web slots on every protected deployment. Recovery evidence must include the processor alongside the existing Action producers.
 
+That step runs immediately after SST finishes and also reapplies the processor's configured placement. A production upload with unchanged processor code and updated release bindings cleared placement even though SST did not update its placement resource. The protected step uses the same region constant as SST and sends only placement settings, then the read-only release verifier checks the normalized script inventory. A failed placement update stops verification. The step name and CLI remain unchanged because cutover recovery verifies their provenance.
+
 Pre-deployment Action cutover preparation reads only the database fence and guard definitions. An already released fence does not require the new processor or a new build's output inventory before SST runs. The expanded consumer inventory is checked after deployment. The current interrupted-cutover recovery command rejects historical evidence that omits the processor. Such an artifact cannot prove the new producer's identity. Preserve the fence and use a protected forward deployment rather than relaxing that provenance check.
 
 ## Database safety
