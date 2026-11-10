@@ -84,6 +84,16 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Reading",
   },
   {
+    description: "Preferences / Appearance",
+    id: "shortcut-hints",
+    keywords:
+      "keyboard keybind hotkeys hints buttons sidebar show hide display",
+    scope: "personal",
+    section: "show-shortcut-hints",
+    tab: "appearance",
+    title: "Show shortcut hints",
+  },
+  {
     description: "Preferences / Keyboard shortcuts",
     id: "shortcuts",
     keywords: "hotkeys keyboard bindings",

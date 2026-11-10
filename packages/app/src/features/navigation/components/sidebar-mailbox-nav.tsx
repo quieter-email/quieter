@@ -12,6 +12,8 @@ import {
   Clock01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
+import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
+import type { KeyboardShortcutId } from "@quieter/app/features/hotkeys/domain/keyboard-shortcuts";
 import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
@@ -22,16 +24,22 @@ const SIDEBAR_MAILBOX_ITEMS: readonly {
   id: MailboxCategory | "scheduled";
   icon: IconSvgElement;
   label: string;
+  shortcutId?: KeyboardShortcutId;
 }[] = [
   { icon: Flag01Icon, id: "important", label: "Important" },
-  { icon: InboxIcon, id: "inbox", label: "Inbox" },
-  { icon: Mail01Icon, id: "unread", label: "Unread" },
-  { icon: Archive02Icon, id: "archive", label: "Archive" },
-  { icon: MailSend02Icon, id: "sent", label: "Sent" },
+  { icon: InboxIcon, id: "inbox", label: "Inbox", shortcutId: "go-inbox" },
+  { icon: Mail01Icon, id: "unread", label: "Unread", shortcutId: "go-unread" },
+  {
+    icon: Archive02Icon,
+    id: "archive",
+    label: "Archive",
+    shortcutId: "go-archive",
+  },
+  { icon: MailSend02Icon, id: "sent", label: "Sent", shortcutId: "go-sent" },
   { icon: Clock01Icon, id: "scheduled", label: "Scheduled" },
-  { icon: Edit01Icon, id: "drafts", label: "Drafts" },
-  { icon: Delete01Icon, id: "trash", label: "Trash" },
-  { icon: Delete02Icon, id: "spam", label: "Spam" },
+  { icon: Edit01Icon, id: "drafts", label: "Drafts", shortcutId: "go-drafts" },
+  { icon: Delete01Icon, id: "trash", label: "Trash", shortcutId: "go-trash" },
+  { icon: Delete02Icon, id: "spam", label: "Spam", shortcutId: "go-spam" },
 ];
 const API_MAILBOX_ITEMS = SIDEBAR_MAILBOX_ITEMS.filter(
   (item) => item.id === "sent"
@@ -128,6 +136,12 @@ export const SidebarMailboxNav = ({
             >
               <Icon tone="default" icon={item.icon} />
               {item.label}
+              {!embedded && mailboxId !== null && item.shortcutId ? (
+                <ShortcutHint
+                  className="ml-auto"
+                  shortcutId={item.shortcutId}
+                />
+              ) : null}
             </SidebarMailboxNavItem>
           </SidebarEntrance>
         );

@@ -3,6 +3,7 @@
 import { CodeIcon, KeyboardIcon } from "@hugeicons/core-free-icons";
 import { ConsentPreferencesLink } from "@quieter/app/components/consent-preferences-link";
 import { useKeyboardShortcuts } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
+import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
 import {
   isDemoModeAvailable,
   setDemoModeEnabled,
@@ -21,6 +22,10 @@ import {
   setManagedDemoModeEnabled,
   useManagedDemoModeEnabled,
 } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
+import {
+  setShortcutHintsEnabled,
+  useShortcutHintsEnabled,
+} from "@quieter/app/features/settings/domain/shortcut-hints-setting";
 import { appRuntime } from "@quieter/app/runtime";
 import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
@@ -46,6 +51,7 @@ import {
 
 export const PreferencesSettingsPanel = () => {
   const mailLayout = useMailLayout();
+  const shortcutHintsEnabled = useShortcutHintsEnabled();
   const externalImagesEnabled = useExternalImagesEnabled();
   const { openKeyboardShortcuts } = useKeyboardShortcuts();
   return (
@@ -92,6 +98,23 @@ export const PreferencesSettingsPanel = () => {
           </SettingsRow>
           <SettingsRow
             action={
+              <Switch
+                aria-label="Show shortcut hints"
+                checked={shortcutHintsEnabled}
+                id="shortcut-hints-toggle"
+                onCheckedChange={setShortcutHintsEnabled}
+                size="sm"
+              >
+                <SwitchThumb />
+              </Switch>
+            }
+            title="Show shortcut hints"
+          >
+            Show keyboard shortcuts beside buttons and sidebar items on this
+            device. Shortcuts still work when hints are hidden.
+          </SettingsRow>
+          <SettingsRow
+            action={
               <Button
                 onClick={openKeyboardShortcuts}
                 size="sm"
@@ -104,6 +127,10 @@ export const PreferencesSettingsPanel = () => {
                   icon={KeyboardIcon}
                 />
                 View
+                <ShortcutHint
+                  className="ml-2"
+                  shortcutId="show-keyboard-shortcuts"
+                />
               </Button>
             }
             title="Keyboard shortcuts"
