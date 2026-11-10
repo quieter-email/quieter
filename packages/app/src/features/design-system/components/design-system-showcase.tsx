@@ -1847,10 +1847,33 @@ export const DesignSystemShowcase = () => {
             </Surface>
           </Row>
           <Row label="Keyboard shortcut">
-            <div className="flex gap-1">
+            <div className="flex items-center gap-1">
               <Kbd>Ctrl</Kbd>
+              <span className="text-micro text-muted-fg">+</span>
               <Kbd>K</Kbd>
             </div>
+          </Row>
+          <Row label="Inline shortcut hints">
+            <Button>
+              Send
+              <Kbd aria-hidden className="ml-2" variant="hint">
+                Ctrl+Enter
+              </Kbd>
+            </Button>
+            <Button variant="ghost">
+              Inbox
+              <Kbd aria-hidden className="ml-2" variant="hint">
+                G → I
+              </Kbd>
+            </Button>
+            <IconButtonTooltip label="Search">
+              <Button aria-label="Search" size="icon" variant="ghost">
+                <Icon aria-hidden icon={Search01Icon} />
+                <Kbd aria-hidden variant="hint">
+                  Ctrl+K
+                </Kbd>
+              </Button>
+            </IconButtonTooltip>
           </Row>
           <Row label="Interactive keycaps">
             <Button variant="keycap">Ctrl</Button>

@@ -37,6 +37,7 @@ import {
 } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { findRecoverableComposeDraft } from "@quieter/app/features/compose/domain/draft-recovery";
+import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
 import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail-subview-header";
 import {
   appEaseOut,
@@ -124,7 +125,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 
 export type ComposeSenderMailbox = {
@@ -322,13 +322,6 @@ const ReadyComposeSurface = ({
   const composeEditorRef = useRef<ComposeEditorHandle | null>(null);
   const [editorReady, setEditorReady] = useState(false);
   const mountedRef = useRef(false);
-  const modKeyLabel = useSyncExternalStore(
-    () => () => {
-      // The operating system has no change event during this page's lifetime.
-    },
-    () => (/Mac|iPhone|iPad|iPod/u.test(navigator.platform) ? "⌘" : "Ctrl"),
-    () => "Ctrl"
-  );
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -1383,9 +1376,10 @@ const ReadyComposeSurface = ({
                           {state.draft.sendUncertain === true
                             ? "Check delivery"
                             : "Send"}
-                          <span className="hidden text-caption text-primary-fg @sm:inline">
-                            {modKeyLabel}↵
-                          </span>
+                          <ShortcutHint
+                            className="ml-2 hidden @sm:inline-flex"
+                            shortcutId="compose-send"
+                          />
                         </ToolbarButton>
                       }
                       trailing={

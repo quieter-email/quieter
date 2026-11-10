@@ -6,11 +6,19 @@ import { cn } from "../../lib/cn";
 
 export const Kbd = ({
   className,
+  variant = "keycap",
   ...props
-}: ComponentPropsWithoutRef<"kbd">) => (
+}: ComponentPropsWithoutRef<"kbd"> & { variant?: "keycap" | "hint" }) => (
   <kbd
+    data-slot={variant === "hint" ? "shortcut-hint" : "kbd"}
     className={cn(
-      "inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-md bg-detail px-1.5 font-mono text-micro font-medium text-fg",
+      "inline-flex shrink-0 items-center justify-center font-mono text-micro",
+      {
+        "font-normal whitespace-nowrap text-current opacity-60":
+          variant === "hint",
+        "h-6 min-w-6 rounded-md bg-detail px-1.5 font-medium text-fg":
+          variant === "keycap",
+      },
       className
     )}
     {...props}
