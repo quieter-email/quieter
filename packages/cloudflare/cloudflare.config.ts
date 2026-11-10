@@ -13,6 +13,14 @@ export default defineConfig({
     compatibilityFlags: ["nodejs_compat"],
     entrypoint: "src/local-worker.ts",
     env: {
+      GmailCatchupProcessingQueue: bindings.queue({
+        dev: { remote: false },
+        name: "quieter-local-gmail-catchup-processing",
+      }),
+      GmailFreshProcessingQueue: bindings.queue({
+        dev: { remote: false },
+        name: "quieter-local-gmail-fresh-processing",
+      }),
       GmailLiveSyncMailboxV2: bindings.durableObject({
         exportName: "GmailLiveSyncMailboxV2",
         worker: "quieter-local-background",
@@ -46,9 +54,28 @@ export default defineConfig({
       triggers.queue({
         deadLetterQueue: "quieter-local-gmail-processing-dead-letter",
         maxBatchSize: 1,
+        maxBatchTimeout: 0,
         maxConcurrency: 2,
         maxRetries: 100,
         name: "quieter-local-gmail-processing",
+        retryDelay: 60,
+      }),
+      triggers.queue({
+        deadLetterQueue: "quieter-local-gmail-processing-dead-letter",
+        maxBatchSize: 1,
+        maxBatchTimeout: 0,
+        maxConcurrency: 4,
+        maxRetries: 100,
+        name: "quieter-local-gmail-fresh-processing",
+        retryDelay: 60,
+      }),
+      triggers.queue({
+        deadLetterQueue: "quieter-local-gmail-processing-dead-letter",
+        maxBatchSize: 1,
+        maxBatchTimeout: 0,
+        maxConcurrency: 2,
+        maxRetries: 100,
+        name: "quieter-local-gmail-catchup-processing",
         retryDelay: 60,
       }),
     ],

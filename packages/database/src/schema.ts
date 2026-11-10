@@ -1248,6 +1248,8 @@ export const gmailWatchState = pgTable(
       .references(() => mailbox.id, { onDelete: "cascade" }),
     processingLeaseExpiresAt: timestamp("processingLeaseExpiresAt"),
     processingLeaseId: text("processingLeaseId"),
+    processingWorkLeaseId: text("processingWorkLeaseId"),
+    providerRetryAt: timestamp("providerRetryAt"),
     recoveryAfter: timestamp("recoveryAfter"),
     recoveryBefore: timestamp("recoveryBefore"),
     recoveryPageToken: text("recoveryPageToken"),
@@ -1261,6 +1263,50 @@ export const gmailWatchState = pgTable(
     ),
     index("gmail_watch_state_processing_lease_expires_at_idx").on(
       table.processingLeaseExpiresAt
+    ),
+  ]
+);
+
+export const gmailMessageWork = pgTable(
+  "gmailMessageWork",
+  {
+    actionsCompletedAt: timestamp("actionsCompletedAt"),
+    attempts: integer("attempts").notNull().default(0),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").notNull(),
+    dueAt: timestamp("dueAt").notNull(),
+    gmailMessageId: text("gmailMessageId").notNull(),
+    id: text("id").primaryKey(),
+    lastError: text("lastError"),
+    leaseToken: text("leaseToken"),
+    leaseUntil: timestamp("leaseUntil"),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    notificationReceivedAt: timestamp("notificationReceivedAt"),
+    position: integer("position").notNull().default(0),
+    priorityAt: timestamp("priorityAt").notNull(),
+    source: text("source").$type<"fresh" | "catchup">().notNull(),
+    triggerActions: boolean("triggerActions").notNull().default(false),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    unique("gmail_message_work_mailbox_message_unique").on(
+      table.mailboxId,
+      table.gmailMessageId
+    ),
+    index("gmail_message_work_ready_idx").on(
+      table.source,
+      table.dueAt,
+      table.priorityAt
+    ),
+    index("gmail_message_work_mailbox_lease_idx").on(
+      table.mailboxId,
+      table.leaseUntil
+    ),
+    check(
+      "gmail_message_work_source_check",
+      sql`${table.source} in ('fresh', 'catchup')`
     ),
   ]
 );

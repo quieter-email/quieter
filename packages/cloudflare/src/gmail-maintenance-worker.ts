@@ -3,7 +3,9 @@ import {
   listGmailPubSubMaintenanceJobs,
   maintainGmailPubSubMailbox,
 } from "@quieter/orpc/gmail-pubsub";
+import { listGmailMessageWorkWakeJobs } from "@quieter/orpc/gmail-work";
 
+import { enqueueGmailMessageWork } from "./gmail-processing";
 import { broadcastGmailUpdate } from "./mail-updates";
 import { reportWorkerError, withSentryReporting } from "./worker-runtime";
 
@@ -13,6 +15,7 @@ export const runGmailMaintenance = async (
   env: Env,
   dependencies: {
     listJobs?: typeof listGmailPubSubMaintenanceJobs;
+    listWorkJobs?: typeof listGmailMessageWorkWakeJobs;
     maintainMailbox?: typeof maintainGmailPubSubMailbox;
   } = {}
 ) => {
@@ -65,6 +68,13 @@ export const runGmailMaintenance = async (
       }
     })
   );
+  const workJobs = await withRequestDatabaseClient(
+    async () =>
+      await (dependencies.listWorkJobs ?? listGmailMessageWorkWakeJobs)()
+  );
+  for (const job of workJobs) {
+    await enqueueGmailMessageWork(env, job);
+  }
   if (failures.length > 0) {
     throw new AggregateError(
       failures,

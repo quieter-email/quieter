@@ -198,11 +198,13 @@ describe("local background entrypoint", () => {
       env
     );
     expect(response.status).toBe(204);
-    expect(send).toHaveBeenCalledExactlyOnceWith({
-      emailAddress: "test@example.invalid",
-      historyId: "42",
-      pubSubMessageId: "local-test-delivery",
-    });
+    expect(send).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        emailAddress: "test@example.invalid",
+        historyId: "42",
+        pubSubMessageId: "local-test-delivery",
+      })
+    );
     expect(processGmailPubSubNotification).not.toHaveBeenCalled();
   });
 

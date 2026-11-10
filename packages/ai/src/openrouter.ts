@@ -5,6 +5,7 @@ import { wrapLanguageModel } from "ai";
 import { z } from "zod";
 
 import { createAiBillingMiddleware } from "./billing";
+import type { MailAiRequestBudget } from "./billing";
 import type { ChatModel } from "./chat-models";
 import { chatModelSchema, resolveModelFallbacks } from "./chat-models";
 import { openRouterStreamMiddleware } from "./openrouter-stream";
@@ -54,13 +55,23 @@ export const createChatModel = (
     onProviderStart?: () => void;
     allowFallbacks?: boolean;
     prioritizeLatency?: boolean;
+    mailRequestBudget?: MailAiRequestBudget;
   }
 ) => {
   const parsedModel = chatModelSchema.parse(model);
+  if (
+    options.mailRequestBudget !== undefined &&
+    options.mailRequestBudget.model !== parsedModel
+  ) {
+    throw new Error("The mail AI model does not match its spending ceiling.");
+  }
   const fallbacks =
-    options.allowFallbacks === false ? [] : resolveModelFallbacks(parsedModel);
+    options.allowFallbacks === false || options.mailRequestBudget !== undefined
+      ? []
+      : resolveModelFallbacks(parsedModel);
   const providerRouting = {
     ...(options.prioritizeLatency === true ? { sort: "latency" } : {}),
+    ...options.mailRequestBudget?.provider,
     zdr: true,
   };
   return wrapLanguageModel({
@@ -69,9 +80,23 @@ export const createChatModel = (
       {
         specificationVersion: "v4",
         // oxlint-disable-next-line eslint/require-await -- The SDK requires a promise-returning transform without I/O.
-        transformParams: async ({ params }) =>
-          params.responseFormat?.type === "json" &&
-          params.responseFormat.schema !== undefined
+        transformParams: async ({ params }) => {
+          if (
+            options.mailRequestBudget !== undefined &&
+            (options.mailRequestBudget.model !==
+              "google/gemini-3.1-flash-lite" ||
+              params.maxOutputTokens === undefined ||
+              params.maxOutputTokens >
+                options.mailRequestBudget.maxOutputTokens ||
+              params.tools !== undefined ||
+              Object.keys(params.providerOptions?.openrouter ?? {}).length > 0)
+          ) {
+            throw new Error(
+              "The mail AI request exceeds its spending ceiling."
+            );
+          }
+          return params.responseFormat?.type === "json" &&
+            params.responseFormat.schema !== undefined
             ? {
                 ...params,
                 providerOptions: {
@@ -85,12 +110,14 @@ export const createChatModel = (
                   },
                 },
               }
-            : params,
+            : params;
+        },
       },
       createAiBillingMiddleware(
         options.billing,
         readChatUsageCostUsd,
-        options.onProviderStart
+        options.onProviderStart,
+        options.mailRequestBudget?.maximumCostUsd
       ),
     ],
     model: getOpenRouterProvider().chat(parsedModel, {

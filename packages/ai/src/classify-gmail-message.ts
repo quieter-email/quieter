@@ -8,7 +8,11 @@ import type { OtpToken } from "@quieter/mail/otp-token";
 import { APICallError } from "ai";
 import { z } from "zod";
 
-import { providerUsageResponseSchema, runBilledAiRequest } from "./billing";
+import {
+  getMailAiRequestBudget,
+  providerUsageResponseSchema,
+  runBilledAiRequest,
+} from "./billing";
 import type { AiUsageReport } from "./chat-usage";
 import { AI_PROMPT_SECURITY_POLICY } from "./prompt-security";
 
@@ -135,14 +139,21 @@ const runMailDecisions = async ({
   if (!apiKey) {
     throw new Error("AI features are temporarily unavailable.");
   }
+  if (model !== AUTO_LABEL_MODEL) {
+    throw new Error("Unsupported mail decision model.");
+  }
+  const requestBudget = await getMailAiRequestBudget(model, billing);
   const payload = await runBilledAiRequest({
     billing,
+    maximumCostUsd:
+      requestBudget.maximumCostUsd * Object.keys(questions).length,
     run: async () => {
       const response = await fetch(
         "https://openrouter.ai/api/alpha/decisions",
         {
           body: JSON.stringify({
             model,
+            provider: requestBudget.provider,
             questions: Object.fromEntries(
               Object.entries(questions).map(([id, question]) => [
                 id,

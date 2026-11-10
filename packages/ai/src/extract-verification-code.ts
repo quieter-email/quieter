@@ -1,6 +1,7 @@
 import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { z } from "zod";
 
+import { getMailAiRequestBudget } from "./billing";
 import type { ChatModel } from "./chat-models";
 import type { AiUsageReport } from "./chat-usage";
 import type { AutomationMailMessage } from "./classify-gmail-message";
@@ -35,6 +36,14 @@ export const extractMailVerificationCode = async ({
     abortSignal: AbortSignal.timeout(10_000),
     billing,
     maxOutputTokens: 100,
+    ...(model === VERIFICATION_CODE_MODEL
+      ? {
+          mailRequestBudget: await getMailAiRequestBudget(
+            "google/gemini-3.1-flash-lite",
+            billing
+          ),
+        }
+      : {}),
     maxRetries: 0,
     model,
     ...(onUsage === undefined ? {} : { onUsage }),

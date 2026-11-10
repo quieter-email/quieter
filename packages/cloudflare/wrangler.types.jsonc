@@ -11,6 +11,14 @@
         "binding": "GmailProcessingQueue",
         "queue": "quieter-gmail-processing-types",
       },
+      {
+        "binding": "GmailFreshProcessingQueue",
+        "queue": "quieter-gmail-fresh-processing-types",
+      },
+      {
+        "binding": "GmailCatchupProcessingQueue",
+        "queue": "quieter-gmail-catchup-processing-types",
+      },
     ],
   },
   "vars": {

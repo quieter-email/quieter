@@ -43,6 +43,16 @@ import {
   validateVerificationCodeCandidate,
 } from "./verification-codes/validation";
 
+export const AI_ADMISSION_RETRY_MS = 5000;
+
+export type VerificationCodeProcessingResult =
+  | { status: "complete" }
+  | {
+      status: "retry";
+      reason: "admission_busy" | "budget" | "failure" | "in_progress";
+      retryAt: Date;
+    };
+
 const LEASE_MS = 5 * 60_000;
 const RETRY_BASE_MS = 2 * 60_000;
 const RETRY_MAX_MS = 30 * 60_000;
@@ -324,7 +334,7 @@ export const processMailVerificationCode = async ({
   messageId: string;
   organizationId?: string | null;
   userId: string;
-}) => {
+}): Promise<VerificationCodeProcessingResult> => {
   const now = new Date();
   const leaseToken = randomUUID();
   const leaseUntil = new Date(now.getTime() + LEASE_MS);
@@ -376,15 +386,27 @@ export const processMailVerificationCode = async ({
       .where(
         and(
           eq(mailboxVerificationCode.mailboxId, mailboxId),
-          eq(mailboxVerificationCode.messageId, messageId),
-          isNull(mailboxVerificationCode.usageReportedAt)
+          eq(mailboxVerificationCode.messageId, messageId)
         )
       )
       .limit(1);
     if (pendingUsage !== undefined) {
       await reportVerificationCodeUsage(pendingUsage, userId);
     }
-    return;
+    if (pendingUsage?.processedAt) {
+      return { status: "complete" };
+    }
+    return {
+      reason: "in_progress",
+      retryAt: new Date(
+        Math.max(
+          Date.now() + AI_ADMISSION_RETRY_MS,
+          pendingUsage?.nextAttemptAt?.getTime() ?? 0,
+          pendingUsage?.leaseUntil?.getTime() ?? 0
+        )
+      ),
+      status: "retry",
+    };
   }
 
   let screenUsage: AiUsageReport | undefined;
@@ -399,12 +421,15 @@ export const processMailVerificationCode = async ({
     }
     if (!message?.threadId) {
       const finishedAt = new Date();
+      const retryAt = new Date(finishedAt.getTime() + RETRY_BASE_MS);
       await db
         .update(mailboxVerificationCode)
         .set({
           leaseToken: null,
           leaseUntil: null,
-          ...(message === null ? { processedAt: finishedAt } : {}),
+          ...(message === null
+            ? { processedAt: finishedAt }
+            : { nextAttemptAt: retryAt }),
           updatedAt: finishedAt,
         })
         .where(
@@ -413,7 +438,13 @@ export const processMailVerificationCode = async ({
             eq(mailboxVerificationCode.leaseToken, leaseToken)
           )
         );
-      return;
+      return message === null
+        ? { status: "complete" }
+        : {
+            reason: "failure",
+            retryAt,
+            status: "retry",
+          };
     }
     if (!shouldInspectIncomingVerificationCode(message, new Date())) {
       await db
@@ -430,7 +461,7 @@ export const processMailVerificationCode = async ({
             eq(mailboxVerificationCode.leaseToken, leaseToken)
           )
         );
-      return;
+      return { status: "complete" };
     }
 
     let { model } = claimed;
@@ -448,12 +479,13 @@ export const processMailVerificationCode = async ({
       });
       if (!budget.allowed) {
         const deferredAt = new Date();
+        const retryAt = new Date(deferredAt.getTime() + RETRY_MAX_MS);
         await db
           .update(mailboxVerificationCode)
           .set({
             leaseToken: null,
             leaseUntil: null,
-            nextAttemptAt: new Date(deferredAt.getTime() + RETRY_MAX_MS),
+            nextAttemptAt: retryAt,
             updatedAt: deferredAt,
           })
           .where(
@@ -462,7 +494,7 @@ export const processMailVerificationCode = async ({
               eq(mailboxVerificationCode.leaseToken, leaseToken)
             )
           );
-        return;
+        return { reason: "budget", retryAt, status: "retry" };
       }
 
       let probability: number | undefined;
@@ -556,7 +588,11 @@ export const processMailVerificationCode = async ({
       )
       .returning({ id: mailboxVerificationCode.id });
     if (saved === undefined) {
-      return;
+      return {
+        reason: "in_progress",
+        retryAt: new Date(Date.now() + AI_ADMISSION_RETRY_MS),
+        status: "retry",
+      };
     }
     if (detail) {
       await publishMailUpdate({ mailboxId, type: "mailbox.changed" });
@@ -571,6 +607,7 @@ export const processMailVerificationCode = async ({
         await reportVerificationCodeUsage(event, userId);
       }
     }
+    return { status: "complete" };
   } catch (error) {
     if (phase === "extract" && !isAiCreditAdmissionBusy(error)) {
       reportError(error, {
@@ -583,7 +620,17 @@ export const processMailVerificationCode = async ({
       extractionUsage
     );
     const failedAt = new Date();
-    const attemptCount = (claimed.attemptCount ?? 0) + 1;
+    const admissionBusy = isAiCreditAdmissionBusy(error);
+    const attemptCount = (claimed.attemptCount ?? 0) + (admissionBusy ? 0 : 1);
+    const retryAt = new Date(
+      failedAt.getTime() +
+        (admissionBusy
+          ? AI_ADMISSION_RETRY_MS
+          : Math.min(
+              RETRY_MAX_MS,
+              RETRY_BASE_MS * 2 ** Math.min(attemptCount - 1, 20)
+            ))
+    );
     await db
       .update(mailboxVerificationCode)
       .set({
@@ -600,13 +647,7 @@ export const processMailVerificationCode = async ({
         attemptCount,
         leaseToken: null,
         leaseUntil: null,
-        nextAttemptAt: new Date(
-          failedAt.getTime() +
-            Math.min(
-              RETRY_MAX_MS,
-              RETRY_BASE_MS * 2 ** Math.min(attemptCount - 1, 20)
-            )
-        ),
+        nextAttemptAt: retryAt,
         updatedAt: failedAt,
       })
       .where(
@@ -618,5 +659,10 @@ export const processMailVerificationCode = async ({
     if (phase === "load") {
       throw error;
     }
+    return {
+      reason: admissionBusy ? "admission_busy" : "failure",
+      retryAt,
+      status: "retry",
+    };
   }
 };

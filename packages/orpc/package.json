@@ -42,6 +42,7 @@
     "./domain-connect-template": "./src/mail-domain/domain-connect.ts",
     "./gmail-compose-retention": "./src/gmail-compose-retention.ts",
     "./gmail-credential-rotation": "./src/gmail-credential-rotation.ts",
+    "./gmail-work": "./src/gmail-sync/work.ts",
     "./gmail-pubsub": "./src/gmail-sync/service.ts",
     "./waitlist": "./src/waitlist.ts",
     "./mail-updates": "./src/mail-updates.ts",

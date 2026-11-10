@@ -9,7 +9,7 @@ import {
 import type { ChatModel } from "./chat-models";
 
 export const VERIFICATION_CODE_MODEL: ChatModel =
-  "google/gemini-2.5-flash-lite";
+  "google/gemini-3.1-flash-lite";
 
 /**
  * Resolves a configured model id against the catalog. Unset values fall back
