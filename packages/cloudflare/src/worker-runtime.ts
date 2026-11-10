@@ -35,28 +35,32 @@ export const readOptionalLinkedSecret = (value: string | undefined) =>
     ? undefined
     : linkedSecretSchema.safeParse(JSON.parse(value)).data?.value;
 
+export const sentryOptions = (
+  runtimeEnv: unknown
+): Sentry.CloudflareOptions => {
+  const bindings =
+    typeof runtimeEnv === "object" && runtimeEnv !== null ? runtimeEnv : {};
+  const dsnBinding =
+    "SST_RESOURCE_SentryDsn" in bindings &&
+    typeof bindings.SST_RESOURCE_SentryDsn === "string"
+      ? bindings.SST_RESOURCE_SentryDsn
+      : undefined;
+  const environment =
+    "SENTRY_ENVIRONMENT" in bindings &&
+    typeof bindings.SENTRY_ENVIRONMENT === "string"
+      ? bindings.SENTRY_ENVIRONMENT
+      : undefined;
+
+  return {
+    beforeSend: (event, hint) =>
+      prepareReportedEvent(event, hint.originalException),
+    dsn: readOptionalLinkedSecret(dsnBinding),
+    environment,
+    tracesSampleRate: 0,
+  };
+};
+
 export const withSentryReporting = <Handler extends ExportedHandler<Env>>(
   handler: Handler
 ): Handler =>
-  Sentry.withSentry<Env, unknown, unknown, Handler>((runtimeEnv: unknown) => {
-    const bindings =
-      typeof runtimeEnv === "object" && runtimeEnv !== null ? runtimeEnv : {};
-    const dsnBinding =
-      "SST_RESOURCE_SentryDsn" in bindings &&
-      typeof bindings.SST_RESOURCE_SentryDsn === "string"
-        ? bindings.SST_RESOURCE_SentryDsn
-        : undefined;
-    const environment =
-      "SENTRY_ENVIRONMENT" in bindings &&
-      typeof bindings.SENTRY_ENVIRONMENT === "string"
-        ? bindings.SENTRY_ENVIRONMENT
-        : undefined;
-
-    return {
-      beforeSend: (event, hint) =>
-        prepareReportedEvent(event, hint.originalException),
-      dsn: readOptionalLinkedSecret(dsnBinding),
-      environment,
-      tracesSampleRate: 0,
-    };
-  }, handler);
+  Sentry.withSentry<Env, unknown, unknown, Handler>(sentryOptions, handler);

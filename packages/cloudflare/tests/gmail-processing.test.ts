@@ -18,7 +18,11 @@ import {
   enqueueGmailNotification,
   processGmailQueue,
 } from "../src/gmail-processing";
-import { GMAIL_PROCESSING_URL } from "../src/gmail-processing-job";
+import {
+  GMAIL_PROCESSING_URL,
+  processGmailJob,
+} from "../src/gmail-processing-job";
+import type { GmailJob } from "../src/gmail-processing-job";
 import processingWorker from "../src/gmail-processing-worker";
 import { broadcastMailUpdate } from "../src/mail-updates";
 import type { broadcastGmailUpdate } from "../src/mail-updates";
@@ -59,7 +63,11 @@ const notification = {
   pubSubMessageId: "delivery-1",
 };
 const capture = { kind: "capture", notification };
-const fresh = { kind: "work", mailboxId: "mailbox-1", priority: "fresh" };
+const fresh = {
+  kind: "work",
+  mailboxId: "mailbox-1",
+  priority: "fresh",
+} satisfies GmailJob;
 const catchup = { ...fresh, priority: "catchup" };
 const completed = {
   busy: false,
@@ -94,6 +102,12 @@ const accepted = {
 
 describe("durable Gmail processing", () => {
   beforeEach(() => {
+    const executor = env.GmailFreshExecutor.getByName("test-acceptance");
+    vi.spyOn(executor, "wake").mockResolvedValue();
+    vi.spyOn(env.GmailFreshExecutor, "getByName").mockReturnValue(executor);
+    vi.spyOn(env.GmailFreshExecutor, "jurisdiction").mockReturnValue(
+      env.GmailFreshExecutor
+    );
     vi.mocked(getGmailMessageWorkWake).mockResolvedValue({
       moreReady: true,
       nextWakeAt: new Date(),
@@ -306,8 +320,11 @@ describe("durable Gmail processing", () => {
         };
       }
     );
-    const { batch, message } = delivery(fresh);
-    const processing = processGmailQueue(batch, env);
+    let finished = false;
+    const processing = processGmailJob(fresh, env).then((decision) => {
+      finished = true;
+      return decision;
+    });
     await vi.waitFor(() => {
       expect(broadcastMailUpdate).toHaveBeenCalledWith(
         expect.anything(),
@@ -317,10 +334,9 @@ describe("durable Gmail processing", () => {
         })
       );
     });
-    expect(message.ack).not.toHaveBeenCalled();
+    expect(finished).toBeFalsy();
     ancillary.resolve(null);
-    await processing;
-    expect(message.ack).toHaveBeenCalledOnce();
+    await expect(processing).resolves.toMatchObject({ action: "ack" });
   });
 
   test("retries discovery if either durable handoff fails", async () => {
@@ -360,10 +376,9 @@ describe("durable Gmail processing", () => {
         };
       }
     );
-    const { batch, message } = delivery(fresh);
-    await processGmailQueue(batch, env);
-    expect(message.ack).toHaveBeenCalledOnce();
-    expect(message.retry).not.toHaveBeenCalled();
+    await expect(processGmailJob(fresh, env)).resolves.toMatchObject({
+      action: "ack",
+    });
   });
 
   test("acknowledges disconnected deliveries without scheduling work", async () => {
@@ -519,14 +534,12 @@ describe("durable Gmail processing", () => {
     const send = vi
       .spyOn(env.GmailFreshProcessingQueue, "send")
       .mockResolvedValue(accepted);
-    const { batch, message } = delivery(fresh);
-    await processGmailQueue(batch, env);
+    const decision = await processGmailJob(fresh, env);
     expect(processNextGmailMessageWork).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ mailboxId: "mailbox-1", priority: "fresh" })
     );
     expect(send.mock.calls[0]?.[1]?.delaySeconds).toBeGreaterThan(100);
-    expect(message.ack).toHaveBeenCalledOnce();
-    expect(message.retry).not.toHaveBeenCalled();
+    expect(decision).toMatchObject({ action: "ack" });
   });
 
   test("does not acknowledge message work until its future wake is durable", async () => {
@@ -539,10 +552,9 @@ describe("durable Gmail processing", () => {
     vi.spyOn(env.GmailFreshProcessingQueue, "send").mockRejectedValueOnce(
       new Error("queue unavailable")
     );
-    const { batch, message } = delivery(fresh);
-    await processGmailQueue(batch, env);
-    expect(message.retry).toHaveBeenCalledOnce();
-    expect(message.ack).not.toHaveBeenCalled();
+    await expect(processGmailJob(fresh, env)).resolves.toMatchObject({
+      action: "retry",
+    });
   });
 
   test("retries capacity wake publication failure and durably rescues its replay", async () => {
@@ -556,15 +568,12 @@ describe("durable Gmail processing", () => {
       .spyOn(env.GmailFreshProcessingQueue, "send")
       .mockRejectedValueOnce(new Error("queue unavailable"))
       .mockResolvedValue(accepted);
-    const first = delivery(fresh);
-    await processGmailQueue(first.batch, env);
-    expect(first.message.retry).toHaveBeenCalledOnce();
-    expect(first.message.ack).not.toHaveBeenCalled();
-    const replay = delivery(fresh);
-    await processGmailQueue(replay.batch, env);
+    await expect(processGmailJob(fresh, env)).resolves.toMatchObject({
+      action: "retry",
+    });
+    const replay = await processGmailJob(fresh, env);
     expect(send.mock.calls.at(-1)?.[1]?.delaySeconds).toBeGreaterThan(0);
-    expect(replay.message.ack).toHaveBeenCalledOnce();
-    expect(replay.message.retry).not.toHaveBeenCalled();
+    expect(replay).toMatchObject({ action: "ack" });
     expect(broadcastMailUpdate).not.toHaveBeenCalled();
   });
 
@@ -724,7 +733,7 @@ describe("private Gmail processing transport", () => {
     const controller = new AbortController();
     const processing = processingWorker.fetch(
       new Request(GMAIL_PROCESSING_URL, {
-        body: JSON.stringify(fresh),
+        body: JSON.stringify(catchup),
         headers: { "content-type": "application/json" },
         method: "POST",
         signal: controller.signal,

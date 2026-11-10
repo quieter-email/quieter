@@ -56,6 +56,10 @@ export const createGmailResources = (
     const gmailCatchupProcessingQueue = new sst.cloudflare.Queue(
       "GmailCatchupProcessingQueue"
     );
+    const gmailFreshExecutor = new sst.cloudflare.DurableObject(
+      "GmailFreshExecutor",
+      { className: "GmailFreshExecutor" }
+    );
     // Production already applied v1 (old class) and v2 (delete), so the class
     // returns under a new name in v3.
     const gmailLiveSyncMailbox = new sst.cloudflare.DurableObject(
@@ -86,10 +90,14 @@ export const createGmailResources = (
           gmailProcessingQueue,
           gmailFreshProcessingQueue,
           gmailCatchupProcessingQueue,
+          gmailFreshExecutor,
           mailLiveUser,
           appDatabase,
           sentryDsnBinding,
           ...processingSecretBindings,
+        ],
+        migrations: [
+          { newSqliteClasses: [gmailFreshExecutor.className], tag: "fresh-v1" },
         ],
         placement: { region: GMAIL_PROCESSING_REGION },
         transform: {

@@ -26,10 +26,17 @@
   "durable_objects": {
     "bindings": [
       {
+        "name": "GmailFreshExecutor",
+        "class_name": "GmailFreshExecutor",
+      },
+      {
         "name": "MailLiveUser",
         "class_name": "MailLiveUser",
         "script_name": "quieter-local-background",
       },
     ],
   },
+  "migrations": [
+    { "tag": "fresh-v1", "new_sqlite_classes": ["GmailFreshExecutor"] },
+  ],
 }
