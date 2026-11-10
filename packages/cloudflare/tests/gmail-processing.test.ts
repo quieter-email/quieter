@@ -1,6 +1,7 @@
 import { processGmailPubSubNotification } from "@quieter/orpc/gmail-pubsub";
 import {
   discoverFreshGmailMessages,
+  getGmailMessageWorkWake,
   processNextGmailMessageWork,
 } from "@quieter/orpc/gmail-work";
 import { env } from "cloudflare:workers";
@@ -39,6 +40,7 @@ vi.mock(import("@quieter/orpc/gmail-pubsub"), () => ({
 vi.mock(import("@quieter/orpc/gmail-work"), async (importOriginal) => ({
   ...(await importOriginal()),
   discoverFreshGmailMessages: vi.fn<typeof discoverFreshGmailMessages>(),
+  getGmailMessageWorkWake: vi.fn<typeof getGmailMessageWorkWake>(),
   processNextGmailMessageWork: vi.fn<typeof processNextGmailMessageWork>(),
 }));
 
@@ -92,6 +94,10 @@ const accepted = {
 
 describe("durable Gmail processing", () => {
   beforeEach(() => {
+    vi.mocked(getGmailMessageWorkWake).mockResolvedValue({
+      moreReady: true,
+      nextWakeAt: new Date(),
+    });
     vi.spyOn(env.GmailProcessingWorker, "fetch").mockImplementation(
       async (input, init) =>
         await processingWorker.fetch(new Request(input, init), env)
@@ -189,6 +195,96 @@ describe("durable Gmail processing", () => {
     expect(send.mock.calls.length).toBeGreaterThan(1);
     expect(message.ack).toHaveBeenCalledOnce();
   });
+
+  test.each([0, 3])(
+    "still publishes capture when discovery lists %i messages but no unfinished fresh work",
+    async (queued) => {
+      vi.mocked(discoverFreshGmailMessages).mockResolvedValue({
+        ignored: false,
+        mailboxId: "mailbox-1",
+        queued,
+      });
+      vi.mocked(getGmailMessageWorkWake).mockResolvedValue({
+        moreReady: false,
+        nextWakeAt: null,
+      });
+      const freshSend = vi.spyOn(env.GmailFreshProcessingQueue, "send");
+      const captureSend = vi
+        .spyOn(env.GmailCatchupProcessingQueue, "send")
+        .mockResolvedValue(accepted);
+      const { batch, message } = delivery();
+      await processGmailQueue(batch, env);
+      expect(freshSend).not.toHaveBeenCalled();
+      expect(captureSend).toHaveBeenCalledWith(capture, undefined);
+      expect(message.ack).toHaveBeenCalledOnce();
+    }
+  );
+
+  test("leaves one durable future wake when discovery has deferred work", async () => {
+    vi.mocked(discoverFreshGmailMessages).mockResolvedValue({
+      ignored: false,
+      mailboxId: "mailbox-1",
+      queued: 3,
+    });
+    vi.mocked(getGmailMessageWorkWake).mockResolvedValue({
+      moreReady: false,
+      nextWakeAt: new Date(Date.now() + 120_000),
+    });
+    const pending = Promise.withResolvers<null>();
+    const send = vi
+      .spyOn(env.GmailFreshProcessingQueue, "send")
+      .mockImplementation(async () => {
+        await pending.promise;
+        return accepted;
+      });
+    vi.spyOn(env.GmailCatchupProcessingQueue, "send").mockResolvedValue(
+      accepted
+    );
+    const { batch, message } = delivery();
+    const processing = processGmailQueue(batch, env);
+    await vi.waitFor(() => {
+      expect(send).toHaveBeenCalledOnce();
+    });
+    expect(send.mock.calls[0]?.[0]).toMatchObject(fresh);
+    expect(send.mock.calls[0]?.[1]?.delaySeconds).toBeGreaterThan(0);
+    expect(message.ack).not.toHaveBeenCalled();
+    pending.resolve(null);
+    await processing;
+    expect(message.ack).toHaveBeenCalledOnce();
+  });
+
+  test.each(["read", "immediate send", "delayed send", "partial fan-out"])(
+    "keeps discovery retryable after a failed readiness %s",
+    async (failure) => {
+      vi.mocked(discoverFreshGmailMessages).mockResolvedValue({
+        ignored: false,
+        mailboxId: "mailbox-1",
+        queued: 3,
+      });
+      const error = new Error("scheduling unavailable");
+      if (failure === "read") {
+        vi.mocked(getGmailMessageWorkWake).mockRejectedValueOnce(error);
+      } else if (failure === "delayed send") {
+        vi.mocked(getGmailMessageWorkWake).mockResolvedValue({
+          moreReady: false,
+          nextWakeAt: new Date(Date.now() + 120_000),
+        });
+      }
+      const freshSend = vi
+        .spyOn(env.GmailFreshProcessingQueue, "send")
+        .mockRejectedValue(error);
+      if (failure === "partial fan-out") {
+        freshSend.mockResolvedValueOnce(accepted);
+      }
+      vi.spyOn(env.GmailCatchupProcessingQueue, "send").mockResolvedValue(
+        accepted
+      );
+      const { batch, message } = delivery();
+      await processGmailQueue(batch, env);
+      expect(message.retry).toHaveBeenCalledOnce();
+      expect(message.ack).not.toHaveBeenCalled();
+    }
+  );
 
   test("broadcasts critical results before ancillary work finishes", async () => {
     const ancillary = Promise.withResolvers<null>();
@@ -315,6 +411,86 @@ describe("durable Gmail processing", () => {
     expect(send).toHaveBeenCalledWith(capture, expect.anything());
     expect(freshSend).toHaveBeenCalledWith(fresh, undefined);
     expect(message.ack).toHaveBeenCalledOnce();
+  });
+
+  test("preserves capture continuation without waking completed work", async () => {
+    vi.mocked(processGmailPubSubNotification).mockResolvedValue({
+      ...completed,
+      needsContinuation: true,
+    });
+    vi.mocked(getGmailMessageWorkWake).mockResolvedValue({
+      moreReady: false,
+      nextWakeAt: null,
+    });
+    const freshSend = vi.spyOn(env.GmailFreshProcessingQueue, "send");
+    const catchupSend = vi
+      .spyOn(env.GmailCatchupProcessingQueue, "send")
+      .mockResolvedValue(accepted);
+    const { batch, message } = delivery(capture);
+    await processGmailQueue(batch, env);
+    expect(freshSend).not.toHaveBeenCalled();
+    expect(catchupSend).toHaveBeenCalledExactlyOnceWith(
+      capture,
+      expect.anything()
+    );
+    expect(message.ack).toHaveBeenCalledOnce();
+  });
+
+  test("schedules capture priorities independently when only catchup is ready", async () => {
+    vi.mocked(processGmailPubSubNotification).mockResolvedValue(completed);
+    vi.mocked(getGmailMessageWorkWake).mockImplementation(
+      async (input) =>
+        await Promise.resolve({
+          moreReady: input.priority === "catchup",
+          nextWakeAt: input.priority === "catchup" ? new Date() : null,
+        })
+    );
+    const freshSend = vi.spyOn(env.GmailFreshProcessingQueue, "send");
+    const catchupSend = vi
+      .spyOn(env.GmailCatchupProcessingQueue, "send")
+      .mockResolvedValue(accepted);
+    const { batch, message } = delivery(capture);
+    await processGmailQueue(batch, env);
+    expect(freshSend).not.toHaveBeenCalled();
+    expect(catchupSend).toHaveBeenCalledWith(catchup, undefined);
+    expect(message.ack).toHaveBeenCalledOnce();
+  });
+
+  test("leaves one delayed wake for each deferred capture priority", async () => {
+    vi.mocked(processGmailPubSubNotification).mockResolvedValue(completed);
+    vi.mocked(getGmailMessageWorkWake).mockResolvedValue({
+      moreReady: false,
+      nextWakeAt: new Date(Date.now() + 120_000),
+    });
+    const freshSend = vi
+      .spyOn(env.GmailFreshProcessingQueue, "send")
+      .mockResolvedValue(accepted);
+    const catchupSend = vi
+      .spyOn(env.GmailCatchupProcessingQueue, "send")
+      .mockResolvedValue(accepted);
+    const { batch, message } = delivery(capture);
+    await processGmailQueue(batch, env);
+    expect(freshSend).toHaveBeenCalledOnce();
+    expect(catchupSend).toHaveBeenCalledOnce();
+    expect(freshSend.mock.calls[0]?.[1]?.delaySeconds).toBeGreaterThan(0);
+    expect(catchupSend.mock.calls[0]?.[1]?.delaySeconds).toBeGreaterThan(0);
+    expect(message.ack).toHaveBeenCalledOnce();
+  });
+
+  test("keeps capture retryable when a delayed wake fails", async () => {
+    vi.mocked(processGmailPubSubNotification).mockResolvedValue(completed);
+    vi.mocked(getGmailMessageWorkWake).mockResolvedValue({
+      moreReady: false,
+      nextWakeAt: new Date(Date.now() + 120_000),
+    });
+    vi.spyOn(env.GmailFreshProcessingQueue, "send").mockResolvedValue(accepted);
+    vi.spyOn(env.GmailCatchupProcessingQueue, "send").mockRejectedValueOnce(
+      new Error("queue unavailable")
+    );
+    const { batch, message } = delivery(capture);
+    await processGmailQueue(batch, env);
+    expect(message.retry).toHaveBeenCalledOnce();
+    expect(message.ack).not.toHaveBeenCalled();
   });
 
   test("honors the mailbox provider cooldown before retrying discovery", async () => {

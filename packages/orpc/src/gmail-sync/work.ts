@@ -31,6 +31,7 @@ import type { GmailWorkPriority } from "./work-store";
 
 export {
   enqueueGmailMessageWork,
+  getGmailMessageWorkWake,
   hasPendingFreshGmailWorkForAccount,
   listGmailMessageWorkWakeJobs,
 } from "./work-store";
