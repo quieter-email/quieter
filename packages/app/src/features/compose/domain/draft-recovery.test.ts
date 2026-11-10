@@ -29,6 +29,29 @@ const draft = {
 };
 
 describe("compose recovery", () => {
+  it("keeps an interrupted scheduling attempt locked to the original operation", () => {
+    const sendOperationId = crypto.randomUUID();
+    const scheduleAttempt = {
+      sendAt: "2027-02-01T10:00:00Z",
+      timeZone: "Europe/Berlin",
+    };
+    const recovered = restoreComposeDraft(
+      JSON.stringify({
+        ...draft,
+        saveStatus: "sending",
+        scheduleAttempt,
+        sendOperationId,
+      }),
+      "editor"
+    );
+    expect(recovered).toMatchObject({
+      saveStatus: "error",
+      scheduleAttempt,
+      sendOperationId,
+      sendUncertain: true,
+    });
+  });
+
   it("does not silently retry a send interrupted by closing the tab", () => {
     const recovered = restoreComposeDraft(
       JSON.stringify({ ...draft, saveStatus: "sending" }),

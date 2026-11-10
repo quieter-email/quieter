@@ -17,6 +17,7 @@ import {
 } from "@quieter/app/features/compose/components/compose-editor";
 import type { ComposeEditorHandle } from "@quieter/app/features/compose/components/compose-editor";
 import { SaveSnippetDialog } from "@quieter/app/features/compose/components/save-snippet-dialog";
+import { ComposeScheduleSend } from "@quieter/app/features/compose/components/schedule-send-picker";
 import {
   getDraftStatusMessage,
   useComposeDialogController,
@@ -452,6 +453,12 @@ const ReadyComposeSurface = ({
         !!mailboxId)) &&
     !audioBusy;
   const isInline = variant === "inline";
+  let sendButtonLabel = state.draft.scheduleAttempt ? "Scheduling…" : "Send";
+  if (state.draft.sendUncertain === true) {
+    sendButtonLabel = state.draft.scheduleAttempt
+      ? "Check schedule"
+      : "Check delivery";
+  }
   const canSwitchSender =
     !isInline &&
     allowSenderSwitch &&
@@ -1352,35 +1359,45 @@ const ReadyComposeSurface = ({
                     <ComposeEditorToolbar
                       chrome="footer"
                       leading={
-                        <ToolbarButton
-                          disabled={!canSubmitCompose}
-                          onClick={
-                            state.draft.sendUncertain === true
-                              ? () => {
-                                  void compose.checkSendDelivery();
-                                }
-                              : undefined
-                          }
-                          type={
-                            state.draft.sendUncertain === true
-                              ? "button"
-                              : "submit"
-                          }
-                          variant="primary"
-                        >
-                          {state.draft.saveStatus === "sending" ? (
-                            <Icon animation="spin" icon={Loading03Icon} />
-                          ) : (
-                            <Icon icon={MailSend02Icon} />
-                          )}
-                          {state.draft.sendUncertain === true
-                            ? "Check delivery"
-                            : "Send"}
-                          <ShortcutHint
-                            className="ml-2 hidden @sm:inline-flex"
-                            shortcutId="compose-send"
+                        <div className="flex items-center gap-1">
+                          <ToolbarButton
+                            disabled={!canSubmitCompose}
+                            onClick={
+                              state.draft.sendUncertain === true
+                                ? () => {
+                                    void compose.checkSendDelivery();
+                                  }
+                                : undefined
+                            }
+                            type={
+                              state.draft.sendUncertain === true
+                                ? "button"
+                                : "submit"
+                            }
+                            variant="primary"
+                          >
+                            {state.draft.saveStatus === "sending" ? (
+                              <Icon animation="spin" icon={Loading03Icon} />
+                            ) : (
+                              <Icon icon={MailSend02Icon} />
+                            )}
+                            {sendButtonLabel}
+                            <ShortcutHint
+                              className="ml-2 hidden @sm:inline-flex"
+                              shortcutId="compose-send"
+                            />
+                          </ToolbarButton>
+                          <ComposeScheduleSend
+                            disabled={
+                              !canEditBody ||
+                              (senderUnavailable ?? false) ||
+                              audioBusy
+                            }
+                            onSchedule={compose.handleScheduleMessage}
+                            pending={state.draft.saveStatus === "sending"}
+                            preview={demoMode || managedDemoMode}
                           />
-                        </ToolbarButton>
+                        </div>
                       }
                       trailing={
                         <>

@@ -30,6 +30,7 @@ type ComposeDraftFormMeta = Pick<
   | "saveStatus"
   | "sendOperationId"
   | "sendUncertain"
+  | "scheduleAttempt"
   | "errorMessage"
   | "lastSavedAt"
   | "recoveryEditorId"

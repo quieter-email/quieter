@@ -14,6 +14,7 @@ import { z } from "zod";
 import { readBoundedJson } from "./bounded-json";
 import { handleReminderWake } from "./reminder-wake";
 import { retryMailBroadcast } from "./retry-mail-broadcast";
+import { handleScheduledSendWake } from "./scheduled-send-wake";
 import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
 
 export const broadcastMailUpdate = async (
@@ -58,6 +59,9 @@ export const broadcastMailUpdate = async (
 
 export const handleMailUpdates = async (request: Request, env: Env) => {
   const url = new URL(request.url);
+  if (url.pathname === "/mail/scheduled-send/wake") {
+    return await handleScheduledSendWake(request, env);
+  }
   if (url.pathname === "/mail/reminders/wake") {
     return await handleReminderWake(request, env);
   }

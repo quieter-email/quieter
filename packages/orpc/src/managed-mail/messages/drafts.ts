@@ -463,6 +463,7 @@ export const deleteManagedDraft = async (input: {
   baseRevision?: string;
   draftId: string;
   mailboxId: string;
+  requireExisting?: boolean;
   userId: string;
 }) => {
   const selectedMailbox = await getAuthorizedManagedMailbox({
@@ -485,6 +486,13 @@ export const deleteManagedDraft = async (input: {
       )
       .limit(1)
       .for("update");
+    if (existing === undefined && input.requireExisting === true) {
+      throw new ORPCError("CONFLICT", {
+        data: { draftConflict: true },
+        message:
+          "The original draft is no longer available. Check Sent before scheduling it again.",
+      });
+    }
     if (
       existing !== undefined &&
       input.baseRevision !== existing.updatedAt.toISOString()

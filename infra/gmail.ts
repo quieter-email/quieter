@@ -74,6 +74,7 @@ export const createGmailResources = (
           gmailLiveSyncMailbox,
           mailLiveUser,
           updates.reminders,
+          updates.scheduledSends,
           gmailLiveSyncTokenSecret,
           appDatabase,
           sentryDsnBinding,
@@ -94,7 +95,8 @@ export const createGmailResources = (
               .apply(([bindings, scriptName]) =>
                 (bindings ?? []).map((binding) =>
                   binding.name === "MailLiveUser" ||
-                  binding.name === "ReminderMailbox"
+                  binding.name === "ReminderMailbox" ||
+                  binding.name === "ScheduledSend"
                     ? { ...binding, scriptName }
                     : binding
                 )

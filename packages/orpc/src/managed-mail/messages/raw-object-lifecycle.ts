@@ -4,10 +4,11 @@ import {
   managedMailMessage,
   organizationApiMailMessage,
   organizationMailSendIdempotency,
+  scheduledMailSend,
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
-import { and, asc, eq, exists, lte, or } from "drizzle-orm";
+import { and, asc, eq, exists, isNull, lte, or } from "drizzle-orm";
 
 import { LOCAL_MAIL_BUCKET } from "../local-storage";
 import { deleteRawMailObject, writeRawMailObject } from "./raw-object";
@@ -70,6 +71,19 @@ export const cleanupMailObjects = async (now = new Date()) => {
           and(
             eq(mailObjectCleanup.id, object.id),
             or(
+              exists(
+                db
+                  .select({ id: scheduledMailSend.id })
+                  .from(scheduledMailSend)
+                  .where(
+                    and(
+                      eq(scheduledMailSend.rawObjectProvider, object.provider),
+                      eq(scheduledMailSend.rawObjectBucket, object.bucket),
+                      eq(scheduledMailSend.rawObjectKey, object.key),
+                      isNull(scheduledMailSend.payloadRetiredAt)
+                    )
+                  )
+              ),
               exists(
                 db
                   .select({ id: managedMailMessage.id })

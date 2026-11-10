@@ -46,7 +46,10 @@
     "./waitlist": "./src/waitlist.ts",
     "./mail-updates": "./src/mail-updates.ts",
     "./verification-codes": "./src/verification-codes.ts",
-    "./mail-importance": "./src/mail-importance.ts"
+    "./mail-importance": "./src/mail-importance.ts",
+    "./scheduled-send/service": "./src/scheduled-send/service.ts",
+    "./scheduled-send/wake": "./src/scheduled-send/wake.ts",
+    "./scheduled-send/repair": "./src/scheduled-send/repair.ts"
   },
   "dependencies": {
     "@ai-sdk/mcp": "catalog:",

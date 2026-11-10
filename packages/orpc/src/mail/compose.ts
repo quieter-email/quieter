@@ -33,6 +33,11 @@ import {
 } from "../managed-mail/messages/drafts";
 import { sendManagedMailboxMessage } from "../managed-mail/messages/send";
 import { saveDraftReminderIntent } from "../reminders/draft-state";
+import {
+  assertComposeNotScheduled,
+  resolveComposeSourceDraftId,
+} from "../scheduled-send/reservation";
+import { withMailComposeLock } from "./compose-lock";
 import { learnAiMemoryFromMailAction } from "./feedback";
 import type { MailInputs } from "./inputs";
 
@@ -84,9 +89,11 @@ export const composeMailOperations = {
   deleteDraft: async ({
     context,
     input,
+    requireExistingDraft = false,
   }: {
     context: MailRequestContext;
     input: MailInputs["deleteDraft"];
+    requireExistingDraft?: boolean;
   }) => {
     const selectedMailbox = await assertAccessibleMailbox({
       mailboxId: input.mailboxId,
@@ -95,6 +102,7 @@ export const composeMailOperations = {
     if (selectedMailbox.provider === "managed") {
       return await deleteManagedDraft({
         ...input,
+        requireExisting: requireExistingDraft,
         userId: context.userId,
       });
     }
@@ -106,7 +114,7 @@ export const composeMailOperations = {
         await deleteGmailComposeDraft(
           accessToken,
           input.mailboxId,
-          input,
+          { ...input, requireExisting: requireExistingDraft },
           context.signal
         )
     );
@@ -161,7 +169,10 @@ export const composeMailOperations = {
       operation.status === "prepared" ||
       operation.status === "pending"
     ) {
-      return { status: "rejected" as const };
+      return {
+        definitiveRejection: operation?.status === "rejected",
+        status: "rejected" as const,
+      };
     }
     if (
       (operation.status === "accepted" || operation.status === "completed") &&
@@ -189,58 +200,84 @@ export const composeMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
-    if (selectedMailbox.provider === "managed") {
-      const saved = await saveManagedDraft({
-        ...input,
-        privateContext,
-        userId: context.userId,
+    if (!selectedMailbox.capabilities.canSend) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "You do not have permission to send from this mailbox.",
       });
-      await saveDraftReminderIntent({
-        draftId: saved.draftId,
-        intent: input.draft.followUpReminder,
-        mailboxId: input.mailboxId,
-        userId: context.userId,
-      });
-      await captureMailboxDraftMemory({
-        draft: input.draft,
-        draftId: saved.draftId,
-        mailboxId: input.mailboxId,
-        userId: context.userId,
-      });
-      return {
-        ...saved,
-        ...(input.draft.followUpReminder === undefined
-          ? {}
-          : { followUpReminder: input.draft.followUpReminder }),
-      };
     }
-
-    return await callGmail(context, input.mailboxId, async (accessToken) => {
-      const saved = await saveGmailDraft(
-        accessToken,
-        input.mailboxId,
-        input.draft,
-        context.signal
-      );
-      await saveDraftReminderIntent({
-        draftId: saved.draftId,
-        intent: input.draft.followUpReminder,
-        mailboxId: input.mailboxId,
-        userId: context.userId,
-      });
-      await captureMailboxDraftMemory({
-        draft: input.draft,
-        draftId: saved.draftId,
-        mailboxId: input.mailboxId,
-        userId: context.userId,
-      });
-      return {
-        ...saved,
-        ...(input.draft.followUpReminder === undefined
-          ? {}
-          : { followUpReminder: input.draft.followUpReminder }),
-      };
+    const sourceDraftId = await resolveComposeSourceDraftId({
+      ...input.draft,
+      mailboxId: input.mailboxId,
+      provider: selectedMailbox.provider,
     });
+    return await withMailComposeLock(
+      input.mailboxId,
+      `source:${sourceDraftId ?? input.draft.localId}`,
+      async () => {
+        await assertComposeNotScheduled({
+          ...input.draft,
+          draftId: sourceDraftId,
+          mailboxId: input.mailboxId,
+          scheduledSendId: undefined,
+        });
+        if (selectedMailbox.provider === "managed") {
+          const saved = await saveManagedDraft({
+            ...input,
+            privateContext,
+            userId: context.userId,
+          });
+          await saveDraftReminderIntent({
+            draftId: saved.draftId,
+            intent: input.draft.followUpReminder,
+            mailboxId: input.mailboxId,
+            userId: context.userId,
+          });
+          await captureMailboxDraftMemory({
+            draft: input.draft,
+            draftId: saved.draftId,
+            mailboxId: input.mailboxId,
+            userId: context.userId,
+          });
+          return {
+            ...saved,
+            ...(input.draft.followUpReminder === undefined
+              ? {}
+              : { followUpReminder: input.draft.followUpReminder }),
+          };
+        }
+
+        return await callGmail(
+          context,
+          input.mailboxId,
+          async (accessToken) => {
+            const saved = await saveGmailDraft(
+              accessToken,
+              input.mailboxId,
+              input.draft,
+              context.signal
+            );
+            await saveDraftReminderIntent({
+              draftId: saved.draftId,
+              intent: input.draft.followUpReminder,
+              mailboxId: input.mailboxId,
+              userId: context.userId,
+            });
+            await captureMailboxDraftMemory({
+              draft: input.draft,
+              draftId: saved.draftId,
+              mailboxId: input.mailboxId,
+              userId: context.userId,
+            });
+            return {
+              ...saved,
+              ...(input.draft.followUpReminder === undefined
+                ? {}
+                : { followUpReminder: input.draft.followUpReminder }),
+            };
+          }
+        );
+      }
+    );
   },
   sendDraft: async ({
     context,
@@ -256,53 +293,82 @@ export const composeMailOperations = {
   sendMessage: async ({
     context,
     input,
+    scheduledSendId,
   }: {
     context: MailRequestContext;
     input: MailInputs["sendMessage"];
+    scheduledSendId?: string;
   }) => {
     const selectedMailbox = await assertAccessibleMailbox({
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
-    if (selectedMailbox.provider === "managed") {
-      return await sendManagedMailboxMessage({
-        ...input,
-        userId: context.userId,
+    if (!selectedMailbox.capabilities.canSend) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "You do not have permission to send from this mailbox.",
       });
     }
-
-    return await callGmail(context, input.mailboxId, async (accessToken) => {
-      const sent = await sendGmailMessage(
-        accessToken,
-        input.mailboxId,
-        input.message,
-        context.signal,
-        selectedMailbox.organizationId,
-        context.userId
-      );
-      await captureMailboxMessageMemory({
-        actorUserId: context.userId,
-        mailboxId: input.mailboxId,
-        message: {
-          bcc: input.message.recipients.bcc,
-          bodyHtml: input.message.bodyHtml,
-          bodyText: input.message.bodyText,
-          cc: input.message.recipients.cc,
-          date: new Date().toISOString(),
-          id: sent.id,
-          inReplyTo: input.message.replyContext?.messageHeaderId,
-          subject: input.message.subject,
-          threadId: sent.threadId ?? sent.id,
-          to: input.message.recipients.to,
-        },
-        source: "sent",
-      }).catch((error: unknown) => {
-        reportError(error, {
-          operation: "Could not record sent-message learning.",
-        });
-      });
-      return sent;
+    const sourceDraftId = await resolveComposeSourceDraftId({
+      ...input.message,
+      mailboxId: input.mailboxId,
+      provider: selectedMailbox.provider,
     });
+    return await withMailComposeLock(
+      input.mailboxId,
+      `source:${sourceDraftId ?? input.message.localId}`,
+      async () => {
+        await assertComposeNotScheduled({
+          ...input.message,
+          draftId: sourceDraftId,
+          mailboxId: input.mailboxId,
+          scheduledSendId,
+        });
+        if (selectedMailbox.provider === "managed") {
+          return await sendManagedMailboxMessage({
+            ...input,
+            userId: context.userId,
+          });
+        }
+
+        return await callGmail(
+          context,
+          input.mailboxId,
+          async (accessToken) => {
+            const sent = await sendGmailMessage(
+              accessToken,
+              input.mailboxId,
+              input.message,
+              context.signal,
+              selectedMailbox.organizationId,
+              context.userId
+            );
+            await captureMailboxMessageMemory({
+              actorUserId: context.userId,
+              mailboxId: input.mailboxId,
+              message: {
+                bcc: input.message.recipients.bcc,
+                bodyHtml: input.message.bodyHtml,
+                bodyText: input.message.bodyText,
+                cc: input.message.recipients.cc,
+                date: new Date().toISOString(),
+                id: sent.id,
+                inReplyTo: input.message.replyContext?.messageHeaderId,
+                subject: input.message.subject,
+                threadId: sent.threadId ?? sent.id,
+                to: input.message.recipients.to,
+              },
+              source: "sent",
+            }).catch((error: unknown) => {
+              reportError(error, {
+                operation: "Could not record sent-message learning.",
+              });
+            });
+            return sent;
+          },
+          { kind: "send" }
+        );
+      }
+    );
   },
   unsubscribeFromMessage: async ({
     context,

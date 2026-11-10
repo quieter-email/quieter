@@ -70,6 +70,12 @@ const CalendarWorkspace = lazy(async () => {
   return { default: Workspace };
 });
 
+const ScheduledMessagesWorkspace = lazy(async () => {
+  const { ScheduledMessagesWorkspace: Component } =
+    await import("@quieter/app/features/scheduled-send/components/scheduled-messages-workspace");
+  return { default: Component };
+});
+
 const messagePanelsClassName = cn(
   workspaceGutterClassName,
   "absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden lg:grid lg:grid-cols-[minmax(20rem,max(34%,405px))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:pl-(--workspace-gutter)"
@@ -489,10 +495,14 @@ const MailboxWorkspaceContentInner = ({
     select: (search) => search.workspace,
   });
   const calendarActive = workspace === "calendar";
+  const isScheduledMailbox = inboxRouteApi.useSearch({
+    select: (search) => search.mailbox === "scheduled",
+  });
   const allInboxesActive = selectedView === "all-inboxes";
   const mailViewActive =
     !isComposeMailbox &&
     !isSnippetMailbox &&
+    !isScheduledMailbox &&
     (selectedView === "inbox" || allInboxesActive);
   const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);
   const senderMailboxes = mailboxes
@@ -639,6 +649,28 @@ const MailboxWorkspaceContentInner = ({
         mailboxGroups={mailboxGroups}
         onConnectGmail={onConnectGmail}
       />
+    );
+  } else if (isScheduledMailbox && selectedMailboxProvider !== "api") {
+    mailboxContent = (
+      <Suspense
+        fallback={
+          <WorkspaceSection>
+            <WorkspaceHeader>
+              <MailSubviewHeader
+                onOpenSidebar={onOpenSidebar}
+                title="Scheduled"
+              />
+            </WorkspaceHeader>
+          </WorkspaceSection>
+        }
+      >
+        <ScheduledMessagesWorkspace
+          demo={isDemoMode || isManagedDemoMode}
+          key={selectedMailboxId}
+          mailboxId={selectedMailboxId}
+          onOpenSidebar={onOpenSidebar}
+        />
+      </Suspense>
     );
   } else if (isComposeMailbox) {
     mailboxContent = (
@@ -1032,7 +1064,7 @@ const MailboxWorkspaceContentInner = ({
                   selectedMailboxId={selectedMailboxId}
                   selectedMailboxProvider={selectedMailboxProvider}
                   selectedView={
-                    isComposeMailbox || isSnippetMailbox
+                    isComposeMailbox || isSnippetMailbox || isScheduledMailbox
                       ? undefined
                       : selectedView
                   }

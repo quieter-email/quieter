@@ -33,7 +33,9 @@
     "./auto-label-matching": "./src/auto-label-matching.ts",
     "./unsubscribe": "./src/unsubscribe.ts",
     "./capture": "./src/capture.ts",
-    "./otp-token": "./src/otp-token.ts"
+    "./otp-token": "./src/otp-token.ts",
+    "./scheduled-send": "./src/scheduled-send.ts",
+    "./scheduled-send-ticket": "./src/scheduled-send-ticket.ts"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
