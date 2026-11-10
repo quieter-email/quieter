@@ -1,5 +1,5 @@
 import { assertLocalEnvFile } from "@quieter/env/local-doctor";
-import { requireServerEnv } from "@quieter/env/server";
+import { requireServerEnv, serverEnv } from "@quieter/env/server";
 
 assertLocalEnvFile(".env.local");
 const [ownerEmail, ...flags] = process.argv.slice(2);
@@ -29,7 +29,10 @@ if (flags.includes("--reminder-ack")) {
 } else if (flags.includes("--reminder-answer")) {
   reminderReply = "fulfilled";
 }
-const response = await fetch("http://127.0.0.1:8787/__dev/mail/seed", {
+const workerOrigin = new URL(
+  serverEnv.MAIL_UPDATES_URL ?? "ws://127.0.0.1:8787/mail/live"
+).origin.replace(/^ws/u, "http");
+const response = await fetch(`${workerOrigin}/__dev/mail/seed`, {
   body: JSON.stringify({
     fresh: flags.includes("--fresh"),
     ownerEmail,

@@ -23,6 +23,9 @@ if (
   );
 }
 const localToken = requireServerEnv("QUIETER_LOCAL_WORKER_TOKEN");
+const workerOrigin = new URL(
+  serverEnv.MAIL_UPDATES_URL ?? "ws://127.0.0.1:8787/mail/live"
+).origin.replace(/^ws/u, "http");
 // oxlint-disable-next-line typescript/strict-void-return -- Node provides a custom promisify implementation for execFile.
 const run = promisify(execFile);
 let accessToken = "";
@@ -115,7 +118,7 @@ while (!stop.signal.aborted) {
           `Pub/Sub deadline extension returned ${extended.status}.`
         );
       }
-      const accepted = await fetch("http://127.0.0.1:8787/__dev/pubsub", {
+      const accepted = await fetch(`${workerOrigin}/__dev/pubsub`, {
         body: JSON.stringify({ message: delivery.message, subscription }),
         headers: {
           authorization: `Bearer ${localToken}`,

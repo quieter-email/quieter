@@ -1,0 +1,35 @@
+{
+  // Auxiliary Worker in dev:workers. No listening port or public deployment.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "quieter-local-gmail-processing",
+  "main": "src/gmail-processing-worker.ts",
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "queues": {
+    "producers": [
+      {
+        "binding": "GmailProcessingQueue",
+        "queue": "quieter-local-gmail-processing",
+      },
+      {
+        "binding": "GmailFreshProcessingQueue",
+        "queue": "quieter-local-gmail-fresh-processing",
+      },
+      {
+        "binding": "GmailCatchupProcessingQueue",
+        "queue": "quieter-local-gmail-catchup-processing",
+      },
+    ],
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MailLiveUser",
+        "class_name": "MailLiveUser",
+        "script_name": "quieter-local-background",
+      },
+    ],
+  },
+}

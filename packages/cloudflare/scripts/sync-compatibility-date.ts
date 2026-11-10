@@ -5,7 +5,11 @@ import { COMPATIBILITY_DATE } from "../src/compatibility-date.ts";
 
 const root = path.join(import.meta.dirname, "../../..");
 const check = process.argv.includes("--check");
-const targets = ["packages/cloudflare/wrangler.types.jsonc"] as const;
+const targets = [
+  "packages/cloudflare/wrangler.types.jsonc",
+  "packages/cloudflare/wrangler.local.jsonc",
+  "packages/cloudflare/wrangler.processing.local.jsonc",
+] as const;
 
 const datePattern =
   /(?<prefix>"compatibility_date"\s*:\s*")\d{4}-\d{2}-\d{2}(?<suffix>")/u;

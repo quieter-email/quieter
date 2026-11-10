@@ -1,0 +1,86 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "quieter-local-background",
+  "main": "src/local-worker.ts",
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "dev": { "ip": "127.0.0.1", "port": 8787 },
+  "services": [
+    {
+      "binding": "GmailProcessingWorker",
+      "service": "quieter-local-gmail-processing",
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "GmailProcessingQueue",
+        "queue": "quieter-local-gmail-processing",
+      },
+      {
+        "binding": "GmailFreshProcessingQueue",
+        "queue": "quieter-local-gmail-fresh-processing",
+      },
+      {
+        "binding": "GmailCatchupProcessingQueue",
+        "queue": "quieter-local-gmail-catchup-processing",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "quieter-local-gmail-processing",
+        "dead_letter_queue": "quieter-local-gmail-processing-dead-letter",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 2,
+        "max_retries": 100,
+        "retry_delay": 60,
+      },
+      {
+        "queue": "quieter-local-gmail-fresh-processing",
+        "dead_letter_queue": "quieter-local-gmail-processing-dead-letter",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 4,
+        "max_retries": 100,
+        "retry_delay": 60,
+      },
+      {
+        "queue": "quieter-local-gmail-catchup-processing",
+        "dead_letter_queue": "quieter-local-gmail-processing-dead-letter",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 2,
+        "max_retries": 100,
+        "retry_delay": 60,
+      },
+    ],
+  },
+  "r2_buckets": [
+    { "binding": "LocalMailStorage", "bucket_name": "quieter-local-mail" },
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "MailLiveUser", "class_name": "MailLiveUser" },
+      { "name": "ReminderMailbox", "class_name": "ReminderMailbox" },
+      { "name": "ScheduledSend", "class_name": "ScheduledSend" },
+      {
+        "name": "GmailLiveSyncMailboxV2",
+        "class_name": "GmailLiveSyncMailboxV2",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "local-v1",
+      "new_sqlite_classes": [
+        "MailLiveUser",
+        "ReminderMailbox",
+        "ScheduledSend",
+        "GmailLiveSyncMailboxV2",
+      ],
+    },
+  ],
+}

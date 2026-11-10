@@ -7,6 +7,7 @@ const workerSchema = z.object({
   deployedAt: timestamp.optional(),
   role: z.enum([
     "gmailMaintenance",
+    "gmailProcessing",
     "gmailRealtime",
     "mailMaintenance",
     "web-a",
@@ -168,6 +169,7 @@ export const validateRecoveryProvenance = (input: {
   const buildId = `${run.head_sha}-${run.id}-${run.run_attempt}`;
   const workerIdentities = {
     gmailMaintenance: "quieter-production-gmailpubsubmaintenancehandlerscript",
+    gmailProcessing: "quieter-production-gmailprocessingworkerscript",
     gmailRealtime: "quieter-production-gmailrealtimeworkerscript",
     mailMaintenance: "quieter-production-mailmaintenancehandlerscript",
     "web-a": "quieter-production-web-release-a",
@@ -178,8 +180,9 @@ export const validateRecoveryProvenance = (input: {
     fence.buildId !== run.head_sha ||
     Date.parse(fence.preparedAt) > verifiedAt ||
     evidence.buildId !== buildId ||
-    evidence.workers.length !== 5 ||
-    new Set(evidence.workers.map((worker) => worker.role)).size !== 5 ||
+    evidence.workers.length !== Object.keys(workerIdentities).length ||
+    new Set(evidence.workers.map((worker) => worker.role)).size !==
+      Object.keys(workerIdentities).length ||
     evidence.workers.some(
       (worker) =>
         (worker.buildId !== buildId &&

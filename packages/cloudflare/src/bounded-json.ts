@@ -1,6 +1,9 @@
 import { RequestError } from "./request-error";
 
-export const readBoundedJson = async (request: Request, limit: number) => {
+export const readBoundedJson = async (
+  request: Pick<Request, "headers" | "body">,
+  limit: number
+) => {
   const declaredLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > limit) {
     throw new RequestError(413, "request_body_too_large");

@@ -13,7 +13,10 @@ import {
   vi,
 } from "vite-plus/test";
 
-import { checkActionDeployment } from "./check-action-deployment.ts";
+import {
+  checkActionDeployment,
+  disablePrivateReleaseUrls,
+} from "./check-action-deployment.ts";
 
 const lambda = vi.hoisted(() => ({ buildId: "new-build" }));
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The fixture replaces an overloaded Node API with its callback contract.
@@ -43,6 +46,9 @@ let directory = "";
 let staleWorker = "";
 let publicSlot = false;
 let incompatible = false;
+let processorBinding = "gmail-processing";
+let processorRegion = "aws:eu-central-1";
+let publicProcessor = false;
 
 const verify = async () => {
   await checkActionDeployment({
@@ -61,6 +67,9 @@ describe("deployed Action consumer verification", () => {
     staleWorker = "";
     publicSlot = false;
     incompatible = false;
+    processorBinding = "gmail-processing";
+    processorRegion = "aws:eu-central-1";
+    publicProcessor = false;
     lambda.buildId = "new-build";
     await writeFile(
       path.join(directory, "outputs.json"),
@@ -69,6 +78,7 @@ describe("deployed Action consumer verification", () => {
           lambdas: { mailInbound: "arn:inbound", mailReceipt: "arn:receipt" },
           workers: {
             gmailMaintenance: "gmail-maintenance",
+            gmailProcessing: "gmail-processing",
             gmailRealtime: "gmail-realtime",
             mailMaintenance: "mail-maintenance",
           },
@@ -101,12 +111,25 @@ describe("deployed Action consumer verification", () => {
             ],
           };
         } else if (url.endsWith("/subdomain")) {
-          result = { enabled: publicSlot, previews_enabled: publicSlot };
+          const exposed = url.includes("/gmail-processing/")
+            ? publicProcessor
+            : publicSlot;
+          result = {
+            enabled: url.includes("/gmail-processing/") ? false : publicSlot,
+            previews_enabled: exposed,
+          };
+        } else if (url.endsWith("/settings")) {
+          result = { placement: { region: processorRegion } };
         } else {
           result = {
             id: version,
             resources: {
               bindings: [
+                {
+                  name: "GmailProcessingWorker",
+                  service: processorBinding,
+                  type: "service",
+                },
                 {
                   name: "QUIETER_ACTION_PROTOCOL",
                   text: PERSONAL_ACTION_PROTOCOL,
@@ -143,6 +166,7 @@ describe("deployed Action consumer verification", () => {
 
   test.each([
     "gmail-maintenance",
+    "gmail-processing",
     "gmail-realtime",
     "mail-maintenance",
     "web-release-a",
@@ -166,6 +190,36 @@ describe("deployed Action consumer verification", () => {
   test("rejects public direct access to private release slots", async () => {
     publicSlot = true;
     await expect(verify()).rejects.toThrow("workers.dev");
+  });
+
+  test("rejects a processor preview URL", async () => {
+    publicProcessor = true;
+    await expect(verify()).rejects.toThrow("workers.dev");
+  });
+
+  test("disables direct and preview access to the deployed processor", async () => {
+    await disablePrivateReleaseUrls({
+      account: "a".repeat(32),
+      outputsFile: path.join(directory, "outputs.json"),
+      token: "test",
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/scripts/gmail-processing/subdomain"),
+      expect.objectContaining({
+        body: JSON.stringify({ enabled: false, previews_enabled: false }),
+        method: "POST",
+      })
+    );
+  });
+
+  test("rejects a queue consumer bound to another processor", async () => {
+    processorBinding = "unexpected-worker";
+    await expect(verify()).rejects.toThrow("processor binding");
+  });
+
+  test("rejects missing regional processor placement", async () => {
+    processorRegion = "aws:us-east-1";
+    await expect(verify()).rejects.toThrow(/./u);
   });
 
   test("rejects a router with no compatible Action protocol", async () => {

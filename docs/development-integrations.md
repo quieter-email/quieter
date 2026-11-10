@@ -84,7 +84,7 @@ Agents may read and move secrets between the approved local configuration and th
 
 ## Native tooling to wire
 
-Cloudflare's installed Vite plugin supports `auxiliaryWorkers`, persistent state, and development tunnels. Wire the realtime Worker, Gmail maintenance handler, and per-minute mail maintenance worker alongside the web Worker. Keep the shared-mailbox restrictions above active even when all handlers run locally. Use scheduled-event injection for tests and an explicit scheduler when continuous local maintenance is needed. See [multiple Workers](https://developers.cloudflare.com/workers/local-development/multi-workers/).
+`dev:workers` runs the realtime gateway and auxiliary Gmail processor through native multi-config Wrangler, with persistent queues and Durable Objects. The web app uses Cloudflare's Vite plugin in its own runtime. Keep the shared-mailbox restrictions above active when all handlers run locally. Maintenance remains manually triggered. See [Gmail background processing](gmail-processing.md) and [multiple Workers](https://developers.cloudflare.com/workers/local-development/multi-workers/).
 
 Use Cloudflare Local Explorer and the runtime inspector for local state, requests, and errors. Its API/UI already provides inspection; avoid building a replacement developer dashboard. Keep these tools on loopback when exposing selected app routes for webhooks. See [Local Explorer](https://developers.cloudflare.com/workers/local-development/local-explorer/).
 

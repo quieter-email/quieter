@@ -26,6 +26,22 @@
     }
   ],
   "source": "Production structured Worker logs and read-only aggregate joins of durable label, code, work and capture records.",
+  "positiveCodeBaseline": {
+    "build": "d78f467bfd4d0b696443923de389dcebc6295b92-42840385950-1",
+    "cohort": "Three approved incoming test emails with synthetic sign-in codes and full production sender history and AI context.",
+    "endpoint": "Later of durable label application and code processing, with exact codes and Personal labels verified in the production UI.",
+    "sampleCount": 3,
+    "retries": 0,
+    "notificationToSavedSeconds": [27.443, 26.773, 31.188],
+    "gmailReceiptToSavedSeconds": [31.931, 30.818, 35.783],
+    "meanNotificationToSavedSeconds": 28.468,
+    "meanGmailReceiptToSavedSeconds": 32.844,
+    "labelMemoryMs": [10361, 10588, 10936],
+    "labelClassifierMs": [4029, 4214, 4084],
+    "singleStatementSaveApplicationMs": [310, 344, 341],
+    "limiter": "Repeated database network and protocol waits. Matching UPDATE execution p50 was 0.076-0.109ms and p99 0.096-0.162ms in PlanetScale Insights, versus 310-344ms observed at the Worker.",
+    "limitation": "Small sequential before/after cohort. This baseline has three positive samples; the regional rollout must be measured separately before claiming a speedup."
+  },
   "limitations": [
     "Two samples do not establish a steady-state average.",
     "Code screening completed but neither message contained a code.",

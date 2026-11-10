@@ -20,6 +20,7 @@ const targetsSchema = z.object({
     }),
     workers: z.object({
       gmailMaintenance: z.string().regex(/^[\w-]+$/u),
+      gmailProcessing: z.string().regex(/^[\w-]+$/u),
       gmailRealtime: z.string().regex(/^[\w-]+$/u),
       mailMaintenance: z.string().regex(/^[\w-]+$/u),
     }),
@@ -110,7 +111,7 @@ export const checkActionDeployment = async (input: {
   const workerTargets = [
     ...Object.entries(targets.workers).map(([role, script]) => ({
       buildId: input.buildId,
-      private: false,
+      private: role === "gmailProcessing",
       role,
       script,
     })),
@@ -134,6 +135,7 @@ export const checkActionDeployment = async (input: {
             bindings: z.array(
               z.object({
                 name: z.string(),
+                service: z.string().optional(),
                 text: z.string().optional(),
                 type: z.string(),
               })
@@ -156,16 +158,34 @@ export const checkActionDeployment = async (input: {
           `Action consumer ${target.role} has not deployed the expected build.`
         );
       }
+      if (
+        target.role === "gmailRealtime" &&
+        !deployed.resources.bindings.some(
+          (binding) =>
+            binding.name === "GmailProcessingWorker" &&
+            binding.type === "service" &&
+            binding.service === targets.workers.gmailProcessing
+        )
+      ) {
+        throw new Error(
+          "The Gmail queue consumer has no verified processor binding."
+        );
+      }
+      if (target.role === "gmailProcessing") {
+        z.object({
+          placement: z.object({ region: z.literal("aws:eu-central-1") }),
+        }).parse(await api(`scripts/${target.script}/settings`));
+      }
       if (target.private) {
         const subdomain = z
           .object({
             enabled: z.boolean(),
-            previews_enabled: z.boolean().optional(),
+            previews_enabled: z.boolean(),
           })
           .parse(await api(`scripts/${target.script}/subdomain`));
-        if (subdomain.enabled || subdomain.previews_enabled === true) {
+        if (subdomain.enabled || subdomain.previews_enabled) {
           throw new Error(
-            `Private release ${target.role} exposes a workers.dev URL.`
+            `Private Worker ${target.role} exposes a workers.dev URL.`
           );
         }
       }
@@ -247,10 +267,17 @@ export const checkActionDeployment = async (input: {
 
 export const disablePrivateReleaseUrls = async (input: {
   account: string;
+  outputsFile: string;
   token: string;
 }) => {
+  const { actionDeploymentTargets: targets } = targetsSchema.parse(
+    JSON.parse(await readFile(input.outputsFile, "utf-8"))
+  );
   await Promise.all(
-    WEB_RELEASE_SLOTS.map(async ({ serviceName }) => {
+    [
+      ...WEB_RELEASE_SLOTS.map(({ serviceName }) => serviceName),
+      targets.workers.gmailProcessing,
+    ].map(async (serviceName) => {
       const response = await fetch(
         `https://api.cloudflare.com/client/v4/accounts/${input.account}/workers/scripts/${serviceName}/subdomain`,
         {
@@ -268,7 +295,7 @@ export const disablePrivateReleaseUrls = async (input: {
         .parse(await response.json());
       if (!response.ok || !result.success) {
         throw new Error(
-          `Cannot disable direct access to private release ${serviceName}.`
+          `Cannot disable direct access to private Worker ${serviceName}.`
         );
       }
     })
@@ -281,6 +308,7 @@ if (import.meta.main) {
   if (mode === "secure-private-releases") {
     await disablePrivateReleaseUrls({
       account: env.CLOUDFLARE_DEFAULT_ACCOUNT_ID,
+      outputsFile: outputsFile ?? ".sst/outputs.json",
       token: env.CLOUDFLARE_API_TOKEN,
     });
   } else if (mode === "verify") {
