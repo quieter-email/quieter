@@ -22,6 +22,7 @@ import {
 } from "@quieter/app/features/compose/domain/compose-actions";
 import { textToComposeBodyHtml } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
+import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
 import { MessageLabels } from "@quieter/app/features/message-labels/components/message-labels";
 import { createMailboxThreadMessageActionHandlers } from "@quieter/app/features/message-thread/components/message-action-handlers";
 import { MessageActionsDropdown } from "@quieter/app/features/message-thread/components/message-actions";
@@ -653,6 +654,12 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                                 ? "Continue draft"
                                 : `Reply to ${replyTargetLabel}`}
                             </Text>
+                            {hotkeyLinkedDraftMessage ? null : (
+                              <ShortcutHint
+                                className="ml-2 hidden @sm:inline-flex"
+                                shortcutId="detail-reply"
+                              />
+                            )}
                           </Button>
                           {showReplyAll ? (
                             <IconButtonTooltip label="Reply all">
@@ -675,8 +682,12 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                                 variant="ghost"
                               >
                                 <Icon aria-hidden icon={MailReplyAll02Icon} />
-                                <span className="hidden @sm:inline">
+                                <span className="hidden items-center @sm:inline-flex">
                                   Reply all
+                                  <ShortcutHint
+                                    className="ml-4"
+                                    shortcutId="detail-reply-all"
+                                  />
                                 </span>
                               </Button>
                             </IconButtonTooltip>
@@ -732,7 +743,13 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                               variant="ghost"
                             >
                               <Icon aria-hidden icon={ArrowRightDoubleIcon} />
-                              <span className="hidden @sm:inline">Forward</span>
+                              <span className="hidden items-center @sm:inline-flex">
+                                Forward
+                                <ShortcutHint
+                                  className="ml-4"
+                                  shortcutId="detail-forward"
+                                />
+                              </span>
                             </Button>
                           </IconButtonTooltip>
                         </ComposerActionBar>

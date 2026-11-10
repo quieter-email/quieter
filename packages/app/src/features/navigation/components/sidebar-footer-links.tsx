@@ -1,7 +1,13 @@
 "use client";
 
 import { useHeadlessConsentUI } from "@c15t/react/headless";
-import { HelpCircleIcon, Settings01Icon } from "@hugeicons/core-free-icons";
+import {
+  HelpCircleIcon,
+  KeyboardIcon,
+  Settings01Icon,
+} from "@hugeicons/core-free-icons";
+import { useKeyboardShortcuts } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
+import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
 import { appRuntime } from "@quieter/app/runtime";
 import { Button } from "@quieter/ui/button";
 import {
@@ -41,6 +47,7 @@ const SidebarHelpMenu = ({
   onRequestClose?: () => void;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const { openKeyboardShortcuts } = useKeyboardShortcuts();
 
   return (
     <DropdownMenu onOpenChange={setIsOpen} open={isOpen}>
@@ -56,6 +63,20 @@ const SidebarHelpMenu = ({
         </IconButtonTooltip>
       </div>
       <DropdownMenuContent align="end" side="top" size="compact">
+        <DropdownMenuItem
+          onSelect={() => {
+            onRequestClose?.();
+            openKeyboardShortcuts();
+          }}
+        >
+          <Icon aria-hidden icon={KeyboardIcon} />
+          Keyboard shortcuts
+          <ShortcutHint
+            className="ml-auto"
+            shortcutId="show-keyboard-shortcuts"
+          />
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={onRequestClose}
           render={<Link to="/privacy" />}

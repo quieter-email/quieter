@@ -18,6 +18,18 @@ export const buttonVariants = cva(
   {
     compoundVariants: [
       {
+        className: "[&_[data-slot=shortcut-hint]]:hidden",
+        size: [
+          "compact",
+          "icon",
+          "icon-lg",
+          "icon-sm",
+          "icon-xs",
+          "text",
+          "xs",
+        ],
+      },
+      {
         auxiliaryPress: false,
         className: "active:scale-[0.97] motion-reduce:active:scale-100",
         variant: [

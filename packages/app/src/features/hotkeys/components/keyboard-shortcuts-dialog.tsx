@@ -1,8 +1,14 @@
 "use client";
 
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
-import { KEYBOARD_SHORTCUTS } from "@quieter/app/features/hotkeys/domain/keyboard-shortcuts";
-import type { KeyboardShortcut } from "@quieter/app/features/hotkeys/domain/keyboard-shortcuts";
+import {
+  getShortcutDisplay,
+  KEYBOARD_SHORTCUTS,
+} from "@quieter/app/features/hotkeys/domain/keyboard-shortcuts";
+import type {
+  KeyboardShortcut,
+  KeyboardShortcutId,
+} from "@quieter/app/features/hotkeys/domain/keyboard-shortcuts";
 import { SettingsCard } from "@quieter/app/features/settings/components/settings-layout";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -16,8 +22,6 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Kbd } from "@quieter/ui/kbd";
-import { formatForDisplay } from "@tanstack/react-hotkeys";
-import type { Hotkey, RegisterableHotkey } from "@tanstack/react-hotkeys";
 
 type KeyboardShortcutsDialogProps = {
   onOpenChange: (open: boolean) => void;
@@ -26,7 +30,7 @@ type KeyboardShortcutsDialogProps = {
 
 type ShortcutViewItem = {
   context?: string;
-  id: string;
+  id: KeyboardShortcutId;
   label?: string;
 };
 
@@ -95,26 +99,12 @@ const shortcutById = new Map(
   KEYBOARD_SHORTCUTS.map((shortcut) => [shortcut.id, shortcut])
 );
 
-const getShortcutById = (id: string) => {
+const getShortcutById = (id: KeyboardShortcutId): KeyboardShortcut => {
   const shortcut = shortcutById.get(id);
   if (!shortcut) {
     throw new Error(`Missing keyboard shortcut: ${id}`);
   }
   return shortcut;
-};
-
-const formatSingleHotkey = (hotkey: RegisterableHotkey) =>
-  typeof hotkey === "object" && hotkey.key === "/" && hotkey.shift === true
-    ? "?"
-    : formatForDisplay(hotkey, { separatorToken: "+" });
-
-const getShortcutDisplay = (shortcut: KeyboardShortcut): string[][] => {
-  const { sequence } = shortcut;
-  if (sequence) {
-    return [sequence.map((hotkey: Hotkey) => formatSingleHotkey(hotkey))];
-  }
-
-  return shortcut.keys.map((hotkey) => [formatSingleHotkey(hotkey)]);
 };
 
 const ShortcutKeys = ({ shortcut }: { shortcut: KeyboardShortcut }) => (

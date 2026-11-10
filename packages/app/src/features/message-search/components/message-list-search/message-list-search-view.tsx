@@ -9,6 +9,7 @@ import {
 import { ArrowInteractionButton } from "@quieter/app/components/arrow-interaction-button";
 import { SpinWhileActive } from "@quieter/app/components/spin-while-active";
 import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
+import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
 import { mailboxLabelSearchPillSurfaceClassNameByColor } from "@quieter/app/features/message-labels/domain/mailbox-label-presentation";
 import { messageListSearchChipClassName } from "@quieter/app/features/message-list/components/message-list-header-surfaces";
 import { MessageListSearchDropdown } from "@quieter/app/features/message-search/components/message-list-search-dropdown";
@@ -411,6 +412,14 @@ export const MessageListSearchView = ({
               />
             </div>
 
+            {currentState.text.length === 0 &&
+            currentState.filters.length === 0 &&
+            !isDropdownOpen ? (
+              <ShortcutHint
+                className="mx-2 hidden sm:inline-flex"
+                shortcutId="focus-search"
+              />
+            ) : null}
             <LazyMotion features={domAnimation}>
               <AnimatePresence>
                 {currentState.text.trim().length > 0 && (

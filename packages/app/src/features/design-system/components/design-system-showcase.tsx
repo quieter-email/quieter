@@ -1852,6 +1852,28 @@ export const DesignSystemShowcase = () => {
               <Kbd>K</Kbd>
             </div>
           </Row>
+          <Row label="Inline shortcut hints">
+            <Button>
+              Send
+              <Kbd aria-hidden className="ml-2" variant="hint">
+                Ctrl+Enter
+              </Kbd>
+            </Button>
+            <Button variant="ghost">
+              Inbox
+              <Kbd aria-hidden className="ml-2" variant="hint">
+                G I
+              </Kbd>
+            </Button>
+            <IconButtonTooltip label="Search">
+              <Button aria-label="Search" size="icon" variant="ghost">
+                <Icon aria-hidden icon={Search01Icon} />
+                <Kbd aria-hidden variant="hint">
+                  Ctrl+K
+                </Kbd>
+              </Button>
+            </IconButtonTooltip>
+          </Row>
           <Row label="Interactive keycaps">
             <Button variant="keycap">Ctrl</Button>
             <Button variant="keycap">K</Button>
