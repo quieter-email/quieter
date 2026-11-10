@@ -7,13 +7,25 @@ import {
   mailbox,
   organization,
 } from "@quieter/database/schema";
-import { and, asc, desc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 
 export type GmailWorkPriority = typeof gmailMessageWork.$inferSelect.source;
 // The queue's maximum invocation lifetime is 15 minutes.
 const WORK_LEASE_MS = 16 * 60_000;
 const unfinished = or(
   isNull(gmailMessageWork.completedAt),
+  isNotNull(gmailMessageWork.lastError),
   and(
     eq(gmailMessageWork.triggerActions, true),
     isNull(gmailMessageWork.actionsCompletedAt)

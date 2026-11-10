@@ -214,25 +214,55 @@ describe("Gmail message work", () => {
     );
   });
 
-  test("preserves critical completion when an ancillary operation fails", async () => {
-    const failure = new Error("Ancillary failure");
-    fixtures.process.mockImplementation(async ({ onCriticalComplete }) => {
-      await onCriticalComplete?.({
-        autoLabelMs: 0,
-        totalMs: 0,
-        verificationCodeMs: 0,
+  test.each([false, true])(
+    "preserves critical completion after a failed followup, actions requested %s",
+    async (triggerActions) => {
+      fixtures.claim.mockResolvedValue({ ...work(), triggerActions });
+      const failure = new Error("Ancillary failure");
+      fixtures.process.mockImplementation(async ({ onCriticalComplete }) => {
+        await onCriticalComplete?.({
+          autoLabelMs: 0,
+          totalMs: 0,
+          verificationCodeMs: 0,
+        });
+        throw failure;
       });
-      throw failure;
-    });
-    await expect(
-      processNextGmailMessageWork({ priority: "fresh" })
-    ).rejects.toBe(failure);
-    expect(fixtures.finish).toHaveBeenCalledWith(
-      expect.objectContaining({
-        actionsComplete: false,
-        criticalComplete: true,
-      })
-    );
-    expect(fixtures.finish.mock.calls[0]?.[0].retryAt).toBeInstanceOf(Date);
-  });
+      await expect(
+        processNextGmailMessageWork({ priority: "fresh" })
+      ).rejects.toBe(failure);
+      expect(fixtures.finish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actionsComplete: false,
+          criticalComplete: true,
+          lastError: failure.message,
+        })
+      );
+      expect(fixtures.finish.mock.calls[0]?.[0].retryAt).toBeInstanceOf(Date);
+      fixtures.claim.mockResolvedValue({
+        ...work(),
+        completedAt: new Date(),
+        lastError: failure.message,
+        triggerActions,
+      });
+      fixtures.process.mockReset().mockResolvedValue({
+        autoLabel: { status: "disabled" },
+        verificationCode: { status: "disabled" },
+      });
+      await processNextGmailMessageWork({ priority: "catchup" });
+      expect(fixtures.process).toHaveBeenCalledWith(
+        expect.objectContaining({
+          autoLabelEnabled: false,
+          extractCodes: false,
+          triggerActions,
+        })
+      );
+      expect(fixtures.finish).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          criticalComplete: true,
+          lastError: null,
+          retryAt: null,
+        })
+      );
+    }
+  );
 });
