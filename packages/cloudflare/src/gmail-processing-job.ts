@@ -43,6 +43,16 @@ export const gmailJobDecisionSchema = z.discriminatedUnion("action", [
 export type GmailJob = z.infer<typeof gmailJobSchema>;
 export type GmailJobDecision = z.infer<typeof gmailJobDecisionSchema>;
 
+export type GmailFreshWake = {
+  mailboxId: string;
+  notBefore: number;
+  count: number;
+};
+
+type GmailProcessingOptions = {
+  onFreshWakeAccepted?: (wake: GmailFreshWake) => Promise<void>;
+};
+
 export const enqueueGmailMessageWork = async (
   env: GmailProcessingEnv,
   job: {
@@ -104,7 +114,8 @@ export const enqueueGmailNotification = async (
 
 export const processGmailJob = async (
   parsed: GmailJob,
-  env: GmailProcessingEnv
+  env: GmailProcessingEnv,
+  options: GmailProcessingOptions = {}
 ): Promise<GmailJobDecision> => {
   const { processGmailPubSubNotification } =
     await import("@quieter/orpc/gmail-pubsub");
@@ -114,6 +125,16 @@ export const processGmailJob = async (
     isGmailRateLimitedError,
     processNextGmailMessageWork,
   } = await import("@quieter/orpc/gmail-work");
+  const notifyFreshWakeAccepted = async (wake: GmailFreshWake) => {
+    try {
+      await options.onFreshWakeAccepted?.(wake);
+    } catch (error) {
+      reportWorkerError(error, {
+        category: "gmail_fresh_wake_error",
+        route: "gmail-processing",
+      });
+    }
+  };
   const scheduleGmailMessageWorkWakes = async (input: {
     mailboxId: string;
     priority: "fresh" | "catchup";
@@ -131,7 +152,7 @@ export const processGmailJob = async (
       return;
     }
     if (wake.moreReady) {
-      await Promise.all(
+      const sends = await Promise.allSettled(
         Array.from({ length: input.immediateWakeCount }, async () => {
           input.onWake?.();
           await enqueueGmailMessageWork(env, {
@@ -140,6 +161,17 @@ export const processGmailJob = async (
           });
         })
       );
+      const failed = sends.find((send) => send.status === "rejected");
+      if (failed?.status === "rejected") {
+        throw failed.reason;
+      }
+      if (input.priority === "fresh") {
+        await notifyFreshWakeAccepted({
+          count: input.immediateWakeCount,
+          mailboxId: input.mailboxId,
+          notBefore: Date.now(),
+        });
+      }
       return;
     }
     input.onWake?.();
@@ -148,6 +180,13 @@ export const processGmailJob = async (
       nextWakeAt: wake.nextWakeAt,
       priority: input.priority,
     });
+    if (input.priority === "fresh") {
+      await notifyFreshWakeAccepted({
+        count: 1,
+        mailboxId: input.mailboxId,
+        notBefore: wake.nextWakeAt.getTime(),
+      });
+    }
   };
   try {
     if (!("kind" in parsed)) {
@@ -293,16 +332,22 @@ export const processGmailJob = async (
         }
       }
       if (result.nextWakeAt !== null) {
+        const nextWakeAt =
+          result.status === "capacity_busy"
+            ? new Date(Math.max(result.nextWakeAt.getTime(), Date.now() + 5000))
+            : result.nextWakeAt;
         await enqueueGmailMessageWork(env, {
           mailboxId: parsed.mailboxId,
-          nextWakeAt:
-            result.status === "capacity_busy"
-              ? new Date(
-                  Math.max(result.nextWakeAt.getTime(), Date.now() + 5000)
-                )
-              : result.nextWakeAt,
+          nextWakeAt,
           priority: parsed.priority,
         });
+        if (parsed.priority === "fresh") {
+          await notifyFreshWakeAccepted({
+            count: 1,
+            mailboxId: parsed.mailboxId,
+            notBefore: nextWakeAt.getTime(),
+          });
+        }
       } else if (result.status === "retry") {
         return { action: "retry", delaySeconds: 60 };
       }
@@ -323,7 +368,7 @@ export const processGmailJob = async (
           })
       );
       if (!result.ignored) {
-        await Promise.all(
+        const schedules = await Promise.allSettled(
           (["fresh", "catchup"] as const).map(async (priority) => {
             await scheduleGmailMessageWorkWakes({
               immediateWakeCount: priority === "fresh" ? 4 : 2,
@@ -332,6 +377,12 @@ export const processGmailJob = async (
             });
           })
         );
+        const failed = schedules.find(
+          (schedule) => schedule.status === "rejected"
+        );
+        if (failed?.status === "rejected") {
+          throw failed.reason;
+        }
         await broadcastGmailUpdate(
           env,
           notification.emailAddress,

@@ -2,7 +2,7 @@
   // Type generation only. SST remains the sole production deployment authority.
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "quieter-gmail-realtime-types",
-  "main": "src/worker.ts",
+  "main": "src/type-generation-worker.ts",
   "compatibility_date": "2026-08-04",
   "compatibility_flags": ["nodejs_compat"],
   "services": [
@@ -60,6 +60,10 @@
   ],
   "durable_objects": {
     "bindings": [
+      {
+        "name": "GmailFreshExecutor",
+        "class_name": "GmailFreshExecutor",
+      },
       { "name": "MailLiveUser", "class_name": "MailLiveUser" },
       { "name": "ReminderMailbox", "class_name": "ReminderMailbox" },
       { "name": "ScheduledSend", "class_name": "ScheduledSend" },
@@ -70,6 +74,7 @@
     ],
   },
   "migrations": [
+    { "tag": "fresh-v1", "new_sqlite_classes": ["GmailFreshExecutor"] },
     {
       "tag": "v2",
       "new_sqlite_classes": ["GmailLiveSyncMailboxV2"],

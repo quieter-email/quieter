@@ -30,7 +30,10 @@ export const processGmailQueue = async (
         GMAIL_PROCESSING_URL,
         {
           body,
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            "x-quieter-delivery-key": message.id,
+          },
           method: "POST",
         }
       );
