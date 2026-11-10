@@ -1,0 +1,1384 @@
+{
+  "date": "2026-11-10",
+  "baselineCommit": "61aca2aa1aa225eedebb0723862bb8b71fe2f69a",
+  "candidateCommit": "7a3241b1b2257e35d4438c8e1e94fd10aa96703d",
+  "scope": {
+    "start": "notification processor receipt",
+    "end": "saved label classification and encrypted code persistence",
+    "database": "allowlisted development database, one shared Node connection",
+    "gmail": "synthetic read boundary, no writes",
+    "models": "actual capped development credentials",
+    "queueTransport": "local adapter; deployed transport excluded",
+    "pairsPerScenario": 5,
+    "order": "alternating baseline then fixed",
+    "p95": "not reported with five samples"
+  },
+  "nativeQueueProof": {
+    "nativeWorkerd": true,
+    "actualQueueAdapter": true,
+    "providerAndDatabase": "explicit stubs, not latency measurement",
+    "freshStartedWhileOlderRunning": true,
+    "criticalBroadcastBeforeAncillary": true,
+    "bothCompletedAfterCallerDisconnected": true
+  },
+  "summary": [
+    {
+      "scenario": "warm",
+      "variant": "baseline",
+      "n": 5,
+      "labelCorrect": 5,
+      "codeCorrect": 0,
+      "labelClassification": {
+        "n": 5,
+        "meanMs": 6019.9046,
+        "medianMs": 6048.7775,
+        "minMs": 5780.7394,
+        "maxMs": 6140.716
+      },
+      "codePersisted": null,
+      "bothPersisted": null,
+      "admissionBusy": 5,
+      "providerErrors": 0
+    },
+    {
+      "scenario": "warm",
+      "variant": "fixed",
+      "n": 5,
+      "labelCorrect": 5,
+      "codeCorrect": 5,
+      "labelClassification": {
+        "n": 5,
+        "meanMs": 6190.89784,
+        "medianMs": 6187.0131,
+        "minMs": 5927.0830000000005,
+        "maxMs": 6422.1752
+      },
+      "codePersisted": {
+        "n": 5,
+        "meanMs": 7152.5745,
+        "medianMs": 6995.8728,
+        "minMs": 6900.2943,
+        "maxMs": 7749.987399999999
+      },
+      "bothPersisted": {
+        "n": 5,
+        "meanMs": 7152.5745,
+        "medianMs": 6995.8728,
+        "minMs": 6900.2943,
+        "maxMs": 7749.987399999999
+      },
+      "admissionBusy": 0,
+      "providerErrors": 0
+    },
+    {
+      "scenario": "backlog",
+      "variant": "baseline",
+      "n": 5,
+      "labelCorrect": 5,
+      "codeCorrect": 0,
+      "labelClassification": {
+        "n": 5,
+        "meanMs": 9955.375940000002,
+        "medianMs": 10081.589399999999,
+        "minMs": 9568.4061,
+        "maxMs": 10300.0362
+      },
+      "codePersisted": null,
+      "bothPersisted": null,
+      "admissionBusy": 5,
+      "providerErrors": 0
+    },
+    {
+      "scenario": "backlog",
+      "variant": "fixed",
+      "n": 5,
+      "labelCorrect": 5,
+      "codeCorrect": 5,
+      "labelClassification": {
+        "n": 5,
+        "meanMs": 6103.27396,
+        "medianMs": 6116.2591,
+        "minMs": 5919.9473,
+        "maxMs": 6266.7201
+      },
+      "codePersisted": {
+        "n": 5,
+        "meanMs": 6913.08034,
+        "medianMs": 6908.4623,
+        "minMs": 6715.560799999999,
+        "maxMs": 7108.349700000001
+      },
+      "bothPersisted": {
+        "n": 5,
+        "meanMs": 6913.08034,
+        "medianMs": 6908.4623,
+        "minMs": 6715.560799999999,
+        "maxMs": 7108.349700000001
+      },
+      "admissionBusy": 0,
+      "providerErrors": 0
+    },
+    {
+      "scenario": "new-arrival",
+      "variant": "baseline",
+      "n": 5,
+      "labelCorrect": 5,
+      "codeCorrect": 5,
+      "labelClassification": {
+        "n": 5,
+        "meanMs": 71406.2393,
+        "medianMs": 71217.16750000001,
+        "minMs": 71001.7362,
+        "maxMs": 71961.2155
+      },
+      "codePersisted": {
+        "n": 5,
+        "meanMs": 67909.18722,
+        "medianMs": 67792.7921,
+        "minMs": 67690.23670000001,
+        "maxMs": 68221.247
+      },
+      "bothPersisted": {
+        "n": 5,
+        "meanMs": 71406.2393,
+        "medianMs": 71217.16750000001,
+        "minMs": 71001.7362,
+        "maxMs": 71961.2155
+      },
+      "admissionBusy": 5,
+      "providerErrors": 0
+    },
+    {
+      "scenario": "new-arrival",
+      "variant": "fixed",
+      "n": 5,
+      "labelCorrect": 5,
+      "codeCorrect": 5,
+      "labelClassification": {
+        "n": 5,
+        "meanMs": 9509.523860000001,
+        "medianMs": 9455.4591,
+        "minMs": 9197.460299999999,
+        "maxMs": 9866.5618
+      },
+      "codePersisted": {
+        "n": 5,
+        "meanMs": 10340.68748,
+        "medianMs": 10237.257099999999,
+        "minMs": 9968.6332,
+        "maxMs": 10687.4818
+      },
+      "bothPersisted": {
+        "n": 5,
+        "meanMs": 10340.68748,
+        "medianMs": 10237.257099999999,
+        "minMs": 9968.6332,
+        "maxMs": 10687.4818
+      },
+      "admissionBusy": 0,
+      "providerErrors": 0
+    }
+  ],
+  "trials": [
+    {
+      "scenario": "warm",
+      "variant": "baseline",
+      "pair": 1,
+      "latencyMs": {
+        "labelClassification": 5780.7394,
+        "codePersisted": null,
+        "bothPersisted": null,
+        "processorReturn": 6457.3027,
+        "processCpu": 359,
+        "providerHttpTotal": 426.71929999999975
+      },
+      "result": {
+        "status": "code_deferred",
+        "labelCorrect": true,
+        "codeCorrect": false
+      },
+      "counts": {
+        "providerRequests": 2,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 8,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 2,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 17051,
+        "usageCostMicroCents": 17051,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00014826,
+      "actualExtractionModels": []
+    },
+    {
+      "scenario": "warm",
+      "variant": "baseline",
+      "pair": 2,
+      "latencyMs": {
+        "labelClassification": 6020.6394,
+        "codePersisted": null,
+        "bothPersisted": null,
+        "processorReturn": 6751.4964,
+        "processCpu": 532,
+        "providerHttpTotal": 374.72730000000047
+      },
+      "result": {
+        "status": "code_deferred",
+        "labelCorrect": true,
+        "codeCorrect": false
+      },
+      "counts": {
+        "providerRequests": 2,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 8,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 2,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 17051,
+        "usageCostMicroCents": 17051,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00014826,
+      "actualExtractionModels": []
+    },
+    {
+      "scenario": "warm",
+      "variant": "baseline",
+      "pair": 3,
+      "latencyMs": {
+        "labelClassification": 6108.6507,
+        "codePersisted": null,
+        "bothPersisted": null,
+        "processorReturn": 6822.4558,
+        "processCpu": 296,
+        "providerHttpTotal": 387.3181000000004
+      },
+      "result": {
+        "status": "code_deferred",
+        "labelCorrect": true,
+        "codeCorrect": false
+      },
+      "counts": {
+        "providerRequests": 2,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 8,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 2,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 17036,
+        "usageCostMicroCents": 17036,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00014813400000000002,
+      "actualExtractionModels": []
+    },
+    {
+      "scenario": "warm",
+      "variant": "baseline",
+      "pair": 4,
+      "latencyMs": {
+        "labelClassification": 6140.716,
+        "codePersisted": null,
+        "bothPersisted": null,
+        "processorReturn": 6866.858,
+        "processCpu": 188,
+        "providerHttpTotal": 393.7519999999995
+      },
+      "result": {
+        "status": "code_deferred",
+        "labelCorrect": true,
+        "codeCorrect": false
+      },
+      "counts": {
+        "providerRequests": 2,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 8,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 2,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 17051,
+        "usageCostMicroCents": 17051,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00014826,
+      "actualExtractionModels": []
+    },
+    {
+      "scenario": "warm",
+      "variant": "baseline",
+      "pair": 5,
+      "latencyMs": {
+        "labelClassification": 6048.7775,
+        "codePersisted": null,
+        "bothPersisted": null,
+        "processorReturn": 6756.6228,
+        "processCpu": 438,
+        "providerHttpTotal": 360.1114999999995
+      },
+      "result": {
+        "status": "code_deferred",
+        "labelCorrect": true,
+        "codeCorrect": false
+      },
+      "counts": {
+        "providerRequests": 2,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 8,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 2,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 17051,
+        "usageCostMicroCents": 17051,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00014826,
+      "actualExtractionModels": []
+    },
+    {
+      "scenario": "warm",
+      "variant": "fixed",
+      "pair": 1,
+      "latencyMs": {
+        "labelClassification": 5927.0830000000005,
+        "codePersisted": 6900.2943,
+        "bothPersisted": 6900.2943,
+        "processorReturn": 7496.271000000001,
+        "processCpu": 594,
+        "providerHttpTotal": 1263.2344000000003
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 3,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 6,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 3,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 51546,
+        "usageCostMicroCents": 51546,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.000448218,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "warm",
+      "variant": "fixed",
+      "pair": 2,
+      "latencyMs": {
+        "labelClassification": 6187.0131,
+        "codePersisted": 6987.5509,
+        "bothPersisted": 6987.5509,
+        "processorReturn": 7576.7505,
+        "processCpu": 687,
+        "providerHttpTotal": 1142.0213999999992
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 3,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 6,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 3,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 53099,
+        "usageCostMicroCents": 53099,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00046171799999999996,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "warm",
+      "variant": "fixed",
+      "pair": 3,
+      "latencyMs": {
+        "labelClassification": 6244.2531,
+        "codePersisted": 7129.167100000001,
+        "bothPersisted": 7129.167100000001,
+        "processorReturn": 7735.039000000001,
+        "processCpu": 577,
+        "providerHttpTotal": 938.2470000000012
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 3,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 6,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 3,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 51522,
+        "usageCostMicroCents": 51522,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00044800799999999996,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "warm",
+      "variant": "fixed",
+      "pair": 4,
+      "latencyMs": {
+        "labelClassification": 6173.9648,
+        "codePersisted": 6995.8728,
+        "bothPersisted": 6995.8728,
+        "processorReturn": 7601.841299999999,
+        "processCpu": 562,
+        "providerHttpTotal": 1016.1028000000006
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 3,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 6,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 3,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 51551,
+        "usageCostMicroCents": 51551,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00044825999999999997,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "warm",
+      "variant": "fixed",
+      "pair": 5,
+      "latencyMs": {
+        "labelClassification": 6422.1752,
+        "codePersisted": 7749.987399999999,
+        "bothPersisted": 7749.987399999999,
+        "processorReturn": 8362.071600000001,
+        "processCpu": 578,
+        "providerHttpTotal": 1697.8435
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 3,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 6,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 3,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 51541,
+        "usageCostMicroCents": 51541,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.000448176,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "backlog",
+      "variant": "baseline",
+      "pair": 1,
+      "latencyMs": {
+        "labelClassification": 10081.589399999999,
+        "codePersisted": null,
+        "bothPersisted": null,
+        "processorReturn": 10812.5324,
+        "processCpu": 671,
+        "providerHttpTotal": 424.59040000000005
+      },
+      "result": {
+        "status": "code_deferred",
+        "labelCorrect": true,
+        "codeCorrect": false
+      },
+      "counts": {
+        "providerRequests": 2,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 22,
+        "gmailWrites": 0,
+        "capturedSnapshots": 13
+      },
+      "billing": {
+        "settledReservations": 2,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 17041,
+        "usageCostMicroCents": 17041,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.000148176,
+      "actualExtractionModels": []
+    },
+    {
+      "scenario": "backlog",
+      "variant": "baseline",
+      "pair": 2,
+      "latencyMs": {
+        "labelClassification": 10083.069000000001,
+        "codePersisted": null,
+        "bothPersisted": null,
+        "processorReturn": 10810.8533,
+        "processCpu": 422,
+        "providerHttpTotal": 442.8763000000008
+      },
+      "result": {
+        "status": "code_deferred",
+        "labelCorrect": true,
+        "codeCorrect": false
+      },
+      "counts": {
+        "providerRequests": 2,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 22,
+        "gmailWrites": 0,
+        "capturedSnapshots": 13
+      },
+      "billing": {
+        "settledReservations": 2,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 17036,
+        "usageCostMicroCents": 17036,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00014813400000000002,
+      "actualExtractionModels": []
+    },
+    {
+      "scenario": "backlog",
+      "variant": "baseline",
+      "pair": 3,
+      "latencyMs": {
+        "labelClassification": 10300.0362,
+        "codePersisted": null,
+        "bothPersisted": null,
+        "processorReturn": 11038.5346,
+        "processCpu": 484,
+        "providerHttpTotal": 374.54619999999977
+      },
+      "result": {
+        "status": "code_deferred",
+        "labelCorrect": true,
+        "codeCorrect": false
+      },
+      "counts": {
+        "providerRequests": 2,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 22,
+        "gmailWrites": 0,
+        "capturedSnapshots": 13
+      },
+      "billing": {
+        "settledReservations": 2,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 17046,
+        "usageCostMicroCents": 17046,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.000148218,
+      "actualExtractionModels": []
+    },
+    {
+      "scenario": "backlog",
+      "variant": "baseline",
+      "pair": 4,
+      "latencyMs": {
+        "labelClassification": 9568.4061,
+        "codePersisted": null,
+        "bothPersisted": null,
+        "processorReturn": 10262.8904,
+        "processCpu": 593,
+        "providerHttpTotal": 414.28899999999885
+      },
+      "result": {
+        "status": "code_deferred",
+        "labelCorrect": true,
+        "codeCorrect": false
+      },
+      "counts": {
+        "providerRequests": 2,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 22,
+        "gmailWrites": 0,
+        "capturedSnapshots": 13
+      },
+      "billing": {
+        "settledReservations": 2,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 17051,
+        "usageCostMicroCents": 17051,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00014826,
+      "actualExtractionModels": []
+    },
+    {
+      "scenario": "backlog",
+      "variant": "baseline",
+      "pair": 5,
+      "latencyMs": {
+        "labelClassification": 9743.779,
+        "codePersisted": null,
+        "bothPersisted": null,
+        "processorReturn": 10444.3353,
+        "processCpu": 374,
+        "providerHttpTotal": 432.9350000000013
+      },
+      "result": {
+        "status": "code_deferred",
+        "labelCorrect": true,
+        "codeCorrect": false
+      },
+      "counts": {
+        "providerRequests": 2,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 22,
+        "gmailWrites": 0,
+        "capturedSnapshots": 13
+      },
+      "billing": {
+        "settledReservations": 2,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 17060,
+        "usageCostMicroCents": 17060,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00014834400000000001,
+      "actualExtractionModels": []
+    },
+    {
+      "scenario": "backlog",
+      "variant": "fixed",
+      "pair": 1,
+      "latencyMs": {
+        "labelClassification": 6266.7201,
+        "codePersisted": 7108.349700000001,
+        "bothPersisted": 7108.349700000001,
+        "processorReturn": 7726.397999999999,
+        "processCpu": 454,
+        "providerHttpTotal": 1062.1528000000008
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 3,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 6,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 3,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 51551,
+        "usageCostMicroCents": 51551,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00044825999999999997,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "backlog",
+      "variant": "fixed",
+      "pair": 2,
+      "latencyMs": {
+        "labelClassification": 6134.919400000001,
+        "codePersisted": 6948.405500000001,
+        "bothPersisted": 6948.405500000001,
+        "processorReturn": 7549.672800000001,
+        "processCpu": 407,
+        "providerHttpTotal": 1157.3084999999992
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 3,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 6,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 3,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 53113,
+        "usageCostMicroCents": 53113,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.000461844,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "backlog",
+      "variant": "fixed",
+      "pair": 3,
+      "latencyMs": {
+        "labelClassification": 6078.5239,
+        "codePersisted": 6884.6233999999995,
+        "bothPersisted": 6884.6233999999995,
+        "processorReturn": 7493.6118,
+        "processCpu": 313,
+        "providerHttpTotal": 1042.6751999999992
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 3,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 6,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 3,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 53104,
+        "usageCostMicroCents": 53104,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00046175999999999997,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "backlog",
+      "variant": "fixed",
+      "pair": 4,
+      "latencyMs": {
+        "labelClassification": 5919.9473,
+        "codePersisted": 6715.560799999999,
+        "bothPersisted": 6715.560799999999,
+        "processorReturn": 7293.4216,
+        "processCpu": 531,
+        "providerHttpTotal": 989.6596
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 3,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 6,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 3,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 53099,
+        "usageCostMicroCents": 53099,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00046171799999999996,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "backlog",
+      "variant": "fixed",
+      "pair": 5,
+      "latencyMs": {
+        "labelClassification": 6116.2591,
+        "codePersisted": 6908.4623,
+        "bothPersisted": 6908.4623,
+        "processorReturn": 7499.4068,
+        "processCpu": 360,
+        "providerHttpTotal": 1177.996999999999
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 3,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 6,
+        "gmailWrites": 0,
+        "capturedSnapshots": 1
+      },
+      "billing": {
+        "settledReservations": 3,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 53094,
+        "usageCostMicroCents": 53094,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.00046167599999999995,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "new-arrival",
+      "variant": "baseline",
+      "pair": 1,
+      "latencyMs": {
+        "labelClassification": 71961.2155,
+        "codePersisted": 68221.247,
+        "bothPersisted": 71961.2155,
+        "processorReturn": 74963.4154,
+        "processCpu": 859,
+        "providerHttpTotal": 1579.5868000000046
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 5,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 20,
+        "gmailWrites": 0,
+        "capturedSnapshots": 2
+      },
+      "billing": {
+        "settledReservations": 5,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 68253,
+        "usageCostMicroCents": 68253,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.000593496,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "new-arrival",
+      "variant": "baseline",
+      "pair": 2,
+      "latencyMs": {
+        "labelClassification": 71766.7994,
+        "codePersisted": 68086.5589,
+        "bothPersisted": 71766.7994,
+        "processorReturn": 75066.90030000001,
+        "processCpu": 812,
+        "providerHttpTotal": 1910.1820000000034
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 5,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 20,
+        "gmailWrites": 0,
+        "capturedSnapshots": 2
+      },
+      "billing": {
+        "settledReservations": 5,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 69844,
+        "usageCostMicroCents": 69844,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.000607332,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "new-arrival",
+      "variant": "baseline",
+      "pair": 3,
+      "latencyMs": {
+        "labelClassification": 71084.2779,
+        "codePersisted": 67690.23670000001,
+        "bothPersisted": 71084.2779,
+        "processorReturn": 74809.9494,
+        "processCpu": 719,
+        "providerHttpTotal": 1745.7190000000019
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 5,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 20,
+        "gmailWrites": 0,
+        "capturedSnapshots": 2
+      },
+      "billing": {
+        "settledReservations": 5,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 69892,
+        "usageCostMicroCents": 69892,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.0006077519999999999,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "new-arrival",
+      "variant": "baseline",
+      "pair": 4,
+      "latencyMs": {
+        "labelClassification": 71217.16750000001,
+        "codePersisted": 67792.7921,
+        "bothPersisted": 71217.16750000001,
+        "processorReturn": 74135.9724,
+        "processCpu": 875,
+        "providerHttpTotal": 1628.9217000000026
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 5,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 20,
+        "gmailWrites": 0,
+        "capturedSnapshots": 2
+      },
+      "billing": {
+        "settledReservations": 5,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 68273,
+        "usageCostMicroCents": 68273,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.0005936639999999999,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "new-arrival",
+      "variant": "baseline",
+      "pair": 5,
+      "latencyMs": {
+        "labelClassification": 71001.7362,
+        "codePersisted": 67755.1014,
+        "bothPersisted": 71001.7362,
+        "processorReturn": 73894.0607,
+        "processCpu": 766,
+        "providerHttpTotal": 1741.6600999999982
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 5,
+        "providerErrors": 0,
+        "admissionBusy": 1,
+        "gmailStubReads": 20,
+        "gmailWrites": 0,
+        "capturedSnapshots": 2
+      },
+      "billing": {
+        "settledReservations": 5,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 69835,
+        "usageCostMicroCents": 69835,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": null,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.000607248,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "new-arrival",
+      "variant": "fixed",
+      "pair": 1,
+      "latencyMs": {
+        "labelClassification": 9866.5618,
+        "codePersisted": 10687.4818,
+        "bothPersisted": 10687.4818,
+        "processorReturn": 14697.222,
+        "processCpu": 907,
+        "providerHttpTotal": 1487.5245000000004
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 5,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 13,
+        "gmailWrites": 0,
+        "capturedSnapshots": 2
+      },
+      "billing": {
+        "settledReservations": 5,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 69844,
+        "usageCostMicroCents": 69844,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": true,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.0006073319999999999,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "new-arrival",
+      "variant": "fixed",
+      "pair": 2,
+      "latencyMs": {
+        "labelClassification": 9455.4591,
+        "codePersisted": 10229.7805,
+        "bothPersisted": 10229.7805,
+        "processorReturn": 13862.1319,
+        "processCpu": 328,
+        "providerHttpTotal": 1385.2380000000003
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 5,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 13,
+        "gmailWrites": 0,
+        "capturedSnapshots": 2
+      },
+      "billing": {
+        "settledReservations": 5,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 69844,
+        "usageCostMicroCents": 69844,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": true,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.0006073319999999999,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "new-arrival",
+      "variant": "fixed",
+      "pair": 3,
+      "latencyMs": {
+        "labelClassification": 9197.460299999999,
+        "codePersisted": 9968.6332,
+        "bothPersisted": 9968.6332,
+        "processorReturn": 13610.2633,
+        "processCpu": 844,
+        "providerHttpTotal": 1436.783800000001
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 5,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 13,
+        "gmailWrites": 0,
+        "capturedSnapshots": 2
+      },
+      "billing": {
+        "settledReservations": 5,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 69835,
+        "usageCostMicroCents": 69835,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": true,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.0006072479999999999,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "new-arrival",
+      "variant": "fixed",
+      "pair": 4,
+      "latencyMs": {
+        "labelClassification": 9447.2635,
+        "codePersisted": 10237.257099999999,
+        "bothPersisted": 10237.257099999999,
+        "processorReturn": 13934.788,
+        "processCpu": 546,
+        "providerHttpTotal": 1400.288700000001
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 5,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 13,
+        "gmailWrites": 0,
+        "capturedSnapshots": 2
+      },
+      "billing": {
+        "settledReservations": 5,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 69883,
+        "usageCostMicroCents": 69883,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": true,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.000607668,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    },
+    {
+      "scenario": "new-arrival",
+      "variant": "fixed",
+      "pair": 5,
+      "latencyMs": {
+        "labelClassification": 9580.874600000001,
+        "codePersisted": 10580.2848,
+        "bothPersisted": 10580.2848,
+        "processorReturn": 14382.867,
+        "processCpu": 750,
+        "providerHttpTotal": 1830.6468000000013
+      },
+      "result": {
+        "status": "complete",
+        "labelCorrect": true,
+        "codeCorrect": true
+      },
+      "counts": {
+        "providerRequests": 5,
+        "providerErrors": 0,
+        "admissionBusy": 0,
+        "gmailStubReads": 13,
+        "gmailWrites": 0,
+        "capturedSnapshots": 2
+      },
+      "billing": {
+        "settledReservations": 5,
+        "releasedReservations": 0,
+        "openReservations": 0,
+        "settledCostMicroCents": 69864,
+        "usageCostMicroCents": 69864,
+        "ledgerMatches": true
+      },
+      "parallel": {
+        "freshProviderBeforeOlderCritical": true,
+        "crossMessageHttpOverlap": false
+      },
+      "providerCostUsd": 0.0006075,
+      "actualExtractionModels": ["google/gemini-3.1-flash-lite"]
+    }
+  ]
+}

@@ -317,32 +317,32 @@ describe("Cloudflare worker runtime", () => {
       });
       const { promise: pending, resolve: finish } =
         Promise.withResolvers<null>();
-      const processNotification = vi.fn<
-        (message: unknown, bindings: Env) => Promise<void>
-      >(async () => {
-        await pending;
-      });
+      const send = vi
+        .spyOn(env.GmailProcessingQueue, "send")
+        .mockImplementationOnce(async () => {
+          await pending;
+          return {
+            metadata: { metrics: { backlogBytes: 0, backlogCount: 1 } },
+          };
+        });
       let acknowledged = false;
       const responsePromise = handlePubSub(
         await pubSubRequest(envelope()),
-        env,
-        processNotification
+        env
       ).then((response) => {
         acknowledged = true;
         return response;
       });
       await vi.waitFor(() => {
-        expect(processNotification).toHaveBeenCalledOnce();
+        expect(send).toHaveBeenCalledOnce();
       });
       expect(acknowledged).toBeFalsy();
-      expect(processNotification.mock.calls[0]).toStrictEqual([
-        {
-          emailAddress,
-          historyId: "123",
-          pubSubMessageId: "message-1",
-        },
-        env,
-      ]);
+      expect(send.mock.calls[0]?.[0]).toMatchObject({
+        emailAddress,
+        historyId: "123",
+        pubSubMessageId: "message-1",
+      });
+      expect(send.mock.calls[0]?.[0]).toHaveProperty("notificationReceivedAt");
       finish(null);
       const response = await responsePromise;
       expect(response.status).toBe(204);
@@ -355,9 +355,10 @@ describe("Cloudflare worker runtime", () => {
         ])
       );
       socket.close(1000, "done");
+      send.mockRestore();
     });
 
-    test("returns 5xx when direct processing transiently fails", async () => {
+    test("returns 5xx when durable enqueue fails", async () => {
       installFetchMock();
       const processNotification = vi
         .fn<(message: unknown, bindings: Env) => Promise<void>>()
@@ -368,19 +369,6 @@ describe("Cloudflare worker runtime", () => {
         processNotification
       ).catch((error: unknown) => requestErrorResponse(error, "/gmail/pubsub"));
       expect(response.status).toBe(500);
-    });
-
-    test("returns a retryable status while history continuation remains", async () => {
-      installFetchMock();
-      const processNotification = vi
-        .fn<(message: unknown, bindings: Env) => Promise<{ retry: boolean }>>()
-        .mockResolvedValue({ retry: true });
-      const response = await handlePubSub(
-        await pubSubRequest(envelope()),
-        env,
-        processNotification
-      ).catch((error: unknown) => requestErrorResponse(error, "/gmail/pubsub"));
-      expect(response.status).toBe(503);
     });
 
     test("does not process a notification with an invalid subscription", async () => {
@@ -396,6 +384,44 @@ describe("Cloudflare worker runtime", () => {
       ).rejects.toThrow("subscription");
       expect(processNotification).not.toHaveBeenCalled();
     });
+  });
+
+  test("recovers durable Gmail work with independent fresh and catchup wakeups", async () => {
+    const fresh = vi
+      .spyOn(env.GmailFreshProcessingQueue, "send")
+      .mockResolvedValue({
+        metadata: { metrics: { backlogBytes: 0, backlogCount: 1 } },
+      });
+    const catchup = vi
+      .spyOn(env.GmailCatchupProcessingQueue, "send")
+      .mockResolvedValue({
+        metadata: { metrics: { backlogBytes: 0, backlogCount: 1 } },
+      });
+    await runGmailMaintenance(env, {
+      listJobs: async () => await Promise.resolve([]),
+      listWorkJobs: async () =>
+        await Promise.resolve([
+          {
+            mailboxId: "recovered-fresh",
+            nextWakeAt: new Date(),
+            priority: "fresh",
+          },
+          {
+            mailboxId: "recovered-catchup",
+            nextWakeAt: new Date(Date.now() + 120_000),
+            priority: "catchup",
+          },
+        ]),
+    });
+    expect(fresh.mock.calls[0]?.[0]).toMatchObject({
+      mailboxId: "recovered-fresh",
+      priority: "fresh",
+    });
+    expect(catchup.mock.calls[0]?.[0]).toMatchObject({
+      mailboxId: "recovered-catchup",
+      priority: "catchup",
+    });
+    expect(catchup.mock.calls[0]?.[1]?.delaySeconds).toBeGreaterThan(0);
   });
 
   test("runs Gmail maintenance with bounded concurrency", async () => {
@@ -420,6 +446,7 @@ describe("Cloudflare worker runtime", () => {
     await expect(
       runGmailMaintenance(env, {
         listJobs,
+        listWorkJobs: async () => await Promise.resolve([]),
         maintainMailbox,
       })
     ).resolves.toMatchObject({ scanned: 9 });

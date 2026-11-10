@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
 import {
   getGmailCapturedSnapshot,
+  getMessageWithDetails,
   getThreadWithDetails,
   listGmailCaptureHistoryPage,
 } from "../src/service";
@@ -43,7 +44,16 @@ describe("Gmail capture adapter", () => {
             internalDate: "1700000000000",
             labelIds: ["INBOX"],
             payload: {
-              headers: [{ name: "From", value: "Sender <sender@example.com>" }],
+              headers: [
+                { name: "From", value: "Sender <sender@example.com>" },
+                { name: "Bcc", value: "private@example.com" },
+                { name: "Date", value: "Tue, 14 Nov 2023 22:13:20 +0000" },
+                { name: "Subject", value: "=?UTF-8?B?QWNjZXNzIGNvZGU=?=" },
+                {
+                  name: "OTP-Token",
+                  value: '"123456"; origin="https://example.com"',
+                },
+              ],
               mimeType: "multipart/mixed",
               parts: [
                 {
@@ -92,6 +102,24 @@ describe("Gmail capture adapter", () => {
       ])
     );
     expect(snapshot.providerRevision).toBe("9007199254740993");
+    const retained: CapturedMailSnapshot[] = [];
+    const message = await getMessageWithDetails(
+      "synthetic-token",
+      "example-message",
+      undefined,
+      (captured) => {
+        retained.push(captured);
+      }
+    );
+    expect(message).toMatchObject({
+      bcc: "private@example.com",
+      bodyHtml: snapshot.bodyHtml,
+      bodyText: snapshot.bodyText,
+      date: "Tue, 14 Nov 2023 22:13:20 +0000",
+      otpToken: { code: "123456", origin: "https://example.com" },
+      subject: "Access code",
+    });
+    expect(retained).toStrictEqual([snapshot]);
   });
 
   test("captures deeply nested content when an older thread is opened", async () => {

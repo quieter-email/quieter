@@ -20,11 +20,13 @@ import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import * as aiMemory from "../src/ai-memory";
 import * as aiMemoryCapture from "../src/ai-memory-capture";
 import type { runAuthorizedGmailMailbox } from "../src/gmail-mailbox-access";
+import { processGmailMessage } from "../src/gmail-sync/message";
 import {
   listGmailPubSubMaintenanceJobs,
   processGmailPubSubNotification,
   retryPendingAutomationMessages,
 } from "../src/gmail-sync/service";
+import type { enqueueGmailMessageWork } from "../src/gmail-sync/work-store";
 import type { getMailAutomationAiBudgetStatus } from "../src/mail-automation/ai-budget";
 import { MAIL_AUTOMATION_AI_PAUSED_MESSAGE } from "../src/mail-automation/ai-budget";
 import type { loadMailAutoLabelHistory } from "../src/mail-automation/history";
@@ -42,6 +44,7 @@ const fixtures = vi.hoisted(() => ({
   budget: vi.fn<() => Promise<BudgetStatus>>(),
   capture: vi.fn<typeof processGmailMailCapture>(),
   classify: vi.fn<typeof classifyMailMessage>(),
+  enqueueWork: vi.fn<typeof enqueueGmailMessageWork>(),
   eventReadFailure: null as Error | null,
   getMessage: vi.fn<typeof getMessageWithDetails>(),
   history: vi.fn<typeof loadMailAutoLabelHistory>(),
@@ -111,6 +114,8 @@ vi.mock("drizzle-orm", async (importOriginal) => {
       const current = row[column.name];
       return current instanceof Date && current <= value;
     },
+    ne: (column: { name: string }, value: unknown) => (row: Row) =>
+      row[column.name] !== value,
     or:
       (...predicates: Predicate[]) =>
       (row: Row, outerRow?: Row) =>
@@ -209,6 +214,34 @@ vi.mock("@quieter/database/client", () => {
   return client;
 });
 
+vi.mock(import("../src/gmail-sync/work-store"), () => ({
+  deferGmailMailboxProvider: async (mailboxId: string, retryAt: Date) => {
+    const state = fixtures.watchStates.find(
+      (row) => row.mailboxId === mailboxId
+    );
+    const previous = state?.providerRetryAt;
+    const deadline =
+      previous instanceof Date && previous > retryAt ? previous : retryAt;
+    if (state) {
+      state.providerRetryAt = deadline;
+    }
+    return deadline;
+  },
+  enqueueGmailMessageWork: fixtures.enqueueWork,
+  getGmailMailboxProviderRetryAt: async (mailboxId: string) => {
+    const deadline = fixtures.watchStates.find(
+      (row) => row.mailboxId === mailboxId
+    )?.providerRetryAt;
+    return deadline instanceof Date ? deadline : null;
+  },
+  hasPendingFreshGmailWorkForAccount: async () => false,
+}));
+
+vi.mock(import("../src/mail-automation/ai-budget"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  getMailAutomationAiBudgetStatus: fixtures.budget,
+}));
+
 vi.mock(import("@quieter/gmail"), async (importOriginal) => ({
   ...(await importOriginal()),
   getMessageWithDetails: fixtures.getMessage,
@@ -246,7 +279,8 @@ vi.mock(import("../src/mail-automation/history"), () => ({
   loadMailAutoLabelHistory: fixtures.history,
 }));
 
-vi.mock(import("../src/verification-codes"), () => ({
+vi.mock(import("../src/verification-codes"), async (importOriginal) => ({
+  ...(await importOriginal()),
   listPendingMailboxVerificationCodeMessageIds: fixtures.pendingCodeRead,
   processMailVerificationCode: fixtures.processCode,
   reportPendingMailboxVerificationCodeUsage: vi.fn<() => Promise<void>>(),
@@ -276,6 +310,7 @@ const input = {
 describe("Gmail automation retry recovery", () => {
   beforeEach(() => {
     fixtures.classify.mockReset();
+    fixtures.enqueueWork.mockReset().mockResolvedValue();
     fixtures.history.mockReset().mockResolvedValue(null);
     vi.spyOn(aiMemory, "loadAiAgentContext")
       .mockReset()
@@ -313,6 +348,7 @@ describe("Gmail automation retry recovery", () => {
       mailboxId: input.mailboxId,
       processingLeaseExpiresAt: null,
       processingLeaseId: null,
+      providerRetryAt: null,
       recoveryAfter: null,
       recoveryPageToken: null,
     });
@@ -321,7 +357,7 @@ describe("Gmail automation retry recovery", () => {
       .mockReset()
       .mockResolvedValue(fixtures.pendingCodeMessageIds);
     fixtures.eventReadFailure = null;
-    fixtures.processCode.mockReset().mockResolvedValue();
+    fixtures.processCode.mockReset().mockResolvedValue({ status: "complete" });
     fixtures.budget.mockReset().mockResolvedValue({
       allowed: true,
       reason: "allowed",
@@ -350,6 +386,7 @@ describe("Gmail automation retry recovery", () => {
       pendingHistoryPage: null,
       phase: "history",
       provider: "gmail",
+      providerRetryAt: null,
       recoveryAfter: null,
       recoveryPageToken: null,
       status: "connected",
@@ -358,7 +395,130 @@ describe("Gmail automation retry recovery", () => {
     });
   });
 
-  test("stops dispatching mail after throttling and retains the provider retry deadline", async () => {
+  test("labels while code extraction is running and publishes both before memory capture finishes", async () => {
+    const code = Promise.withResolvers<true>();
+    const memory = Promise.withResolvers<true>();
+    let criticalFinished = false;
+    fixtures.processCode.mockImplementation(async ({ loadMessage }) => {
+      await loadMessage();
+      await code.promise;
+      return { status: "complete" };
+    });
+    const capture = vi
+      .spyOn(aiMemoryCapture, "captureMailboxMessageMemory")
+      .mockImplementation(async () => {
+        await memory.promise;
+        return null;
+      });
+    const pending = processGmailMessage({
+      ...input,
+      extractCodes: true,
+      gmailMessageId: "deferred-message",
+      onCriticalComplete: () => {
+        criticalFinished = true;
+      },
+    });
+    try {
+      await vi.waitFor(() => {
+        expect(fixtures.rows[0]?.appliedAt).toBeInstanceOf(Date);
+      });
+      expect(criticalFinished).toBeFalsy();
+      expect(capture).not.toHaveBeenCalled();
+      code.resolve(true);
+      await vi.waitFor(() => {
+        expect(criticalFinished).toBeTruthy();
+      });
+      expect(fixtures.rows[0]?.appliedAt).toBeInstanceOf(Date);
+      expect(fixtures.getMessage).toHaveBeenCalledOnce();
+    } finally {
+      code.resolve(true);
+      memory.resolve(true);
+      await pending;
+      capture.mockRestore();
+    }
+  });
+
+  test("persists a short admission retry without consuming a provider failure attempt", async () => {
+    Object.assign(fixtures.rows[0] ?? {}, {
+      attemptCount: 2,
+      nextAttemptAt: null,
+    });
+    const result = await processGmailMessage({
+      ...input,
+      automationRuntime: {
+        ...input.automationRuntime,
+        getAutoLabelContext: async () => {
+          throw new AiCreditAdmissionBusyError();
+        },
+      },
+      extractCodes: false,
+      gmailMessageId: "deferred-message",
+    });
+    expect(result.autoLabel).toMatchObject({
+      reason: "admission_busy",
+      status: "retry",
+    });
+    expect(fixtures.rows[0]?.attemptCount).toBe(2);
+    expect(Number(fixtures.rows[0]?.nextAttemptAt)).toBeGreaterThan(Date.now());
+    expect(Number(fixtures.rows[0]?.nextAttemptAt) - Date.now()).toBeLessThan(
+      30_000
+    );
+    expect(fixtures.reported).not.toHaveBeenCalled();
+  });
+
+  test("does not confuse admission contention with a resumable exhausted budget", async () => {
+    Object.assign(fixtures.rows[0] ?? {}, {
+      lastError: new AiCreditAdmissionBusyError().message,
+      nextAttemptAt: new Date(Date.now() + 30_000),
+    });
+    await retryPendingAutomationMessages(input);
+    expect(fixtures.rows[0]?.appliedAt).toBeNull();
+    expect(fixtures.budget).not.toHaveBeenCalled();
+  });
+
+  test("can finish labeling while code extraction has its own pending claim", async () => {
+    fixtures.processCode.mockResolvedValue({
+      reason: "in_progress",
+      retryAt: new Date(Date.now() + 60_000),
+      status: "retry",
+    });
+    const result = await processGmailMessage({
+      ...input,
+      extractCodes: true,
+      gmailMessageId: "deferred-message",
+    });
+    expect(result.verificationCode).toMatchObject({
+      reason: "in_progress",
+      status: "retry",
+    });
+    expect(result.autoLabel).toMatchObject({ status: "complete" });
+    expect(fixtures.rows[0]?.appliedAt).toBeInstanceOf(Date);
+  });
+
+  test("processes codes without retrying labeling before its failure deadline", async () => {
+    const retryAt = new Date(Date.now() + 5 * 60_000);
+    Object.assign(fixtures.rows[0] ?? {}, {
+      attemptCount: 1,
+      lastError: "Provider failure",
+      nextAttemptAt: retryAt,
+    });
+    const result = await processGmailMessage({
+      ...input,
+      extractCodes: true,
+      gmailMessageId: "deferred-message",
+    });
+    expect(result.verificationCode).toMatchObject({ status: "complete" });
+    expect(result.autoLabel).toMatchObject({
+      reason: "failure",
+      retryAt,
+      status: "retry",
+    });
+    expect(fixtures.rows[0]?.appliedAt).toBeNull();
+    expect(fixtures.mutate).not.toHaveBeenCalled();
+    expect(fixtures.classify).not.toHaveBeenCalled();
+  });
+
+  test("retains the provider retry deadline without processing another message", async () => {
     const [event] = fixtures.rows;
     if (event === undefined) {
       throw new Error("Missing fixture.");
@@ -376,7 +536,9 @@ describe("Gmail automation retry recovery", () => {
     });
     fixtures.getMessage.mockRejectedValue(failure);
     await expect(
-      retryPendingAutomationMessages({
+      processGmailMessage({
+        extractCodes: true,
+        gmailMessageId: "deferred-message",
         ...input,
         automationRuntime: {
           ...input.automationRuntime,
@@ -456,7 +618,9 @@ describe("Gmail automation retry recovery", () => {
       fixtures.history.mockRejectedValue(historyFailure);
       try {
         await expect(
-          retryPendingAutomationMessages({
+          processGmailMessage({
+            extractCodes: true,
+            gmailMessageId: "deferred-message",
             ...input,
             automationRuntime: {
               ...input.automationRuntime,
@@ -545,7 +709,9 @@ describe("Gmail automation retry recovery", () => {
     fixtures.history.mockRejectedValue(failure);
     try {
       await expect(
-        retryPendingAutomationMessages({
+        processGmailMessage({
+          extractCodes: true,
+          gmailMessageId: "deferred-message",
           ...input,
           automationRuntime: {
             ...input.automationRuntime,
@@ -584,11 +750,14 @@ describe("Gmail automation retry recovery", () => {
     fixtures.getMessage.mockRejectedValue(failure);
     fixtures.processCode.mockImplementation(async () => {
       await work.promise;
+      return { status: "complete" };
     });
     let settled = false;
     const pending = (async () => {
       try {
-        await retryPendingAutomationMessages({
+        await processGmailMessage({
+          extractCodes: true,
+          gmailMessageId: "deferred-message",
           ...input,
           autoLabelEnabled: false,
         });
@@ -610,7 +779,7 @@ describe("Gmail automation retry recovery", () => {
     await expect(pending).resolves.toBe(failure);
   });
 
-  test("holds mailbox retry ownership until the provider deadline and resumes pending history afterward", async () => {
+  test("holds the mailbox provider cooldown until its deadline and resumes pending history afterward", async () => {
     fixtures.rows.length = 0;
     const [state] = fixtures.watchStates;
     if (state === undefined) {
@@ -637,8 +806,8 @@ describe("Gmail automation retry recovery", () => {
       expect(first).toMatchObject({ busy: true, needsContinuation: true });
       expect(captureOwnedLease).toBeTruthy();
       expect(state.historyPageToken).toBe("pending-page");
-      expect(state.processingLeaseExpiresAt).toBeInstanceOf(Date);
-      const nextOwnerAt = Number(state.processingLeaseExpiresAt);
+      expect(state.providerRetryAt).toBeInstanceOf(Date);
+      const nextOwnerAt = Number(state.providerRetryAt);
       expect(nextOwnerAt).toBeGreaterThan(Date.now());
       await expect(
         processGmailPubSubNotification(notification)
@@ -681,7 +850,13 @@ describe("Gmail automation retry recovery", () => {
 
     await retryPendingAutomationMessages(input);
 
-    expect(deferred?.appliedAt).toBeInstanceOf(Date);
+    const queued = fixtures.enqueueWork.mock.calls.flatMap(
+      ([job]) => job.messageIds
+    );
+    expect(queued).toContain("deferred-message");
+    expect(queued).not.toContain("failed-message");
+    expect(queued).not.toContain("classified-message");
+    expect(queued).not.toContain("other-message");
     expect(failed.appliedAt).toBeNull();
     expect(classified.appliedAt).toBeNull();
     expect(otherMailbox.appliedAt).toBeNull();
@@ -699,7 +874,9 @@ describe("Gmail automation retry recovery", () => {
     expect(fixtures.rows[0]?.appliedAt).toBeNull();
     fixtures.budget.mockResolvedValue({ allowed: true, reason: "allowed" });
     await retryPendingAutomationMessages(input);
-    expect(fixtures.rows[0]?.appliedAt).toBeInstanceOf(Date);
+    expect(
+      fixtures.enqueueWork.mock.calls.flatMap(([job]) => job.messageIds)
+    ).toContain("deferred-message");
   });
 
   test("processes due retries without checking budget solely for future failures", async () => {
@@ -718,7 +895,11 @@ describe("Gmail automation retry recovery", () => {
 
     await retryPendingAutomationMessages(input);
 
-    expect(due.appliedAt).toBeInstanceOf(Date);
+    const queued = fixtures.enqueueWork.mock.calls.flatMap(
+      ([job]) => job.messageIds
+    );
+    expect(queued).toContain("deferred-message");
+    expect(queued).not.toContain("future-failure-message");
     expect(fixtures.rows[1]?.appliedAt).toBeNull();
     expect(fixtures.budget).not.toHaveBeenCalled();
   });
@@ -752,7 +933,9 @@ describe("Gmail automation retry recovery", () => {
         inclusionCriteria: null,
         name: "Sender",
       };
-      await retryPendingAutomationMessages({
+      await processGmailMessage({
+        extractCodes: true,
+        gmailMessageId: "deferred-message",
         ...input,
         automationRuntime: {
           ...input.automationRuntime,

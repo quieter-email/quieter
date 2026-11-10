@@ -1,0 +1,1 @@
+ALTER TABLE "gmailWatchState" ADD COLUMN "providerRetryAt" timestamp;

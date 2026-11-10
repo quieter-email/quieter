@@ -2044,7 +2044,8 @@ export const getThreadWithDetails = async (
 export const getMessageWithDetails = async (
   accessToken: string,
   messageId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onSnapshot?: (snapshot: CapturedMailSnapshot) => void | Promise<void>
 ): Promise<MessageListItem> => {
   const message = await requestGmail(
     accessToken,
@@ -2053,12 +2054,24 @@ export const getMessageWithDetails = async (
     { query: { format: "full" }, signal }
   );
 
-  return await toMessageListItem(
+  const item = await toMessageListItem(
     accessToken,
     message,
     { includeAttachmentMetadata: true, includeBody: true },
     signal
   );
+  if (
+    onSnapshot &&
+    message.labelIds?.includes(MAILBOX_LABELS.drafts) !== true
+  ) {
+    await onSnapshot(
+      toGmailCapturedSnapshot(message, {
+        html: item.bodyHtml,
+        text: item.bodyText,
+      })
+    );
+  }
+  return item;
 };
 
 export const getMessageInspector = async (

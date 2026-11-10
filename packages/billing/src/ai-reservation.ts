@@ -91,7 +91,17 @@ export const getOutstandingAiCreditReservations = async (
   return reserved?.cost ?? 0;
 };
 
-export const reserveAiCreditUsage = async (context: AiBillingContext) => {
+export const reserveAiCreditUsage = async (
+  context: AiBillingContext,
+  maximumCostUsd?: number
+) => {
+  const maximumCostMicroCents =
+    maximumCostUsd === undefined
+      ? undefined
+      : getAiUsageCostMicroCents(maximumCostUsd);
+  if (maximumCostMicroCents !== undefined) {
+    assertBillingMoney(maximumCostMicroCents);
+  }
   if (context.kind === "development") {
     if (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local") {
       throw new Error(
@@ -119,7 +129,10 @@ export const reserveAiCreditUsage = async (context: AiBillingContext) => {
     await lockBillingAccount(account, tx, { admission: true });
     const budget = await getBillingBudget(account, tx);
     const [openReservation] = await tx
-      .select({ id: aiCreditReservation.id })
+      .select({
+        createdAt: aiCreditReservation.createdAt,
+        id: aiCreditReservation.id,
+      })
       .from(aiCreditReservation)
       .where(
         and(
@@ -130,8 +143,15 @@ export const reserveAiCreditUsage = async (context: AiBillingContext) => {
           eq(aiCreditReservation.status, "reserved")
         )
       )
+      .orderBy(aiCreditReservation.createdAt)
       .limit(1);
-    if (openReservation !== undefined) {
+    if (
+      openReservation !== undefined &&
+      (maximumCostMicroCents === undefined ||
+        budget.authorizedCostMicroCents === 0 ||
+        openReservation.createdAt < account.currentPeriodStart ||
+        openReservation.createdAt >= account.currentPeriodEnd)
+    ) {
       throw new AiCreditAdmissionBusyError();
     }
     if (budget.authorizedCostMicroCents === 0) {
@@ -139,11 +159,28 @@ export const reserveAiCreditUsage = async (context: AiBillingContext) => {
         message: "AI features require available usage balance.",
       });
     }
+    if (
+      maximumCostMicroCents !== undefined &&
+      maximumCostMicroCents >
+        (budget.authorizedCostMicroCents ??
+          Number.MAX_SAFE_INTEGER - budget.pendingMicroCents) &&
+      openReservation !== undefined
+    ) {
+      throw new AiCreditAdmissionBusyError();
+    }
+    const reservedCostMicroCents = Math.min(
+      maximumCostMicroCents ?? Number.MAX_SAFE_INTEGER,
+      budget.authorizedCostMicroCents ??
+        Number.MAX_SAFE_INTEGER - budget.pendingMicroCents
+    );
     const id = crypto.randomUUID();
     await tx.insert(aiCreditReservation).values({
       account: {
         ...account,
-        authorizedCostMicroCents: budget.authorizedCostMicroCents,
+        authorizedCostMicroCents:
+          maximumCostMicroCents === undefined
+            ? budget.authorizedCostMicroCents
+            : reservedCostMicroCents,
         currentPeriodEnd: account.currentPeriodEnd.toISOString(),
         currentPeriodStart: account.currentPeriodStart.toISOString(),
       },
@@ -152,9 +189,7 @@ export const reserveAiCreditUsage = async (context: AiBillingContext) => {
       groupId: context.groupId,
       id,
       organizationId: account.organizationId,
-      reservedCostMicroCents:
-        budget.authorizedCostMicroCents ??
-        Number.MAX_SAFE_INTEGER - budget.pendingMicroCents,
+      reservedCostMicroCents,
       status: "reserved",
       usageKind: context.usageKind,
     });

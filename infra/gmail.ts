@@ -33,9 +33,27 @@ export const createGmailResources = (
     gmailMaintenance: $util.Output<string>;
   } | null = null;
   let gmailPubSubIngressUrl: $util.Output<string> | null = null;
+  let gmailProcessingQueues: {
+    deadLetter: $util.Output<string>;
+    pending: $util.Output<string>;
+    fresh: $util.Output<string>;
+    catchup: $util.Output<string>;
+  } | null = null;
 
   if (context.gmailPubSubEnabled) {
     const sentryDsnBinding = requireSecretBinding(secretBindings, "SENTRY_DSN");
+    const gmailProcessingDeadLetterQueue = new sst.cloudflare.Queue(
+      "GmailProcessingDeadLetterQueue"
+    );
+    const gmailProcessingQueue = new sst.cloudflare.Queue(
+      "GmailProcessingQueue"
+    );
+    const gmailFreshProcessingQueue = new sst.cloudflare.Queue(
+      "GmailFreshProcessingQueue"
+    );
+    const gmailCatchupProcessingQueue = new sst.cloudflare.Queue(
+      "GmailCatchupProcessingQueue"
+    );
     // Production already applied v1 (old class) and v2 (delete), so the class
     // returns under a new name in v3.
     const gmailLiveSyncMailbox = new sst.cloudflare.DurableObject(
@@ -71,6 +89,9 @@ export const createGmailResources = (
         },
         handler: "packages/cloudflare/src/worker.ts",
         link: [
+          gmailProcessingQueue,
+          gmailFreshProcessingQueue,
+          gmailCatchupProcessingQueue,
           gmailLiveSyncMailbox,
           mailLiveUser,
           updates.reminders,
@@ -109,6 +130,64 @@ export const createGmailResources = (
       }
     );
 
+    // oxlint-disable-next-line no-new -- Pulumi registers this consumer with the existing realtime Worker.
+    new cloudflare.QueueConsumer("GmailProcessingConsumer", {
+      accountId: gmailProcessingQueue.nodes.queue.accountId.apply(
+        (accountId) => {
+          if (accountId === undefined) {
+            throw new Error(
+              "Gmail processing queue is missing its account ID."
+            );
+          }
+          return accountId;
+        }
+      ),
+      deadLetterQueue: gmailProcessingDeadLetterQueue.nodes.queue.queueName,
+      queueId: gmailProcessingQueue.id,
+      scriptName: gmailRealtimeWorker.nodes.worker.scriptName,
+      settings: {
+        batchSize: 1,
+        maxConcurrency: 2,
+        maxRetries: 100,
+        maxWaitTimeMs: 0,
+        retryDelay: 60,
+      },
+      type: "worker",
+    });
+    for (const [name, queue, maxConcurrency] of [
+      ["GmailFreshProcessingConsumer", gmailFreshProcessingQueue, 4],
+      ["GmailCatchupProcessingConsumer", gmailCatchupProcessingQueue, 2],
+    ] as const) {
+      // oxlint-disable-next-line no-new -- Pulumi registers each independent consumer with the realtime Worker.
+      new cloudflare.QueueConsumer(name, {
+        accountId: queue.nodes.queue.accountId.apply((accountId) => {
+          if (accountId === undefined) {
+            throw new Error(
+              "Gmail processing queue is missing its account ID."
+            );
+          }
+          return accountId;
+        }),
+        deadLetterQueue: gmailProcessingDeadLetterQueue.nodes.queue.queueName,
+        queueId: queue.id,
+        scriptName: gmailRealtimeWorker.nodes.worker.scriptName,
+        settings: {
+          batchSize: 1,
+          maxConcurrency,
+          maxRetries: 100,
+          maxWaitTimeMs: 0,
+          retryDelay: 60,
+        },
+        type: "worker",
+      });
+    }
+    gmailProcessingQueues = {
+      catchup: gmailCatchupProcessingQueue.nodes.queue.queueName,
+      deadLetter: gmailProcessingDeadLetterQueue.nodes.queue.queueName,
+      fresh: gmailFreshProcessingQueue.nodes.queue.queueName,
+      pending: gmailProcessingQueue.nodes.queue.queueName,
+    };
+
     const gmailPubSubMaintenance = new sst.cloudflare.Cron(
       "GmailPubSubMaintenance",
       {
@@ -130,6 +209,8 @@ export const createGmailResources = (
           handler: "packages/cloudflare/src/gmail-maintenance-worker.ts",
           link: [
             appDatabase,
+            gmailFreshProcessingQueue,
+            gmailCatchupProcessingQueue,
             mailLiveUser,
             sentryDsnBinding,
             ...processingSecretBindings,
@@ -168,6 +249,7 @@ export const createGmailResources = (
   return {
     actionWorkers,
     gmailLiveSyncUrl,
+    gmailProcessingQueues,
     gmailPubSubIngressUrl,
   };
 };

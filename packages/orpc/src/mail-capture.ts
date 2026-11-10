@@ -32,6 +32,7 @@ import {
   inArray,
   isNull,
   lt,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -254,6 +255,21 @@ const captureMessage = async (input: {
   source: typeof gmailCapturedMessage.$inferInsert.source;
   leaseId: string;
 }) => {
+  const [retained] = await db
+    .select({ messageId: gmailCapturedMessage.messageId })
+    .from(gmailCapturedMessage)
+    .where(
+      and(
+        eq(gmailCapturedMessage.mailboxId, input.mailboxId),
+        eq(gmailCapturedMessage.messageId, input.messageId),
+        ne(gmailCapturedMessage.source, "search"),
+        sql`${gmailCapturedMessage.providerRevision}::numeric >= ${input.providerRevision}::numeric`
+      )
+    )
+    .limit(1);
+  if (retained !== undefined) {
+    return;
+  }
   try {
     const snapshot = await getGmailCapturedSnapshot(
       input.accessToken,

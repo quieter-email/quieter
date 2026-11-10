@@ -11,8 +11,13 @@ import {
   vi,
 } from "vite-plus/test";
 
-import { createAiBillingMiddleware, runBilledAiRequest } from "../src/billing";
+import {
+  createAiBillingMiddleware,
+  getMailAiRequestBudget,
+  runBilledAiRequest,
+} from "../src/billing";
 import { detectMailVerificationCode } from "../src/classify-gmail-message";
+import { createChatModel } from "../src/openrouter";
 import { openRouterStreamMiddleware } from "../src/openrouter-stream";
 import { generateOpenRouterTranscription } from "../src/openrouter-transcription";
 
@@ -178,6 +183,87 @@ describe("paid provider admission and settlement", () => {
     expect(state.release).toHaveBeenCalledOnce();
     expect(state.settle).not.toHaveBeenCalled();
   });
+
+  test("preserves the provider's actual cost and rejects its output when it violates the admitted ceiling", async () => {
+    const costUsd = 0.02;
+    await expect(
+      runBilledAiRequest({
+        billing,
+        maximumCostUsd: 0.01,
+        run: async () => {
+          await Promise.resolve();
+          return { costUsd, result: "Untrusted result" };
+        },
+      })
+    ).rejects.toThrow(/exceeded.*ceiling/u);
+    expect(state.settle).toHaveBeenCalledWith(
+      expect.objectContaining({ costUsd })
+    );
+    expect(state.release).not.toHaveBeenCalled();
+  });
+
+  test("refuses mail provider dispatch when its native context no longer fits the complete hold", async () => {
+    const provider = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        data: {
+          endpoints: [
+            { context_length: Number.MAX_SAFE_INTEGER, tag: "typesafe" },
+          ],
+        },
+      })
+    );
+    vi.stubGlobal("fetch", provider);
+    await expect(
+      detectMailVerificationCode({
+        billing: {
+          ...billing,
+          account: {
+            creditAmountCents: 100,
+            currentPeriodEnd: new Date(Date.now() + 3_600_000),
+            currentPeriodStart: new Date(),
+            externalCustomerId: "synthetic-account",
+            organizationId: billing.organizationId,
+            product: "pro",
+          },
+        },
+        message: { bodyText: "Synthetic content", id: "message" },
+      })
+    ).rejects.toThrow(/ceiling has changed/u);
+    expect(state.reserve).not.toHaveBeenCalled();
+    expect(
+      provider.mock.calls.every(([input]) =>
+        new Request(input).url.endsWith("/endpoints")
+      )
+    ).toBeTruthy();
+  });
+
+  test.each([
+    { max_tokens: 1_000_000 },
+    { models: ["unbounded-model"] },
+    { plugins: [{ id: "web" }] },
+  ])(
+    "rejects call-level provider options that could bypass the mail spending contract",
+    async (override) => {
+      const provider = vi.fn<typeof fetch>();
+      vi.stubGlobal("fetch", provider);
+      const model = createChatModel("google/gemini-3.1-flash-lite", {
+        billing,
+        mailRequestBudget: await getMailAiRequestBudget(
+          "google/gemini-3.1-flash-lite",
+          { kind: "development" }
+        ),
+      });
+      await expect(
+        model.doGenerate({
+          maxOutputTokens: 100,
+          prompt: [],
+          providerOptions: { openrouter: override },
+        })
+      ).rejects.toThrow(/exceeds.*ceiling/u);
+      expect(provider).not.toHaveBeenCalled();
+      expect(state.reserve).not.toHaveBeenCalled();
+    }
+  );
 
   test("the shared SDK boundary blocks generation before invoking the model", async () => {
     const provider = new MockLanguageModelV4();

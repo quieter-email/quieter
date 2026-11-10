@@ -5,6 +5,22 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-08-04",
   "compatibility_flags": ["nodejs_compat"],
+  "queues": {
+    "producers": [
+      {
+        "binding": "GmailProcessingQueue",
+        "queue": "quieter-gmail-processing-types",
+      },
+      {
+        "binding": "GmailFreshProcessingQueue",
+        "queue": "quieter-gmail-fresh-processing-types",
+      },
+      {
+        "binding": "GmailCatchupProcessingQueue",
+        "queue": "quieter-gmail-catchup-processing-types",
+      },
+    ],
+  },
   "vars": {
     "BETTER_AUTH_URL": "https://quieter.example",
     "CONNECTOR_TOKEN_ENCRYPTION_KEY": "connector-token-key",
