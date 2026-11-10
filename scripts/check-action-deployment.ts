@@ -172,9 +172,19 @@ export const checkActionDeployment = async (input: {
         );
       }
       if (target.role === "gmailProcessing") {
+        const scripts = z
+          .array(
+            z.object({ id: z.string(), placement: z.unknown().optional() })
+          )
+          .parse(await api("scripts"));
         z.object({
-          placement: z.object({ region: z.literal("aws:eu-central-1") }),
-        }).parse(await api(`scripts/${target.script}/settings`));
+          placement: z.object({
+            mode: z.literal("targeted"),
+            target: z.tuple([
+              z.object({ region: z.literal("aws:eu-central-1") }),
+            ]),
+          }),
+        }).parse(scripts.find((script) => script.id === target.script));
       }
       if (target.private) {
         const subdomain = z

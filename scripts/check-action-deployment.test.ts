@@ -48,6 +48,8 @@ let publicSlot = false;
 let incompatible = false;
 let processorBinding = "gmail-processing";
 let processorRegion = "aws:eu-central-1";
+let processorScript = "gmail-processing";
+let extraPlacementTarget = false;
 let publicProcessor = false;
 
 const verify = async () => {
@@ -69,6 +71,8 @@ describe("deployed Action consumer verification", () => {
     incompatible = false;
     processorBinding = "gmail-processing";
     processorRegion = "aws:eu-central-1";
+    processorScript = "gmail-processing";
+    extraPlacementTarget = false;
     publicProcessor = false;
     lambda.buildId = "new-build";
     await writeFile(
@@ -118,8 +122,24 @@ describe("deployed Action consumer verification", () => {
             enabled: url.includes("/gmail-processing/") ? false : publicSlot,
             previews_enabled: exposed,
           };
+        } else if (url.endsWith("/scripts")) {
+          result = [
+            { id: "unrelated-worker" },
+            {
+              id: processorScript,
+              placement: {
+                mode: "targeted",
+                target: [
+                  { id: 39, region: processorRegion, type: "region" },
+                  ...(extraPlacementTarget
+                    ? [{ region: "aws:us-east-1", type: "region" }]
+                    : []),
+                ],
+              },
+            },
+          ];
         } else if (url.endsWith("/settings")) {
-          result = { placement: { region: processorRegion } };
+          result = { placement: { mode: "targeted", target: [39] } };
         } else {
           result = {
             id: version,
@@ -219,6 +239,16 @@ describe("deployed Action consumer verification", () => {
 
   test("rejects missing regional processor placement", async () => {
     processorRegion = "aws:us-east-1";
+    await expect(verify()).rejects.toThrow(/./u);
+  });
+
+  test("rejects placement metadata for a different script", async () => {
+    processorScript = "another-processor";
+    await expect(verify()).rejects.toThrow(/./u);
+  });
+
+  test("rejects additional placement targets", async () => {
+    extraPlacementTarget = true;
     await expect(verify()).rejects.toThrow(/./u);
   });
 
