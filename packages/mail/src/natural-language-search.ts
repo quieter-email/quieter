@@ -56,7 +56,6 @@ const FIXED_FILTER_PHRASE_TABLE: FixedFilterPhrase[] = [
   { filter: { type: "is", value: "read" }, phrase: "opened" },
   { filter: { type: "is", value: "read" }, phrase: "read" },
   { filter: { type: "is", value: "inbox" }, phrase: "inbox" },
-  { filter: { type: "is", value: "archived" }, phrase: "archived" },
   { filter: { type: "is", value: "spam" }, phrase: "junk" },
   { filter: { type: "is", value: "spam" }, phrase: "spam" },
   { filter: { type: "is", value: "trash" }, phrase: "binned" },

@@ -211,9 +211,7 @@ export const aiRouter = {
       try {
         parsed = await parseMailSearchWithAi({
           allowedIsValues:
-            mailbox.provider === "managed"
-              ? undefined
-              : ["archived", "read", "unread"],
+            mailbox.provider === "managed" ? undefined : ["read", "unread"],
           availableLabels: input.availableLabels ?? [],
           billing: await createMailboxAiBillingContext({
             externalId: `search-interpret:${requestId}`,

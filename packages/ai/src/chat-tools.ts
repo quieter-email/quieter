@@ -41,7 +41,6 @@ export const workspaceViewSchema = z.enum([
   "inbox",
   "important",
   "unread",
-  "archive",
   "spam",
   "sent",
   "trash",

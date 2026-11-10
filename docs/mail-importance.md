@@ -1,6 +1,6 @@
 # Mail importance
 
-Important is a mailbox category backed by incoming message classifications. It uses the ordinary thread list, search, reader, and mail actions. Archived messages can qualify. Spam, trash, drafts, and deleted messages do not qualify for the Important view.
+Important is a mailbox category backed by incoming message classifications. It uses the ordinary thread list, search, reader, and mail actions. Spam, trash, drafts, and deleted messages do not qualify for the Important view.
 
 A thread qualifies when at least one eligible incoming member is important. The thread indicator uses that aggregate even when the displayed list anchor is a different message. quieter importance does not read or change Gmail's native importance labels.
 

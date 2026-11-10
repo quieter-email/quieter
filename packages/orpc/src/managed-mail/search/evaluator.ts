@@ -62,9 +62,6 @@ const matchesIsFilter = (
   if (value === message.direction) {
     return true;
   }
-  if (value === "archived") {
-    return message.mailboxState === "archived";
-  }
   if (value === "spam") {
     return message.mailboxState === "spam";
   }

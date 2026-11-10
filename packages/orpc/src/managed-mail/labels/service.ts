@@ -61,9 +61,6 @@ const getMailboxStateFromLabelChanges = (input: {
   if (addLabelIds.has(MAILBOX_LABELS.spam)) {
     return "spam";
   }
-  if (removeLabelIds.has(MAILBOX_LABELS.inbox)) {
-    return "archived";
-  }
   if (
     addLabelIds.has(MAILBOX_LABELS.inbox) ||
     addLabelIds.has(MAILBOX_LABELS.sent) ||

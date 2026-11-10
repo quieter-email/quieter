@@ -3,7 +3,6 @@ export {
   addUnreadLabel,
   applyLabelIdChanges,
   hasRenderableMessageBody,
-  isMessageArchived,
   isMessageInMailbox,
   isMessageUnread,
   removeUnreadLabel,

@@ -438,24 +438,6 @@ export const useMessageViewHotkeys = ({
             return;
           }
           void runHotkeyThreadAction(async () => {
-            await mailboxActions.archiveThread(hotkeyMessage.threadId);
-            onBackToList?.();
-          }, "Conversation archived.");
-        },
-        hotkey: "E",
-        options: {
-          enabled:
-            !isActionPending &&
-            mailboxProvider !== "api" &&
-            (activeMailbox === "inbox" || activeMailbox === "unread"),
-        },
-      },
-      {
-        callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) {
-            return;
-          }
-          void runHotkeyThreadAction(async () => {
             await mailboxActions.moveThreadToTrash(hotkeyMessage.threadId);
             onBackToList?.();
           }, "Conversation moved to Trash.");

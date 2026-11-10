@@ -84,7 +84,7 @@ export const isMailSearchFilterSupported = (
   return !(
     provider === "gmail" &&
     filter.type === "is" &&
-    !["archived", "read", "unread"].includes(filter.value.toLocaleLowerCase())
+    !["read", "unread"].includes(filter.value.toLocaleLowerCase())
   );
 };
 
@@ -193,7 +193,6 @@ export const parseStructuredSearchFilterToken = (
   if (type === "is") {
     const normalizedValue = value.toLocaleLowerCase();
     return [
-      "archived",
       "inbox",
       "inbound",
       "outbound",

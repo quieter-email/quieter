@@ -8,6 +8,28 @@ import { mailCategorySchema } from "@quieter/mail/data-plane";
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import { z } from "zod";
 
+const updateLabelsInputSchema = z
+  .object({
+    addLabelIds: z.array(z.string()).optional(),
+    mailboxId: z.string().trim().min(1),
+    removeLabelIds: z.array(z.string()).optional(),
+  })
+  .refine(
+    (input) =>
+      !["INBOX", "SPAM", "TRASH"].some(
+        (labelId) => input.removeLabelIds?.includes(labelId) === true
+      ) ||
+      ["INBOX", "SPAM", "TRASH"].some(
+        (labelId) =>
+          input.addLabelIds?.includes(labelId) === true &&
+          input.removeLabelIds?.includes(labelId) !== true
+      ),
+    {
+      message: "Choose Inbox, Spam, or Trash when moving messages.",
+      path: ["removeLabelIds"],
+    }
+  );
+
 export const mailInputSchemas = {
   applyChanges: z
     .object({
@@ -15,15 +37,31 @@ export const mailInputSchemas = {
         z.object({ kind: z.literal("set-read"), read: z.boolean() }),
         z.object({ important: z.boolean(), kind: z.literal("set-importance") }),
         z.object({
-          destination: z.enum(["archive", "inbox", "spam", "trash"]),
+          destination: z.enum(["inbox", "spam", "trash"]),
           kind: z.literal("move"),
         }),
         z.object({ kind: z.literal("delete-permanently") }),
-        z.object({
-          addIds: z.array(z.string()),
-          kind: z.literal("set-labels"),
-          removeIds: z.array(z.string()),
-        }),
+        z
+          .object({
+            addIds: z.array(z.string()),
+            kind: z.literal("set-labels"),
+            removeIds: z.array(z.string()),
+          })
+          .refine(
+            (command) =>
+              !["INBOX", "SPAM", "TRASH"].some((labelId) =>
+                command.removeIds.includes(labelId)
+              ) ||
+              ["INBOX", "SPAM", "TRASH"].some(
+                (labelId) =>
+                  command.addIds.includes(labelId) &&
+                  !command.removeIds.includes(labelId)
+              ),
+            {
+              message: "Choose Inbox, Spam, or Trash when moving messages.",
+              path: ["removeIds"],
+            }
+          ),
       ]),
       mailboxId: z.string().trim().min(1),
       targets: z
@@ -155,15 +193,7 @@ export const mailInputSchemas = {
     message: composeMessageInputSchema,
   }),
   syncMailbox: z.object({
-    category: z.enum([
-      "inbox",
-      "important",
-      "unread",
-      "archive",
-      "spam",
-      "sent",
-      "trash",
-    ]),
+    category: z.enum(["inbox", "important", "unread", "spam", "sent", "trash"]),
     mailboxId: z.string().trim().min(1),
     startHistoryId: z.string().min(1),
   }),
@@ -195,16 +225,10 @@ export const mailInputSchemas = {
     labelId: z.string().trim().min(1),
     mailboxId: z.string().trim().min(1),
   }),
-  updateMessageLabels: z.object({
-    addLabelIds: z.array(z.string()).optional(),
-    mailboxId: z.string().trim().min(1),
+  updateMessageLabels: updateLabelsInputSchema.safeExtend({
     messageId: z.string(),
-    removeLabelIds: z.array(z.string()).optional(),
   }),
-  updateThreadLabels: z.object({
-    addLabelIds: z.array(z.string()).optional(),
-    mailboxId: z.string().trim().min(1),
-    removeLabelIds: z.array(z.string()).optional(),
+  updateThreadLabels: updateLabelsInputSchema.safeExtend({
     threadId: z.string(),
   }),
 };

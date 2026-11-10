@@ -40,7 +40,6 @@ import {
   isNotNull,
   isNull,
   lt,
-  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -89,9 +88,6 @@ const getManagedPrimarySystemLabelId = (message: {
 }) => {
   if (message.mailboxState === "draft") {
     return MAILBOX_LABELS.drafts;
-  }
-  if (message.mailboxState === "archived") {
-    return MAILBOX_LABELS.archive;
   }
   if (message.mailboxState === "trash") {
     return MAILBOX_LABELS.trash;
@@ -181,8 +177,8 @@ const getCategoryCondition = (category: MailboxCategory) => {
   if (category === "important") {
     return and(
       eq(managedMailMessage.direction, "inbound"),
-      inArray(managedMailMessage.mailboxState, ["active", "archived"]),
-      sql`exists (select 1 from ${mailMessageImportance} i inner join ${managedMailMessage} m on m."mailboxId" = i."mailboxId" and m.id = i."messageId" where i."mailboxId" = ${managedMailMessage.mailboxId} and i."threadId" = ${managedMailMessage.threadId} and coalesce(i."manualImportant", i."aiImportant", false) and m.direction = 'inbound' and m."mailboxState" in ('active', 'archived'))`
+      eq(managedMailMessage.mailboxState, "active"),
+      sql`exists (select 1 from ${mailMessageImportance} i inner join ${managedMailMessage} m on m."mailboxId" = i."mailboxId" and m.id = i."messageId" where i."mailboxId" = ${managedMailMessage.mailboxId} and i."threadId" = ${managedMailMessage.threadId} and coalesce(i."manualImportant", i."aiImportant", false) and m.direction = 'inbound' and m."mailboxState" = 'active')`
     );
   }
   if (category === "inbox") {
@@ -197,9 +193,6 @@ const getCategoryCondition = (category: MailboxCategory) => {
       eq(managedMailMessage.isRead, false),
       eq(managedMailMessage.mailboxState, "active")
     );
-  }
-  if (category === "archive") {
-    return eq(managedMailMessage.mailboxState, "archived");
   }
   if (category === "sent") {
     return and(
@@ -605,13 +598,10 @@ export const getManagedMessageInspector = async (input: {
 };
 
 const resolveManagedMoveMailboxState = (
-  destination: "archive" | "inbox" | "spam" | "trash"
+  destination: "inbox" | "spam" | "trash"
 ): ManagedMailMailboxState => {
   if (destination === "inbox") {
     return "active";
-  }
-  if (destination === "archive") {
-    return "archived";
   }
   return destination;
 };
@@ -753,14 +743,7 @@ export const applyManagedMessageChanges = async (input: {
       await tx
         .update(managedMailMessage)
         .set({ mailboxState, updatedAt: new Date() })
-        .where(
-          and(
-            baseCondition,
-            input.command.destination === "archive"
-              ? ne(managedMailMessage.mailboxState, "draft")
-              : undefined
-          )
-        );
+        .where(baseCondition);
     } else if (input.command.kind === "set-labels") {
       const labelIds = [
         ...new Set([...input.command.addIds, ...input.command.removeIds]),
@@ -850,10 +833,6 @@ const updateManagedThreadState = async (input: {
     requiredRoles: ["manager", "responder"],
     userId: input.userId,
   });
-  const stateCondition =
-    "mailboxState" in input.changes && input.changes.mailboxState === "archived"
-      ? ne(managedMailMessage.mailboxState, "draft")
-      : undefined;
   const { records, customLabels } = await db.transaction(async (tx) => {
     const lockedRecords = await tx
       .select({
@@ -866,8 +845,7 @@ const updateManagedThreadState = async (input: {
       .where(
         and(
           eq(managedMailMessage.mailboxId, input.mailboxId),
-          eq(managedMailMessage.threadId, input.threadId),
-          stateCondition
+          eq(managedMailMessage.threadId, input.threadId)
         )
       )
       .orderBy(asc(managedMailMessage.id))
@@ -886,8 +864,7 @@ const updateManagedThreadState = async (input: {
           inArray(
             managedMailMessage.id,
             lockedRecords.map((record) => record.id)
-          ),
-          stateCondition
+          )
         )
       );
     await tx

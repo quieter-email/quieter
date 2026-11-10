@@ -18,7 +18,7 @@ export type RuleActionKind = "forward" | "move" | "set-labels" | "set-read";
 
 export type RuleMatchMode = "all" | "any";
 
-export type RuleMoveDestination = "archive" | "inbox" | "spam" | "trash";
+export type RuleMoveDestination = "inbox" | "spam" | "trash";
 
 export type MailboxOrganizerState = ReturnType<typeof useMailboxOrganizerState>;
 

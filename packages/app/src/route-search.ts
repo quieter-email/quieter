@@ -30,7 +30,6 @@ const mailboxSearchCategories = [
   "inbox",
   "important",
   "unread",
-  "archive",
   "spam",
   "sent",
   "trash",
