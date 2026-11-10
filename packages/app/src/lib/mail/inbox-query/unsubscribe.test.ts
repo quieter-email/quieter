@@ -24,7 +24,7 @@ describe("remembered unsubscribe cache state", () => {
     ];
     const folder = getMessagesQueryKey("mailbox", "inbox");
     const important = getMessagesQueryKey("mailbox", "important");
-    const search = getMessagesQueryKey("mailbox", "archive", "updates");
+    const search = getMessagesQueryKey("mailbox", "important", "updates");
     const otherMailbox = getMessagesQueryKey("another", "inbox");
     const thread = getThreadQueryKey("mailbox", "first");
     for (const queryKey of [folder, important, search, otherMailbox]) {

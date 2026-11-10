@@ -41,7 +41,6 @@ const isMailboxCategory = (value: unknown): value is MailboxCategory =>
   value === "inbox" ||
   value === "important" ||
   value === "unread" ||
-  value === "archive" ||
   value === "spam" ||
   value === "sent" ||
   value === "trash" ||

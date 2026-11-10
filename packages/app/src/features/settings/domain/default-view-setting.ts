@@ -10,7 +10,6 @@ export const DEFAULT_VIEW_OPTIONS = [
   { label: "Unread", value: "unread" },
   { label: "Sent", value: "sent" },
   { label: "Drafts", value: "drafts" },
-  { label: "Archive", value: "archive" },
   { label: "Spam", value: "spam" },
   { label: "Trash", value: "trash" },
   { label: "Calendar", value: "calendar" },

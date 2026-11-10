@@ -42,7 +42,7 @@ export const useMailboxOrganizerState = ({
     useState<RuleActionKind>("set-labels");
   const [ruleReadState, setRuleReadState] = useState(true);
   const [ruleMoveDestination, setRuleMoveDestination] =
-    useState<RuleMoveDestination>("archive");
+    useState<RuleMoveDestination>("inbox");
   const [ruleForwardRecipients, setRuleForwardRecipients] = useState("");
   const [ruleForwardIncludesAttachments, setRuleForwardIncludesAttachments] =
     useState(false);

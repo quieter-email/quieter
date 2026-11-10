@@ -88,7 +88,6 @@ export const ChatContextPicker = ({
               { label: "Inbox", value: "inbox" },
               { label: "Unread", value: "unread" },
               { label: "Sent", value: "sent" },
-              { label: "Archive", value: "archive" },
               { label: "Drafts", value: "drafts" },
               { label: "Spam", value: "spam" },
               { label: "Trash", value: "trash" },
@@ -108,7 +107,6 @@ export const ChatContextPicker = ({
                 <SelectItem value="inbox">Inbox</SelectItem>
                 <SelectItem value="unread">Unread</SelectItem>
                 <SelectItem value="sent">Sent</SelectItem>
-                <SelectItem value="archive">Archive</SelectItem>
                 <SelectItem value="drafts">Drafts</SelectItem>
                 <SelectItem value="spam">Spam</SelectItem>
                 <SelectItem value="trash">Trash</SelectItem>

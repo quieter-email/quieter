@@ -52,7 +52,6 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
   {
     items: [
       { id: "go-inbox", label: "Inbox" },
-      { id: "go-archive", label: "Archive" },
       { id: "go-sent", label: "Sent" },
       { id: "go-drafts", label: "Drafts" },
       { id: "go-unread", label: "Unread" },
@@ -85,7 +84,6 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
   },
   {
     items: [
-      { context: "List", id: "list-archive" },
       { context: "List and detail", id: "list-trash" },
       { context: "List and detail", id: "list-spam" },
       { context: "List and detail", id: "list-mark-read" },

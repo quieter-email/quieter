@@ -154,7 +154,6 @@ export const applyBulkChangesInMailbox = async (
 };
 
 const METADATA_LABEL_CHANGES = {
-  archive: { removeLabelIds: [MAILBOX_LABELS.inbox] },
   read: { removeLabelIds: [MAILBOX_LABELS.unread] },
   spam: {
     addLabelIds: [MAILBOX_LABELS.spam],
@@ -185,7 +184,6 @@ export type MailMetadataOperation =
   | LabelChangeSet;
 
 const MESSAGE_METADATA_MUTATIONS = {
-  archive: rpc.mail.updateMessageLabels,
   read: rpc.mail.markMessageAsRead,
   spam: rpc.mail.updateMessageLabels,
   trash: rpc.mail.moveMessageToTrash,
@@ -194,7 +192,6 @@ const MESSAGE_METADATA_MUTATIONS = {
   untrash: rpc.mail.untrashMessage,
 };
 const THREAD_METADATA_MUTATIONS = {
-  archive: rpc.mail.updateThreadLabels,
   read: rpc.mail.markThreadAsRead,
   spam: rpc.mail.updateThreadLabels,
   trash: rpc.mail.moveThreadToTrash,

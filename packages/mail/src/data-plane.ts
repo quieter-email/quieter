@@ -4,7 +4,6 @@ export const mailCategorySchema = z.enum([
   "inbox",
   "important",
   "unread",
-  "archive",
   "sent",
   "drafts",
   "spam",
@@ -51,7 +50,6 @@ export type MailThreadDetail<TMessage = unknown> = {
 
 export type MailboxCapabilities = {
   categories: MailCategory[];
-  canArchive: boolean;
   canDeletePermanently: boolean;
   canManageKnowledge: boolean;
   canManageLabels: boolean;
@@ -67,7 +65,7 @@ export type MailboxCapabilities = {
 export type MailCommand =
   | { kind: "set-read"; read: boolean }
   | { kind: "set-importance"; important: boolean }
-  | { kind: "move"; destination: "archive" | "inbox" | "spam" | "trash" }
+  | { kind: "move"; destination: "inbox" | "spam" | "trash" }
   | { kind: "delete-permanently" }
   | { kind: "set-labels"; addIds: string[]; removeIds: string[] };
 
@@ -110,7 +108,6 @@ export const getMailboxCapabilities = (input: {
 }): MailboxCapabilities => {
   if (input.provider === "api") {
     return {
-      canArchive: false,
       canDeletePermanently: false,
       canManageKnowledge: false,
       canManageLabels: false,
@@ -130,7 +127,6 @@ export const getMailboxCapabilities = (input: {
     input.role === "manager" ||
     input.role === "responder";
   return {
-    canArchive: canRespond,
     canDeletePermanently: false,
     canManageKnowledge: input.provider === "gmail" || input.role === "manager",
     canManageLabels: input.provider === "gmail" || input.role === "manager",
@@ -145,7 +141,6 @@ export const getMailboxCapabilities = (input: {
       "inbox",
       "important",
       "unread",
-      "archive",
       "sent",
       "drafts",
       "trash",

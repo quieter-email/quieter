@@ -9,7 +9,6 @@ import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
 import type { MessageListItem } from "@quieter/app/lib/mail";
 
 type MessageAction =
-  | "archiveMessage"
   | "markMessageAsRead"
   | "markMessageAsSpam"
   | "markMessageAsUnread"
@@ -18,7 +17,6 @@ type MessageAction =
   | "unsubscribeFromMessage"
   | "untrashMessage";
 type ThreadAction =
-  | "archiveThread"
   | "markThreadAsRead"
   | "markThreadAsSpam"
   | "markThreadAsUnread"
@@ -26,7 +24,6 @@ type ThreadAction =
   | "unmarkThreadAsSpam"
   | "untrashThread";
 type BulkAction =
-  | "archiveThreads"
   | "deleteDrafts"
   | "markThreadsAsRead"
   | "markThreadsAsSpam"
@@ -115,15 +112,6 @@ export const createUnifiedInboxActions = ({
     }
   };
   const mailboxActions: MailboxActions = {
-    archiveMessage: async (id) => {
-      await runMessageAction("archiveMessage", id);
-    },
-    archiveThread: async (id) => {
-      await runThreadAction("archiveThread", id);
-    },
-    archiveThreads: async (threads) => {
-      await runBulkAction("archiveThreads", threads);
-    },
     get canMarkRead() {
       return [...contextsByThreadId.values()].some(
         (context) => context.mailboxActions.canMarkRead

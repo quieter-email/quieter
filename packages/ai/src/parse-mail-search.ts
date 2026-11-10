@@ -9,7 +9,6 @@ import { resolveBackgroundModel } from "./model-config";
 export const MAIL_SEARCH_QUERY_MAX_LENGTH = 300;
 
 const DEFAULT_IS_VALUES = [
-  "archived",
   "inbox",
   "inbound",
   "outbound",

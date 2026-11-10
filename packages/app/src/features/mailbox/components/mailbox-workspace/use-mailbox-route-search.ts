@@ -11,7 +11,6 @@ const MAILBOX_ROUTE_CATEGORIES = [
   "inbox",
   "important",
   "unread",
-  "archive",
   "spam",
   "sent",
   "trash",

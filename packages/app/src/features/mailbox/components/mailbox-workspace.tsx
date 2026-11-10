@@ -705,15 +705,6 @@ const useMailboxWorkspaceHotkeys = ({
     { enabled, ignoreInputs: true }
   );
   useHotkeySequence(
-    ["G", "A"],
-    (event) => {
-      if (!shouldIgnoreAppShortcut(event)) {
-        selectMailboxFromHotkey("archive");
-      }
-    },
-    { enabled, ignoreInputs: true }
-  );
-  useHotkeySequence(
     ["G", "D"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {

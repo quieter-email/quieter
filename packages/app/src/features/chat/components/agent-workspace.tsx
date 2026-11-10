@@ -357,7 +357,6 @@ export const AgentWorkspaceProvider = ({
             "inbox",
             "important",
             "unread",
-            "archive",
             "spam",
             "sent",
             "trash",
@@ -396,7 +395,6 @@ export const AgentWorkspaceProvider = ({
           view === "inbox" ||
           view === "important" ||
           view === "unread" ||
-          view === "archive" ||
           view === "spam" ||
           view === "sent" ||
           view === "trash" ||

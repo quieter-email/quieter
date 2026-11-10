@@ -19,6 +19,7 @@ import {
   runForwardMigrations,
 } from "./run-forward-migrations.ts";
 import { testBillingCreditRepair } from "./test-billing-credit-repair.ts";
+import { testMailArchiveRetirement } from "./test-mail-archive-retirement.ts";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 const migrationsDirectory = path.join(packageDirectory, "drizzle");
@@ -125,6 +126,7 @@ export default defineConfig({
   });
   await assertMigrationHistory();
   await testBillingCreditRepair(sql);
+  await testMailArchiveRetirement(sql);
 } finally {
   await sql.end();
   rmSync(temporaryDirectory, { force: true, recursive: true });

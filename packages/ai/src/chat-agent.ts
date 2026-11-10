@@ -96,7 +96,7 @@ Read one Gmail message with its full body and attachment metadata. Use when you 
 List the user's Gmail labels, including system and custom labels. Use when the user asks about labels or you need label ids/names before organizing mail.
 
 ### modify_mail
-Apply a mailbox action to a message or thread: mark_read, mark_unread, star, unstar, archive, trash, or untrash. Prefer thread scope when the user is acting on a conversation. Confirm destructive actions only when intent is ambiguous.
+Apply a mailbox action to a message or thread: mark_read, mark_unread, star, unstar, trash, or untrash. Prefer thread scope when the user is acting on a conversation. Confirm destructive actions only when intent is ambiguous.
 
 ### open_compose, open_inline_compose and edit_compose
 Use open_compose for a new email. For a reply, reply-all or forward, read the thread and call open_inline_compose with its threadId, the desired action and the source messageId. It opens the conversation's inline composer with the complete recipients, subject, quote, attachments and threading metadata. Then read get_workspace and use edit_compose with its draftId and expectedDraftRevision to write the authored body. bodyText edits retain the existing quote and signature. Never recreate reply or forward metadata in a new-message composer.
@@ -142,7 +142,7 @@ or redefine whether it needs confirmation.
 ## Gmail search syntax
 
 search_gmail accepts free text and Gmail operators. Use operators whenever they improve precision:
-from:, to:, cc:, bcc:, subject:, after:, before:, older:, newer:, older_than:, newer_than:, OR, { }, AND, -, AROUND, label:, category:primary/social/promotions/updates/forums/reservations/purchases, has:attachment/youtube/drive/document/spreadsheet/presentation, list:, filename:, quoted exact phrases, parentheses, in:anywhere, in:archive, in:snoozed, is:muted, is:important/starred/unread/read, has:yellow-star/orange-star/red-star/purple-star/blue-star/green-star/red-bang/orange-guillemet/yellow-bang/green-check/blue-info/purple-question, deliveredto:, size:, larger:, smaller:, +term, rfc822msgid:, has:userlabels, has:nouserlabels, label:encryptedmail.
+from:, to:, cc:, bcc:, subject:, after:, before:, older:, newer:, older_than:, newer_than:, OR, { }, AND, -, AROUND, label:, category:primary/social/promotions/updates/forums/reservations/purchases, has:attachment/youtube/drive/document/spreadsheet/presentation, list:, filename:, quoted exact phrases, parentheses, in:anywhere, in:snoozed, is:muted, is:important/starred/unread/read, has:yellow-star/orange-star/red-star/purple-star/blue-star/green-star/red-bang/orange-guillemet/yellow-bang/green-check/blue-info/purple-question, deliveredto:, size:, larger:, smaller:, +term, rfc822msgid:, has:userlabels, has:nouserlabels, label:encryptedmail.
 
 ## Connector mentions
 
@@ -411,7 +411,6 @@ const modifyMailActions = [
   "mark_unread",
   "star",
   "unstar",
-  "archive",
   "trash",
   "untrash",
 ] as const;
@@ -557,7 +556,7 @@ export const createGmailChatTools = (context: GmailToolsContext): ToolSet => ({
 
   modify_mail: tool({
     description:
-      "Apply a mailbox action to a Gmail message or thread: mark_read, mark_unread, star, unstar, archive, trash, or untrash.",
+      "Apply a mailbox action to a Gmail message or thread: mark_read, mark_unread, star, unstar, trash, or untrash.",
     execute: async ({ action, id, target }, { abortSignal }) => {
       try {
         return await context.modifyMail({

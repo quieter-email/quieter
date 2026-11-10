@@ -289,7 +289,7 @@ export const useManagedMailboxRuleActions = ({
       ruleEnabledRef.current = true;
       setRuleActionKind("set-labels");
       setRuleReadState(true);
-      setRuleMoveDestination("archive");
+      setRuleMoveDestination("inbox");
       setRuleForwardRecipients("");
       setRuleForwardIncludesAttachments(false);
       setRuleStopsProcessing(false);

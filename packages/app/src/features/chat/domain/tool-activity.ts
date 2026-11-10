@@ -621,7 +621,6 @@ const describeActivity = (
       if (result.success) {
         activity.phase = "complete";
         activity.title = {
-          archive: "Archived your mail",
           mark_read: "Marked your mail as read",
           mark_unread: "Marked your mail as unread",
           star: "Starred your mail",

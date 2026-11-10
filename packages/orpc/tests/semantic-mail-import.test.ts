@@ -39,7 +39,7 @@ const input = {
 const snapshot: CapturedMailSnapshot = {
   attachments: [],
   bodyHtml: null,
-  bodyText: "A synthetic archived message.",
+  bodyText: "A synthetic imported message.",
   headers: [],
   id: "message",
   internalDate: "1",
