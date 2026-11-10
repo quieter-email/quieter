@@ -5,7 +5,7 @@ import {
   semanticEmbedding,
 } from "@quieter/database/schema";
 import { analyzeMailMessage } from "@quieter/mail/capture";
-import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
 
 import { assertAccessibleMailbox } from "./mailbox/service";
 
@@ -78,7 +78,7 @@ export const normalizeCapturedMailMetadata = async (input: {
     .where(
       and(
         eq(managedMailMessage.mailboxId, input.mailboxId),
-        inArray(managedMailMessage.mailboxState, ["active", "archived"]),
+        eq(managedMailMessage.mailboxState, "active"),
         or(
           isNull(managedMailMessage.analysis),
           sql`${managedMailMessage.analysis}->>'version' = '1'`
@@ -99,7 +99,7 @@ export const normalizeCapturedMailMetadata = async (input: {
           and(
             eq(managedMailMessage.mailboxId, input.mailboxId),
             eq(managedMailMessage.id, row.id),
-            inArray(managedMailMessage.mailboxState, ["active", "archived"]),
+            eq(managedMailMessage.mailboxState, "active"),
             sql`${managedMailMessage.subject} is not distinct from ${row.subject}`,
             sql`${managedMailMessage.bodyText} is not distinct from ${row.bodyText}`,
             sql`${managedMailMessage.bodyHtml} is not distinct from ${row.bodyHtml}`,

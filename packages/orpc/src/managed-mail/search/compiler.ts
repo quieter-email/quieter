@@ -131,9 +131,6 @@ const createIsFilterCondition = (filter: MailSearchFilter): SQL | undefined => {
   if (value === "inbound" || value === "outbound") {
     return eq(managedMailMessage.direction, value);
   }
-  if (value === "archived") {
-    return eq(managedMailMessage.mailboxState, "archived");
-  }
   if (value === "spam" || value === "trash") {
     return eq(managedMailMessage.mailboxState, value);
   }

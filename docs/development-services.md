@@ -23,7 +23,7 @@ Disposable verification uses the pinned image in `infra/docker/semantic-search-p
 | Former Workers AI adapter | Historical 1024-dimensional smoke test only; this adapter is retired | Current embedding evidence uses OpenRouter below |
 | Polar | Non-expiring sandbox token, existing Managed/Pro products, official CLI 1.3.9 in WSL; six real customer/member events returned HTTP 200 | Checkout/portal/renewal/cancellation/credits with bypass off |
 | Telemetry | Explicit opt-in implemented; off by default; consent still required for PostHog | Development-project ingestion and browser privacy assertions |
-| Managed mail | Private fixture mailbox opens in the browser with its body and attachment; archive and restore-to-inbox actions pass; native R2 read/delete tests; fixture reseed preserves one message; domain changes and external sending blocked locally | SES/MX delivery requires a deployment and is excluded from this local setup |
+| Managed mail | Private fixture mailbox opens in the browser with its body and attachment; native R2 read/delete tests; fixture reseed preserves one message; domain changes and external sending blocked locally | SES/MX delivery requires a deployment and is excluded from this local setup |
 | Calendar/Linear | Independent server-side write controls; Calendar checks the connected account and target-calendar permissions; OAuth configuration present | Real connector authorization and dedicated resources for writes |
 | logo.dev/c15t | Real publishable logo configuration; consent uses offline mode | Focused UI/network acceptance |
 | Domain Connect | Inactive | Deferred until activated |
@@ -150,7 +150,7 @@ These are required acceptance cases, not a claim that every row was executed dur
 | Passkeys | Virtual authenticator register/login/remove, failed challenge | Real device/browser smoke test |
 | Organizations and divisions | Owner/admin/member roles, invites, cross-org denials | Invitation delivery and membership lifecycle |
 | Mailbox ownership and grants | Two users, private Gmail, private managed mailbox, explicit grants/revocation | Provider account ownership remains separate |
-| Mail browsing | Thread grouping, unread counts, archive/trash/spam, pagination, empty/loading/error states | Gmail history and real managed-message ingestion |
+| Mail browsing | Thread grouping, unread counts, trash/spam, pagination, empty/loading/error states | Gmail history and real managed-message ingestion |
 | Search | Mailbox-scoped queries, filters, cache invalidation | Gmail search semantics and indexed DB behavior |
 | Compose | Draft persistence, reply/all/forward, recipients, snippets, attachments, retries | Real Gmail send and SES simulator send |
 | Message rendering | MIME variants, HTML sanitization, inline images, downloads, malformed content | Large real fixture messages and private object permissions |

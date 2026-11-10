@@ -56,9 +56,9 @@ describe("foreground continuation", () => {
             type: "tool-navigate",
           },
           {
-            input: { action: "archive" },
+            input: { action: "trash" },
             state: "input-available",
-            toolCallId: "archive-1",
+            toolCallId: "trash-1",
             type: "tool-modify_mail",
           },
         ]),

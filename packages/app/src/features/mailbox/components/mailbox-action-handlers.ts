@@ -258,18 +258,6 @@ export const createMailboxActionHandlers = ({
   };
 
   return {
-    archiveMessage: async (messageId: string) => {
-      await runMailboxMessageAction(messageId, "archive");
-    },
-    archiveThread: async (threadId: string) => {
-      await runMailboxThreadAction(threadId, "archive");
-    },
-    archiveThreads: async (threads: ThreadListEntry[]) => {
-      await runBulkMailboxCommand(threads, {
-        destination: "archive",
-        kind: "move",
-      });
-    },
     get canMarkRead() {
       return (
         queryClient

@@ -1242,7 +1242,7 @@ export const DesignSystemShowcase = () => {
                   </DropdownMenuSubmenuTrigger>
                   <DropdownMenuSubmenuContent>
                     <DropdownMenuItem>Inbox</DropdownMenuItem>
-                    <DropdownMenuItem>Archive</DropdownMenuItem>
+                    <DropdownMenuItem>Spam</DropdownMenuItem>
                   </DropdownMenuSubmenuContent>
                 </DropdownMenuSubmenu>
               </DropdownMenuContent>
@@ -1835,7 +1835,7 @@ export const DesignSystemShowcase = () => {
           <Row label="Toolbar">
             <Toolbar aria-label="Example toolbar">
               <ToolbarButton>Reply</ToolbarButton>
-              <ToolbarButton variant="selected">Archive</ToolbarButton>
+              <ToolbarButton variant="selected">Mark as read</ToolbarButton>
             </Toolbar>
           </Row>
           <Row label="Inset toolbar">

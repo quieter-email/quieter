@@ -56,7 +56,7 @@ Controls required for this mode:
 - The local subscriber only processes mailboxes explicitly connected and allowlisted in development. Unrelated notifications must not trigger message retrieval or AI calls.
 - Development maintains its own history cursor, deduplication, and processing leases. It acknowledges only its own subscription after direct processing.
 - Real AI may summarize, extract information, classify, and store results in `quieter_dev`. Proposed provider actions are recorded for inspection rather than executed.
-- Enforce the read-only provider boundary server-side for shared mailboxes. Include manual mail mutations, auto-label application, drafts, send, trash/delete, archive/read state, watch management, and connector tool writes. A hidden button or a disabled cron is insufficient.
+- Enforce the read-only provider boundary server-side for shared mailboxes. Include manual mail mutations, auto-label application, drafts, send, trash/delete, read state, watch management, and connector tool writes. A hidden button or a disabled cron is insufficient.
 - Use development billing configuration. Development AI usage must not update production entitlements or report usage to production Polar.
 - Bound catch-up work after the laptop has been offline. Collapse redundant mailbox notifications and cap AI work so a backlog cannot exhaust the development credit budget.
 

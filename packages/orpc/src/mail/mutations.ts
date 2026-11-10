@@ -81,11 +81,6 @@ const recordMetadataAction = async (
     );
     if (destination !== undefined && conflictingDestination === undefined) {
       actionName = `move:${destination.destination}`;
-    } else if (
-      destination === undefined &&
-      operation.removeLabelIds?.includes(MAILBOX_LABELS.inbox) === true
-    ) {
-      actionName = "move:archive";
     }
   }
   const action = {
@@ -554,9 +549,7 @@ export const mutationsMailOperations = {
           await batchModifyMessages(
             accessToken,
             messageIds,
-            input.command.destination === "archive"
-              ? { removeLabelIds: ["INBOX"] }
-              : { addLabelIds: ["SPAM"], removeLabelIds: ["INBOX"] },
+            { addLabelIds: ["SPAM"], removeLabelIds: ["INBOX"] },
             signal
           );
         }

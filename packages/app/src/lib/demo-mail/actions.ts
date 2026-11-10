@@ -55,19 +55,6 @@ export const createDemoActions = (
     await invalidate();
   };
   return {
-    archiveMessage: async (id) => {
-      await apply([id], "message", { destination: "archive", kind: "move" });
-    },
-    archiveThread: async (id) => {
-      await apply([id], "thread", { destination: "archive", kind: "move" });
-    },
-    archiveThreads: async (threads) => {
-      await apply(
-        threads.map((thread) => thread.threadId),
-        "thread",
-        { destination: "archive", kind: "move" }
-      );
-    },
     canMarkRead: true,
     canSetImportance: true,
     deleteDraft: async (message) => {

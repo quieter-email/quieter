@@ -68,13 +68,6 @@ export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
   },
   {
     category: "Navigation",
-    id: "go-archive",
-    label: "Go to Archive",
-    scope: "mailbox",
-    sequence: ["G", "A"],
-  },
-  {
-    category: "Navigation",
     id: "go-sent",
     label: "Go to Sent",
     scope: "mailbox",
@@ -166,13 +159,6 @@ export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
   },
   {
     category: "Message list",
-    id: "list-archive",
-    keys: ["E"],
-    label: "Archive",
-    scope: "message-list",
-  },
-  {
-    category: "Message list",
     id: "list-trash",
     keys: ["Shift+3"],
     label: "Move to Trash",
@@ -225,13 +211,6 @@ export const KEYBOARD_SHORTCUTS: readonly KeyboardShortcut[] = [
     id: "detail-forward",
     keys: ["F"],
     label: "Forward",
-    scope: "message-detail",
-  },
-  {
-    category: "Message detail",
-    id: "detail-archive",
-    keys: ["E"],
-    label: "Archive",
     scope: "message-detail",
   },
   {

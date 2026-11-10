@@ -123,12 +123,7 @@ export type GmailUsefulDetailFeedbackSignal = "not_useful" | "useful";
 export type MailAutomationAgent = "auto_label" | "useful_detail";
 export type MailAutoLabelFeedbackSignal = "added" | "removed";
 export type ManagedMailDirection = "inbound" | "outbound";
-export type ManagedMailMailboxState =
-  | "active"
-  | "archived"
-  | "draft"
-  | "spam"
-  | "trash";
+export type ManagedMailMailboxState = "active" | "draft" | "spam" | "trash";
 export type ManagedMailRawObjectProvider = "r2" | "s3";
 export type ManagedMailLabelAssignmentSource =
   | "ai_auto_label"
@@ -2346,7 +2341,7 @@ export const managedMailMessage = pgTable(
     ),
     check(
       "managed_mail_message_mailbox_state_check",
-      sql`${table.mailboxState} in ('active', 'archived', 'draft', 'spam', 'trash')`
+      sql`${table.mailboxState} in ('active', 'draft', 'spam', 'trash')`
     ),
     check(
       "managed_mail_message_raw_object_provider_check",

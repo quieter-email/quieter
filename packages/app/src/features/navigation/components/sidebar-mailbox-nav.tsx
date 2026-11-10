@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Archive02Icon,
   Delete01Icon,
   Delete02Icon,
   Edit01Icon,
@@ -24,7 +23,6 @@ const SIDEBAR_MAILBOX_ITEMS: readonly {
   { icon: Flag01Icon, id: "important", label: "Important" },
   { icon: InboxIcon, id: "inbox", label: "Inbox" },
   { icon: Mail01Icon, id: "unread", label: "Unread" },
-  { icon: Archive02Icon, id: "archive", label: "Archive" },
   { icon: MailSend02Icon, id: "sent", label: "Sent" },
   { icon: Edit01Icon, id: "drafts", label: "Drafts" },
   { icon: Delete01Icon, id: "trash", label: "Trash" },

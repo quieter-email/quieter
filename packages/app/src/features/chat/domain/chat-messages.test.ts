@@ -30,7 +30,7 @@ describe("chat message conversion", () => {
     const messages = toCanonicalTranscript([
       {
         id: "user",
-        parts: [{ text: "Archive it", type: "text" }],
+        parts: [{ text: "Move it to trash", type: "text" }],
         role: "user",
       },
       {
@@ -38,9 +38,9 @@ describe("chat message conversion", () => {
         parts: [
           {
             approval: { approved: true, id: "approval" },
-            input: { action: "archive" },
+            input: { action: "trash" },
             state: "approval-responded",
-            toolCallId: "archive",
+            toolCallId: "trash",
             type: "tool-modify_mail",
           },
         ],
@@ -49,7 +49,7 @@ describe("chat message conversion", () => {
     ]);
 
     expect(messages[1]?.parts[0]).toMatchObject({
-      input: { action: "archive" },
+      input: { action: "trash" },
       state: "output-error",
     });
   });

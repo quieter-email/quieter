@@ -84,11 +84,6 @@ describe("mail metadata cache updates", () => {
       source: "unread",
     },
     {
-      command: { destination: "archive", kind: "move" },
-      destination: "archive",
-      source: "inbox",
-    },
-    {
       command: { destination: "trash", kind: "move" },
       destination: "trash",
       source: "inbox",

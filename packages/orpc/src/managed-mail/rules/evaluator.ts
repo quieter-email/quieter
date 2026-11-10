@@ -368,7 +368,6 @@ const advanceRuleRun = async (
       } else if (action.kind === "move") {
         const mailboxState = (
           {
-            archive: "archived",
             inbox: "active",
             spam: "spam",
             trash: "trash",

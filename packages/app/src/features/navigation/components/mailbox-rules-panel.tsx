@@ -191,23 +191,21 @@ const ManagedRuleActionEditor = (props: MailboxOrganizerContentProps) => {
             variant="plain"
             value={[ruleMoveDestination]}
           >
-            {(["archive", "inbox", "spam", "trash"] as const).map(
-              (destination) => (
-                <Toggle
-                  size="sm"
-                  key={destination}
-                  onClick={() => {
-                    setRuleMoveDestination(destination);
-                  }}
-                  type="button"
-                  value={destination}
-                >
-                  {destination === "inbox"
-                    ? "Move to Inbox"
-                    : `Move to ${destination[0]?.toUpperCase()}${destination.slice(1)}`}
-                </Toggle>
-              )
-            )}
+            {(["inbox", "spam", "trash"] as const).map((destination) => (
+              <Toggle
+                size="sm"
+                key={destination}
+                onClick={() => {
+                  setRuleMoveDestination(destination);
+                }}
+                type="button"
+                value={destination}
+              >
+                {destination === "inbox"
+                  ? "Move to Inbox"
+                  : `Move to ${destination[0]?.toUpperCase()}${destination.slice(1)}`}
+              </Toggle>
+            ))}
           </ToggleGroup>
         ) : null}
         {ruleActionKind === "forward" ? (

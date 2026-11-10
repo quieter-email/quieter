@@ -46,7 +46,7 @@ export const managedMailboxRuleActionSchema = z.discriminatedUnion("kind", [
     read: z.boolean(),
   }),
   z.object({
-    destination: z.enum(["archive", "inbox", "spam", "trash"]),
+    destination: z.enum(["inbox", "spam", "trash"]),
     kind: z.literal("move"),
   }),
   z

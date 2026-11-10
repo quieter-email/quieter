@@ -251,8 +251,7 @@ const loadImportanceSources = async (
       }
       return {
         eligible:
-          message.direction === "inbound" &&
-          ["active", "archived"].includes(message.mailboxState),
+          message.direction === "inbound" && message.mailboxState === "active",
         incoming: message.direction === "inbound",
         message: {
           ...message,
@@ -322,7 +321,7 @@ export const hydrateMailImportance = async <T extends MessageListItem>(
           eq(managedMailMessage.mailboxId, mailboxId),
           inArray(managedMailMessage.id, messageIds),
           eq(managedMailMessage.direction, "inbound"),
-          inArray(managedMailMessage.mailboxState, ["active", "archived"])
+          eq(managedMailMessage.mailboxState, "active")
         )
       ),
   ]);
@@ -522,8 +521,6 @@ export const setMailImportance = async (input: {
                       "INBOX",
                       "SENT",
                       "DRAFT",
-                      "ARCHIVED",
-                      "ARCHIVE",
                       "UNREAD",
                       "SPAM",
                       "TRASH",
@@ -971,8 +968,6 @@ const capturedImportanceSearch = (expression: MailSearchExpression): SQL => {
       if (filter.value === "read") {
         condition = sql`not (${condition})`;
       }
-    } else if (filter.value === "archived") {
-      condition = sql`not (${gmailCapturedMessage.snapshot}->'labelIds' ? 'INBOX')`;
     }
   } else if (filter.type === "label") {
     condition = sql`${gmailCapturedMessage.snapshot}->'labelIds' ? ${filter.value}`;
