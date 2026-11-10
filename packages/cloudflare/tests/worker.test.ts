@@ -317,31 +317,32 @@ describe("Cloudflare worker runtime", () => {
       });
       const { promise: pending, resolve: finish } =
         Promise.withResolvers<null>();
-      const processNotification = vi.fn<
-        (message: unknown, bindings: Env) => Promise<void>
-      >(async () => {
-        await pending;
-      });
+      const send = vi
+        .spyOn(env.GmailProcessingQueue, "send")
+        .mockImplementationOnce(async () => {
+          await pending;
+          return {
+            metadata: { metrics: { backlogBytes: 0, backlogCount: 1 } },
+          };
+        });
       let acknowledged = false;
       const responsePromise = handlePubSub(
         await pubSubRequest(envelope()),
-        env,
-        processNotification
+        env
       ).then((response) => {
         acknowledged = true;
         return response;
       });
       await vi.waitFor(() => {
-        expect(processNotification).toHaveBeenCalledOnce();
+        expect(send).toHaveBeenCalledOnce();
       });
       expect(acknowledged).toBeFalsy();
-      expect(processNotification.mock.calls[0]).toStrictEqual([
+      expect(send.mock.calls[0]).toStrictEqual([
         {
           emailAddress,
           historyId: "123",
           pubSubMessageId: "message-1",
         },
-        env,
       ]);
       finish(null);
       const response = await responsePromise;
@@ -355,9 +356,10 @@ describe("Cloudflare worker runtime", () => {
         ])
       );
       socket.close(1000, "done");
+      send.mockRestore();
     });
 
-    test("returns 5xx when direct processing transiently fails", async () => {
+    test("returns 5xx when durable enqueue fails", async () => {
       installFetchMock();
       const processNotification = vi
         .fn<(message: unknown, bindings: Env) => Promise<void>>()
@@ -368,19 +370,6 @@ describe("Cloudflare worker runtime", () => {
         processNotification
       ).catch((error: unknown) => requestErrorResponse(error, "/gmail/pubsub"));
       expect(response.status).toBe(500);
-    });
-
-    test("returns a retryable status while history continuation remains", async () => {
-      installFetchMock();
-      const processNotification = vi
-        .fn<(message: unknown, bindings: Env) => Promise<{ retry: boolean }>>()
-        .mockResolvedValue({ retry: true });
-      const response = await handlePubSub(
-        await pubSubRequest(envelope()),
-        env,
-        processNotification
-      ).catch((error: unknown) => requestErrorResponse(error, "/gmail/pubsub"));
-      expect(response.status).toBe(503);
     });
 
     test("does not process a notification with an invalid subscription", async () => {

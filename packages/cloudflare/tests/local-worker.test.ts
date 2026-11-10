@@ -187,49 +187,34 @@ describe("local background entrypoint", () => {
     expect(processGmailPubSubNotification).not.toHaveBeenCalled();
   });
 
-  test("processes validated deliveries before acknowledging", async () => {
+  test("durably enqueues validated deliveries without processing in the request", async () => {
+    const send = vi
+      .spyOn(env.GmailProcessingQueue, "send")
+      .mockResolvedValueOnce({
+        metadata: { metrics: { backlogBytes: 0, backlogCount: 1 } },
+      });
     const response = await localWorker.fetch(
       request(JSON.stringify(delivery)),
       env
     );
     expect(response.status).toBe(204);
-    expect(processGmailPubSubNotification).toHaveBeenCalledExactlyOnceWith(
-      {
-        emailAddress: "test@example.invalid",
-        historyId: "42",
-        pubSubMessageId: "local-test-delivery",
-      },
-      expect.any(Object)
-    );
-  });
-
-  test("returns 503 while mailbox processing is leased", async () => {
-    vi.mocked(processGmailPubSubNotification).mockResolvedValueOnce({
-      busy: true,
-      ignored: false,
-      mailboxId: "test-mailbox",
-      needsContinuation: false,
+    expect(send).toHaveBeenCalledExactlyOnceWith({
+      emailAddress: "test@example.invalid",
+      historyId: "42",
       pubSubMessageId: "local-test-delivery",
     });
+    expect(processGmailPubSubNotification).not.toHaveBeenCalled();
+  });
+
+  test("leaves the delivery unacknowledged when enqueue fails", async () => {
+    vi.spyOn(env.GmailProcessingQueue, "send").mockRejectedValueOnce(
+      new Error("temporary")
+    );
     const response = await localWorker.fetch(
       request(JSON.stringify(delivery)),
       env
     );
-    expect(response.status).toBe(503);
-  });
-
-  test("leaves a delivery unacknowledged when history has more pages", async () => {
-    vi.mocked(processGmailPubSubNotification).mockResolvedValueOnce({
-      busy: false,
-      ignored: false,
-      mailboxId: "test-mailbox",
-      needsContinuation: true,
-      pubSubMessageId: "local-test-delivery",
-    });
-    const response = await localWorker.fetch(
-      request(JSON.stringify(delivery)),
-      env
-    );
-    expect(response.status).toBe(503);
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(processGmailPubSubNotification).not.toHaveBeenCalled();
   });
 });

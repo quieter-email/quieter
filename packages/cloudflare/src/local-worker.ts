@@ -3,7 +3,10 @@ import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
 
 import { runGmailMaintenance } from "./gmail-maintenance-worker";
-import { broadcastGmailUpdate } from "./mail-updates";
+import {
+  enqueueGmailNotification,
+  processGmailQueue,
+} from "./gmail-processing";
 import realtimeWorker from "./worker";
 import {
   parseGmailNotification,
@@ -22,13 +25,13 @@ const deliverySchema = z.object({
 });
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx?: ExecutionContext) {
     if (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local") {
       return new Response(null, { status: 404 });
     }
     const url = new URL(request.url);
     if (url.pathname.startsWith("/mail/")) {
-      return await realtimeWorker.fetch(request, env);
+      return await realtimeWorker.fetch(request, env, ctx);
     }
     const token = serverEnv.QUIETER_LOCAL_WORKER_TOKEN;
     if (
@@ -93,39 +96,15 @@ export default {
           return new Response(null, { status: 403 });
         }
         const notification = parseGmailNotification(delivery.data.message.data);
-        const { processGmailPubSubNotification } =
-          await import("@quieter/orpc/gmail-pubsub");
-        const result = await withRequestDatabaseClient(
-          async () =>
-            await processGmailPubSubNotification(
-              {
-                ...notification,
-                pubSubMessageId: delivery.data.message.messageId,
-              },
-              {
-                onAccepted: async () => {
-                  await broadcastGmailUpdate(
-                    env,
-                    notification.emailAddress,
-                    "mailbox.changed"
-                  );
-                },
-              }
-            )
+        await enqueueGmailNotification(
+          {
+            emailAddress: notification.emailAddress.trim().toLowerCase(),
+            historyId: notification.historyId,
+            pubSubMessageId: delivery.data.message.messageId,
+          },
+          env,
+          ctx
         );
-        if (!result.ignored) {
-          await broadcastGmailUpdate(
-            env,
-            notification.emailAddress,
-            "mailbox.changed"
-          );
-        }
-        if (
-          !result.ignored &&
-          (result.busy === true || result.needsContinuation === true)
-        ) {
-          return new Response(null, { status: 503 });
-        }
         return new Response(null, { status: 204 });
       } catch (error) {
         return requestErrorResponse(error, "local-pubsub");
@@ -284,4 +263,5 @@ export default {
     }
     return new Response(null, { status: 404 });
   },
+  queue: processGmailQueue,
 } satisfies ExportedHandler<Env>;

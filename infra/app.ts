@@ -78,6 +78,7 @@ export const createInfrastructure = async (input: {
       "GMAIL_LIVE_SYNC_TOKEN_SECRET"
     ).name,
     gmailLiveSyncUrl: gmail.gmailLiveSyncUrl,
+    gmailProcessingQueues: gmail.gmailProcessingQueues,
     gmailPubSubIngressUrl: gmail.gmailPubSubIngressUrl,
     gmailPubSubPushAudience:
       context.gmailPubSubEnvironment.GMAIL_PUBSUB_PUSH_AUDIENCE || null,

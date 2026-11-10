@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { readBoundedJson } from "./bounded-json";
 import { timingSafeEqual } from "./crypto-utils";
-import { broadcastGmailUpdate } from "./mail-updates";
+import { enqueueGmailNotification } from "./gmail-processing";
 import { RequestError } from "./request-error";
 
 const GOOGLE_JWKS = createRemoteJWKSet(
@@ -102,37 +102,8 @@ export const parseGmailNotification = (data: string) => {
 export const handlePubSub = async (
   request: Request,
   env: Env,
-  processNotification: (
-    message: {
-      emailAddress: string;
-      historyId: string;
-      pubSubMessageId: string;
-    },
-    bindings: Env
-  ) => Promise<unknown> = async (message, bindings) => {
-    const { withRequestDatabaseClient } =
-      await import("@quieter/database/client");
-    const { processGmailPubSubNotification } =
-      await import("@quieter/orpc/gmail-pubsub");
-    const result = await withRequestDatabaseClient(
-      async () =>
-        await processGmailPubSubNotification(message, {
-          onAccepted: async () => {
-            await broadcastGmailUpdate(
-              bindings,
-              message.emailAddress,
-              "mailbox.changed",
-              message.historyId
-            );
-          },
-        })
-    );
-    return {
-      retry:
-        !result.ignored &&
-        (result.busy === true || result.needsContinuation === true),
-    };
-  }
+  enqueueNotification = enqueueGmailNotification,
+  ctx?: Pick<ExecutionContext, "waitUntil">
 ) => {
   await verifyPubSubToken(request, env);
   const envelope = pubSubEnvelopeSchema.safeParse(
@@ -152,21 +123,7 @@ export const handlePubSub = async (
     historyId: notification.historyId,
     pubSubMessageId: envelope.data.message.messageId,
   };
-  const processing = await processNotification(processorMessage, env);
-  await broadcastGmailUpdate(
-    env,
-    emailAddress,
-    "mailbox.changed",
-    notification.historyId
-  );
-  if (
-    typeof processing === "object" &&
-    processing !== null &&
-    "retry" in processing &&
-    processing.retry === true
-  ) {
-    return Response.json({ error: "Processing pending" }, { status: 503 });
-  }
+  await enqueueNotification(processorMessage, env, ctx);
   return new Response(null, { status: 204 });
 };
 

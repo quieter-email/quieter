@@ -33,9 +33,19 @@ export const createGmailResources = (
     gmailMaintenance: $util.Output<string>;
   } | null = null;
   let gmailPubSubIngressUrl: $util.Output<string> | null = null;
+  let gmailProcessingQueues: {
+    deadLetter: $util.Output<string>;
+    pending: $util.Output<string>;
+  } | null = null;
 
   if (context.gmailPubSubEnabled) {
     const sentryDsnBinding = requireSecretBinding(secretBindings, "SENTRY_DSN");
+    const gmailProcessingDeadLetterQueue = new sst.cloudflare.Queue(
+      "GmailProcessingDeadLetterQueue"
+    );
+    const gmailProcessingQueue = new sst.cloudflare.Queue(
+      "GmailProcessingQueue"
+    );
     // Production already applied v1 (old class) and v2 (delete), so the class
     // returns under a new name in v3.
     const gmailLiveSyncMailbox = new sst.cloudflare.DurableObject(
@@ -71,6 +81,7 @@ export const createGmailResources = (
         },
         handler: "packages/cloudflare/src/worker.ts",
         link: [
+          gmailProcessingQueue,
           gmailLiveSyncMailbox,
           mailLiveUser,
           updates.reminders,
@@ -106,6 +117,35 @@ export const createGmailResources = (
         url: true,
       }
     );
+
+    // oxlint-disable-next-line no-new -- Pulumi registers this consumer with the existing realtime Worker.
+    new cloudflare.QueueConsumer("GmailProcessingConsumer", {
+      accountId: gmailProcessingQueue.nodes.queue.accountId.apply(
+        (accountId) => {
+          if (accountId === undefined) {
+            throw new Error(
+              "Gmail processing queue is missing its account ID."
+            );
+          }
+          return accountId;
+        }
+      ),
+      deadLetterQueue: gmailProcessingDeadLetterQueue.nodes.queue.queueName,
+      queueId: gmailProcessingQueue.id,
+      scriptName: gmailRealtimeWorker.nodes.worker.scriptName,
+      settings: {
+        batchSize: 1,
+        maxConcurrency: 2,
+        maxRetries: 100,
+        maxWaitTimeMs: 1000,
+        retryDelay: 60,
+      },
+      type: "worker",
+    });
+    gmailProcessingQueues = {
+      deadLetter: gmailProcessingDeadLetterQueue.nodes.queue.queueName,
+      pending: gmailProcessingQueue.nodes.queue.queueName,
+    };
 
     const gmailPubSubMaintenance = new sst.cloudflare.Cron(
       "GmailPubSubMaintenance",
@@ -166,6 +206,7 @@ export const createGmailResources = (
   return {
     actionWorkers,
     gmailLiveSyncUrl,
+    gmailProcessingQueues,
     gmailPubSubIngressUrl,
   };
 };

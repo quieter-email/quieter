@@ -118,7 +118,7 @@ vp run dev:trigger actions
 vp run dev:trigger reminders
 ```
 
-The local Worker handles Gmail notifications, realtime updates, managed-mail fixtures, and maintenance in one process. Production deploys separate Workers. Local maintenance uses manual triggers, not an automatically running cron. The Pub/Sub bridge uses `gcloud auth print-access-token`, pulls one message at a time from its own subscription, extends the acknowledgment deadline during processing, and acknowledges only after the local Worker finishes.
+The local Worker handles Gmail notifications, realtime updates, managed-mail fixtures, and maintenance in one process. Production deploys separate Workers. Local maintenance uses manual triggers, not an automatically running cron. The Pub/Sub bridge uses `gcloud auth print-access-token`, pulls one message at a time from its own subscription, extends the acknowledgment deadline during handoff, and acknowledges after the local Worker durably queues the notification. The shared queue handler processes it independently of that HTTP request. See [Gmail background processing](gmail-processing.md) for retries, recovery, and manual verification.
 
 Important classification has a manual maintenance trigger. Use `vp run dev:trigger importance` to process pending incoming mail with development model credentials and billing controls. See [Mail importance](mail-importance.md) for classification, manual overrides, and privacy rules. The trigger preserves Gmail watch ownership and provider data.
 

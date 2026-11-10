@@ -82,7 +82,8 @@ import {
 
 const WATCH_RENEWAL_INTERVAL_MS = 1000 * 60 * 60 * 20;
 const WATCH_EXPIRATION_BUFFER_MS = 1000 * 60 * 60 * 48;
-const PROCESSING_LEASE_MS = 1000 * 60 * 14;
+// Queue and scheduled invocations can live for 15 minutes.
+const PROCESSING_LEASE_MS = 1000 * 60 * 16;
 const MAILBOX_RATE_LIMIT_RETRY_MS = 60_000;
 const HISTORY_RECOVERY_LOOKBACK_MS = 1000 * 60 * 60 * 24 * 7;
 const HISTORY_RECOVERY_OVERLAP_MS = 1000 * 60 * 60;
@@ -851,7 +852,25 @@ const processMailboxHistory = async ({
 }) => {
   const leaseId = await claimMailboxProcessingLease(mailboxId);
   if (!leaseId) {
-    return { busy: true, needsContinuation: false };
+    const [state] = await db
+      .select({
+        processingLeaseExpiresAt: gmailWatchState.processingLeaseExpiresAt,
+      })
+      .from(gmailWatchState)
+      .where(eq(gmailWatchState.mailboxId, mailboxId))
+      .limit(1);
+    return {
+      busy: true,
+      needsContinuation: false,
+      retryAfterMs: Math.min(
+        MAILBOX_RATE_LIMIT_RETRY_MS,
+        Math.max(
+          1000,
+          (state?.processingLeaseExpiresAt?.getTime() ?? Date.now()) -
+            Date.now()
+        )
+      ),
+    };
   }
   let captureNeedsContinuation = false;
   let retryAt: Date | null = null;
@@ -1062,7 +1081,11 @@ const processMailboxHistory = async ({
         Date.now() +
           Math.max(1000, error.retryAfterMs ?? MAILBOX_RATE_LIMIT_RETRY_MS)
       );
-      return { busy: true, needsContinuation: true };
+      return {
+        busy: true,
+        needsContinuation: true,
+        retryAfterMs: Math.max(1000, retryAt.getTime() - Date.now()),
+      };
     }
     throw error;
   } finally {
@@ -1289,6 +1312,7 @@ export type GmailPubSubNotificationMessage = {
 export const processGmailPubSubNotification = async (
   input: GmailPubSubNotificationMessage,
   options?: {
+    maxHistoryPages?: number;
     onAccepted?: (input: { mailboxId: string }) => Promise<void>;
     onProcessed?: (input: { mailboxId: string }) => Promise<void>;
   }
@@ -1310,7 +1334,7 @@ export const processGmailPubSubNotification = async (
     .limit(1);
 
   if (!gmailMailbox?.ownerUserId || gmailMailbox.status !== "connected") {
-    return { ignored: true, reason: "mailbox_not_connected" as const };
+    return { ignored: true as const, reason: "mailbox_not_connected" as const };
   }
 
   await ensureWatchState(gmailMailbox.id);
@@ -1326,7 +1350,7 @@ export const processGmailPubSubNotification = async (
 
   const result = await processMailboxHistory({
     mailboxId: gmailMailbox.id,
-    maxHistoryPages: 5,
+    maxHistoryPages: options?.maxHistoryPages ?? 5,
     organizationId: gmailMailbox.organizationId,
     userId: gmailMailbox.ownerUserId,
   });
@@ -1336,9 +1360,12 @@ export const processGmailPubSubNotification = async (
 
   return {
     busy: result.busy,
-    ignored: false,
+    ignored: false as const,
     mailboxId: gmailMailbox.id,
     needsContinuation: result.needsContinuation,
     pubSubMessageId: input.pubSubMessageId,
+    ...(result.retryAfterMs === undefined
+      ? {}
+      : { retryAfterMs: result.retryAfterMs }),
   };
 };

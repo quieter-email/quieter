@@ -7,6 +7,7 @@ export default defineConfig({
       miniflare: {
         bindings: {
           CONNECTOR_TOKEN_ENCRYPTION_KEY: "connector-token-key",
+          GMAIL_PUBSUB_SUBSCRIPTION: "projects/example/subscriptions/gmail",
           GMAIL_TOKEN_ENCRYPTION_KEY: "gmail-token-key",
           GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT: "gmail-token-key-current",
           GOOGLE_CALENDAR_CLIENT_ID: "calendar-client-id",

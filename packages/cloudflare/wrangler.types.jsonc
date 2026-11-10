@@ -5,6 +5,14 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-08-04",
   "compatibility_flags": ["nodejs_compat"],
+  "queues": {
+    "producers": [
+      {
+        "binding": "GmailProcessingQueue",
+        "queue": "quieter-gmail-processing-types",
+      },
+    ],
+  },
   "vars": {
     "CONNECTOR_TOKEN_ENCRYPTION_KEY": "connector-token-key",
     "GMAIL_TOKEN_ENCRYPTION_KEY": "gmail-token-key",
