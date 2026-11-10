@@ -151,7 +151,11 @@ export const runBilledAiRequest = async <Result>(input: {
         throw new Error("The AI provider did not report a generation cost.");
       }
       recordStage("settlement");
-      await settleAiCreditUsage({ costUsd, reservationId });
+      await settleAiCreditUsage({
+        billing: input.billing,
+        costUsd,
+        reservationId,
+      });
       recordStage(null);
       if (
         input.maximumCostUsd !== undefined &&
@@ -256,7 +260,7 @@ export const createAiBillingMiddleware = (
                     "The AI provider did not report a generation cost."
                   );
                 }
-                await settleAiCreditUsage({ costUsd, reservationId });
+                await settleAiCreditUsage({ billing, costUsd, reservationId });
               }
               controller.enqueue(part);
             },

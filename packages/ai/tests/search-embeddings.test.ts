@@ -92,10 +92,12 @@ describe("search embedding provider boundary", () => {
       values: ["Flight preferences", "A different topic"],
     });
     expect(vectors.map((vector) => vector.at(0))).toStrictEqual([0.5, -0.5]);
-    expect(state.settle).toHaveBeenCalledWith({
-      costUsd: response.usage.cost,
-      reservationId,
-    });
+    expect(state.settle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        costUsd: response.usage.cost,
+        reservationId,
+      })
+    );
     expect(onUsage).toHaveBeenCalledWith(
       expect.objectContaining({
         costUsd: response.usage.cost,

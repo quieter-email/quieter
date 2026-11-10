@@ -248,17 +248,16 @@ export const recordAiCreditProviderGeneration = async (input: {
     return;
   }
   const { reservationId } = input;
-  await withLockedAiReservation(reservationId, async (_row, tx) => {
-    await tx
-      .update(aiCreditReservation)
-      .set({ providerGenerationId: input.generationId })
-      .where(
-        and(
-          eq(aiCreditReservation.id, reservationId),
-          isNull(aiCreditReservation.providerGenerationId)
-        )
-      );
-  });
+  const [row] = await db
+    .update(aiCreditReservation)
+    .set({
+      providerGenerationId: sql`coalesce(${aiCreditReservation.providerGenerationId}, ${input.generationId})`,
+    })
+    .where(eq(aiCreditReservation.id, reservationId))
+    .returning({ id: aiCreditReservation.id });
+  if (row === undefined) {
+    throw new Error("The AI billing reservation is unavailable.");
+  }
 };
 
 const generationCostSchema = z.object({
@@ -401,6 +400,7 @@ export const reconcileAiCreditReservations = async (
 };
 
 export const settleAiCreditUsage = async (input: {
+  billing: AiBillingContext;
   costUsd: number;
   reservationId: string | null;
 }) => {
@@ -414,6 +414,24 @@ export const settleAiCreditUsage = async (input: {
     input.costUsd === 0 ? 0 : getAiUsageCostMicroCents(input.costUsd);
   assertBillingMoney(actualCostMicroCents);
   const { reservationId } = input;
+  if (input.billing.kind === "team" && input.billing.account === null) {
+    const [row] = await db
+      .update(aiCreditReservation)
+      .set({
+        actualCostMicroCents: sql`coalesce(${aiCreditReservation.actualCostMicroCents}, ${actualCostMicroCents})`,
+      })
+      .where(
+        and(
+          eq(aiCreditReservation.id, reservationId),
+          isNull(aiCreditReservation.account),
+          eq(aiCreditReservation.status, "settled")
+        )
+      )
+      .returning({ id: aiCreditReservation.id });
+    if (row !== undefined) {
+      return;
+    }
+  }
   const hasBillingAccount = await withLockedAiReservation(
     reservationId,
     async (row, tx) => {
