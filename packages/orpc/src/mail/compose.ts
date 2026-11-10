@@ -364,7 +364,8 @@ export const composeMailOperations = {
               });
             });
             return sent;
-          }
+          },
+          { kind: "send" }
         );
       }
     );

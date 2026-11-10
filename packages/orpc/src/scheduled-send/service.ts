@@ -5,6 +5,7 @@ import {
   managedMailMessage,
   organizationMailSendIdempotency,
   scheduledMailSend,
+  scheduledMailSendAbandonment,
 } from "@quieter/database/schema";
 import type {
   createScheduledSendSchema,
@@ -23,6 +24,10 @@ import { assertAccessibleMailbox } from "../mailbox/service";
 import { readRawMailObject } from "../managed-mail/messages/raw-object";
 import { storeRawMailObject } from "../managed-mail/messages/raw-object-lifecycle";
 import { hashRequest } from "../request-hash";
+import {
+  assertScheduledSendAttemptActive,
+  withScheduledSendAttemptLock,
+} from "./attempts";
 import {
   captureScheduledSendPayload,
   restoreScheduledSendPayload,
@@ -49,6 +54,7 @@ export const validateScheduledSendTime = (
     due > latest
   ) {
     throw new ORPCError("BAD_REQUEST", {
+      data: { scheduledTimeInvalid: true },
       message:
         "Choose a time at least a minute from now and within five years.",
     });
@@ -229,6 +235,14 @@ const createScheduledSendWithinLock = async (
       )
     )
     .limit(1);
+  const attempt = {
+    mailboxId: input.mailboxId,
+    sendOperationId,
+    userId: input.userId,
+  };
+  if (existing === undefined) {
+    await assertScheduledSendAttemptActive(attempt);
+  }
   const payload = await captureScheduledSendPayload(input.message);
   const requestHash = hashRequest({
     attachments: payload.attachments.map(
@@ -368,34 +382,42 @@ const createScheduledSendWithinLock = async (
   const rawObject = await storeRawMailObject(
     new TextEncoder().encode(JSON.stringify(payload))
   );
-  const [inserted] = await db
-    .insert(scheduledMailSend)
-    .values({
-      createdAt: new Date(),
-      id,
-      mailboxId: input.mailboxId,
-      nextWakeAt: new Date(Date.now() + 60_000),
-      rawObjectBucket: rawObject.bucket,
-      rawObjectKey: rawObject.key,
-      rawObjectProvider: rawObject.provider,
-      requestHash,
-      sendAt,
-      sendOperationId,
-      sourceDraftId: await resolveComposeSourceDraftId({
-        ...input.message,
-        mailboxId: input.mailboxId,
-        provider: selectedMailbox.provider,
-      }),
-      sourceLocalId: input.message.localId,
-      status: "preparing",
-      subject: payload.subject,
-      timeZone: input.timeZone,
-      to: payload.recipients.to,
-      updatedAt: new Date(),
-      userId: input.userId,
-    })
-    .onConflictDoNothing()
-    .returning();
+  const sourceDraftId = await resolveComposeSourceDraftId({
+    ...input.message,
+    mailboxId: input.mailboxId,
+    provider: selectedMailbox.provider,
+  });
+  const inserted = await withScheduledSendAttemptLock(
+    attempt,
+    async (database) => {
+      await assertScheduledSendAttemptActive(attempt, database);
+      const [created] = await database
+        .insert(scheduledMailSend)
+        .values({
+          createdAt: new Date(),
+          id,
+          mailboxId: input.mailboxId,
+          nextWakeAt: new Date(Date.now() + 60_000),
+          rawObjectBucket: rawObject.bucket,
+          rawObjectKey: rawObject.key,
+          rawObjectProvider: rawObject.provider,
+          requestHash,
+          sendAt,
+          sendOperationId,
+          sourceDraftId,
+          sourceLocalId: input.message.localId,
+          status: "preparing",
+          subject: payload.subject,
+          timeZone: input.timeZone,
+          to: payload.recipients.to,
+          updatedAt: new Date(),
+          userId: input.userId,
+        })
+        .onConflictDoNothing()
+        .returning();
+      return created;
+    }
+  );
   if (inserted === undefined) {
     const [concurrent] = await db
       .select()
@@ -512,6 +534,35 @@ export const getScheduledSendByOperation = async (scope: {
     )
     .limit(1);
   return row === undefined ? null : toSummary(row);
+};
+
+export const recoverScheduledSendAttempt = async (scope: {
+  mailboxId: string;
+  userId: string;
+  sendOperationId: string;
+}) => {
+  await assertAccessibleMailbox(scope);
+  return await withScheduledSendAttemptLock(scope, async (database) => {
+    const [scheduled] = await database
+      .select()
+      .from(scheduledMailSend)
+      .where(
+        and(
+          eq(scheduledMailSend.mailboxId, scope.mailboxId),
+          eq(scheduledMailSend.userId, scope.userId),
+          eq(scheduledMailSend.sendOperationId, scope.sendOperationId)
+        )
+      )
+      .limit(1);
+    if (scheduled !== undefined) {
+      return { scheduled: toSummary(scheduled), status: "scheduled" as const };
+    }
+    await database
+      .insert(scheduledMailSendAbandonment)
+      .values({ ...scope, createdAt: new Date() })
+      .onConflictDoNothing();
+    return { status: "abandoned" as const };
+  });
 };
 
 export const rescheduleSend = async (
@@ -855,10 +906,19 @@ export const dispatchScheduledSend = async (
       errorData !== null &&
       "deliveryUncertain" in errorData &&
       errorData.deliveryUncertain === true;
+    const sendNotStarted =
+      typeof errorData === "object" &&
+      errorData !== null &&
+      "sendNotStarted" in errorData &&
+      errorData.sendNotStarted === true;
     const uncertain =
-      !rejected &&
-      (wasSubmitted || (submissionStarted && (!expected || deliveryUncertain)));
-    const retry = !submissionStarted && !expected;
+      wasSubmitted ||
+      (submissionStarted &&
+        !sendNotStarted &&
+        !rejected &&
+        (!expected || deliveryUncertain));
+    const retry =
+      !wasSubmitted && (!submissionStarted || sendNotStarted) && !expected;
     let nextWakeAt: number | null = null;
     let status: ScheduledSend["status"] = "failed";
     let errorMessage =

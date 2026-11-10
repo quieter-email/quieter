@@ -70,6 +70,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { recoverComposeSchedule } from "../domain/scheduled-recovery";
+
 type ComposeDraftUpdate =
   | ComposeDraftState
   | ((current: ComposeDraftState) => ComposeDraftState);
@@ -1218,18 +1220,18 @@ export const useComposeDialogController = ({
     setState((current) => ({ ...current, isFinishing: true }));
     try {
       if (draft.scheduleAttempt) {
-        let scheduled = await rpc.scheduledSends.getByOperation({
+        const recovered = await recoverComposeSchedule({
+          draft: buildDraftFromForm(form.state.values),
           mailboxId,
-          sendOperationId: draft.sendOperationId,
         });
-        scheduled ??= await scheduleComposeMessage(
-          mailboxId,
-          buildDraftFromForm(form.state.values),
-          draft.scheduleAttempt
-        );
+        if (recovered.status === "editable") {
+          setDraft(recovered.draft);
+          recovery.checkpoint();
+          return;
+        }
         await completeScheduledMessage({
           message: draft,
-          scheduled,
+          scheduled: recovered.scheduled,
           scheduledMailboxId: mailboxId,
         });
         return;

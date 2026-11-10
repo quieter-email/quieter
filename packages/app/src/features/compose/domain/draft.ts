@@ -802,8 +802,8 @@ export const sendComposeMessage = async (
       "data" in error &&
       typeof error.data === "object" &&
       error.data !== null &&
-      "sendRejected" in error.data &&
-      error.data.sendRejected === true
+      (("sendRejected" in error.data && error.data.sendRejected === true) ||
+        ("sendNotStarted" in error.data && error.data.sendNotStarted === true))
     ) {
       throw error;
     }

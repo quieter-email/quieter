@@ -15,8 +15,10 @@ export type MailRequestContext = Pick<
 export const callGmail = async <T>(
   context: MailRequestContext,
   mailboxId: string,
-  operation: (accessToken: string, signal?: AbortSignal) => Promise<T>
+  operation: (accessToken: string, signal?: AbortSignal) => Promise<T>,
+  options?: { kind: "send" }
 ): Promise<T> => {
+  let operationStarted = false;
   try {
     return await runAuthorizedGmailMailbox(
       {
@@ -24,21 +26,42 @@ export const callGmail = async <T>(
         retryUnauthorized: context.retryUnauthorized,
         userId: context.userId,
       },
-      async (token) => await operation(token, context.signal)
+      async (token) => {
+        operationStarted = true;
+        return await operation(token, context.signal);
+      }
     );
   } catch (error) {
-    if (!isGmailRateLimitedError(error)) {
-      throw error;
+    let failure: unknown = error;
+    if (isGmailRateLimitedError(error)) {
+      const retryAfter = Math.max(
+        1,
+        Math.ceil((error.retryAfterMs ?? 1000) / 1000)
+      );
+      context.resHeaders?.set("retry-after", String(retryAfter));
+      failure = new ORPCError("RATE_LIMITED", {
+        data: { provider: "gmail", retryAfter },
+        message: "Your mailbox is busy. Please try again shortly.",
+        status: 429,
+      });
     }
-    const retryAfter = Math.max(
-      1,
-      Math.ceil((error.retryAfterMs ?? 1000) / 1000)
-    );
-    context.resHeaders?.set("retry-after", String(retryAfter));
-    throw new ORPCError("RATE_LIMITED", {
-      data: { provider: "gmail", retryAfter },
-      message: "Your mailbox is busy. Please try again shortly.",
-      status: 429,
-    });
+    if (options?.kind === "send" && !operationStarted) {
+      const previous = failure instanceof ORPCError ? failure : undefined;
+      const data: unknown = previous?.data;
+      throw new ORPCError(previous?.code ?? "INTERNAL_SERVER_ERROR", {
+        cause: failure,
+        data: {
+          ...(typeof data === "object" && data !== null ? data : {}),
+          sendNotStarted: true,
+        },
+        defined: previous?.defined,
+        message:
+          failure instanceof Error
+            ? failure.message
+            : "The message could not be prepared for sending.",
+        status: previous?.status ?? 500,
+      });
+    }
+    throw failure;
   }
 };

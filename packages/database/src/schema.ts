@@ -3977,6 +3977,25 @@ export const scheduledMailSend = pgTable(
   ]
 );
 
+export const scheduledMailSendAbandonment = pgTable(
+  "scheduledMailSendAbandonment",
+  {
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    sendOperationId: text("sendOperationId").notNull(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.mailboxId, table.userId, table.sendOperationId],
+    }),
+  ]
+);
+
 export const tables = {
   account,
   aiGeneratedMailBody,
@@ -4061,6 +4080,7 @@ export const tables = {
   passkey,
   rateLimitBucket,
   scheduledMailSend,
+  scheduledMailSendAbandonment,
   semanticEmbedding,
   semanticIndexRequest,
   semanticSearchLease,

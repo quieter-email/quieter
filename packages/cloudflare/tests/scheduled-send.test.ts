@@ -105,4 +105,67 @@ describe("durable scheduled sending", () => {
     );
     expect(response.status).toBe(401);
   });
+
+  test("accepts a new wake during dispatch and preserves it after the old callback completes", async () => {
+    const scope = {
+      id: crypto.randomUUID(),
+      mailboxId: "scheduled-mailbox",
+      userId: "scheduled-owner",
+    };
+    const stub = env.ScheduledSend.get(
+      env.ScheduledSend.idFromName(
+        JSON.stringify([scope.userId, scope.mailboxId, scope.id])
+      )
+    );
+    await stub.fetch("https://internal/scheduled-send/wake", {
+      body: JSON.stringify(scope),
+      method: "POST",
+    });
+    await runInDurableObject(stub, () => {
+      configureServerEnv({ BETTER_AUTH_URL: "https://quieter.example" });
+    });
+    const started = Promise.withResolvers<null>();
+    const finish = Promise.withResolvers<null>();
+    const futureSendAt = Date.now() + 86_400_000;
+    let dispatched = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => {
+        if (dispatched) {
+          return Response.json({ nextWakeAt: futureSendAt });
+        }
+        dispatched = true;
+        started.resolve(null);
+        await finish.promise;
+        return Response.json({ nextWakeAt: null });
+      })
+    );
+    const originalAlarm = runDurableObjectAlarm(stub);
+    await started.promise;
+    let wakeAccepted = false;
+    const wake = env.ScheduledSend.get(stub.id)
+      .fetch("https://internal/scheduled-send/wake", {
+        body: JSON.stringify(scope),
+        method: "POST",
+      })
+      .then((response) => {
+        wakeAccepted = response.status === 204;
+      });
+    try {
+      await vi.waitFor(() => {
+        expect(wakeAccepted).toBeTruthy();
+      });
+    } finally {
+      finish.resolve(null);
+      await originalAlarm;
+      await wake;
+    }
+    await runDurableObjectAlarm(env.ScheduledSend.get(stub.id));
+    await expect(
+      runInDurableObject(
+        env.ScheduledSend.get(stub.id),
+        async (_instance, state) => await state.storage.getAlarm()
+      )
+    ).resolves.toBe(futureSendAt);
+  });
 });

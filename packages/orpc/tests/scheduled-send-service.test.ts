@@ -213,6 +213,58 @@ describe("scheduled send execution", () => {
     expect(fixture.send).not.toHaveBeenCalled();
   });
 
+  test("retries a definite failure before submission using the same send operation", async () => {
+    row.sendAt = new Date(Date.now() - 60_000);
+    fixture.readObject.mockResolvedValue(
+      new TextEncoder().encode(
+        JSON.stringify({
+          attachments: [],
+          bodyHtml: "<p>Hello</p>",
+          bodyText: "Hello",
+          inlineImages: [],
+          localId: "source",
+          recipients: { bcc: "", cc: "", to: "person@example.test" },
+          saveStatus: "saved",
+          subject: "Message",
+          updatedAt: Date.now(),
+        })
+      )
+    );
+    fixture.send.mockRejectedValueOnce(
+      new ORPCError("INTERNAL_SERVER_ERROR", {
+        data: { sendNotStarted: true },
+        message: "Temporary authorization failure",
+      })
+    );
+    const first = await dispatchScheduledSend(scope);
+    expect(row.status).toBe("scheduled");
+    expect(first.nextWakeAt).toBeGreaterThan(Date.now());
+    fixture.send.mockResolvedValue({
+      draftCleanupHandled: true,
+      id: "sent-message",
+      idempotent: false,
+    });
+    await dispatchScheduledSend(scope);
+    expect(row.status).toBe("sent");
+    expect(
+      fixture.send.mock.calls.map(
+        ([input]) => input.input.message.sendOperationId
+      )
+    ).toStrictEqual([row.sendOperationId, row.sendOperationId]);
+  });
+
+  test("does not erase an earlier uncertain submission on a later preparation failure", async () => {
+    row.status = "uncertain";
+    fixture.getStatus.mockRejectedValue(
+      new ORPCError("INTERNAL_SERVER_ERROR", {
+        data: { sendNotStarted: true },
+      })
+    );
+    await dispatchScheduledSend(scope);
+    expect(row.status).toBe("uncertain");
+    expect(fixture.send).not.toHaveBeenCalled();
+  });
+
   test("reconciles pending delivery without submitting again", async () => {
     row.status = "sending";
     row.sendAt = new Date(Date.now() - 60_000);

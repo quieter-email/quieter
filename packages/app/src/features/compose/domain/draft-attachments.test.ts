@@ -27,6 +27,19 @@ describe("compose attachments", () => {
     vi.resetAllMocks();
   });
 
+  it("keeps a definite pre-submission failure retryable", async () => {
+    draft = createEmptyComposeDraft();
+    const failure = Object.assign(
+      new Error("Temporary authorization failure"),
+      {
+        data: { sendNotStarted: true },
+        status: 500,
+      }
+    );
+    sendMessage.mockRejectedValue(failure);
+    await expect(sendComposeMessage("mailbox", draft)).rejects.toBe(failure);
+  });
+
   it("loads reopened attachments from their owning mailbox and message", async () => {
     draft = {
       ...createEmptyComposeDraft(),

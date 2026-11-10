@@ -11,6 +11,7 @@ import {
   createScheduledSend,
   getScheduledSendByOperation,
   listScheduledSends,
+  recoverScheduledSendAttempt,
   rescheduleSend,
 } from "../scheduled-send/service";
 import { protectedProcedure } from "./base";
@@ -39,6 +40,12 @@ export const scheduledSendsRouter = {
     .handler(
       async ({ context, input }) =>
         await listScheduledSends({ ...input, userId: context.userId })
+    ),
+  recoverAttempt: protectedProcedure
+    .input(scheduledSendOperationSchema)
+    .handler(
+      async ({ context, input }) =>
+        await recoverScheduledSendAttempt({ ...input, userId: context.userId })
     ),
   reschedule: protectedProcedure
     .input(rescheduleSendSchema)

@@ -27,7 +27,7 @@ export class ScheduledSend extends DurableObject<Env> {
       ) {
         throw new Error("Scheduled send scope cannot change.");
       }
-      await this.ctx.storage.put("scope", scope);
+      await this.ctx.storage.put({ scope, wakeToken: crypto.randomUUID() });
       await this.ctx.storage.setAlarm(Date.now() + 100);
     });
     return new Response(null, { status: 204 });
@@ -35,18 +35,32 @@ export class ScheduledSend extends DurableObject<Env> {
 
   async alarm() {
     try {
-      await this.ctx.blockConcurrencyWhile(async () => {
+      const pending = await this.ctx.blockConcurrencyWhile(async () => {
         const stored = await this.ctx.storage.get("scope");
         const scope = scheduledSendScopeSchema.safeParse(stored);
         if (!scope.success) {
           await this.ctx.storage.deleteAlarm();
+          return null;
+        }
+        const wakeToken =
+          (await this.ctx.storage.get<string>("wakeToken")) ??
+          crypto.randomUUID();
+        await this.ctx.storage.put("wakeToken", wakeToken);
+        await this.ctx.storage.setAlarm(Date.now() + 120_000);
+        return { scope: scope.data, wakeToken };
+      });
+      if (pending === null) {
+        return;
+      }
+      const { nextWakeAt } = await this.dispatch(pending.scope);
+      await this.ctx.blockConcurrencyWhile(async () => {
+        const currentWakeToken = await this.ctx.storage.get("wakeToken");
+        if (currentWakeToken !== pending.wakeToken) {
           return;
         }
-        await this.ctx.storage.setAlarm(Date.now() + 30_000);
-        const { nextWakeAt } = await this.dispatch(scope.data);
         if (nextWakeAt === null) {
           await this.ctx.storage.deleteAlarm();
-          await this.ctx.storage.delete("scope");
+          await this.ctx.storage.delete(["scope", "wakeToken"]);
         } else {
           await this.ctx.storage.setAlarm(
             Math.max(Date.now() + 100, nextWakeAt)
@@ -87,7 +101,7 @@ export class ScheduledSend extends DurableObject<Env> {
         },
         method: "POST",
         redirect: "manual",
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(90_000),
       }
     );
     if (!response.ok) {

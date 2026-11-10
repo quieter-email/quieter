@@ -4,7 +4,7 @@ Scheduled messages belong to their creator and mailbox. The composer stores a co
 
 ## Timing and delivery
 
-PostgreSQL owns each message's time and delivery state. Private object storage holds its immutable compose payload. Each `ScheduledSend` Durable Object holds only its authenticated scope and one alarm. The alarm calls `/api/internal/scheduled-send` on the configured `BETTER_AUTH_URL` origin. The web handler loads the current record and calls the existing provider-neutral compose sender.
+PostgreSQL owns each message's time and delivery state. Private object storage holds its immutable compose payload. Each `ScheduledSend` Durable Object holds its authenticated scope, the version of its latest wake, and one alarm. The alarm calls `/api/internal/scheduled-send` on the configured `BETTER_AUTH_URL` origin. The web handler loads the current record and calls the existing provider-neutral compose sender.
 
 The timer does not hold Gmail credentials or AWS sending permissions. Gmail refreshes encrypted owner credentials when the message is due. Managed mail uses the established permission, suppression, billing, tracking, and delivery code. Both paths use one permanent send operation ID. Delivery with an uncertain provider response is reconciled through existing receipts rather than submitted again with another ID.
 
@@ -16,7 +16,13 @@ Wake and dispatch requests use the existing linked `GMAIL_LIVE_SYNC_TOKEN_SECRET
 
 The minute maintenance worker scans only records whose `nextWakeAt` is due. It requests another durable wake after an interrupted preparation, missed alarm registration, stale execution claim, or deferred delivery reconciliation. It does not poll future messages every minute. A recovery claim moves its next repair time forward before requesting a wake, so concurrent maintenance workers do not repeatedly register the same due timer.
 
+A send that cannot start because credential refresh temporarily fails remains scheduled for retry with its original operation ID. Once submission may have started, recovery keeps the message reserved until the existing delivery receipts establish the outcome.
+
+Composer recovery first looks for the saved schedule. If the recovered files are missing or the send time has expired, an atomic recovery request either returns the existing schedule or permanently fences the absent attempt. Creation checks that fence in the same transaction as its final insert. Only a confirmed abandoned attempt unlocks editing and receives a new operation ID, so an older request cannot later schedule an incomplete copy.
+
 The Durable Object persists a recovery alarm before calling the web handler. A failed callback retains that alarm. A successful callback returns the next authoritative wake time or `null` to remove it. Cancellation and rescheduling compete with the database send claim, so an already-started send cannot report a successful cancellation.
+
+The callback wait runs outside the Durable Object's short state gates and allows the provider's full send budget. A new wake can arrive while dispatch is pending. An older callback can only update the timer if the stored wake version still matches, so it cannot erase or delay newer work.
 
 If the original draft disappears during transfer, scheduling stops for review and keeps the saved message. This also covers a crash after deleting the draft but before recording that deletion. Cancel the failed schedule to restore a draft before trying again. A missing draft cannot prove whether another mail client sent it.
 

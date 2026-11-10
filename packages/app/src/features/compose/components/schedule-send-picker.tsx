@@ -238,7 +238,13 @@ export const ComposeScheduleSend = ({
             onCancel={() => {
               setOpen(false);
             }}
-            onConfirm={onSchedule}
+            onConfirm={async (value) => {
+              try {
+                await onSchedule(value);
+              } finally {
+                setOpen(false);
+              }
+            }}
             pending={pending}
             submitDisabled={preview}
           />
