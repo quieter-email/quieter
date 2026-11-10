@@ -4,16 +4,26 @@ import { Collapsible as CollapsiblePrimitive } from "@base-ui/react/collapsible"
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
+import { buttonVariants } from "./button";
 import { overlayTriggerClassName } from "./overlay-chrome";
 
 export const Collapsible = CollapsiblePrimitive.Root;
 
 export const CollapsibleTrigger = ({
   className,
+  variant = "default",
   ...props
-}: ComponentPropsWithoutRef<typeof CollapsiblePrimitive.Trigger>) => (
+}: ComponentPropsWithoutRef<typeof CollapsiblePrimitive.Trigger> & {
+  variant?: "default" | "text";
+}) => (
   <CollapsiblePrimitive.Trigger
-    className={cn("squircle", className, overlayTriggerClassName)}
+    className={cn(
+      variant === "text"
+        ? [buttonVariants({ size: "text", variant: "link" }), "no-underline"]
+        : "squircle",
+      className,
+      overlayTriggerClassName
+    )}
     {...props}
   />
 );

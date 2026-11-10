@@ -7,6 +7,7 @@ import {
   gmailThreadResultSchema,
   linearToolCallInputSchema,
   mailboxOverviewResultSchema,
+  modifyMailBatchResultSchema,
   modifyMailResultSchema,
 } from "@quieter/ai/chat-agent";
 import {
@@ -237,6 +238,13 @@ const operations: Record<
     pending: "Updating your mail…",
     subject: "Mail update",
   },
+  modify_mail_batch: {
+    category: "mail",
+    complete: "Updated your mail",
+    failed: "Couldn't update your mail",
+    pending: "Updating your mail…",
+    subject: "Mail updates",
+  },
   navigate: {
     category: "workspace",
     complete: "Opened your mail",
@@ -418,6 +426,55 @@ const describeActivity = (
       kind: "approval",
       title,
     };
+  }
+  if (name === "modify_mail_batch" && part.state === "output-available") {
+    const parsed = modifyMailBatchResultSchema.safeParse(part.output);
+    if (parsed.success) {
+      const { action, results, target } = parsed.data;
+      const confirmed = results.filter(
+        (result) => result.status === "success"
+      ).length;
+      const unconfirmed = results.filter(
+        (result) => result.status === "error"
+      ).length;
+      const skipped = results.length - confirmed - unconfirmed;
+      const item = target === "message" ? "email" : "conversation";
+      const items = `${confirmed} ${item}${confirmed === 1 ? "" : "s"}`;
+      const title = {
+        mark_read: `Marked ${items} as read`,
+        mark_unread: `Marked ${items} as unread`,
+        star: `Starred ${items}`,
+        trash: `Moved ${items} to trash`,
+        unstar: `Removed stars from ${items}`,
+        untrash: `Restored ${items}`,
+      }[action];
+      if (parsed.data.status === "error") {
+        const message = [
+          parsed.data.error,
+          unconfirmed > 0 ? `Couldn't confirm ${unconfirmed}.` : undefined,
+          skipped > 0 ? `Skipped ${skipped}.` : undefined,
+        ]
+          .filter(Boolean)
+          .join(" ");
+        return {
+          category: "mail",
+          id: part.toolCallId,
+          kind: "failure",
+          message,
+          sources: [],
+          title: confirmed > 0 ? title : "No mail changes confirmed",
+        };
+      }
+      return {
+        category: "mail",
+        context: [],
+        id: part.toolCallId,
+        kind: "operation",
+        phase: "complete",
+        sources: [],
+        title,
+      };
+    }
   }
   const returnedError =
     part.state === "output-available"

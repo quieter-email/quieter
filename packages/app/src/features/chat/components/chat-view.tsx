@@ -1,6 +1,10 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import {
+  modifyMailBatchResultSchema,
+  modifyMailResultSchema,
+} from "@quieter/ai/chat-agent";
 import type { ChatMailContext } from "@quieter/ai/chat-context";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import {
@@ -31,7 +35,10 @@ import {
 } from "@quieter/app/lib/chat-query";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { getMessagesQueryKey } from "@quieter/app/lib/mail/inbox-query/index";
-import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query-keys";
+import {
+  getMailboxThreadQueriesKey,
+  getThreadQueryKey,
+} from "@quieter/app/lib/mail/thread-query-keys";
 import { rpc } from "@quieter/app/lib/orpc";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appFetch, getApiUrl } from "@quieter/app/runtime";
@@ -177,6 +184,7 @@ const ChatSession = ({
       toastError(decodeChatStreamError(error), { boundary: "assistant-chat" });
     },
     onFinish: ({ messages, isAbort, isError }) => {
+      let mailboxChanged = false;
       for (const message of messages) {
         for (const part of message.parts) {
           if (
@@ -187,6 +195,20 @@ const ChatSession = ({
             continue;
           }
           const toolName = part.type.replace("tool-", "");
+          if (toolName === "modify_mail" || toolName === "modify_mail_batch") {
+            const changed =
+              toolName === "modify_mail_batch"
+                ? modifyMailBatchResultSchema
+                    .safeParse(part.output)
+                    .data?.results.some((result) => result.status === "success")
+                : modifyMailResultSchema.safeParse(part.output).data?.status ===
+                  "success";
+            if (changed === true) {
+              appliedReceipts.current.add(part.toolCallId);
+              mailboxChanged = true;
+            }
+            continue;
+          }
           if (
             toolName === "create_reminder" ||
             toolName === "change_reminder"
@@ -275,6 +297,12 @@ const ChatSession = ({
             void refreshMailQueries(affectedKeys);
           }
         }
+      }
+      if (mailboxChanged) {
+        void refreshMailQueries([
+          getMessagesQueryKey(workspace.mailboxId, "inbox").slice(0, 2),
+          getMailboxThreadQueriesKey(workspace.mailboxId),
+        ]);
       }
       const last = messages.at(-1);
       const pending = last?.parts.some(

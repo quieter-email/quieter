@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowDown01Icon,
   Delete02Icon,
   FileAttachmentIcon,
   LayoutRightIcon,
@@ -1301,8 +1302,9 @@ export const DesignSystemShowcase = () => {
           </Row>
           <Row label="Technical disclosure">
             <Collapsible>
-              <CollapsibleTrigger render={<Button variant="secondary" />}>
+              <CollapsibleTrigger variant="text">
                 Show technical details
+                <Icon aria-hidden icon={ArrowDown01Icon} />
               </CollapsibleTrigger>
               <CollapsiblePanel>
                 <div className="min-h-0 overflow-hidden">

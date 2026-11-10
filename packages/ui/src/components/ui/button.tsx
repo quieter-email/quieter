@@ -130,6 +130,7 @@ export const buttonVariants = cva(
           "h-5 min-w-0 shrink justify-start rounded-none border-0 bg-transparent p-0 text-left text-body font-normal text-fg active:scale-100",
         keycap:
           "h-16 min-w-16 rounded-lg bg-detail px-5 font-normal text-title-sm text-fg hover:bg-control-hover active:bg-control-active",
+        link: "rounded-sm border-0 bg-transparent text-left text-muted-fg underline underline-offset-2 hover:text-fg",
         // Segmented option, e.g. the rule-builder choices. The selected look
         // follows aria-pressed so callers only pass the state.
         option:
