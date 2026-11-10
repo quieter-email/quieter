@@ -74,9 +74,13 @@ vi.mock(
     detectMailVerificationCode: fixtures.screen,
   })
 );
-vi.mock(import("@quieter/ai/extract-verification-code"), () => ({
-  extractMailVerificationCode: fixtures.extract,
-}));
+vi.mock(
+  import("@quieter/ai/extract-verification-code"),
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    extractMailVerificationCode: fixtures.extract,
+  })
+);
 vi.mock(import("@quieter/billing/ai-reservation"), () => ({
   createMailboxAiBillingContext: async () => ({
     account: null,
