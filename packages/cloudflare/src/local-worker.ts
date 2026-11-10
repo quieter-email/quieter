@@ -14,6 +14,7 @@ import {
 
 export { MailLiveUser } from "./mail-live-user";
 export { ReminderMailbox } from "./reminder-mailbox";
+export { ScheduledSend } from "./scheduled-send";
 export { GmailLiveSyncMailboxV2 } from "./gmail-live-sync-mailbox";
 
 const deliverySchema = z.object({
@@ -129,6 +130,19 @@ export default {
         return new Response(null, { status: 204 });
       } catch (error) {
         return requestErrorResponse(error, "local-pubsub");
+      }
+    }
+    if (url.pathname === "/__dev/scheduled-send") {
+      try {
+        const { reconcileScheduledSends } =
+          await import("@quieter/orpc/scheduled-send/repair");
+        return Response.json(
+          await withRequestDatabaseClient(
+            async () => await reconcileScheduledSends({ limit: 4 })
+          )
+        );
+      } catch (error) {
+        return requestErrorResponse(error, "local-scheduled-send");
       }
     }
     if (url.pathname === "/__dev/maintenance") {

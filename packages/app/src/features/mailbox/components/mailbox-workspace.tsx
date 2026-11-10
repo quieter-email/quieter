@@ -431,6 +431,7 @@ const useMailboxWorkspaceRouteEffects = ({
 const useMailboxWorkspaceActions = ({
   activeMailbox,
   isComposeMailbox,
+  isScheduledMailbox,
   isSnippetMailbox,
   mailboxes,
   openComposeWorkspace,
@@ -443,6 +444,7 @@ const useMailboxWorkspaceActions = ({
 }: {
   activeMailbox: MailboxCategory;
   isComposeMailbox: boolean;
+  isScheduledMailbox: boolean;
   isSnippetMailbox: boolean;
   mailboxes: { id: string; provider: string }[];
   openComposeWorkspace: (draft: ComposeDraftState | null) => void;
@@ -467,12 +469,13 @@ const useMailboxWorkspaceActions = ({
   const applySearch = (nextQuery: string) => {
     const normalizedQuery = nextQuery.trim();
 
-    if (normalizedQuery === (query ?? "").trim()) {
+    if (!isScheduledMailbox && normalizedQuery === (query ?? "").trim()) {
       void setMailboxSearch({ messageId: null });
       return;
     }
 
     void setMailboxSearch({
+      mailbox: isScheduledMailbox ? "inbox" : undefined,
       messageId: null,
       query: normalizedQuery === "" ? null : normalizedQuery,
     });
@@ -482,6 +485,7 @@ const useMailboxWorkspaceActions = ({
     if (
       !isSnippetMailbox &&
       !isComposeMailbox &&
+      !isScheduledMailbox &&
       mailbox === activeMailbox &&
       view === "inbox"
     ) {
@@ -496,11 +500,17 @@ const useMailboxWorkspaceActions = ({
 
   const selectView = (nextView: MailboxWorkspaceView) => {
     const resolvedView = nextView;
-    if (resolvedView === view && !isComposeMailbox && !isSnippetMailbox) {
+    if (
+      resolvedView === view &&
+      !isComposeMailbox &&
+      !isSnippetMailbox &&
+      !isScheduledMailbox
+    ) {
       return;
     }
     void setMailboxSearch({
       mailbox:
+        isScheduledMailbox ||
         resolvedView === "all-inboxes" ||
         resolvedView === "labels" ||
         resolvedView === "rules"
@@ -876,6 +886,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     compose,
     gmailLink,
     isComposeMailbox,
+    isScheduledMailbox,
     isSnippetMailbox,
     mailboxId,
     mailto,
@@ -994,6 +1005,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const workspaceActions = useMailboxWorkspaceActions({
     activeMailbox,
     isComposeMailbox,
+    isScheduledMailbox,
     isSnippetMailbox,
     mailboxes,
     openComposeWorkspace: composeWorkspace.openComposeWorkspace,

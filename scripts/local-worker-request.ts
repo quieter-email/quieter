@@ -13,10 +13,11 @@ if (
     "semantic-index",
     "actions",
     "reminders",
+    "scheduled-send",
   ].includes(action)
 ) {
   throw new Error(
-    "Use dev:trigger health, maintenance, mail-recovery, importance, memory, semantic-index <user-id> <mailbox-id> <memory|chat|mail>, actions, or reminders."
+    "Use dev:trigger health, maintenance, mail-recovery, importance, memory, semantic-index <user-id> <mailbox-id> <memory|chat|mail>, actions, reminders, or scheduled-send."
   );
 }
 const response = await fetch(`http://127.0.0.1:8787/__dev/${action}`, {

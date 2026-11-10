@@ -17,6 +17,7 @@ import type {
   ReminderSource,
   ReminderTarget,
 } from "@quieter/mail/reminders";
+import type { ScheduledSendStatus } from "@quieter/mail/scheduled-send";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -3913,6 +3914,69 @@ export const semanticIndexRequest = pgTable(
   ]
 );
 
+export const scheduledMailSend = pgTable(
+  "scheduledMailSend",
+  {
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    draftRemovedAt: timestamp("draftRemovedAt", { withTimezone: true }),
+    errorMessage: text("errorMessage"),
+    id: text("id").primaryKey(),
+    leaseToken: text("leaseToken"),
+    leaseUntil: timestamp("leaseUntil", { withTimezone: true }),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    nextWakeAt: timestamp("nextWakeAt", { withTimezone: true }),
+    payloadRetiredAt: timestamp("payloadRetiredAt", { withTimezone: true }),
+    rawObjectBucket: text("rawObjectBucket").notNull(),
+    rawObjectKey: text("rawObjectKey").notNull(),
+    rawObjectProvider: text("rawObjectProvider").$type<"r2" | "s3">().notNull(),
+    requestHash: text("requestHash").notNull(),
+    restoredDraftId: text("restoredDraftId"),
+    sendAt: timestamp("sendAt", { withTimezone: true }).notNull(),
+    sendOperationId: text("sendOperationId").notNull(),
+    sentAt: timestamp("sentAt", { withTimezone: true }),
+    sourceDraftId: text("sourceDraftId"),
+    sourceLocalId: text("sourceLocalId").notNull(),
+    status: text("status").$type<ScheduledSendStatus>().notNull(),
+    subject: text("subject").notNull(),
+    timeZone: text("timeZone").notNull(),
+    to: text("to").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    unique("scheduled_mail_send_operation_unique").on(
+      table.mailboxId,
+      table.userId,
+      table.sendOperationId
+    ),
+    index("scheduled_mail_send_owner_idx").on(
+      table.userId,
+      table.mailboxId,
+      table.status,
+      table.sendAt
+    ),
+    index("scheduled_mail_send_wake_idx").on(table.nextWakeAt),
+    uniqueIndex("scheduled_mail_send_source_local_unique")
+      .on(table.mailboxId, table.sourceLocalId)
+      .where(
+        sql`${table.status} in ('preparing', 'scheduled', 'sending', 'failed', 'uncertain')`
+      ),
+    uniqueIndex("scheduled_mail_send_source_draft_unique")
+      .on(table.mailboxId, table.sourceDraftId)
+      .where(
+        sql`${table.status} in ('preparing', 'scheduled', 'sending', 'failed', 'uncertain')`
+      ),
+    check(
+      "scheduled_mail_send_status_check",
+      sql`${table.status} in ('preparing', 'scheduled', 'sending', 'sent', 'failed', 'uncertain', 'cancelled')`
+    ),
+  ]
+);
+
 export const tables = {
   account,
   aiGeneratedMailBody,
@@ -3996,6 +4060,7 @@ export const tables = {
   organizationMailUsageSettings,
   passkey,
   rateLimitBucket,
+  scheduledMailSend,
   semanticEmbedding,
   semanticIndexRequest,
   semanticSearchLease,

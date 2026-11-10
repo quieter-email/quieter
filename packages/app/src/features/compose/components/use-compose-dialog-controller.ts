@@ -31,6 +31,7 @@ import {
   haveComposeDraftPersistedFieldsChanged,
   prepareLoadedComposeDraft,
   saveComposeDraft,
+  scheduleComposeMessage,
   sendComposeMessage,
   textToComposeBodyHtml,
 } from "@quieter/app/features/compose/domain/draft";
@@ -52,7 +53,7 @@ import {
   saveManagedDemoDraft,
   sendManagedDemoDraft,
 } from "@quieter/app/lib/managed-mail/demo-managed-mail";
-import { rpc } from "@quieter/app/lib/orpc";
+import { orpc, rpc } from "@quieter/app/lib/orpc";
 import {
   isSuppressedRecipientError,
   shouldRetryOrpcError,
@@ -62,6 +63,8 @@ import {
   composeSendFormValuesSchema,
 } from "@quieter/mail/compose/schema";
 import type { FollowUpReminderIntent } from "@quieter/mail/reminders";
+import type { ScheduledSendTime } from "@quieter/mail/scheduled-send";
+import { toast } from "@quieter/ui/toast";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
@@ -79,7 +82,7 @@ export const getDraftStatusMessage = (
   persistDrafts = true
 ) => {
   if (draft.saveStatus === "sending") {
-    return "Sending message…";
+    return draft.scheduleAttempt ? "Scheduling message…" : "Sending message…";
   }
   if (draft.saveStatus === "error") {
     return "Draft needs attention";
@@ -157,6 +160,7 @@ export const useComposeDialogController = ({
         sendOperationId:
           resolved.sendOperationId ??
           (resolved.sendUncertain === true ? undefined : crypto.randomUUID()),
+        sendUncertain: resolved.scheduleAttempt ? true : resolved.sendUncertain,
       },
       isFinishing: false,
       open: true,
@@ -185,6 +189,7 @@ export const useComposeDialogController = ({
   const retryableSaveErrorRef = useRef(false);
   const saveErrorReportedRef = useRef(false);
   const saveConflictRef = useRef(false);
+  const scheduleRequestRef = useRef<ScheduledSendTime | null>(null);
   const [canSaveDraftCopy, setCanSaveDraftCopy] = useState(false);
   const previousActionRef = useRef({
     attachments: state.draft.draftId
@@ -251,6 +256,7 @@ export const useComposeDialogController = ({
       recoveryUpdatedAt: draft.recoveryUpdatedAt,
       replyContext: draft.replyContext,
       saveStatus: "idle",
+      scheduleAttempt: draft.scheduleAttempt,
       sendOperationId: draft.sendOperationId,
       sendUncertain: draft.sendUncertain,
       updatedAt: Date.now(),
@@ -308,10 +314,14 @@ export const useComposeDialogController = ({
       "draftConflict" in error.data &&
       error.data.draftConflict === true;
     setCanSaveDraftCopy(saveConflictRef.current);
-    let errorMessage = "Could not send message. Please try again.";
+    const scheduling = activeDraftRef.current.scheduleAttempt !== undefined;
+    let errorMessage = scheduling
+      ? "Could not schedule message. Please try again."
+      : "Could not send message. Please try again.";
     if (deliveryUncertain) {
-      errorMessage =
-        "Delivery could not be confirmed. Check Sent before sending again.";
+      errorMessage = scheduling
+        ? "Scheduling could not be confirmed. Check the schedule before sending again."
+        : "Delivery could not be confirmed. Check Sent before sending again.";
     } else if (isRecipientProblem) {
       errorMessage = SUPPRESSED_RECIPIENT_MESSAGE;
     } else if (saveConflictRef.current) {
@@ -322,18 +332,83 @@ export const useComposeDialogController = ({
       ...activeDraftRef.current,
       errorMessage,
       saveStatus: "error",
+      scheduleAttempt: deliveryUncertain
+        ? activeDraftRef.current.scheduleAttempt
+        : undefined,
       sendUncertain: deliveryUncertain,
     });
     toastError(error, {
-      boundary: "compose-send",
-      fallback: "Could not send message. Please try again.",
+      boundary: scheduling ? "compose-schedule" : "compose-send",
+      fallback: scheduling
+        ? "Could not schedule message. Please try again."
+        : "Could not send message. Please try again.",
     });
+    // oxlint-disable-next-line no-use-before-define -- The form invokes this handler after recovery initializes.
+    recovery.checkpoint();
     if (isRecipientProblem) {
       onRecipientProblem?.();
     }
   };
 
-  const submitComposeForm = async (values: ComposeFormValues) => {
+  const completeScheduledMessage = async ({
+    scheduled,
+    message,
+    scheduledMailboxId,
+  }: {
+    scheduled: Awaited<ReturnType<typeof rpc.scheduledSends.create>>;
+    message: ComposeDraftState;
+    scheduledMailboxId: string;
+  }) => {
+    closeDialog();
+    if (scheduled.status === "failed") {
+      toastError(
+        {
+          message:
+            scheduled.errorMessage ??
+            "Scheduling needs attention. Open Scheduled to review this message.",
+          status: 400,
+        },
+        { boundary: "compose-schedule-preparation" }
+      );
+    } else if (scheduled.status === "preparing") {
+      toast("Message saved in Scheduled. Scheduling is still being confirmed.");
+    } else if (scheduled.status === "uncertain") {
+      toast("Delivery is being confirmed. Check Scheduled or Sent.");
+    } else if (scheduled.status === "sent") {
+      toast.success("This message has been sent.");
+    } else if (scheduled.status === "sending") {
+      toast("This message is sending.");
+    } else if (scheduled.status === "cancelled") {
+      toast.success("This scheduled send was cancelled. Check Drafts.");
+    } else {
+      toast.success(
+        `Scheduled for ${new Intl.DateTimeFormat(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+          timeZone: scheduled.timeZone,
+        }).format(new Date(scheduled.sendAt))}.`
+      );
+    }
+    await Promise.all([
+      refreshCachedMailboxQueries(queryClient, scheduledMailboxId, "drafts"),
+      queryClient.invalidateQueries({
+        queryKey: orpc.scheduledSends.list.queryOptions({
+          input: { mailboxId: scheduledMailboxId },
+        }).queryKey,
+      }),
+    ]).catch((error: unknown) => {
+      toastError(error, {
+        boundary: "compose-scheduled-refresh",
+        fallback: "Refresh to update your scheduled messages.",
+      });
+    });
+    clearComposeDraftRuntimeFiles(message);
+  };
+
+  const submitComposeForm = async (
+    values: ComposeFormValues,
+    schedule: ScheduledSendTime | null
+  ) => {
     if (activeDraftRef.current.sendUncertain === true) {
       // oxlint-disable-next-line no-use-before-define -- Submission runs after the delivery handler initializes.
       await checkSendDelivery();
@@ -352,6 +427,7 @@ export const useComposeDialogController = ({
       ...current,
       errorMessage: null,
       saveStatus: "sending",
+      scheduleAttempt: schedule ?? undefined,
       sendOperationId: current.sendOperationId ?? crypto.randomUUID(),
     }));
     await savingRef.current;
@@ -362,6 +438,19 @@ export const useComposeDialogController = ({
 
     let draftCleanupHandled = false;
     try {
+      if (schedule) {
+        const scheduled = await scheduleComposeMessage(
+          mailboxId,
+          message,
+          schedule
+        );
+        await completeScheduledMessage({
+          message,
+          scheduled,
+          scheduledMailboxId: mailboxId,
+        });
+        return;
+      }
       if (demoMode) {
         sendDemoDraft(message);
       } else if (managedDemoMode) {
@@ -418,7 +507,7 @@ export const useComposeDialogController = ({
   const form = useForm({
     defaultValues,
     onSubmit: async ({ value }) => {
-      await submitComposeForm(value);
+      await submitComposeForm(value, scheduleRequestRef.current);
     },
     validationLogic: revalidateLogic(),
     validators: {
@@ -426,6 +515,18 @@ export const useComposeDialogController = ({
       onSubmit: composeSendFormValuesSchema,
     },
   });
+
+  const handleScheduleMessage = async (schedule: ScheduledSendTime) => {
+    if (demoMode || managedDemoMode || scheduleRequestRef.current !== null) {
+      return;
+    }
+    scheduleRequestRef.current = schedule;
+    try {
+      await form.handleSubmit();
+    } finally {
+      scheduleRequestRef.current = null;
+    }
+  };
 
   const recovery = useDraftRecovery({
     enabled: persistDrafts && !demoMode && !managedDemoMode && state.open,
@@ -1116,6 +1217,23 @@ export const useComposeDialogController = ({
     finishingRef.current = true;
     setState((current) => ({ ...current, isFinishing: true }));
     try {
+      if (draft.scheduleAttempt) {
+        let scheduled = await rpc.scheduledSends.getByOperation({
+          mailboxId,
+          sendOperationId: draft.sendOperationId,
+        });
+        scheduled ??= await scheduleComposeMessage(
+          mailboxId,
+          buildDraftFromForm(form.state.values),
+          draft.scheduleAttempt
+        );
+        await completeScheduledMessage({
+          message: draft,
+          scheduled,
+          scheduledMailboxId: mailboxId,
+        });
+        return;
+      }
       const delivery = await rpc.mail.getComposeSendStatus({
         mailboxId,
         sendOperationId: draft.sendOperationId,
@@ -1168,8 +1286,12 @@ export const useComposeDialogController = ({
       }
     } catch (error) {
       toastError(error, {
-        boundary: "compose-check-delivery",
-        fallback: "Could not check delivery. Please try again.",
+        boundary: draft.scheduleAttempt
+          ? "compose-check-schedule"
+          : "compose-check-delivery",
+        fallback: draft.scheduleAttempt
+          ? "Could not confirm the schedule. Please try again."
+          : "Could not check delivery. Please try again.",
       });
     } finally {
       finishingRef.current = false;
@@ -1614,6 +1736,7 @@ export const useComposeDialogController = ({
     form,
     handleDialogOpenChange,
     handleFollowUpReminderChange,
+    handleScheduleMessage,
     handleUserDraftChange,
     prepareSenderSwitch,
     removeAttachment,

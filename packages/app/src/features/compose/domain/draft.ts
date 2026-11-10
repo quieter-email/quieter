@@ -2,6 +2,7 @@ import type { MessageAttachment } from "@quieter/app/lib/mail";
 import { rpc } from "@quieter/app/lib/orpc";
 import type { ComposeDraftAnchor } from "@quieter/mail/compose/schema";
 import type { FollowUpReminderIntent } from "@quieter/mail/reminders";
+import type { ScheduledSendTime } from "@quieter/mail/scheduled-send";
 
 const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;
 const CONTENT_ID_PREFIX = "quieter-inline";
@@ -56,6 +57,7 @@ export type ComposeDraftState = {
   saveStatus: ComposeSaveStatus;
   sendOperationId?: string;
   sendUncertain?: boolean;
+  scheduleAttempt?: ScheduledSendTime;
   senderName?: string;
   errorMessage: string | null;
   lastSavedAt?: number;
@@ -820,6 +822,38 @@ export const sendComposeMessage = async (
       new Error(
         "Delivery could not be confirmed. Check Sent before sending again.",
         { cause: error }
+      ),
+      { data: { deliveryUncertain: true } }
+    );
+  }
+};
+
+export const scheduleComposeMessage = async (
+  mailboxId: string,
+  draft: ComposeDraftState,
+  schedule: ScheduledSendTime
+) => {
+  const message = await serializeDraft(mailboxId, draft);
+  try {
+    return await rpc.scheduledSends.create({ mailboxId, message, ...schedule });
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "status" in error &&
+      typeof error.status === "number" &&
+      error.status >= 400 &&
+      error.status < 500 &&
+      error.status !== 408
+    ) {
+      throw error;
+    }
+    throw Object.assign(
+      new Error(
+        "Scheduling could not be confirmed. Check the schedule before sending again.",
+        {
+          cause: error,
+        }
       ),
       { data: { deliveryUncertain: true } }
     );
