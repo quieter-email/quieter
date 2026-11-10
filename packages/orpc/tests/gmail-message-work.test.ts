@@ -100,7 +100,9 @@ const work = (): typeof gmailMessageWork.$inferSelect => ({
 
 describe("Gmail message work", () => {
   beforeEach(() => {
-    fixtures.claim.mockReset().mockResolvedValue(work());
+    fixtures.claim
+      .mockReset()
+      .mockResolvedValue({ status: "claimed", work: work() });
     fixtures.deferProvider.mockReset().mockResolvedValue(new Date());
     fixtures.providerRetryAt.mockReset().mockResolvedValue(null);
     fixtures.authorize.mockReset();
@@ -115,12 +117,36 @@ describe("Gmail message work", () => {
   });
 
   test("does not execute or finish a message claimed by another worker", async () => {
-    fixtures.claim.mockResolvedValue(null);
+    fixtures.claim.mockResolvedValue({ status: "empty" });
     await expect(
       processNextGmailMessageWork({ priority: "fresh" })
     ).resolves.toMatchObject({ status: "idle" });
     expect(fixtures.process).not.toHaveBeenCalled();
     expect(fixtures.finish).not.toHaveBeenCalled();
+  });
+
+  test("retains a future capacity rescue without authorizing or reading ready work", async () => {
+    const retryAt = new Date(Date.now() + 5000);
+    fixtures.claim.mockResolvedValue({
+      activeLeases: 4,
+      retryAt,
+      status: "capacity_busy",
+    });
+    fixtures.wake.mockResolvedValue({
+      moreReady: true,
+      nextWakeAt: new Date(),
+    });
+    const result = await processNextGmailMessageWork({ priority: "fresh" });
+    expect(result).toMatchObject({
+      moreReady: false,
+      nextWakeAt: retryAt,
+      status: "capacity_busy",
+    });
+    expect(result.nextWakeAt?.getTime()).toBeGreaterThan(Date.now());
+    expect(fixtures.authorize).not.toHaveBeenCalled();
+    expect(fixtures.process).not.toHaveBeenCalled();
+    expect(fixtures.finish).not.toHaveBeenCalled();
+    expect(fixtures.wake).not.toHaveBeenCalled();
   });
 
   test("runs pending work with the current owner and settings", async () => {
@@ -200,7 +226,10 @@ describe("Gmail message work", () => {
   });
 
   test("finishes late action observations without rerunning completed critical work", async () => {
-    fixtures.claim.mockResolvedValue({ ...work(), completedAt: new Date() });
+    fixtures.claim.mockResolvedValue({
+      status: "claimed",
+      work: { ...work(), completedAt: new Date() },
+    });
     await processNextGmailMessageWork({ priority: "fresh" });
     expect(fixtures.process).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -217,7 +246,10 @@ describe("Gmail message work", () => {
   test.each([false, true])(
     "preserves critical completion after a failed followup, actions requested %s",
     async (triggerActions) => {
-      fixtures.claim.mockResolvedValue({ ...work(), triggerActions });
+      fixtures.claim.mockResolvedValue({
+        status: "claimed",
+        work: { ...work(), triggerActions },
+      });
       const failure = new Error("Ancillary failure");
       fixtures.process.mockImplementation(async ({ onCriticalComplete }) => {
         await onCriticalComplete?.({
@@ -239,10 +271,13 @@ describe("Gmail message work", () => {
       );
       expect(fixtures.finish.mock.calls[0]?.[0].retryAt).toBeInstanceOf(Date);
       fixtures.claim.mockResolvedValue({
-        ...work(),
-        completedAt: new Date(),
-        lastError: failure.message,
-        triggerActions,
+        status: "claimed",
+        work: {
+          ...work(),
+          completedAt: new Date(),
+          lastError: failure.message,
+          triggerActions,
+        },
       });
       fixtures.process.mockReset().mockResolvedValue({
         autoLabel: { status: "disabled" },

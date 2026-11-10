@@ -16,6 +16,7 @@ import {
   getMailAiRequestBudget,
   runBilledAiRequest,
 } from "../src/billing";
+import type { AiRequestDiagnostics } from "../src/billing";
 import { detectMailVerificationCode } from "../src/classify-gmail-message";
 import { createChatModel } from "../src/openrouter";
 import { openRouterStreamMiddleware } from "../src/openrouter-stream";
@@ -59,6 +60,79 @@ describe("paid provider admission and settlement", () => {
     state.release.mockResolvedValue(void 0);
   });
   afterEach(() => vi.unstubAllGlobals());
+
+  test("a failing diagnostic observer preserves successful settlement and rejected-provider release", async () => {
+    const snapshots: AiRequestDiagnostics[] = [];
+    const onDiagnostics = (diagnostics: AiRequestDiagnostics) => {
+      snapshots.push(diagnostics);
+      throw new Error("Observer failed");
+    };
+    const result = { value: "Private provider result" };
+    await expect(
+      runBilledAiRequest({
+        billing,
+        onDiagnostics,
+        run: async () => {
+          await Promise.resolve();
+          return { costUsd: 0.01, result };
+        },
+      })
+    ).resolves.toBe(result);
+    expect(state.settle).toHaveBeenCalledWith(
+      expect.objectContaining({ costUsd: 0.01 })
+    );
+    const refusal = new APICallError({
+      message: "Private provider error",
+      requestBodyValues: {},
+      statusCode: 429,
+      url: "https://example.invalid",
+    });
+    await expect(
+      runBilledAiRequest({
+        billing,
+        onDiagnostics,
+        run: async () => {
+          await Promise.resolve();
+          throw refusal;
+        },
+      })
+    ).rejects.toBe(refusal);
+    expect(state.release).toHaveBeenCalledOnce();
+    expect(snapshots[0]?.stages.settlement?.state).toBe("returned");
+    expect(snapshots[1]?.stages.provider?.state).toBe("failed");
+    expect(snapshots[1]?.stages.release?.state).toBe("returned");
+    expect(JSON.stringify(snapshots)).not.toMatch(/Private|operation|team/u);
+  });
+
+  test.each(["admission", "generation", "settlement"] as const)(
+    "emits a partial %s failure without releasing an unresolved hold",
+    async (stage) => {
+      const failure = new Error("Private ledger failure");
+      if (stage === "admission") {
+        state.reserve.mockRejectedValue(failure);
+      } else if (stage === "generation") {
+        state.generation.mockRejectedValue(failure);
+      } else {
+        state.settle.mockRejectedValue(failure);
+      }
+      const snapshots: AiRequestDiagnostics[] = [];
+      await expect(
+        runBilledAiRequest({
+          billing,
+          onDiagnostics: (diagnostics) => {
+            snapshots.push(diagnostics);
+          },
+          run: async () => {
+            await Promise.resolve();
+            return { costUsd: 0.01, result: "Private result" };
+          },
+        })
+      ).rejects.toBe(failure);
+      expect(snapshots[0]?.stages[stage]?.state).toBe("failed");
+      expect(state.release).not.toHaveBeenCalled();
+      expect(JSON.stringify(snapshots)).not.toMatch(/Private|operation|team/u);
+    }
+  );
 
   test.each(["transcription", "decisions"])(
     "blocks %s before its HTTP sink when reservation fails",

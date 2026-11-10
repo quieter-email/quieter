@@ -85,9 +85,24 @@ export const getMailAiRequestBudget = async (
   return budget;
 };
 
+export type AiRequestStageMeasurement = {
+  calls: number;
+  ms: number;
+  state: "returned" | "failed";
+};
+export type AiRequestDiagnostics = {
+  stages: Partial<
+    Record<
+      "admission" | "provider" | "generation" | "settlement" | "release",
+      AiRequestStageMeasurement
+    >
+  >;
+};
+
 export const runBilledAiRequest = async <Result>(input: {
   billing: AiBillingContext;
   maximumCostUsd?: number;
+  onDiagnostics?: (diagnostics: AiRequestDiagnostics) => void;
   onProviderStart?: () => void;
   run: () => Promise<{
     costUsd: number | undefined;
@@ -95,36 +110,83 @@ export const runBilledAiRequest = async <Result>(input: {
     result: Result;
   }>;
 }): Promise<Result> => {
-  const reservationId = await reserveAiCreditUsage(
-    input.billing,
-    input.maximumCostUsd
-  );
-  try {
-    input.onProviderStart?.();
-    const { costUsd, generationId, result } = await input.run();
-    await recordAiCreditProviderGeneration({ generationId, reservationId });
-    if (costUsd === undefined) {
-      throw new Error("The AI provider did not report a generation cost.");
+  const diagnostics: AiRequestDiagnostics = { stages: {} };
+  let activeStage: {
+    name: keyof AiRequestDiagnostics["stages"];
+    startedAt: number;
+  } | null = null;
+  const recordStage = (
+    next: keyof AiRequestDiagnostics["stages"] | null,
+    failed = false
+  ) => {
+    if (input.onDiagnostics === undefined) {
+      return;
     }
-    await settleAiCreditUsage({ costUsd, reservationId });
-    if (input.maximumCostUsd !== undefined && costUsd > input.maximumCostUsd) {
-      const error = new Error("The AI provider exceeded its spending ceiling.");
-      reportError(error, {
-        actualCostUsd: costUsd,
-        maximumCostUsd: input.maximumCostUsd,
-        operation: "ai:spending-ceiling",
-      });
+    if (activeStage !== null) {
+      const previous = diagnostics.stages[activeStage.name];
+      diagnostics.stages[activeStage.name] = {
+        calls: (previous?.calls ?? 0) + 1,
+        ms: (previous?.ms ?? 0) + performance.now() - activeStage.startedAt,
+        state: failed || previous?.state === "failed" ? "failed" : "returned",
+      };
+    }
+    activeStage =
+      next === null ? null : { name: next, startedAt: performance.now() };
+  };
+  try {
+    recordStage("admission");
+    const reservationId = await reserveAiCreditUsage(
+      input.billing,
+      input.maximumCostUsd
+    );
+    recordStage(null);
+    try {
+      recordStage("provider");
+      input.onProviderStart?.();
+      const { costUsd, generationId, result } = await input.run();
+      recordStage("generation");
+      await recordAiCreditProviderGeneration({ generationId, reservationId });
+      recordStage(null);
+      if (costUsd === undefined) {
+        throw new Error("The AI provider did not report a generation cost.");
+      }
+      recordStage("settlement");
+      await settleAiCreditUsage({ costUsd, reservationId });
+      recordStage(null);
+      if (
+        input.maximumCostUsd !== undefined &&
+        costUsd > input.maximumCostUsd
+      ) {
+        const error = new Error(
+          "The AI provider exceeded its spending ceiling."
+        );
+        reportError(error, {
+          actualCostUsd: costUsd,
+          maximumCostUsd: input.maximumCostUsd,
+          operation: "ai:spending-ceiling",
+        });
+        throw error;
+      }
+      return result;
+    } catch (error) {
+      recordStage(null, true);
+      if (
+        APICallError.isInstance(error) &&
+        [400, 401, 402, 403, 404, 413, 422, 429].includes(error.statusCode ?? 0)
+      ) {
+        recordStage("release");
+        await releaseAiCreditUsage(reservationId);
+        recordStage(null);
+      }
       throw error;
     }
-    return result;
-  } catch (error) {
-    if (
-      APICallError.isInstance(error) &&
-      [400, 401, 402, 403, 404, 413, 422, 429].includes(error.statusCode ?? 0)
-    ) {
-      await releaseAiCreditUsage(reservationId);
+  } finally {
+    recordStage(null, true);
+    try {
+      input.onDiagnostics?.(diagnostics);
+    } catch {
+      // Ignore diagnostic observer failures.
     }
-    throw error;
   }
 };
 

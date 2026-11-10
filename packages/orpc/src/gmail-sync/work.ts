@@ -40,9 +40,10 @@ export { isGmailRateLimitedError } from "@quieter/gmail";
 type MessageAttempt = Parameters<
   NonNullable<Parameters<typeof processGmailMessage>[0]["onAttemptComplete"]>
 >[0];
-type ClaimedWork = NonNullable<
-  Awaited<ReturnType<typeof claimGmailMessageWork>>
->;
+type ClaimedWork = Extract<
+  Awaited<ReturnType<typeof claimGmailMessageWork>>,
+  { status: "claimed" }
+>["work"];
 export type GmailWorkAttempt = {
   accountMs?: number;
   actionsComplete: number;
@@ -195,9 +196,17 @@ export const processNextGmailMessageWork = async (input: {
 }) => {
   const attemptStartedAt = performance.now();
   const handlerStartedAt = Date.now();
-  const work = await claimGmailMessageWork(input);
+  const admission = await claimGmailMessageWork(input);
   const claimMs = performance.now() - attemptStartedAt;
-  if (work === null) {
+  if (admission.status === "capacity_busy") {
+    return {
+      activeLeases: admission.activeLeases,
+      moreReady: false,
+      nextWakeAt: admission.retryAt,
+      status: "capacity_busy" as const,
+    };
+  }
+  if (admission.status === "empty") {
     const wake = await getGmailMessageWorkWake(input);
     return {
       ...wake,
@@ -208,6 +217,7 @@ export const processNextGmailMessageWork = async (input: {
       status: "idle" as const,
     };
   }
+  const { work } = admission;
   const claimedAt = Date.now();
   const attempt: GmailWorkAttempt = {
     actionsComplete: 0,

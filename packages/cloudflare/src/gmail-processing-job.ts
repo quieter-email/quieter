@@ -266,6 +266,9 @@ export const processGmailJob = async (
       );
       // oxlint-disable-next-line no-console -- Count deferred work independently from successful critical completion.
       console.info({
+        activeLeases:
+          result.status === "capacity_busy" ? result.activeLeases : undefined,
+        capacityBusy: Number(result.status === "capacity_busy"),
         complete: Number(result.status === "complete"),
         deferred: Number(
           result.status === "idle" && result.nextWakeAt !== null
@@ -292,7 +295,12 @@ export const processGmailJob = async (
       if (result.nextWakeAt !== null) {
         await enqueueGmailMessageWork(env, {
           mailboxId: parsed.mailboxId,
-          nextWakeAt: result.nextWakeAt,
+          nextWakeAt:
+            result.status === "capacity_busy"
+              ? new Date(
+                  Math.max(result.nextWakeAt.getTime(), Date.now() + 5000)
+                )
+              : result.nextWakeAt,
           priority: parsed.priority,
         });
       } else if (result.status === "retry") {

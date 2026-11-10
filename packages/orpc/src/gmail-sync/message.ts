@@ -31,7 +31,10 @@ import {
   loadAiAgentContext,
   serializeAiAgentContext,
 } from "../ai-memory";
-import type { AiAgentMemoryCandidates } from "../ai-memory";
+import type {
+  AiAgentMemoryCandidates,
+  AiMemoryDiagnostics,
+} from "../ai-memory";
 import { captureMailboxMessageMemory } from "../ai-memory-capture";
 import { enqueueMailAgentMessage } from "../mail-agent/inbox";
 import type { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
@@ -120,6 +123,7 @@ type AutoLabelAttempt = {
   aiLabelCount?: number;
   deterministicLabelCount?: number;
   selectedLabelCount?: number;
+  memory?: AiMemoryDiagnostics;
   providerMutationCount: number;
 };
 export type GmailMessageAttempt = {
@@ -409,6 +413,9 @@ const processAutoLabelMessage = async ({
                 agent: "auto_label",
                 candidates: autoLabelContext.memoryCandidates,
                 mailboxId,
+                onDiagnostics: (memory) => {
+                  attempt.memory = memory;
+                },
                 query: buildMailMemoryQuery(message),
                 semantic: { billingMailboxId: mailboxId },
                 userId: autoLabelContext.memoryCandidates.userId,

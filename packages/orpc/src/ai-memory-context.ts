@@ -5,6 +5,7 @@ import {
 } from "@quieter/ai/ai-memory";
 import type { AiMemoryCategory } from "@quieter/ai/ai-memory";
 import type { AiMemoryProvenance } from "@quieter/ai/ai-memory-provenance";
+import type { AiRequestStageMeasurement } from "@quieter/ai/search-embeddings";
 import { db } from "@quieter/database/client";
 import { aiMemory } from "@quieter/database/schema";
 import { reportError } from "@quieter/observability";
@@ -26,7 +27,9 @@ import { z } from "zod";
 import { serializeAiMemoryProvenance } from "./ai-memory-provenance";
 import { assertAccessibleMailbox } from "./mailbox/service";
 import { requestSemanticIndex } from "./semantic-index-request";
+import type { SemanticIndexRequestDiagnostics } from "./semantic-index-request";
 import { prepareSemanticSearch } from "./semantic-search";
+import type { SemanticSearchDiagnostics } from "./semantic-search";
 
 type MemoryRow = Omit<typeof aiMemory.$inferSelect, "embedding" | "embeddedAt">;
 export type AiAgentMemoryCandidates = {
@@ -36,6 +39,17 @@ export type AiAgentMemoryCandidates = {
 export type AiAgentMemoryContext = {
   instructions: string | null;
   memory: string | null;
+};
+export type AiMemoryDiagnostics = {
+  stages: Partial<
+    Record<
+      "authorization" | "indexRequest" | "semantic" | "candidates" | "rank",
+      AiRequestStageMeasurement
+    >
+  >;
+  // Child timings are included in their corresponding parent stages.
+  indexRequest?: SemanticIndexRequestDiagnostics;
+  semantic?: SemanticSearchDiagnostics;
 };
 export type AiMemoryOverviewCursor = { afterId: string; startedAt: string };
 export type AiMemoryOverviewPage = {
@@ -673,6 +687,7 @@ export const rankAiAgentMemoryCandidates = async ({
 };
 
 type AiAgentContextInput = AiAgentMemoryAccess & {
+  onDiagnostics?: (diagnostics: AiMemoryDiagnostics) => void;
   semantic?: { billingMailboxId: string; signal?: AbortSignal };
   agent: string;
   candidates?: AiAgentMemoryCandidates;
@@ -702,131 +717,192 @@ export function loadAiAgentContext(
 export async function loadAiAgentContext(
   input: AiAgentContextInput | AiMemoryOverviewInput
 ): Promise<AiAgentMemoryContext | AiMemoryOverviewPage> {
-  if (input.mailboxId !== undefined) {
-    await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: input.userId,
-    });
-  }
-  if (!("overview" in input)) {
-    if (input.candidates && input.candidates.userId !== input.userId) {
-      throw new ORPCError("NOT_FOUND", {
-        message: "That context is no longer available.",
-      });
+  const diagnostics: AiMemoryDiagnostics = { stages: {} };
+  const onDiagnostics = "overview" in input ? undefined : input.onDiagnostics;
+  let activeStage: {
+    name: keyof AiMemoryDiagnostics["stages"];
+    startedAt: number;
+  } | null = null;
+  const recordStage = (
+    next: keyof AiMemoryDiagnostics["stages"] | null,
+    failed = false
+  ) => {
+    if (onDiagnostics === undefined) {
+      return;
     }
-    const policy = resolveContextSelection(input.agent, input.selection);
-    let semanticMatches: { id: string; similarity: number; version: number }[] =
-      [];
-    if (input.semantic !== undefined && input.query.trim()) {
-      await requestSemanticIndex({
-        kind: "memory",
-        mailboxId: input.semantic.billingMailboxId,
+    if (activeStage !== null) {
+      const previous = diagnostics.stages[activeStage.name];
+      diagnostics.stages[activeStage.name] = {
+        calls: (previous?.calls ?? 0) + 1,
+        ms: (previous?.ms ?? 0) + performance.now() - activeStage.startedAt,
+        state: failed || previous?.state === "failed" ? "failed" : "returned",
+      };
+    }
+    activeStage =
+      next === null ? null : { name: next, startedAt: performance.now() };
+  };
+  try {
+    if (input.mailboxId !== undefined) {
+      recordStage("authorization");
+      await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
         userId: input.userId,
       });
-      const prepared = await prepareSemanticSearch({
-        kind: "memory",
-        mailboxId: input.semantic.billingMailboxId,
-        query: input.query,
-        signal: input.semantic.signal,
-        userId: input.userId,
-      });
-      semanticMatches = prepared.memoryMatches;
-      if (
-        input.mailboxId !== undefined &&
-        input.mailboxId !== input.semantic.billingMailboxId
-      ) {
-        await assertAccessibleMailbox({
-          mailboxId: input.mailboxId,
-          userId: input.userId,
+      recordStage(null);
+    }
+    if (!("overview" in input)) {
+      if (input.candidates && input.candidates.userId !== input.userId) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "That context is no longer available.",
         });
       }
-    }
-    try {
-      return selectAiMemoryContext({
-        agent: input.agent,
-        candidates: await loadTaskCandidates({
+      const policy = resolveContextSelection(input.agent, input.selection);
+      let semanticMatches: {
+        id: string;
+        similarity: number;
+        version: number;
+      }[] = [];
+      if (input.semantic !== undefined && input.query.trim()) {
+        recordStage("indexRequest");
+        await requestSemanticIndex({
+          kind: "memory",
+          mailboxId: input.semantic.billingMailboxId,
+          onDiagnostics:
+            onDiagnostics === undefined
+              ? undefined
+              : (indexRequest) => {
+                  diagnostics.indexRequest = indexRequest;
+                },
+          userId: input.userId,
+        });
+        recordStage("semantic");
+        const prepared = await prepareSemanticSearch({
+          kind: "memory",
+          mailboxId: input.semantic.billingMailboxId,
+          onDiagnostics:
+            onDiagnostics === undefined
+              ? undefined
+              : (semantic) => {
+                  diagnostics.semantic = semantic;
+                },
+          query: input.query,
+          signal: input.semantic.signal,
+          userId: input.userId,
+        });
+        recordStage(null);
+        semanticMatches = prepared.memoryMatches;
+        if (
+          input.mailboxId !== undefined &&
+          input.mailboxId !== input.semantic.billingMailboxId
+        ) {
+          recordStage("authorization");
+          await assertAccessibleMailbox({
+            mailboxId: input.mailboxId,
+            userId: input.userId,
+          });
+          recordStage(null);
+        }
+      }
+      try {
+        recordStage("candidates");
+        const candidates = await loadTaskCandidates({
           agent: input.agent,
           mailboxId: input.mailboxId,
           query: input.query,
           selection: policy,
           semanticMatches,
           userId: input.userId,
-        }),
-        query: input.query,
-        selection: policy,
-        semanticMatches,
+        });
+        recordStage("rank");
+        const context = selectAiMemoryContext({
+          agent: input.agent,
+          candidates,
+          query: input.query,
+          selection: policy,
+          semanticMatches,
+        });
+        recordStage(null);
+        return context;
+      } catch (error) {
+        recordStage(null, true);
+        reportError(error, { operation: "ai-memory:load-context" });
+        return { instructions: null, memory: null };
+      }
+    }
+    const now = new Date();
+    const cursor = input.overview.cursor
+      ? overviewCursorSchema.parse(input.overview.cursor)
+      : null;
+    const startedAt = cursor ? new Date(cursor.startedAt) : now;
+    if (startedAt > now) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "That context page is no longer available. Start again.",
       });
-    } catch (error) {
-      reportError(error, { operation: "ai-memory:load-context" });
-      return { instructions: null, memory: null };
+    }
+    const query = input.overview.query?.trim().slice(0, 2000);
+    const where = and(
+      eq(aiMemory.scope, "user"),
+      eq(aiMemory.scopeKey, `user:${input.userId}`),
+      eq(aiMemory.userId, input.userId),
+      eq(aiMemory.status, "active"),
+      or(isNull(aiMemory.expiresAt), gt(aiMemory.expiresAt, now)),
+      lte(aiMemory.createdAt, startedAt),
+      input.overview.category
+        ? eq(sql`${aiMemory.metadata}->>'category'`, input.overview.category)
+        : undefined,
+      query
+        ? sql`(${aiMemory.content} || ' ' || ${aiMemory.summary} || ' ' || ${aiMemory.metadata}::text) ilike ${`%${query.replaceAll(/[\\%_]/gu, "\\$&")}%`}`
+        : undefined
+    );
+    const [rows, totals] = await Promise.all([
+      db
+        .select({
+          confidence: aiMemory.confidence,
+          content: aiMemory.content,
+          createdAt: aiMemory.createdAt,
+          expiresAt: aiMemory.expiresAt,
+          id: aiMemory.id,
+          kind: aiMemory.kind,
+          lastConfirmedAt: aiMemory.lastConfirmedAt,
+          reinforcementCount: aiMemory.reinforcementCount,
+          source: aiMemory.source,
+          summary: aiMemory.summary,
+        })
+        .from(aiMemory)
+        .where(and(where, cursor ? gt(aiMemory.id, cursor.afterId) : undefined))
+        .orderBy(asc(aiMemory.id))
+        .limit(101),
+      db.select({ total: count() }).from(aiMemory).where(where),
+    ]);
+    const items = rows.slice(0, 100).map((row) => {
+      const sensitive = containsProhibitedMemorySecret(
+        `${row.summary} ${row.content}`
+      );
+      return {
+        content: sensitive ? "A sensitive detail was omitted." : row.content,
+        id: row.id,
+        kind: row.kind,
+        provenance: serializeAiMemoryProvenance(row),
+        summary: sensitive ? "Sensitive detail omitted" : row.summary,
+      };
+    });
+    const last = items.at(-1);
+    const hasMore = rows.length > items.length;
+    return {
+      hasMore,
+      items,
+      nextCursor:
+        hasMore && last
+          ? { afterId: last.id, startedAt: startedAt.toISOString() }
+          : null,
+      total: totals[0]?.total ?? 0,
+    };
+  } finally {
+    recordStage(null, true);
+    try {
+      onDiagnostics?.(diagnostics);
+    } catch {
+      // Ignore diagnostic observer failures.
     }
   }
-  const now = new Date();
-  const cursor = input.overview.cursor
-    ? overviewCursorSchema.parse(input.overview.cursor)
-    : null;
-  const startedAt = cursor ? new Date(cursor.startedAt) : now;
-  if (startedAt > now) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "That context page is no longer available. Start again.",
-    });
-  }
-  const query = input.overview.query?.trim().slice(0, 2000);
-  const where = and(
-    eq(aiMemory.scope, "user"),
-    eq(aiMemory.scopeKey, `user:${input.userId}`),
-    eq(aiMemory.userId, input.userId),
-    eq(aiMemory.status, "active"),
-    or(isNull(aiMemory.expiresAt), gt(aiMemory.expiresAt, now)),
-    lte(aiMemory.createdAt, startedAt),
-    input.overview.category
-      ? eq(sql`${aiMemory.metadata}->>'category'`, input.overview.category)
-      : undefined,
-    query
-      ? sql`(${aiMemory.content} || ' ' || ${aiMemory.summary} || ' ' || ${aiMemory.metadata}::text) ilike ${`%${query.replaceAll(/[\\%_]/gu, "\\$&")}%`}`
-      : undefined
-  );
-  const [rows, totals] = await Promise.all([
-    db
-      .select({
-        confidence: aiMemory.confidence,
-        content: aiMemory.content,
-        createdAt: aiMemory.createdAt,
-        expiresAt: aiMemory.expiresAt,
-        id: aiMemory.id,
-        kind: aiMemory.kind,
-        lastConfirmedAt: aiMemory.lastConfirmedAt,
-        reinforcementCount: aiMemory.reinforcementCount,
-        source: aiMemory.source,
-        summary: aiMemory.summary,
-      })
-      .from(aiMemory)
-      .where(and(where, cursor ? gt(aiMemory.id, cursor.afterId) : undefined))
-      .orderBy(asc(aiMemory.id))
-      .limit(101),
-    db.select({ total: count() }).from(aiMemory).where(where),
-  ]);
-  const items = rows.slice(0, 100).map((row) => {
-    const sensitive = containsProhibitedMemorySecret(
-      `${row.summary} ${row.content}`
-    );
-    return {
-      content: sensitive ? "A sensitive detail was omitted." : row.content,
-      id: row.id,
-      kind: row.kind,
-      provenance: serializeAiMemoryProvenance(row),
-      summary: sensitive ? "Sensitive detail omitted" : row.summary,
-    };
-  });
-  const last = items.at(-1);
-  const hasMore = rows.length > items.length;
-  return {
-    hasMore,
-    items,
-    nextCursor:
-      hasMore && last
-        ? { afterId: last.id, startedAt: startedAt.toISOString() }
-        : null,
-    total: totals[0]?.total ?? 0,
-  };
 }
