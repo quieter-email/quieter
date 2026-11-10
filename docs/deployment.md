@@ -105,6 +105,10 @@ Application secrets are cataloged in `packages/env/src/sst-secrets.ts` and decla
 
 Repository checks cannot validate account-level state. After changing Worker infrastructure, verify that the deployment token remains least-privilege, logs and traces have the intended retention, Gmail Pub/Sub push delivery and retries work with the direct processing acknowledgement deadline, Hyperdrive targets the expected database with query caching disabled, and the production custom domain still routes to its intended Worker. Drain and retire the previous Gmail queue consumer during rollout. Treat this as verification only; SST remains the configuration authority.
 
+The private Gmail processor is part of `actionDeploymentTargets.workers`. Release verification checks its current build and Frankfurt placement, confirms both workers.dev and version preview URLs are disabled, and verifies the realtime Worker's service binding targets that processor. The private URL step reapplies disabled URL settings to the processor and retained web slots on every protected deployment. Recovery evidence must include the processor alongside the existing Action producers.
+
+Pre-deployment Action cutover preparation reads only the database fence and guard definitions. An already released fence does not require the new processor or a new build's output inventory before SST runs. The expanded consumer inventory is checked after deployment. The current interrupted-cutover recovery command rejects historical evidence that omits the processor. Such an artifact cannot prove the new producer's identity. Preserve the fence and use a protected forward deployment rather than relaxing that provenance check.
+
 ## Database safety
 
 `DATABASE_URL` is the least-privilege runtime role. `DATABASE_MIGRATION_URL` is available only to the protected production migration step. Local development must use loopback Postgres or the explicitly allowlisted PlanetScale `quieter_dev` database. Keep `DATABASE_URL` on port 6432, set `DATABASE_MIGRATION_URL` to direct port 5432, and pin their exact host with `QUIETER_LOCAL_PLANETSCALE_HOST`. Do not store production migration credentials in `.env.local`.

@@ -29,6 +29,7 @@ export const createGmailResources = (
   );
   let gmailLiveSyncUrl: $util.Input<string> = "";
   let actionWorkers: {
+    gmailProcessing: $util.Output<string>;
     gmailRealtime: $util.Output<string>;
     gmailMaintenance: $util.Output<string>;
   } | null = null;
@@ -66,6 +67,65 @@ export const createGmailResources = (
     const processingSecretBindings = processingSecretNames.map((name) =>
       requireSecretBinding(secretBindings, name)
     );
+    const gmailProcessingWorker = new sst.cloudflare.Worker(
+      "GmailProcessingWorker",
+      {
+        compatibility: {
+          date: COMPATIBILITY_DATE,
+          flags: ["nodejs_compat"],
+        },
+        environment: {
+          ...context.billingEnvironment,
+          ...context.releaseEnvironment,
+          QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
+          SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
+        },
+        handler: "packages/cloudflare/src/gmail-processing-worker.ts",
+        link: [
+          gmailProcessingQueue,
+          gmailFreshProcessingQueue,
+          gmailCatchupProcessingQueue,
+          mailLiveUser,
+          appDatabase,
+          sentryDsnBinding,
+          ...processingSecretBindings,
+        ],
+        placement: { region: "aws:eu-central-1" },
+        transform: {
+          worker(args) {
+            args.bindings = $util
+              .all([args.bindings, updates.worker.nodes.worker.scriptName])
+              .apply(([bindings, scriptName]) =>
+                (bindings ?? []).map((binding) =>
+                  binding.name === "MailLiveUser"
+                    ? { ...binding, scriptName }
+                    : binding
+                )
+              );
+            args.limits = { cpuMs: 300_000 };
+            args.observability = cloudflareWorkerObservability;
+          },
+        },
+        url: false,
+      }
+    );
+    const gmailProcessingPrivateUrls = new cloudflare.WorkersScriptSubdomain(
+      "GmailProcessingPrivateUrls",
+      {
+        accountId: gmailProcessingWorker.nodes.worker.accountId.apply(
+          (accountId) => {
+            if (accountId === undefined) {
+              throw new Error("Gmail processor is missing its account ID.");
+            }
+            return accountId;
+          }
+        ),
+        enabled: false,
+        previewsEnabled: false,
+        scriptName: gmailProcessingWorker.nodes.worker.scriptName,
+      },
+      { dependsOn: [gmailProcessingWorker] }
+    );
     const gmailRealtimeWorker = new sst.cloudflare.Worker(
       "GmailRealtimeWorker",
       {
@@ -89,6 +149,7 @@ export const createGmailResources = (
         },
         handler: "packages/cloudflare/src/worker.ts",
         link: [
+          gmailProcessingWorker,
           gmailProcessingQueue,
           gmailFreshProcessingQueue,
           gmailCatchupProcessingQueue,
@@ -127,7 +188,8 @@ export const createGmailResources = (
           },
         },
         url: true,
-      }
+      },
+      { dependsOn: [gmailProcessingWorker, gmailProcessingPrivateUrls] }
     );
 
     // oxlint-disable-next-line no-new -- Pulumi registers this consumer with the existing realtime Worker.
@@ -235,6 +297,7 @@ export const createGmailResources = (
     );
     actionWorkers = {
       gmailMaintenance: gmailPubSubMaintenance.nodes.worker.scriptName,
+      gmailProcessing: gmailProcessingWorker.nodes.worker.scriptName,
       gmailRealtime: gmailRealtimeWorker.nodes.worker.scriptName,
     };
 

@@ -23,6 +23,9 @@ export default defineConfig({
           }),
         },
         r2Buckets: { LocalMailStorage: "quieter-local-mail" },
+        serviceBindings: {
+          GmailProcessingWorker: () => new Response(null, { status: 503 }),
+        },
       },
       wrangler: { configPath: "./wrangler.types.jsonc" },
     }),

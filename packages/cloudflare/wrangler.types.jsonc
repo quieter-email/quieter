@@ -5,6 +5,12 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-08-04",
   "compatibility_flags": ["nodejs_compat"],
+  "services": [
+    {
+      "binding": "GmailProcessingWorker",
+      "service": "quieter-gmail-processing-types",
+    },
+  ],
   "queues": {
     "producers": [
       {

@@ -17,6 +17,7 @@ import {
 } from "vite-plus/test";
 
 import { runGmailMaintenance } from "../src/gmail-maintenance-worker";
+import type { enqueueGmailNotification } from "../src/gmail-processing";
 import { broadcastMailUpdate, handleMailUpdates } from "../src/mail-updates";
 import worker from "../src/worker";
 import { handlePubSub, requestErrorResponse } from "../src/worker-utils";
@@ -361,7 +362,7 @@ describe("Cloudflare worker runtime", () => {
     test("returns 5xx when durable enqueue fails", async () => {
       installFetchMock();
       const processNotification = vi
-        .fn<(message: unknown, bindings: Env) => Promise<void>>()
+        .fn<typeof enqueueGmailNotification>()
         .mockRejectedValue(new Error("temporary"));
       const response = await handlePubSub(
         await pubSubRequest(envelope()),
@@ -373,8 +374,7 @@ describe("Cloudflare worker runtime", () => {
 
     test("does not process a notification with an invalid subscription", async () => {
       installFetchMock();
-      const processNotification =
-        vi.fn<(message: unknown, bindings: Env) => Promise<void>>();
+      const processNotification = vi.fn<typeof enqueueGmailNotification>();
       await expect(
         handlePubSub(
           await pubSubRequest(envelope({ subscription: "other" })),

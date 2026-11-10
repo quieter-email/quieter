@@ -18,7 +18,7 @@ import { handleScheduledSendWake } from "./scheduled-send-wake";
 import { readLinkedSecret, reportWorkerError } from "./worker-runtime";
 
 export const broadcastMailUpdate = async (
-  env: Env,
+  env: Pick<Env, "MailLiveUser">,
   event: MailUpdate,
   recipientUserIds?: readonly string[]
 ) => {
@@ -125,7 +125,7 @@ export const handleMailUpdates = async (request: Request, env: Env) => {
 };
 
 export const broadcastGmailUpdate = async (
-  env: Env,
+  env: Pick<Env, "MailLiveUser">,
   emailAddress: string,
   type: MailUpdate["type"],
   revision?: string

@@ -18,7 +18,7 @@ See [OAuth connectors](oauth-connectors.md) for Notion, Todoist, ClickUp, Outloo
 
 ## Install
 
-Cloudflare uses the beta `cf` CLI and Vite plugin with `apps/web/cloudflare.config.ts` and `packages/cloudflare/cloudflare.config.ts`. The background runtime uses `wrangler dev --experimental-new-config` to load the same config and retain shared `.wrangler/state` persistence; the current `cf dev` rejects `--persist-to`. SST remains the deployment authority. The Wrangler JSON fixture only serves Worker type generation and tests. Type generation explicitly loads the empty `packages/cloudflare/wrangler.types.env` fixture, keeping its output independent of local `.dev.vars` files. Run `vp exec sst install` after dependency installation to generate infrastructure types. The updated `cf` delegate launcher works on Windows without a patch. Worker tests use isolated Vitest 4 packages until Cloudflare supports Vitest 5.
+The web app uses Cloudflare's beta `cf` Vite plugin with `apps/web/cloudflare.config.ts`. The background runtime uses native multi-config `wrangler dev` with `packages/cloudflare/wrangler.local.jsonc` and `wrangler.processing.local.jsonc`, retaining shared `.wrangler/state` persistence. SST remains the deployment authority. The separate `wrangler.types.jsonc` fixture serves Worker type generation and tests. Type generation explicitly loads the empty `packages/cloudflare/wrangler.types.env` fixture, keeping its output independent of local `.dev.vars` files. Run `vp exec sst install` after dependency installation to generate infrastructure types. The updated `cf` delegate launcher works on Windows without a patch. Worker tests use isolated Vitest 4 packages until Cloudflare supports Vitest 5.
 
 Dependency installation checks peers strictly and does not auto-install optional integration trees. Declare required peers in the consuming workspace. The Vite peer-version exception maps the pinned Vite+ core alias; update it with Vite+. Run `vp pm audit` when updating dependencies, and upgrade related authentication or Cloudflare packages together.
 
@@ -102,7 +102,7 @@ vp run dev
 
 This starts the web app in Cloudflare's local Worker runtime on `http://localhost:3000`. Vite validates the development database destination before serving. Use `vp run dev:full` for the web app plus the background Worker on port 8787. Use `vp run dev:workers` to start only the background runtime alongside an already-running web app.
 
-`dev:prepare` generates ignored `packages/cloudflare/.dev.vars` from the validated local settings. The web plugin reads workspace `.env.local` and resolves declared secret bindings through `@quieter/env`. It excludes migration credentials and supplies the linked live-sync signing secret. Restart both runtimes after changing secrets or Worker bindings. A Vite hot reload alone does not refresh a separate `cf dev` process.
+`dev:prepare` generates ignored `packages/cloudflare/.dev.vars` for both background Workers from the validated local settings. The web plugin reads workspace `.env.local` and resolves declared secret bindings through `@quieter/env`. Preparation excludes migration credentials and supplies the linked live-sync signing secret. Restart both runtimes after changing secrets or Worker bindings. A Vite hot reload alone does not refresh a separate Wrangler process.
 
 ```bash
 vp run dev:setup
@@ -118,7 +118,7 @@ vp run dev:trigger actions
 vp run dev:trigger reminders
 ```
 
-The local Worker handles Gmail notifications, realtime updates, managed-mail fixtures, and maintenance in one process. Production deploys separate Workers. Local maintenance uses manual triggers, not an automatically running cron. The Pub/Sub bridge uses `gcloud auth print-access-token`, pulls one message at a time from its own subscription, extends the acknowledgment deadline during handoff, and acknowledges after the local Worker durably queues the notification. The shared queue handler processes it independently of that HTTP request. See [Gmail background processing](gmail-processing.md) for retries, recovery, and manual verification.
+The local gateway handles Gmail notifications, realtime updates, managed-mail fixtures, and manual maintenance. The auxiliary Gmail processor receives complete jobs through the same private service binding as production. Only the gateway exposes a loopback HTTP port. Local maintenance uses manual triggers, not an automatically running cron. The Pub/Sub bridge uses `gcloud auth print-access-token`, pulls one message at a time from its own subscription, extends the acknowledgment deadline during handoff, and acknowledges after the gateway durably queues the notification. The queue handler and processor run independently of that HTTP request. See [Gmail background processing](gmail-processing.md) for retries, recovery, and manual verification.
 
 Important classification has a manual maintenance trigger. Use `vp run dev:trigger importance` to process pending incoming mail with development model credentials and billing controls. See [Mail importance](mail-importance.md) for classification, manual overrides, and privacy rules. The trigger preserves Gmail watch ownership and provider data.
 

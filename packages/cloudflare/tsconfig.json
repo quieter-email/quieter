@@ -9,8 +9,6 @@
     "scripts/**/*.ts",
     "tests/**/*.ts",
     "worker-tests.config.ts",
-    "worker-configuration.d.ts",
-    "cloudflare.config.ts",
-    "wrangler.config.ts"
+    "worker-configuration.d.ts"
   ]
 }

@@ -4,12 +4,21 @@ import {
   processNextGmailMessageWork,
 } from "@quieter/orpc/gmail-work";
 import { env } from "cloudflare:workers";
-import { afterEach, describe, expect, test, vi } from "vite-plus/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from "vite-plus/test";
 
 import {
   enqueueGmailNotification,
   processGmailQueue,
 } from "../src/gmail-processing";
+import { GMAIL_PROCESSING_URL } from "../src/gmail-processing-job";
+import processingWorker from "../src/gmail-processing-worker";
 import { broadcastMailUpdate } from "../src/mail-updates";
 import type { broadcastGmailUpdate } from "../src/mail-updates";
 
@@ -82,6 +91,13 @@ const accepted = {
 };
 
 describe("durable Gmail processing", () => {
+  beforeEach(() => {
+    vi.spyOn(env.GmailProcessingWorker, "fetch").mockImplementation(
+      async (input, init) =>
+        await processingWorker.fetch(new Request(input, init), env)
+    );
+  });
+
   afterEach(() => {
     vi.resetAllMocks();
     vi.restoreAllMocks();
@@ -113,9 +129,21 @@ describe("durable Gmail processing", () => {
     await processGmailQueue(batch, env);
     expect(discoverFreshGmailMessages).toHaveBeenCalledWith(notification);
     expect(freshSend).toHaveBeenCalledWith(fresh, undefined);
-    expect(captureSend).toHaveBeenCalledWith(capture);
+    expect(captureSend).toHaveBeenCalledWith(capture, undefined);
     expect(processGmailPubSubNotification).not.toHaveBeenCalled();
     expect(processNextGmailMessageWork).not.toHaveBeenCalled();
+    expect(message.ack).toHaveBeenCalledOnce();
+  });
+
+  test("preserves the receive time through the private processing boundary", async () => {
+    vi.mocked(discoverFreshGmailMessages).mockResolvedValue({
+      ignored: true,
+      reason: "mailbox_not_connected",
+    });
+    const received = { ...notification, notificationReceivedAt: Date.now() };
+    const { batch, message } = delivery(received);
+    await processGmailQueue(batch, env);
+    expect(discoverFreshGmailMessages).toHaveBeenCalledWith(received);
     expect(message.ack).toHaveBeenCalledOnce();
   });
 
@@ -186,7 +214,7 @@ describe("durable Gmail processing", () => {
     const processing = processGmailQueue(batch, env);
     await vi.waitFor(() => {
       expect(broadcastMailUpdate).toHaveBeenCalledWith(
-        env,
+        expect.anything(),
         expect.objectContaining({
           mailboxId: "mailbox-1",
           type: "mailbox.changed",
@@ -364,5 +392,152 @@ describe("durable Gmail processing", () => {
     expect(message.ack).not.toHaveBeenCalled();
     expect(processNextGmailMessageWork).not.toHaveBeenCalled();
     expect(processGmailPubSubNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe("private Gmail processing transport", () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  test("sends job metadata only in bounded POST JSON", async () => {
+    const fetch = vi
+      .spyOn(env.GmailProcessingWorker, "fetch")
+      .mockResolvedValue(Response.json({ action: "ack" }));
+    const { batch, message } = delivery(fresh);
+    await processGmailQueue(batch, env);
+    const [call] = fetch.mock.calls;
+    expect(call?.[0]).toBe(GMAIL_PROCESSING_URL);
+    expect(call?.[1]).toMatchObject({
+      body: JSON.stringify(fresh),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    expect(message.ack).toHaveBeenCalledOnce();
+  });
+
+  test.each([
+    { action: "retry", delaySeconds: 0 },
+    { action: "retry", delaySeconds: -1 },
+    { action: "retry", delaySeconds: 43_201 },
+    { action: "retry", delaySeconds: 1.5 },
+    { action: "retry", delaySeconds: "60" },
+    { action: "ack", delaySeconds: 60 },
+    { action: "unknown" },
+  ])("does not acknowledge an invalid decision %j", async (decision) => {
+    vi.spyOn(env.GmailProcessingWorker, "fetch").mockResolvedValue(
+      Response.json(decision)
+    );
+    const { batch, message } = delivery(fresh);
+    await processGmailQueue(batch, env);
+    expect(message.ack).not.toHaveBeenCalled();
+    expect(message.retry).toHaveBeenCalledWith({ delaySeconds: 60 });
+  });
+
+  test.each([
+    () => Response.json({ action: "ack" }, { status: 503 }),
+    () => new Response("invalid"),
+    () => new Response(null, { status: 204 }),
+    () => new Response(" ".repeat(2048)),
+  ])("keeps failed or unbounded responses retryable", async (response) => {
+    vi.spyOn(env.GmailProcessingWorker, "fetch").mockResolvedValue(response());
+    const { batch, message } = delivery(fresh);
+    await processGmailQueue(batch, env);
+    expect(message.ack).not.toHaveBeenCalled();
+    expect(message.retry).toHaveBeenCalledWith({ delaySeconds: 60 });
+  });
+
+  test("keeps binding failures retryable without running work in the consumer", async () => {
+    vi.spyOn(env.GmailProcessingWorker, "fetch").mockRejectedValue(
+      new Error("service unavailable")
+    );
+    const { batch, message } = delivery(fresh);
+    await processGmailQueue(batch, env);
+    expect(message.ack).not.toHaveBeenCalled();
+    expect(message.retry).toHaveBeenCalledWith({ delaySeconds: 60 });
+    expect(processNextGmailMessageWork).not.toHaveBeenCalled();
+  });
+
+  test("applies a validated retry decision without acknowledging", async () => {
+    vi.spyOn(env.GmailProcessingWorker, "fetch").mockResolvedValue(
+      Response.json({ action: "retry", delaySeconds: 123 })
+    );
+    const { batch, message } = delivery(fresh);
+    await processGmailQueue(batch, env);
+    expect(message.ack).not.toHaveBeenCalled();
+    expect(message.retry).toHaveBeenCalledWith({ delaySeconds: 123 });
+  });
+
+  test("rejects oversized jobs before forwarding", async () => {
+    const fetch = vi.spyOn(env.GmailProcessingWorker, "fetch");
+    const { batch, message } = delivery({
+      ...notification,
+      pubSubMessageId: "x".repeat(65_536),
+    });
+    await processGmailQueue(batch, env);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(message.ack).not.toHaveBeenCalled();
+    expect(message.retry).toHaveBeenCalledOnce();
+  });
+
+  test.each([
+    new Request(GMAIL_PROCESSING_URL),
+    new Request(`${GMAIL_PROCESSING_URL}?mailbox=private`, { method: "POST" }),
+    new Request("https://gmail-processing.internal/other", { method: "POST" }),
+  ])("rejects methods and private metadata in URLs", async (request) => {
+    const response = await processingWorker.fetch(request, env);
+    expect(response.status).toBe(404);
+    expect(processNextGmailMessageWork).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    { body: "{", contentType: "application/json" },
+    {
+      body: JSON.stringify({ emailAddress: "invalid" }),
+      contentType: "application/json",
+    },
+    { body: JSON.stringify(fresh), contentType: "text/plain" },
+    { body: " ".repeat(65_537), contentType: "application/json" },
+  ])(
+    "rejects invalid private input before processing",
+    async ({ body, contentType }) => {
+      const response = await processingWorker.fetch(
+        new Request(GMAIL_PROCESSING_URL, {
+          body,
+          headers: { "content-type": contentType },
+          method: "POST",
+        }),
+        env
+      );
+      expect(response.ok).toBeFalsy();
+      expect(processNextGmailMessageWork).not.toHaveBeenCalled();
+      expect(processGmailPubSubNotification).not.toHaveBeenCalled();
+    }
+  );
+
+  test("does not return acknowledgement after request cancellation", async () => {
+    const pending = Promise.withResolvers<null>();
+    vi.mocked(processNextGmailMessageWork).mockImplementationOnce(async () => {
+      await pending.promise;
+      return { moreReady: false, nextWakeAt: null, status: "idle" };
+    });
+    const controller = new AbortController();
+    const processing = processingWorker.fetch(
+      new Request(GMAIL_PROCESSING_URL, {
+        body: JSON.stringify(fresh),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+        signal: controller.signal,
+      }),
+      env
+    );
+    await vi.waitFor(() => {
+      expect(processNextGmailMessageWork).toHaveBeenCalledOnce();
+    });
+    controller.abort();
+    pending.resolve(null);
+    const response = await processing;
+    expect(response.ok).toBeFalsy();
   });
 });

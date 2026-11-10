@@ -26,6 +26,7 @@ const original = actionEvidenceSchema.parse({
   verifiedAt,
   workers: Object.entries({
     gmailMaintenance: "quieter-production-gmailpubsubmaintenancehandlerscript",
+    gmailProcessing: "quieter-production-gmailprocessingworkerscript",
     gmailRealtime: "quieter-production-gmailrealtimeworkerscript",
     mailMaintenance: "quieter-production-mailmaintenancehandlerscript",
     "web-a": "quieter-production-web-release-a",

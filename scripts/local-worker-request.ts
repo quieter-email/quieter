@@ -1,5 +1,5 @@
 import { assertLocalEnvFile } from "@quieter/env/local-doctor";
-import { requireServerEnv } from "@quieter/env/server";
+import { requireServerEnv, serverEnv } from "@quieter/env/server";
 
 assertLocalEnvFile(".env.local");
 const action = process.argv[2] ?? "health";
@@ -20,7 +20,10 @@ if (
     "Use dev:trigger health, maintenance, mail-recovery, importance, memory, semantic-index <user-id> <mailbox-id> <memory|chat|mail>, actions, reminders, or scheduled-send."
   );
 }
-const response = await fetch(`http://127.0.0.1:8787/__dev/${action}`, {
+const workerOrigin = new URL(
+  serverEnv.MAIL_UPDATES_URL ?? "ws://127.0.0.1:8787/mail/live"
+).origin.replace(/^ws/u, "http");
+const response = await fetch(`${workerOrigin}/__dev/${action}`, {
   ...(action === "semantic-index"
     ? {
         body: JSON.stringify({

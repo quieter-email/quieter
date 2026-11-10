@@ -37,5 +37,5 @@ await writeFile(
   { mode: 0o600 }
 );
 process.stdout.write(
-  "Prepared ignored local Worker bindings. Migration credentials are excluded.\n"
+  "Prepared ignored bindings shared by the local gateway and Gmail processor. Migration credentials are excluded.\n"
 );

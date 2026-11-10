@@ -50,7 +50,7 @@ Implemented: `sst.local.config.ts` uses a personal stage and native [DevCommand]
 
 ### Cloudflare Workers, Queues, Durable Objects, scheduled jobs, and Hyperdrive
 
-Cloudflare's Vite plugin runs Worker code in workerd. `auxiliaryWorkers` runs the other application Workers in the same development session. This is the native fit for the realtime ingress, Gmail maintenance scheduler, and per-minute mail maintenance worker. Service bindings connect entrypoints. See [multiple Workers](https://developers.cloudflare.com/workers/local-development/multi-workers/).
+Cloudflare's Vite plugin runs the web Worker in workerd. `dev:workers` starts the gateway and auxiliary Gmail processor in one native multi-config Wrangler session. Service bindings connect them, and only the gateway exposes a loopback HTTP port. The gateway retains manual maintenance triggers. See [Gmail background processing](gmail-processing.md) and [multiple Workers](https://developers.cloudflare.com/workers/local-development/multi-workers/).
 
 Queues have native local producers and consumers. They support testing message flow without a cloud queue, but local consumer concurrency is not supported, and Wrangler remote mode does not support Queues. Test distributed concurrency and delivery behavior in the deployed development stage. See [Queues local development](https://developers.cloudflare.com/queues/configuration/local-development/).
 

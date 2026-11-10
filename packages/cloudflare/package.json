@@ -6,7 +6,7 @@
     "./compatibility-date": "./src/compatibility-date.ts"
   },
   "scripts": {
-    "dev": "wrangler dev --experimental-new-config --persist-to ../../.wrangler/state",
+    "dev": "wrangler dev --config wrangler.local.jsonc --config wrangler.processing.local.jsonc --persist-to ../../.wrangler/state",
     "cf-typecheck": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-file wrangler.types.env --strict-vars false --check",
     "cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-file wrangler.types.env --strict-vars false",
     "check:compatibility-date": "node scripts/sync-compatibility-date.ts --check",
