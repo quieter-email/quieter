@@ -8,7 +8,10 @@ import {
   detectMailVerificationCode,
 } from "@quieter/ai/classify-gmail-message";
 import { isAiCreditAdmissionBusy } from "@quieter/ai/errors";
-import { extractMailVerificationCode } from "@quieter/ai/extract-verification-code";
+import {
+  extractMailVerificationCode,
+  MailVerificationCodeTimeoutError,
+} from "@quieter/ai/extract-verification-code";
 import { VERIFICATION_CODE_MODEL } from "@quieter/ai/model-config";
 import { reportAiUsage } from "@quieter/billing";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
@@ -49,11 +52,17 @@ export type VerificationCodeProcessingResult =
   | { status: "complete" }
   | {
       status: "retry";
-      reason: "admission_busy" | "budget" | "failure" | "in_progress";
+      reason:
+        | "admission_busy"
+        | "budget"
+        | "extraction_timeout"
+        | "failure"
+        | "in_progress";
       retryAt: Date;
     };
 
 const LEASE_MS = 5 * 60_000;
+const FIRST_EXTRACTION_TIMEOUT_RETRY_MS = 5000;
 const RETRY_BASE_MS = 2 * 60_000;
 const RETRY_MAX_MS = 30 * 60_000;
 const COMBINED_CODE_MODEL = `${AUTO_LABEL_MODEL}+${VERIFICATION_CODE_MODEL}`;
@@ -609,8 +618,14 @@ export const processMailVerificationCode = async ({
     }
     return { status: "complete" };
   } catch (error) {
-    if (phase === "extract" && !isAiCreditAdmissionBusy(error)) {
-      reportError(error, {
+    const extractionTimedOut =
+      error instanceof MailVerificationCodeTimeoutError;
+    const failureReason = extractionTimedOut ? "extraction_timeout" : "failure";
+    const reason = isAiCreditAdmissionBusy(error)
+      ? "admission_busy"
+      : failureReason;
+    if (phase === "extract" && reason !== "admission_busy") {
+      reportError(extractionTimedOut ? error.cause : error, {
         operation: "verification-code:extract",
       });
     }
@@ -620,17 +635,18 @@ export const processMailVerificationCode = async ({
       extractionUsage
     );
     const failedAt = new Date();
-    const admissionBusy = isAiCreditAdmissionBusy(error);
-    const attemptCount = (claimed.attemptCount ?? 0) + (admissionBusy ? 0 : 1);
-    const retryAt = new Date(
-      failedAt.getTime() +
-        (admissionBusy
-          ? AI_ADMISSION_RETRY_MS
-          : Math.min(
-              RETRY_MAX_MS,
-              RETRY_BASE_MS * 2 ** Math.min(attemptCount - 1, 20)
-            ))
+    const attemptCount =
+      (claimed.attemptCount ?? 0) + (reason === "admission_busy" ? 0 : 1);
+    let retryDelayMs = Math.min(
+      RETRY_MAX_MS,
+      RETRY_BASE_MS * 2 ** Math.min(attemptCount - 1, 20)
     );
+    if (reason === "admission_busy") {
+      retryDelayMs = AI_ADMISSION_RETRY_MS;
+    } else if (reason === "extraction_timeout" && attemptCount === 1) {
+      retryDelayMs = FIRST_EXTRACTION_TIMEOUT_RETRY_MS;
+    }
+    const retryAt = new Date(failedAt.getTime() + retryDelayMs);
     await db
       .update(mailboxVerificationCode)
       .set({
@@ -660,7 +676,7 @@ export const processMailVerificationCode = async ({
       throw error;
     }
     return {
-      reason: admissionBusy ? "admission_busy" : "failure",
+      reason,
       retryAt,
       status: "retry",
     };
