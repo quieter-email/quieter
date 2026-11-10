@@ -110,9 +110,45 @@ export const processGmailJob = async (
     await import("@quieter/orpc/gmail-pubsub");
   const {
     discoverFreshGmailMessages,
+    getGmailMessageWorkWake,
     isGmailRateLimitedError,
     processNextGmailMessageWork,
   } = await import("@quieter/orpc/gmail-work");
+  const scheduleGmailMessageWorkWakes = async (input: {
+    mailboxId: string;
+    priority: "fresh" | "catchup";
+    immediateWakeCount: number;
+    onWake?: () => void;
+  }) => {
+    const wake = await withRequestDatabaseClient(
+      async () =>
+        await getGmailMessageWorkWake({
+          mailboxId: input.mailboxId,
+          priority: input.priority,
+        })
+    );
+    if (wake.nextWakeAt === null) {
+      return;
+    }
+    if (wake.moreReady) {
+      await Promise.all(
+        Array.from({ length: input.immediateWakeCount }, async () => {
+          input.onWake?.();
+          await enqueueGmailMessageWork(env, {
+            mailboxId: input.mailboxId,
+            priority: input.priority,
+          });
+        })
+      );
+      return;
+    }
+    input.onWake?.();
+    await enqueueGmailMessageWork(env, {
+      mailboxId: input.mailboxId,
+      nextWakeAt: wake.nextWakeAt,
+      priority: input.priority,
+    });
+  };
   try {
     if (!("kind" in parsed)) {
       const discoveryStartedAt = performance.now();
@@ -135,18 +171,14 @@ export const processGmailJob = async (
           listedMessageCount = discovery.queued;
           const schedulingStartedAt = performance.now();
           try {
-            await Promise.all(
-              Array.from(
-                { length: Math.max(1, Math.min(4, discovery.queued)) },
-                async () => {
-                  wakeCallCount += 1;
-                  await enqueueGmailMessageWork(env, {
-                    mailboxId: discovery.mailboxId,
-                    priority: "fresh",
-                  });
-                }
-              )
-            );
+            await scheduleGmailMessageWorkWakes({
+              immediateWakeCount: Math.max(1, Math.min(4, discovery.queued)),
+              mailboxId: discovery.mailboxId,
+              onWake: () => {
+                wakeCallCount += 1;
+              },
+              priority: "fresh",
+            });
             await env.GmailCatchupProcessingQueue.send({
               kind: "capture",
               notification: parsed,
@@ -284,14 +316,13 @@ export const processGmailJob = async (
       );
       if (!result.ignored) {
         await Promise.all(
-          (["fresh", "catchup"] as const).flatMap((priority) =>
-            Array.from({ length: priority === "fresh" ? 4 : 2 }, async () => {
-              await enqueueGmailMessageWork(env, {
-                mailboxId: result.mailboxId,
-                priority,
-              });
-            })
-          )
+          (["fresh", "catchup"] as const).map(async (priority) => {
+            await scheduleGmailMessageWorkWakes({
+              immediateWakeCount: priority === "fresh" ? 4 : 2,
+              mailboxId: result.mailboxId,
+              priority,
+            });
+          })
         );
         await broadcastGmailUpdate(
           env,
