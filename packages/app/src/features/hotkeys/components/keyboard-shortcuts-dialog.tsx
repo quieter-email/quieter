@@ -123,7 +123,10 @@ const ShortcutKeys = ({ shortcut }: { shortcut: KeyboardShortcut }) => (
               key={`${shortcut.id}-${bindingKey}-${key}`}
             >
               {keyIndex > 0 && (
-                <span className="text-micro text-muted-fg">then</span>
+                <span className="text-micro text-muted-fg">
+                  <span aria-hidden>→</span>
+                  <span className="sr-only">then</span>
+                </span>
               )}
               <Kbd>{key}</Kbd>
             </span>

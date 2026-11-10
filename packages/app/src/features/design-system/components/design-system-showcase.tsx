@@ -1847,8 +1847,9 @@ export const DesignSystemShowcase = () => {
             </Surface>
           </Row>
           <Row label="Keyboard shortcut">
-            <div className="flex gap-1">
+            <div className="flex items-center gap-1">
               <Kbd>Ctrl</Kbd>
+              <span className="text-micro text-muted-fg">+</span>
               <Kbd>K</Kbd>
             </div>
           </Row>
@@ -1862,7 +1863,7 @@ export const DesignSystemShowcase = () => {
             <Button variant="ghost">
               Inbox
               <Kbd aria-hidden className="ml-2" variant="hint">
-                G I
+                G → I
               </Kbd>
             </Button>
             <IconButtonTooltip label="Search">

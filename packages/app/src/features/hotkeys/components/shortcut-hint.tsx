@@ -32,7 +32,7 @@ export const ShortcutHint = ({
 
   return (
     <Kbd aria-hidden className={className} variant="hint">
-      {getShortcutDisplay(shortcut, platform)[0]?.join(" ")}
+      {getShortcutDisplay(shortcut, platform)[0]?.join(" → ")}
     </Kbd>
   );
 };
