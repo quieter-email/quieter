@@ -14,13 +14,16 @@ import {
 } from "vite-plus/test";
 
 import type { captureMailboxMessageMemory } from "../src/ai-memory-capture";
+import { processGmailMessage } from "../src/gmail-sync/message";
 import { processGmailPubSubNotification } from "../src/gmail-sync/service";
+import type { enqueueGmailMessageWork } from "../src/gmail-sync/work-store";
 import type { enqueueMailAgentMessage } from "../src/mail-agent/inbox";
 import type { observeReminderMail } from "../src/reminders/service";
 import type { processMailVerificationCode } from "../src/verification-codes";
 
 const fixtures = vi.hoisted(() => ({
   enqueue: vi.fn<typeof enqueueMailAgentMessage>(),
+  enqueueWork: vi.fn<typeof enqueueGmailMessageWork>(),
   history: vi.fn<typeof listGmailAddedMessageHistoryPage>(),
   list: vi.fn<typeof listGmailMessageIds>(),
   message: vi.fn<typeof getMessageWithDetails>(),
@@ -92,6 +95,19 @@ vi.mock("../src/gmail-mailbox-access", () => ({
 vi.mock(import("../src/mail-agent/inbox"), () => ({
   enqueueMailAgentMessage: fixtures.enqueue,
 }));
+vi.mock(import("../src/gmail-sync/work-store"), () => ({
+  deferGmailMailboxProvider: async (_mailboxId: string, retryAt: Date) =>
+    retryAt,
+  enqueueGmailMessageWork: fixtures.enqueueWork,
+  getGmailMailboxProviderRetryAt: async () => null,
+  hasPendingFreshGmailWorkForAccount: async () => false,
+}));
+vi.mock(import("../src/mail-capture"), () => ({
+  processGmailMailCapture: async () => ({
+    busy: false,
+    needsContinuation: false,
+  }),
+}));
 vi.mock(import("../src/reminders/service"), () => ({
   observeReminderMail: vi.fn<typeof observeReminderMail>().mockResolvedValue(),
 }));
@@ -123,6 +139,7 @@ describe("Gmail action receive acknowledgement", () => {
       recoveryPageToken: null,
     });
     fixtures.enqueue.mockReset().mockResolvedValue();
+    fixtures.enqueueWork.mockReset().mockResolvedValue();
     fixtures.history.mockReset().mockResolvedValue({
       hasMore: false,
       historyExpired: false,
@@ -142,7 +159,7 @@ describe("Gmail action receive acknowledgement", () => {
         labelIds: labels[messageId] ?? [],
         threadId: "thread",
       }));
-    fixtures.processCode.mockReset().mockResolvedValue();
+    fixtures.processCode.mockReset().mockResolvedValue({ status: "complete" });
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -157,6 +174,30 @@ describe("Gmail action receive acknowledgement", () => {
     await expect(
       processGmailPubSubNotification(notification)
     ).resolves.toMatchObject({ ignored: false });
+    for (const [job] of fixtures.enqueueWork.mock.calls) {
+      for (const messageId of job.messageIds) {
+        await processGmailMessage({
+          accessToken: "mail-token",
+          autoLabelEnabled: false,
+          automationRuntime: {
+            getAutoLabelContext: async () => ({
+              availableLabelIds: new Set<string>(),
+              historyLabels: [],
+              labels: [],
+              memoryCandidates: null,
+              model: "unused",
+            }),
+            getBudgetStatus: async () => ({ allowed: true, reason: "allowed" }),
+          },
+          extractCodes: false,
+          gmailMessageId: messageId,
+          mailboxId: job.mailboxId,
+          organizationId: null,
+          triggerActions: job.triggerActions,
+          userId: "owner",
+        });
+      }
+    }
     expect(fixtures.enqueue).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ mailboxId: "mailbox", messageId: "inbound" })
     );
@@ -164,7 +205,7 @@ describe("Gmail action receive acknowledgement", () => {
   });
 
   test("preserves the cursor when durable enqueue fails so redelivery can retry", async () => {
-    fixtures.enqueue.mockRejectedValueOnce(new Error("Inbox unavailable"));
+    fixtures.enqueueWork.mockRejectedValueOnce(new Error("Inbox unavailable"));
     await expect(processGmailPubSubNotification(notification)).rejects.toThrow(
       "Inbox unavailable"
     );
@@ -188,6 +229,16 @@ describe("Gmail action receive acknowledgement", () => {
       processGmailPubSubNotification(notification)
     ).resolves.toMatchObject({ ignored: false });
     expect(fixtures.list.mock.calls.length).toBeGreaterThan(0);
+    expect(
+      fixtures.enqueueWork.mock.calls.some(([job]) =>
+        job.messageIds.includes("historical")
+      )
+    ).toBeTruthy();
+    expect(
+      fixtures.enqueueWork.mock.calls
+        .filter(([job]) => job.messageIds.length > 0)
+        .every(([job]) => job.triggerActions !== true)
+    ).toBeTruthy();
     expect(fixtures.enqueue).not.toHaveBeenCalled();
   });
 });
