@@ -94,6 +94,7 @@ export {
 export type {
   AiAgentMemoryCandidates,
   AiAgentMemoryContext,
+  AiMemoryDiagnostics,
   AiMemoryContextSelection,
   AiMemoryOverviewCursor,
   AiMemoryOverviewPage,

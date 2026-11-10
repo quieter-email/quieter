@@ -545,6 +545,29 @@ describe("durable Gmail processing", () => {
     expect(message.ack).not.toHaveBeenCalled();
   });
 
+  test("retries capacity wake publication failure and durably rescues its replay", async () => {
+    vi.mocked(processNextGmailMessageWork).mockResolvedValue({
+      activeLeases: 4,
+      moreReady: false,
+      nextWakeAt: new Date(Date.now() - 1000),
+      status: "capacity_busy",
+    });
+    const send = vi
+      .spyOn(env.GmailFreshProcessingQueue, "send")
+      .mockRejectedValueOnce(new Error("queue unavailable"))
+      .mockResolvedValue(accepted);
+    const first = delivery(fresh);
+    await processGmailQueue(first.batch, env);
+    expect(first.message.retry).toHaveBeenCalledOnce();
+    expect(first.message.ack).not.toHaveBeenCalled();
+    const replay = delivery(fresh);
+    await processGmailQueue(replay.batch, env);
+    expect(send.mock.calls.at(-1)?.[1]?.delaySeconds).toBeGreaterThan(0);
+    expect(replay.message.ack).toHaveBeenCalledOnce();
+    expect(replay.message.retry).not.toHaveBeenCalled();
+    expect(broadcastMailUpdate).not.toHaveBeenCalled();
+  });
+
   test("rechecks very distant work within the queue delay limit", async () => {
     vi.mocked(processNextGmailMessageWork).mockResolvedValue({
       moreReady: false,

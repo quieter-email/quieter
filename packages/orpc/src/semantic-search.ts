@@ -5,6 +5,10 @@ import {
   SEARCH_EMBEDDING_MODEL,
   SEARCH_EMBEDDING_MODEL_KEY,
 } from "@quieter/ai/search-embeddings";
+import type {
+  AiRequestDiagnostics,
+  AiRequestStageMeasurement,
+} from "@quieter/ai/search-embeddings";
 import { reportAiUsage } from "@quieter/billing";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
@@ -32,9 +36,36 @@ export type SemanticSearchCoverage = {
   complete: boolean;
 };
 
+export type SemanticSearchDiagnostics = {
+  stages: Partial<
+    Record<
+      | "authorization"
+      | "initialCoverage"
+      | "lease"
+      | "pending"
+      | "billingContext"
+      | "embedding"
+      | "usage"
+      | "persist"
+      | "matches"
+      | "finalCoverage"
+      | "releaseLease",
+      AiRequestStageMeasurement
+    >
+  >;
+  // Billing stages are children of the inclusive embedding stage.
+  ai?: AiRequestDiagnostics;
+  pendingChunks?: number;
+  embeddingValues?: number;
+  semanticMatches?: number;
+  totalSources?: number;
+  indexedSources?: number;
+};
+
 type SemanticSearchInput = SemanticSearchScope & {
   query: string;
   signal?: AbortSignal;
+  onDiagnostics?: (diagnostics: SemanticSearchDiagnostics) => void;
 };
 
 const chunkSchema = z.object({
@@ -103,55 +134,93 @@ export const readSemanticSearchCoverage = async (
 const runSemanticPreparation = async (
   input: SemanticSearchScope & {
     signal?: AbortSignal;
+    onDiagnostics?: (diagnostics: SemanticSearchDiagnostics) => void;
     operation: { kind: "index" } | { kind: "search"; query: string };
   }
 ) => {
-  input.signal?.throwIfAborted();
-  const mailbox = await assertAccessibleMailbox(input);
-  const sourceQuery = semanticSourceQuery(input, mailbox.provider);
-  const query =
-    input.operation.kind === "search"
-      ? input.operation.query.trim().slice(0, 2000).toWellFormed()
-      : null;
-  const initialCoverage = await readCoverage(sourceQuery);
-  if (
-    query === "" ||
-    initialCoverage.totalSources === 0 ||
-    (query === null && initialCoverage.complete)
-  ) {
-    return { coverage: initialCoverage, memoryMatches: [], queryVector: null };
-  }
-  const token = crypto.randomUUID();
-  const now = new Date();
-  const lease = await db
-    .insert(semanticSearchLease)
-    .values({
-      expiresAt: new Date(now.getTime() + 60_000),
-      mailboxId: input.mailboxId,
-      token,
-      userId: input.userId,
-    })
-    .onConflictDoUpdate({
-      set: { expiresAt: new Date(now.getTime() + 60_000), token },
-      setWhere: lt(semanticSearchLease.expiresAt, now),
-      target: [semanticSearchLease.userId, semanticSearchLease.mailboxId],
-    })
-    .returning({ token: semanticSearchLease.token });
-  const ownsPreparation = lease.length > 0;
-  if (!ownsPreparation && input.operation.kind === "index") {
-    throw new ORPCError("CONFLICT", {
-      message: "Search is already being prepared. Try again shortly.",
-    });
-  }
-  try {
-    if (ownsPreparation && input.kind === "mail") {
-      await normalizeCapturedMailMetadata(input);
+  const diagnostics: SemanticSearchDiagnostics = { stages: {} };
+  let activeStage: {
+    name: keyof SemanticSearchDiagnostics["stages"];
+    startedAt: number;
+  } | null = null;
+  const recordStage = (
+    next: keyof SemanticSearchDiagnostics["stages"] | null,
+    failed = false
+  ) => {
+    if (input.onDiagnostics === undefined) {
+      return;
     }
-    const pending = ownsPreparation
-      ? z
-          .array(chunkSchema)
-          .parse(
-            await db.execute(sql`with sources as (${sourceQuery})
+    if (activeStage !== null) {
+      const previous = diagnostics.stages[activeStage.name];
+      diagnostics.stages[activeStage.name] = {
+        calls: (previous?.calls ?? 0) + 1,
+        ms: (previous?.ms ?? 0) + performance.now() - activeStage.startedAt,
+        state: failed || previous?.state === "failed" ? "failed" : "returned",
+      };
+    }
+    activeStage =
+      next === null ? null : { name: next, startedAt: performance.now() };
+  };
+  try {
+    input.signal?.throwIfAborted();
+    recordStage("authorization");
+    const mailbox = await assertAccessibleMailbox(input);
+    recordStage(null);
+    const sourceQuery = semanticSourceQuery(input, mailbox.provider);
+    const query =
+      input.operation.kind === "search"
+        ? input.operation.query.trim().slice(0, 2000).toWellFormed()
+        : null;
+    recordStage("initialCoverage");
+    const initialCoverage = await readCoverage(sourceQuery);
+    recordStage(null);
+    diagnostics.totalSources = initialCoverage.totalSources;
+    diagnostics.indexedSources = initialCoverage.indexedSources;
+    if (
+      query === "" ||
+      initialCoverage.totalSources === 0 ||
+      (query === null && initialCoverage.complete)
+    ) {
+      return {
+        coverage: initialCoverage,
+        memoryMatches: [],
+        queryVector: null,
+      };
+    }
+    const token = crypto.randomUUID();
+    const now = new Date();
+    recordStage("lease");
+    const lease = await db
+      .insert(semanticSearchLease)
+      .values({
+        expiresAt: new Date(now.getTime() + 60_000),
+        mailboxId: input.mailboxId,
+        token,
+        userId: input.userId,
+      })
+      .onConflictDoUpdate({
+        set: { expiresAt: new Date(now.getTime() + 60_000), token },
+        setWhere: lt(semanticSearchLease.expiresAt, now),
+        target: [semanticSearchLease.userId, semanticSearchLease.mailboxId],
+      })
+      .returning({ token: semanticSearchLease.token });
+    recordStage(null);
+    const ownsPreparation = lease.length > 0;
+    if (!ownsPreparation && input.operation.kind === "index") {
+      throw new ORPCError("CONFLICT", {
+        message: "Search is already being prepared. Try again shortly.",
+      });
+    }
+    try {
+      recordStage("pending");
+      if (ownsPreparation && input.kind === "mail") {
+        await normalizeCapturedMailMetadata(input);
+      }
+      const pending = ownsPreparation
+        ? z
+            .array(chunkSchema)
+            .parse(
+              await db.execute(sql`with sources as (${sourceQuery})
         select sources."sourceKey", sources."sourceRevision", chunks."chunkIndex",
           substring(content from chunks."chunkIndex" * 2000 + 1 for 2000) as content
         from sources cross join lateral generate_series(0, ceil(char_length(content)::numeric / 2000)::integer - 1) as chunks("chunkIndex")
@@ -159,202 +228,251 @@ const runSemanticPreparation = async (
           where e."sourceKey" = sources."sourceKey" and e.model = ${SEARCH_EMBEDDING_MODEL_KEY}
             and e."sourceRevision" = sources."sourceRevision" and e."chunkIndex" = chunks."chunkIndex")
         order by sources."updatedAt" desc, sources."sourceKey", chunks."chunkIndex" limit 16`)
-          )
-          .toSorted(
-            (left, right) =>
-              left.sourceKey.localeCompare(right.sourceKey) ||
-              left.chunkIndex - right.chunkIndex
-          )
-      : [];
-    if (pending.length === 0 && query === null) {
-      return {
-        coverage: await readCoverage(sourceQuery),
-        memoryMatches: [],
-        queryVector: null,
-      };
-    }
-    const externalId = `memory-recall:${crypto.randomUUID()}`;
-    const billing = await createMailboxAiBillingContext({
-      externalId,
-      mailboxId: input.mailboxId,
-      usageKind: "aiMemory",
-      userId: input.userId,
-    });
-    let usage: AiUsageReport | undefined;
-    let vectors: number[][];
-    try {
-      vectors = await embedSearchTexts({
-        billing,
-        onUsage: (value) => {
-          usage = value;
-        },
-        signal: input.signal,
-        values: [
+            )
+            .toSorted(
+              (left, right) =>
+                left.sourceKey.localeCompare(right.sourceKey) ||
+                left.chunkIndex - right.chunkIndex
+            )
+        : [];
+      recordStage(null);
+      diagnostics.pendingChunks = pending.length;
+      if (pending.length === 0 && query === null) {
+        recordStage("finalCoverage");
+        const coverage = await readCoverage(sourceQuery);
+        recordStage(null);
+        diagnostics.totalSources = coverage.totalSources;
+        diagnostics.indexedSources = coverage.indexedSources;
+        return {
+          coverage,
+          memoryMatches: [],
+          queryVector: null,
+        };
+      }
+      const externalId = `memory-recall:${crypto.randomUUID()}`;
+      recordStage("billingContext");
+      const billing = await createMailboxAiBillingContext({
+        externalId,
+        mailboxId: input.mailboxId,
+        usageKind: "aiMemory",
+        userId: input.userId,
+      });
+      recordStage(null);
+      let usage: AiUsageReport | undefined;
+      let vectors: number[][];
+      try {
+        const values = [
           ...pending.map((chunk) => chunk.content),
           ...(query === null ? [] : [query]),
-        ],
-      });
-    } finally {
-      if (usage !== undefined) {
-        try {
-          await reportAiUsage({
-            completionTokens: usage.completionTokens,
-            costUsd: usage.costUsd,
-            externalId,
-            mailboxId: input.mailboxId,
-            model: SEARCH_EMBEDDING_MODEL,
-            promptTokens: usage.promptTokens,
-            usageKind: "aiMemory",
-            userId: input.userId,
-          });
-        } catch {
-          reportError(new Error("Search usage could not be recorded."), {
-            operation: "semantic-search:usage",
-          });
+        ];
+        diagnostics.embeddingValues = values.length;
+        recordStage("embedding");
+        vectors = await embedSearchTexts({
+          billing,
+          onDiagnostics:
+            input.onDiagnostics === undefined
+              ? undefined
+              : (ai) => {
+                  diagnostics.ai = ai;
+                },
+          onUsage: (value) => {
+            usage = value;
+          },
+          signal: input.signal,
+          values,
+        });
+        recordStage(null);
+      } finally {
+        recordStage(null, true);
+        if (usage !== undefined) {
+          try {
+            recordStage("usage");
+            await reportAiUsage({
+              completionTokens: usage.completionTokens,
+              costUsd: usage.costUsd,
+              externalId,
+              mailboxId: input.mailboxId,
+              model: SEARCH_EMBEDDING_MODEL,
+              promptTokens: usage.promptTokens,
+              usageKind: "aiMemory",
+              userId: input.userId,
+            });
+            recordStage(null);
+          } catch {
+            recordStage(null, true);
+            reportError(new Error("Search usage could not be recorded."), {
+              operation: "semantic-search:usage",
+            });
+          }
         }
       }
-    }
-    input.signal?.throwIfAborted();
-    await assertAccessibleMailbox(input);
-    const queryVector = query === null ? null : vectors.at(-1);
-    if (
-      queryVector === undefined ||
-      vectors.length !== pending.length + (query === null ? 0 : 1)
-    ) {
-      throw new Error("Search preparation did not return all embeddings.");
-    }
-    if (pending.length > 0) {
-      await db.transaction(async (tx) => {
-        const [activeLease] = await tx
-          .select({ token: semanticSearchLease.token })
-          .from(semanticSearchLease)
-          .where(
-            and(
-              eq(semanticSearchLease.userId, input.userId),
-              eq(semanticSearchLease.mailboxId, input.mailboxId),
-              eq(semanticSearchLease.token, token),
-              gt(semanticSearchLease.expiresAt, new Date())
+      input.signal?.throwIfAborted();
+      recordStage("authorization");
+      await assertAccessibleMailbox(input);
+      recordStage(null);
+      const queryVector = query === null ? null : vectors.at(-1);
+      if (
+        queryVector === undefined ||
+        vectors.length !== pending.length + (query === null ? 0 : 1)
+      ) {
+        throw new Error("Search preparation did not return all embeddings.");
+      }
+      if (pending.length > 0) {
+        recordStage("persist");
+        await db.transaction(async (tx) => {
+          const [activeLease] = await tx
+            .select({ token: semanticSearchLease.token })
+            .from(semanticSearchLease)
+            .where(
+              and(
+                eq(semanticSearchLease.userId, input.userId),
+                eq(semanticSearchLease.mailboxId, input.mailboxId),
+                eq(semanticSearchLease.token, token),
+                gt(semanticSearchLease.expiresAt, new Date())
+              )
             )
-          )
-          .for("update");
-        if (activeLease === undefined) {
-          return;
-        }
-        for (const [index, chunk] of pending.entries()) {
-          const vector = vectors[index];
-          if (vector === undefined) {
-            throw new Error("A search chunk embedding is missing.");
+            .for("update");
+          if (activeLease === undefined) {
+            return;
           }
-          const [sourceKind, sourceId, sourceMailboxId] = z
-            .tuple([
-              z.enum(["memory", "chat", "gmail", "managed"]),
-              z.string(),
-              z.string(),
-            ])
-            .parse(JSON.parse(chunk.sourceKey));
-          switch (sourceKind) {
-            case "memory": {
-              await tx
-                .select({ id: aiMemory.id })
-                .from(aiMemory)
-                .where(
-                  and(
-                    eq(aiMemory.id, sourceId),
-                    eq(aiMemory.userId, input.userId)
+          for (const [index, chunk] of pending.entries()) {
+            const vector = vectors[index];
+            if (vector === undefined) {
+              throw new Error("A search chunk embedding is missing.");
+            }
+            const [sourceKind, sourceId, sourceMailboxId] = z
+              .tuple([
+                z.enum(["memory", "chat", "gmail", "managed"]),
+                z.string(),
+                z.string(),
+              ])
+              .parse(JSON.parse(chunk.sourceKey));
+            switch (sourceKind) {
+              case "memory": {
+                await tx
+                  .select({ id: aiMemory.id })
+                  .from(aiMemory)
+                  .where(
+                    and(
+                      eq(aiMemory.id, sourceId),
+                      eq(aiMemory.userId, input.userId)
+                    )
                   )
-                )
-                .for("share");
-              break;
-            }
-            case "chat": {
-              await tx
-                .select({ id: chatMessage.id })
-                .from(chatMessage)
-                .innerJoin(chat, eq(chat.id, chatMessage.chatId))
-                .where(
-                  and(
-                    eq(chatMessage.id, sourceId),
-                    eq(chat.userId, input.userId),
-                    eq(chat.mailboxId, input.mailboxId)
+                  .for("share");
+                break;
+              }
+              case "chat": {
+                await tx
+                  .select({ id: chatMessage.id })
+                  .from(chatMessage)
+                  .innerJoin(chat, eq(chat.id, chatMessage.chatId))
+                  .where(
+                    and(
+                      eq(chatMessage.id, sourceId),
+                      eq(chat.userId, input.userId),
+                      eq(chat.mailboxId, input.mailboxId)
+                    )
                   )
-                )
-                .for("share");
-              break;
-            }
-            case "gmail": {
-              await tx
-                .select({ id: gmailCapturedMessage.messageId })
-                .from(gmailCapturedMessage)
-                .where(
-                  and(
-                    eq(gmailCapturedMessage.messageId, sourceId),
-                    eq(gmailCapturedMessage.mailboxId, sourceMailboxId),
-                    eq(gmailCapturedMessage.mailboxId, input.mailboxId)
+                  .for("share");
+                break;
+              }
+              case "gmail": {
+                await tx
+                  .select({ id: gmailCapturedMessage.messageId })
+                  .from(gmailCapturedMessage)
+                  .where(
+                    and(
+                      eq(gmailCapturedMessage.messageId, sourceId),
+                      eq(gmailCapturedMessage.mailboxId, sourceMailboxId),
+                      eq(gmailCapturedMessage.mailboxId, input.mailboxId)
+                    )
                   )
-                )
-                .for("share");
-              break;
-            }
-            case "managed": {
-              await tx
-                .select({ id: managedMailMessage.id })
-                .from(managedMailMessage)
-                .where(
-                  and(
-                    eq(managedMailMessage.id, sourceId),
-                    eq(managedMailMessage.mailboxId, input.mailboxId)
+                  .for("share");
+                break;
+              }
+              case "managed": {
+                await tx
+                  .select({ id: managedMailMessage.id })
+                  .from(managedMailMessage)
+                  .where(
+                    and(
+                      eq(managedMailMessage.id, sourceId),
+                      eq(managedMailMessage.mailboxId, input.mailboxId)
+                    )
                   )
-                )
-                .for("share");
-              break;
+                  .for("share");
+                break;
+              }
+              default: {
+                const exhaustive: never = sourceKind;
+                throw new Error("Unknown search source.", {
+                  cause: exhaustive,
+                });
+              }
             }
-            default: {
-              const exhaustive: never = sourceKind;
-              throw new Error("Unknown search source.", { cause: exhaustive });
-            }
-          }
-          await tx.execute(sql`with sources as (${sourceQuery})
+            await tx.execute(sql`with sources as (${sourceQuery})
             delete from ${semanticEmbedding} e using sources
               where e."sourceKey" = sources."sourceKey" and e."sourceKey" = ${chunk.sourceKey}
                 and e.model = ${SEARCH_EMBEDDING_MODEL_KEY} and e."sourceRevision" <> sources."sourceRevision"`);
-          await tx.execute(sql`with sources as (${sourceQuery})
+            await tx.execute(sql`with sources as (${sourceQuery})
             insert into ${semanticEmbedding} ("sourceKey", model, "chunkIndex", "sourceRevision", "searchText", embedding, "createdAt", "memoryId", "chatMessageId", "gmailMailboxId", "gmailMessageId", "managedMessageId")
             select "sourceKey", ${SEARCH_EMBEDDING_MODEL_KEY}, ${chunk.chunkIndex}, "sourceRevision", ${chunk.content}, ${JSON.stringify(vector)}::vector, now(),
               "memoryId", "chatMessageId", "gmailMailboxId", "gmailMessageId", "managedMessageId"
               from sources where "sourceKey" = ${chunk.sourceKey} and "sourceRevision" = ${chunk.sourceRevision}
             on conflict ("sourceKey", model, "chunkIndex") do update set
               "sourceRevision" = excluded."sourceRevision", "searchText" = excluded."searchText", embedding = excluded.embedding, "createdAt" = excluded."createdAt"`);
-        }
-      });
-    }
-    await assertAccessibleMailbox(input);
-    const memoryMatches =
-      input.kind === "memory" && queryVector !== null
-        ? z.array(memoryMatchSchema).parse(
-            await db.execute(sql`with sources as (${sourceQuery})
+          }
+        });
+        recordStage(null);
+      }
+      recordStage("authorization");
+      await assertAccessibleMailbox(input);
+      recordStage("matches");
+      const memoryMatches =
+        input.kind === "memory" && queryVector !== null
+          ? z.array(memoryMatchSchema).parse(
+              await db.execute(sql`with sources as (${sourceQuery})
           select sources.id, sources.version, max(1 - (e.embedding <=> ${JSON.stringify(queryVector)}::vector)) as similarity
           from sources inner join ${semanticEmbedding} e on e."sourceKey" = sources."sourceKey"
             and e."sourceRevision" = sources."sourceRevision" and e.model = ${SEARCH_EMBEDDING_MODEL_KEY}
           group by sources.id, sources.version having max(1 - (e.embedding <=> ${JSON.stringify(queryVector)}::vector)) >= 0.3
           order by similarity desc, sources.id limit 40`)
-          )
-        : [];
-    return {
-      coverage: await readCoverage(sourceQuery),
-      memoryMatches,
-      queryVector,
-    };
+            )
+          : [];
+      recordStage(null);
+      diagnostics.semanticMatches = memoryMatches.length;
+      recordStage("finalCoverage");
+      const coverage = await readCoverage(sourceQuery);
+      recordStage(null);
+      diagnostics.totalSources = coverage.totalSources;
+      diagnostics.indexedSources = coverage.indexedSources;
+      return {
+        coverage,
+        memoryMatches,
+        queryVector,
+      };
+    } finally {
+      recordStage(null, true);
+      if (ownsPreparation) {
+        recordStage("releaseLease");
+        await db
+          .delete(semanticSearchLease)
+          .where(
+            and(
+              eq(semanticSearchLease.userId, input.userId),
+              eq(semanticSearchLease.mailboxId, input.mailboxId),
+              eq(semanticSearchLease.token, token)
+            )
+          );
+        recordStage(null);
+      }
+    }
   } finally {
-    if (ownsPreparation) {
-      await db
-        .delete(semanticSearchLease)
-        .where(
-          and(
-            eq(semanticSearchLease.userId, input.userId),
-            eq(semanticSearchLease.mailboxId, input.mailboxId),
-            eq(semanticSearchLease.token, token)
-          )
-        );
+    recordStage(null, true);
+    try {
+      input.onDiagnostics?.(diagnostics);
+    } catch {
+      // Ignore diagnostic observer failures.
     }
   }
 };
@@ -366,7 +484,10 @@ export const prepareSemanticSearch = async (input: SemanticSearchInput) =>
   });
 
 export const indexSemanticSources = async (
-  input: SemanticSearchScope & { signal?: AbortSignal }
+  input: SemanticSearchScope & {
+    signal?: AbortSignal;
+    onDiagnostics?: (diagnostics: SemanticSearchDiagnostics) => void;
+  }
 ) => {
   const prepared = await runSemanticPreparation({
     ...input,

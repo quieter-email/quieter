@@ -4,7 +4,13 @@ import { APICallError } from "ai";
 import { z } from "zod";
 
 import { providerUsageResponseSchema, runBilledAiRequest } from "./billing";
+import type { AiRequestDiagnostics } from "./billing";
 import type { AiUsageReport } from "./chat-usage";
+
+export type {
+  AiRequestDiagnostics,
+  AiRequestStageMeasurement,
+} from "./billing";
 
 export const SEARCH_EMBEDDING_MODEL = "baai/bge-m3";
 export const SEARCH_EMBEDDING_DIMENSIONS = 1024;
@@ -47,6 +53,7 @@ export const embedSearchTexts = async (input: {
   billing: AiBillingContext;
   values: string[];
   signal?: AbortSignal;
+  onDiagnostics?: (diagnostics: AiRequestDiagnostics) => void;
   onUsage?: (usage: AiUsageReport) => void;
 }): Promise<number[][]> => {
   const values = searchTextsSchema.safeParse(input.values);
@@ -63,6 +70,7 @@ export const embedSearchTexts = async (input: {
     : AbortSignal.timeout(15_000);
   const payload = await runBilledAiRequest({
     billing: input.billing,
+    onDiagnostics: input.onDiagnostics,
     run: async () => {
       const response = await fetch("https://openrouter.ai/api/v1/embeddings", {
         body: JSON.stringify({
