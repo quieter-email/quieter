@@ -2,14 +2,22 @@
 
 import { MailReference } from "@quieter/app/features/chat/components/mail-reference";
 import { parseMailReference } from "@quieter/app/features/chat/domain/mail-reference";
+
+import "katex/dist/katex.min.css";
 import type { ComponentPropsWithoutRef } from "react";
-import { useRemarkSync } from "react-remark";
+import Markdown from "react-markdown";
+import type { ExtraProps } from "react-markdown";
+import rehypeKatex from "rehype-katex";
+import remarkMath from "remark-math";
+
+import { remarkCurrency } from "./remark-currency";
 
 const markdownLink = ({
   children,
   href,
+  node: _node,
   ...props
-}: ComponentPropsWithoutRef<"a">) => {
+}: ComponentPropsWithoutRef<"a"> & ExtraProps) => {
   const reference = parseMailReference(href);
   if (reference !== null) {
     return <MailReference reference={reference}>{children}</MailReference>;
@@ -32,11 +40,15 @@ type MarkdownContentProps = {
   markdown: string;
 };
 
-export const MarkdownContent = ({ markdown }: MarkdownContentProps) => {
-  // oxlint-disable-next-line node/no-sync -- This renderer commits final text and follow-up actions together, without file I/O.
-  const content = useRemarkSync(markdown, {
-    rehypeReactOptions: { components: { a: markdownLink, img: markdownImage } },
-    remarkToRehypeOptions: { allowDangerousHtml: false },
-  });
-  return <div className="typeset typeset-body">{content}</div>;
-};
+export const MarkdownContent = ({ markdown }: MarkdownContentProps) => (
+  <div className="typeset typeset-body [&_.katex-display]:overflow-x-auto [&_.katex-display>.katex]:min-w-max">
+    <Markdown
+      components={{ a: markdownLink, img: markdownImage }}
+      rehypePlugins={[[rehypeKatex, { maxSize: 20, trust: false }]]}
+      remarkPlugins={[remarkMath, remarkCurrency]}
+      skipHtml
+    >
+      {markdown}
+    </Markdown>
+  </div>
+);

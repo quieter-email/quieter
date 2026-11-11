@@ -88,6 +88,9 @@ overrides:
   sharp: "0.35.5"
   undici: "8.11.2"
   "brace-expansion@>=4": "5.0.12"
+  # Keep Markdown math on the patched KaTeX line until its plugins widen their ranges.
+  "micromark-extension-math>katex": "^0.19.1"
+  "rehype-katex>katex": "^0.19.1"
   "vite-plus>vitest": "5.0.4"
   "@vitest/browser@5.0.3": "5.0.4"
   "@vitest/browser-preview@5.0.3": "5.0.4"

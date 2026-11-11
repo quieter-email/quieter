@@ -377,11 +377,14 @@
     "css-tree": "^3.2.1",
     "dompurify": "^3.4.17",
     "idb": "^8.0.4",
+    "katex": "^0.19.1",
     "motion": "catalog:",
     "pdfjs-dist": "6.5.438",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-remark": "^2.1.0",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0",
     "tailwindcss": "catalog:",
     "vgpu": "0.6.0",
     "zod": "catalog:"
@@ -392,7 +395,9 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "fake-indexeddb": "^6.2.5",
+    "micromark-util-types": "^2.0.3",
     "typescript": "catalog:",
+    "unified": "^11.0.5",
     "vite": "catalog:",
     "vite-plus": "catalog:"
   }
