@@ -606,17 +606,20 @@ export const AgentWorkspaceProvider = ({
 
   useEffect(() => {
     const takeOver = (event: Event) => {
+      const { target } = event;
       if (
         !event.isTrusted ||
+        !(target instanceof Element) ||
         (event instanceof KeyboardEvent &&
-          ["Tab", "Shift", "Control", "Alt", "Meta"].includes(event.key))
+          ["Tab", "Shift", "Control", "Alt", "Meta"].includes(event.key)) ||
+        target.closest("[data-assistant-panel], [data-assistant-launcher]")
       ) {
         return;
       }
       if (
-        event.target instanceof Element &&
-        event.target.closest(
-          "[data-assistant-panel], [data-assistant-launcher]"
+        event.type === "pointerdown" &&
+        !target.closest(
+          "a[href], button:enabled, input:enabled, label, select:enabled, summary, textarea:enabled, [contenteditable=''], [contenteditable='true'], [role='button'], [role='link'], [role='menuitem'], [role='option'], [role='tab']"
         )
       ) {
         return;

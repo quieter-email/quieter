@@ -203,6 +203,12 @@ describe("canonical transcript conversion", () => {
               toolCallId: "tool-1",
               type: "tool-search_gmail",
             },
+            {
+              input: { ids: ["unfinished"] },
+              state: "input-streaming",
+              toolCallId: "draft-write",
+              type: "tool-modify_mail_batch",
+            },
             { secret: "not rendered", type: "provider-detail" },
             { type: "text" },
           ],

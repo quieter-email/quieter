@@ -327,9 +327,9 @@ const ChatSession = ({
       const interrupted =
         !isAbort && (finishReason === undefined || finishReason === "error");
       if (isDisconnect || (interrupted && !isError)) {
-        setInterruptionMessage(
-          "The reply was interrupted. Check any completed actions before asking me to continue."
-        );
+        setInterruptionMessage("The reply was interrupted.");
+      } else if (finishReason === "length") {
+        setInterruptionMessage("The response was cut short.");
       }
       if (isError || interrupted) {
         chat.setMessages(cancelForegroundMessages(messages));

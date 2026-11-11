@@ -12,7 +12,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vite-plus/test";
 import { z } from "zod";
 
-import { completeChatReply } from "../src/chat/reply-stream";
+import { filterChatToolInputDrafts } from "../src/chat/reply-stream";
 
 type ModelStreamPart =
   Awaited<
@@ -54,7 +54,7 @@ const readReply = async <TOOLS extends ToolSet>(
     onEnd: ({ responseMessage }) => {
       savedMessage = responseMessage;
     },
-    stream: stream.pipeThrough(completeChatReply()),
+    stream: stream.pipeThrough(filterChatToolInputDrafts()),
   });
   const snapshots = await Array.fromAsync(
     readUIMessageStream({ stream: uiStream })
@@ -62,8 +62,72 @@ const readReply = async <TOOLS extends ToolSet>(
   return { savedMessage, visibleMessage: snapshots.at(-1) };
 };
 
-describe("chat reply completion", () => {
-  test("shows and saves a reply when a search is followed only by reasoning", async () => {
+describe("chat reply stream", () => {
+  test("keeps completed results and drops an unfinished tool draft", async () => {
+    const result = streamText({
+      model: new MockLanguageModelV4({
+        doStream: [
+          modelStep(
+            {
+              id: "search",
+              toolName: "search_gmail",
+              type: "tool-input-start",
+            },
+            { delta: "{}", id: "search", type: "tool-input-delta" },
+            { id: "search", type: "tool-input-end" },
+            {
+              input: "{}",
+              toolCallId: "search",
+              toolName: "search_gmail",
+              type: "tool-call",
+            },
+            finish("tool-calls")
+          ),
+          modelStep(
+            {
+              id: "unfinished",
+              toolName: "modify_mail_batch",
+              type: "tool-input-start",
+            },
+            {
+              delta: '{"ids":["mail',
+              id: "unfinished",
+              type: "tool-input-delta",
+            },
+            finish("length")
+          ),
+        ],
+      }),
+      prompt: "Trash all latency tests.",
+      stopWhen: isStepCount(2),
+      tools: {
+        modify_mail_batch: tool({
+          execute: ({ ids }) => ({ moved: ids }),
+          inputSchema: z.object({ ids: z.array(z.string()) }),
+        }),
+        search_gmail: tool({
+          execute: () => ({ ids: ["mail-1", "mail-2"] }),
+          inputSchema: z.object({}),
+        }),
+      },
+    });
+    const { savedMessage, visibleMessage } = await readReply(result.stream);
+
+    expect(visibleMessage?.parts).toContainEqual(
+      expect.objectContaining({
+        state: "output-available",
+        toolCallId: "search",
+      })
+    );
+    expect(visibleMessage?.parts).not.toContainEqual(
+      expect.objectContaining({ toolCallId: "unfinished" })
+    );
+    expect(savedMessage?.parts).not.toContainEqual(
+      expect.objectContaining({ toolCallId: "unfinished" })
+    );
+  });
+
+  test("shows and saves a completed search followed only by reasoning", async () => {
     const result = streamText({
       model: new MockLanguageModelV4({
         doStream: [
@@ -122,10 +186,14 @@ describe("chat reply completion", () => {
         type: "tool-search_gmail",
       })
     );
-    expect(visibleText(visibleMessage)).not.toHaveLength(0);
-    expect(visibleText(savedMessage)).toStrictEqual(
-      visibleText(visibleMessage)
+    expect(savedMessage?.parts).toContainEqual(
+      expect.objectContaining({
+        state: "output-available",
+        type: "tool-search_gmail",
+      })
     );
+    expect(visibleText(visibleMessage)).toHaveLength(0);
+    expect(visibleText(savedMessage)).toHaveLength(0);
   });
 
   test("keeps an answer followed only by optional suggestions", async () => {

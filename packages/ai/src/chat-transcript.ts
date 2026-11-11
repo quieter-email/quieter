@@ -12,7 +12,11 @@ const isRenderablePart = (part: ChatMessagePart): boolean => {
   if (part.type === "step-start") {
     return true;
   }
-  return part.type.startsWith("tool-") && typeof part.toolCallId === "string";
+  return (
+    part.type.startsWith("tool-") &&
+    typeof part.toolCallId === "string" &&
+    part.state !== "input-streaming"
+  );
 };
 
 /**
@@ -35,8 +39,7 @@ export const toCanonicalTranscript = (
         !part.type.startsWith("tool-") ||
         (part.state !== "approval-requested" &&
           part.state !== "approval-responded" &&
-          part.state !== "input-available" &&
-          part.state !== "input-streaming")
+          part.state !== "input-available")
       ) {
         return part;
       }
