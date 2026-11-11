@@ -63,6 +63,12 @@ export const appRouter = {
         default: onboardingRouter,
       }))
   ),
+  operations: lazy(
+    async () =>
+      await import("./operations").then(({ operationsRouter }) => ({
+        default: operationsRouter,
+      }))
+  ),
   organization: lazy(
     async () =>
       await import("./organization").then(({ organizationRouter }) => ({

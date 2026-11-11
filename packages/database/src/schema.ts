@@ -360,6 +360,15 @@ export const user = pgTable("user", {
   weekStartsOn: integer("weekStartsOn").$type<0 | 1 | 2 | 3 | 4 | 5 | 6>(),
 });
 
+export const platformAdmin = pgTable("platformAdmin", {
+  grantedAt: timestamp("grantedAt", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  userId: text("userId")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+});
+
 export const userAiContext = pgTable(
   "userAiContext",
   {
@@ -3817,6 +3826,17 @@ export const chatMessage = pgTable(
   ]
 );
 
+export const waitlistSettingRevision = pgTable("waitlistSettingRevision", {
+  actorUserId: text("actorUserId").references(() => user.id, {
+    onDelete: "set null",
+  }),
+  changedAt: timestamp("changedAt", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  waitlistOpen: boolean("waitlistOpen").notNull(),
+});
+
 export const waitlistSignup = pgTable("waitlistSignup", {
   createdAt: timestamp("createdAt").notNull(),
   email: text("email").primaryKey(),
@@ -4131,6 +4151,7 @@ export const tables = {
   organizationMailUsageEvent,
   organizationMailUsageSettings,
   passkey,
+  platformAdmin,
   rateLimitBucket,
   scheduledMailSend,
   scheduledMailSendAbandonment,
@@ -4142,6 +4163,7 @@ export const tables = {
   userAiContext,
   userAiContextEvent,
   verification,
+  waitlistSettingRevision,
   waitlistSignup,
 };
 

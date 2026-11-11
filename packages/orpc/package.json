@@ -20,6 +20,7 @@
     "./deployment-health": "./src/deployment-health.ts",
     ".": "./src/client.ts",
     "./context": "./src/context.ts",
+    "./operations-access": "./src/operations-access.ts",
     "./abuse-protection": "./src/abuse-protection.ts",
     "./errors": "./src/errors.ts",
     "./mailbox": "./src/mailbox/service.ts",

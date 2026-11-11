@@ -17,6 +17,10 @@ type WaitlistResponse = {
   status: "accepted";
 };
 
+class WaitlistClosedError extends Error {
+  override name = "WaitlistClosedError";
+}
+
 const parseWaitlistResponse = (value: unknown): WaitlistResponse => {
   if (
     !(typeof value === "object" && value !== null) ||
@@ -39,6 +43,20 @@ const addToWaitlist = async (formData: FormData): Promise<WaitlistResponse> => {
     },
     method: "POST",
   });
+
+  if (response.status === 503) {
+    const payload: unknown = await response.json();
+    if (
+      typeof payload === "object" &&
+      payload !== null &&
+      "status" in payload &&
+      payload.status === "closed" &&
+      "message" in payload &&
+      typeof payload.message === "string"
+    ) {
+      throw new WaitlistClosedError(payload.message);
+    }
+  }
 
   if (!response.ok) {
     throw new Error("Could not add waitlist signup.");
@@ -64,28 +82,25 @@ export const WaitlistForm = ({
     const form = event.currentTarget;
     setIconState("loading");
 
-    const request = addToWaitlist(new FormData(form));
-
-    void toast.promise(request, {
-      error: "Something went wrong. Try again.",
-      loading: "Adding you to the waitlist…",
-      success: (response) => `Added ${response.email} to the waitlist.`,
-    });
-
     const updateIconState = async () => {
-      await request
-        .then(() => {
-          form.reset();
-          setIconState("success");
-        })
-        .catch(() => {
-          setIconState("error");
-        })
-        .finally(() => {
-          window.setTimeout(() => {
-            setIconState("idle");
-          }, 1600);
+      try {
+        await toast.promise(addToWaitlist(new FormData(form)), {
+          error: (error) =>
+            error instanceof WaitlistClosedError
+              ? error.message
+              : "Something went wrong. Try again.",
+          loading: "Adding you to the waitlist…",
+          success: (response) => `Added ${response.email} to the waitlist.`,
         });
+        form.reset();
+        setIconState("success");
+      } catch {
+        setIconState("error");
+      } finally {
+        window.setTimeout(() => {
+          setIconState("idle");
+        }, 1600);
+      }
     };
     void updateIconState();
   };

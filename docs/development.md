@@ -254,6 +254,30 @@ CI runs destructive migration integration tests only against a dedicated tempora
 
 Read [Database safety](database-safety.md) before changing migration tooling.
 
+## Grant access to internal operations
+
+The internal dashboard requires a row in `platformAdmin` for the signed-in user's immutable `user.id`. The protected deployment applies the additive migration before deploying the dashboard and the updated public waitlist endpoint. The release router sends `/api/waitlist` to the active release, including requests from browsers pinned to an older build. The waitlist starts open until an admin pauses it. Confirm the new release serves `/api/waitlist` before pausing intake. Rolling back to a build that predates waitlist controls resumes public intake.
+
+For a local walkthrough, use a disposable loopback database so the waitlist switch affects only your test. The [PostgreSQL image used by migration CI](../infra/docker/semantic-search-postgres.Dockerfile) includes the extensions required by the migration history. Apply the migrations with `vp run db:migrate`, sign in to create a local account, and confirm its `user.id` in that database. Grant access using the SQL below.
+
+In production, confirm the intended account and its ID in the target database. Run the grant only with explicit authorization through the protected database operations process. Use the confirmed ID as a bound SQL parameter. Grant access to synthetic preview accounts only in a disposable loopback database.
+
+```sql
+INSERT INTO public."platformAdmin" ("userId")
+VALUES ($1)
+ON CONFLICT ("userId") DO NOTHING;
+```
+
+Reload the signed-in app and confirm that **Operations** opens. Verify that a separate account with an organization admin role cannot access the dashboard. In the disposable environment, pause intake and submit the public form. Confirm that the request returns HTTP 503 and the email is absent from `waitlistSignup`. Reopen intake, submit again, and confirm both changes appear in the dashboard history.
+
+To revoke access, use the same approved database process and bind the confirmed ID.
+
+```sql
+DELETE FROM public."platformAdmin" WHERE "userId" = $1;
+```
+
+The next authorized request checks membership again. Waitlist revisions remain available after a membership is revoked.
+
 ## Testing and Quality
 
 Run the full verification suite:

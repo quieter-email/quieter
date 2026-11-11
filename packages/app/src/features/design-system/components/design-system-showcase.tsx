@@ -53,6 +53,7 @@ import {
   ComposerContextChip,
   PromptComposerFrame,
 } from "@quieter/ui/composer-chrome";
+import { CompositionChart } from "@quieter/ui/composition-chart";
 import { DatePicker } from "@quieter/ui/date-picker";
 import {
   Dialog,
@@ -814,6 +815,17 @@ export const DesignSystemShowcase = () => {
               ],
               managedUsageCostCents: 1184,
             }}
+          />
+        </Section>
+
+        <Section title="Composition chart">
+          <CompositionChart
+            description="The share and count for each subscription plan."
+            segments={[
+              { color: "var(--q-purple)", label: "Pro", value: 38 },
+              { color: "var(--q-cyan)", label: "Managed", value: 12 },
+            ]}
+            title="Sample subscriptions"
           />
         </Section>
 
