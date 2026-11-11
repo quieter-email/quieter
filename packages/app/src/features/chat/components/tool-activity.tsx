@@ -1,6 +1,5 @@
 import {
   Alert02Icon,
-  ArrowDown01Icon,
   Calendar03Icon,
   Edit02Icon,
   Link01Icon,
@@ -19,6 +18,7 @@ import type {
 } from "@quieter/app/features/chat/domain/tool-activity";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   Collapsible,
   CollapsiblePanel,
@@ -135,13 +135,8 @@ const ActivityApproval = ({
         )}
         {review ? null : (
           <Collapsible>
-            <CollapsibleTrigger className="group/action-review" variant="text">
+            <CollapsibleTrigger variant="text">
               Full action details
-              <Icon
-                aria-hidden
-                className="group-data-panel-open/action-review:rotate-180"
-                icon={ArrowDown01Icon}
-              />
             </CollapsibleTrigger>
             <CollapsiblePanel>
               <div className="min-h-0 overflow-hidden">
@@ -200,11 +195,10 @@ export const ToolActivity = ({
           aria-hidden
           className="mt-0.5"
           icon={Alert02Icon}
-          size={12}
           tone="destructive"
         />
-        <div className="min-w-0 flex-1">
-          <Text size="caption" tone="destructive">
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <Text size="sm" tone="destructive">
             {activity.title}
           </Text>
           <Text className="wrap-anywhere" size="caption" tone="muted">
@@ -240,24 +234,24 @@ export const ToolActivity = ({
     });
   }
   const sources = [...sourcesById.values()];
-  const multipleSteps = steps.length > 1;
-  const hasStepDetails = multipleSteps || steps[0].context.length > 0;
+  const detailSteps = steps.filter(
+    (step) => step !== current || step.context.length > 0
+  );
   const icon =
     current.phase === "running"
       ? Loading03Icon
       : categoryIcons[current.category];
 
-  if (!hasStepDetails && sources.length === 0) {
+  if (detailSteps.length === 0 && sources.length === 0) {
     return (
-      <output className="flex items-center gap-2">
+      <output className="flex min-h-6 items-center gap-2">
         <Icon
           aria-hidden
           animation={current.phase === "running" ? "spin" : undefined}
           icon={icon}
-          size={12}
           tone="muted"
         />
-        <Text as="span" size="caption" tone="muted">
+        <Text as="span" size="sm" tone="muted">
           {current.title}
         </Text>
       </output>
@@ -266,7 +260,7 @@ export const ToolActivity = ({
 
   return (
     <Collapsible>
-      <CollapsibleTrigger className="group/activity max-w-full" variant="text">
+      <CollapsibleTrigger className="max-w-full" variant="text">
         <Icon
           aria-hidden
           animation={current.phase === "running" ? "spin" : undefined}
@@ -275,19 +269,19 @@ export const ToolActivity = ({
         <span aria-live="polite" className="truncate">
           {current.title}
         </span>
-        <Icon
-          aria-hidden
-          className="group-data-panel-open/activity:rotate-180"
-          icon={ArrowDown01Icon}
-        />
       </CollapsibleTrigger>
       <CollapsiblePanel keepMounted={false}>
-        <div className="min-h-0 space-y-1 py-1">
-          {hasStepDetails ? (
-            <ol className="space-y-1">
-              {steps.map((step) => (
-                <li className="flex items-start gap-2" key={step.id}>
-                  {multipleSteps ? (
+        <div className="min-h-0 space-y-2 py-1">
+          {detailSteps.length > 0 ? (
+            <ol className="space-y-1.5">
+              {detailSteps.map((step) => (
+                <li
+                  className={cn("flex items-start gap-2", {
+                    "ps-6": step === current,
+                  })}
+                  key={step.id}
+                >
+                  {step === current ? null : (
                     <Icon
                       aria-hidden
                       animation={step.phase === "running" ? "spin" : undefined}
@@ -297,38 +291,55 @@ export const ToolActivity = ({
                           ? Loading03Icon
                           : categoryIcons[step.category]
                       }
-                      size={12}
                       tone="muted"
                     />
-                  ) : null}
-                  <div className={multipleSteps ? "min-w-0" : "min-w-0 ps-5"}>
-                    {multipleSteps ? (
-                      <Text size="caption" tone="muted">
-                        {step.title}
-                      </Text>
-                    ) : null}
-                    {step.context.map((context) => (
-                      <Text
-                        className="wrap-anywhere"
-                        key={context}
-                        size="caption"
-                        tone="muted"
-                      >
-                        {context}
-                      </Text>
-                    ))}
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      {step === current ? null : (
+                        <Text as="span" size="sm">
+                          {step.title}
+                        </Text>
+                      )}
+                      {step.context.length === 1 ? (
+                        <Text
+                          as="span"
+                          className="wrap-anywhere"
+                          size="caption"
+                          tone="muted"
+                        >
+                          {step.context[0]}
+                        </Text>
+                      ) : null}
+                    </div>
+                    {step.context.length > 1
+                      ? step.context.map((context) => (
+                          <Text
+                            className="wrap-anywhere"
+                            key={context}
+                            size="caption"
+                            tone="muted"
+                          >
+                            {context}
+                          </Text>
+                        ))
+                      : null}
                   </div>
                 </li>
               ))}
             </ol>
           ) : null}
           {sources.length > 0 ? (
-            <div className="flex min-w-0 flex-col items-start ps-5">
-              {sources.slice(0, 3).map((source) => (
-                <MailReference inline key={source.messageId} reference={source}>
-                  Open email
-                </MailReference>
-              ))}
+            <div className="flex min-w-0 flex-col items-start ps-6">
+              <ul className="w-full">
+                {sources.slice(0, 3).map((source) => (
+                  <li key={source.messageId}>
+                    <MailReference inline reference={source}>
+                      Open email
+                    </MailReference>
+                  </li>
+                ))}
+              </ul>
               {sources.length > 3 ? (
                 <Text size="caption" tone="muted">
                   {sources.length - 3} more emails in these results.
