@@ -1301,7 +1301,7 @@ export const DesignSystemShowcase = () => {
           </Row>
           <Row label="Technical disclosure">
             <Collapsible>
-              <CollapsibleTrigger render={<Button variant="secondary" />}>
+              <CollapsibleTrigger variant="text">
                 Show technical details
               </CollapsibleTrigger>
               <CollapsiblePanel>
@@ -1670,6 +1670,11 @@ export const DesignSystemShowcase = () => {
           <Row label="Inline text action">
             <Button size="text" variant="ghost">
               Open mail
+            </Button>
+          </Row>
+          <Row label="Inline link">
+            <Button size="text" variant="link">
+              Open conversation
             </Button>
           </Row>
           <Row label="Tabs">

@@ -12,9 +12,11 @@ import type { ReactNode } from "react";
 
 export const MailReference = ({
   children,
+  inline = false,
   reference,
 }: {
   children: ReactNode;
+  inline?: boolean;
   reference: NonNullable<ReturnType<typeof parseMailReference>>;
 }) => {
   const setMailboxSearch = useMailboxSearchActions();
@@ -33,7 +35,11 @@ export const MailReference = ({
     getThreadWithDetailsOptions(
       workspace?.mailboxId ?? "",
       threadId ?? "",
-      !!workspace && !!threadId && !cachedMessage?.senderAvatarUrls
+      !!workspace &&
+        !!threadId &&
+        (inline
+          ? !cachedMessage?.subject && !reference.subject
+          : !cachedMessage?.senderAvatarUrls)
     )
   );
   const message =
@@ -73,23 +79,25 @@ export const MailReference = ({
       onClick={() => {
         void openMessage();
       }}
-      size="auto"
+      size={inline ? "text" : "auto"}
       title={
         senderLabel
           ? `${subjectLabel ?? "Email"}, ${senderLabel}`
           : subjectLabel
       }
       type="button"
-      variant="outline"
+      variant={inline ? "link" : "outline"}
     >
-      <SenderAvatar
-        avatarUrlDark={message?.senderAvatarUrls?.dark}
-        avatarUrlLight={message?.senderAvatarUrls?.light}
-        fallbackLabel={(senderLabel.trim().charAt(0) || "?").toUpperCase()}
-      />
+      {inline ? null : (
+        <SenderAvatar
+          avatarUrlDark={message?.senderAvatarUrls?.dark}
+          avatarUrlLight={message?.senderAvatarUrls?.light}
+          fallbackLabel={(senderLabel.trim().charAt(0) || "?").toUpperCase()}
+        />
+      )}
       <span className="flex min-w-0 flex-col">
         <span className="truncate">{subject}</span>
-        {senderLabel ? (
+        {!inline && senderLabel ? (
           <span className="truncate text-caption text-muted-fg">
             {senderLabel}
           </span>

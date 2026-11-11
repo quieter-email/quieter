@@ -81,6 +81,11 @@ export const buttonVariants = cva(
         size: "field",
         variant: "secondary",
       },
+      {
+        className: "min-h-6 text-body-sm",
+        size: "text",
+        variant: "link",
+      },
     ],
     defaultVariants: {
       auxiliaryPress: false,
@@ -112,7 +117,7 @@ export const buttonVariants = cva(
         "icon-xs": "size-6 p-0 [&_svg]:size-3.5",
         lg: "h-10 px-5 text-body-lg [&_svg]:size-4.5",
         sm: "h-7 px-2.5 text-body-sm [&_svg]:size-3.5",
-        text: "h-auto min-h-4 p-0 text-caption font-normal [&_svg]:size-3",
+        text: "h-auto min-h-4 p-0 text-caption font-normal",
         xs: "h-6 px-2 text-caption [&_svg]:size-3",
       },
       variant: {
@@ -130,6 +135,7 @@ export const buttonVariants = cva(
           "h-5 min-w-0 shrink justify-start rounded-none border-0 bg-transparent p-0 text-left text-body font-normal text-fg active:scale-100",
         keycap:
           "h-16 min-w-16 rounded-lg bg-detail px-5 font-normal text-title-sm text-fg hover:bg-control-hover active:bg-control-active",
+        link: "rounded-sm border-0 bg-transparent text-left text-fg underline decoration-border-strong underline-offset-2 transition-colors duration-(--app-motion-duration-feedback) hover:decoration-current",
         // Segmented option, e.g. the rule-builder choices. The selected look
         // follows aria-pressed so callers only pass the state.
         option:

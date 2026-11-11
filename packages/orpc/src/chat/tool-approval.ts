@@ -1,8 +1,9 @@
 import { ORPCError } from "@orpc/server";
-import { foregroundSnapshotSchema } from "@quieter/ai/chat-tools";
 import type { ForegroundSnapshot } from "@quieter/ai/chat-tools";
 import type { ChatMessagePart } from "@quieter/database/schema";
 import { z } from "zod";
+
+import { matchesForegroundLease } from "./continuation";
 
 const canonicalToolInput = (input: unknown) =>
   JSON.stringify(input, (_key, value: unknown) =>
@@ -25,18 +26,13 @@ export const assertExactChatToolApproval = (input: {
   const decision = z
     .object({ approved: z.literal(true), id: z.string().min(1) })
     .safeParse(approved?.approval);
-  const lease = foregroundSnapshotSchema
-    .strip()
-    .safeParse(approved?.foreground);
   if (
     approved?.state !== "approval-responded" ||
     !decision.success ||
     approved.type !== input.proposedPart.type ||
     approved.toolCallId !== input.proposedPart.toolCallId ||
     input.foreground.exchangeId !== input.exchangeId ||
-    !lease.success ||
-    lease.data.expiresAt <= Date.now() ||
-    canonicalToolInput(lease.data) !== canonicalToolInput(input.foreground) ||
+    !matchesForegroundLease(approved.foreground, input.foreground) ||
     approved.input === undefined ||
     canonicalToolInput(approved.input) !==
       canonicalToolInput(input.proposedPart.input)

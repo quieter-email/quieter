@@ -1,6 +1,10 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import {
+  modifyMailBatchResultSchema,
+  modifyMailResultSchema,
+} from "@quieter/ai/chat-agent";
 import type { ChatMailContext } from "@quieter/ai/chat-context";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import {
@@ -31,7 +35,10 @@ import {
 } from "@quieter/app/lib/chat-query";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { getMessagesQueryKey } from "@quieter/app/lib/mail/inbox-query/index";
-import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query-keys";
+import {
+  getMailboxThreadQueriesKey,
+  getThreadQueryKey,
+} from "@quieter/app/lib/mail/thread-query-keys";
 import { rpc } from "@quieter/app/lib/orpc";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appFetch, getApiUrl } from "@quieter/app/runtime";
@@ -97,6 +104,7 @@ const ChatSession = ({
   const [busy, setBusy] = useState(false);
   const [completedAssistantMessageId, setCompletedAssistantMessageId] =
     useState<string | null>(null);
+  const [interruptionMessage, setInterruptionMessage] = useState("");
   const foregroundRef = useRef<ForegroundSnapshot | null>(null);
   const requestContextRef = useRef<{
     context: ChatMailContext;
@@ -148,15 +156,17 @@ const ChatSession = ({
         },
         prepareSendMessagesRequest: ({ messages, trigger }) => {
           const foreground = foregroundRef.current;
-          if (!foreground) {
+          if (
+            !foreground ||
+            !workspace.control.isCurrent(foreground.generation)
+          ) {
             throw new Error("Start a new request to continue.");
           }
-          workspace.control.claimLeg(foreground.generation);
           return {
             body: {
               category: latestRef.current.props.activeMailbox,
               ...requestContextRef.current,
-              foreground,
+              foreground: { ...foreground, expiresAt: Date.now() + 120_000 },
               mailboxId: workspace.mailboxId,
               message: messages.at(-1),
               threadId,
@@ -172,11 +182,24 @@ const ChatSession = ({
       toCanonicalTranscript(chatData?.messages ?? [])
     ),
     onError: (error) => {
+      const foreground = foregroundRef.current;
+      if (
+        !mountedRef.current ||
+        foreground === null ||
+        !workspace.control.isCurrent(foreground.generation)
+      ) {
+        return;
+      }
       setCompletedAssistantMessageId(null);
-      workspace.control.finish();
       toastError(decodeChatStreamError(error), { boundary: "assistant-chat" });
     },
-    onFinish: ({ messages, isAbort, isError }) => {
+    onFinish: ({ messages, isAbort, isDisconnect, isError, finishReason }) => {
+      const foreground = foregroundRef.current;
+      const currentRun =
+        mountedRef.current &&
+        foreground !== null &&
+        workspace.control.isCurrent(foreground.generation);
+      let mailboxChanged = false;
       for (const message of messages) {
         for (const part of message.parts) {
           if (
@@ -187,6 +210,20 @@ const ChatSession = ({
             continue;
           }
           const toolName = part.type.replace("tool-", "");
+          if (toolName === "modify_mail" || toolName === "modify_mail_batch") {
+            const changed =
+              toolName === "modify_mail_batch"
+                ? modifyMailBatchResultSchema
+                    .safeParse(part.output)
+                    .data?.results.some((result) => result.status === "success")
+                : modifyMailResultSchema.safeParse(part.output).data?.status ===
+                  "success";
+            if (changed === true) {
+              appliedReceipts.current.add(part.toolCallId);
+              mailboxChanged = true;
+            }
+            continue;
+          }
           if (
             toolName === "create_reminder" ||
             toolName === "change_reminder"
@@ -254,7 +291,9 @@ const ChatSession = ({
               : saveComposeDraftOutputSchema.safeParse(part.output);
           if (receipt.success) {
             appliedReceipts.current.add(part.toolCallId);
-            workspace.getCompose()?.applyReceipt(receipt.data);
+            if (currentRun) {
+              workspace.getCompose()?.applyReceipt(receipt.data);
+            }
             const draftInput = saveComposeDraftInputSchema.safeParse(
               part.input
             );
@@ -276,6 +315,25 @@ const ChatSession = ({
           }
         }
       }
+      if (mailboxChanged) {
+        void refreshMailQueries([
+          getMessagesQueryKey(workspace.mailboxId, "inbox").slice(0, 2),
+          getMailboxThreadQueriesKey(workspace.mailboxId),
+        ]);
+      }
+      if (!currentRun) {
+        return;
+      }
+      const interrupted =
+        !isAbort && (finishReason === undefined || finishReason === "error");
+      if (isDisconnect || (interrupted && !isError)) {
+        setInterruptionMessage(
+          "The reply was interrupted. Check any completed actions before asking me to continue."
+        );
+      }
+      if (isError || interrupted) {
+        chat.setMessages(cancelForegroundMessages(messages));
+      }
       const last = messages.at(-1);
       const pending = last?.parts.some(
         (part) =>
@@ -286,10 +344,13 @@ const ChatSession = ({
       const terminal =
         isAbort ||
         isError ||
+        interrupted ||
         (pending !== true && !needsForegroundContinuation(messages));
       if (terminal) {
         setCompletedAssistantMessageId(
-          !isAbort && !isError && last?.role === "assistant" ? last.id : null
+          !isAbort && !isError && !interrupted && last?.role === "assistant"
+            ? last.id
+            : null
         );
         foregroundRef.current = null;
         workspace.control.finish();
@@ -298,7 +359,7 @@ const ChatSession = ({
         queryKey: getChatsQueryKey(workspace.mailboxId),
       });
       void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
-      if (terminal && props.chatId === null && mountedRef.current) {
+      if (terminal && !isError && !interrupted && props.chatId === null) {
         void synchronizeHistory();
       }
     },
@@ -391,21 +452,16 @@ const ChatSession = ({
         cancel();
       }
     });
-    const timeout = window.setInterval(() => {
+    return () => {
+      mountedRef.current = false;
       const foreground = foregroundRef.current;
       if (
-        foreground &&
-        !workspace.control.isCurrent(foreground.generation) &&
-        workspace.control.state.get().active
+        foreground !== null &&
+        workspace.control.isCurrent(foreground.generation)
       ) {
         workspace.control.cancel();
       }
-    }, 1000);
-    return () => {
-      mountedRef.current = false;
-      workspace.control.cancel();
       subscription.unsubscribe();
-      window.clearInterval(timeout);
     };
   }, [threadId, workspace]);
 
@@ -513,7 +569,10 @@ const ChatSession = ({
       ];
     })
   );
-  const errorMessage = streaming ? "" : (chat.error?.message ?? "");
+  const errorMessage = streaming
+    ? ""
+    : interruptionMessage ||
+      (chat.error ? decodeChatStreamError(chat.error).message : "");
   const lastUserIndex = chat.messages.findLastIndex(
     (message) => message.role === "user"
   );
@@ -532,7 +591,11 @@ const ChatSession = ({
       .some(
         (message) =>
           message.role === "assistant" &&
-          message.parts.some((part) => part.type !== "step-start")
+          message.parts.some(
+            (part) =>
+              isToolUIPart(part) ||
+              (part.type === "text" && part.text.trim() !== "")
+          )
       );
   const canRetry =
     errorMessage !== "" &&
@@ -560,6 +623,7 @@ const ChatSession = ({
     }
     setBusy(true);
     setCompletedAssistantMessageId(null);
+    setInterruptionMessage("");
     const generation = workspace.control.begin();
     const snapshot = workspace.read();
     try {
@@ -610,7 +674,9 @@ const ChatSession = ({
       if (resubmit === undefined) {
         setInput(text);
       }
-      workspace.control.finish();
+      if (workspace.control.isCurrent(generation)) {
+        workspace.control.finish();
+      }
       toastError(error, { boundary: "assistant-submit" });
     } finally {
       setBusy(false);

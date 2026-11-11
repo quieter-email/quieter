@@ -82,6 +82,21 @@ const createCompose = () => {
 };
 
 describe("workspace tools", () => {
+  test("continues using the same workspace during a long-running chat", async () => {
+    vi.useFakeTimers();
+    try {
+      const workspace = createWorkspace();
+      const generation = workspace.control.begin();
+      vi.setSystemTime(Date.now() + 10 * 60_000);
+
+      await expect(
+        executeWorkspaceTool(workspace, "get_workspace", {}, generation)
+      ).resolves.toMatchObject({ mailboxId: "mailbox-a", workspace: "mail" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("does not dispatch commands for a stale generation", async () => {
     const workspace = createWorkspace();
     const staleGeneration = workspace.control.begin();

@@ -1,6 +1,5 @@
 import {
   Alert02Icon,
-  ArrowDown01Icon,
   Calendar03Icon,
   Edit02Icon,
   Link01Icon,
@@ -19,6 +18,7 @@ import type {
 } from "@quieter/app/features/chat/domain/tool-activity";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   Collapsible,
   CollapsiblePanel,
@@ -135,16 +135,8 @@ const ActivityApproval = ({
         )}
         {review ? null : (
           <Collapsible>
-            <CollapsibleTrigger
-              className="group/action-review"
-              render={<Button size="compact" variant="ghost" />}
-            >
+            <CollapsibleTrigger variant="text">
               Full action details
-              <Icon
-                className="group-data-panel-open/action-review:rotate-180"
-                icon={ArrowDown01Icon}
-                size={14}
-              />
             </CollapsibleTrigger>
             <CollapsiblePanel>
               <div className="min-h-0 overflow-hidden">
@@ -198,34 +190,39 @@ export const ToolActivity = ({
   }
   if (activity.kind === "failure") {
     return (
-      <Surface aria-live="polite" className="my-2" variant="detail">
-        <div className="flex items-start gap-3">
-          <Icon icon={Alert02Icon} size={16} tone="destructive" />
-          <div className="min-w-0 space-y-1">
-            <Text size="sm" weight="medium">
-              {activity.title}
-            </Text>
-            <Text className="wrap-anywhere" size="sm" tone="muted">
-              {activity.message}
-            </Text>
-          </div>
+      <div aria-live="polite" className="flex items-start gap-2">
+        <Icon
+          aria-hidden
+          className="mt-0.5"
+          icon={Alert02Icon}
+          tone="destructive"
+        />
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <Text size="sm" tone="destructive">
+            {activity.title}
+          </Text>
+          <Text className="wrap-anywhere" size="caption" tone="muted">
+            {activity.message}
+          </Text>
+          {activity.sources.length > 0 ? (
+            <div className="flex min-w-0 flex-col items-start">
+              {activity.sources.slice(0, 3).map((source) => (
+                <MailReference inline key={source.messageId} reference={source}>
+                  Open email
+                </MailReference>
+              ))}
+            </div>
+          ) : null}
         </div>
-        {activity.sources.length > 0 ? (
-          <div className="mt-3 flex min-w-0 flex-col items-start gap-2">
-            {activity.sources.slice(0, 3).map((source) => (
-              <MailReference key={source.messageId} reference={source}>
-                Open email
-              </MailReference>
-            ))}
-          </div>
-        ) : null}
-      </Surface>
+      </div>
     );
   }
 
   const { steps } = activity;
   const current =
-    steps.findLast((step) => step.phase === "running") ?? steps[0];
+    steps.findLast((step) => step.phase === "running") ??
+    steps.findLast((step) => step.phase === "complete") ??
+    steps[0];
   const sourcesById = new Map<string, RoutineActivity["sources"][number]>();
   for (const source of steps.flatMap((step) => step.sources)) {
     const previous = sourcesById.get(source.messageId);
@@ -237,25 +234,24 @@ export const ToolActivity = ({
     });
   }
   const sources = [...sourcesById.values()];
-  const hasDetails =
-    steps.length > 1 ||
-    steps.some((step) => step.context.length > 0) ||
-    sources.length > 0;
+  const detailSteps = steps.filter(
+    (step) => step !== current || step.context.length > 0
+  );
   const icon =
     current.phase === "running"
       ? Loading03Icon
       : categoryIcons[current.category];
 
-  if (!hasDetails) {
+  if (detailSteps.length === 0 && sources.length === 0) {
     return (
-      <output className="flex items-center gap-2 py-2">
+      <output className="flex min-h-6 items-center gap-2">
         <Icon
+          aria-hidden
           animation={current.phase === "running" ? "spin" : undefined}
           icon={icon}
-          size={14}
           tone="muted"
         />
-        <Text size="sm" tone="muted">
+        <Text as="span" size="sm" tone="muted">
           {current.title}
         </Text>
       </output>
@@ -264,73 +260,93 @@ export const ToolActivity = ({
 
   return (
     <Collapsible>
-      <CollapsibleTrigger
-        className="group/activity"
-        render={<Button className="w-full" size="auto" variant="ghost" />}
-      >
+      <CollapsibleTrigger className="max-w-full" variant="text">
         <Icon
+          aria-hidden
           animation={current.phase === "running" ? "spin" : undefined}
           icon={icon}
-          size={14}
         />
-        <span aria-live="polite" className="min-w-0 flex-1">
+        <span aria-live="polite" className="truncate">
           {current.title}
         </span>
-        <Icon
-          className="group-data-panel-open/activity:rotate-180"
-          icon={ArrowDown01Icon}
-          size={14}
-        />
       </CollapsibleTrigger>
       <CollapsiblePanel keepMounted={false}>
-        <div className="min-h-0 overflow-hidden">
-          <Surface className="my-2">
-            <div className="space-y-4">
-              <ol className="space-y-3">
-                {steps.map((step) => (
-                  <li className="flex items-start gap-3" key={step.id}>
+        <div className="min-h-0 space-y-2 py-1">
+          {detailSteps.length > 0 ? (
+            <ol className="space-y-1.5">
+              {detailSteps.map((step) => (
+                <li
+                  className={cn("flex items-start gap-2", {
+                    "ps-6": step === current,
+                  })}
+                  key={step.id}
+                >
+                  {step === current ? null : (
                     <Icon
+                      aria-hidden
                       animation={step.phase === "running" ? "spin" : undefined}
+                      className="mt-0.5"
                       icon={
                         step.phase === "running"
                           ? Loading03Icon
                           : categoryIcons[step.category]
                       }
-                      size={14}
                       tone="muted"
                     />
-                    <div className="min-w-0 space-y-1">
-                      <Text size="sm">{step.title}</Text>
-                      {step.context.map((context) => (
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      {step === current ? null : (
+                        <Text as="span" size="sm">
+                          {step.title}
+                        </Text>
+                      )}
+                      {step.context.length === 1 ? (
                         <Text
+                          as="span"
                           className="wrap-anywhere"
-                          key={context}
                           size="caption"
                           tone="muted"
                         >
-                          {context}
+                          {step.context[0]}
                         </Text>
-                      ))}
+                      ) : null}
                     </div>
-                  </li>
-                ))}
-              </ol>
-              {sources.length > 0 ? (
-                <div className="flex min-w-0 flex-col items-start gap-2">
-                  {sources.slice(0, 3).map((source) => (
-                    <MailReference key={source.messageId} reference={source}>
+                    {step.context.length > 1
+                      ? step.context.map((context) => (
+                          <Text
+                            className="wrap-anywhere"
+                            key={context}
+                            size="caption"
+                            tone="muted"
+                          >
+                            {context}
+                          </Text>
+                        ))
+                      : null}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : null}
+          {sources.length > 0 ? (
+            <div className="flex min-w-0 flex-col items-start ps-6">
+              <ul className="w-full">
+                {sources.slice(0, 3).map((source) => (
+                  <li key={source.messageId}>
+                    <MailReference inline reference={source}>
                       Open email
                     </MailReference>
-                  ))}
-                  {sources.length > 3 ? (
-                    <Text size="caption" tone="muted">
-                      {sources.length - 3} more emails in these results.
-                    </Text>
-                  ) : null}
-                </div>
+                  </li>
+                ))}
+              </ul>
+              {sources.length > 3 ? (
+                <Text size="caption" tone="muted">
+                  {sources.length - 3} more emails in these results.
+                </Text>
               ) : null}
             </div>
-          </Surface>
+          ) : null}
         </div>
       </CollapsiblePanel>
     </Collapsible>

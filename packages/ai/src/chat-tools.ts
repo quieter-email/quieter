@@ -284,6 +284,7 @@ export const mutatingChatToolNames = [
   "connector_write",
   "linear_write",
   "modify_mail",
+  "modify_mail_batch",
   "save_compose_draft",
   "send_mail",
   ...calendarWriteToolNames,

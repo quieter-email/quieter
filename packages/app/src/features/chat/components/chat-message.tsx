@@ -15,6 +15,7 @@ import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Surface } from "@quieter/ui/surface";
+import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
 import type { UIMessage } from "ai";
 
@@ -53,11 +54,10 @@ export const ChatMessage = ({
         chrome="bubble"
         className="max-w-2/3 self-end"
         data-conversation-item={message.id}
-        variant="detail"
+        padding="snug"
+        variant="section"
       >
-        <p className="text-body/relaxed wrap-anywhere whitespace-pre-wrap text-fg">
-          {text}
-        </p>
+        <Text className="wrap-anywhere whitespace-pre-wrap">{text}</Text>
       </Surface>
     );
   }
@@ -74,7 +74,7 @@ export const ChatMessage = ({
   const suggestions = getMessageSuggestions(message.parts);
 
   return (
-    <article className="group/message w-full min-w-0 space-y-1 text-body/relaxed text-fg">
+    <article className="group/message w-full min-w-0 space-y-2 text-body text-fg">
       {segments.map((segment) => {
         if (segment.kind === "text") {
           return (
@@ -93,9 +93,9 @@ export const ChatMessage = ({
         );
       })}
       {showThinking ? (
-        <p aria-live="polite" className="text-caption text-muted-fg">
+        <Text aria-live="polite" size="sm" tone="muted">
           Thinking…
-        </p>
+        </Text>
       ) : null}
       {onSuggestion !== undefined &&
       !isStreaming &&

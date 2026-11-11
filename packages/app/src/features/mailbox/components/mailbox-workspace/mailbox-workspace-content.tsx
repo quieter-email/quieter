@@ -621,7 +621,6 @@ const MailboxWorkspaceContentInner = ({
         restoreAssistantTriggerFocus();
       }
       assistantAutoCollapsedRef.current = true;
-      agentWorkspace?.control.cancel();
       setAssistantOpen(false);
     } else if (wide && assistantAutoCollapsedRef.current) {
       assistantAutoCollapsedRef.current = false;
@@ -1111,7 +1110,6 @@ const MailboxWorkspaceContentInner = ({
                     onRenameChat={onRenameChat}
                     onMinimize={() => {
                       assistantAutoCollapsedRef.current = false;
-                      agentWorkspace?.control.cancel();
                       setAssistantOpen(false);
                       try {
                         localStorage.setItem(

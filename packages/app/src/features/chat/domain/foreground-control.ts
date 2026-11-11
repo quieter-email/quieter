@@ -8,12 +8,8 @@ export const createForegroundControl = () => {
     active: false,
     generation: 0,
   });
-  let deadline = 0;
-  let legs = 0;
   return {
     begin() {
-      deadline = Date.now() + 120_000;
-      legs = 0;
       state.setState((current) => ({
         ...current,
         active: true,
@@ -31,24 +27,12 @@ export const createForegroundControl = () => {
         generation: current.generation + 1,
       }));
     },
-    claimLeg(generation: number) {
-      if (!this.isCurrent(generation) || legs >= 12) {
-        throw new Error(
-          "This request has stopped. Send a follow-up to continue."
-        );
-      }
-      legs += 1;
-    },
     finish() {
       state.setState((current) => ({ ...current, active: false }));
     },
     isCurrent(generation: number) {
       const current = state.get();
-      return (
-        current.active &&
-        current.generation === generation &&
-        Date.now() < deadline
-      );
+      return current.active && current.generation === generation;
     },
     state,
   };
