@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getRequestHeaders } from "../context";
 import { hasPlatformOperationsAccess } from "../operations-access";
 import { getOperationsOverview } from "../operations-metrics";
+import { operationsRanges } from "../operations-range";
 import { getWaitlistSettings } from "../waitlist";
 import { protectedProcedure } from "./base";
 
@@ -31,7 +32,7 @@ export const operationsRouter = {
     })),
   overview: platformAdminProcedure
     .route({ method: "GET" })
-    .input(z.object({ days: z.literal([7, 30, 90]) }))
+    .input(z.object({ days: z.literal(operationsRanges) }))
     .handler(
       async ({ context, input }) =>
         await getOperationsOverview({ days: input.days, db: context.db })
