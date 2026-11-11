@@ -82,31 +82,25 @@ export const WaitlistForm = ({
     const form = event.currentTarget;
     setIconState("loading");
 
-    const request = addToWaitlist(new FormData(form));
-
-    void toast.promise(request, {
-      error: (error) =>
-        error instanceof WaitlistClosedError
-          ? error.message
-          : "Something went wrong. Try again.",
-      loading: "Adding you to the waitlist…",
-      success: (response) => `Added ${response.email} to the waitlist.`,
-    });
-
     const updateIconState = async () => {
-      await request
-        .then(() => {
-          form.reset();
-          setIconState("success");
-        })
-        .catch(() => {
-          setIconState("error");
-        })
-        .finally(() => {
-          window.setTimeout(() => {
-            setIconState("idle");
-          }, 1600);
+      try {
+        await toast.promise(addToWaitlist(new FormData(form)), {
+          error: (error) =>
+            error instanceof WaitlistClosedError
+              ? error.message
+              : "Something went wrong. Try again.",
+          loading: "Adding you to the waitlist…",
+          success: (response) => `Added ${response.email} to the waitlist.`,
         });
+        form.reset();
+        setIconState("success");
+      } catch {
+        setIconState("error");
+      } finally {
+        window.setTimeout(() => {
+          setIconState("idle");
+        }, 1600);
+      }
     };
     void updateIconState();
   };
