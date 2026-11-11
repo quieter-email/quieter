@@ -1,3 +1,7 @@
+import {
+  SettingsErrorState,
+  SettingsLoadingState,
+} from "@quieter/app/features/settings/components/settings-layout";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
 import { Pill } from "@quieter/ui/pill";
@@ -9,10 +13,9 @@ import {
   SettingsRowText,
   SettingsSectionLayout,
 } from "@quieter/ui/settings-layout";
+import { Surface } from "@quieter/ui/surface";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-
-import { OperationsQueryState } from "./operations-query-state";
 
 export const OperationsSettings = () => {
   const queryClient = useQueryClient();
@@ -31,13 +34,20 @@ export const OperationsSettings = () => {
   );
 
   if (settings.isPending) {
-    return <OperationsQueryState label="Loading configuration" />;
+    return (
+      <Surface padding="none">
+        <SettingsLoadingState
+          className="min-h-48"
+          label="Loading configuration"
+        />
+      </Surface>
+    );
   }
   if (settings.isError) {
     return (
-      <OperationsQueryState
-        label="Couldn’t load configuration."
-        retry={() => void settings.refetch()}
+      <SettingsErrorState
+        message="Couldn’t load configuration."
+        onRetry={() => void settings.refetch()}
       />
     );
   }

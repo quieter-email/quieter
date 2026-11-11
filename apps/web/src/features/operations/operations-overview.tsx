@@ -4,19 +4,21 @@ import {
   Mail01Icon,
   UserGroupIcon,
 } from "@hugeicons/core-free-icons";
+import {
+  SettingsErrorState,
+  SettingsLoadingState,
+} from "@quieter/app/features/settings/components/settings-layout";
 import { orpc } from "@quieter/app/lib/orpc";
 import type { rpc } from "@quieter/app/lib/orpc";
 import { BarChart } from "@quieter/ui/bar-chart";
 import type { BarChartPoint, BarChartSeries } from "@quieter/ui/bar-chart";
+import { CompositionChart } from "@quieter/ui/composition-chart";
 import { Icon } from "@quieter/ui/icon";
 import { Surface } from "@quieter/ui/surface";
 import { Text } from "@quieter/ui/text";
 import { Toggle, ToggleGroup } from "@quieter/ui/toggle";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import type { CSSProperties } from "react";
-
-import { OperationsQueryState } from "./operations-query-state";
 
 type Overview = Awaited<ReturnType<typeof rpc.operations.overview>>;
 type Days = Parameters<typeof rpc.operations.overview>[0]["days"];
@@ -29,10 +31,6 @@ const periods = [
   { days: 90, groupBy: 7 },
 ] as const satisfies readonly { days: Days; groupBy: number }[];
 type Period = (typeof periods)[number];
-type SegmentStyle = CSSProperties & {
-  "--segment-color": string;
-  "--segment-size"?: number;
-};
 const shortDate = new Intl.DateTimeFormat(undefined, {
   day: "numeric",
   month: "short",
@@ -130,76 +128,6 @@ const chartPoints = (
     });
   }
   return points;
-};
-
-const CompositionChart = ({
-  description,
-  segments,
-  title,
-}: {
-  description: string;
-  segments: { color: string; label: string; value: number }[];
-  title: string;
-}) => {
-  const total = segments.reduce((sum, segment) => sum + segment.value, 0);
-  const breakdown = segments.map(({ color, label, value }) => {
-    const style: SegmentStyle = {
-      "--segment-color": color,
-      "--segment-size": value,
-    };
-    return { label, style, value };
-  });
-  return (
-    <Surface padding="comfortable">
-      <figure className="space-y-4">
-        <figcaption className="space-y-1">
-          <Text as="h3" size="sm" weight="medium">
-            {title}
-          </Text>
-          <Text size="caption" tone="muted">
-            {description}
-          </Text>
-        </figcaption>
-        <div
-          aria-hidden="true"
-          className="flex h-2.5 overflow-hidden rounded-full bg-detail not-squircle"
-        >
-          {breakdown.map(({ label, style }) => (
-            <div
-              className="grow-(--segment-size) bg-(--segment-color)"
-              key={label}
-              style={style}
-            />
-          ))}
-        </div>
-        <dl className="space-y-2">
-          {breakdown.map(({ label, style, value }) => (
-            <div className="flex items-baseline gap-3" key={label}>
-              <dt className="flex min-w-0 flex-1 items-center gap-2 text-body-sm">
-                <span
-                  aria-hidden="true"
-                  className="size-2 shrink-0 rounded-xs bg-(--segment-color)"
-                  style={style}
-                />
-                {label}
-              </dt>
-              <dd className="text-caption text-muted-fg tabular-nums">
-                {total > 0
-                  ? (value / total).toLocaleString(undefined, {
-                      maximumFractionDigits: 1,
-                      style: "percent",
-                    })
-                  : "0%"}
-              </dd>
-              <dd className="w-12 text-right text-body-sm tabular-nums">
-                {value.toLocaleString()}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </figure>
-    </Surface>
-  );
 };
 
 const OverviewMetrics = ({
@@ -374,11 +302,15 @@ export const OperationsOverview = () => {
           </Text>
         )}
       </div>
-      {overview.isPending && <OperationsQueryState label="Loading activity" />}
+      {overview.isPending && (
+        <Surface padding="none">
+          <SettingsLoadingState className="min-h-48" label="Loading activity" />
+        </Surface>
+      )}
       {overview.isError && (
-        <OperationsQueryState
-          label="Couldn’t load activity."
-          retry={() => void overview.refetch()}
+        <SettingsErrorState
+          message="Couldn’t load activity."
+          onRetry={() => void overview.refetch()}
         />
       )}
       {overview.isSuccess && (
