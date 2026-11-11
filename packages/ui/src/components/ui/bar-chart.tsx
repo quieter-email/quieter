@@ -9,6 +9,7 @@ export type BarChartSeries = {
   color: string;
   key: string;
   label: string;
+  valueFormat?: Intl.NumberFormatOptions;
 };
 
 export type BarChartPoint = {
@@ -40,7 +41,12 @@ export const BarChart = ({
       series.map((item) => point.values[item.key] ?? 0)
     )
   );
-  const ceiling = Math.max(2, Math.ceil(maximum / 2) * 2);
+  const axisStep =
+    maximum > 0 && maximum < 1 ? 10 ** Math.floor(Math.log10(maximum)) : 1;
+  const ceiling = Math.max(
+    2 * axisStep,
+    Math.ceil(maximum / (2 * axisStep)) * 2 * axisStep
+  );
   const tickEvery = Math.max(1, Math.ceil((data.length - 1) / 4));
 
   return (
@@ -85,7 +91,7 @@ export const BarChart = ({
             {data.map((point) => (
               <Tooltip key={point.label}>
                 <TooltipTrigger
-                  aria-label={`${point.label}, ${series.map((item) => `${item.label} ${point.values[item.key] ?? 0}`).join(", ")}`}
+                  aria-label={`${point.label}, ${series.map((item) => `${item.label} ${(point.values[item.key] ?? 0).toLocaleString(undefined, item.valueFormat)}`).join(", ")}`}
                   className="flex h-full min-w-0 items-end justify-center gap-px rounded-sm px-0.5 hover:bg-fg/5 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   {series.map((item) => {
@@ -117,7 +123,10 @@ export const BarChart = ({
                         />
                         <span className="flex-1">{item.label}</span>
                         <span className="tabular-nums">
-                          {(point.values[item.key] ?? 0).toLocaleString()}
+                          {(point.values[item.key] ?? 0).toLocaleString(
+                            undefined,
+                            item.valueFormat
+                          )}
                         </span>
                       </div>
                     ))}

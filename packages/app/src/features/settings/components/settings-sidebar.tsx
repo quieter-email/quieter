@@ -77,10 +77,12 @@ const PERSONAL_ITEMS = [
 ] as const;
 
 export const SettingsSidebar = ({
+  internalNavigation,
   onRequestClose,
   searchInput,
   searchResults,
 }: {
+  internalNavigation?: ReactNode;
   onRequestClose?: () => void;
   searchInput: ReactNode;
   searchResults?: ReactNode;
@@ -183,6 +185,7 @@ export const SettingsSidebar = ({
                 { tab: "development" },
                 tab === "development"
               )}
+            {internalNavigation}
           </div>
           <div className="space-y-0">
             <p className="px-2 py-1 text-caption text-muted-fg">
