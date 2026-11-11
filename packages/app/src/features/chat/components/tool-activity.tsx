@@ -18,7 +18,6 @@ import type {
 } from "@quieter/app/features/chat/domain/tool-activity";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import {
   Collapsible,
   CollapsiblePanel,
@@ -221,7 +220,7 @@ export const ToolActivity = ({
   const { steps } = activity;
   const current =
     steps.findLast((step) => step.phase === "running") ??
-    steps.findLast((step) => step.phase === "complete") ??
+    steps.at(-1) ??
     steps[0];
   const sourcesById = new Map<string, RoutineActivity["sources"][number]>();
   for (const source of steps.flatMap((step) => step.sources)) {
@@ -234,15 +233,16 @@ export const ToolActivity = ({
     });
   }
   const sources = [...sourcesById.values()];
-  const detailSteps = steps.filter(
-    (step) => step !== current || step.context.length > 0
-  );
   const icon =
     current.phase === "running"
       ? Loading03Icon
       : categoryIcons[current.category];
 
-  if (detailSteps.length === 0 && sources.length === 0) {
+  if (
+    steps.length === 1 &&
+    current.context.length === 0 &&
+    sources.length === 0
+  ) {
     return (
       <output className="flex min-h-6 items-center gap-2">
         <Icon
@@ -271,67 +271,42 @@ export const ToolActivity = ({
         </span>
       </CollapsibleTrigger>
       <CollapsiblePanel keepMounted={false}>
-        <div className="min-h-0 space-y-2 py-1">
-          {detailSteps.length > 0 ? (
-            <ol className="space-y-1.5">
-              {detailSteps.map((step) => (
-                <li
-                  className={cn("flex items-start gap-2", {
-                    "ps-6": step === current,
-                  })}
-                  key={step.id}
-                >
-                  {step === current ? null : (
-                    <Icon
-                      aria-hidden
-                      animation={step.phase === "running" ? "spin" : undefined}
-                      className="mt-0.5"
-                      icon={
-                        step.phase === "running"
-                          ? Loading03Icon
-                          : categoryIcons[step.category]
-                      }
+        <div className="min-h-0 space-y-3 ps-6 pt-2 pb-1">
+          <ol className="space-y-2">
+            {steps.map((step) => (
+              <li className="flex items-start gap-2" key={step.id}>
+                <Icon
+                  aria-hidden
+                  animation={step.phase === "running" ? "spin" : undefined}
+                  className="mt-0.5"
+                  icon={
+                    step.phase === "running"
+                      ? Loading03Icon
+                      : categoryIcons[step.category]
+                  }
+                  tone="muted"
+                />
+                <div className="min-w-0 space-y-0.5">
+                  <Text size="sm" tone="muted">
+                    {step.title}
+                  </Text>
+                  {step.context.map((context) => (
+                    <Text
+                      className="wrap-anywhere"
+                      key={context}
+                      size="caption"
                       tone="muted"
-                    />
-                  )}
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-baseline gap-x-2">
-                      {step === current ? null : (
-                        <Text as="span" size="sm">
-                          {step.title}
-                        </Text>
-                      )}
-                      {step.context.length === 1 ? (
-                        <Text
-                          as="span"
-                          className="wrap-anywhere"
-                          size="caption"
-                          tone="muted"
-                        >
-                          {step.context[0]}
-                        </Text>
-                      ) : null}
-                    </div>
-                    {step.context.length > 1
-                      ? step.context.map((context) => (
-                          <Text
-                            className="wrap-anywhere"
-                            key={context}
-                            size="caption"
-                            tone="muted"
-                          >
-                            {context}
-                          </Text>
-                        ))
-                      : null}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          ) : null}
+                    >
+                      {context}
+                    </Text>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ol>
           {sources.length > 0 ? (
-            <div className="flex min-w-0 flex-col items-start ps-6">
-              <ul className="w-full">
+            <div className="flex min-w-0 flex-col items-start gap-1 ps-6">
+              <ul className="w-full space-y-0.5">
                 {sources.slice(0, 3).map((source) => (
                   <li key={source.messageId}>
                     <MailReference inline reference={source}>

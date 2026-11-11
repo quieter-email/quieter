@@ -74,7 +74,7 @@ export const ChatMessage = ({
   const suggestions = getMessageSuggestions(message.parts);
 
   return (
-    <article className="group/message w-full min-w-0 space-y-2 text-body text-fg">
+    <article className="group/message w-full min-w-0 space-y-3 text-body text-fg">
       {segments.map((segment) => {
         if (segment.kind === "text") {
           return (

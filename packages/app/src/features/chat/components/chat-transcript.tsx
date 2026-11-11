@@ -7,6 +7,7 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Text } from "@quieter/ui/text";
 import type { UIMessage } from "ai";
 import { useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -134,6 +135,11 @@ export const ChatTranscript = ({
               }
             />
           ))}
+          {isStreaming && messages.at(-1)?.role === "user" ? (
+            <Text aria-live="polite" size="sm" tone="muted">
+              Thinking…
+            </Text>
+          ) : null}
           {errorMessage === undefined || errorMessage === "" ? null : (
             <div className="flex items-start gap-2" role="alert">
               <Icon

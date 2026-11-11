@@ -7,6 +7,7 @@ import { getCachedMessagesQueries } from "@quieter/app/lib/mail/inbox-query/quer
 import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
 import { Button } from "@quieter/ui/button";
 import { SenderAvatar } from "@quieter/ui/sender-avatar";
+import { Text } from "@quieter/ui/text";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -96,7 +97,9 @@ export const MailReference = ({
         />
       )}
       <span className="flex min-w-0 flex-col">
-        <span className="truncate">{subject}</span>
+        <Text as="span" size="sm" tone={inline ? "muted" : "default"} truncate>
+          {subject}
+        </Text>
         {!inline && senderLabel ? (
           <span className="truncate text-caption text-muted-fg">
             {senderLabel}
