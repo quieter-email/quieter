@@ -16,6 +16,7 @@ import {
   batchModifyMessages,
   getGmailMessageCount,
   getGmailProfile,
+  getGmailTargetLabelState,
   getMessageAttachment,
   getMessageWithDetails,
   getThreadWithDetails,
@@ -438,27 +439,68 @@ const gmailChatMailChanges = {
   untrash: "untrash",
 } satisfies Record<ModifyMailResult["action"], GmailMetadataChange>;
 
-const mutateGmailChatTarget = async (
-  accessToken: string,
-  input: {
-    change: GmailMetadataChange;
-    id: string;
-    signal?: AbortSignal;
-    target: ModifyMailResult["target"];
-  }
-) => {
-  const mutate =
-    input.target === "thread" ? mutateGmailThread : mutateGmailMessage;
-  const result = await mutate(
-    accessToken,
-    input.id,
-    input.change,
-    input.signal
-  );
-  return "messages" in result
-    ? (result.messages ?? []).map((message) => message.id)
-    : [input.id];
+type GmailChatMutationReceipt = Awaited<
+  ReturnType<typeof mutateGmailMessage | typeof mutateGmailThread>
+>;
+type GmailChatTarget = Parameters<typeof getGmailTargetLabelState>[1] & {
+  change: GmailMetadataChange;
 };
+
+const confirmsGmailChange = (labels: string[], change: GmailMetadataChange) => {
+  if (typeof change === "string") {
+    return labels.includes("TRASH") === (change === "trash");
+  }
+  return (
+    (change.addLabelIds?.every((label) => labels.includes(label)) ?? true) &&
+    (change.removeLabelIds?.every((label) => !labels.includes(label)) ?? true)
+  );
+};
+
+const verifyGmailChatTarget = async (
+  run: Awaited<ReturnType<typeof openAuthorizedGmailChatRequests>>,
+  input: GmailChatTarget,
+  receipt?: GmailChatMutationReceipt
+) => {
+  const { change, id, signal } = input;
+  if (receipt !== undefined) {
+    const target = "threadId" in receipt ? receipt.threadId : receipt.id;
+    const messages = "messages" in receipt ? receipt.messages : [receipt];
+    if (
+      target === id &&
+      messages.length > 0 &&
+      messages.every(
+        (message) =>
+          message.labelIds !== undefined &&
+          confirmsGmailChange(message.labelIds, change)
+      )
+    ) {
+      return messages.map((message) => message.id);
+    }
+  }
+  try {
+    const observed = await run(async (accessToken) => {
+      signal?.throwIfAborted();
+      return await getGmailTargetLabelState(accessToken, input);
+    });
+    return observed.id === id &&
+      observed.messages.every((message) =>
+        confirmsGmailChange(message.labelIds, change)
+      )
+      ? observed.messages.map((message) => message.id)
+      : [];
+  } catch (error) {
+    if (
+      signal?.aborted !== true &&
+      !(isGmailServiceError(error) && error.status === 404)
+    ) {
+      reportError(error, { operation: "mailbox-tool:verify mail action" });
+    }
+    return [];
+  }
+};
+
+const UNCONFIRMED_MAIL_CHANGE =
+  "The mail change could not be confirmed. Check the affected mail before trying again.";
 
 const recordGmailChatAction = async (
   input: GmailChatRequest & { action: ModifyMailResult["action"] },
@@ -489,18 +531,27 @@ export const modifyMailForUser = async (
 ): Promise<ModifyMailResult> => {
   const { action, category, id, signal, target } = input;
   const change = gmailChatMailChanges[action];
-  const messageIds = await runAuthorizedGmailChatRequest(
-    input,
-    async (accessToken) => {
-      signal?.throwIfAborted();
-      return await mutateGmailChatTarget(accessToken, {
-        change,
-        id,
-        signal,
-        target,
-      });
-    }
+  const run = await openAuthorizedGmailChatRequests(input);
+  const mutate = target === "thread" ? mutateGmailThread : mutateGmailMessage;
+  const receipt = await run(async (accessToken) => {
+    signal?.throwIfAborted();
+    return await mutate(accessToken, id, change, signal);
+  });
+  const messageIds = await verifyGmailChatTarget(
+    run,
+    { change, id, signal, target },
+    receipt
   );
+  if (messageIds.length === 0) {
+    return {
+      action,
+      category,
+      error: UNCONFIRMED_MAIL_CHANGE,
+      id,
+      status: "error",
+      target,
+    };
+  }
   await recordGmailChatAction(input, messageIds);
   return { action, category, id, status: "success", target };
 };
@@ -521,18 +572,53 @@ export const modifyMailBatchForUser = async (
 
   if (target === "message" && typeof change !== "string") {
     signal?.throwIfAborted();
+    let attempted = false;
     try {
       await run(async (accessToken) => {
         signal?.throwIfAborted();
+        attempted = true;
         await batchModifyMessages(accessToken, ids, change, signal);
       });
-      results.push(...ids.map((id) => ({ id, status: "success" as const })));
-      appliedMessageIds.push(...ids);
+      for (
+        let offset = 0;
+        offset < ids.length;
+        offset += GMAIL_CHAT_BATCH_CONCURRENCY
+      ) {
+        if (signal?.aborted === true) {
+          break;
+        }
+        const outcomes = await Promise.all(
+          ids
+            .slice(offset, offset + GMAIL_CHAT_BATCH_CONCURRENCY)
+            .map(async (id) => ({
+              id,
+              messageIds: await verifyGmailChatTarget(run, {
+                change,
+                id,
+                signal,
+                target,
+              }),
+            }))
+        );
+        for (const { id, messageIds } of outcomes) {
+          results.push({
+            id,
+            status: messageIds.length > 0 ? "success" : "error",
+          });
+          appliedMessageIds.push(...messageIds);
+        }
+      }
     } catch (error) {
       failure = error;
-      results.push(...ids.map((id) => ({ id, status: "error" as const })));
     }
+    results.push(
+      ...ids.slice(results.length).map((id) => ({
+        id,
+        status: attempted ? ("error" as const) : ("not_attempted" as const),
+      }))
+    );
   } else {
+    const mutate = target === "thread" ? mutateGmailThread : mutateGmailMessage;
     for (
       let offset = 0;
       offset < ids.length;
@@ -546,17 +632,23 @@ export const modifyMailBatchForUser = async (
         group.map(async (id) => {
           let attempted = false;
           try {
-            const messageIds = await run(async (accessToken) => {
+            const receipt = await run(async (accessToken) => {
               signal?.throwIfAborted();
               attempted = true;
-              return await mutateGmailChatTarget(accessToken, {
-                change,
-                id,
-                signal,
-                target,
-              });
+              return await mutate(accessToken, id, change, signal);
             });
-            return { id, messageIds, status: "success" as const };
+            const messageIds = await verifyGmailChatTarget(
+              run,
+              { change, id, signal, target },
+              receipt
+            );
+            return messageIds.length > 0
+              ? { id, messageIds, status: "success" as const }
+              : {
+                  error: new Error(UNCONFIRMED_MAIL_CHANGE),
+                  id,
+                  status: "error" as const,
+                };
           } catch (error) {
             return {
               error,

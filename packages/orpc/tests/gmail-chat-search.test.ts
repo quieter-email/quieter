@@ -11,6 +11,7 @@ import { z } from "zod";
 import type { captureMailboxMessageMemory } from "../src/ai-memory-capture";
 import {
   modifyMailBatchForUser,
+  modifyMailForUser,
   searchGmailForUser,
 } from "../src/gmail-chat-search";
 import type {
@@ -198,30 +199,114 @@ describe("Gmail chat search and batch actions", () => {
     });
   });
 
-  test("applies a shared message label change in one provider batch", async () => {
-    const provider = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(new Response(null, { status: 204 }));
+  test("verifies individual label states after a single provider batch write", async () => {
+    const provider = vi.fn<typeof fetch>(async (request, options) => {
+      const url = new URL(z.string().parse(request));
+      if (options?.method === "POST") {
+        return await Promise.resolve(new Response(null, { status: 204 }));
+      }
+      const id = url.pathname.split("/").at(-1);
+      return await Promise.resolve(
+        id === "missing"
+          ? new Response(null, { status: 404 })
+          : Response.json({
+              id,
+              labelIds: id === "first" ? ["INBOX"] : ["INBOX", "UNREAD"],
+            })
+      );
+    });
     vi.stubGlobal("fetch", provider);
 
     const result = await modifyMailBatchForUser({
       ...mailbox,
       action: "mark_read",
-      ids: ["first", "second", "first"],
+      ids: ["first", "second", "missing", "first"],
       target: "message",
     });
 
-    expect(result.status).toBe("success");
-    expect(provider).toHaveBeenCalledOnce();
-    const [request] = provider.mock.calls;
+    expect(result.status).toBe("error");
+    expect(result.results).toContainEqual({ id: "first", status: "success" });
+    expect(result.results).toContainEqual({ id: "second", status: "error" });
+    expect(result.results).toContainEqual({ id: "missing", status: "error" });
+    expect(fixtures.queueMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ messageIds: ["first"] })
+    );
+    const writes = provider.mock.calls.filter(
+      ([, options]) => options?.method === "POST"
+    );
+    expect(writes).toHaveLength(1);
+    const [request] = writes;
     expect(new URL(z.string().parse(request?.[0])).pathname).toMatch(
       /\/batchModify$/u
     );
     const body = z.string().parse(request?.[1]?.body);
     expect(JSON.parse(body)).toMatchObject({
-      ids: ["first", "second"],
+      ids: ["first", "second", "missing"],
       removeLabelIds: ["UNREAD"],
     });
+  });
+
+  test("refreshes credentials for verification without repeating a mail change", async () => {
+    fixtures.refresh.mockResolvedValue("refreshed-token");
+    const provider = vi.fn<typeof fetch>(async (request, options) => {
+      const url = new URL(z.string().parse(request));
+      if (options?.method === "POST" && trashPath.test(url.pathname)) {
+        return await Promise.resolve(Response.json({ id: "confirmed" }));
+      }
+      const token = new Headers(options?.headers).get("authorization");
+      return await Promise.resolve(
+        token === "Bearer refreshed-token"
+          ? Response.json({ id: "confirmed", labelIds: ["TRASH"] })
+          : Response.json(
+              {
+                error: { message: "Invalid access", status: "UNAUTHENTICATED" },
+              },
+              { status: 401 }
+            )
+      );
+    });
+    vi.stubGlobal("fetch", provider);
+
+    const result = await modifyMailForUser({
+      ...mailbox,
+      action: "trash",
+      id: "confirmed",
+      target: "message",
+    });
+
+    expect(result.status).toBe("success");
+    expect(fixtures.refresh).toHaveBeenCalledOnce();
+    expect(
+      provider.mock.calls.filter(([, options]) => options?.method === "POST")
+    ).toHaveLength(1);
+  });
+
+  test("leaves a thread unconfirmed when a message still has the previous state", async () => {
+    const provider = vi.fn<typeof fetch>(
+      async (_request, options) =>
+        await Promise.resolve(
+          options?.method === "POST"
+            ? Response.json({ id: "conversation" })
+            : Response.json({
+                id: "conversation",
+                messages: [
+                  { id: "moved", labelIds: ["TRASH"] },
+                  { id: "unchanged", labelIds: ["INBOX"] },
+                ],
+              })
+        )
+    );
+    vi.stubGlobal("fetch", provider);
+
+    const result = await modifyMailForUser({
+      ...mailbox,
+      action: "trash",
+      id: "conversation",
+      target: "thread",
+    });
+
+    expect(result.status).toBe("error");
+    expect(fixtures.queueMemory).not.toHaveBeenCalled();
   });
 
   test("keeps confirmed provider receipts when local feedback cannot be saved", async () => {
@@ -230,12 +315,14 @@ describe("Gmail chat search and batch actions", () => {
       "fetch",
       vi
         .fn<typeof fetch>()
-        .mockResolvedValue(new Response(null, { status: 204 }))
+        .mockResolvedValue(
+          Response.json({ id: "confirmed", labelIds: ["TRASH"] })
+        )
     );
 
     const result = await modifyMailBatchForUser({
       ...mailbox,
-      action: "mark_read",
+      action: "trash",
       ids: ["confirmed"],
       target: "message",
     });

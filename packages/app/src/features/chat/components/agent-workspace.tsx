@@ -623,25 +623,18 @@ export const AgentWorkspaceProvider = ({
       }
       bridge.control.cancel();
     };
-    const onVisibility = () => {
-      if (document.hidden) {
-        bridge.control.cancel();
-      }
-    };
     const onBack = () => {
       bridge.control.cancel();
     };
     document.addEventListener("pointerdown", takeOver, true);
     document.addEventListener("keydown", takeOver, true);
     document.addEventListener("input", takeOver, true);
-    document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("popstate", onBack);
     return () => {
       bridge.control.cancel();
       document.removeEventListener("pointerdown", takeOver, true);
       document.removeEventListener("keydown", takeOver, true);
       document.removeEventListener("input", takeOver, true);
-      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("popstate", onBack);
     };
   }, [bridge]);

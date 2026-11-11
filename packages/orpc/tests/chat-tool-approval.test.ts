@@ -106,6 +106,32 @@ describe("destructive-only chat approval", () => {
     }).not.toThrow();
   });
 
+  test("accepts the reviewed action after the same workspace renews its request", () => {
+    expect(() => {
+      assertExactChatToolApproval({
+        approvedPart: approved,
+        exchangeId: foreground.exchangeId,
+        foreground: { ...foreground, expiresAt: Date.now() + 120_000 },
+        proposedPart: proposed,
+      });
+    }).not.toThrow();
+  });
+
+  test("rejects a renewed request from a different tab", () => {
+    expect(() => {
+      assertExactChatToolApproval({
+        approvedPart: approved,
+        exchangeId: foreground.exchangeId,
+        foreground: {
+          ...foreground,
+          expiresAt: Date.now() + 120_000,
+          tabId: "another-tab",
+        },
+        proposedPart: proposed,
+      });
+    }).toThrow(/approve/iu);
+  });
+
   test("rejects an approval from an older exchange", () => {
     expect(() => {
       assertExactChatToolApproval({

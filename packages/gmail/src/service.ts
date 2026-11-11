@@ -2569,6 +2569,45 @@ export const batchModifyMessages = async (
   return { ids };
 };
 
+export const getGmailTargetLabelState = async (
+  accessToken: string,
+  input: { id: string; signal?: AbortSignal; target: "message" | "thread" }
+) => {
+  const { id, signal, target } = input;
+  const path = `/gmail/v1/users/me/${target}s/${encodeURIComponent(id)}`;
+  if (target === "message") {
+    const message = await requestGmail(
+      accessToken,
+      path,
+      gmailMessageMutationSchema,
+      {
+        query: { fields: "id,labelIds", format: "minimal" },
+        signal,
+      }
+    );
+    return {
+      id: message.id,
+      messages: [{ id: message.id, labelIds: message.labelIds ?? [] }],
+    };
+  }
+  const thread = await requestGmail(
+    accessToken,
+    path,
+    gmailThreadMutationSchema,
+    {
+      query: { fields: "id,messages(id,labelIds)", format: "minimal" },
+      signal,
+    }
+  );
+  return {
+    id: thread.id,
+    messages: (thread.messages ?? []).map((message) => ({
+      id: message.id,
+      labelIds: message.labelIds ?? [],
+    })),
+  };
+};
+
 export const createDraft = async (
   accessToken: string,
   raw: string,

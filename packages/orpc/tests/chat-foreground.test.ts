@@ -7,6 +7,7 @@ import { describe, expect, test } from "vite-plus/test";
 import {
   cancelForegroundExchangeParts,
   cancelPendingChatParts,
+  interruptedChatParts,
   normalizeExpiredChatParts,
 } from "../src/chat/continuation";
 import {
@@ -21,6 +22,53 @@ const foreground = foregroundSnapshotSchema.parse({
   expiresAt: Date.now() + 60_000,
   generation: 1,
   tabId: "tab-1",
+});
+
+describe("interrupted chat history", () => {
+  test("keeps confirmed writes and closes pending actions after a timeout", () => {
+    const result = interruptedChatParts({
+      errorText: "Timed out while finishing the reply.",
+      persistedParts: [
+        { foreground, type: "data-foreground" },
+        {
+          output: { status: "success" },
+          state: "output-available",
+          toolCallId: "applied",
+          type: "tool-modify_mail",
+        },
+        {
+          foreground,
+          state: "input-available",
+          toolCallId: "pending",
+          type: "tool-navigate",
+        },
+      ],
+      retryable: true,
+      streamedParts: [
+        {
+          output: { status: "error" },
+          toolCallId: "applied",
+          type: "tool-modify_mail",
+        },
+      ],
+    });
+    expect(result).toContainEqual(
+      expect.objectContaining({
+        output: { status: "success" },
+        state: "output-available",
+        toolCallId: "applied",
+      })
+    );
+    expect(result).toContainEqual(
+      expect.objectContaining({ state: "output-error", toolCallId: "pending" })
+    );
+    expect(result.find((part) => part.type === "text")?.text).toMatch(
+      /timed out/iu
+    );
+    expect(result).not.toContainEqual(
+      expect.objectContaining({ type: "data-foreground-failed" })
+    );
+  });
 });
 
 const richDraft = foregroundComposeDraftSchema.parse({
