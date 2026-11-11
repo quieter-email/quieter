@@ -1,6 +1,7 @@
 import { waitlistSettingRevision } from "@quieter/database/schema";
 import { z } from "zod";
 
+import { getRequestHeaders } from "../context";
 import { hasPlatformOperationsAccess } from "../operations-access";
 import { getOperationsOverview } from "../operations-metrics";
 import { getWaitlistSettings } from "../waitlist";
@@ -36,8 +37,15 @@ export const operationsRouter = {
         await getOperationsOverview({ days: input.days, db: context.db })
     ),
   setWaitlistOpen: platformAdminProcedure
+    .route({ method: "POST" })
+    .errors({ UNSUPPORTED_MEDIA_TYPE: {} })
     .input(z.object({ waitlistOpen: z.boolean() }))
-    .handler(async ({ context, input }) => {
+    .handler(async ({ context, errors, input }) => {
+      const [contentType] =
+        getRequestHeaders(context).get("content-type")?.split(";", 1) ?? [];
+      if (contentType?.trim().toLowerCase() !== "application/json") {
+        throw errors.UNSUPPORTED_MEDIA_TYPE();
+      }
       await context.db.insert(waitlistSettingRevision).values({
         actorUserId: context.userId,
         waitlistOpen: input.waitlistOpen,
