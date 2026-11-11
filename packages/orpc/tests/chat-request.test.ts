@@ -26,6 +26,51 @@ const validBody = (): Record<string, unknown> => ({
 });
 
 describe("chat request validation", () => {
+  test("accepts an edit only as a new user message in a new conversation", () => {
+    const body = validBody();
+    body.editSource = {
+      chatId: "771c41e5-7280-4c11-beb2-4c9cc1d37f84",
+      messageId: "previous-message",
+    };
+    expect(validateChatRequest(body)).toMatchObject({
+      editSource: body.editSource,
+      kind: "message",
+    });
+
+    expect(() =>
+      validateChatRequest({
+        ...body,
+        editSource: { chatId: body.threadId, messageId: "previous-message" },
+      })
+    ).toThrow(z.ZodError);
+    expect(() =>
+      validateChatRequest({
+        ...body,
+        editSource: {
+          chatId: "771c41e5-7280-4c11-beb2-4c9cc1d37f84",
+          messageId: "message-1",
+        },
+      })
+    ).toThrow(z.ZodError);
+    expect(() =>
+      validateChatRequest({
+        ...body,
+        message: {
+          id: "assistant-1",
+          parts: [
+            {
+              approval: { approved: true, id: "approval" },
+              state: "approval-responded",
+              toolCallId: "send",
+              type: "tool-send_mail",
+            },
+          ],
+          role: "assistant",
+        },
+      })
+    ).toThrow(z.ZodError);
+  });
+
   test("rejects unknown body properties", () => {
     const body = validBody();
     Object.assign(body, { userId: "attacker" });

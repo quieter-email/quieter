@@ -11,11 +11,13 @@ import { Text } from "@quieter/ui/text";
 import type { UIMessage } from "ai";
 import { useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import type { ComponentProps } from "react";
 
 type ChatTranscriptProps = {
   approvals: ChatToolApproval[];
   completedAssistantMessageId?: string | null;
   docked: boolean;
+  edit?: ComponentProps<typeof ChatMessage>["edit"];
   errorMessage?: string;
   isStreaming: boolean;
   messages: UIMessage[];
@@ -29,6 +31,7 @@ export const ChatTranscript = ({
   approvals,
   completedAssistantMessageId = null,
   docked,
+  edit,
   errorMessage,
   isStreaming,
   messages,
@@ -123,6 +126,7 @@ export const ChatTranscript = ({
           {messages.map((message) => (
             <ChatMessage
               approvals={approvals}
+              edit={edit}
               isStreaming={isStreaming && message === messages.at(-1)}
               key={message.id}
               message={message}

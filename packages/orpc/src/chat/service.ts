@@ -115,6 +115,7 @@ import {
   matchesForegroundLease,
   replaceChatParts,
 } from "./continuation";
+import { loadChatEditHistory } from "./edit-history";
 import { createLinearChatTools } from "./linear-tools";
 import { createMailReadChatTools, mailReadToolsPrompt } from "./mail-tools";
 import { filterChatToolInputDrafts } from "./reply-stream";
@@ -123,6 +124,7 @@ import { assertExactChatToolApproval } from "./tool-approval";
 type UIMessagePart = UIMessage["parts"][number];
 
 const CHAT_HISTORY_WINDOW_MESSAGES = 30;
+const CHAT_EDIT_INSERT_BATCH_SIZE = 1000;
 const MAIL_TOOL_TIMEOUT_MS = 25_000;
 const MAIL_BATCH_TIMEOUT_MS = 120_000;
 const CHAT_MODEL_IDLE_TIMEOUT_MS = 60_000;
@@ -238,6 +240,11 @@ const clientAssistantMessageSchema = z.object({
   role: z.literal("assistant"),
 });
 
+const chatEditSourceSchema = z.strictObject({
+  chatId: z.uuid(),
+  messageId: identifierSchema,
+});
+
 type ValidatedChatRequestBase = {
   category: MailboxCategory;
   context?: ChatMailContext;
@@ -251,6 +258,7 @@ type ValidatedChatRequestBase = {
 type ValidatedChatRequest = ValidatedChatRequestBase &
   (
     | {
+        editSource?: z.infer<typeof chatEditSourceSchema>;
         kind: "message";
         userMessage: { id: string; text: string };
       }
@@ -266,6 +274,7 @@ const chatRequestBodySchema = z
   .object({
     category: mailCategorySchema,
     context: chatMailContextSchema.optional(),
+    editSource: chatEditSourceSchema.optional(),
     foreground: foregroundSnapshotSchema,
     mailboxId: identifierSchema,
     message: z.unknown(),
@@ -298,6 +307,20 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
 
   if (messageRole === "user") {
     const userMessage = clientUserMessageSchema.parse(parsedBody.message);
+    const { editSource } = parsedBody;
+    if (
+      editSource !== undefined &&
+      (editSource.chatId === threadId ||
+        editSource.messageId === userMessage.id)
+    ) {
+      throw new z.ZodError([
+        {
+          code: "custom",
+          message: "An edit must start a new conversation with a new message.",
+          path: ["editSource"],
+        },
+      ]);
+    }
     if (userMessage.parts.length !== 1) {
       throw new z.ZodError([
         {
@@ -312,6 +335,7 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
       ...(parsedBody.context === undefined
         ? {}
         : { context: parsedBody.context }),
+      ...(editSource === undefined ? {} : { editSource }),
       foreground: parsedBody.foreground,
       kind: "message",
       mailboxId: parsedBody.mailboxId,
@@ -325,6 +349,15 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
     };
   }
 
+  if (parsedBody.editSource !== undefined) {
+    throw new z.ZodError([
+      {
+        code: "custom",
+        message: "Only a user message can start an edited conversation.",
+        path: ["editSource"],
+      },
+    ]);
+  }
   const assistantMessage = clientAssistantMessageSchema.parse(
     parsedBody.message
   );
@@ -1086,8 +1119,21 @@ const createAiChatResponseInRequest = async (
   if (validated.kind !== "message" && existingChat === undefined) {
     throw new ChatRequestError(404, "Chat not found.");
   }
+  if (
+    validated.kind === "message" &&
+    validated.editSource !== undefined &&
+    existingChat !== undefined
+  ) {
+    throw new ChatRequestError(
+      409,
+      "This conversation has already been started."
+    );
+  }
 
-  const rows = await loadRecentRows(threadId);
+  const rows =
+    validated.kind === "message" && validated.editSource !== undefined
+      ? []
+      : await loadRecentRows(threadId);
   if (
     rows.some(
       (row) =>
@@ -1226,6 +1272,17 @@ const createAiChatResponseInRequest = async (
           "This chat message has already been submitted."
         );
       }
+      const editHistory =
+        validated.editSource === undefined
+          ? undefined
+          : await loadChatEditHistory({
+              ...validated.editSource,
+              mailboxId,
+              userId: input.userId,
+            });
+      if (editHistory === null) {
+        throw new ChatRequestError(404, "Message not found.");
+      }
       memoryUpdateResult = await updateChatMemory();
       const now = new Date();
       shouldGenerateTitle = !rows.some((row) => row.role === "user");
@@ -1248,7 +1305,8 @@ const createAiChatResponseInRequest = async (
           titlePrompt = firstPrompt;
         }
       }
-      const userPosition = (lastRow?.position ?? -1) + 1;
+      const userPosition =
+        editHistory?.position ?? (lastRow?.position ?? -1) + 1;
       try {
         await db.transaction(async (transaction) => {
           if (existingChat === undefined) {
@@ -1271,6 +1329,23 @@ const createAiChatResponseInRequest = async (
                   eq(chatTable.userId, input.userId)
                 )
               );
+          }
+          if (editHistory !== undefined) {
+            for (
+              let offset = 0;
+              offset < editHistory.messages.length;
+              offset += CHAT_EDIT_INSERT_BATCH_SIZE
+            ) {
+              await transaction.insert(chatMessage).values(
+                editHistory.messages
+                  .slice(offset, offset + CHAT_EDIT_INSERT_BATCH_SIZE)
+                  .map((message) => ({
+                    ...message,
+                    chatId: threadId,
+                    userId: input.userId,
+                  }))
+              );
+            }
           }
           await transaction.insert(chatMessage).values({
             chatId: threadId,
@@ -1312,7 +1387,10 @@ const createAiChatResponseInRequest = async (
         throw error;
       }
       transcript = [
-        ...toCanonicalTranscript(rows),
+        ...toCanonicalTranscript(
+          editHistory?.messages.slice(-(CHAT_HISTORY_WINDOW_MESSAGES - 1)) ??
+            rows
+        ),
         {
           id: validated.userMessage.id,
           parts: [{ text: validated.userMessage.text, type: "text" }],
