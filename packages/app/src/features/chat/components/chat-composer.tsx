@@ -4,15 +4,20 @@ import {
   Cancel01Icon,
   Mail01Icon,
   Mic01Icon,
+  NoteIcon,
   Search01Icon,
+  SparklesIcon,
   StopIcon,
 } from "@hugeicons/core-free-icons";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import { ChatModelPicker } from "@quieter/app/features/chat/components/chat-model-picker";
+import { ModelLabLogo } from "@quieter/app/features/chat/components/model-lab-logo";
 import { getConnectorIcon } from "@quieter/app/lib/connector-icons";
 import { connectorsQueryOptions } from "@quieter/app/lib/connectors-query";
+import { orpc } from "@quieter/app/lib/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { CommandMenu } from "@quieter/ui/command-menu";
 import {
   ComposerDictationControl,
   ComposerContextChip,
@@ -29,7 +34,13 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Text } from "@quieter/ui/text";
 import { Textarea } from "@quieter/ui/textarea";
 import { useQuery } from "@tanstack/react-query";
+import { useId, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode, RefObject, SubmitEvent } from "react";
+
+import {
+  getChatSlashCommand,
+  getChatSlashItems,
+} from "../domain/chat-slash-commands";
 
 export type ChatContextItem = {
   id: string;
@@ -45,6 +56,7 @@ type ChatComposerProps = {
   disabled?: boolean;
   input: string;
   inputRef?: RefObject<HTMLTextAreaElement | null>;
+  mailboxId: string;
   model: ChatModel | "auto";
   onInputChange: (value: string) => void;
   onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
@@ -71,12 +83,20 @@ type ChatComposerProps = {
   transcribing: boolean;
 };
 
+type CommandCursor = {
+  end: number;
+  highlightedId?: string;
+  phase: "focused" | "blurred" | "dismissed";
+  start: number;
+};
+
 export const ChatComposer = ({
   contextItems,
   contextPicker,
   disabled = false,
   input,
   inputRef,
+  mailboxId,
   model,
   onInputChange,
   onInputKeyDown,
@@ -96,6 +116,40 @@ export const ChatComposer = ({
   streaming,
   transcribing,
 }: ChatComposerProps) => {
+  const localInputRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = inputRef ?? localInputRef;
+  const listId = useId();
+  const [cursor, setCursor] = useState<CommandCursor | null>(null);
+  const command =
+    disabled || cursor === null || cursor.phase === "dismissed"
+      ? null
+      : getChatSlashCommand(input, cursor.start, cursor.end);
+  const snippets = useQuery({
+    ...orpc.mailSnippets.list.queryOptions({ input: { mailboxId } }),
+    enabled:
+      command !== null &&
+      command.kind !== "model" &&
+      cursor?.phase === "focused",
+  });
+  const commands =
+    command === null
+      ? []
+      : getChatSlashItems(command, snippets.data?.snippets ?? []);
+  const commandOpen =
+    command !== null && (command.kind !== "commands" || commands.length > 0);
+  const menuVisible = commandOpen && cursor?.phase === "focused";
+  const activeIndex = Math.max(
+    0,
+    commands.findIndex(({ id }) => id === cursor?.highlightedId)
+  );
+  let commandStatus: string | undefined;
+  if (command?.kind === "snippet") {
+    if (snippets.isFetching) {
+      commandStatus = "Loading snippets…";
+    } else if (snippets.isError) {
+      commandStatus = "Could not load snippets.";
+    }
+  }
   const { data: connectorData } = useQuery(connectorsQueryOptions());
   const connectedAccounts =
     connectorData?.connectors.flatMap((connector) =>
@@ -111,10 +165,120 @@ export const ChatComposer = ({
   const dictationLabel = recordingSupported
     ? "Dictate"
     : "Dictation is unavailable in this browser";
-  const submitLabel = queueing ? "Queue message" : "Send";
+  let submitLabel = queueing ? "Queue message" : "Send";
+  if (commandOpen) {
+    submitLabel = "Select command";
+  }
+
+  const captureCursor = (target: HTMLTextAreaElement) => {
+    const { selectionStart: start, selectionEnd: end } = target;
+    setCursor((current) =>
+      current?.start === start &&
+      current.end === end &&
+      current.phase !== "blurred"
+        ? current
+        : { end, phase: "focused", start }
+    );
+  };
+
+  const selectCommand = (index: number) => {
+    const item = commands[index];
+    if (command === null || item === undefined) {
+      return;
+    }
+    let replacement = "";
+    if (item.kind === "search") {
+      replacement = `/${item.command} `;
+    } else if (item.kind === "snippet") {
+      replacement = item.text;
+    }
+    const position = command.from + replacement.length;
+    setCursor({
+      end: position,
+      phase: item.kind === "search" ? "focused" : "dismissed",
+      start: position,
+    });
+    onInputChange(
+      `${input.slice(0, command.from)}${replacement}${input.slice(command.to)}`
+    );
+    if (item.kind === "model") {
+      onModelChange(item.model);
+    }
+    requestAnimationFrame(() => {
+      const target = textareaRef.current;
+      target?.setSelectionRange(position, position);
+      target?.focus();
+    });
+  };
+
+  const highlightCommand = (index: number) => {
+    const item = commands[index];
+    if (item !== undefined) {
+      setCursor((current) =>
+        current === null || current.highlightedId === item.id
+          ? current
+          : { ...current, highlightedId: item.id }
+      );
+    }
+  };
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Safari can clear isComposing before the IME confirmation key event.
+    // oxlint-disable-next-line typescript/no-deprecated
+    if (event.nativeEvent.isComposing || event.keyCode === 229) {
+      return;
+    }
+    if (menuVisible) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setCursor((current) =>
+          current === null ? null : { ...current, phase: "dismissed" }
+        );
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        selectCommand(activeIndex);
+        return;
+      }
+      if (
+        (event.key === "ArrowUp" || event.key === "ArrowDown") &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey
+      ) {
+        event.preventDefault();
+        if (commands.length > 0) {
+          const nextIndex =
+            (activeIndex +
+              (event.key === "ArrowDown" ? 1 : -1) +
+              commands.length) %
+            commands.length;
+          highlightCommand(nextIndex);
+          document
+            .querySelector(`#${CSS.escape(`${listId}-${nextIndex}`)}`)
+            ?.scrollIntoView({ block: "nearest" });
+        }
+        return;
+      }
+    }
+    onInputKeyDown(event);
+  };
 
   return (
-    <form className="mt-auto w-full shrink-0 p-0.5" onSubmit={onSubmit}>
+    <form
+      className="mt-auto w-full shrink-0 p-0.5"
+      onSubmit={(event) => {
+        if (commandOpen) {
+          event.preventDefault();
+          selectCommand(activeIndex);
+        } else {
+          onSubmit(event);
+        }
+      }}
+    >
       <PromptComposerFrame>
         {queue && queue.items.length > 0 ? (
           <div className="flex flex-col gap-1 pb-1">
@@ -192,19 +356,79 @@ export const ChatComposer = ({
             />
           ))}
         </div>
-        <Textarea
-          aria-label="Message"
-          data-assistant-composer
-          disabled={disabled}
-          onChange={(event) => {
-            onInputChange(event.target.value);
-          }}
-          onKeyDown={onInputKeyDown}
-          placeholder={queueing ? "Queue a follow-up…" : placeholder}
-          ref={inputRef}
-          value={input}
-          variant="prompt"
-        />
+        <div className="relative flex flex-col">
+          <Textarea
+            aria-activedescendant={
+              menuVisible && commands.length > 0
+                ? `${listId}-${activeIndex}`
+                : undefined
+            }
+            aria-autocomplete="list"
+            aria-controls={menuVisible ? listId : undefined}
+            aria-label="Message"
+            data-assistant-composer
+            disabled={disabled}
+            onBlur={(event) => {
+              const target = event.relatedTarget;
+              if (
+                target !== null &&
+                event.currentTarget.parentElement?.contains(target) === true
+              ) {
+                return;
+              }
+              setCursor((current) =>
+                current?.phase === "focused"
+                  ? { ...current, phase: "blurred" }
+                  : current
+              );
+            }}
+            onChange={(event) => {
+              const {
+                selectionStart: start,
+                selectionEnd: end,
+                value,
+              } = event.currentTarget;
+              setCursor({ end, phase: "focused", start });
+              onInputChange(value);
+            }}
+            onFocus={(event) => {
+              captureCursor(event.currentTarget);
+            }}
+            onKeyDown={handleInputKeyDown}
+            onSelect={(event) => {
+              captureCursor(event.currentTarget);
+            }}
+            placeholder={queueing ? "Queue a follow-up…" : placeholder}
+            ref={textareaRef}
+            value={input}
+            variant="prompt"
+          />
+          {menuVisible ? (
+            <div className="absolute start-0 bottom-full z-50 mb-1">
+              <CommandMenu
+                activeIndex={activeIndex}
+                id={listId}
+                items={commands.map((item) => {
+                  if (item.kind === "model" && item.lab !== undefined) {
+                    return { ...item, icon: <ModelLabLogo lab={item.lab} /> };
+                  }
+                  const isSnippet =
+                    item.kind === "snippet" ||
+                    (item.kind === "search" && item.command === "snippet");
+                  return {
+                    ...item,
+                    icon: <Icon icon={isSnippet ? NoteIcon : SparklesIcon} />,
+                  };
+                })}
+                label="Chat commands"
+                onHighlight={highlightCommand}
+                onSelect={selectCommand}
+                selectionHint="select"
+                status={commandStatus}
+              />
+            </div>
+          ) : null}
+        </div>
         <div className="flex min-w-0 items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <ChatModelPicker
@@ -238,9 +462,9 @@ export const ChatComposer = ({
                       key={account.id}
                       onSelect={() => {
                         const start =
-                          inputRef?.current?.selectionStart ?? input.length;
+                          textareaRef.current?.selectionStart ?? input.length;
                         const end =
-                          inputRef?.current?.selectionEnd ?? input.length;
+                          textareaRef.current?.selectionEnd ?? input.length;
                         const prefix = input.slice(0, start);
                         const suffix = input.slice(end);
                         const spacer =
@@ -248,8 +472,8 @@ export const ChatComposer = ({
                         const mention = `${spacer}@[connection:${account.id}] `;
                         onInputChange(`${prefix}${mention}${suffix}`);
                         requestAnimationFrame(() => {
-                          inputRef?.current?.focus();
-                          inputRef?.current?.setSelectionRange(
+                          textareaRef.current?.focus();
+                          textareaRef.current?.setSelectionRange(
                             start + mention.length,
                             start + mention.length
                           );
@@ -318,7 +542,13 @@ export const ChatComposer = ({
               <IconButtonTooltip label={submitLabel}>
                 <Button
                   aria-label={submitLabel}
-                  disabled={disabled || recording || audioBusy || !input.trim()}
+                  disabled={
+                    disabled ||
+                    recording ||
+                    audioBusy ||
+                    !input.trim() ||
+                    (commandOpen && commands.length === 0)
+                  }
                   size="icon-sm"
                   type="submit"
                 >

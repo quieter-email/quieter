@@ -17,15 +17,19 @@ export const CommandMenu = ({
   activeIndex,
   id,
   items,
+  label = "Insert or format",
   onHighlight,
   onSelect,
+  selectionHint = "insert",
   status,
 }: {
   activeIndex: number;
   id: string;
   items: CommandMenuItem[];
+  label?: string;
   onHighlight: (index: number) => void;
   onSelect: (index: number) => void;
+  selectionHint?: "insert" | "select";
   status?: string;
 }) => (
   <div
@@ -35,7 +39,7 @@ export const CommandMenu = ({
     )}
   >
     <div
-      aria-label="Insert or format"
+      aria-label={label}
       className="max-h-64 overflow-y-auto p-1"
       id={id}
       // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Suggestions keep editor focus and support rich options.
@@ -43,7 +47,7 @@ export const CommandMenu = ({
     >
       {items.length === 0 ? (
         <p className="px-3 py-5 text-caption text-muted-fg">
-          No matching commands or snippets.
+          {status ?? "No matching commands or snippets."}
         </p>
       ) : null}
       {items.map((item, index) => (
@@ -95,8 +99,10 @@ export const CommandMenu = ({
       ))}
     </div>
     <div className="border-t border-border px-3 py-2 text-micro text-muted-fg">
-      {status ? <output className="block">{status}</output> : null}
-      <p>↑↓ to browse, Enter to insert, Esc to dismiss</p>
+      {status && items.length > 0 ? (
+        <output className="block">{status}</output>
+      ) : null}
+      <p>↑↓ to browse, Enter to {selectionHint}, Esc to dismiss</p>
     </div>
   </div>
 );

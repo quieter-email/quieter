@@ -1,6 +1,6 @@
 import { ArrowDown01Icon, SparklesIcon } from "@hugeicons/core-free-icons";
-import { chatModelGroups, chatModels } from "@quieter/ai/chat-models";
-import type { ChatModel, ChatModelGroup } from "@quieter/ai/chat-models";
+import { chatModels } from "@quieter/ai/chat-models";
+import type { ChatModel } from "@quieter/ai/chat-models";
 import { ModelLabLogo } from "@quieter/app/features/chat/components/model-lab-logo";
 import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
@@ -13,14 +13,10 @@ import {
 } from "@quieter/ui/popover";
 import { useState } from "react";
 
-const labs = {
-  anthropic: { keywords: "claude", label: "Anthropic" },
-  deepseek: { keywords: "", label: "DeepSeek" },
-  google: { keywords: "gemini", label: "Google" },
-  moonshotai: { keywords: "moonshotai", label: "Moonshot" },
-  openai: { keywords: "gpt chatgpt", label: "OpenAI" },
-  "z-ai": { keywords: "z-ai zai", label: "Z.ai" },
-} satisfies Record<ChatModelGroup, { keywords: string; label: string }>;
+import {
+  chatModelLabs,
+  getChatModelOptions,
+} from "../domain/chat-model-options";
 
 export const ChatModelPicker = ({
   disabled,
@@ -33,24 +29,7 @@ export const ChatModelPicker = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const searchTerms = search.toLowerCase().trim().split(/\s+/u).filter(Boolean);
-  const autoMatches = searchTerms.every((term) =>
-    "auto automatic".includes(term)
-  );
-  const groups = chatModelGroups
-    .map((group) => ({
-      group,
-      options: chatModels.filter(
-        (option) =>
-          option.group === group &&
-          searchTerms.every((term) =>
-            `${labs[group].label} ${labs[group].keywords} ${option.label}`
-              .toLowerCase()
-              .includes(term)
-          )
-      ),
-    }))
-    .filter(({ options }) => options.length > 0);
+  const { autoMatches, groups } = getChatModelOptions(search);
   const selectedModel = chatModels.find(
     (option) =>
       option.value === model ||
@@ -141,13 +120,13 @@ export const ChatModelPicker = ({
           ) : null}
           {groups.map(({ group, options }) => (
             <fieldset
-              aria-label={`${labs[group].label} models`}
+              aria-label={`${chatModelLabs[group].label} models`}
               className="flex items-start gap-2"
               key={group}
             >
               <span className="flex w-24 shrink-0 items-center gap-1.5 py-1.5 text-caption text-muted-fg">
                 <ModelLabLogo lab={group} />
-                {labs[group].label}
+                {chatModelLabs[group].label}
               </span>
               <div className="flex min-w-0 flex-1 flex-wrap gap-1">
                 {options.map((option) => (

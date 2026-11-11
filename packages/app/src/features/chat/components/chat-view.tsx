@@ -966,6 +966,7 @@ const ChatSession = ({
         </p>
       )}
       <ChatComposer
+        mailboxId={workspace.mailboxId}
         placeholder={
           activeWorkspace === "calendar"
             ? "Ask about your calendar…"
