@@ -80,7 +80,7 @@ export const ChatContextPicker = ({
         <Icon aria-hidden icon={Attachment01Icon} />
         Attach mail
       </PopoverTrigger>
-      <PopoverContent align="start" side="top" size="sm">
+      <PopoverContent align="start" data-assistant-panel side="top" size="sm">
         <PopoverTitle>Mail context</PopoverTitle>
         <div className="mt-2">
           <Select
@@ -102,7 +102,7 @@ export const ChatContextPicker = ({
             <SelectTrigger aria-label="Mail folder" size="sm" variant="ghost">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent align="start" size="compact">
+            <SelectContent align="start" data-assistant-panel size="compact">
               <SelectList>
                 <SelectItem value="inbox">Inbox</SelectItem>
                 <SelectItem value="unread">Unread</SelectItem>

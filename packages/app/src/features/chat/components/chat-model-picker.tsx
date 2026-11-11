@@ -88,6 +88,7 @@ export const ChatModelPicker = ({
         align="start"
         className="flex max-h-(--available-height) w-90 flex-col"
         collisionPadding={16}
+        data-assistant-panel
         side="top"
         size="sm"
       >

@@ -1,6 +1,7 @@
 import {
+  AddToListIcon,
   ArrowUp02Icon,
-  Loading03Icon,
+  Cancel01Icon,
   Mail01Icon,
   Mic01Icon,
   Search01Icon,
@@ -25,6 +26,7 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Text } from "@quieter/ui/text";
 import { Textarea } from "@quieter/ui/textarea";
 import { useQuery } from "@tanstack/react-query";
 import type { KeyboardEvent, ReactNode, RefObject, SubmitEvent } from "react";
@@ -53,12 +55,19 @@ type ChatComposerProps = {
   onToggleDictation: () => void;
   onCancelDictation: () => void;
   placeholder?: string;
+  queue?: {
+    canResume: boolean;
+    items: readonly { id: string; text: string }[];
+    onRemove: (id: string) => void;
+    onResume: () => void;
+    paused: boolean;
+  };
+  queueing?: boolean;
   recording: boolean;
   recordingAnalyser: AnalyserNode | null;
   recordingSupported: boolean;
   startingRecording: boolean;
   streaming: boolean;
-  submitting: boolean;
   transcribing: boolean;
 };
 
@@ -78,12 +87,13 @@ export const ChatComposer = ({
   onToggleDictation,
   onCancelDictation,
   placeholder = "Ask about your mail…",
+  queue,
+  queueing = false,
   recording,
   recordingAnalyser,
   recordingSupported,
   startingRecording,
   streaming,
-  submitting,
   transcribing,
 }: ChatComposerProps) => {
   const { data: connectorData } = useQuery(connectorsQueryOptions());
@@ -101,10 +111,66 @@ export const ChatComposer = ({
   const dictationLabel = recordingSupported
     ? "Dictate"
     : "Dictation is unavailable in this browser";
+  const submitLabel = queueing ? "Queue message" : "Send";
 
   return (
     <form className="mt-auto w-full shrink-0 p-0.5" onSubmit={onSubmit}>
       <PromptComposerFrame>
+        {queue && queue.items.length > 0 ? (
+          <div className="flex flex-col gap-1 pb-1">
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <output className="text-caption text-muted-fg">
+                {queue.paused ? "Queue paused" : `${queue.items.length} queued`}
+              </output>
+              {queue.paused ? (
+                <Button
+                  disabled={!queue.canResume}
+                  onClick={() => {
+                    queue.onResume();
+                  }}
+                  size="compact"
+                  type="button"
+                  variant="secondary"
+                >
+                  Resume queue
+                </Button>
+              ) : null}
+            </div>
+            <ol
+              aria-label="Queued messages"
+              className="max-h-28 space-y-1 overflow-y-auto overscroll-contain"
+            >
+              {queue.items.map((item) => (
+                <li className="flex min-w-0 items-center gap-2" key={item.id}>
+                  <Text
+                    className="min-w-0 flex-1"
+                    id={`queued-message-${item.id}`}
+                    size="sm"
+                    title={item.text}
+                    tone="muted"
+                    truncate
+                  >
+                    {item.text}
+                  </Text>
+                  <IconButtonTooltip label="Remove queued message">
+                    <Button
+                      aria-describedby={`queued-message-${item.id}`}
+                      aria-label="Remove queued message"
+                      onClick={() => {
+                        queue.onRemove(item.id);
+                      }}
+                      size="icon-xs"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Icon aria-hidden icon={Cancel01Icon} />
+                    </Button>
+                  </IconButtonTooltip>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {contextPicker}
           {contextItems.map((item) => (
@@ -134,7 +200,7 @@ export const ChatComposer = ({
             onInputChange(event.target.value);
           }}
           onKeyDown={onInputKeyDown}
-          placeholder={placeholder}
+          placeholder={queueing ? "Queue a follow-up…" : placeholder}
           ref={inputRef}
           value={input}
           variant="prompt"
@@ -157,7 +223,11 @@ export const ChatComposer = ({
                   @
                 </DropdownMenuTrigger>
               </IconButtonTooltip>
-              <DropdownMenuContent align="start" size="compact">
+              <DropdownMenuContent
+                align="start"
+                data-assistant-panel
+                size="compact"
+              >
                 {connectedAccounts.length === 0 ? (
                   <p className="px-2 py-2 text-caption text-muted-fg">
                     No connected accounts
@@ -237,33 +307,28 @@ export const ChatComposer = ({
                   aria-label="Stop response"
                   onClick={onStop}
                   size="icon-sm"
+                  type="button"
                   variant="secondary"
                 >
                   <Icon aria-hidden icon={StopIcon} />
                 </Button>
               </IconButtonTooltip>
-            ) : (
-              <IconButtonTooltip label="Send">
+            ) : null}
+            {!streaming || queueing ? (
+              <IconButtonTooltip label={submitLabel}>
                 <Button
-                  aria-label="Send"
-                  disabled={
-                    disabled ||
-                    submitting ||
-                    recording ||
-                    audioBusy ||
-                    !input.trim()
-                  }
+                  aria-label={submitLabel}
+                  disabled={disabled || recording || audioBusy || !input.trim()}
                   size="icon-sm"
                   type="submit"
                 >
                   <Icon
                     aria-hidden
-                    animation={submitting ? "spin" : undefined}
-                    icon={submitting ? Loading03Icon : ArrowUp02Icon}
+                    icon={queueing ? AddToListIcon : ArrowUp02Icon}
                   />
                 </Button>
               </IconButtonTooltip>
-            )}
+            ) : null}
           </div>
         </div>
       </PromptComposerFrame>

@@ -48,10 +48,23 @@ import type { RouterOutputs } from "@quieter/orpc";
 import { decodeChatStreamError } from "@quieter/orpc/chat-errors";
 import { Button } from "@quieter/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { DefaultChatTransport, isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
+import { emptyChatQueue, updateChatQueue } from "../domain/chat-queue";
+import type {
+  ChatQueues,
+  ChatQueueStore,
+  QueuedChatMessage,
+} from "../domain/chat-queue";
 import {
   cancelForegroundMessages,
   needsForegroundContinuation,
@@ -76,8 +89,13 @@ type ChatEdit = {
 const ChatSession = ({
   chatData,
   canUseAiChat,
+  queues,
   ...props
-}: ChatViewProps & { chatData?: ChatData; canUseAiChat: boolean }) => {
+}: ChatViewProps & {
+  chatData?: ChatData;
+  canUseAiChat: boolean;
+  queues: ChatQueueStore;
+}) => {
   const workspace = useAgentWorkspace();
   if (!workspace) {
     throw new Error("The assistant needs a mail workspace.");
@@ -108,14 +126,33 @@ const ChatSession = ({
   // oxlint-disable-next-line react/hook-use-state -- The session identity is fixed until this keyed component unmounts.
   const [tabId] = useState(() => crypto.randomUUID());
   const threadId = props.chatId ?? props.draftChatKey;
+  const queueKey = `${workspace.mailboxId}:${threadId}`;
   const [busy, setBusy] = useState(false);
-  const [openingEdit, setOpeningEdit] = useState(false);
+  const [editSession, setEditSession] = useState<{
+    chatId: string;
+    opening: boolean;
+  } | null>(null);
+  const openingEdit = editSession?.opening === true;
+  const activeQueueKey =
+    editSession === null
+      ? queueKey
+      : `${workspace.mailboxId}:${editSession.chatId}`;
+  const queue = useSelector(
+    queues,
+    (state) => state.get(activeQueueKey) ?? emptyChatQueue
+  );
+  const canceling = queue.phase === "canceling";
+  const foregroundActive = useSelector(
+    workspace.control.state,
+    (state) => state.active
+  );
   const [completedAssistantMessageId, setCompletedAssistantMessageId] =
     useState<string | null>(null);
   const [interruptionMessage, setInterruptionMessage] = useState("");
   const foregroundRef = useRef<ForegroundSnapshot | null>(null);
   const editRef = useRef<ChatEdit | null>(null);
   const requestContextRef = useRef<{
+    category?: QueuedChatMessage["category"];
     context: ChatMailContext;
     model?: ChatModel;
   } | null>(null);
@@ -139,7 +176,8 @@ const ChatSession = ({
     edit: ChatEdit,
     setMessages: (messages: UIMessage[]) => void
   ) => {
-    setOpeningEdit(true);
+    setEditSession({ chatId: edit.chatId, opening: true });
+    let opened = false;
     try {
       const saved = await queryClient.query({
         ...chatQueryOptions(workspace.mailboxId, edit.chatId),
@@ -147,6 +185,7 @@ const ChatSession = ({
       });
       if (mountedRef.current && editRef.current === edit) {
         if (saved.messages.some((message) => message.id === edit.messageId)) {
+          opened = true;
           props.onChatIdChange(edit.chatId);
         } else {
           setMessages(edit.originalMessages);
@@ -164,7 +203,13 @@ const ChatSession = ({
     } finally {
       if (mountedRef.current && editRef.current === edit) {
         editRef.current = null;
-        setOpeningEdit(false);
+        if (!opened) {
+          updateChatQueue(queues, queueKey, {
+            sourceKey: `${workspace.mailboxId}:${edit.chatId}`,
+            type: "return-edit",
+          });
+          setEditSession(null);
+        }
       }
     }
   };
@@ -398,6 +443,21 @@ const ChatSession = ({
         interrupted ||
         (pending !== true && !needsForegroundContinuation(messages));
       if (terminal) {
+        updateChatQueue(
+          queues,
+          edit === null ? queueKey : `${workspace.mailboxId}:${edit.chatId}`,
+          {
+            type:
+              isAbort ||
+              isError ||
+              interrupted ||
+              isDisconnect ||
+              finishReason === "length" ||
+              finishReason === "content-filter"
+                ? "pause"
+                : "finish",
+          }
+        );
         setCompletedAssistantMessageId(
           !isAbort && !isError && !interrupted && last?.role === "assistant"
             ? last.id
@@ -493,14 +553,20 @@ const ChatSession = ({
       }
       foregroundRef.current = null;
       setCompletedAssistantMessageId(null);
-      void chatRef.current.stop();
+      const activeChatId = editRef.current?.chatId ?? threadId;
+      const canceledQueueKey = `${workspace.mailboxId}:${activeChatId}`;
+      updateChatQueue(queues, canceledQueueKey, { type: "cancel" });
+      const stopped = chatRef.current.stop();
       chatRef.current.setMessages(
         cancelForegroundMessages(chatRef.current.messages)
       );
-      void cancelServer(
-        foreground.exchangeId,
-        editRef.current?.chatId ?? threadId
-      );
+      void (async () => {
+        await Promise.allSettled([
+          stopped,
+          cancelServer(foreground.exchangeId, activeChatId),
+        ]);
+        updateChatQueue(queues, canceledQueueKey, { type: "canceled" });
+      })();
     };
     const subscription = workspace.control.state.subscribe(() => {
       if (
@@ -521,7 +587,7 @@ const ChatSession = ({
       }
       subscription.unsubscribe();
     };
-  }, [threadId, workspace]);
+  }, [queues, threadId, workspace]);
 
   const streaming = chat.status === "streaming" || chat.status === "submitted";
   const approvals = chat.messages.flatMap((message) =>
@@ -662,21 +728,30 @@ const ChatSession = ({
     !streaming &&
     approvals.length === 0 &&
     canUseAiChat;
+  const turnActive = foregroundActive || streaming || approvals.length > 0;
+  const composerDisabled = !canUseAiChat || openingEdit;
+  const audioActive =
+    dictation.isRecording || dictation.isStarting || dictation.isTranscribing;
   const submissionBlocked =
-    streaming ||
-    busy ||
-    openingEdit ||
-    approvals.length > 0 ||
-    !canUseAiChat ||
-    dictation.isRecording ||
-    dictation.isStarting ||
-    dictation.isTranscribing;
+    composerDisabled || audioActive || turnActive || busy || canceling;
+  const queueing = turnActive || busy || canceling || queue.items.length > 0;
   const submit = async (
-    resubmit?: { kind: "edit" | "retry"; messageId: string; text: string },
+    resubmit?:
+      | { kind: "edit" | "retry"; messageId: string; text: string }
+      | { kind: "queued"; message: QueuedChatMessage },
     suggestion?: string
   ) => {
-    const text = (resubmit?.text ?? suggestion ?? input).trim();
-    if (!text || submissionBlocked || editRef.current !== null) {
+    const text = (
+      resubmit?.kind === "queued"
+        ? resubmit.message.text
+        : (resubmit?.text ?? suggestion ?? input)
+    ).trim();
+    if (
+      !text ||
+      submissionBlocked ||
+      workspace.control.state.get().active ||
+      editRef.current !== null
+    ) {
       return;
     }
     let edit: ChatEdit | null = null;
@@ -696,16 +771,27 @@ const ChatSession = ({
         source: { chatId: props.chatId, messageId: resubmit.messageId },
       };
     }
+    const runQueueKey =
+      edit === null ? queueKey : `${workspace.mailboxId}:${edit.chatId}`;
+    updateChatQueue(queues, runQueueKey, { type: "start" });
     setBusy(true);
     setCompletedAssistantMessageId(null);
     setInterruptionMessage("");
     const generation = workspace.control.begin();
-    const snapshot = workspace.read();
     try {
-      requestContextRef.current = {
-        context: mailContext.context,
-        ...(model === "auto" ? {} : { model }),
-      };
+      const snapshot = workspace.read();
+      const context =
+        resubmit?.kind === "queued"
+          ? resubmit.message.context
+          : mailContext.context;
+      requestContextRef.current =
+        resubmit?.kind === "queued"
+          ? {
+              category: resubmit.message.category,
+              context,
+              model: resubmit.message.model,
+            }
+          : { context, ...(model === "auto" ? {} : { model }) };
       foregroundRef.current = foregroundSnapshotSchema.parse({
         calendar: snapshot.calendar,
         capabilities:
@@ -725,29 +811,30 @@ const ChatSession = ({
         exchangeId: crypto.randomUUID(),
         expiresAt: Date.now() + 120_000,
         generation,
-        query: mailContext.context.query,
-        selectedMessageId: mailContext.attachedMessageIds.includes(
-          snapshot.selectedMessageId ?? ""
-        )
-          ? snapshot.selectedMessageId
-          : undefined,
-        selectedThreadId: mailContext.context.threadId,
+        query: context.query,
+        selectedMessageId:
+          context.messageIds?.includes(snapshot.selectedMessageId ?? "") ===
+          true
+            ? snapshot.selectedMessageId
+            : undefined,
+        selectedThreadId: context.threadId,
         tabId,
         view: snapshot.view,
         workspace: snapshot.workspace,
       });
-      if (resubmit === undefined) {
+      if (resubmit === undefined && suggestion === undefined) {
         setInput("");
       }
       chat.clearError();
       if (edit === null) {
         await chat.sendMessage(
-          resubmit === undefined
+          resubmit === undefined || resubmit.kind === "queued"
             ? { text }
             : { messageId: resubmit.messageId, text }
         );
       } else {
         editRef.current = edit;
+        setEditSession({ chatId: edit.chatId, opening: false });
         chat.setMessages(edit.originalMessages.slice(0, editIndex));
         await chat.sendMessage({
           id: edit.messageId,
@@ -758,12 +845,22 @@ const ChatSession = ({
     } catch (error) {
       if (edit !== null && editRef.current === edit) {
         editRef.current = null;
+        setEditSession(null);
         chat.setMessages(edit.originalMessages);
       }
-      if (resubmit === undefined) {
+      if (resubmit === undefined && suggestion === undefined) {
         setInput(text);
       }
+      if (resubmit?.kind === "queued") {
+        updateChatQueue(queues, runQueueKey, {
+          message: resubmit.message,
+          type: "restore",
+        });
+      } else {
+        updateChatQueue(queues, runQueueKey, { type: "pause" });
+      }
       if (workspace.control.isCurrent(generation)) {
+        foregroundRef.current = null;
         workspace.control.finish();
       }
       toastError(error, { boundary: "assistant-submit" });
@@ -771,6 +868,60 @@ const ChatSession = ({
       setBusy(false);
     }
   };
+  const sendOrQueue = (suggestion?: string) => {
+    const text = (suggestion ?? input).trim();
+    if (!text || composerDisabled || audioActive) {
+      return;
+    }
+    if (!queueing && !workspace.control.state.get().active) {
+      void submit(undefined, suggestion);
+      return;
+    }
+    updateChatQueue(queues, activeQueueKey, {
+      message: {
+        category: props.activeMailbox,
+        context: mailContext.context,
+        id: crypto.randomUUID(),
+        ...(model === "auto" ? {} : { model }),
+        text,
+      },
+      type: "add",
+    });
+    if (suggestion === undefined) {
+      setInput("");
+    }
+  };
+  const drainQueue = useEffectEvent(() => {
+    const next = queues.get().get(queueKey);
+    const message = next?.items[0];
+    if (
+      submissionBlocked ||
+      editRef.current !== null ||
+      editSession !== null ||
+      workspace.control.state.get().active ||
+      next?.phase !== "ready" ||
+      message === undefined
+    ) {
+      return;
+    }
+    updateChatQueue(queues, queueKey, { id: message.id, type: "take" });
+    void submit({ kind: "queued", message });
+  });
+  useEffect((): (() => void) | undefined => {
+    if (
+      !submissionBlocked &&
+      queue.phase === "ready" &&
+      queue.items.length > 0
+    ) {
+      const scheduled = window.setTimeout(() => {
+        drainQueue();
+      }, 0);
+      return () => {
+        window.clearTimeout(scheduled);
+      };
+    }
+    return undefined;
+  }, [queue, submissionBlocked]);
 
   return (
     <div
@@ -795,9 +946,7 @@ const ChatSession = ({
           isStreaming={streaming}
           approvals={approvals}
           errorMessage={errorMessage}
-          onSuggestion={(text) => {
-            void submit(undefined, text);
-          }}
+          onSuggestion={sendOrQueue}
           onRetry={
             canRetry && lastUserMessage !== undefined
               ? () => {
@@ -837,26 +986,25 @@ const ChatSession = ({
         onCancelDictation={() => {
           dictation.cancel();
         }}
-        disabled={
-          !canUseAiChat ||
-          busy ||
-          streaming ||
-          openingEdit ||
-          approvals.length > 0
-        }
-        streaming={streaming || approvals.length > 0}
-        submitting={chat.status === "submitted"}
+        disabled={composerDisabled}
+        streaming={turnActive}
+        queueing={queueing}
+        queue={{
+          canResume: !submissionBlocked,
+          items: queue.items,
+          onRemove: (id) => {
+            updateChatQueue(queues, activeQueueKey, { id, type: "remove" });
+          },
+          onResume: () => {
+            updateChatQueue(queues, activeQueueKey, { type: "resume" });
+          },
+          paused: queue.phase === "paused" || canceling,
+        }}
         contextItems={mailContext.contextItems}
         contextPicker={
           <ChatContextPicker
             attachedMessageIds={mailContext.attachedMessageIds}
-            disabled={
-              !canUseAiChat ||
-              busy ||
-              streaming ||
-              openingEdit ||
-              approvals.length > 0
-            }
+            disabled={composerDisabled}
             mailboxId={workspace.mailboxId}
             initialCategory={props.activeMailbox}
             onSelect={mailContext.handleAttach}
@@ -871,7 +1019,7 @@ const ChatSession = ({
             !event.nativeEvent.isComposing
           ) {
             event.preventDefault();
-            void submit();
+            sendOrQueue();
           }
         }}
         onStop={() => {
@@ -880,7 +1028,7 @@ const ChatSession = ({
         }}
         onSubmit={(event) => {
           event.preventDefault();
-          void submit();
+          sendOrQueue();
         }}
       />
     </div>
@@ -888,6 +1036,7 @@ const ChatSession = ({
 };
 
 export const ChatView = (props: ChatViewProps) => {
+  const queues = useCreateStore<ChatQueues>(new Map());
   const { data: billing, isPending } = useQuery(userBillingQueryOptions());
   const {
     data: chatData,
@@ -922,6 +1071,7 @@ export const ChatView = (props: ChatViewProps) => {
       key={`${props.mailboxId}:${props.chatId ?? props.draftChatKey}`}
       {...props}
       chatData={chatData}
+      queues={queues}
       canUseAiChat={
         !isPending &&
         !!billing &&
