@@ -113,7 +113,16 @@ export default {
       requestedBuild = request.headers.get(DEPLOYMENT_BUILD_HEADER);
     }
     let release = null;
+    let usesCurrentPolicy = false;
+    try {
+      usesCurrentPolicy = /^\/+api\/+waitlist\/*$/iu.test(
+        decodeURI(url.pathname)
+      );
+    } catch {
+      usesCurrentPolicy = false;
+    }
     if (
+      usesCurrentPolicy ||
       requestedBuild === null ||
       requestedBuild === manifest.current.buildId
     ) {

@@ -21,6 +21,7 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { lazy, Suspense, useState } from "react";
+import type { ReactNode } from "react";
 
 const AccountSettingsPanel = lazy(
   async () =>
@@ -103,8 +104,10 @@ type SettingsUser = {
 
 export const SettingsScreen = ({
   initialUser,
+  renderInternalNavigation,
 }: {
   initialUser: SettingsUser;
+  renderInternalNavigation?: (onRequestClose?: () => void) => ReactNode;
 }) => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const routeSearch = settingsRouteApi.useSearch();
@@ -138,6 +141,7 @@ export const SettingsScreen = ({
             {(close) => (
               <SettingsSidebar
                 onRequestClose={close}
+                internalNavigation={renderInternalNavigation?.(close)}
                 searchInput={input}
                 searchResults={close ? results : null}
               />

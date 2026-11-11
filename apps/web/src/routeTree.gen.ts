@@ -15,6 +15,7 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAuthRouteImport } from './routes/_app/auth'
 import { Route as AppDesignSystemRouteImport } from './routes/_app/design-system'
 import { Route as AppOnboardingRouteImport } from './routes/_app/onboarding'
+import { Route as AppOperationsRouteImport } from './routes/_app/operations'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppSitePasswordRouteImport } from './routes/_app/site-password'
 import { Route as PublicAboutRouteImport } from './routes/_public/about'
@@ -73,6 +74,13 @@ const AppOnboardingRoute = AppOnboardingRouteImport.update({
   path: '/onboarding',
   getParentRoute: () => AppRoute,
 } as any)
+const AppOperationsRoute = AppOperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
+  getParentRoute: () => AppRoute,
+} as any).lazy(() =>
+  import('./routes/_app/operations.lazy').then((d) => d.Route),
+)
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -230,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AppAuthRoute
   '/design-system': typeof AppDesignSystemRoute
   '/onboarding': typeof AppOnboardingRoute
+  '/operations': typeof AppOperationsRoute
   '/settings': typeof AppSettingsRoute
   '/site-password': typeof AppSitePasswordRoute
   '/about': typeof PublicAboutRoute
@@ -265,6 +274,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AppAuthRoute
   '/design-system': typeof AppDesignSystemRoute
   '/onboarding': typeof AppOnboardingRoute
+  '/operations': typeof AppOperationsRoute
   '/settings': typeof AppSettingsRoute
   '/site-password': typeof AppSitePasswordRoute
   '/about': typeof PublicAboutRoute
@@ -302,6 +312,7 @@ export interface FileRoutesById {
   '/_app/auth': typeof AppAuthRoute
   '/_app/design-system': typeof AppDesignSystemRoute
   '/_app/onboarding': typeof AppOnboardingRoute
+  '/_app/operations': typeof AppOperationsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/site-password': typeof AppSitePasswordRoute
   '/_public/about': typeof PublicAboutRoute
@@ -340,6 +351,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/design-system'
     | '/onboarding'
+    | '/operations'
     | '/settings'
     | '/site-password'
     | '/about'
@@ -375,6 +387,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/design-system'
     | '/onboarding'
+    | '/operations'
     | '/settings'
     | '/site-password'
     | '/about'
@@ -411,6 +424,7 @@ export interface FileRouteTypes {
     | '/_app/auth'
     | '/_app/design-system'
     | '/_app/onboarding'
+    | '/_app/operations'
     | '/_app/settings'
     | '/_app/site-password'
     | '/_public/about'
@@ -509,6 +523,13 @@ declare module '@tanstack/react-router' {
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof AppOnboardingRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/operations': {
+      id: '/_app/operations'
+      path: '/operations'
+      fullPath: '/operations'
+      preLoaderRoute: typeof AppOperationsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/settings': {
@@ -721,6 +742,7 @@ interface AppRouteChildren {
   AppAuthRoute: typeof AppAuthRoute
   AppDesignSystemRoute: typeof AppDesignSystemRoute
   AppOnboardingRoute: typeof AppOnboardingRoute
+  AppOperationsRoute: typeof AppOperationsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSitePasswordRoute: typeof AppSitePasswordRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -731,6 +753,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAuthRoute: AppAuthRoute,
   AppDesignSystemRoute: AppDesignSystemRoute,
   AppOnboardingRoute: AppOnboardingRoute,
+  AppOperationsRoute: AppOperationsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSitePasswordRoute: AppSitePasswordRoute,
   AppIndexRoute: AppIndexRoute,

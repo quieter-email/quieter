@@ -43,12 +43,20 @@ export const Route = createFileRoute("/api/waitlist")({
 
         const { recordWaitlistSignup } = await import("@quieter/orpc/waitlist");
         const signup = await recordWaitlistSignup(email.data);
+        if (signup.status === "closed") {
+          const message = "The waitlist is paused. Please check back later.";
+          if (wantsJson) {
+            return Response.json(
+              { message, status: signup.status },
+              { status: 503 }
+            );
+          }
+
+          return new Response(message, { status: 503 });
+        }
 
         if (wantsJson) {
-          return Response.json({
-            email: signup.email,
-            status: signup.status,
-          });
+          return Response.json(signup);
         }
 
         const url = new URL("/home", request.url);
