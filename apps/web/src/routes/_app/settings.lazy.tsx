@@ -17,12 +17,14 @@ const OperationsNavigation = ({
   }
   return (
     <SidebarNavItem
+      className="justify-start text-left"
       nativeButton={false}
       onClick={onRequestClose}
       render={<Link to="/operations" />}
       // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- SidebarNavItem renders an anchor through its render slot.
       role="link"
       size="sm"
+      variant="ghost"
     >
       <Icon icon={DashboardSquare01Icon} tone="default" />
       Operations
