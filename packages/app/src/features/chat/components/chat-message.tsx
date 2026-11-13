@@ -170,9 +170,13 @@ export const ChatMessage = ({
       (segment.kind === "activity" &&
         segment.steps.some((step) => step.phase === "running"))
   );
-  const showThinking =
-    !activeWork && getAssistantProgress(message.parts, isStreaming) !== null;
+  const progress = activeWork
+    ? null
+    : getAssistantProgress(message.parts, isStreaming);
   const suggestions = getMessageSuggestions(message.parts);
+  const interruption = message.parts.findLast(
+    (part) => part.type === "data-chat-interruption"
+  );
 
   return (
     <article className="group/message w-full min-w-0 space-y-3 text-body text-fg">
@@ -193,11 +197,17 @@ export const ChatMessage = ({
           />
         );
       })}
-      {showThinking ? (
+      {interruption?.type === "data-chat-interruption" &&
+      typeof interruption.data === "string" ? (
         <Text aria-live="polite" size="sm" tone="muted">
-          Thinking…
+          {interruption.data}
         </Text>
       ) : null}
+      {progress === null ? null : (
+        <Text aria-live="polite" size="sm" tone="muted">
+          {progress}
+        </Text>
+      )}
       {onSuggestion !== undefined &&
       !isStreaming &&
       !activeWork &&

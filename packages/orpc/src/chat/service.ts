@@ -35,7 +35,6 @@ import {
 } from "@quieter/ai/chat-tools";
 import type { ForegroundSnapshot } from "@quieter/ai/chat-tools";
 import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
-import { summarizeAiUsage } from "@quieter/ai/chat-usage";
 import { isTransientAiProviderError } from "@quieter/ai/errors";
 import { generateChatTitle } from "@quieter/ai/generate-chat-title";
 import {
@@ -118,7 +117,10 @@ import {
 import { loadChatEditHistory } from "./edit-history";
 import { createLinearChatTools } from "./linear-tools";
 import { createMailReadChatTools, mailReadToolsPrompt } from "./mail-tools";
-import { filterChatToolInputDrafts } from "./reply-stream";
+import {
+  chatReplyInterruption,
+  filterChatToolInputDrafts,
+} from "./reply-stream";
 import { assertExactChatToolApproval } from "./tool-approval";
 
 type UIMessagePart = UIMessage["parts"][number];
@@ -1975,34 +1977,6 @@ const createAiChatResponseInRequest = async (
     onAbort: ({ reason }) => {
       modelAbortReason = reason;
     },
-    onEnd: async ({ steps }) => {
-      const completedSteps = steps.filter(
-        (step) => step.finishReason !== "error"
-      );
-      if (completedSteps.length === 0) {
-        return;
-      }
-      const usage = summarizeAiUsage({ steps: completedSteps });
-      try {
-        await reportAiUsage({
-          chatId: threadId,
-          completionTokens: usage.completionTokens,
-          costUsd: usage.costUsd,
-          externalId: `${usageId}:${assistantMessageId}`,
-          mailboxId,
-          model: validated.model,
-          promptTokens: usage.promptTokens,
-          promptTokensDetails: {
-            cacheWriteTokens: usage.cacheWriteTokens,
-            cachedTokens: usage.cachedTokens,
-          },
-          usageKind: "aiChat",
-          userId: input.userId,
-        });
-      } catch (error: unknown) {
-        reportError(error, { operation: "chat:report-ai-usage" });
-      }
-    },
     onError: ({ error }) => {
       generationFailed = true;
       if (error instanceof Error && error.name === "AbortError") {
@@ -2046,7 +2020,6 @@ const createAiChatResponseInRequest = async (
       responseMessage,
       outcome,
     }) => {
-      // Tool outcomes are already durable; failed prose must not replace them.
       if (
         generationFailed ||
         finishReason === "error" ||
@@ -2060,13 +2033,12 @@ const createAiChatResponseInRequest = async (
         await persistInterruption(responseMessage.parts);
         return;
       }
-      const hasContent = responseMessage.parts.some(
-        (part) =>
-          isToolUIPart(part) ||
-          (part.type === "text" && part.text.trim() !== "")
+      const interruption = chatReplyInterruption(
+        responseMessage.parts,
+        finishReason
       );
-      if (!hasContent) {
-        streamErrorText = "The run ended without a reply or tool result.";
+      if (interruption !== null) {
+        streamErrorText = interruption;
         await persistInterruption(responseMessage.parts);
         return;
       }

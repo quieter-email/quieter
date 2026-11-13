@@ -271,7 +271,9 @@ const ChatSession = ({
   const chat = useChat({
     id: threadId,
     messages: cancelForegroundMessages(
-      toCanonicalTranscript(chatData?.messages ?? [])
+      toCanonicalTranscript(chatData?.messages ?? [], {
+        includeInterruption: true,
+      })
     ),
     onError: (error) => {
       const foreground = foregroundRef.current;

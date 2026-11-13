@@ -611,13 +611,32 @@ export const AgentWorkspaceProvider = ({
         !event.isTrusted ||
         !(target instanceof Element) ||
         (event instanceof KeyboardEvent &&
-          ["Tab", "Shift", "Control", "Alt", "Meta"].includes(event.key)) ||
+          ([
+            "Tab",
+            "Shift",
+            "Control",
+            "Alt",
+            "Meta",
+            "ArrowUp",
+            "ArrowDown",
+            "ArrowLeft",
+            "ArrowRight",
+            "Home",
+            "End",
+            "PageUp",
+            "PageDown",
+          ].includes(event.key) ||
+            ((event.ctrlKey || event.metaKey) &&
+              ["a", "c", "f"].includes(event.key.toLowerCase())))) ||
+        (event instanceof PointerEvent && event.button !== 0) ||
         target.closest("[data-assistant-panel], [data-assistant-launcher]")
       ) {
         return;
       }
       if (
-        event.type === "pointerdown" &&
+        (event.type === "pointerdown" ||
+          (event instanceof KeyboardEvent &&
+            [" ", "Backspace", "Delete"].includes(event.key))) &&
         !target.closest(
           "a[href], button:enabled, input:enabled, label, select:enabled, summary, textarea:enabled, [contenteditable=''], [contenteditable='true'], [role='button'], [role='link'], [role='menuitem'], [role='option'], [role='tab']"
         )

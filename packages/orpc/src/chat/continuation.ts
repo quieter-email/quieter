@@ -87,22 +87,55 @@ export const interruptedChatParts = (input: {
   retryable: boolean;
   streamedParts: ChatMessagePart[];
 }): ChatMessagePart[] => {
-  const streamedTools = new Map(
-    input.streamedParts.map((part) => [part.toolCallId, part])
+  const persistedTools = new Map(
+    input.persistedParts
+      .filter((part) => typeof part.toolCallId === "string")
+      .map((part) => [part.toolCallId, part])
   );
-  const durableParts = input.persistedParts
-    .filter((part) => part.type !== "data-foreground")
-    .map((part) => ({
-      ...(part.toolCallId === undefined
-        ? undefined
-        : streamedTools.get(part.toolCallId)),
-      ...part,
-    }));
+  const durableParts = (
+    input.streamedParts.length === 0
+      ? input.persistedParts
+      : input.streamedParts
+  )
+    .filter(
+      (part) =>
+        part.type !== "data-foreground" &&
+        part.type !== "data-foreground-failed" &&
+        part.type !== "data-chat-interruption"
+    )
+    .map((part) => {
+      const persisted = persistedTools.get(part.toolCallId);
+      persistedTools.delete(part.toolCallId);
+      if (
+        (part.type === "text" || part.type === "reasoning") &&
+        part.state === "streaming"
+      ) {
+        return { ...part, state: "done" };
+      }
+      return persisted === undefined ? part : { ...part, ...persisted };
+    });
+  durableParts.push(...persistedTools.values());
+  if (
+    input.persistedParts.some(
+      (part) => part.type === "data-foreground-cancelled"
+    ) &&
+    !durableParts.some((part) => part.type === "data-foreground-cancelled")
+  ) {
+    durableParts.push({ type: "data-foreground-cancelled" });
+  }
+  const hasResult = durableParts.some(
+    (part) =>
+      part.type === "data-foreground-cancelled" ||
+      part.type.startsWith("tool-") ||
+      (part.type === "text" &&
+        typeof part.text === "string" &&
+        part.text.trim() !== "")
+  );
   return [
-    ...(input.retryable && durableParts.length === 0
+    ...(input.retryable && !hasResult
       ? [{ type: "data-foreground-failed" }]
       : cancelPendingChatParts(durableParts)),
-    { text: input.errorText, type: "text" },
+    { data: input.errorText, type: "data-chat-interruption" },
   ];
 };
 

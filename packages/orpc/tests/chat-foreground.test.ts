@@ -45,11 +45,13 @@ describe("interrupted chat history", () => {
       ],
       retryable: true,
       streamedParts: [
+        { text: "I moved the first message.", type: "text" },
         {
           output: { status: "error" },
           toolCallId: "applied",
           type: "tool-modify_mail",
         },
+        { text: "Opening the workspace next.", type: "text" },
       ],
     });
     expect(result).toContainEqual(
@@ -62,12 +64,106 @@ describe("interrupted chat history", () => {
     expect(result).toContainEqual(
       expect.objectContaining({ state: "output-error", toolCallId: "pending" })
     );
-    expect(result.find((part) => part.type === "text")?.text).toMatch(
-      /timed out/iu
-    );
+    expect(
+      result.find((part) => part.type === "data-chat-interruption")?.data
+    ).toMatch(/timed out/iu);
+    expect(result.slice(0, 3)).toMatchObject([
+      { text: "I moved the first message.", type: "text" },
+      { state: "output-available", toolCallId: "applied" },
+      { text: "Opening the workspace next.", type: "text" },
+    ]);
     expect(result).not.toContainEqual(
       expect.objectContaining({ type: "data-foreground-failed" })
     );
+  });
+
+  test("retains streamed reads and cancels pending actions missing from persistence", () => {
+    const result = interruptedChatParts({
+      errorText: "Interrupted.",
+      persistedParts: [{ foreground, type: "data-foreground" }],
+      retryable: true,
+      streamedParts: [
+        { text: "Found one message.", type: "text" },
+        {
+          input: {},
+          output: { ids: ["mail-1"] },
+          state: "output-available",
+          toolCallId: "search",
+          type: "tool-search_gmail",
+        },
+        {
+          input: {},
+          state: "input-available",
+          toolCallId: "navigate",
+          type: "tool-navigate",
+        },
+      ],
+    });
+    expect(result).toMatchObject([
+      { text: "Found one message.", type: "text" },
+      { output: { ids: ["mail-1"] }, toolCallId: "search" },
+      { state: "output-error", toolCallId: "navigate" },
+      { type: "data-chat-interruption" },
+    ]);
+    expect(
+      result.some((part) => part.type === "data-foreground-failed")
+    ).toBeFalsy();
+  });
+
+  test("allows retry only when no answer or tool action was produced", () => {
+    const result = interruptedChatParts({
+      errorText: "Interrupted.",
+      persistedParts: [{ foreground, type: "data-foreground" }],
+      retryable: true,
+      streamedParts: [
+        { type: "step-start" },
+        { text: "Thinking about the request", type: "reasoning" },
+      ],
+    });
+    expect(
+      result.some((part) => part.type === "data-foreground-failed")
+    ).toBeTruthy();
+    expect(result.some((part) => part.type === "text")).toBeFalsy();
+  });
+
+  test("keeps a confirmed write even when the stream failed before delivering it", () => {
+    const result = interruptedChatParts({
+      errorText: "Interrupted.",
+      persistedParts: [
+        {
+          input: {},
+          output: { status: "sent" },
+          state: "output-available",
+          toolCallId: "sent",
+          type: "tool-send_mail",
+        },
+      ],
+      retryable: true,
+      streamedParts: [{ text: "Sending your message.", type: "text" }],
+    });
+    expect(result).toContainEqual(
+      expect.objectContaining({
+        output: { status: "sent" },
+        state: "output-available",
+        toolCallId: "sent",
+      })
+    );
+    expect(
+      result.some((part) => part.type === "data-foreground-failed")
+    ).toBeFalsy();
+  });
+
+  test("does not make a canceled empty turn retryable", () => {
+    const result = interruptedChatParts({
+      errorText: "Interrupted.",
+      persistedParts: [{ type: "data-foreground-cancelled" }],
+      retryable: true,
+      streamedParts: [{ type: "step-start" }],
+    });
+    expect(result).toContainEqual({ type: "data-foreground-cancelled" });
+    expect(
+      result.some((part) => part.type === "data-foreground-failed")
+    ).toBeFalsy();
   });
 });
 

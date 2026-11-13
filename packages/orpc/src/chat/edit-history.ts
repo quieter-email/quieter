@@ -57,7 +57,9 @@ export const loadChatEditHistory = async (input: {
     if (earlierMessage === null) {
       return [];
     }
-    return toCanonicalTranscript([earlierMessage]).map((message) => ({
+    return toCanonicalTranscript([earlierMessage], {
+      includeInterruption: true,
+    }).map((message) => ({
       createdAt: earlierMessage.createdAt,
       id: crypto.randomUUID(),
       parts: message.parts.map(

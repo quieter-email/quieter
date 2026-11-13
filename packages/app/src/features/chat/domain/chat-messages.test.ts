@@ -1,5 +1,7 @@
 import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
+import { getAssistantProgress } from "@quieter/app/features/chat/domain/chat-messages";
 import { isChatToolPart } from "@quieter/app/features/chat/domain/chat-tools";
+import type { UIMessage } from "ai";
 import { describe, expect, test } from "vite-plus/test";
 
 describe("chat message conversion", () => {
@@ -52,5 +54,48 @@ describe("chat message conversion", () => {
       input: { action: "trash" },
       state: "output-error",
     });
+  });
+});
+
+describe("assistant progress", () => {
+  test("keeps progress visible between commentary and the next response", () => {
+    const parts: UIMessage["parts"] = [
+      {
+        state: "done",
+        text: "I will check the remaining messages.",
+        type: "text",
+      },
+    ];
+    expect(getAssistantProgress(parts, true)).not.toBeNull();
+    parts.push({ type: "step-start" });
+    expect(getAssistantProgress(parts, true)).not.toBeNull();
+    parts.push({
+      state: "streaming",
+      text: "Private reasoning",
+      type: "reasoning",
+    });
+    expect(getAssistantProgress(parts, true)).not.toBeNull();
+    parts.push({
+      state: "streaming",
+      text: "Here are the results",
+      type: "text",
+    });
+    expect(getAssistantProgress(parts, true)).toBeNull();
+    expect(getAssistantProgress(parts, false)).toBeNull();
+  });
+
+  test("reports hidden tool work while its details stay private", () => {
+    const parts: UIMessage["parts"] = [
+      { state: "done", text: "I will check.", type: "text" },
+      {
+        input: {},
+        state: "input-available",
+        toolCallId: "context",
+        type: "tool-read_personal_context",
+      },
+    ];
+    expect(getAssistantProgress(parts, true)).not.toBeNull();
+    expect(parts.filter(isChatToolPart)).toHaveLength(0);
+    expect(getAssistantProgress(parts, false)).toBeNull();
   });
 });
