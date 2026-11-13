@@ -1,5 +1,6 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { APICallError, streamText, wrapLanguageModel } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vite-plus/test";
 
 import { isTransientAiProviderError } from "../src/errors";
@@ -25,6 +26,289 @@ const providerResponse = (...chunks: unknown[]) =>
   );
 
 describe("OpenRouter streamed errors", () => {
+  test("cancels a stalled response body through the real provider adapter", async () => {
+    vi.useFakeTimers();
+    try {
+      const cancel = vi.fn<(reason: unknown) => void>();
+      const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+        new Response(
+          new ReadableStream({
+            cancel,
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  `data: ${JSON.stringify({
+                    ...completion,
+                    choices: [{ delta: {}, finish_reason: null, index: 0 }],
+                  })}\n\n`
+                )
+              );
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" } }
+        )
+      );
+      const errors: unknown[] = [];
+      const result = streamText({
+        model: wrapLanguageModel({
+          middleware: openRouterStreamMiddleware,
+          model: createOpenRouter({ apiKey: "fixture", fetch }).chat(
+            "openai/gpt-5.6-luna"
+          ),
+        }),
+        onError: ({ error }) => errors.push(error),
+        prompt: "Say OK",
+        timeout: { firstChunkMs: 1000 },
+      });
+      const consuming = result.consumeStream();
+      await vi.waitUntil(() => fetch.mock.calls.length > 0);
+      await vi.runAllTimersAsync();
+      await consuming;
+      expect(errors).toContainEqual(
+        expect.objectContaining({ name: "TimeoutError" })
+      );
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(fetch).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("settles Stop even when provider setup ignores cancellation and cancels its late response", async () => {
+    const abort = new AbortController();
+    const cancellation = new Error("User stopped this exchange.");
+    let respond:
+      | ((response: { stream: ReadableStream<never> }) => void)
+      | undefined;
+    const model = wrapLanguageModel({
+      middleware: openRouterStreamMiddleware,
+      model: new MockLanguageModelV4({
+        doStream: async () =>
+          // oxlint-disable-next-line promise/avoid-new -- Provider setup deliberately ignores cancellation and resolves later.
+          await new Promise<{ stream: ReadableStream<never> }>((resolve) => {
+            respond = resolve;
+          }),
+      }),
+    });
+    const response = model.doStream({ abortSignal: abort.signal, prompt: [] });
+    await vi.waitUntil(() => respond !== undefined);
+    abort.abort(cancellation);
+    await expect(response).rejects.toBe(cancellation);
+    const cancel = vi.fn<(reason: unknown) => void>();
+    const stream = new ReadableStream<never>({ cancel });
+    respond?.({ stream });
+    await vi.waitUntil(() => cancel.mock.calls.length > 0);
+    expect(cancel).toHaveBeenCalledWith(cancellation);
+    expect(stream.locked).toBeFalsy();
+  });
+
+  test("cancels an active response without reporting a provider failure", async () => {
+    const abort = new AbortController();
+    const cancel = vi.fn<(reason: unknown) => void>();
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      new Response(
+        new ReadableStream({
+          cancel,
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                `data: ${JSON.stringify(completion)}\n\n`
+              )
+            );
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } }
+      )
+    );
+    const onAbort = vi.fn<() => void>();
+    const onError = vi.fn<(event: { error: unknown }) => void>();
+    const result = streamText({
+      abortSignal: abort.signal,
+      model: wrapLanguageModel({
+        middleware: openRouterStreamMiddleware,
+        model: createOpenRouter({ apiKey: "fixture", fetch }).chat(
+          "openai/gpt-5.6-luna"
+        ),
+      }),
+      onAbort,
+      onChunk: ({ chunk }) => {
+        if (chunk.type === "text-delta") {
+          abort.abort();
+        }
+      },
+      onError,
+      prompt: "Say OK",
+    });
+    await result.consumeStream();
+    expect(onAbort).toHaveBeenCalledOnce();
+    expect(onError).not.toHaveBeenCalled();
+    await vi.waitUntil(() => cancel.mock.calls.length > 0);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  test.each(["handshake", "metadata"] as const)(
+    "times out a stalled %s before the SDK first-chunk timer starts",
+    async (stage) => {
+      vi.useFakeTimers();
+      try {
+        const signals: AbortSignal[] = [];
+        const errors: unknown[] = [];
+        const model = new MockLanguageModelV4({
+          doStream: async ({ abortSignal }) => {
+            if (!abortSignal) {
+              throw new Error("Provider requests must carry cancellation.");
+            }
+            signals.push(abortSignal);
+            if (stage === "handshake") {
+              // oxlint-disable-next-line promise/avoid-new -- The synthetic provider settles only when its request is aborted.
+              return await new Promise<never>((_resolve, reject) => {
+                abortSignal.addEventListener("abort", () => {
+                  reject(new DOMException("Request aborted.", "AbortError"));
+                });
+              });
+            }
+            return {
+              stream: new ReadableStream({
+                start(controller) {
+                  controller.enqueue({ type: "stream-start", warnings: [] });
+                  controller.enqueue({
+                    id: "fixture",
+                    type: "response-metadata",
+                  });
+                  abortSignal.addEventListener("abort", () => {
+                    controller.error(abortSignal.reason);
+                  });
+                },
+              }),
+            };
+          },
+        });
+        const result = streamText({
+          model: wrapLanguageModel({
+            middleware: openRouterStreamMiddleware,
+            model,
+          }),
+          onError: ({ error }) => errors.push(error),
+          prompt: "Say OK",
+          timeout: { firstChunkMs: 1000 },
+        });
+        const consuming = result.consumeStream();
+        await vi.waitUntil(() => signals.length > 0);
+        const [signal] = signals;
+        await vi.runAllTimersAsync();
+        await consuming;
+        expect(signal?.aborted).toBeTruthy();
+        expect(errors).toContainEqual(
+          expect.objectContaining({ name: "TimeoutError" })
+        );
+        expect(model.doStreamCalls).toHaveLength(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+  );
+
+  test("preserves cancellation while waiting for provider output", async () => {
+    const cancellation = new Error("User stopped this exchange.");
+    const abort = new AbortController();
+    let providerStarted = false;
+    const model = wrapLanguageModel({
+      middleware: openRouterStreamMiddleware,
+      model: new MockLanguageModelV4({
+        doStream: async ({ abortSignal }) => {
+          providerStarted = true;
+          // oxlint-disable-next-line promise/avoid-new -- The synthetic provider settles only when its request is aborted.
+          return await new Promise<never>((_resolve, reject) => {
+            abortSignal?.addEventListener("abort", () => {
+              reject(new DOMException("Request aborted.", "AbortError"));
+            });
+          });
+        },
+      }),
+    });
+    const response = model.doStream({ abortSignal: abort.signal, prompt: [] });
+    await vi.waitUntil(() => providerStarted);
+    abort.abort(cancellation);
+    await expect(response).rejects.toBe(cancellation);
+  });
+
+  test("clears the startup deadline once generation begins", async () => {
+    vi.useFakeTimers();
+    try {
+      const signals: AbortSignal[] = [];
+      const model = wrapLanguageModel({
+        middleware: openRouterStreamMiddleware,
+        model: new MockLanguageModelV4({
+          doStream: async ({ abortSignal }) => {
+            if (!abortSignal) {
+              throw new Error("Provider requests must carry cancellation.");
+            }
+            signals.push(abortSignal);
+            return await Promise.resolve({
+              stream: new ReadableStream({
+                start(controller) {
+                  controller.enqueue({ type: "stream-start", warnings: [] });
+                  controller.enqueue({ id: "answer", type: "text-start" });
+                  controller.enqueue({
+                    delta: "OK",
+                    id: "answer",
+                    type: "text-delta",
+                  });
+                  controller.close();
+                },
+              }),
+            });
+          },
+        }),
+      });
+      const response = await model.doStream({ prompt: [] });
+      await vi.waitUntil(() => signals.length > 0);
+      const [signal] = signals;
+      await vi.runAllTimersAsync();
+      expect(signal?.aborted).toBeFalsy();
+      const parts = [];
+      for await (const part of response.stream) {
+        parts.push(part);
+      }
+      expect(parts).toContainEqual(
+        expect.objectContaining({ delta: "OK", type: "text-delta" })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("bounds a provider that keeps sending metadata without output", async () => {
+    const signals: AbortSignal[] = [];
+    const model = wrapLanguageModel({
+      middleware: openRouterStreamMiddleware,
+      model: new MockLanguageModelV4({
+        doStream: async ({ abortSignal }) => {
+          if (!abortSignal) {
+            throw new Error("Provider requests must carry cancellation.");
+          }
+          signals.push(abortSignal);
+          return await Promise.resolve({
+            stream: new ReadableStream({
+              pull(controller) {
+                controller.enqueue({
+                  id: "fixture",
+                  type: "response-metadata",
+                });
+              },
+            }),
+          });
+        },
+      }),
+    });
+    await expect(model.doStream({ prompt: [] })).rejects.toThrow(
+      /before responding/u
+    );
+    const [signal] = signals;
+    expect(signal?.aborted).toBeTruthy();
+  });
+
   test("retries an HTTP 200 rate-limit payload before output with the real provider adapter", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
