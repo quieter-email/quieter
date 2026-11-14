@@ -10,6 +10,8 @@ import {
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 
+import type { OperationsRange } from "./operations-range";
+
 const nonnegativeCount = z.number().int().nonnegative();
 
 const dailyMetricsSchema = z.object({
@@ -29,29 +31,82 @@ const currentMetricsSchema = z.object({
   managedPrivateMailboxes: nonnegativeCount,
   managedSharedMailboxes: nonnegativeCount,
   managedSubscriptions: nonnegativeCount,
+  managedSubscriptionsInRange: nonnegativeCount,
   proSubscriptions: nonnegativeCount,
+  proSubscriptionsInRange: nonnegativeCount,
   totalUsers: nonnegativeCount,
 });
+
+const overviewBounds = ({
+  asOf,
+  days,
+  start,
+}: {
+  asOf: string;
+  days: OperationsRange;
+  start: string;
+}) =>
+  days === "all"
+    ? sql`
+        starts as (
+          select min(${user.createdAt}) as started_at from ${user}
+          union all
+          select min(${waitlistSignup.createdAt}) from ${waitlistSignup}
+          union all
+          select min(${billingCreditUsageEvent.createdAt})
+            from ${billingCreditUsageEvent}
+            where ${billingCreditUsageEvent.category} = 'ai'
+          union all
+          select min(${organizationMailUsageEvent.createdAt})
+            from ${organizationMailUsageEvent}
+          union all
+          select min(${mailbox.createdAt}) from ${mailbox}
+          union all
+          select min(${billingSubscription.createdAt})
+            from ${billingSubscription}
+        ),
+        bounds as (
+          select date_trunc(
+                   'day',
+                   coalesce(
+                     (select min(started_at) from starts),
+                     ${asOf}::timestamp without time zone
+                   )
+                 ) as utc_start_at,
+                 ${asOf}::timestamp without time zone as utc_as_of
+        )
+      `
+    : sql`
+        bounds as (
+          select ${start}::timestamp without time zone as utc_start_at,
+                 ${asOf}::timestamp without time zone as utc_as_of
+        )
+      `;
 
 export const getOperationsOverview = async ({
   db,
   days,
 }: {
   db: DatabaseClient;
-  days: 7 | 30 | 90;
+  days: OperationsRange;
 }) => {
   const now = new Date();
   const asOf = now.toISOString();
-  const start = new Date(now);
-  start.setUTCHours(0, 0, 0, 0);
-  start.setUTCDate(start.getUTCDate() - (days - 1));
+  const windowStart = new Date(now);
+  windowStart.setUTCHours(0, 0, 0, 0);
+  if (days !== "all") {
+    windowStart.setUTCDate(windowStart.getUTCDate() - (days - 1));
+  }
+  const bounds = () =>
+    overviewBounds({
+      asOf,
+      days,
+      start: windowStart.toISOString(),
+    });
 
   const [dailyRows, currentRows] = await Promise.all([
     db.execute(sql`
-      with bounds as (
-        select ${start.toISOString()}::timestamp without time zone as utc_start_at,
-               ${asOf}::timestamp without time zone as utc_as_of
-      ), signups as (
+      with ${bounds()}, signups as (
         select date_trunc('day', ${user.createdAt}) as day, count(*) as users
         from ${user}, bounds
         where ${user.createdAt} >= bounds.utc_start_at and ${user.createdAt} < bounds.utc_as_of
@@ -98,7 +153,7 @@ export const getOperationsOverview = async ({
       order by calendar.day
     `),
     db.execute(sql`
-      with users as (
+      with ${bounds()}, users as (
         select count(*)::double precision as "totalUsers",
                (count(*) filter (where ${user.onboardingCompletedAt} < ${asOf}::timestamp))::double precision
                  as "completedOnboardingUsers"
@@ -108,19 +163,42 @@ export const getOperationsOverview = async ({
         select (count(*) filter (where ${billingSubscription.plan} = 'pro'))::double precision
                  as "proSubscriptions",
                (count(*) filter (where ${billingSubscription.plan} = 'managed'))::double precision
-                 as "managedSubscriptions"
+                 as "managedSubscriptions",
+               (count(*) filter (
+                 where ${billingSubscription.plan} = 'pro'
+                   and ${billingSubscription.createdAt} >= bounds.utc_start_at
+                   and ${billingSubscription.createdAt} < bounds.utc_as_of
+               ))::double precision as "proSubscriptionsInRange",
+               (count(*) filter (
+                 where ${billingSubscription.plan} = 'managed'
+                   and ${billingSubscription.createdAt} >= bounds.utc_start_at
+                   and ${billingSubscription.createdAt} < bounds.utc_as_of
+               ))::double precision as "managedSubscriptionsInRange"
         from ${billingSubscription}
+        cross join bounds
         where ${billingSubscription.status} in ('active', 'trialing')
       ), mailboxes as (
         select (count(*) filter (where ${mailbox.status} = 'connected'))::double precision
                  as "connectedMailboxes",
-               (count(*) filter (where ${mailbox.provider} = 'gmail'))::double precision
-                 as "gmailMailboxes",
-               (count(*) filter (where ${mailbox.provider} = 'managed' and ${mailbox.accessMode} = 'private'))::double precision
-                 as "managedPrivateMailboxes",
-               (count(*) filter (where ${mailbox.provider} = 'managed' and ${mailbox.accessMode} = 'shared'))::double precision
-                 as "managedSharedMailboxes"
+               (count(*) filter (
+                 where ${mailbox.provider} = 'gmail'
+                   and ${mailbox.createdAt} >= bounds.utc_start_at
+                   and ${mailbox.createdAt} < bounds.utc_as_of
+               ))::double precision as "gmailMailboxes",
+               (count(*) filter (
+                 where ${mailbox.provider} = 'managed'
+                   and ${mailbox.accessMode} = 'private'
+                   and ${mailbox.createdAt} >= bounds.utc_start_at
+                   and ${mailbox.createdAt} < bounds.utc_as_of
+               ))::double precision as "managedPrivateMailboxes",
+               (count(*) filter (
+                 where ${mailbox.provider} = 'managed'
+                   and ${mailbox.accessMode} = 'shared'
+                   and ${mailbox.createdAt} >= bounds.utc_start_at
+                   and ${mailbox.createdAt} < bounds.utc_as_of
+               ))::double precision as "managedSharedMailboxes"
         from ${mailbox}
+        cross join bounds
       )
       select * from users cross join subscriptions cross join mailboxes
     `),
@@ -145,8 +223,8 @@ export const getOperationsOverview = async ({
       managedShared: current.managedSharedMailboxes,
     },
     subscriptionMix: {
-      managed: current.managedSubscriptions,
-      pro: current.proSubscriptions,
+      managed: current.managedSubscriptionsInRange,
+      pro: current.proSubscriptionsInRange,
     },
   };
 };

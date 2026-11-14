@@ -131,6 +131,9 @@ describe("platform operations access", () => {
     await expect(operations.overview({ days: 7 })).resolves.toHaveProperty(
       "daily"
     );
+    await expect(operations.overview({ days: "all" })).resolves.toHaveProperty(
+      "daily"
+    );
     await expect(
       operations.setWaitlistOpen({ waitlistOpen: false })
     ).resolves.toMatchObject({
