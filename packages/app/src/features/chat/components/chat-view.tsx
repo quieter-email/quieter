@@ -48,9 +48,23 @@ import type { RouterOutputs } from "@quieter/orpc";
 import { decodeChatStreamError } from "@quieter/orpc/chat-errors";
 import { Button } from "@quieter/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { DefaultChatTransport, isToolUIPart } from "ai";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { UIMessage } from "ai";
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
+import { emptyChatQueue, updateChatQueue } from "../domain/chat-queue";
+import type {
+  ChatQueues,
+  ChatQueueStore,
+  QueuedChatMessage,
+} from "../domain/chat-queue";
 import {
   cancelForegroundMessages,
   needsForegroundContinuation,
@@ -65,12 +79,23 @@ import { ChatContextPicker } from "./chat-context-picker";
 import { ChatTranscript } from "./chat-transcript";
 
 type ChatData = RouterOutputs["chat"]["get"];
+type ChatEdit = {
+  chatId: string;
+  messageId: string;
+  originalMessages: UIMessage[];
+  source: { chatId: string; messageId: string };
+};
 
 const ChatSession = ({
   chatData,
   canUseAiChat,
+  queues,
   ...props
-}: ChatViewProps & { chatData?: ChatData; canUseAiChat: boolean }) => {
+}: ChatViewProps & {
+  chatData?: ChatData;
+  canUseAiChat: boolean;
+  queues: ChatQueueStore;
+}) => {
   const workspace = useAgentWorkspace();
   if (!workspace) {
     throw new Error("The assistant needs a mail workspace.");
@@ -101,12 +126,33 @@ const ChatSession = ({
   // oxlint-disable-next-line react/hook-use-state -- The session identity is fixed until this keyed component unmounts.
   const [tabId] = useState(() => crypto.randomUUID());
   const threadId = props.chatId ?? props.draftChatKey;
+  const queueKey = `${workspace.mailboxId}:${threadId}`;
   const [busy, setBusy] = useState(false);
+  const [editSession, setEditSession] = useState<{
+    chatId: string;
+    opening: boolean;
+  } | null>(null);
+  const openingEdit = editSession?.opening === true;
+  const activeQueueKey =
+    editSession === null
+      ? queueKey
+      : `${workspace.mailboxId}:${editSession.chatId}`;
+  const queue = useSelector(
+    queues,
+    (state) => state.get(activeQueueKey) ?? emptyChatQueue
+  );
+  const canceling = queue.phase === "canceling";
+  const foregroundActive = useSelector(
+    workspace.control.state,
+    (state) => state.active
+  );
   const [completedAssistantMessageId, setCompletedAssistantMessageId] =
     useState<string | null>(null);
   const [interruptionMessage, setInterruptionMessage] = useState("");
   const foregroundRef = useRef<ForegroundSnapshot | null>(null);
+  const editRef = useRef<ChatEdit | null>(null);
   const requestContextRef = useRef<{
+    category?: QueuedChatMessage["category"];
     context: ChatMailContext;
     model?: ChatModel;
   } | null>(null);
@@ -124,6 +170,47 @@ const ChatSession = ({
       }
     } catch (error) {
       toastError(error, { boundary: "assistant-history" });
+    }
+  };
+  const openEditedChat = async (
+    edit: ChatEdit,
+    setMessages: (messages: UIMessage[]) => void
+  ) => {
+    setEditSession({ chatId: edit.chatId, opening: true });
+    let opened = false;
+    try {
+      const saved = await queryClient.query({
+        ...chatQueryOptions(workspace.mailboxId, edit.chatId),
+        retry: false,
+      });
+      if (mountedRef.current && editRef.current === edit) {
+        if (saved.messages.some((message) => message.id === edit.messageId)) {
+          opened = true;
+          props.onChatIdChange(edit.chatId);
+        } else {
+          setMessages(edit.originalMessages);
+        }
+      }
+    } catch (error) {
+      if (mountedRef.current && editRef.current === edit) {
+        setMessages(edit.originalMessages);
+        if (
+          !(error instanceof Error && "status" in error && error.status === 404)
+        ) {
+          toastError(error, { boundary: "assistant-history" });
+        }
+      }
+    } finally {
+      if (mountedRef.current && editRef.current === edit) {
+        editRef.current = null;
+        if (!opened) {
+          updateChatQueue(queues, queueKey, {
+            sourceKey: `${workspace.mailboxId}:${edit.chatId}`,
+            type: "return-edit",
+          });
+          setEditSession(null);
+        }
+      }
     }
   };
   const refreshMailQueries = async (
@@ -162,14 +249,19 @@ const ChatSession = ({
           ) {
             throw new Error("Start a new request to continue.");
           }
+          const edit = editRef.current;
+          const message = messages.at(-1);
           return {
             body: {
               category: latestRef.current.props.activeMailbox,
               ...requestContextRef.current,
+              ...(edit !== null && message?.id === edit.messageId
+                ? { editSource: edit.source }
+                : {}),
               foreground: { ...foreground, expiresAt: Date.now() + 120_000 },
               mailboxId: workspace.mailboxId,
-              message: messages.at(-1),
-              threadId,
+              message,
+              threadId: edit?.chatId ?? threadId,
               trigger,
             },
           };
@@ -179,7 +271,9 @@ const ChatSession = ({
   const chat = useChat({
     id: threadId,
     messages: cancelForegroundMessages(
-      toCanonicalTranscript(chatData?.messages ?? [])
+      toCanonicalTranscript(chatData?.messages ?? [], {
+        includeInterruption: true,
+      })
     ),
     onError: (error) => {
       const foreground = foregroundRef.current;
@@ -193,126 +287,127 @@ const ChatSession = ({
       setCompletedAssistantMessageId(null);
       toastError(decodeChatStreamError(error), { boundary: "assistant-chat" });
     },
-    onFinish: ({ messages, isAbort, isDisconnect, isError, finishReason }) => {
+    onFinish: ({
+      message,
+      messages,
+      isAbort,
+      isDisconnect,
+      isError,
+      finishReason,
+    }) => {
       const foreground = foregroundRef.current;
+      const edit = editRef.current;
       const currentRun =
         mountedRef.current &&
         foreground !== null &&
         workspace.control.isCurrent(foreground.generation);
       let mailboxChanged = false;
-      for (const message of messages) {
-        for (const part of message.parts) {
-          if (
-            !isToolUIPart(part) ||
-            part.state !== "output-available" ||
-            appliedReceipts.current.has(part.toolCallId)
-          ) {
-            continue;
-          }
-          const toolName = part.type.replace("tool-", "");
-          if (toolName === "modify_mail" || toolName === "modify_mail_batch") {
-            const changed =
-              toolName === "modify_mail_batch"
-                ? modifyMailBatchResultSchema
-                    .safeParse(part.output)
-                    .data?.results.some((result) => result.status === "success")
-                : modifyMailResultSchema.safeParse(part.output).data?.status ===
-                  "success";
-            if (changed === true) {
-              appliedReceipts.current.add(part.toolCallId);
-              mailboxChanged = true;
-            }
-            continue;
-          }
-          if (
-            toolName === "create_reminder" ||
-            toolName === "change_reminder"
-          ) {
-            const receipt = reminderSchema.safeParse(part.output);
-            if (
-              receipt.success &&
-              receipt.data.mailboxId === workspace.mailboxId
-            ) {
-              appliedReceipts.current.add(part.toolCallId);
-              void queryClient.invalidateQueries({
-                queryKey: ["reminders", workspace.mailboxId, "remote"],
-              });
-              void queryClient.invalidateQueries({
-                queryKey: ["reminder-suggestion", workspace.mailboxId],
-              });
-            }
-            continue;
-          }
-          if (isCalendarWriteToolName(toolName)) {
-            const receipt = calendarMutationResultSchema.safeParse(part.output);
-            const command = calendarWriteInputSchemas[toolName].safeParse(
-              part.input
-            );
-            const expectedAction = {
-              create_calendar_event: "created",
-              delete_calendar_event: "deleted",
-              respond_to_calendar_event: "responded",
-              update_calendar_event: "updated",
-            }[toolName];
-            if (
-              userId !== undefined &&
-              receipt.success &&
-              command.success &&
-              receipt.data.action === expectedAction &&
-              receipt.data.connectionId === command.data.connectionId &&
-              receipt.data.calendarId === command.data.calendarId &&
-              (!("eventId" in command.data) ||
-                receipt.data.eventId === command.data.eventId)
-            ) {
-              appliedReceipts.current.add(part.toolCallId);
-              void (async () => {
-                try {
-                  await applyCalendarMutationReceipt(
-                    queryClient,
-                    userId,
-                    receipt.data
-                  );
-                } catch (error) {
-                  toastError(error, { boundary: "assistant-calendar-refresh" });
-                }
-              })();
-            }
-            continue;
-          }
-          if (
-            part.type !== "tool-save_compose_draft" &&
-            part.type !== "tool-send_mail"
-          ) {
-            continue;
-          }
-          const receipt =
-            part.type === "tool-send_mail"
-              ? sendMailOutputSchema.safeParse(part.output)
-              : saveComposeDraftOutputSchema.safeParse(part.output);
-          if (receipt.success) {
+      for (const part of message.parts) {
+        if (
+          !isToolUIPart(part) ||
+          part.state !== "output-available" ||
+          appliedReceipts.current.has(part.toolCallId)
+        ) {
+          continue;
+        }
+        const toolName = part.type.replace("tool-", "");
+        if (toolName === "modify_mail" || toolName === "modify_mail_batch") {
+          const changed =
+            toolName === "modify_mail_batch"
+              ? modifyMailBatchResultSchema
+                  .safeParse(part.output)
+                  .data?.results.some((result) => result.status === "success")
+              : modifyMailResultSchema.safeParse(part.output).data?.status ===
+                "success";
+          if (changed === true) {
             appliedReceipts.current.add(part.toolCallId);
-            if (currentRun) {
-              workspace.getCompose()?.applyReceipt(receipt.data);
-            }
-            const draftInput = saveComposeDraftInputSchema.safeParse(
-              part.input
-            );
-            const affectedThreadId =
-              "threadId" in receipt.data ? receipt.data.threadId : undefined;
-            const replyThreadId = draftInput.success
-              ? draftInput.data.draft.replyContext?.threadId
-              : undefined;
-            const affectedKeys = [
-              getMessagesQueryKey(workspace.mailboxId, "drafts").slice(0, 3),
-              ...(receipt.data.status === "sent"
-                ? [getMessagesQueryKey(workspace.mailboxId, "sent").slice(0, 3)]
-                : []),
-              ...[...new Set([affectedThreadId, replyThreadId])].flatMap(
-                (id) => (id ? [getThreadQueryKey(workspace.mailboxId, id)] : [])
-              ),
-            ];
-            void refreshMailQueries(affectedKeys);
+            mailboxChanged = true;
           }
+          continue;
+        }
+        if (toolName === "create_reminder" || toolName === "change_reminder") {
+          const receipt = reminderSchema.safeParse(part.output);
+          if (
+            receipt.success &&
+            receipt.data.mailboxId === workspace.mailboxId
+          ) {
+            appliedReceipts.current.add(part.toolCallId);
+            void queryClient.invalidateQueries({
+              queryKey: ["reminders", workspace.mailboxId, "remote"],
+            });
+            void queryClient.invalidateQueries({
+              queryKey: ["reminder-suggestion", workspace.mailboxId],
+            });
+          }
+          continue;
+        }
+        if (isCalendarWriteToolName(toolName)) {
+          const receipt = calendarMutationResultSchema.safeParse(part.output);
+          const command = calendarWriteInputSchemas[toolName].safeParse(
+            part.input
+          );
+          const expectedAction = {
+            create_calendar_event: "created",
+            delete_calendar_event: "deleted",
+            respond_to_calendar_event: "responded",
+            update_calendar_event: "updated",
+          }[toolName];
+          if (
+            userId !== undefined &&
+            receipt.success &&
+            command.success &&
+            receipt.data.action === expectedAction &&
+            receipt.data.connectionId === command.data.connectionId &&
+            receipt.data.calendarId === command.data.calendarId &&
+            (!("eventId" in command.data) ||
+              receipt.data.eventId === command.data.eventId)
+          ) {
+            appliedReceipts.current.add(part.toolCallId);
+            void (async () => {
+              try {
+                await applyCalendarMutationReceipt(
+                  queryClient,
+                  userId,
+                  receipt.data
+                );
+              } catch (error) {
+                toastError(error, { boundary: "assistant-calendar-refresh" });
+              }
+            })();
+          }
+          continue;
+        }
+        if (
+          part.type !== "tool-save_compose_draft" &&
+          part.type !== "tool-send_mail"
+        ) {
+          continue;
+        }
+        const receipt =
+          part.type === "tool-send_mail"
+            ? sendMailOutputSchema.safeParse(part.output)
+            : saveComposeDraftOutputSchema.safeParse(part.output);
+        if (receipt.success) {
+          appliedReceipts.current.add(part.toolCallId);
+          if (currentRun) {
+            workspace.getCompose()?.applyReceipt(receipt.data);
+          }
+          const draftInput = saveComposeDraftInputSchema.safeParse(part.input);
+          const affectedThreadId =
+            "threadId" in receipt.data ? receipt.data.threadId : undefined;
+          const replyThreadId = draftInput.success
+            ? draftInput.data.draft.replyContext?.threadId
+            : undefined;
+          const affectedKeys = [
+            getMessagesQueryKey(workspace.mailboxId, "drafts").slice(0, 3),
+            ...(receipt.data.status === "sent"
+              ? [getMessagesQueryKey(workspace.mailboxId, "sent").slice(0, 3)]
+              : []),
+            ...[...new Set([affectedThreadId, replyThreadId])].flatMap((id) =>
+              id ? [getThreadQueryKey(workspace.mailboxId, id)] : []
+            ),
+          ];
+          void refreshMailQueries(affectedKeys);
         }
       }
       if (mailboxChanged) {
@@ -322,14 +417,17 @@ const ChatSession = ({
         ]);
       }
       if (!currentRun) {
+        if (edit !== null && isAbort && mountedRef.current) {
+          void openEditedChat(edit, chat.setMessages);
+        }
         return;
       }
       const interrupted =
         !isAbort && (finishReason === undefined || finishReason === "error");
       if (isDisconnect || (interrupted && !isError)) {
-        setInterruptionMessage(
-          "The reply was interrupted. Check any completed actions before asking me to continue."
-        );
+        setInterruptionMessage("The reply was interrupted.");
+      } else if (finishReason === "length") {
+        setInterruptionMessage("The response was cut short.");
       }
       if (isError || interrupted) {
         chat.setMessages(cancelForegroundMessages(messages));
@@ -347,6 +445,21 @@ const ChatSession = ({
         interrupted ||
         (pending !== true && !needsForegroundContinuation(messages));
       if (terminal) {
+        updateChatQueue(
+          queues,
+          edit === null ? queueKey : `${workspace.mailboxId}:${edit.chatId}`,
+          {
+            type:
+              isAbort ||
+              isError ||
+              interrupted ||
+              isDisconnect ||
+              finishReason === "length" ||
+              finishReason === "content-filter"
+                ? "pause"
+                : "finish",
+          }
+        );
         setCompletedAssistantMessageId(
           !isAbort && !isError && !interrupted && last?.role === "assistant"
             ? last.id
@@ -359,8 +472,12 @@ const ChatSession = ({
         queryKey: getChatsQueryKey(workspace.mailboxId),
       });
       void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
-      if (terminal && !isError && !interrupted && props.chatId === null) {
-        void synchronizeHistory();
+      if (terminal) {
+        if (edit !== null) {
+          void openEditedChat(edit, chat.setMessages);
+        } else if (!isError && !interrupted && props.chatId === null) {
+          void synchronizeHistory();
+        }
       }
     },
     onToolCall: async ({ toolCall }) => {
@@ -420,11 +537,11 @@ const ChatSession = ({
 
   useEffect(() => {
     mountedRef.current = true;
-    const cancelServer = async (assistantMessageId: string) => {
+    const cancelServer = async (assistantMessageId: string, chatId: string) => {
       try {
         await rpc.chat.cancel({
           assistantMessageId,
-          chatId: threadId,
+          chatId,
           mailboxId: workspace.mailboxId,
         });
       } catch (error) {
@@ -438,11 +555,20 @@ const ChatSession = ({
       }
       foregroundRef.current = null;
       setCompletedAssistantMessageId(null);
-      void chatRef.current.stop();
+      const activeChatId = editRef.current?.chatId ?? threadId;
+      const canceledQueueKey = `${workspace.mailboxId}:${activeChatId}`;
+      updateChatQueue(queues, canceledQueueKey, { type: "cancel" });
+      const stopped = chatRef.current.stop();
       chatRef.current.setMessages(
         cancelForegroundMessages(chatRef.current.messages)
       );
-      void cancelServer(foreground.exchangeId);
+      void (async () => {
+        await Promise.allSettled([
+          stopped,
+          cancelServer(foreground.exchangeId, activeChatId),
+        ]);
+        updateChatQueue(queues, canceledQueueKey, { type: "canceled" });
+      })();
     };
     const subscription = workspace.control.state.subscribe(() => {
       if (
@@ -463,7 +589,7 @@ const ChatSession = ({
       }
       subscription.unsubscribe();
     };
-  }, [threadId, workspace]);
+  }, [queues, threadId, workspace]);
 
   const streaming = chat.status === "streaming" || chat.status === "submitted";
   const approvals = chat.messages.flatMap((message) =>
@@ -604,33 +730,70 @@ const ChatSession = ({
     !streaming &&
     approvals.length === 0 &&
     canUseAiChat;
+  const turnActive = foregroundActive || streaming || approvals.length > 0;
+  const composerDisabled = !canUseAiChat || openingEdit;
+  const audioActive =
+    dictation.isRecording || dictation.isStarting || dictation.isTranscribing;
+  const submissionBlocked =
+    composerDisabled || audioActive || turnActive || busy || canceling;
+  const queueing = turnActive || busy || canceling || queue.items.length > 0;
   const submit = async (
-    resubmit?: { messageId: string; text: string },
+    resubmit?:
+      | { kind: "edit" | "retry"; messageId: string; text: string }
+      | { kind: "queued"; message: QueuedChatMessage },
     suggestion?: string
   ) => {
-    const text = (resubmit?.text ?? suggestion ?? input).trim();
+    const text = (
+      resubmit?.kind === "queued"
+        ? resubmit.message.text
+        : (resubmit?.text ?? suggestion ?? input)
+    ).trim();
     if (
       !text ||
-      streaming ||
-      busy ||
-      approvals.length > 0 ||
-      !canUseAiChat ||
-      dictation.isRecording ||
-      dictation.isStarting ||
-      dictation.isTranscribing
+      submissionBlocked ||
+      workspace.control.state.get().active ||
+      editRef.current !== null
     ) {
       return;
     }
+    let edit: ChatEdit | null = null;
+    let editIndex = -1;
+    if (resubmit?.kind === "edit") {
+      editIndex = chat.messages.findIndex(
+        (message) =>
+          message.id === resubmit.messageId && message.role === "user"
+      );
+      if (props.chatId === null || editIndex === -1) {
+        return;
+      }
+      edit = {
+        chatId: crypto.randomUUID(),
+        messageId: crypto.randomUUID(),
+        originalMessages: chat.messages,
+        source: { chatId: props.chatId, messageId: resubmit.messageId },
+      };
+    }
+    const runQueueKey =
+      edit === null ? queueKey : `${workspace.mailboxId}:${edit.chatId}`;
+    updateChatQueue(queues, runQueueKey, { type: "start" });
     setBusy(true);
     setCompletedAssistantMessageId(null);
     setInterruptionMessage("");
     const generation = workspace.control.begin();
-    const snapshot = workspace.read();
     try {
-      requestContextRef.current = {
-        context: mailContext.context,
-        ...(model === "auto" ? {} : { model }),
-      };
+      const snapshot = workspace.read();
+      const context =
+        resubmit?.kind === "queued"
+          ? resubmit.message.context
+          : mailContext.context;
+      requestContextRef.current =
+        resubmit?.kind === "queued"
+          ? {
+              category: resubmit.message.category,
+              context,
+              model: resubmit.message.model,
+            }
+          : { context, ...(model === "auto" ? {} : { model }) };
       foregroundRef.current = foregroundSnapshotSchema.parse({
         calendar: snapshot.calendar,
         capabilities:
@@ -650,31 +813,56 @@ const ChatSession = ({
         exchangeId: crypto.randomUUID(),
         expiresAt: Date.now() + 120_000,
         generation,
-        query: mailContext.context.query,
-        selectedMessageId: mailContext.attachedMessageIds.includes(
-          snapshot.selectedMessageId ?? ""
-        )
-          ? snapshot.selectedMessageId
-          : undefined,
-        selectedThreadId: mailContext.context.threadId,
+        query: context.query,
+        selectedMessageId:
+          context.messageIds?.includes(snapshot.selectedMessageId ?? "") ===
+          true
+            ? snapshot.selectedMessageId
+            : undefined,
+        selectedThreadId: context.threadId,
         tabId,
         view: snapshot.view,
         workspace: snapshot.workspace,
       });
-      if (resubmit === undefined) {
+      if (resubmit === undefined && suggestion === undefined) {
         setInput("");
       }
       chat.clearError();
-      await chat.sendMessage(
-        resubmit === undefined
-          ? { text }
-          : { messageId: resubmit.messageId, text }
-      );
+      if (edit === null) {
+        await chat.sendMessage(
+          resubmit === undefined || resubmit.kind === "queued"
+            ? { text }
+            : { messageId: resubmit.messageId, text }
+        );
+      } else {
+        editRef.current = edit;
+        setEditSession({ chatId: edit.chatId, opening: false });
+        chat.setMessages(edit.originalMessages.slice(0, editIndex));
+        await chat.sendMessage({
+          id: edit.messageId,
+          parts: [{ text, type: "text" }],
+          role: "user",
+        });
+      }
     } catch (error) {
-      if (resubmit === undefined) {
+      if (edit !== null && editRef.current === edit) {
+        editRef.current = null;
+        setEditSession(null);
+        chat.setMessages(edit.originalMessages);
+      }
+      if (resubmit === undefined && suggestion === undefined) {
         setInput(text);
       }
+      if (resubmit?.kind === "queued") {
+        updateChatQueue(queues, runQueueKey, {
+          message: resubmit.message,
+          type: "restore",
+        });
+      } else {
+        updateChatQueue(queues, runQueueKey, { type: "pause" });
+      }
       if (workspace.control.isCurrent(generation)) {
+        foregroundRef.current = null;
         workspace.control.finish();
       }
       toastError(error, { boundary: "assistant-submit" });
@@ -682,27 +870,90 @@ const ChatSession = ({
       setBusy(false);
     }
   };
+  const sendOrQueue = (suggestion?: string) => {
+    const text = (suggestion ?? input).trim();
+    if (!text || composerDisabled || audioActive) {
+      return;
+    }
+    if (!queueing && !workspace.control.state.get().active) {
+      void submit(undefined, suggestion);
+      return;
+    }
+    updateChatQueue(queues, activeQueueKey, {
+      message: {
+        category: props.activeMailbox,
+        context: mailContext.context,
+        id: crypto.randomUUID(),
+        ...(model === "auto" ? {} : { model }),
+        text,
+      },
+      type: "add",
+    });
+    if (suggestion === undefined) {
+      setInput("");
+    }
+  };
+  const drainQueue = useEffectEvent(() => {
+    const next = queues.get().get(queueKey);
+    const message = next?.items[0];
+    if (
+      submissionBlocked ||
+      editRef.current !== null ||
+      editSession !== null ||
+      workspace.control.state.get().active ||
+      next?.phase !== "ready" ||
+      message === undefined
+    ) {
+      return;
+    }
+    updateChatQueue(queues, queueKey, { id: message.id, type: "take" });
+    void submit({ kind: "queued", message });
+  });
+  useEffect((): (() => void) | undefined => {
+    if (
+      !submissionBlocked &&
+      queue.phase === "ready" &&
+      queue.items.length > 0
+    ) {
+      const scheduled = window.setTimeout(() => {
+        drainQueue();
+      }, 0);
+      return () => {
+        window.clearTimeout(scheduled);
+      };
+    }
+    return undefined;
+  }, [queue, submissionBlocked]);
 
   return (
     <div
       className="flex min-h-0 flex-1 flex-col"
-      data-assistant-loading={streaming || busy ? "" : undefined}
+      data-assistant-loading={streaming || busy || openingEdit ? "" : undefined}
     >
       {chat.messages.length > 0 || errorMessage !== "" ? (
         <ChatTranscript
           completedAssistantMessageId={completedAssistantMessageId}
           docked={props.docked}
+          edit={
+            props.chatId !== null && canUseAiChat
+              ? {
+                  disabled: submissionBlocked,
+                  onSubmit: (messageId, text) => {
+                    void submit({ kind: "edit", messageId, text });
+                  },
+                }
+              : undefined
+          }
           messages={chat.messages}
           isStreaming={streaming}
           approvals={approvals}
           errorMessage={errorMessage}
-          onSuggestion={(text) => {
-            void submit(undefined, text);
-          }}
+          onSuggestion={sendOrQueue}
           onRetry={
             canRetry && lastUserMessage !== undefined
               ? () => {
                   void submit({
+                    kind: "retry",
                     messageId: lastUserMessage.id,
                     text: lastUserText,
                   });
@@ -717,6 +968,7 @@ const ChatSession = ({
         </p>
       )}
       <ChatComposer
+        mailboxId={workspace.mailboxId}
         placeholder={
           activeWorkspace === "calendar"
             ? "Ask about your calendar…"
@@ -737,16 +989,25 @@ const ChatSession = ({
         onCancelDictation={() => {
           dictation.cancel();
         }}
-        disabled={!canUseAiChat || busy || streaming || approvals.length > 0}
-        streaming={streaming || approvals.length > 0}
-        submitting={chat.status === "submitted"}
+        disabled={composerDisabled}
+        streaming={turnActive}
+        queueing={queueing}
+        queue={{
+          canResume: !submissionBlocked,
+          items: queue.items,
+          onRemove: (id) => {
+            updateChatQueue(queues, activeQueueKey, { id, type: "remove" });
+          },
+          onResume: () => {
+            updateChatQueue(queues, activeQueueKey, { type: "resume" });
+          },
+          paused: queue.phase === "paused" || canceling,
+        }}
         contextItems={mailContext.contextItems}
         contextPicker={
           <ChatContextPicker
             attachedMessageIds={mailContext.attachedMessageIds}
-            disabled={
-              !canUseAiChat || busy || streaming || approvals.length > 0
-            }
+            disabled={composerDisabled}
             mailboxId={workspace.mailboxId}
             initialCategory={props.activeMailbox}
             onSelect={mailContext.handleAttach}
@@ -761,7 +1022,7 @@ const ChatSession = ({
             !event.nativeEvent.isComposing
           ) {
             event.preventDefault();
-            void submit();
+            sendOrQueue();
           }
         }}
         onStop={() => {
@@ -770,7 +1031,7 @@ const ChatSession = ({
         }}
         onSubmit={(event) => {
           event.preventDefault();
-          void submit();
+          sendOrQueue();
         }}
       />
     </div>
@@ -778,6 +1039,7 @@ const ChatSession = ({
 };
 
 export const ChatView = (props: ChatViewProps) => {
+  const queues = useCreateStore<ChatQueues>(new Map());
   const { data: billing, isPending } = useQuery(userBillingQueryOptions());
   const {
     data: chatData,
@@ -812,6 +1074,7 @@ export const ChatView = (props: ChatViewProps) => {
       key={`${props.mailboxId}:${props.chatId ?? props.draftChatKey}`}
       {...props}
       chatData={chatData}
+      queues={queues}
       canUseAiChat={
         !isPending &&
         !!billing &&

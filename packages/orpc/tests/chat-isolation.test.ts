@@ -55,6 +55,33 @@ describe("chat history isolation", () => {
     mocks.query.mockReset();
   });
 
+  test("hides an edit source that is unavailable in the user's mailbox", async () => {
+    mocks.query.mockResolvedValue({ rows: [] });
+
+    await expect(
+      createAiChatResponse({
+        body: {
+          category: "inbox",
+          editSource: {
+            chatId: "771c41e5-7280-4c11-beb2-4c9cc1d37f84",
+            messageId: "source-message",
+          },
+          foreground,
+          mailboxId: "mailbox",
+          message: {
+            id: "new-message",
+            parts: [{ text: "Revised question", type: "text" }],
+            role: "user",
+          },
+          threadId,
+          trigger: "submit-message",
+        },
+        request: new Request("https://example.test/api/chat"),
+        userId: "user",
+      })
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
   test("rejects stale assistant resolutions even when tool call ids match", async () => {
     const part = {
       approval: { id: "approval" },

@@ -12,7 +12,11 @@ import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vite-plus/test";
 import { z } from "zod";
 
-import { completeChatReply } from "../src/chat/reply-stream";
+import { interruptedChatParts } from "../src/chat/continuation";
+import {
+  chatReplyInterruption,
+  filterChatToolInputDrafts,
+} from "../src/chat/reply-stream";
 
 type ModelStreamPart =
   Awaited<
@@ -49,25 +53,209 @@ const readReply = async <TOOLS extends ToolSet>(
   stream: ReadableStream<TextStreamPart<TOOLS>>
 ) => {
   let savedMessage: UIMessage | undefined;
+  let interruption: string | null = null;
   const uiStream = toUIMessageStream({
     generateMessageId: () => "reply-test",
-    onEnd: ({ responseMessage }) => {
+    onEnd: ({ responseMessage, finishReason }) => {
+      interruption = chatReplyInterruption(responseMessage.parts, finishReason);
       savedMessage = responseMessage;
     },
-    stream: stream.pipeThrough(completeChatReply()),
+    stream: stream.pipeThrough(filterChatToolInputDrafts()),
   });
   const snapshots = await Array.fromAsync(
     readUIMessageStream({ stream: uiStream })
   );
-  return { savedMessage, visibleMessage: snapshots.at(-1) };
+  return { interruption, savedMessage, visibleMessage: snapshots.at(-1) };
 };
 
-describe("chat reply completion", () => {
-  test("shows and saves a reply when a search is followed only by reasoning", async () => {
+describe("chat reply stream", () => {
+  test.each(["stop", "eof"] as const)(
+    "does not complete a search followed by an empty %s step",
+    async (ending) => {
+      const result = streamText({
+        model: new MockLanguageModelV4({
+          doStream: [
+            modelStep(
+              {
+                input: "{}",
+                toolCallId: "search",
+                toolName: "search_gmail",
+                type: "tool-call",
+              },
+              finish("tool-calls")
+            ),
+            modelStep(...(ending === "stop" ? [finish("stop")] : [])),
+          ],
+        }),
+        prompt: "Find the test message.",
+        stopWhen: isStepCount(2),
+        tools: {
+          search_gmail: tool({
+            execute: () => ({ ids: ["mail-1"] }),
+            inputSchema: z.object({}),
+          }),
+        },
+      });
+      const { interruption, savedMessage } = await readReply(result.stream);
+      expect(interruption).not.toBeNull();
+      expect(savedMessage?.parts).toContainEqual(
+        expect.objectContaining({
+          state: "output-available",
+          toolCallId: "search",
+        })
+      );
+    }
+  );
+
+  test("accepts a completed tool-only final step", async () => {
+    const result = streamText({
+      model: new MockLanguageModelV4({
+        doStream: modelStep(
+          {
+            input: "{}",
+            toolCallId: "search",
+            toolName: "search_gmail",
+            type: "tool-call",
+          },
+          finish("tool-calls")
+        ),
+      }),
+      prompt: "Find the test message.",
+      tools: {
+        search_gmail: tool({
+          execute: () => ({ ids: ["mail-1"] }),
+          inputSchema: z.object({}),
+        }),
+      },
+    });
+    const { interruption, savedMessage } = await readReply(result.stream);
+    expect(interruption).toBeNull();
+    expect(savedMessage?.parts).toContainEqual(
+      expect.objectContaining({
+        state: "output-available",
+        toolCallId: "search",
+      })
+    );
+  });
+
+  test("persists partial text and a cutoff status after the output limit", async () => {
+    const result = streamText({
+      model: new MockLanguageModelV4({
+        doStream: modelStep(
+          { id: "partial", type: "text-start" },
+          {
+            delta: "I found the first message, and",
+            id: "partial",
+            type: "text-delta",
+          },
+          { id: "partial", type: "text-end" },
+          finish("length")
+        ),
+      }),
+      prompt: "Find the test messages.",
+    });
+    const { interruption, savedMessage } = await readReply(result.stream);
+    expect(interruption).not.toBeNull();
+    const persisted = interruptedChatParts({
+      errorText: interruption ?? "",
+      persistedParts: [],
+      retryable: true,
+      streamedParts: savedMessage?.parts ?? [],
+    });
+    expect(persisted).toContainEqual(
+      expect.objectContaining({
+        text: "I found the first message, and",
+        type: "text",
+      })
+    );
+    expect(
+      persisted.find((part) => part.type === "data-chat-interruption")?.data
+    ).toMatch(/length limit/iu);
+    expect(
+      persisted.some((part) => part.type === "data-foreground-failed")
+    ).toBeFalsy();
+  });
+
+  test("keeps completed results and drops an unfinished tool draft", async () => {
     const result = streamText({
       model: new MockLanguageModelV4({
         doStream: [
           modelStep(
+            {
+              id: "search",
+              toolName: "search_gmail",
+              type: "tool-input-start",
+            },
+            { delta: "{}", id: "search", type: "tool-input-delta" },
+            { id: "search", type: "tool-input-end" },
+            {
+              input: "{}",
+              toolCallId: "search",
+              toolName: "search_gmail",
+              type: "tool-call",
+            },
+            finish("tool-calls")
+          ),
+          modelStep(
+            {
+              id: "unfinished",
+              toolName: "modify_mail_batch",
+              type: "tool-input-start",
+            },
+            {
+              delta: '{"ids":["mail',
+              id: "unfinished",
+              type: "tool-input-delta",
+            },
+            finish("length")
+          ),
+        ],
+      }),
+      prompt: "Trash all latency tests.",
+      stopWhen: isStepCount(2),
+      tools: {
+        modify_mail_batch: tool({
+          execute: ({ ids }) => ({ moved: ids }),
+          inputSchema: z.object({ ids: z.array(z.string()) }),
+        }),
+        search_gmail: tool({
+          execute: () => ({ ids: ["mail-1", "mail-2"] }),
+          inputSchema: z.object({}),
+        }),
+      },
+    });
+    const { interruption, savedMessage, visibleMessage } = await readReply(
+      result.stream
+    );
+
+    expect(interruption).toMatch(/length limit/iu);
+
+    expect(visibleMessage?.parts).toContainEqual(
+      expect.objectContaining({
+        state: "output-available",
+        toolCallId: "search",
+      })
+    );
+    expect(visibleMessage?.parts).not.toContainEqual(
+      expect.objectContaining({ toolCallId: "unfinished" })
+    );
+    expect(savedMessage?.parts).not.toContainEqual(
+      expect.objectContaining({ toolCallId: "unfinished" })
+    );
+  });
+
+  test("marks a completed search followed only by reasoning as interrupted", async () => {
+    const result = streamText({
+      model: new MockLanguageModelV4({
+        doStream: [
+          modelStep(
+            { id: "preamble", type: "text-start" },
+            {
+              delta: "I will search for those messages.",
+              id: "preamble",
+              type: "text-delta",
+            },
+            { id: "preamble", type: "text-end" },
             {
               input: '{"query":"latency tests"}',
               toolCallId: "search-1",
@@ -114,7 +302,11 @@ describe("chat reply completion", () => {
         }),
       },
     });
-    const { savedMessage, visibleMessage } = await readReply(result.stream);
+    const { interruption, savedMessage, visibleMessage } = await readReply(
+      result.stream
+    );
+
+    expect(interruption).not.toBeNull();
 
     expect(visibleMessage?.parts).toContainEqual(
       expect.objectContaining({
@@ -122,9 +314,17 @@ describe("chat reply completion", () => {
         type: "tool-search_gmail",
       })
     );
-    expect(visibleText(visibleMessage)).not.toHaveLength(0);
-    expect(visibleText(savedMessage)).toStrictEqual(
-      visibleText(visibleMessage)
+    expect(savedMessage?.parts).toContainEqual(
+      expect.objectContaining({
+        state: "output-available",
+        type: "tool-search_gmail",
+      })
+    );
+    expect(visibleText(visibleMessage)).toContain(
+      "I will search for those messages."
+    );
+    expect(visibleText(savedMessage)).toContain(
+      "I will search for those messages."
     );
   });
 
@@ -154,8 +354,9 @@ describe("chat reply completion", () => {
       stopWhen: isStepCount(2),
       tools: createChatSuggestionTool(),
     });
-    const { visibleMessage } = await readReply(result.stream);
+    const { interruption, visibleMessage } = await readReply(result.stream);
 
+    expect(interruption).toBeNull();
     expect(visibleText(visibleMessage)).toStrictEqual([answer]);
   });
 
@@ -195,8 +396,11 @@ describe("chat reply completion", () => {
           navigate: tool({ inputSchema: z.object({}) }),
         },
       });
-      const { savedMessage, visibleMessage } = await readReply(result.stream);
+      const { interruption, savedMessage, visibleMessage } = await readReply(
+        result.stream
+      );
 
+      expect(interruption).toBeNull();
       expect(visibleMessage?.parts).toContainEqual(
         expect.objectContaining({ state, type: `tool-${toolName}` })
       );

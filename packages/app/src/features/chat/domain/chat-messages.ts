@@ -1,4 +1,4 @@
-import { isChatToolPart } from "@quieter/app/features/chat/domain/chat-tools";
+import { isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
 import { z } from "zod";
 
@@ -61,11 +61,14 @@ export const getAssistantProgress = (
     const part = parts[index];
     if (part?.type === "text") {
       if (typeof part.text === "string" && part.text.trim() !== "") {
-        return null;
+        return part.state === "streaming" ? null : "Thinking…";
       }
       continue;
     }
-    if (part !== undefined && isChatToolPart(part)) {
+    if (part?.type === "step-start" || part?.type === "reasoning") {
+      return "Thinking…";
+    }
+    if (part !== undefined && isToolUIPart(part)) {
       return "Working with your mail…";
     }
   }

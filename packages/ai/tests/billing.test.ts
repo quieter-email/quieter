@@ -1,3 +1,4 @@
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type * as ReservationModule from "@quieter/billing/ai-reservation";
 import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { APICallError, wrapLanguageModel } from "ai";
@@ -405,6 +406,75 @@ describe("paid provider admission and settlement", () => {
     );
     expect(state.release).not.toHaveBeenCalled();
     expect(state.settle).not.toHaveBeenCalled();
+  });
+
+  test("repeated provider metadata cannot block text after its identity is durable", async () => {
+    let persistedGeneration: string | undefined;
+    state.generation.mockImplementation(async ({ generationId }) => {
+      if (persistedGeneration !== undefined) {
+        // oxlint-disable-next-line promise/avoid-new -- An extra database write must stall this stream regression.
+        await new Promise<void>(() => {});
+      }
+      persistedGeneration = generationId;
+    });
+    const chunks = [
+      {
+        choices: [{ delta: {}, finish_reason: null, index: 0 }],
+        model: "fixture",
+      },
+      ...["Hello", " world"].map((content) => ({
+        choices: [{ delta: { content }, finish_reason: null, index: 0 }],
+        id: "durable-generation",
+        model: "fixture",
+      })),
+      {
+        choices: [{ delta: {}, finish_reason: "stop", index: 0 }],
+        id: "durable-generation",
+        model: "fixture",
+        usage: {
+          completion_tokens: 2,
+          cost: 0.01,
+          prompt_tokens: 1,
+          total_tokens: 3,
+        },
+      },
+    ];
+    const provider = createOpenRouter({
+      apiKey: "fixture",
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          new Response(
+            `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")}data: [DONE]\n\n`,
+            { headers: { "content-type": "text/event-stream" } }
+          )
+        ),
+    });
+    const model = wrapLanguageModel({
+      middleware: createAiBillingMiddleware(billing, () => 0.01),
+      model: provider.chat("fixture"),
+    });
+    const { stream } = await model.doStream({ prompt: [] });
+    const parts = [];
+    const reader = stream.getReader();
+    while (true) {
+      const part = await reader.read();
+      if (part.done) {
+        break;
+      }
+      parts.push(part.value);
+    }
+    expect(persistedGeneration).toBe("durable-generation");
+    expect(
+      parts
+        .filter((part) => part.type === "text-delta")
+        .map((part) => part.delta)
+        .join("")
+    ).toBe("Hello world");
+    expect(parts).toContainEqual(expect.objectContaining({ type: "finish" }));
+    expect(state.settle).toHaveBeenCalledWith(
+      expect.objectContaining({ costUsd: 0.01 })
+    );
   });
 
   test("a confirmed initial streaming refusal releases before the SDK retries", async () => {

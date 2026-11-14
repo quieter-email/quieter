@@ -12,7 +12,11 @@ const isRenderablePart = (part: ChatMessagePart): boolean => {
   if (part.type === "step-start") {
     return true;
   }
-  return part.type.startsWith("tool-") && typeof part.toolCallId === "string";
+  return (
+    part.type.startsWith("tool-") &&
+    typeof part.toolCallId === "string" &&
+    part.state !== "input-streaming"
+  );
 };
 
 /**
@@ -24,31 +28,39 @@ export const toCanonicalTranscript = (
     id: string;
     parts: ChatMessagePart[];
     role: "assistant" | "system" | "user";
-  }[]
+  }[],
+  options: { includeInterruption?: boolean } = {}
 ): UIMessage[] =>
   messages.flatMap((message) => {
     if (message.role !== "assistant" && message.role !== "user") {
       return [];
     }
-    const parts = message.parts.filter(isRenderablePart).map((part) => {
-      if (
-        !part.type.startsWith("tool-") ||
-        (part.state !== "approval-requested" &&
-          part.state !== "approval-responded" &&
-          part.state !== "input-available" &&
-          part.state !== "input-streaming")
-      ) {
-        return part;
-      }
-      const { approval: _approval, ...withoutApproval } = part;
-      return {
-        ...withoutApproval,
-        errorText:
-          "The action has no confirmed result. Check the affected item before requesting it again.",
-        state: "output-error",
-      };
-    });
-    if (parts.length === 0) {
+    const parts = message.parts
+      .filter(
+        (part) =>
+          isRenderablePart(part) ||
+          (options.includeInterruption === true &&
+            part.type === "data-chat-interruption" &&
+            typeof part.data === "string")
+      )
+      .map((part) => {
+        if (
+          !part.type.startsWith("tool-") ||
+          (part.state !== "approval-requested" &&
+            part.state !== "approval-responded" &&
+            part.state !== "input-available")
+        ) {
+          return part;
+        }
+        const { approval: _approval, ...withoutApproval } = part;
+        return {
+          ...withoutApproval,
+          errorText:
+            "The action has no confirmed result. Check the affected item before requesting it again.",
+          state: "output-error",
+        };
+      });
+    if (!parts.some((part) => part.type !== "step-start")) {
       return [];
     }
     return [

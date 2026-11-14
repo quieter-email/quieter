@@ -1,54 +1,42 @@
-import { isForegroundClientToolName } from "@quieter/ai/chat-tools";
-import type { TextStreamPart, ToolSet } from "ai";
+import { isToolUIPart } from "ai";
+import type { FinishReason, TextStreamPart, ToolSet, UIMessage } from "ai";
 
-export const completeChatReply = <TOOLS extends ToolSet>() => {
-  const pending = new Set<string>();
-  let hasReply = false;
-  let interrupted = false;
+export const chatReplyInterruption = (
+  parts: UIMessage["parts"],
+  finishReason: FinishReason | undefined
+): string | null => {
+  if (finishReason === "length") {
+    return "The reply reached its length limit before it finished.";
+  }
+  if (finishReason === "content-filter") {
+    return "The reply was stopped before it finished.";
+  }
+  if (finishReason !== "stop" && finishReason !== "tool-calls") {
+    return "The reply was interrupted.";
+  }
+  const finalStep = parts.slice(
+    parts.findLastIndex((part) => part.type === "step-start") + 1
+  );
+  const lastResult = parts.findLast(
+    (part) =>
+      (isToolUIPart(part) && part.type !== "tool-suggest_replies") ||
+      (part.type === "text" && part.text.trim() !== "")
+  );
+  if (finalStep.some(isToolUIPart) || lastResult?.type === "text") {
+    return null;
+  }
+  return "The assistant stopped before finishing this reply.";
+};
 
-  return new TransformStream<TextStreamPart<TOOLS>, TextStreamPart<TOOLS>>({
+export const filterChatToolInputDrafts = <TOOLS extends ToolSet>() =>
+  new TransformStream<TextStreamPart<TOOLS>, TextStreamPart<TOOLS>>({
     transform(part, controller) {
-      if (part.type === "text-delta") {
-        hasReply ||= part.text.trim() !== "";
-      } else if (
-        part.type === "tool-call" &&
-        part.invalid !== true &&
-        isForegroundClientToolName(part.toolName)
+      if (
+        part.type !== "tool-input-start" &&
+        part.type !== "tool-input-delta" &&
+        part.type !== "tool-input-end"
       ) {
-        pending.add(part.toolCallId);
-      } else if (
-        part.type === "tool-approval-request" &&
-        part.isAutomatic !== true
-      ) {
-        pending.add(part.toolCall.toolCallId);
-      } else if (
-        (part.type === "tool-result" && part.preliminary !== true) ||
-        part.type === "tool-error" ||
-        part.type === "tool-output-denied"
-      ) {
-        pending.delete(part.toolCallId);
-        if (part.toolName !== "suggest_replies") {
-          hasReply = false;
-        }
-      } else if (part.type === "error" || part.type === "abort") {
-        interrupted = true;
-      } else if (
-        part.type === "finish" &&
-        !hasReply &&
-        !interrupted &&
-        pending.size === 0 &&
-        part.finishReason !== "error"
-      ) {
-        const id = crypto.randomUUID();
-        controller.enqueue({ id, type: "text-start" });
-        controller.enqueue({
-          id,
-          text: "I couldn't finish this reply. You can ask me to continue.",
-          type: "text-delta",
-        });
-        controller.enqueue({ id, type: "text-end" });
+        controller.enqueue(part);
       }
-      controller.enqueue(part);
     },
   });
-};

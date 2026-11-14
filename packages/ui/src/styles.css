@@ -345,6 +345,7 @@
   --color-secondary-fg: var(--secondary-fg);
   --color-muted: var(--muted);
   --color-muted-fg: var(--muted-fg);
+  --color-disclosure-fg: color-mix(in oklch, var(--fg), var(--muted-fg));
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
   --color-destructive: var(--destructive);

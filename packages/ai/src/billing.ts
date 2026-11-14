@@ -224,6 +224,7 @@ export const createAiBillingMiddleware = (
       onProviderStart?.();
       const result = await doStream();
       let providerStarted = false;
+      let generationRecorded = false;
       return {
         ...result,
         stream: result.stream.pipeThrough(
@@ -247,11 +248,16 @@ export const createAiBillingMiddleware = (
               ) {
                 providerStarted = true;
               }
-              if (part.type === "response-metadata") {
+              if (
+                part.type === "response-metadata" &&
+                part.id &&
+                !generationRecorded
+              ) {
                 await recordAiCreditProviderGeneration({
                   generationId: part.id,
                   reservationId,
                 });
+                generationRecorded = true;
               }
               if (part.type === "finish") {
                 const costUsd = readCost(part.providerMetadata);
