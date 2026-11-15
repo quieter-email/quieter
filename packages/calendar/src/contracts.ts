@@ -46,6 +46,7 @@ export const calendarEventTimeSchema = z.discriminatedUnion("kind", [
       endDate: calendarDateSchema,
       kind: z.literal("all-day"),
       startDate: calendarDateSchema,
+      timeZone: calendarTimeZoneSchema.optional(),
     })
     .strict()
     .refine((value) => value.endDate > value.startDate, {

@@ -13,8 +13,13 @@ import {
   calendarUpdateInputSchema,
   calendarUpdateColorInputSchema,
 } from "@quieter/calendar";
+import {
+  calendarAvailabilityInputSchema,
+  calendarAvailabilityResultSchema,
+} from "@quieter/calendar/availability";
 import { z } from "zod";
 
+import { proposeCalendarAvailabilityForUser } from "../calendar/availability";
 import { importCalendarInvitationAttachmentForUser } from "../calendar/invitation-import";
 import {
   createCalendarEventForUser,
@@ -44,6 +49,18 @@ export const calendarRouter = {
     .handler(
       async ({ context }) =>
         await listCalendarAccountsForUser({
+          signal: context.signal,
+          userId: context.userId,
+        })
+    ),
+
+  availability: protectedProcedure
+    .input(calendarAvailabilityInputSchema)
+    .output(calendarAvailabilityResultSchema)
+    .handler(
+      async ({ context, input }) =>
+        await proposeCalendarAvailabilityForUser({
+          ...input,
           signal: context.signal,
           userId: context.userId,
         })
