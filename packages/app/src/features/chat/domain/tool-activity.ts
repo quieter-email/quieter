@@ -336,6 +336,13 @@ const operations: Record<
     pending: "Searching your mail…",
     subject: "Mail search",
   },
+  search_semantic_mail: {
+    category: "search",
+    complete: "Searched your mail by meaning",
+    failed: "Couldn't search your mail",
+    pending: "Searching your mail by meaning…",
+    subject: "Mail search",
+  },
   send_mail: {
     category: "draft",
     complete: "Sent your email",
@@ -353,6 +360,11 @@ const operations: Record<
 };
 
 const mailReadActivitySchema = z.object({
+  coverage: z
+    .object({
+      complete: z.boolean(),
+    })
+    .optional(),
   messages: z.array(
     z.object({
       from: z.string().optional(),
@@ -362,6 +374,7 @@ const mailReadActivitySchema = z.object({
     })
   ),
   nextPageToken: z.string().optional(),
+  retainedOnly: z.boolean().optional(),
   status: z.literal("success"),
   subject: z.string().optional(),
 });
@@ -563,17 +576,24 @@ const describeActivity = (
       break;
     }
     case "search_mail":
+    case "search_semantic_mail":
     case "read_mail_thread": {
       const result = mailReadActivitySchema.safeParse(part.output);
       if (result.success) {
         activity.phase = "complete";
         activity.title =
-          name === "search_mail" && result.data.messages.length === 0
+          name !== "read_mail_thread" && result.data.messages.length === 0
             ? "No matching emails"
             : operation.complete;
         activity.context = [
           ...(result.data.subject ? [result.data.subject] : []),
           ...(result.data.nextPageToken ? ["More matches are available."] : []),
+          ...(result.data.coverage?.complete === false
+            ? ["Search coverage is incomplete."]
+            : []),
+          ...(result.data.retainedOnly === true
+            ? ["Only retained mail was searched."]
+            : []),
         ];
         activity.sources = mailSources(result.data.messages);
       }
