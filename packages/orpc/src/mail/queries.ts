@@ -59,12 +59,18 @@ import type { MailInputs } from "./inputs";
 
 const hydrateGmailMessageMetadata = async <T extends MessageListItem>(
   mailboxId: string,
-  messages: T[]
+  messages: T[],
+  responseHeaders?: Headers
 ) => {
+  const startedAt = performance.now();
   const [importance, unsubscribe] = await Promise.all([
     hydrateMailImportance(mailboxId, messages),
     hydrateUnsubscribeStatus(mailboxId, messages),
   ]);
+  responseHeaders?.append(
+    "Server-Timing",
+    `mail_metadata;dur=${(performance.now() - startedAt).toFixed(1)}`
+  );
   return importance.map((message, index) => {
     const unsubscribeStatus = unsubscribe[index]?.unsubscribeStatus;
     return unsubscribeStatus === undefined
@@ -328,7 +334,8 @@ export const queriesMailOperations = {
             ...thread,
             messages: await hydrateGmailMessageMetadata(
               input.mailboxId,
-              thread.messages
+              thread.messages,
+              context.resHeaders
             ),
           };
     const capture = (async () => {
@@ -516,7 +523,8 @@ export const queriesMailOperations = {
         : undefined,
       messages: await hydrateGmailMessageMetadata(
         input.mailboxId,
-        page.messages
+        page.messages,
+        context.resHeaders
       ),
     };
   },
@@ -581,6 +589,15 @@ export const queriesMailOperations = {
     );
     const appChanged =
       token?.groups?.revision !== String(selectedMailbox.contentRevision);
+    if (token !== null && appChanged) {
+      return {
+        hasChanges: true,
+        refreshFirstPage: true,
+        removedMessageIds: [],
+        requiresFullRefresh: true,
+        updatedMessages: [],
+      };
+    }
     const delta = await callGmail(
       context,
       input.mailboxId,
@@ -601,7 +618,8 @@ export const queriesMailOperations = {
       requiresFullRefresh: delta.requiresFullRefresh || appChanged,
       updatedMessages: await hydrateGmailMessageMetadata(
         input.mailboxId,
-        delta.updatedMessages
+        delta.updatedMessages,
+        context.resHeaders
       ),
     };
   },

@@ -23,7 +23,12 @@ export type ProtectedContext = OrpcContext & {
 export const protectedProcedure = base.use(
   async ({ context, errors, next }) => {
     const headers = getRequestHeaders(context);
+    const sessionStartedAt = performance.now();
     const session = await getSessionWithOrganization(headers);
+    context.resHeaders?.append(
+      "Server-Timing",
+      `session;dur=${(performance.now() - sessionStartedAt).toFixed(1)}`
+    );
 
     if (session?.user === undefined || session.session === undefined) {
       throw errors.UNAUTHORIZED();

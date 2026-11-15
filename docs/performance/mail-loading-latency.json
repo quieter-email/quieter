@@ -1,0 +1,215 @@
+{
+  "date": "2026-11-15",
+  "environment": "Local Cloudflare development Worker and approved quieter_dev database, sequential requests on an 8-core host. No production deployment.",
+  "baselineCommit": "42af36ba",
+  "httpMailboxList": {
+    "scenario": "Authenticated demo mailbox list, five alternating baseline/candidate pairs after one untimed warmup per variant. Same browser session, runtime, database and response shape.",
+    "results": {
+      "baseline": {
+        "samples": 5,
+        "medianMs": 289.8,
+        "minMs": 255.6,
+        "maxMs": 296.4
+      },
+      "candidate": {
+        "samples": 5,
+        "medianMs": 249.9,
+        "minMs": 232.3,
+        "maxMs": 264.2
+      }
+    },
+    "samples": [
+      {
+        "pair": 1,
+        "variant": "baseline",
+        "durationMs": 290,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=81.0, rpc;dur=213.0"
+      },
+      {
+        "pair": 1,
+        "variant": "candidate",
+        "durationMs": 254.89999985694885,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=39.0, rpc;dur=174.0"
+      },
+      {
+        "pair": 2,
+        "variant": "baseline",
+        "durationMs": 255.59999990463257,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=71.0, rpc;dur=188.0"
+      },
+      {
+        "pair": 2,
+        "variant": "candidate",
+        "durationMs": 264.2000000476837,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=43.0, rpc;dur=185.0"
+      },
+      {
+        "pair": 3,
+        "variant": "baseline",
+        "durationMs": 289.7999999523163,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=77.0, rpc;dur=214.0"
+      },
+      {
+        "pair": 3,
+        "variant": "candidate",
+        "durationMs": 249.89999985694885,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=38.0, rpc;dur=174.0"
+      },
+      {
+        "pair": 4,
+        "variant": "baseline",
+        "durationMs": 281.30000019073486,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=76.0, rpc;dur=207.0"
+      },
+      {
+        "pair": 4,
+        "variant": "candidate",
+        "durationMs": 232.29999995231628,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=34.0, rpc;dur=157.0"
+      },
+      {
+        "pair": 5,
+        "variant": "baseline",
+        "durationMs": 296.40000009536743,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=80.0, rpc;dur=218.0"
+      },
+      {
+        "pair": 5,
+        "variant": "candidate",
+        "durationMs": 247.6999998092651,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=38.0, rpc;dur=171.0"
+      }
+    ],
+    "validation": "Every response returned HTTP 200 with one non-empty mailbox group. Session timing median fell from 77ms to 38ms.",
+    "limiter": "Session provisioning round trips removed; remaining mailbox data reads and local Worker transport dominate."
+  },
+  "syncReconciliationDecision": {
+    "scenario": "Real connected development Gmail mailbox. Current provider history, deliberately mismatched valid app revision. Five alternating pairs after a warmup pair. Times include mailbox authorization, exclude HTTP/auth and the subsequent list fetch.",
+    "results": {
+      "baseline": {
+        "samples": 5,
+        "medianMs": 197.08,
+        "minMs": 191.44,
+        "maxMs": 202.42
+      },
+      "candidate": {
+        "samples": 5,
+        "medianMs": 14.07,
+        "minMs": 13.68,
+        "maxMs": 15.23
+      }
+    },
+    "samples": [
+      {
+        "pair": 1,
+        "variant": "baseline",
+        "durationMs": 202.4161469999999,
+        "requests": 1,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 1,
+        "variant": "candidate",
+        "durationMs": 14.23896300000024,
+        "requests": 0,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 2,
+        "variant": "baseline",
+        "durationMs": 197.0805849999997,
+        "requests": 1,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 2,
+        "variant": "candidate",
+        "durationMs": 13.936686000000009,
+        "requests": 0,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 3,
+        "variant": "baseline",
+        "durationMs": 191.43579999999974,
+        "requests": 1,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 3,
+        "variant": "candidate",
+        "durationMs": 15.23016299999972,
+        "requests": 0,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 4,
+        "variant": "baseline",
+        "durationMs": 193.37333499999977,
+        "requests": 1,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 4,
+        "variant": "candidate",
+        "durationMs": 14.069013999999697,
+        "requests": 0,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 5,
+        "variant": "baseline",
+        "durationMs": 202.30917599999975,
+        "requests": 1,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 5,
+        "variant": "candidate",
+        "durationMs": 13.67812099999992,
+        "requests": 0,
+        "errors": 0,
+        "fullRefresh": true
+      }
+    ],
+    "validation": "Every result required full refresh. Baseline made one successful Gmail request per sample; candidate made none. Both retained mailbox authorization.",
+    "limiter": "Baseline waits for a Gmail delta it then discards; candidate waits only for mailbox authorization."
+  },
+  "limitations": [
+    "Development region and transport do not represent production end-to-end latency.",
+    "The original five-second uncached thread delay was not reproduced. Five direct development thread reads had median 246ms and all returned a body.",
+    "The sync result measures the decision before refreshing rows, not total inbox refresh time.",
+    "HTTP measurements use development warm modules and synthetic mailbox metadata, not real Gmail thread rendering.",
+    "The full-refresh paging algorithm, calendar mutation optimism and provider polling cadence are unchanged.",
+    "Hidden tabs now process events while runnable. Frozen pages and closed browsers require catch-up when reopened."
+  ]
+}

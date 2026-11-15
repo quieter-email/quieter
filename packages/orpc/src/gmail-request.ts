@@ -19,6 +19,7 @@ export const callGmail = async <T>(
   options?: { kind: "send" }
 ): Promise<T> => {
   let operationStarted = false;
+  const authorizationStartedAt = performance.now();
   try {
     return await runAuthorizedGmailMailbox(
       {
@@ -27,8 +28,22 @@ export const callGmail = async <T>(
         userId: context.userId,
       },
       async (token) => {
+        if (!operationStarted) {
+          context.resHeaders?.append(
+            "Server-Timing",
+            `mail_authorization;dur=${(performance.now() - authorizationStartedAt).toFixed(1)}`
+          );
+        }
         operationStarted = true;
-        return await operation(token, context.signal);
+        const providerStartedAt = performance.now();
+        try {
+          return await operation(token, context.signal);
+        } finally {
+          context.resHeaders?.append(
+            "Server-Timing",
+            `mail_provider;dur=${(performance.now() - providerStartedAt).toFixed(1)}`
+          );
+        }
       }
     );
   } catch (error) {
