@@ -27,6 +27,36 @@ describe("mail content persistence", () => {
     vi.unstubAllGlobals();
   });
 
+  test("keeps the last complete persisted inbox while a progressive prefix has withheld its continuation", async () => {
+    const client = new QueryClient();
+    setQueryPersistenceUser(crypto.randomUUID(), client);
+    const key = ["messages", "mailbox", "inbox", ""];
+    client.setQueryData(key, {
+      pageParams: [undefined],
+      pages: [
+        {
+          historyId: "old",
+          messages: [{ id: "cached" }],
+          nextPageToken: "old-2",
+        },
+      ],
+    });
+    await queryPersister.persistQueryByKey(key, client);
+    client.setQueryData(key, {
+      pageParams: [undefined],
+      pages: [
+        { historyId: "old", messages: [{ id: "fresh" }], refreshing: true },
+      ],
+    });
+    await queryPersister.persistQueryByKey(key, client);
+    await expect(
+      queryPersister.retrieveQuery(JSON.stringify(key))
+    ).resolves.toMatchObject({
+      pages: [{ messages: [{ id: "cached" }], nextPageToken: "old-2" }],
+    });
+    client.clear();
+  });
+
   test("a login after committed logout survives the sender completing", async () => {
     const client = new QueryClient();
     setQueryPersistenceUser("one", client, crypto.randomUUID());

@@ -32,3 +32,11 @@ export const loadSnippetWorkspace = createPreloadableWorkspaceLoader(
     return { default: Component };
   }
 );
+
+export const loadCalendarWorkspace = createPreloadableWorkspaceLoader(
+  async () => {
+    const { CalendarWorkspace: Component } =
+      await import("@quieter/app/features/calendar/components/calendar-workspace");
+    return { default: Component };
+  }
+);

@@ -1,5 +1,4 @@
 import { mailCache } from "@quieter/app/lib/mail-cache";
-import { pendingMailMutations } from "@quieter/app/lib/mail-mutation-state";
 import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
@@ -24,56 +23,211 @@ export const subscribeMailboxAccessLoss = (
     listeners.delete(listener);
   };
 };
-const listSchema = z.object({
-  pages: z.array(
-    z.object({
-      messages: z.array(z.object({ threadId: z.string().optional() })),
-    })
-  ),
-});
+export type ThreadPreloadCandidate = {
+  mailboxId: string;
+  threadId: string;
+  expectedMessage: NonNullable<
+    Parameters<typeof getThreadWithDetailsOptions>[3]
+  >;
+};
+
+type ThreadPreloader = {
+  update: (candidates: readonly ThreadPreloadCandidate[]) => void;
+  intent: (candidate: ThreadPreloadCandidate | null) => void;
+  dispose: () => void;
+};
+const preloaders = new WeakMap<
+  QueryClient,
+  (owner: symbol) => ThreadPreloader
+>();
+
+const preloadAttachments = new WeakMap<QueryClient, Set<() => void>>();
+
+export const attachThreadPreloader = (client: QueryClient): ThreadPreloader => {
+  const attachmentOwner = Symbol("thread-preloader");
+  let current: ThreadPreloader | undefined;
+  let latest: readonly ThreadPreloadCandidate[] = [];
+  const connect = () => {
+    current?.dispose();
+    current = preloaders.get(client)?.(attachmentOwner);
+    current?.update(latest);
+  };
+  const attachments = preloadAttachments.get(client) ?? new Set();
+  attachments.add(connect);
+  preloadAttachments.set(client, attachments);
+  connect();
+  return {
+    dispose: () => {
+      attachments.delete(connect);
+      current?.dispose();
+      latest = [];
+    },
+    intent: (candidate) => {
+      current?.intent(candidate);
+    },
+    update: (candidates) => {
+      latest = candidates.slice(0, 10);
+      current?.update(latest);
+    },
+  };
+};
 
 export const bindMailCache = (client: QueryClient) => {
   let disposed = false;
   let pinned = new Set<string>();
-  let prefetching = false;
-  const queued = new Map<string, { mailboxId: string; threadId: string }>();
-
-  const prefetch = async () => {
+  let owner: symbol | undefined;
+  let candidates = new Map<string, ThreadPreloadCandidate>();
+  let intent: ThreadPreloadCandidate | null = null;
+  let intentTimer: ReturnType<typeof setTimeout> | undefined;
+  let active = 0;
+  let scheduled = false;
+  const attempted = new Set<string>();
+  const pump = async () => {
+    scheduled = false;
     if (
-      prefetching ||
       disposed ||
+      typeof document === "undefined" ||
+      typeof navigator === "undefined" ||
       document.visibilityState !== "visible" ||
       !navigator.onLine
     ) {
       return;
     }
-    prefetching = true;
-    try {
-      while (
-        queued.size > 0 &&
-        document.visibilityState === "visible" &&
-        navigator.onLine
-      ) {
-        if (disposed) {
-          break;
-        }
-        const batch = [...queued.entries()].slice(0, 2);
-        for (const [key] of batch) {
-          queued.delete(key);
-        }
-        await Promise.allSettled(
-          batch.map(
-            async ([, { mailboxId, threadId }]) =>
-              await client.query(
-                getThreadWithDetailsOptions(mailboxId, threadId)
+    const connection =
+      typeof navigator !== "undefined" && "connection" in navigator
+        ? navigator.connection
+        : null;
+    const constrained =
+      typeof connection === "object" &&
+      connection !== null &&
+      (("saveData" in connection && connection.saveData === true) ||
+        ("effectiveType" in connection &&
+          (connection.effectiveType === "slow-2g" ||
+            connection.effectiveType === "2g")));
+    const fetching = client.isFetching({ queryKey: ["message-thread"] });
+    if (active >= 3 || fetching >= 3) {
+      return;
+    }
+    const candidate =
+      intent ??
+      (!constrained && active < 2 && fetching === active
+        ? [...candidates.values()].find(
+            (entry) =>
+              !attempted.has(
+                JSON.stringify([
+                  entry.mailboxId,
+                  entry.threadId,
+                  entry.expectedMessage,
+                ])
               )
           )
-        );
-      }
-    } finally {
-      prefetching = false;
+        : undefined);
+    if (!candidate) {
+      return;
+    }
+    if (candidate === intent) {
+      intent = null;
+    }
+    const candidateKey = JSON.stringify([
+      candidate.mailboxId,
+      candidate.threadId,
+      candidate.expectedMessage,
+    ]);
+    if (candidates.has(candidateKey)) {
+      attempted.add(candidateKey);
+    }
+    active += 1;
+    // oxlint-disable-next-line no-use-before-define -- Fill available capacity through the same queue.
+    schedule();
+    await Promise.allSettled([
+      client.query(
+        getThreadWithDetailsOptions(
+          candidate.mailboxId,
+          candidate.threadId,
+          true,
+          candidate.expectedMessage
+        )
+      ),
+    ]);
+    active -= 1;
+    // oxlint-disable-next-line no-use-before-define -- Completion schedules the same bounded queue.
+    schedule();
+  };
+  const schedule = () => {
+    if (!scheduled && !disposed) {
+      scheduled = true;
+      queueMicrotask(() => {
+        void pump();
+      });
     }
   };
+  const attach = (nextOwner: symbol): ThreadPreloader => {
+    owner = nextOwner;
+    candidates.clear();
+    attempted.clear();
+    intent = null;
+    clearTimeout(intentTimer);
+    return {
+      dispose: () => {
+        if (owner === nextOwner) {
+          owner = undefined;
+          candidates.clear();
+          attempted.clear();
+          intent = null;
+          clearTimeout(intentTimer);
+        }
+      },
+      intent: (candidate) => {
+        if (owner !== nextOwner || disposed) {
+          return;
+        }
+        clearTimeout(intentTimer);
+        intent = null;
+        if (candidate) {
+          intentTimer = setTimeout(() => {
+            intent = candidate;
+            schedule();
+          }, 200);
+        }
+      },
+      update: (next) => {
+        if (owner !== nextOwner || disposed) {
+          return;
+        }
+        candidates = new Map(
+          next
+            .slice(0, 10)
+            .map((entry) => [
+              JSON.stringify([
+                entry.mailboxId,
+                entry.threadId,
+                entry.expectedMessage,
+              ]),
+              entry,
+            ])
+        );
+        for (const key of attempted) {
+          if (!candidates.has(key)) {
+            attempted.delete(key);
+          }
+        }
+        schedule();
+      },
+    };
+  };
+  preloaders.set(client, attach);
+  for (const connect of preloadAttachments.get(client) ?? []) {
+    connect();
+  }
+  globalThis.document?.addEventListener("visibilitychange", schedule);
+  globalThis.window?.addEventListener("online", schedule);
+  const connection =
+    typeof navigator !== "undefined" && "connection" in navigator
+      ? navigator.connection
+      : null;
+  if (connection instanceof EventTarget) {
+    connection.addEventListener("change", schedule);
+  }
 
   const unsubscribe = client.getQueryCache().subscribe((event) => {
     const rawKey: unknown = event.query.queryKey;
@@ -101,6 +255,13 @@ export const bindMailCache = (client: QueryClient) => {
             z.object({ resource: z.literal("mailbox") }).safeParse(error.data)
               .success))
       ) {
+        for (const [candidateKey, candidate] of candidates) {
+          if (candidate.mailboxId === mailboxId) {
+            candidates.delete(candidateKey);
+          }
+        }
+        clearTimeout(intentTimer);
+        intent = null;
         for (const listener of accessLossListeners.get(client) ?? []) {
           listener({ mailboxId });
         }
@@ -154,37 +315,21 @@ export const bindMailCache = (client: QueryClient) => {
       }
       pinned = next;
     }
-    if (
-      event.type !== "updated" ||
-      event.action.type !== "success" ||
-      key[0] !== "messages" ||
-      key.length !== 4 ||
-      key[3] !== "" ||
-      typeof mailboxId !== "string" ||
-      !event.query.isActive()
-    ) {
-      return;
+    if (key[0] === "message-thread") {
+      schedule();
     }
-    if (pendingMailMutations.get(client)?.has(mailboxId) === true) {
-      return;
-    }
-    const parsed = listSchema.safeParse(event.query.state.data);
-    if (!parsed.success) {
-      return;
-    }
-    for (const message of parsed.data.pages[0]?.messages.slice(0, 5) ?? []) {
-      if (message.threadId) {
-        queued.set(JSON.stringify([mailboxId, message.threadId]), {
-          mailboxId,
-          threadId: message.threadId,
-        });
-      }
-    }
-    void prefetch();
   });
   return () => {
     disposed = true;
-    queued.clear();
+    candidates.clear();
+    intent = null;
+    clearTimeout(intentTimer);
+    preloaders.delete(client);
+    globalThis.document?.removeEventListener("visibilitychange", schedule);
+    globalThis.window?.removeEventListener("online", schedule);
+    if (connection instanceof EventTarget) {
+      connection.removeEventListener("change", schedule);
+    }
     unsubscribe();
     for (const key of pinned) {
       mailCache.protect(key, false);

@@ -4,6 +4,7 @@ import {
   mailMutationCoordinators,
   pendingMailMutations,
 } from "@quieter/app/lib/mail-mutation-state";
+import { isMessagesQueryData } from "@quieter/app/lib/mail/inbox-query/data";
 import { experimental_createQueryPersister } from "@tanstack/query-persist-client-core";
 import type { PersistedQuery } from "@tanstack/query-persist-client-core";
 import { notifyManager } from "@tanstack/react-query";
@@ -146,6 +147,9 @@ const createPersister = (generation: number) => {
           ? query.queryKey[2]
           : query.queryKey[1];
       if (
+        (query.queryKey[0] === "messages" &&
+          isMessagesQueryData(query.state.data) &&
+          query.state.data.pages[0]?.refreshing === true) ||
         generation !== persistenceGeneration ||
         (query.queryKey[0] === "calendar" &&
           query.queryKey[1] !== persistenceUser) ||
@@ -226,7 +230,7 @@ export const queryPersister: ReturnType<
       context,
       query
     );
-    if (restored) {
+    if (restored && query.meta?.ownsMailLiveSync !== true) {
       notifyManager.schedule(() => {
         if (
           delegate === currentPersister &&
@@ -290,6 +294,7 @@ const updatePersistenceOwner = (
 ) => {
   persistenceInitialized = true;
   if (persistenceClient) {
+    invalidateQuerySession(persistenceClient);
     mailMutationCoordinators.get(persistenceClient)?.dispose();
     deferredMailPersistence.delete(persistenceClient);
   }

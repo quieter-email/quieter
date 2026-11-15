@@ -34,6 +34,7 @@ import { shouldRetryOrpcError } from "@quieter/app/lib/orpc-errors";
 import {
   persistQueryByKey,
   queryPersister,
+  subscribeQuerySessionInvalidation,
 } from "@quieter/app/lib/query-persister";
 import {
   isManagedSandboxMailboxId,
@@ -63,7 +64,6 @@ const messagesQueryPersister: QueryPersister<
 
 type RefreshLoadedMessagesPagesOptions = {
   maxPageCount?: number;
-  preserveUnrefreshedPages?: boolean;
   signal?: AbortSignal;
   preserveHistoryId?: string;
   refreshThreads?: boolean;
@@ -107,74 +107,202 @@ const fetchMessagesPage = async (
   );
 };
 
-export const refreshLoadedMessagesPages = async (
+type RefreshOperation = {
+  signal: AbortSignal;
+  assertCurrent: () => void;
+  finish: () => void;
+  restorePagination?: () => void;
+  cancel: () => void;
+};
+
+const refreshOperations = new WeakMap<
+  QueryClient,
+  Map<string, RefreshOperation>
+>();
+
+const beginRefresh = (
+  queryClient: QueryClient,
+  queryKey: MessagesQueryKey,
+  signal?: AbortSignal
+): RefreshOperation => {
+  const existing = refreshOperations.get(queryClient);
+  const operations = existing ?? new Map<string, RefreshOperation>();
+  if (!existing) {
+    refreshOperations.set(queryClient, operations);
+    subscribeQuerySessionInvalidation(queryClient, () => {
+      for (const operation of operations.values()) {
+        operation.cancel();
+      }
+      operations.clear();
+    });
+  }
+  const key = JSON.stringify(queryKey);
+  operations.get(key)?.cancel();
+  const controller = new AbortController();
+  const query = queryClient
+    .getQueryCache()
+    .build<unknown, Error, unknown>(queryClient, { queryKey });
+  const operation: RefreshOperation = {
+    assertCurrent: () => {
+      operation.signal.throwIfAborted();
+      if (
+        operations.get(key) !== operation ||
+        queryClient.getQueryCache().get(query.queryHash) !== query
+      ) {
+        throw new DOMException("Mail refresh superseded", "AbortError");
+      }
+    },
+    cancel: () => {
+      operation.restorePagination?.();
+      operation.restorePagination = undefined;
+      controller.abort();
+    },
+    finish: () => {
+      if (operations.get(key) === operation) {
+        operation.restorePagination?.();
+        operations.delete(key);
+      }
+    },
+    signal: signal
+      ? AbortSignal.any([signal, controller.signal])
+      : controller.signal,
+  };
+  operations.set(key, operation);
+  return operation;
+};
+
+const refreshMessagesPages = async (
   queryClient: QueryClient,
   mailboxId: string,
   mailbox: MailboxCategory,
-  searchQuery?: string | null,
-  options: RefreshLoadedMessagesPagesOptions = {}
+  searchQuery: string | null | undefined,
+  options: RefreshLoadedMessagesPagesOptions,
+  operation: RefreshOperation
 ) => {
   const messagesQueryKey = getMessagesQueryKey(mailboxId, mailbox, searchQuery);
+  await queryClient.cancelQueries({ exact: true, queryKey: messagesQueryKey });
+  operation.assertCurrent();
+  const messagesQuery = queryClient
+    .getQueryCache()
+    .find({ exact: true, queryKey: messagesQueryKey });
   const currentMessages =
     queryClient.getQueryData<MessagesQueryData>(messagesQueryKey);
   const loadedPageCount = Math.max(currentMessages?.pages.length ?? 0, 1);
-  const maxPageCount = Math.max(
-    1,
-    options.maxPageCount ?? GMAIL_MAILBOX_REFRESH_PAGE_LIMIT
+  const refreshedPageCount = Math.min(
+    loadedPageCount,
+    Math.max(1, options.maxPageCount ?? GMAIL_MAILBOX_REFRESH_PAGE_LIMIT)
   );
-  const refreshedPageCount = Math.min(loadedPageCount, maxPageCount);
   const refreshedPages: ListMessagesPageResult[] = [];
   const refreshedPageParams: (string | undefined)[] = [];
+  const oldHistoryId =
+    options.preserveHistoryId ?? currentMessages?.pages[0]?.historyId;
+  let pageToken: string | undefined;
 
-  const refreshNextPage = async (pageIndex: number, pageToken?: string) => {
-    if (pageIndex >= refreshedPageCount) {
-      return;
+  const publish = (complete: boolean) => {
+    operation.assertCurrent();
+    const pages = refreshedPages.map((page, index) => ({
+      ...page,
+      ...(index === 0 && !complete ? { historyId: oldHistoryId } : {}),
+      ...(index === refreshedPages.length - 1 && !complete
+        ? { nextPageToken: undefined }
+        : {}),
+    }));
+    if (options.preserveHistoryId !== undefined) {
+      pages[0].historyId = options.preserveHistoryId;
     }
-
-    refreshedPageParams.push(pageToken);
-    const refreshedPage = await fetchMessagesPage(
-      mailboxId,
-      mailbox,
-      pageToken,
-      searchQuery,
-      options.signal
+    const enriched = mergeRefreshedMailboxPagesIntoQueryData(
+      currentMessages,
+      pages,
+      refreshedPageParams
     );
-
-    refreshedPages.push(refreshedPage);
-    if (!refreshedPage.nextPageToken) {
-      return;
-    }
-    await refreshNextPage(pageIndex + 1, refreshedPage.nextPageToken);
+    updateMailQueryFromServer<MessagesQueryData>(
+      queryClient,
+      messagesQueryKey,
+      (data) => {
+        const merged = mergeRefreshedMailboxPagesIntoQueryData(
+          data,
+          enriched.pages,
+          refreshedPageParams
+        );
+        return {
+          ...merged,
+          pages: merged.pages.map((page, index) =>
+            index === 0
+              ? { ...page, refreshing: complete ? undefined : true }
+              : page
+          ),
+        };
+      }
+    );
   };
 
-  await refreshNextPage(0);
-  options.signal?.throwIfAborted();
-  updateMailQueryFromServer<MessagesQueryData>(
-    queryClient,
-    messagesQueryKey,
-    (data) =>
-      mergeRefreshedMailboxPagesIntoQueryData(
-        data,
-        options.preserveHistoryId === undefined
-          ? refreshedPages
-          : refreshedPages.map((page, index) =>
-              index === 0
-                ? { ...page, historyId: options.preserveHistoryId }
-                : page
-            ),
-        refreshedPageParams,
-        {
-          preserveUnrefreshedPages:
-            options.preserveUnrefreshedPages ??
-            refreshedPageCount < loadedPageCount,
+  operation.restorePagination = () => {
+    if (
+      queryClient
+        .getQueryCache()
+        .find({ exact: true, queryKey: messagesQueryKey }) !== messagesQuery
+    ) {
+      return;
+    }
+    updateMailQueryFromServer<MessagesQueryData>(
+      queryClient,
+      messagesQueryKey,
+      (data) => {
+        if (!data?.pages[0]?.refreshing) {
+          return data;
         }
-      )
-  );
+        return {
+          ...data,
+          pages: data.pages.map((page, index) => ({
+            ...page,
+            ...(index === 0 ? { refreshing: undefined } : {}),
+            ...(index === data.pages.length - 1
+              ? { nextPageToken: pageToken }
+              : {}),
+          })),
+        };
+      }
+    );
+  };
+  try {
+    for (let pageIndex = 0; pageIndex < refreshedPageCount; pageIndex += 1) {
+      operation.assertCurrent();
+      const refreshedPage = await fetchMessagesPage(
+        mailboxId,
+        mailbox,
+        pageToken,
+        searchQuery,
+        operation.signal
+      );
+      operation.assertCurrent();
+      if (pageIndex === 0) {
+        await queryClient.cancelQueries({
+          exact: true,
+          queryKey: messagesQueryKey,
+        });
+        operation.assertCurrent();
+      }
+      refreshedPageParams.push(pageToken);
+      refreshedPages.push(refreshedPage);
+      pageToken = refreshedPage.nextPageToken ?? undefined;
+      const complete = !pageToken || pageIndex + 1 === refreshedPageCount;
+      publish(complete);
+      if (complete) {
+        operation.restorePagination = undefined;
+        break;
+      }
+    }
+  } catch (error) {
+    operation.restorePagination?.();
+    operation.restorePagination = undefined;
+    throw error;
+  }
   const touchedThreadQueryKeys = new Map<
     string,
     ReturnType<typeof getThreadQueryKey>
   >();
   for (const page of refreshedPages) {
+    operation.assertCurrent();
     for (const message of page.messages) {
       const threadQueryKey = getThreadQueryKey(mailboxId, message.threadId);
       if (queryClient.getQueryData(threadQueryKey) === undefined) {
@@ -188,6 +316,7 @@ export const refreshLoadedMessagesPages = async (
       );
     }
   }
+  operation.assertCurrent();
   await Promise.all([
     persistQueryByKey(messagesQueryKey, queryClient),
     ...Array.from(touchedThreadQueryKeys.values(), async (threadQueryKey) => {
@@ -205,8 +334,34 @@ export const refreshLoadedMessagesPages = async (
         ]
       : []),
   ]);
-  options.signal?.throwIfAborted();
+  operation.assertCurrent();
   return refreshedPages[0];
+};
+
+export const refreshLoadedMessagesPages = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  mailbox: MailboxCategory,
+  searchQuery?: string | null,
+  options: RefreshLoadedMessagesPagesOptions = {}
+) => {
+  const operation = beginRefresh(
+    queryClient,
+    getMessagesQueryKey(mailboxId, mailbox, searchQuery),
+    options.signal
+  );
+  try {
+    return await refreshMessagesPages(
+      queryClient,
+      mailboxId,
+      mailbox,
+      searchQuery,
+      options,
+      operation
+    );
+  } finally {
+    operation.finish();
+  }
 };
 
 export const refreshCachedMailboxQueries = async (
@@ -318,34 +473,37 @@ export const applyMailboxSyncDelta = async (
   );
 };
 
-export const syncMessages = async (
+const syncOwnedMessages = async (
   queryClient: QueryClient,
   mailboxId: string,
   mailbox: MailboxCategory,
-  searchQuery?: string | null,
-  signal?: AbortSignal
+  searchQuery: string | null | undefined,
+  signal: AbortSignal,
+  operation: RefreshOperation
 ) => {
   if (isSandboxMailboxId(mailboxId)) {
-    return await refreshLoadedMessagesPages(
+    return await refreshMessagesPages(
       queryClient,
       mailboxId,
       mailbox,
       searchQuery,
       {
         signal,
-      }
+      },
+      operation
     );
   }
 
   if (mailbox === "drafts" || normalizeSearchQuery(searchQuery)) {
-    return await refreshLoadedMessagesPages(
+    return await refreshMessagesPages(
       queryClient,
       mailboxId,
       mailbox,
       searchQuery,
       {
         signal,
-      }
+      },
+      operation
     );
   }
 
@@ -358,7 +516,7 @@ export const syncMessages = async (
     currentMessages.pages.length === 0 ||
     !startHistoryId
   ) {
-    return await refreshLoadedMessagesPages(
+    return await refreshMessagesPages(
       queryClient,
       mailboxId,
       mailbox,
@@ -366,10 +524,12 @@ export const syncMessages = async (
       {
         refreshThreads: true,
         signal,
-      }
+      },
+      operation
     );
   }
 
+  operation.assertCurrent();
   const syncDelta = await rpc.mail.syncMailbox(
     {
       category: mailbox,
@@ -379,9 +539,9 @@ export const syncMessages = async (
     { signal }
   );
 
-  signal?.throwIfAborted();
+  operation.assertCurrent();
   if (syncDelta.requiresFullRefresh) {
-    return await refreshLoadedMessagesPages(
+    return await refreshMessagesPages(
       queryClient,
       mailboxId,
       mailbox,
@@ -389,8 +549,21 @@ export const syncMessages = async (
       {
         refreshThreads: true,
         signal,
-      }
+      },
+      operation
     );
+  }
+
+  if (
+    syncDelta.updatedMessages.length > 0 ||
+    syncDelta.removedMessageIds.length > 0 ||
+    syncDelta.refreshFirstPage
+  ) {
+    await queryClient.cancelQueries({
+      exact: true,
+      queryKey: messagesQueryKey,
+    });
+    operation.assertCurrent();
   }
 
   await applyMailboxSyncDelta(
@@ -404,7 +577,7 @@ export const syncMessages = async (
   );
 
   if (syncDelta.refreshFirstPage) {
-    await refreshLoadedMessagesPages(
+    await refreshMessagesPages(
       queryClient,
       mailboxId,
       mailbox,
@@ -412,12 +585,12 @@ export const syncMessages = async (
       {
         maxPageCount: 1,
         preserveHistoryId: startHistoryId,
-        preserveUnrefreshedPages: true,
         signal,
-      }
+      },
+      operation
     );
   }
-  signal?.throwIfAborted();
+  operation.assertCurrent();
   const { historyId } = syncDelta;
   if (historyId && historyId !== startHistoryId) {
     updateMailQueryFromServer<MessagesQueryData>(
@@ -434,11 +607,38 @@ export const syncMessages = async (
   );
 };
 
+export const syncMessages = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  mailbox: MailboxCategory,
+  searchQuery?: string | null,
+  signal?: AbortSignal
+) => {
+  const operation = beginRefresh(
+    queryClient,
+    getMessagesQueryKey(mailboxId, mailbox, searchQuery),
+    signal
+  );
+  try {
+    return await syncOwnedMessages(
+      queryClient,
+      mailboxId,
+      mailbox,
+      searchQuery,
+      operation.signal,
+      operation
+    );
+  } finally {
+    operation.finish();
+  }
+};
+
 export const messagesQueryOptions = (
   mailboxId: string,
   mailbox: MailboxCategory,
   searchQuery?: string | null,
-  enabled = true
+  enabled = true,
+  ownsLiveSync = false
 ) => {
   const initialData =
     mailboxId === LANDING_DEMO_MAILBOX_ID
@@ -472,6 +672,7 @@ export const messagesQueryOptions = (
       lastPage.nextPageToken ?? undefined,
     initialData,
     initialPageParam: undefined as string | undefined,
+    meta: { ownsMailLiveSync: ownsLiveSync },
     persister,
     queryFn: async ({ pageParam, signal }) =>
       await fetchMessagesPage(

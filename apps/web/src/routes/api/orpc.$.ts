@@ -5,6 +5,7 @@ export const Route = createFileRoute("/api/orpc/$")({
   server: {
     handlers: {
       ANY: async ({ request }) => {
+        const startedAt = performance.now();
         const [
           { ORPCError },
           { createOrpcContext },
@@ -32,7 +33,12 @@ export const Route = createFileRoute("/api/orpc/$")({
           prefix: "/api/orpc",
         });
 
-        return response ?? new Response("Not Found", { status: 404 });
+        const result = response ?? new Response("Not Found", { status: 404 });
+        result.headers.append(
+          "Server-Timing",
+          `rpc;dur=${(performance.now() - startedAt).toFixed(1)}`
+        );
+        return result;
       },
     },
   },

@@ -13,12 +13,8 @@ import type {
 import type { MailCommand } from "@quieter/mail/data-plane";
 
 export type MessagesQueryData = {
-  pages: ListMessagesPageResult[];
+  pages: (ListMessagesPageResult & { refreshing?: true })[];
   pageParams: (string | undefined)[];
-};
-
-type MergeRefreshedMailboxPagesOptions = {
-  preserveUnrefreshedPages?: boolean;
 };
 
 export type MessageMetadataMutationResult = {
@@ -104,19 +100,13 @@ export const mergeMessagePreservingLoadedDetails = (
 export const mergeRefreshedMailboxPagesIntoQueryData = (
   previous: MessagesQueryData | undefined,
   refreshedPages: ListMessagesPageResult[],
-  refreshedPageParams: (string | undefined)[],
-  options: MergeRefreshedMailboxPagesOptions = {}
+  refreshedPageParams: (string | undefined)[]
 ): MessagesQueryData => {
   if (previous === undefined || previous.pages.length === 0) {
     return { pageParams: refreshedPageParams, pages: refreshedPages };
   }
 
-  const cachedById = buildCachedMessageLookup(
-    previous,
-    options.preserveUnrefreshedPages === true
-      ? Math.min(previous.pages.length, refreshedPages.length + 1)
-      : previous.pages.length
-  );
+  const cachedById = buildCachedMessageLookup(previous);
   const pages = refreshedPages.map((page) => ({
     ...page,
     messages: page.messages.map((message) => {
@@ -126,37 +116,7 @@ export const mergeRefreshedMailboxPagesIntoQueryData = (
         : message;
     }),
   }));
-  const lastRefreshedPage = refreshedPages.at(-1);
-
-  if (
-    options.preserveUnrefreshedPages !== true ||
-    lastRefreshedPage?.nextPageToken === null ||
-    lastRefreshedPage?.nextPageToken === undefined ||
-    lastRefreshedPage.nextPageToken === "" ||
-    refreshedPages.length >= previous.pages.length
-  ) {
-    return { pageParams: refreshedPageParams, pages };
-  }
-
-  const refreshedMessageIds = new Set(
-    pages.flatMap((page) => page.messages.map((message) => message.id))
-  );
-  const preservedPages = previous.pages
-    .slice(refreshedPages.length)
-    .map((page) => ({
-      ...page,
-      messages: page.messages.filter(
-        (message) => !refreshedMessageIds.has(message.id)
-      ),
-    }));
-
-  return {
-    pageParams: [
-      ...refreshedPageParams,
-      ...previous.pageParams.slice(refreshedPageParams.length),
-    ],
-    pages: [...pages, ...preservedPages],
-  };
+  return { pageParams: refreshedPageParams, pages };
 };
 
 export const updateFirstPageHistoryId = (

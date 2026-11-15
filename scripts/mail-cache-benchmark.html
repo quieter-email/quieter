@@ -1,0 +1,82 @@
+<!doctype html>
+<title>Synthetic mail cache benchmark</title>
+<p>
+  Run await runMailCacheBenchmark() in the browser console. This page uses
+  synthetic IndexedDB data only.
+</p>
+<script type="module">
+  import { createMailCache as before } from "./before.ts";
+  import { createMailCache as after } from "benchmark-current";
+  import { openDB } from "idb";
+
+  window.runMailCacheBenchmark = async (
+    fixtures = [
+      [0, 0],
+      [1000, 10000],
+      [10000, 9500],
+    ],
+    repeats = 5
+  ) => {
+    const results = [];
+    for (const [count, bytes] of fixtures) {
+      const name = `synthetic-mail-benchmark-${crypto.randomUUID()}`;
+      await before({ name }).setUser("synthetic-owner", "synthetic-session");
+      const db = await openDB(name);
+      const tx = db.transaction(["entries", "values"], "readwrite");
+      const value = "x".repeat(bytes);
+      const now = Date.now();
+      for (let i = 0; i < count; i++) {
+        const key = `synthetic-owner:body-${i}`;
+        tx.objectStore("entries").put({
+          key,
+          bytes: bytes + 300,
+          userId: "synthetic-owner",
+          accessedAt: now,
+          expiresAt: now + 86400000,
+        });
+        tx.objectStore("values").put(value, key);
+      }
+      await tx.done;
+      const samples = [];
+      for (let pair = 1; pair <= repeats; pair++) {
+        for (const [variant, create] of [
+          ["before", before],
+          ["after", after],
+        ]) {
+          const cache = create({ name });
+          const start = performance.now();
+          await cache.setUser("synthetic-owner", "synthetic-session");
+          const activationMs = performance.now() - start;
+          const readStart = performance.now();
+          const read = await cache.getItem("body-0");
+          samples.push({
+            pair,
+            variant,
+            activationMs,
+            readMs: performance.now() - readStart,
+            valid: count === 0 ? read === null : read === value,
+          });
+        }
+      }
+      const metadataCount = await db.count("entries");
+      const valueCount = await db.count("values");
+      const errors =
+        samples.filter((sample) => !sample.valid).length +
+        Number(metadataCount !== count) +
+        Number(valueCount !== count);
+      results.push({
+        count,
+        bytes,
+        totalBytes: count * bytes,
+        metadataCount,
+        valueCount,
+        errors,
+        samples,
+      });
+      if (errors) throw new Error(JSON.stringify(results));
+      db.close();
+    }
+    console.log(JSON.stringify(results, null, 2));
+    return results;
+  };
+</script>

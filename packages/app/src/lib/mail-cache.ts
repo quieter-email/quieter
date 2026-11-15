@@ -207,22 +207,26 @@ export const createMailCache = (
           (identity !== undefined && identityState !== "active") ||
           (previousUser !== undefined &&
             (previousUser !== next || previousSession !== identity));
-        let cursor = await tx.objectStore("entries").openCursor();
-        while (cursor !== null) {
-          if (cursor.value.userId !== next) {
+        const [entries, valueKeys] = await Promise.all([
+          tx.objectStore("entries").getAll(),
+          tx.objectStore("values").getAllKeys(),
+        ]);
+        const retainedKeys = new Set<string>();
+        const removals: Promise<unknown>[] = [];
+        for (const entry of entries) {
+          if (entry.userId === next) {
+            retainedKeys.add(entry.key);
+          } else {
             revoked = true;
-            await tx.objectStore("values").delete(cursor.key);
-            await cursor.delete();
+            removals.push(tx.objectStore("entries").delete(entry.key));
           }
-          cursor = await cursor.continue();
         }
-        let valueCursor = await tx.objectStore("values").openKeyCursor();
-        while (valueCursor !== null) {
-          if ((await tx.objectStore("entries").count(valueCursor.key)) === 0) {
-            await tx.objectStore("values").delete(valueCursor.key);
+        for (const key of valueKeys) {
+          if (!retainedKeys.has(key)) {
+            removals.push(tx.objectStore("values").delete(key));
           }
-          valueCursor = await valueCursor.continue();
         }
+        await Promise.all(removals);
         if (next === undefined) {
           await tx.objectStore("values").clear();
           await tx

@@ -1,8 +1,9 @@
 import { db, withRequestDatabaseClient } from "@quieter/database/client";
-import { tables } from "@quieter/database/schema";
+import { mailbox, tables } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { lazyAuth } from "./lazy-auth";
 import { ensureUserOrganizationState } from "./organization";
@@ -50,8 +51,32 @@ export const handleSessionRequest = async (request: Request) =>
 export const getSessionWithOrganization = async (headers: Headers) =>
   await withRequestDatabaseClient(async () => {
     const session = await sessionAuth.api.getSession({ headers });
-    if (session?.user) {
+    if (!session?.user) {
+      return session;
+    }
+    const orphanedMailboxes =
+      session.user.defaultOrganizationProvisioned === true
+        ? await db
+            .select({ id: mailbox.id })
+            .from(mailbox)
+            .where(
+              and(
+                eq(mailbox.ownerUserId, session.user.id),
+                eq(mailbox.provider, "gmail"),
+                isNull(mailbox.organizationId)
+              )
+            )
+            .limit(1)
+        : [];
+    if (
+      session.user.defaultOrganizationProvisioned !== true ||
+      orphanedMailboxes.length > 0
+    ) {
       await ensureUserOrganizationState(session.user);
+      return {
+        ...session,
+        user: { ...session.user, defaultOrganizationProvisioned: true },
+      };
     }
     return session;
   });

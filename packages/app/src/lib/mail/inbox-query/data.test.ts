@@ -24,7 +24,7 @@ const page = (
 });
 
 describe(mergeRefreshedMailboxPagesIntoQueryData, () => {
-  test("preserves unrefreshed persisted pages behind a refreshed prefix", () => {
+  test("replaces stale tail pages with a coherent fresh prefix and preserves loaded details", () => {
     const previous: MessagesQueryData = {
       pageParams: [undefined, "old-page-2", "old-page-3"],
       pages: [
@@ -37,21 +37,16 @@ describe(mergeRefreshedMailboxPagesIntoQueryData, () => {
     const next = mergeRefreshedMailboxPagesIntoQueryData(
       previous,
       [page([message("x"), message("a")], "new-page-2")],
-      [undefined],
-      { preserveUnrefreshedPages: true }
+      [undefined]
     );
 
     expect(
       next.pages.map((currentPage) =>
         currentPage.messages.map((item) => item.id)
       )
-    ).toStrictEqual([["x", "a"], ["b", "c"], ["d"]]);
+    ).toStrictEqual([["x", "a"]]);
     expect(next.pages[0].messages[1].bodyHtml).toBe("<p>cached a</p>");
-    expect(next.pageParams).toStrictEqual([
-      undefined,
-      "old-page-2",
-      "old-page-3",
-    ]);
+    expect(next.pageParams).toStrictEqual([undefined]);
   });
 
   test("drops stale tail pages when the refreshed prefix reaches the end", () => {
@@ -63,8 +58,7 @@ describe(mergeRefreshedMailboxPagesIntoQueryData, () => {
     const next = mergeRefreshedMailboxPagesIntoQueryData(
       previous,
       [page([message("a")])],
-      [undefined],
-      { preserveUnrefreshedPages: true }
+      [undefined]
     );
 
     expect(

@@ -24,6 +24,7 @@ import {
   useMailboxSearchActions,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import {
+  loadCalendarWorkspace,
   loadChatView,
   loadComposeWorkspace,
   loadSnippetWorkspace,
@@ -64,11 +65,7 @@ import {
 } from "react";
 import type { ComponentProps, ReactNode } from "react";
 
-const CalendarWorkspace = lazy(async () => {
-  const { CalendarWorkspace: Workspace } =
-    await import("@quieter/app/features/calendar/components/calendar-workspace");
-  return { default: Workspace };
-});
+const CalendarWorkspace = lazy(loadCalendarWorkspace);
 
 const ScheduledMessagesWorkspace = lazy(async () => {
   const { ScheduledMessagesWorkspace: Component } =

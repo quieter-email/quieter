@@ -1,0 +1,1056 @@
+{
+  "date": "2026-11-15",
+  "environment": "Local Cloudflare development Worker and approved quieter_dev database, sequential requests on an 8-core host. No production deployment.",
+  "baselineCommit": "42af36ba",
+  "httpMailboxList": {
+    "scenario": "Authenticated demo mailbox list, five alternating baseline/candidate pairs after one untimed warmup per variant. Same browser session, runtime, database and response shape.",
+    "results": {
+      "baseline": {
+        "samples": 5,
+        "medianMs": 289.8,
+        "minMs": 255.6,
+        "maxMs": 296.4
+      },
+      "candidate": {
+        "samples": 5,
+        "medianMs": 249.9,
+        "minMs": 232.3,
+        "maxMs": 264.2
+      }
+    },
+    "samples": [
+      {
+        "pair": 1,
+        "variant": "baseline",
+        "durationMs": 290,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=81.0, rpc;dur=213.0"
+      },
+      {
+        "pair": 1,
+        "variant": "candidate",
+        "durationMs": 254.89999985694885,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=39.0, rpc;dur=174.0"
+      },
+      {
+        "pair": 2,
+        "variant": "baseline",
+        "durationMs": 255.59999990463257,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=71.0, rpc;dur=188.0"
+      },
+      {
+        "pair": 2,
+        "variant": "candidate",
+        "durationMs": 264.2000000476837,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=43.0, rpc;dur=185.0"
+      },
+      {
+        "pair": 3,
+        "variant": "baseline",
+        "durationMs": 289.7999999523163,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=77.0, rpc;dur=214.0"
+      },
+      {
+        "pair": 3,
+        "variant": "candidate",
+        "durationMs": 249.89999985694885,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=38.0, rpc;dur=174.0"
+      },
+      {
+        "pair": 4,
+        "variant": "baseline",
+        "durationMs": 281.30000019073486,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=76.0, rpc;dur=207.0"
+      },
+      {
+        "pair": 4,
+        "variant": "candidate",
+        "durationMs": 232.29999995231628,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=34.0, rpc;dur=157.0"
+      },
+      {
+        "pair": 5,
+        "variant": "baseline",
+        "durationMs": 296.40000009536743,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=80.0, rpc;dur=218.0"
+      },
+      {
+        "pair": 5,
+        "variant": "candidate",
+        "durationMs": 247.6999998092651,
+        "groups": 1,
+        "status": 200,
+        "timing": "session;dur=38.0, rpc;dur=171.0"
+      }
+    ],
+    "validation": "Every response returned HTTP 200 with one non-empty mailbox group. Session timing median fell from 77ms to 38ms.",
+    "limiter": "Session provisioning round trips removed; remaining mailbox data reads and local Worker transport dominate."
+  },
+  "syncReconciliationDecision": {
+    "scenario": "Real connected development Gmail mailbox. Current provider history, deliberately mismatched valid app revision. Five alternating pairs after a warmup pair. Times include mailbox authorization, exclude HTTP/auth and the subsequent list fetch.",
+    "results": {
+      "baseline": {
+        "samples": 5,
+        "medianMs": 197.08,
+        "minMs": 191.44,
+        "maxMs": 202.42
+      },
+      "candidate": {
+        "samples": 5,
+        "medianMs": 14.07,
+        "minMs": 13.68,
+        "maxMs": 15.23
+      }
+    },
+    "samples": [
+      {
+        "pair": 1,
+        "variant": "baseline",
+        "durationMs": 202.4161469999999,
+        "requests": 1,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 1,
+        "variant": "candidate",
+        "durationMs": 14.23896300000024,
+        "requests": 0,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 2,
+        "variant": "baseline",
+        "durationMs": 197.0805849999997,
+        "requests": 1,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 2,
+        "variant": "candidate",
+        "durationMs": 13.936686000000009,
+        "requests": 0,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 3,
+        "variant": "baseline",
+        "durationMs": 191.43579999999974,
+        "requests": 1,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 3,
+        "variant": "candidate",
+        "durationMs": 15.23016299999972,
+        "requests": 0,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 4,
+        "variant": "baseline",
+        "durationMs": 193.37333499999977,
+        "requests": 1,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 4,
+        "variant": "candidate",
+        "durationMs": 14.069013999999697,
+        "requests": 0,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 5,
+        "variant": "baseline",
+        "durationMs": 202.30917599999975,
+        "requests": 1,
+        "errors": 0,
+        "fullRefresh": true
+      },
+      {
+        "pair": 5,
+        "variant": "candidate",
+        "durationMs": 13.67812099999992,
+        "requests": 0,
+        "errors": 0,
+        "fullRefresh": true
+      }
+    ],
+    "validation": "Every result required full refresh. Baseline made one successful Gmail request per sample; candidate made none. Both retained mailbox authorization.",
+    "limiter": "Baseline waits for a Gmail delta it then discards; candidate waits only for mailbox authorization."
+  },
+  "limitations": [
+    "Development region and transport do not represent production end-to-end latency.",
+    "The original five-second uncached thread delay was not reproduced. Five direct development thread reads had median 246ms and all returned a body.",
+    "The sync result measures the decision before refreshing rows, not total inbox refresh time.",
+    "HTTP measurements use development warm modules and synthetic mailbox metadata, not real Gmail thread rendering.",
+    "In the original measurement round, full-refresh paging, calendar mutation optimism, and provider polling cadence were unchanged. Round two separately measures progressive full-refresh publication.",
+    "Hidden tabs now process events while runnable. Frozen pages and closed browsers require catch-up when reopened."
+  ],
+  "roundTwo": {
+    "baselineCommit": "85b9d05d",
+    "environment": "Local real Chromium, synthetic data only, warm OS cache. No production deployment or production end-to-end verification.",
+    "cacheActivation": {
+      "scenario": "Five alternating pairs per fixture. Timed awaited setUser on fresh cache instances sharing a seeded IndexedDB database. A separate timed getItem verifies an actual body read. Payload bytes exclude metadata and storage overhead.",
+      "results": [
+        {
+          "count": 0,
+          "bytes": 0,
+          "totalBytes": 0,
+          "metadataCount": 0,
+          "valueCount": 0,
+          "before": {
+            "n": 5,
+            "errors": 0,
+            "activation": {
+              "median": 2.299999952316284,
+              "min": 2.0999999046325684,
+              "max": 2.4000000953674316
+            },
+            "read": {
+              "median": 0.5,
+              "min": 0.4000000953674317,
+              "max": 0.5999999046325684
+            }
+          },
+          "after": {
+            "n": 5,
+            "errors": 0,
+            "activation": {
+              "median": 2.200000047683716,
+              "min": 2.0999999046325684,
+              "max": 2.3999998569488525
+            },
+            "read": {
+              "median": 0.5,
+              "min": 0.4000000953674317,
+              "max": 0.5
+            }
+          }
+        },
+        {
+          "count": 1000,
+          "bytes": 10000,
+          "totalBytes": 10000000,
+          "metadataCount": 1000,
+          "valueCount": 1000,
+          "before": {
+            "n": 5,
+            "errors": 0,
+            "activation": {
+              "median": 394.5,
+              "min": 380.7999999523163,
+              "max": 505.7999999523163
+            },
+            "read": {
+              "median": 1.2000000476837158,
+              "min": 1,
+              "max": 2.5
+            }
+          },
+          "after": {
+            "n": 5,
+            "errors": 0,
+            "activation": {
+              "median": 15.600000143051147,
+              "min": 13.200000047683716,
+              "max": 27.399999856948853
+            },
+            "read": {
+              "median": 1.3999998569488523,
+              "min": 1.0999999046325684,
+              "max": 2.200000047683716
+            }
+          }
+        },
+        {
+          "count": 10000,
+          "bytes": 9500,
+          "totalBytes": 95000000,
+          "metadataCount": 10000,
+          "valueCount": 10000,
+          "before": {
+            "n": 5,
+            "errors": 0,
+            "activation": {
+              "median": 3594.7000000476837,
+              "min": 3458.2999999523163,
+              "max": 3813.200000047684
+            },
+            "read": {
+              "median": 1.5,
+              "min": 0.9000000953674316,
+              "max": 2.1000001430511475
+            }
+          },
+          "after": {
+            "n": 5,
+            "errors": 0,
+            "activation": {
+              "median": 125,
+              "min": 106.20000004768372,
+              "max": 142
+            },
+            "read": {
+              "median": 1.4000000953674316,
+              "min": 1.1999998092651367,
+              "max": 1.6000001430511477
+            }
+          }
+        }
+      ],
+      "operationProbe": [
+        {
+          "continue": 20000,
+          "count": 10000,
+          "getAll": 0,
+          "getAllKeys": 0,
+          "side": "before"
+        },
+        {
+          "continue": 0,
+          "count": 0,
+          "getAll": 1,
+          "getAllKeys": 1,
+          "side": "after"
+        }
+      ],
+      "limiter": "Separate untimed operation probe at 10000 entries observed 20000 cursor continuations and 10000 count calls before, versus one metadata getAll and one value-key getAllKeys after. Candidate still reads metadata and keys, not body values.",
+      "validation": "Zero invalid body reads. Metadata and value counts match every fixture. Empty cache has zero records. Benchmark does not cover identity-switch cleanup or draft recovery.",
+      "rerun": "vp exec node scripts/mail-cache-benchmark.mjs, then await runMailCacheBenchmark() in the isolated browser origin console.",
+      "rawFixtures": [
+        {
+          "bytes": 0,
+          "count": 0,
+          "metadataCount": 0,
+          "samples": [
+            {
+              "activation": 2.299999952316284,
+              "read": 0.5,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 2.0999999046325684,
+              "read": 0.5,
+              "side": "after",
+              "valid": true
+            },
+            {
+              "activation": 2.200000047683716,
+              "read": 0.5,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 2.200000047683716,
+              "read": 0.4000000953674317,
+              "side": "after",
+              "valid": true
+            },
+            {
+              "activation": 2.299999952316284,
+              "read": 0.5,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 2.200000047683716,
+              "read": 0.5,
+              "side": "after",
+              "valid": true
+            },
+            {
+              "activation": 2.4000000953674316,
+              "read": 0.4000000953674317,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 2.3999998569488525,
+              "read": 0.5,
+              "side": "after",
+              "valid": true
+            },
+            {
+              "activation": 2.0999999046325684,
+              "read": 0.5999999046325684,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 2.1000001430511475,
+              "read": 0.5,
+              "side": "after",
+              "valid": true
+            }
+          ],
+          "totalBytes": 0,
+          "valueCount": 0
+        },
+        {
+          "bytes": 10000,
+          "count": 1000,
+          "metadataCount": 1000,
+          "samples": [
+            {
+              "activation": 466.2999999523163,
+              "read": 1.7000000476837158,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 27.399999856948853,
+              "read": 2.200000047683716,
+              "side": "after",
+              "valid": true
+            },
+            {
+              "activation": 505.7999999523163,
+              "read": 2.5,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 15.600000143051147,
+              "read": 1.0999999046325684,
+              "side": "after",
+              "valid": true
+            },
+            {
+              "activation": 394.5,
+              "read": 1.2000000476837158,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 13.200000047683716,
+              "read": 1.3999998569488523,
+              "side": "after",
+              "valid": true
+            },
+            {
+              "activation": 388.7999999523163,
+              "read": 1.1000001430511477,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 13.799999952316284,
+              "read": 1.2000000476837158,
+              "side": "after",
+              "valid": true
+            },
+            {
+              "activation": 380.7999999523163,
+              "read": 1,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 15.800000190734863,
+              "read": 1.3999998569488523,
+              "side": "after",
+              "valid": true
+            }
+          ],
+          "totalBytes": 10000000,
+          "valueCount": 1000
+        },
+        {
+          "bytes": 9500,
+          "count": 10000,
+          "metadataCount": 10000,
+          "samples": [
+            {
+              "activation": 3813.200000047684,
+              "read": 1.5,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 107.89999985694884,
+              "read": 1.2000000476837158,
+              "side": "after",
+              "valid": true
+            },
+            {
+              "activation": 3522.099999904633,
+              "read": 2.1000001430511475,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 125,
+              "read": 1.6000001430511477,
+              "side": "after",
+              "valid": true
+            },
+            {
+              "activation": 3797.400000095367,
+              "read": 1,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 125.89999985694884,
+              "read": 1.4000000953674316,
+              "side": "after",
+              "valid": true
+            },
+            {
+              "activation": 3458.2999999523163,
+              "read": 1.9000000953674316,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 142,
+              "read": 1.5999999046325684,
+              "side": "after",
+              "valid": true
+            },
+            {
+              "activation": 3594.7000000476837,
+              "read": 0.9000000953674316,
+              "side": "before",
+              "valid": true
+            },
+            {
+              "activation": 106.20000004768372,
+              "read": 1.1999998092651367,
+              "side": "after",
+              "valid": true
+            }
+          ],
+          "totalBytes": 95000000,
+          "valueCount": 10000
+        }
+      ]
+    },
+    "refreshPublication": {
+      "scenario": "Deterministic fake-timer test of the real refresh function, with injected provider delays of 100ms, 400ms, and 400ms. This is scheduling evidence, not observed provider or production latency.",
+      "evidence": {
+        "clock": "virtual milliseconds",
+        "providerDelayMs": [100, 400, 400],
+        "sourceBaseline": "85b9d05d",
+        "runs": [
+          {
+            "repeat": 0,
+            "name": "baseline",
+            "firstFreshMs": 900,
+            "completeMs": 900,
+            "freshWhilePageTwoPending": false,
+            "requests": 3,
+            "errors": 0,
+            "finalMessageCount": 3
+          },
+          {
+            "repeat": 0,
+            "name": "current",
+            "firstFreshMs": 100,
+            "completeMs": 900,
+            "freshWhilePageTwoPending": true,
+            "requests": 3,
+            "errors": 0,
+            "finalMessageCount": 3
+          },
+          {
+            "repeat": 1,
+            "name": "baseline",
+            "firstFreshMs": 900,
+            "completeMs": 900,
+            "freshWhilePageTwoPending": false,
+            "requests": 3,
+            "errors": 0,
+            "finalMessageCount": 3
+          },
+          {
+            "repeat": 1,
+            "name": "current",
+            "firstFreshMs": 100,
+            "completeMs": 900,
+            "freshWhilePageTwoPending": true,
+            "requests": 3,
+            "errors": 0,
+            "finalMessageCount": 3
+          },
+          {
+            "repeat": 2,
+            "name": "baseline",
+            "firstFreshMs": 900,
+            "completeMs": 900,
+            "freshWhilePageTwoPending": false,
+            "requests": 3,
+            "errors": 0,
+            "finalMessageCount": 3
+          },
+          {
+            "repeat": 2,
+            "name": "current",
+            "firstFreshMs": 100,
+            "completeMs": 900,
+            "freshWhilePageTwoPending": true,
+            "requests": 3,
+            "errors": 0,
+            "finalMessageCount": 3
+          },
+          {
+            "repeat": 3,
+            "name": "baseline",
+            "firstFreshMs": 900,
+            "completeMs": 900,
+            "freshWhilePageTwoPending": false,
+            "requests": 3,
+            "errors": 0,
+            "finalMessageCount": 3
+          },
+          {
+            "repeat": 3,
+            "name": "current",
+            "firstFreshMs": 100,
+            "completeMs": 900,
+            "freshWhilePageTwoPending": true,
+            "requests": 3,
+            "errors": 0,
+            "finalMessageCount": 3
+          },
+          {
+            "repeat": 4,
+            "name": "baseline",
+            "firstFreshMs": 900,
+            "completeMs": 900,
+            "freshWhilePageTwoPending": false,
+            "requests": 3,
+            "errors": 0,
+            "finalMessageCount": 3
+          },
+          {
+            "repeat": 4,
+            "name": "current",
+            "firstFreshMs": 100,
+            "completeMs": 900,
+            "freshWhilePageTwoPending": true,
+            "requests": 3,
+            "errors": 0,
+            "finalMessageCount": 3
+          }
+        ]
+      },
+      "validation": "All ten runs have zero errors, three provider requests, three final messages, and 900ms completion. Candidate publishes fresh data while the second page is pending.",
+      "limiter": "Baseline withholds publication until all provider pages complete. Candidate publishes the first fresh page after its request resolves."
+    },
+    "htmlRendering": {
+      "scenario": "Synthetic 119388-character newsletter, 400 headings, local Chromium. Five alternating pairs after one untimed warmup per side. Compares duplicate preference processing with reuse of its existing result. Times preprocessing, preferences, parsing, and shadow DOM insertion, excluding layout, paint, RPC, and full component mount.",
+      "results": {
+        "before": {
+          "samples": 5,
+          "medianMs": 48.89999985694885,
+          "minMs": 46.29999995231629,
+          "maxMs": 54.79999995231629
+        },
+        "after": {
+          "samples": 5,
+          "medianMs": 36.69999980926514,
+          "minMs": 34.40000009536743,
+          "maxMs": 51.20000004768371
+        }
+      },
+      "samples": [
+        {
+          "headings": 400,
+          "htmlBytes": 132547,
+          "ms": 48.89999985694885,
+          "pair": 1,
+          "remoteImages": 0,
+          "textBytes": 61358,
+          "variant": "before"
+        },
+        {
+          "headings": 400,
+          "htmlBytes": 132547,
+          "ms": 38.09999990463257,
+          "pair": 1,
+          "remoteImages": 0,
+          "textBytes": 61358,
+          "variant": "after"
+        },
+        {
+          "headings": 400,
+          "htmlBytes": 132547,
+          "ms": 54.79999995231629,
+          "pair": 2,
+          "remoteImages": 0,
+          "textBytes": 61358,
+          "variant": "before"
+        },
+        {
+          "headings": 400,
+          "htmlBytes": 132547,
+          "ms": 51.20000004768371,
+          "pair": 2,
+          "remoteImages": 0,
+          "textBytes": 61358,
+          "variant": "after"
+        },
+        {
+          "headings": 400,
+          "htmlBytes": 132547,
+          "ms": 49.20000004768371,
+          "pair": 3,
+          "remoteImages": 0,
+          "textBytes": 61358,
+          "variant": "before"
+        },
+        {
+          "headings": 400,
+          "htmlBytes": 132547,
+          "ms": 34.40000009536743,
+          "pair": 3,
+          "remoteImages": 0,
+          "textBytes": 61358,
+          "variant": "after"
+        },
+        {
+          "headings": 400,
+          "htmlBytes": 132547,
+          "ms": 46.29999995231629,
+          "pair": 4,
+          "remoteImages": 0,
+          "textBytes": 61358,
+          "variant": "before"
+        },
+        {
+          "headings": 400,
+          "htmlBytes": 132547,
+          "ms": 36.69999980926514,
+          "pair": 4,
+          "remoteImages": 0,
+          "textBytes": 61358,
+          "variant": "after"
+        },
+        {
+          "headings": 400,
+          "htmlBytes": 132547,
+          "ms": 46.5,
+          "pair": 5,
+          "remoteImages": 0,
+          "textBytes": 61358,
+          "variant": "before"
+        },
+        {
+          "headings": 400,
+          "htmlBytes": 132547,
+          "ms": 35.39999985694885,
+          "pair": 5,
+          "remoteImages": 0,
+          "textBytes": 61358,
+          "variant": "after"
+        }
+      ],
+      "errors": 0,
+      "validation": "Every run preserves 400 headings, 61358 text characters, and 132547 processed HTML characters. Zero remote image sources remain. Character counts are not encoded byte sizes.",
+      "limiter": "Avoids a repeated HTML preference transformation. Median saving is about 12ms on this synthetic input."
+    },
+    "productionEvidenceLimits": [
+      "No matching production Sentry spans were available for the mail wait.",
+      "Observed SQL execution p99 below 70ms excludes network round-trip time and does not establish RPC latency.",
+      "The available Cloudflare token listed no Workers, so Worker logs and traces could not verify production behavior.",
+      "No production fix or full application loading improvement is established by these local component measurements."
+    ],
+    "developmentAppReload": {
+      "scenario": "Full Vite development demo UI reload to first mail row with 10000 synthetic cache entries and 95MB body payload. Five alternating pairs, warm browser and OS caches. Only mail-cache.ts swapped between baseline and candidate. Not production Gmail timing.",
+      "seed": {
+        "entries": 10000,
+        "bodyBytes": 95000000
+      },
+      "results": {
+        "before": {
+          "samples": 5,
+          "medianFirstRowMs": 5864.299999952316,
+          "minFirstRowMs": 5747.200000047684,
+          "maxFirstRowMs": 6672.400000095367,
+          "medianFirstActivationTransactionMs": 4342.700000047684,
+          "windowErrors": 0
+        },
+        "after": {
+          "samples": 5,
+          "medianFirstRowMs": 2193.600000143051,
+          "minFirstRowMs": 1832.1000001430511,
+          "maxFirstRowMs": 2351.100000143051,
+          "medianFirstActivationTransactionMs": 255.90000009536743,
+          "windowErrors": 0
+        }
+      },
+      "samples": [
+        {
+          "pair": 0,
+          "side": "before",
+          "firstRow": 6672.400000095367,
+          "errors": 0,
+          "activation": [
+            {
+              "start": 2265.4000000953674,
+              "end": 6482.200000047684
+            },
+            {
+              "start": 6482.400000095367,
+              "end": 6483.799999952316
+            },
+            {
+              "start": 6482.400000095367,
+              "end": 6519.900000095367
+            },
+            {
+              "start": 6482.5,
+              "end": 6521.299999952316
+            }
+          ]
+        },
+        {
+          "pair": 0,
+          "side": "after",
+          "firstRow": 2351.100000143051,
+          "errors": 0,
+          "activation": [
+            {
+              "start": 1991.7000000476837,
+              "end": 2191.9000000953674
+            },
+            {
+              "start": 2192.100000143051,
+              "end": 2198.2000000476837
+            },
+            {
+              "start": 2192.2000000476837,
+              "end": 2230.100000143051
+            },
+            {
+              "start": 2192.2999999523163,
+              "end": 2231.2999999523163
+            }
+          ]
+        },
+        {
+          "pair": 1,
+          "side": "before",
+          "firstRow": 5864.299999952316,
+          "errors": 0,
+          "activation": [
+            {
+              "start": 1353.1999998092651,
+              "end": 5695.899999856949
+            },
+            {
+              "start": 5696,
+              "end": 5697.299999952316
+            },
+            {
+              "start": 5696,
+              "end": 5730.099999904633
+            },
+            {
+              "start": 5696.099999904633,
+              "end": 5731.699999809265
+            }
+          ]
+        },
+        {
+          "pair": 1,
+          "side": "after",
+          "firstRow": 2193.600000143051,
+          "errors": 0,
+          "activation": [
+            {
+              "start": 1702,
+              "end": 1957.9000000953674
+            },
+            {
+              "start": 1958.1000001430511,
+              "end": 2024.6000001430511
+            },
+            {
+              "start": 1958.2000000476837,
+              "end": 2074.2000000476837
+            },
+            {
+              "start": 1958.2999999523163,
+              "end": 2076.2000000476837
+            }
+          ]
+        },
+        {
+          "pair": 2,
+          "side": "before",
+          "firstRow": 5788.700000047684,
+          "errors": 0,
+          "activation": [
+            {
+              "start": 1211.5999999046326,
+              "end": 5602.700000047684
+            },
+            {
+              "start": 5602.799999952316,
+              "end": 5604.5
+            },
+            {
+              "start": 5603,
+              "end": 5645.599999904633
+            },
+            {
+              "start": 5603.099999904633,
+              "end": 5647.399999856949
+            }
+          ]
+        },
+        {
+          "pair": 2,
+          "side": "after",
+          "firstRow": 1832.1000001430511,
+          "errors": 0,
+          "activation": [
+            {
+              "start": 1235,
+              "end": 1536.5
+            },
+            {
+              "start": 1536.7000000476837,
+              "end": 1562.7000000476837
+            },
+            {
+              "start": 1536.8000001907349,
+              "end": 1687
+            },
+            {
+              "start": 1536.9000000953674,
+              "end": 1713.4000000953674
+            }
+          ]
+        },
+        {
+          "pair": 3,
+          "side": "before",
+          "firstRow": 5890.399999856949,
+          "errors": 0,
+          "activation": [
+            {
+              "start": 1627.7000000476837,
+              "end": 5721.399999856949
+            },
+            {
+              "start": 5721.599999904633,
+              "end": 5723.399999856949
+            },
+            {
+              "start": 5721.700000047684,
+              "end": 5754.799999952316
+            },
+            {
+              "start": 5721.700000047684,
+              "end": 5756
+            }
+          ]
+        },
+        {
+          "pair": 3,
+          "side": "after",
+          "firstRow": 1900.9000000953674,
+          "errors": 0,
+          "activation": [
+            {
+              "start": 1353.0999999046326,
+              "end": 1569.5
+            },
+            {
+              "start": 1569.5999999046326,
+              "end": 1633.5999999046326
+            },
+            {
+              "start": 1569.7999999523163,
+              "end": 1724.5999999046326
+            },
+            {
+              "start": 1569.7999999523163,
+              "end": 1788.0999999046326
+            }
+          ]
+        },
+        {
+          "pair": 4,
+          "side": "before",
+          "firstRow": 5747.200000047684,
+          "errors": 0,
+          "activation": [
+            {
+              "start": 1190.5,
+              "end": 5583.799999952316
+            },
+            {
+              "start": 5584.099999904633,
+              "end": 5585.400000095367
+            },
+            {
+              "start": 5584.099999904633,
+              "end": 5622
+            },
+            {
+              "start": 5584.200000047684,
+              "end": 5623.299999952316
+            }
+          ]
+        },
+        {
+          "pair": 4,
+          "side": "after",
+          "firstRow": 2195.7999999523163,
+          "errors": 0,
+          "activation": [
+            {
+              "start": 1626.5,
+              "end": 1885.1999998092651
+            },
+            {
+              "start": 1885.2999999523163,
+              "end": 1941.6999998092651
+            },
+            {
+              "start": 1885.5,
+              "end": 2029.2999999523163
+            },
+            {
+              "start": 1885.5999999046326,
+              "end": 2096.7999999523163
+            }
+          ]
+        }
+      ],
+      "limiter": "The first cache activation transaction dominates the measured before/after delta. Other module startup, request, and rendering work remains in first-row time.",
+      "validation": "Every reload reached a mail row with zero observed window errors. This fixture does not establish production or real-mailbox response latency."
+    }
+  }
+}
