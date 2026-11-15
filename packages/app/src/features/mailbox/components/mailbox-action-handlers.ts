@@ -280,13 +280,14 @@ export const createMailboxActionHandlers = ({
     const thread = queryClient.getQueryData<ThreadMessagesResult>(
       getThreadQueryKey(mailboxId, threadId)
     );
-    const messages =
-      thread?.messages ??
-      findMessagesInCachedMailboxQueries(
+    const messages = [
+      ...(thread?.messages ?? []),
+      ...findMessagesInCachedMailboxQueries(
         queryClient,
         mailboxId,
         (message) => message.threadId === threadId
-      );
+      ),
+    ];
     await setPlacement([{ messages, threadId }], placement);
   };
 
