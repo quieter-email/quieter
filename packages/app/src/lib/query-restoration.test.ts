@@ -3,6 +3,12 @@ import { setImmediate as settleScheduledTasks } from "node:timers/promises";
 import "fake-indexeddb/auto";
 import { mailCache } from "@quieter/app/lib/mail-cache";
 import {
+  liveSyncQueryOptions,
+  messagesQueryOptions,
+  syncMessages,
+} from "@quieter/app/lib/mail/inbox-query/sync";
+import { rpc } from "@quieter/app/lib/orpc";
+import {
   queryPersister,
   setQueryPersistenceUser,
 } from "@quieter/app/lib/query-persister";
@@ -10,6 +16,7 @@ import {
   InfiniteQueryObserver,
   notifyManager,
   QueryClient,
+  QueryObserver,
 } from "@tanstack/react-query";
 import type { InfiniteData } from "@tanstack/react-query";
 import {
@@ -20,6 +27,16 @@ import {
   test,
   vi,
 } from "vite-plus/test";
+
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- Only mail read contracts are needed.
+vi.mock("@quieter/app/lib/orpc", () => ({
+  rpc: {
+    mail: {
+      listThreads: vi.fn<typeof rpc.mail.listThreads>(),
+      syncMailbox: vi.fn<typeof rpc.mail.syncMailbox>(),
+    },
+  },
+}));
 
 type MessagePage = { messages: { id: string }[] };
 
@@ -58,6 +75,68 @@ describe("persisted query refresh lifecycle", () => {
     setQueryPersistenceUser(undefined);
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  test("lets the mounted live owner refresh restored mail without a duplicate infinite refetch", async () => {
+    client.setQueryData(
+      queryKey,
+      {
+        pageParams: [undefined, "old-2"],
+        pages: [
+          {
+            historyId: "old",
+            messages: [{ id: "cached", threadId: "cached" }],
+            nextPageToken: "old-2",
+          },
+          { messages: [{ id: "tail", threadId: "tail" }] },
+        ],
+      },
+      { updatedAt: Date.now() - 60_000 }
+    );
+    await queryPersister.persistQueryByKey(queryKey, client);
+    client.removeQueries({ exact: true, queryKey });
+    vi.mocked(rpc.mail.listThreads).mockClear();
+    vi.mocked(rpc.mail.syncMailbox).mockResolvedValueOnce({
+      hasChanges: true,
+      historyId: "fresh",
+      refreshFirstPage: false,
+      removedMessageIds: [],
+      requiresFullRefresh: false,
+      updatedMessages: [
+        { id: "arrival", internalDate: "1", threadId: "arrival" },
+      ],
+    });
+    const observer = new InfiniteQueryObserver(
+      client,
+      messagesQueryOptions("mailbox", "inbox", undefined, true, true)
+    );
+    const unsubscribe = observer.subscribe(() => {});
+    let stopLive: (() => void) | undefined;
+    try {
+      await vi.waitFor(() => {
+        expect(
+          observer.getCurrentResult().data?.pages[0].messages
+        ).toContainEqual(expect.objectContaining({ id: "cached" }));
+      });
+      const live = new QueryObserver(
+        client,
+        liveSyncQueryOptions(client, "mailbox", "inbox")
+      );
+      stopLive = live.subscribe(() => {});
+      await vi.waitFor(() => {
+        for (const task of scheduled.splice(0)) {
+          task();
+        }
+        expect(
+          observer.getCurrentResult().data?.pages[0].messages
+        ).toContainEqual(expect.objectContaining({ id: "arrival" }));
+      });
+      expect(rpc.mail.listThreads).not.toHaveBeenCalled();
+      expect(rpc.mail.syncMailbox).toHaveBeenCalledOnce();
+    } finally {
+      stopLive?.();
+      unsubscribe();
+    }
   });
 
   test("cancels slow restores during navigation and refreshes when the mailbox is reopened", async () => {
@@ -131,6 +210,35 @@ describe("persisted query refresh lifecycle", () => {
       finishSecondRead.resolve(null);
       unsubscribe();
     }
+  });
+
+  test("discards a direct sync response after the persistence session changes on the same client", async () => {
+    client.setQueryData(queryKey, {
+      pageParams: [undefined],
+      pages: [
+        { historyId: "old", messages: [{ id: "cached", threadId: "cached" }] },
+      ],
+    });
+    const response =
+      Promise.withResolvers<Awaited<ReturnType<typeof rpc.mail.syncMailbox>>>();
+    vi.mocked(rpc.mail.syncMailbox).mockReturnValueOnce(response.promise);
+    const refresh = syncMessages(client, "mailbox", "inbox");
+    const outcome = Promise.allSettled([refresh]);
+    setQueryPersistenceUser(crypto.randomUUID(), client);
+    response.resolve({
+      hasChanges: true,
+      historyId: "private-late",
+      refreshFirstPage: false,
+      removedMessageIds: ["cached"],
+      requiresFullRefresh: false,
+      updatedMessages: [{ id: "private-late", threadId: "private-late" }],
+    });
+    await expect(outcome).resolves.toMatchObject([
+      { reason: { name: "AbortError" }, status: "rejected" },
+    ]);
+    expect(client.getQueryData(queryKey)).toMatchObject({
+      pages: [{ historyId: "old", messages: [{ id: "cached" }] }],
+    });
   });
 
   test("does not refresh a restored mailbox after the persistence owner changes", async () => {

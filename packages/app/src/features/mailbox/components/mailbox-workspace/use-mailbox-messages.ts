@@ -38,37 +38,6 @@ const hasLoadedMessagePages = (
   data: { pages: readonly unknown[] } | undefined
 ) => data !== undefined && data.pages.length > 0;
 
-const canUseLiveSync = ({
-  activeMailbox,
-  hasLoadedMessages,
-  isDemoMode,
-  isManagedDemoMode,
-  isManualRefreshing,
-  isWindowActive,
-  mailboxProvider,
-  normalizedQuery,
-  selectedMailboxId,
-}: {
-  activeMailbox: MailboxCategory;
-  hasLoadedMessages: boolean;
-  isDemoMode: boolean;
-  isManagedDemoMode: boolean;
-  isManualRefreshing: boolean;
-  isWindowActive: boolean;
-  mailboxProvider: "api" | "gmail" | "managed";
-  normalizedQuery: string;
-  selectedMailboxId: string | null;
-}) =>
-  !!selectedMailboxId &&
-  !isDemoMode &&
-  !isManagedDemoMode &&
-  activeMailbox !== "drafts" &&
-  normalizedQuery.length === 0 &&
-  mailboxProvider !== "api" &&
-  isWindowActive &&
-  hasLoadedMessages &&
-  !isManualRefreshing;
-
 const getCachedSelectedMessage = (
   activeMailbox: MailboxCategory,
   messageId: string | undefined,
@@ -155,38 +124,6 @@ export const markMailboxNeedsReconnectInCache = (
   void queryClient.invalidateQueries({ queryKey });
 };
 
-export const useWindowActive = () => {
-  const [isWindowActive, setIsWindowActive] = useState(
-    () =>
-      typeof document !== "undefined" &&
-      document.visibilityState === "visible" &&
-      document.hasFocus()
-  );
-
-  useEffect(() => {
-    const updateWindowActivity = () => {
-      const nextIsWindowActive =
-        document.visibilityState === "visible" && document.hasFocus();
-      setIsWindowActive((current) =>
-        current === nextIsWindowActive ? current : nextIsWindowActive
-      );
-    };
-
-    updateWindowActivity();
-    window.addEventListener("focus", updateWindowActivity);
-    window.addEventListener("blur", updateWindowActivity);
-    document.addEventListener("visibilitychange", updateWindowActivity);
-
-    return () => {
-      window.removeEventListener("focus", updateWindowActivity);
-      window.removeEventListener("blur", updateWindowActivity);
-      document.removeEventListener("visibilitychange", updateWindowActivity);
-    };
-  }, []);
-
-  return isWindowActive;
-};
-
 export const useMailboxMessages = ({
   activeMailbox,
   isDemoMode,
@@ -198,9 +135,15 @@ export const useMailboxMessages = ({
   searchQuery,
   selectedMailboxId,
 }: UseMailboxMessagesOptions) => {
-  const isWindowActive = useWindowActive();
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const normalizedQuery = searchQuery.trim();
+  const ownsLiveSync =
+    !!selectedMailboxId &&
+    !isDemoMode &&
+    !isManagedDemoMode &&
+    activeMailbox !== "drafts" &&
+    normalizedQuery.length === 0 &&
+    mailboxProvider !== "api";
   const {
     data: messagesData,
     error: messagesError,
@@ -215,22 +158,14 @@ export const useMailboxMessages = ({
       selectedMailboxId ?? "",
       activeMailbox,
       normalizedQuery,
-      !!selectedMailboxId
+      !!selectedMailboxId,
+      ownsLiveSync
     )
   );
   const messages = messagesData?.pages ?? EMPTY_MESSAGE_PAGES;
   const hasLoadedMessages = hasLoadedMessagePages(messagesData);
-  const isLiveSyncEnabled = canUseLiveSync({
-    activeMailbox,
-    hasLoadedMessages,
-    isDemoMode,
-    isManagedDemoMode,
-    isManualRefreshing,
-    isWindowActive,
-    mailboxProvider,
-    normalizedQuery,
-    selectedMailboxId,
-  });
+  const isLiveSyncEnabled =
+    ownsLiveSync && hasLoadedMessages && !isManualRefreshing;
   const { error: syncError, isFetching: isSyncFetching } = useQuery(
     liveSyncQueryOptions(
       queryClient,

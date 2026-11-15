@@ -1,22 +1,38 @@
 import type {
+  ListMessagesPageResult,
   MessageListItem,
   ThreadMessagesResult,
 } from "@quieter/app/lib/mail";
+import {
+  disposeMailMutations,
+  runMailMutation,
+} from "@quieter/app/lib/mail-mutations";
+import {
+  removeMessagesFromQueryData,
+  updateMessageInQueryData,
+} from "@quieter/app/lib/mail/inbox-query/data";
 import type { MessagesQueryData } from "@quieter/app/lib/mail/inbox-query/data";
 import { getMessagesQueryKey } from "@quieter/app/lib/mail/inbox-query/keys";
 import {
   applyMailboxSyncDelta,
+  messagesQueryOptions,
+  refreshLoadedMessagesPages,
   syncMessages,
 } from "@quieter/app/lib/mail/inbox-query/sync";
 import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query";
 import { rpc } from "@quieter/app/lib/orpc";
-import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { describe, expect, test, vi } from "vite-plus/test";
+import {
+  InfiniteQueryObserver,
+  QueryClient,
+  QueryObserver,
+} from "@tanstack/react-query";
+import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- Only the sync contract is needed.
 vi.mock("@quieter/app/lib/orpc", () => ({
   rpc: {
     mail: {
+      listThreads: vi.fn<typeof rpc.mail.listThreads>(),
       syncMailbox: vi.fn<typeof rpc.mail.syncMailbox>(),
     },
   },
@@ -233,5 +249,411 @@ describe(applyMailboxSyncDelta, () => {
     expect(
       queryClient.getQueryData<ThreadMessagesResult>(threadQueryKey)?.messages
     ).toStrictEqual([selectedMessage]);
+  });
+});
+
+describe(refreshLoadedMessagesPages, () => {
+  beforeEach(() => {
+    vi.mocked(rpc.mail.listThreads).mockReset();
+    vi.mocked(rpc.mail.syncMailbox).mockReset();
+  });
+
+  test("publishes a fresh head before a pending continuation, preserves deep details, and resumes a coherent cursor chain", async () => {
+    const client = new QueryClient();
+    const key = getMessagesQueryKey("mailbox", "inbox");
+    const otherKey = getMessagesQueryKey("other", "inbox");
+    const deep = message("deep", {
+      bodyText: "Loaded detail",
+      threadAttachmentNames: ["invoice.pdf"],
+      unsubscribeStatus: "requested",
+    });
+    client.setQueryData<MessagesQueryData>(key, {
+      pageParams: [undefined, "old-2", "old-3", "old-4"],
+      pages: ["a", "b", "c", "deep"].map((id) => ({
+        historyId: "old",
+        messages: [id === "deep" ? deep : message(id)],
+        nextPageToken: `old-after-${id}`,
+      })),
+    });
+    const untouched = {
+      pageParams: [undefined],
+      pages: [{ messages: [message("other")] }],
+    };
+    client.setQueryData(otherKey, untouched);
+    const second = Promise.withResolvers<ListMessagesPageResult>();
+    vi.mocked(rpc.mail.listThreads)
+      .mockResolvedValueOnce({
+        historyId: "fresh",
+        messages: [message("deep")],
+        nextPageToken: "fresh-2",
+      })
+      .mockReturnValueOnce(second.promise)
+      .mockResolvedValueOnce({
+        messages: [message("c")],
+        nextPageToken: "fresh-4",
+      });
+    const refreshing = refreshLoadedMessagesPages(client, "mailbox", "inbox");
+    await vi.waitFor(() => {
+      expect(
+        client.getQueryData<MessagesQueryData>(key)?.pages[0].messages
+      ).toContainEqual(
+        expect.objectContaining({
+          bodyText: "Loaded detail",
+          id: "deep",
+          threadAttachmentNames: ["invoice.pdf"],
+          unsubscribeStatus: "requested",
+        })
+      );
+      expect(rpc.mail.listThreads).toHaveBeenCalledTimes(2);
+    });
+    expect(client.getQueryData<MessagesQueryData>(key)).toMatchObject({
+      pages: [{ historyId: "old", nextPageToken: undefined, refreshing: true }],
+    });
+    expect(client.getQueryData<MessagesQueryData>(key)?.pages).toHaveLength(1);
+    second.resolve({ messages: [message("b")], nextPageToken: "fresh-3" });
+    await refreshing;
+    const refreshed = client.getQueryData<MessagesQueryData>(key);
+    expect(
+      refreshed?.pages.flatMap((page) => page.messages.map((item) => item.id))
+    ).toStrictEqual(["deep", "b", "c"]);
+    expect(refreshed?.pageParams).toStrictEqual([
+      undefined,
+      "fresh-2",
+      "fresh-3",
+    ]);
+    expect(refreshed?.pages[0].historyId).toBe("fresh");
+    expect(refreshed?.pages.at(-1)?.nextPageToken).toBe("fresh-4");
+    expect(refreshed?.pages[0]?.refreshing).toBeUndefined();
+    expect(client.getQueryData(otherKey)).toStrictEqual(untouched);
+    client.clear();
+  });
+
+  test.each(["failure", "abort"])(
+    "keeps the old checkpoint and restores valid continuation after %s",
+    async (outcome) => {
+      const client = new QueryClient();
+      const key = getMessagesQueryKey("mailbox", "inbox");
+      client.setQueryData<MessagesQueryData>(key, {
+        pageParams: [undefined, "old-2"],
+        pages: [
+          { historyId: "old", messages: [message("a")] },
+          { messages: [message("b")] },
+        ],
+      });
+      const second = Promise.withResolvers<ListMessagesPageResult>();
+      const controller = new AbortController();
+      vi.mocked(rpc.mail.listThreads)
+        .mockResolvedValueOnce({
+          historyId: "fresh",
+          messages: [message("arrival")],
+          nextPageToken: "fresh-2",
+        })
+        .mockReturnValueOnce(second.promise);
+      const refreshing = refreshLoadedMessagesPages(
+        client,
+        "mailbox",
+        "inbox",
+        undefined,
+        { signal: controller.signal }
+      );
+      const rejected = Promise.allSettled([refreshing]);
+      await vi.waitFor(() => {
+        expect(rpc.mail.listThreads).toHaveBeenCalledTimes(2);
+      });
+      if (outcome === "abort") {
+        controller.abort();
+        second.resolve({ messages: [message("late")] });
+      } else {
+        second.reject(new Error("Provider unavailable"));
+      }
+      await expect(rejected).resolves.toMatchObject([
+        {
+          reason: { name: outcome === "abort" ? "AbortError" : "Error" },
+          status: "rejected",
+        },
+      ]);
+      expect(client.getQueryData<MessagesQueryData>(key)).toMatchObject({
+        pages: [
+          {
+            historyId: "old",
+            messages: [{ id: "arrival" }],
+            nextPageToken: "fresh-2",
+          },
+        ],
+      });
+      expect(
+        client.getQueryData<MessagesQueryData>(key)?.pages[0]?.refreshing
+      ).toBeUndefined();
+      vi.mocked(rpc.mail.listThreads).mockResolvedValueOnce({
+        historyId: "retried",
+        messages: [message("arrival"), message("late")],
+      });
+      await refreshLoadedMessagesPages(client, "mailbox", "inbox");
+      expect(
+        client.getQueryData<MessagesQueryData>(key)?.pages[0].historyId
+      ).toBe("retried");
+      client.clear();
+    }
+  );
+
+  test("ignores superseded direct refreshes and stale deltas without requiring caller signals", async () => {
+    const client = new QueryClient();
+    const key = getMessagesQueryKey("mailbox", "inbox");
+    client.setQueryData<MessagesQueryData>(key, {
+      pageParams: [undefined],
+      pages: [{ historyId: "old", messages: [message("old")] }],
+    });
+    const delta =
+      Promise.withResolvers<Awaited<ReturnType<typeof rpc.mail.syncMailbox>>>();
+    vi.mocked(rpc.mail.syncMailbox).mockReturnValueOnce(delta.promise);
+    const staleSynchronization = syncMessages(client, "mailbox", "inbox");
+    const syncRejected = Promise.allSettled([staleSynchronization]);
+    const oldHead = Promise.withResolvers<ListMessagesPageResult>();
+    vi.mocked(rpc.mail.listThreads)
+      .mockReturnValueOnce(oldHead.promise)
+      .mockResolvedValueOnce({
+        historyId: "newest",
+        messages: [message("newest")],
+      });
+    const staleRefresh = refreshLoadedMessagesPages(client, "mailbox", "inbox");
+    const refreshRejected = Promise.allSettled([staleRefresh]);
+    await vi.waitFor(() => {
+      expect(rpc.mail.listThreads).toHaveBeenCalledOnce();
+    });
+    await refreshLoadedMessagesPages(client, "mailbox", "inbox");
+    oldHead.resolve({ historyId: "stale", messages: [message("stale")] });
+    delta.resolve({
+      hasChanges: true,
+      historyId: "stale-delta",
+      refreshFirstPage: false,
+      removedMessageIds: ["newest"],
+      requiresFullRefresh: false,
+      updatedMessages: [message("stale-delta")],
+    });
+    await expect(syncRejected).resolves.toMatchObject([
+      { reason: { name: "AbortError" }, status: "rejected" },
+    ]);
+    await expect(refreshRejected).resolves.toMatchObject([
+      { reason: { name: "AbortError" }, status: "rejected" },
+    ]);
+    expect(client.getQueryData<MessagesQueryData>(key)?.pages[0]).toMatchObject(
+      { historyId: "newest", messages: [{ id: "newest" }] }
+    );
+    client.clear();
+  });
+
+  test("a newer refresh replaces a provisional prefix without the older continuation restoring stale cursors", async () => {
+    const client = new QueryClient();
+    const key = getMessagesQueryKey("mailbox", "inbox");
+    client.setQueryData<MessagesQueryData>(key, {
+      pageParams: [undefined, "old-2"],
+      pages: [
+        { historyId: "old", messages: [message("a")] },
+        { messages: [message("b")] },
+      ],
+    });
+    const continuation = Promise.withResolvers<ListMessagesPageResult>();
+    vi.mocked(rpc.mail.listThreads)
+      .mockResolvedValueOnce({
+        historyId: "intermediate",
+        messages: [message("intermediate")],
+        nextPageToken: "intermediate-2",
+      })
+      .mockReturnValueOnce(continuation.promise)
+      .mockResolvedValueOnce({
+        historyId: "newest",
+        messages: [message("newest")],
+        nextPageToken: "newest-2",
+      });
+    const older = refreshLoadedMessagesPages(client, "mailbox", "inbox");
+    const olderOutcome = Promise.allSettled([older]);
+    await vi.waitFor(() => {
+      expect(
+        client.getQueryData<MessagesQueryData>(key)?.pages[0]?.refreshing
+      ).toBeTruthy();
+    });
+    const observer = new InfiniteQueryObserver(client, {
+      ...messagesQueryOptions("mailbox", "inbox"),
+      enabled: false,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    await observer.fetchNextPage();
+    expect(
+      client.getQueryData<MessagesQueryData>(key)?.pages[0]?.refreshing
+    ).toBeTruthy();
+    expect(rpc.mail.listThreads).toHaveBeenCalledTimes(2);
+    await refreshLoadedMessagesPages(client, "mailbox", "inbox");
+    continuation.resolve({
+      messages: [message("stale")],
+      nextPageToken: "stale-3",
+    });
+    await expect(olderOutcome).resolves.toMatchObject([
+      { reason: { name: "AbortError" }, status: "rejected" },
+    ]);
+    expect(client.getQueryData<MessagesQueryData>(key)).toMatchObject({
+      pages: [
+        {
+          historyId: "newest",
+          messages: [{ id: "newest" }],
+          nextPageToken: "newest-2",
+        },
+      ],
+    });
+    expect(
+      client.getQueryData<MessagesQueryData>(key)?.pages[0]?.refreshing
+    ).toBeUndefined();
+    unsubscribe();
+    client.clear();
+  });
+
+  test("a delta head repair keeps only its fresh page chain before advancing its covered checkpoint", async () => {
+    const client = new QueryClient();
+    const key = getMessagesQueryKey("mailbox", "inbox");
+    client.setQueryData<MessagesQueryData>(key, {
+      pageParams: [undefined, "old-2"],
+      pages: [
+        { historyId: "old", messages: [message("a")] },
+        { messages: [message("b")] },
+      ],
+    });
+    vi.mocked(rpc.mail.syncMailbox).mockResolvedValueOnce({
+      hasChanges: true,
+      historyId: "covered",
+      refreshFirstPage: true,
+      removedMessageIds: [],
+      requiresFullRefresh: false,
+      updatedMessages: [],
+    });
+    vi.mocked(rpc.mail.listThreads).mockResolvedValueOnce({
+      historyId: "list-checkpoint",
+      messages: [message("fresh")],
+      nextPageToken: "fresh-2",
+    });
+    await syncMessages(client, "mailbox", "inbox");
+    expect(client.getQueryData<MessagesQueryData>(key)?.pages).toHaveLength(1);
+    expect(client.getQueryData<MessagesQueryData>(key)?.pages[0]).toMatchObject(
+      {
+        historyId: "covered",
+        messages: [{ id: "fresh" }],
+        nextPageToken: "fresh-2",
+      }
+    );
+    client.clear();
+  });
+
+  test("does not recreate cleared session queries from late provider results", async () => {
+    const client = new QueryClient();
+    const response = Promise.withResolvers<ListMessagesPageResult>();
+    vi.mocked(rpc.mail.listThreads).mockReturnValueOnce(response.promise);
+    const refresh = refreshLoadedMessagesPages(client, "mailbox", "inbox");
+    const rejected = Promise.allSettled([refresh]);
+    await vi.waitFor(() => {
+      expect(rpc.mail.listThreads).toHaveBeenCalledOnce();
+    });
+    client.clear();
+    response.resolve({ messages: [message("private")] });
+    await expect(rejected).resolves.toMatchObject([
+      { reason: { name: "AbortError" }, status: "rejected" },
+    ]);
+    expect(client.getQueryCache().getAll()).toHaveLength(0);
+  });
+
+  test("cancels pending pagination from the old chain before publishing fresh pages", async () => {
+    const client = new QueryClient();
+    const key = getMessagesQueryKey("mailbox", "inbox");
+    client.setQueryData<MessagesQueryData>(key, {
+      pageParams: [undefined],
+      pages: [{ messages: [message("old")], nextPageToken: "old-2" }],
+    });
+    const oldTail = Promise.withResolvers<ListMessagesPageResult>();
+    vi.mocked(rpc.mail.listThreads)
+      .mockReturnValueOnce(oldTail.promise)
+      .mockResolvedValueOnce({
+        historyId: "fresh",
+        messages: [message("fresh")],
+        nextPageToken: "fresh-2",
+      });
+    const observer = new InfiniteQueryObserver(
+      client,
+      messagesQueryOptions("mailbox", "inbox")
+    );
+    const unsubscribe = observer.subscribe(() => {});
+    const paging = observer.fetchNextPage();
+    await vi.waitFor(() => {
+      expect(rpc.mail.listThreads).toHaveBeenCalledOnce();
+    });
+    await refreshLoadedMessagesPages(client, "mailbox", "inbox");
+    oldTail.resolve({ messages: [message("stale-tail")] });
+    await paging;
+    expect(
+      observer
+        .getCurrentResult()
+        .data?.pages.flatMap((page) => page.messages.map((item) => item.id))
+    ).toStrictEqual(["fresh"]);
+    expect(observer.getCurrentResult().data?.pages.at(-1)?.nextPageToken).toBe(
+      "fresh-2"
+    );
+    unsubscribe();
+    client.clear();
+  });
+
+  test("keeps pending read and archive intents through prefix publications and restores failed archive", async () => {
+    const client = new QueryClient();
+    const key = getMessagesQueryKey("mailbox", "inbox");
+    client.setQueryData<MessagesQueryData>(key, {
+      pageParams: [undefined, "old-2"],
+      pages: [
+        {
+          historyId: "old",
+          messages: [message("read", { isUnread: true }), message("archive")],
+        },
+        { messages: [message("tail")] },
+      ],
+    });
+    const settle = Promise.withResolvers<() => void>();
+    const mutation = runMailMutation(client, {
+      apply: () => {
+        client.setQueryData<MessagesQueryData>(key, (data) =>
+          removeMessagesFromQueryData(
+            updateMessageInQueryData(data, "read", (item) => ({
+              ...item,
+              isUnread: false,
+            })),
+            (item) => item.id === "archive"
+          )
+        );
+      },
+      execute: async () => await settle.promise,
+      mailboxId: "mailbox",
+      targets: ["read", "archive"],
+    });
+    const failed = mutation.catch(() => {});
+    const second = Promise.withResolvers<ListMessagesPageResult>();
+    vi.mocked(rpc.mail.listThreads)
+      .mockResolvedValueOnce({
+        historyId: "fresh",
+        messages: [message("read", { isUnread: true }), message("archive")],
+        nextPageToken: "fresh-2",
+      })
+      .mockReturnValueOnce(second.promise);
+    const refresh = refreshLoadedMessagesPages(client, "mailbox", "inbox");
+    await vi.waitFor(() => {
+      expect(rpc.mail.listThreads).toHaveBeenCalledTimes(2);
+    });
+    expect(
+      client.getQueryData<MessagesQueryData>(key)?.pages[0].messages
+    ).toStrictEqual([expect.objectContaining({ id: "read", isUnread: false })]);
+    second.resolve({ messages: [message("tail")] });
+    await refresh;
+    expect(
+      client.getQueryData<MessagesQueryData>(key)?.pages[0].messages
+    ).toStrictEqual([expect.objectContaining({ id: "read", isUnread: false })]);
+    settle.reject(new Error("Mutation failed"));
+    await failed;
+    expect(
+      client.getQueryData<MessagesQueryData>(key)?.pages[0].messages
+    ).toContainEqual(expect.objectContaining({ id: "archive" }));
+    disposeMailMutations(client);
+    client.clear();
   });
 });
