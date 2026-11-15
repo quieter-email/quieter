@@ -335,6 +335,31 @@ const isMessageInMailbox = (
   return true;
 };
 
+const getThreadMailboxMessages = ({
+  mailbox,
+  messages,
+}: {
+  mailbox?: MailboxCategory;
+  messages: GmailMessage[];
+}): GmailMessage[] => {
+  const publishedMessages = messages.filter(
+    (message) => !hasDraftLabel(message.labelIds)
+  );
+  if (
+    mailbox === "done" &&
+    publishedMessages.some(
+      (message) => message.labelIds?.includes("INBOX") === true
+    )
+  ) {
+    return [];
+  }
+  return mailbox
+    ? publishedMessages.filter((message) =>
+        isMessageInMailbox(mailbox, normalizeLabelIds(message.labelIds))
+      )
+    : publishedMessages;
+};
+
 const isNonEmptyString = (value: string | null | undefined): value is string =>
   value !== null && value !== undefined && value.trim() !== "";
 
@@ -1697,17 +1722,7 @@ export const listMessagesWithDetails = async (
     const messages = (thread.messages ?? []).filter(
       (message) => !hasDraftLabel(message.labelIds)
     );
-    if (
-      mailbox === "done" &&
-      messages.some((message) => message.labelIds?.includes("INBOX") === true)
-    ) {
-      return [];
-    }
-    const matchingMessages = mailbox
-      ? messages.filter((message) =>
-          isMessageInMailbox(mailbox, normalizeLabelIds(message.labelIds))
-        )
-      : messages;
+    const matchingMessages = getThreadMailboxMessages({ mailbox, messages });
     let anchor: GmailMessage | undefined;
     for (const message of matchingMessages) {
       if (
@@ -1787,8 +1802,28 @@ export const listMessagesForAgent = async (
     list.messages.map((message) => message.id),
     options?.signal
   );
+  const doneThreads =
+    options?.mailbox === "done"
+      ? await getGmailThreadsListMetadata(
+          accessToken,
+          list.messages.map((message) => message.threadId),
+          options.signal
+        )
+      : null;
+  const doneMessageIds = doneThreads
+    ? new Set(
+        doneThreads.flatMap((thread) =>
+          thread
+            ? getThreadMailboxMessages({
+                mailbox: "done",
+                messages: thread.messages ?? [],
+              }).map((message) => message.id)
+            : []
+        )
+      )
+    : null;
   const messages = details.flatMap((message) => {
-    if (!message) {
+    if (!message || (doneMessageIds && !doneMessageIds.has(message.id))) {
       return [];
     }
 
@@ -1813,6 +1848,17 @@ export const listMessagesForAgent = async (
       },
     ];
   });
+
+  if (
+    options?.mailbox === "done" &&
+    messages.length === 0 &&
+    list.nextPageToken
+  ) {
+    return await listMessagesForAgent(accessToken, {
+      ...options,
+      pageToken: list.nextPageToken,
+    });
+  }
 
   return {
     messages,

@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vite-plus/test";
 
 import {
   getMessageWithDetails,
+  listMessagesForAgent,
   listMessagesWithDetails,
   getGmailMessageMetadata,
   getGmailProfile,
@@ -688,65 +689,85 @@ describe("OTP sending and extraction", () => {
 });
 
 describe("Done conversation pagination", () => {
-  test("reaches handled mail after consecutive provider pages containing only reopened conversations", async () => {
-    const originalFetch = globalThis.fetch;
-    const pages = new Map([
-      ["", { id: "reopened-first", next: "second" }],
-      ["second", { id: "reopened-second", next: "third" }],
-      ["third", { id: "handled", next: undefined }],
-    ]);
-    setFetch(async (input, init) => {
-      const url = new URL(getRequestUrl(input));
-      if (url.pathname.endsWith("/threads")) {
-        const page = pages.get(url.searchParams.get("pageToken") ?? "");
-        if (!page) {
-          throw new Error("Unexpected fixture page.");
-        }
-        return await resolveJson({
-          nextPageToken: page.next,
-          threads: [{ id: page.id }],
-        });
-      }
-      const body = getRequestBody(init?.body);
-      const id = ["reopened-first", "reopened-second", "handled"].find(
-        (candidate) => body.includes(`/threads/${candidate}`)
-      );
-      if (id) {
-        const messages: MessageListItem[] = [
-          { id: `${id}-old`, internalDate: "1", labelIds: [], threadId: id },
-        ];
-        if (id !== "handled") {
-          messages.push({
-            id: `${id}-reply`,
-            internalDate: "2",
-            labelIds: ["INBOX"],
-            threadId: id,
+  test.each([
+    { list: listMessagesWithDetails, name: "mailbox list" },
+    { list: listMessagesForAgent, name: "agent search" },
+  ])(
+    "$name reaches handled mail after consecutive reopened pages",
+    async ({ list }) => {
+      const originalFetch = globalThis.fetch;
+      const pages = new Map([
+        ["", { id: "reopened-first", next: "second" }],
+        ["second", { id: "reopened-second", next: "third" }],
+        ["third", { id: "handled", next: undefined }],
+      ]);
+      setFetch(async (input, init) => {
+        const url = new URL(getRequestUrl(input));
+        if (
+          url.pathname.endsWith("/threads") ||
+          url.pathname.endsWith("/messages")
+        ) {
+          const page = pages.get(url.searchParams.get("pageToken") ?? "");
+          if (!page) {
+            throw new Error("Unexpected fixture page.");
+          }
+          return await resolveJson({
+            messages: [{ id: `${page.id}-old`, threadId: page.id }],
+            nextPageToken: page.next,
+            threads: [{ id: page.id }],
           });
         }
-        return await resolveResponse(
-          new Response(
-            createIdentifiedBatchResponse("threads", [
-              {
-                body: { historyId: "30", id, messages },
-                contentId: "thread-0",
-              },
-            ]),
-            { headers: { "Content-Type": "multipart/mixed; boundary=threads" } }
-          )
+        const body = getRequestBody(init?.body);
+        const id = ["reopened-first", "reopened-second", "handled"].find(
+          (candidate) =>
+            body.includes(`/threads/${candidate}`) ||
+            body.includes(`/messages/${candidate}-old`)
         );
-      }
-      throw new Error("Unexpected provider request.");
-    });
-    try {
-      const page = await listMessagesWithDetails("fixture-token", {
-        mailbox: "done",
+        if (id) {
+          const messages: MessageListItem[] = [
+            { id: `${id}-old`, internalDate: "1", labelIds: [], threadId: id },
+          ];
+          if (id !== "handled") {
+            messages.push({
+              id: `${id}-reply`,
+              internalDate: "2",
+              labelIds: ["INBOX"],
+              threadId: id,
+            });
+          }
+          return await resolveResponse(
+            new Response(
+              createIdentifiedBatchResponse("threads", [
+                {
+                  body: body.includes(`/messages/${id}-old`)
+                    ? messages[0]
+                    : { historyId: "30", id, messages },
+                  contentId: body.includes(`/messages/${id}-old`)
+                    ? "message-0"
+                    : "thread-0",
+                },
+              ]),
+              {
+                headers: {
+                  "Content-Type": "multipart/mixed; boundary=threads",
+                },
+              }
+            )
+          );
+        }
+        throw new Error("Unexpected provider request.");
       });
-      expect(page.messages).toContainEqual(
-        expect.objectContaining({ id: "handled-old", threadId: "handled" })
-      );
-      expect(page.nextPageToken).toBeUndefined();
-    } finally {
-      Reflect.set(globalThis, "fetch", originalFetch);
+      try {
+        const page = await list("fixture-token", {
+          mailbox: "done",
+        });
+        expect(page.messages).toContainEqual(
+          expect.objectContaining({ id: "handled-old", threadId: "handled" })
+        );
+        expect(page.nextPageToken).toBeUndefined();
+      } finally {
+        Reflect.set(globalThis, "fetch", originalFetch);
+      }
     }
-  });
+  );
 });
