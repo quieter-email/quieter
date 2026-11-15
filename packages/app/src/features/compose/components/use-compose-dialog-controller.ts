@@ -66,7 +66,7 @@ import type { FollowUpReminderIntent } from "@quieter/mail/reminders";
 import type { ScheduledSendTime } from "@quieter/mail/scheduled-send";
 import { toast } from "@quieter/ui/toast";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
@@ -247,6 +247,7 @@ export const useComposeDialogController = ({
       draftId: draft.draftId,
       errorMessage: null,
       followUpReminder: draft.followUpReminder,
+      holdAttempt: draft.holdAttempt,
       inlineImages: draft.inlineImages,
       lastSavedAt: draft.lastSavedAt,
       localId: draft.localId,
@@ -333,6 +334,9 @@ export const useComposeDialogController = ({
     setDraft({
       ...activeDraftRef.current,
       errorMessage,
+      holdAttempt: deliveryUncertain
+        ? activeDraftRef.current.holdAttempt
+        : undefined,
       saveStatus: "error",
       scheduleAttempt: deliveryUncertain
         ? activeDraftRef.current.scheduleAttempt
@@ -428,6 +432,8 @@ export const useComposeDialogController = ({
     setDraft((current) => ({
       ...current,
       errorMessage: null,
+      holdAttempt:
+        !schedule && !demoMode && !managedDemoMode ? true : undefined,
       saveStatus: "sending",
       scheduleAttempt: schedule ?? undefined,
       sendOperationId: current.sendOperationId ?? crypto.randomUUID(),
@@ -438,7 +444,6 @@ export const useComposeDialogController = ({
     // oxlint-disable-next-line no-use-before-define -- The form invokes this handler after recovery initializes.
     recovery.checkpoint();
 
-    let draftCleanupHandled = false;
     try {
       if (schedule) {
         const scheduled = await scheduleComposeMessage(
@@ -458,9 +463,22 @@ export const useComposeDialogController = ({
       } else if (managedDemoMode) {
         sendManagedDemoDraft(message);
       } else {
-        const sent = await sendComposeMessage(mailboxId ?? "", message);
-        draftCleanupHandled =
-          "draftCleanupHandled" in sent && sent.draftCleanupHandled;
+        const held = await sendComposeMessage(mailboxId, message);
+        queryClient.setQueryData(
+          orpc.mail.getHeldSend.queryOptions({
+            input: { mailboxId, sendOperationId: held.sendOperationId },
+          }).queryKey,
+          held
+        );
+        setDraft({
+          ...message,
+          holdAttempt: true,
+          saveStatus: "idle",
+          sendUncertain: true,
+        });
+        // oxlint-disable-next-line no-use-before-define -- Submission runs after the recovery hook initializes.
+        recovery.checkpoint();
+        return;
       }
     } catch (error) {
       handleSendFailure(error);
@@ -469,11 +487,7 @@ export const useComposeDialogController = ({
 
     closeDialog();
 
-    if (
-      !draftCleanupHandled &&
-      message.draftId !== undefined &&
-      message.draftId !== ""
-    ) {
+    if (message.draftId !== undefined && message.draftId !== "") {
       try {
         if (demoMode) {
           deleteDemoDraft(message);
@@ -918,6 +932,7 @@ export const useComposeDialogController = ({
       (finishingRef.current ||
         draftClosedRef.current ||
         assistantUnsavedRef.current ||
+        activeDraftRef.current.sendUncertain === true ||
         activeDraftRef.current.saveStatus === "sending" ||
         (activeDraftRef.current.saveStatus === "error" &&
           !retryableSaveErrorRef.current))
@@ -996,7 +1011,11 @@ export const useComposeDialogController = ({
 
   useDraftAutosave({
     attachments: state.draft.attachments,
-    enabled: persistDrafts && !autosavePaused && state.open,
+    enabled:
+      persistDrafts &&
+      !autosavePaused &&
+      state.open &&
+      state.draft.sendUncertain !== true,
     followUpReminder: state.draft.followUpReminder,
     mailboxId,
     save: async () => {
@@ -1004,6 +1023,7 @@ export const useComposeDialogController = ({
         !assistantUnsavedRef.current &&
         !draftClosedRef.current &&
         !finishingRef.current &&
+        activeDraftRef.current.sendUncertain !== true &&
         activeDraftRef.current.saveStatus !== "sending" &&
         (activeDraftRef.current.saveStatus !== "error" ||
           retryableSaveErrorRef.current) &&
@@ -1196,6 +1216,45 @@ export const useComposeDialogController = ({
     }
   };
 
+  const restoreHeldMessage = async () => {
+    const draft = activeDraftRef.current;
+    if (!mailboxId || !draft.sendOperationId || draft.holdAttempt !== true) {
+      return;
+    }
+    setState((current) => ({ ...current, isFinishing: true }));
+    try {
+      const canceled = await rpc.mail.undoSend({
+        mailboxId,
+        sendOperationId: draft.sendOperationId,
+      });
+      const restored = canceled.draftId
+        ? await rpc.mail.getDraft({ draftId: canceled.draftId, mailboxId })
+        : null;
+      const editable = await prepareLoadedComposeDraft(mailboxId, {
+        ...draft,
+        ...restored,
+        draftId: restored?.draftId ?? draft.draftId,
+        errorMessage: null,
+        holdAttempt: undefined,
+        lastSavedAt: restored?.lastSavedAt ?? draft.lastSavedAt,
+        messageId: restored?.messageId ?? draft.messageId,
+        recoveryMissingFiles: restored ? undefined : draft.recoveryMissingFiles,
+        saveStatus: restored ? "saved" : "idle",
+        sendOperationId: crypto.randomUUID(),
+        sendUncertain: false,
+      });
+      setDraft(editable);
+      lastSavedDraftRef.current = editable;
+      form.reset(draftToComposeFormValues(editable));
+      recovery.checkpoint();
+      await refreshCachedMailboxQueries(queryClient, mailboxId, "drafts");
+    } catch (error) {
+      toastError(error, { boundary: "compose-undo-send" });
+    } finally {
+      setState((current) => ({ ...current, isFinishing: false }));
+    }
+  };
+
   const checkSendDelivery = async () => {
     const draft = activeDraftRef.current;
     if (
@@ -1219,6 +1278,24 @@ export const useComposeDialogController = ({
     finishingRef.current = true;
     setState((current) => ({ ...current, isFinishing: true }));
     try {
+      if (draft.holdAttempt === true) {
+        const held = await rpc.mail.getHeldSend({
+          mailboxId,
+          sendOperationId: draft.sendOperationId,
+        });
+        if (held === null || held.status === "canceled") {
+          await restoreHeldMessage();
+        } else if (held.status === "accepted") {
+          closeDialog();
+          await Promise.all([
+            refreshCachedMailboxQueries(queryClient, mailboxId, "drafts"),
+            refreshCachedMailboxQueries(queryClient, mailboxId, "sent"),
+            refreshThread(draft),
+          ]);
+          toast.success("Message sent.");
+        }
+        return;
+      }
       if (draft.scheduleAttempt) {
         const recovered = await recoverComposeSchedule({
           draft: buildDraftFromForm(form.state.values),
@@ -1300,6 +1377,35 @@ export const useComposeDialogController = ({
       setState((current) => ({ ...current, isFinishing: false }));
     }
   };
+
+  const heldSendQuery = useQuery({
+    ...orpc.mail.getHeldSend.queryOptions({
+      input: {
+        mailboxId: mailboxId ?? "",
+        sendOperationId: state.draft.sendOperationId ?? "",
+      },
+    }),
+    enabled:
+      !!mailboxId &&
+      state.draft.holdAttempt === true &&
+      state.draft.sendUncertain === true,
+    refetchInterval: (query) =>
+      ["accepted", "canceled", "failed"].includes(
+        query.state.data?.status ?? ""
+      )
+        ? false
+        : 1000,
+    retry: false,
+  });
+
+  const finishHeldSend = useEffectEvent(() => {
+    void checkSendDelivery();
+  });
+  useEffect(() => {
+    if (heldSendQuery.data?.status === "accepted") {
+      finishHeldSend();
+    }
+  }, [heldSendQuery.data?.status]);
 
   const handleDialogOpenChange = (open: boolean) => {
     if (open) {
@@ -1740,9 +1846,11 @@ export const useComposeDialogController = ({
     handleFollowUpReminderChange,
     handleScheduleMessage,
     handleUserDraftChange,
+    heldSendQuery,
     prepareSenderSwitch,
     removeAttachment,
     renameAttachment,
+    restoreHeldMessage,
     saveDraftCopy,
     setActiveDraftError,
     state,

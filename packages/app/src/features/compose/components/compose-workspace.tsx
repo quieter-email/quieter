@@ -128,6 +128,8 @@ import {
   useState,
 } from "react";
 
+import { HeldSendNotice } from "./held-send-notice";
+
 export type ComposeSenderMailbox = {
   capabilities: Pick<MailboxCapabilities, "canSetSenderName">;
   id: string;
@@ -452,6 +454,12 @@ const ReadyComposeSurface = ({
         !switchingSender &&
         !!mailboxId)) &&
     !audioBusy;
+  const holding =
+    state.draft.holdAttempt === true && state.draft.sendUncertain === true;
+  const canRestoreHeld =
+    compose.heldSendQuery.data?.canUndo === true ||
+    compose.heldSendQuery.data?.status === "failed" ||
+    compose.heldSendQuery.data?.status === "canceled";
   const isInline = variant === "inline";
   let sendButtonLabel = state.draft.scheduleAttempt ? "Scheduling…" : "Send";
   if (state.draft.sendUncertain === true) {
@@ -1360,6 +1368,29 @@ const ReadyComposeSurface = ({
                       chrome="footer"
                       leading={
                         <div className="flex items-center gap-1">
+                          {holding ? (
+                            <ToolbarButton
+                              disabled={
+                                state.isFinishing ||
+                                (compose.heldSendQuery.data?.canUndo !== true &&
+                                  compose.heldSendQuery.data?.status !==
+                                    "failed" &&
+                                  compose.heldSendQuery.data?.status !==
+                                    "canceled")
+                              }
+                              onClick={() => {
+                                void compose.restoreHeldMessage();
+                              }}
+                              type="button"
+                              variant="primary"
+                            >
+                              {compose.heldSendQuery.data?.status ===
+                                "failed" ||
+                              compose.heldSendQuery.data?.status === "canceled"
+                                ? "Return to draft"
+                                : "Undo send"}
+                            </ToolbarButton>
+                          ) : null}
                           <ToolbarButton
                             disabled={!canSubmitCompose}
                             onClick={
@@ -1374,7 +1405,9 @@ const ReadyComposeSurface = ({
                                 ? "button"
                                 : "submit"
                             }
-                            variant="primary"
+                            variant={
+                              holding && canRestoreHeld ? "default" : "primary"
+                            }
                           >
                             {state.draft.saveStatus === "sending" ? (
                               <Icon animation="spin" icon={Loading03Icon} />
@@ -1493,6 +1526,9 @@ const ReadyComposeSurface = ({
             )}
           </form.Field>
 
+          {holding ? (
+            <HeldSendNotice held={compose.heldSendQuery.data} />
+          ) : null}
           {senderUnavailable ? (
             <Text as="div" role="alert" tone="destructive">
               This sending address is no longer available. You can keep editing,
