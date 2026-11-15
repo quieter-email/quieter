@@ -33,9 +33,12 @@ vi.mock(import("./draft"), async (importOriginal) => ({
 }));
 
 const scheduled: ScheduledMessage = {
+  canUndo: false,
+  deliveryKind: "scheduled",
   errorMessage: null,
   id: crypto.randomUUID(),
   mailboxId: "mailbox",
+  restoredDraftId: null,
   sendAt: new Date(Date.now() + 86_400_000).toISOString(),
   sendOperationId: crypto.randomUUID(),
   status: "scheduled",
