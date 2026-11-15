@@ -9,10 +9,10 @@ import { MessageRow } from "@quieter/app/features/message-list/components/messag
 import type { useMessageListSelection } from "@quieter/app/features/message-list/components/use-message-list-selection";
 import { useThreadVerificationCodes } from "@quieter/app/features/verification-codes/use-thread-verification-codes";
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
-import {
-  getThreadQueryKey,
-  getThreadWithDetailsOptions,
-} from "@quieter/app/lib/mail/thread-query";
+import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
+import { attachThreadPreloader } from "@quieter/app/lib/mail-cache-lifecycle";
+import type { ThreadPreloadCandidate } from "@quieter/app/lib/mail-cache-lifecycle";
+import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Icon } from "@quieter/ui/icon";
 import { mailListRowParts } from "@quieter/ui/mail-list-row";
@@ -117,57 +117,6 @@ const MessageListLoadingSkeleton = () => (
   </div>
 );
 
-const useThreadIntentPrefetch = (
-  mailboxId: string,
-  mailboxContextsByThreadId: MessageListProps["mailboxContextsByThreadId"],
-  queryClient: ReturnType<typeof useQueryClient>
-) => {
-  const intentTimerRef = useRef<number | null>(null);
-  const intentThreadIdRef = useRef<string | null>(null);
-  const handleThreadIntent = (threadId: string | null) => {
-    if (intentTimerRef.current !== null) {
-      window.clearTimeout(intentTimerRef.current);
-      intentTimerRef.current = null;
-    }
-    intentThreadIdRef.current = threadId;
-    if (threadId === null || threadId === "") {
-      return;
-    }
-    intentTimerRef.current = window.setTimeout(() => {
-      intentTimerRef.current = null;
-      if (intentThreadIdRef.current !== threadId) {
-        return;
-      }
-      const context = mailboxContextsByThreadId?.get(threadId);
-      if (mailboxContextsByThreadId && !context) {
-        return;
-      }
-      const sourceMailboxId = context?.mailboxId ?? mailboxId;
-      const originalThreadId = context?.originalThreadId ?? threadId;
-      const queryKey = getThreadQueryKey(sourceMailboxId, originalThreadId);
-      if (queryClient.isFetching({ exact: true, queryKey }) > 0) {
-        return;
-      }
-      void Promise.allSettled([
-        queryClient.query(
-          getThreadWithDetailsOptions(sourceMailboxId, originalThreadId)
-        ),
-      ]);
-    }, 200);
-  };
-
-  useLayoutEffect(
-    () => () => {
-      if (intentTimerRef.current !== null) {
-        window.clearTimeout(intentTimerRef.current);
-      }
-    },
-    []
-  );
-
-  return handleThreadIntent;
-};
-
 const getEmptyMessageLabel = (
   activeMailbox: MessageListProps["activeMailbox"],
   searchQuery: string
@@ -203,11 +152,54 @@ export const MessageListScrollPane = ({
     threadedMessages,
     list.isPending
   );
-  const handleThreadIntent = useThreadIntentPrefetch(
-    list.mailboxId,
-    list.mailboxContextsByThreadId,
-    queryClient
+  const preloaderRef = useRef<ReturnType<typeof attachThreadPreloader> | null>(
+    null
   );
+  useLayoutEffect(() => {
+    const preloader = attachThreadPreloader(queryClient);
+    preloaderRef.current = preloader;
+    return () => {
+      preloader?.dispose();
+      preloaderRef.current = null;
+    };
+  }, [
+    queryClient,
+    list.selectionScopeKey,
+    list.mailboxId,
+    list.activeMailbox,
+    list.searchQuery,
+  ]);
+  const candidateForThread = (
+    thread: ThreadListEntry
+  ): ThreadPreloadCandidate | undefined => {
+    const context = list.mailboxContextsByThreadId?.get(thread.threadId);
+    if (list.mailboxContextsByThreadId && !context) {
+      return undefined;
+    }
+    const mailboxId = context?.mailboxId ?? list.mailboxId;
+    const message = thread.anchorMessage;
+    return {
+      expectedMessage: {
+        id: context?.originalMessageIds.get(message.id) ?? message.id,
+        includeDrafts:
+          ((context?.mailboxProvider ?? list.mailboxProvider) !== "gmail" &&
+            !isSandboxMailboxId(mailboxId)) ||
+          (message.draftId?.trim() ?? "") !== "" ||
+          message.labelIds?.includes(MAILBOX_LABELS.drafts) === true,
+        threadMessageCount: message.threadMessageCount,
+      },
+      mailboxId,
+      threadId: context?.originalThreadId ?? thread.threadId,
+    };
+  };
+  const handleThreadIntent = (threadId: string | null) => {
+    const thread = threadedMessages.find(
+      (entry) => entry.threadId === threadId
+    );
+    preloaderRef.current?.intent(
+      thread ? (candidateForThread(thread) ?? null) : null
+    );
+  };
 
   const deliveryBuckets = useMemo(() => {
     const buckets = new Map<
@@ -457,6 +449,31 @@ export const MessageListScrollPane = ({
   }, [messageVirtualizer, selection.scrollRef, updateRowMeasurements]);
 
   const virtualItems = messageVirtualizer.getVirtualItems();
+  useLayoutEffect(() => {
+    const element = selection.scrollRef.current;
+    const candidates: ThreadPreloadCandidate[] = [];
+    if (
+      element &&
+      element.clientWidth > 0 &&
+      element.clientHeight > 0 &&
+      !list.isError
+    ) {
+      const top = messageVirtualizer.scrollOffset ?? element.scrollTop;
+      for (const item of virtualItems) {
+        if (item.end <= top || item.start >= top + element.clientHeight) {
+          continue;
+        }
+        const thread = threadedMessages[item.index];
+        const candidate =
+          thread === undefined ? undefined : candidateForThread(thread);
+        if (candidate) {
+          candidates.push(candidate);
+        }
+      }
+    }
+    preloaderRef.current?.update(candidates);
+  });
+
   const latestCodeByThreadId = useThreadVerificationCodes(
     threadedMessages,
     list

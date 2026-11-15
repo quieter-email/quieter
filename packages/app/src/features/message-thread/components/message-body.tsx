@@ -231,12 +231,15 @@ const HtmlMessageBodyContent = ({
       }
     }
 
-    const resolvedMail = applyEmailPreferences(
-      preprocessedHtml,
-      shouldLoadImages,
-      "light",
-      inlineImageUrls
-    );
+    const resolvedMail =
+      inlineImageUrls.size === 0
+        ? processedMail
+        : applyEmailPreferences(
+            preprocessedHtml,
+            shouldLoadImages,
+            "light",
+            inlineImageUrls
+          );
     const parsedDocument = new DOMParser().parseFromString(
       resolvedMail.processedHtml,
       "text/html"
@@ -268,6 +271,7 @@ const HtmlMessageBodyContent = ({
     inlineAttachments,
     inlineImageQueries.files,
     preprocessedHtml,
+    processedMail,
     shouldLoadImages,
   ]);
 
