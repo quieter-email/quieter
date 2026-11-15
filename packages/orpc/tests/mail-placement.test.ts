@@ -13,7 +13,9 @@ import {
   vi,
 } from "vite-plus/test";
 
+import { consumeRateLimit } from "../src/abuse-protection";
 import type { MailRequestContext } from "../src/gmail-request";
+import { mailInputSchemas } from "../src/mail/inputs";
 import {
   applyMailPlacement,
   supersedePendingMailPlacement,
@@ -40,13 +42,14 @@ const fixture = await vi.hoisted(async () => {
     databaseUrl ?? "postgresql://postgres@127.0.0.1:1/placement_fixture",
     {
       connect_timeout: 3,
-      max: 2,
+      max: 3,
       onnotice: () => {},
     }
   );
   const state: {
     access: boolean;
     ambiguousWrite: boolean;
+    beforeAdmission?: () => Promise<void>;
     beforeSnapshot?: () => Promise<void>;
     messages: MessageListItem[];
     provider: "gmail" | "managed";
@@ -129,6 +132,18 @@ vi.mock("@quieter/gmail", () => ({
           ?.labelIds ?? [],
       providerRevision: "1",
     }),
+  getGmailMessageThreadAssociations: async (
+    _accessToken: string,
+    messageIds: readonly string[],
+    signal?: AbortSignal
+  ) => {
+    const associations = fixture.state.messages
+      .filter((message) => messageIds.includes(message.id))
+      .map((message) => ({ id: message.id, threadId: message.threadId }));
+    await fixture.state.beforeAdmission?.();
+    signal?.throwIfAborted();
+    return associations;
+  },
   getThreadWithDetails: async (_accessToken: string, threadId: string) => {
     const messages = structuredClone(
       fixture.state.messages.filter((message) => message.threadId === threadId)
@@ -161,6 +176,18 @@ const seedManaged = async ({
   `;
 };
 
+describe("placement command admission", () => {
+  test("rejects an oversized placement reference before command admission", () => {
+    const result = mailInputSchemas.applyChanges.safeParse({
+      command: { kind: "set-placement", placement: "done" },
+      mailboxId: "mailbox",
+      requestId: randomUUID(),
+      targets: [{ messageIds: ["anchor"], threadId: "x".repeat(1024) }],
+    });
+    expect(result.success).toBeFalsy();
+  });
+});
+
 describe.skipIf(!fixture.enabled)("durable mail placement commands", () => {
   beforeAll(async () => {
     await fixture.client.unsafe(`
@@ -168,6 +195,12 @@ describe.skipIf(!fixture.enabled)("durable mail placement commands", () => {
         id text primary key,
         "contentRevision" bigint not null default 0,
         "updatedAt" timestamptz not null default now()
+      );
+      create table if not exists "rateLimitBucket" (
+        key text primary key,
+        count integer not null,
+        "windowStart" timestamptz not null,
+        "expiresAt" timestamptz not null
       );
       create table if not exists "managedMailMessage" (
         id text primary key,
@@ -204,7 +237,7 @@ describe.skipIf(!fixture.enabled)("durable mail placement commands", () => {
 
   beforeEach(async () => {
     await fixture.client.unsafe(
-      'truncate "mailPlacementOperation", "managedMailMessage", mailbox restart identity cascade'
+      'truncate "rateLimitBucket", "mailPlacementOperation", "managedMailMessage", mailbox restart identity cascade'
     );
     await fixture.client`insert into mailbox (id) values ('mailbox'), ('other-mailbox')`;
     fixture.state.access = true;
@@ -213,11 +246,195 @@ describe.skipIf(!fixture.enabled)("durable mail placement commands", () => {
     fixture.state.messages = [];
     fixture.state.providerWrites = 0;
     fixture.state.ambiguousWrite = false;
+    fixture.state.beforeAdmission = undefined;
     fixture.state.beforeSnapshot = undefined;
   });
 
   afterAll(async () => {
     await fixture.client.end();
+  });
+
+  test("charges weighted costs atomically while keeping the default request cost", async () => {
+    const input = { key: randomUUID(), limit: 4, windowMs: 60_000 };
+    const initial = await consumeRateLimit({ ...input, cost: 3 });
+    expect(initial.allowed).toBeTruthy();
+    const competing = await Promise.all([
+      consumeRateLimit(input),
+      consumeRateLimit(input),
+    ]);
+    expect(competing.filter((result) => result.allowed)).toHaveLength(1);
+    await fixture.client`
+      update "rateLimitBucket" set "expiresAt" = now() - interval '1 second'
+      where key = ${input.key}
+    `;
+    const reset = await consumeRateLimit({ ...input, cost: 4 });
+    expect(reset.allowed).toBeTruthy();
+    const exhausted = await consumeRateLimit(input);
+    expect(exhausted.allowed).toBeFalsy();
+  });
+
+  test.each([0, -1, 0.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid server-derived budget cost %s",
+    async (cost) => {
+      await expect(
+        consumeRateLimit({
+          cost,
+          key: randomUUID(),
+          limit: 4,
+          windowMs: 60_000,
+        })
+      ).rejects.toBeInstanceOf(RangeError);
+      const buckets = await fixture.client`select key from "rateLimitBucket"`;
+      expect(buckets).toHaveLength(0);
+    }
+  );
+
+  test.each(["gmail", "managed"] as const)(
+    "rejects unknown and mismatched %s anchors without retaining target receipts",
+    async (provider) => {
+      fixture.state.provider = provider;
+      fixture.state.messages = [
+        { id: "anchor", labelIds: ["INBOX"], threadId: "conversation" },
+      ];
+      await seedManaged({ id: "anchor" });
+      await seedManaged({ id: "foreign", mailboxId: "other-mailbox" });
+      const result = await applyMailPlacement({
+        context: { userId: "actor" },
+        input: {
+          command: { kind: "set-placement", placement: "done" },
+          mailboxId: "mailbox",
+          requestId: randomUUID(),
+          targets: [
+            { messageIds: ["missing"], threadId: "missing-conversation" },
+            { messageIds: ["anchor"], threadId: "wrong-conversation" },
+            { messageIds: ["foreign"], threadId: "foreign-conversation" },
+          ],
+        },
+      });
+      expect(
+        result.targets.every((target) => target.status === "failed")
+      ).toBeTruthy();
+      const receipts =
+        await fixture.client`select id from "mailPlacementOperation"`;
+      expect(receipts).toHaveLength(0);
+      expect(fixture.state.providerWrites).toBe(0);
+      const messages = await fixture.client<
+        { mailboxState: string }[]
+      >`select "mailboxState" from "managedMailMessage"`;
+      expect(
+        messages.every((message) => message.mailboxState === "active")
+      ).toBeTruthy();
+    }
+  );
+
+  test("denies new targets across mailboxes after the actor budget is exhausted but still replays accepted identities", async () => {
+    await seedManaged({ id: "anchor" });
+    await seedManaged({
+      id: "second",
+      mailboxId: "other-mailbox",
+      threadId: "second-conversation",
+    });
+    const request = {
+      context: { userId: "actor" },
+      input: {
+        command: { kind: "set-placement", placement: "done" },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [{ messageIds: ["anchor"], threadId: "conversation" }],
+      },
+    } satisfies Parameters<typeof applyMailPlacement>[0];
+    await applyMailPlacement(request);
+    await fixture.client`update "rateLimitBucket" set count = 2147483647`;
+    await expect(
+      applyMailPlacement({
+        ...request,
+        input: {
+          ...request.input,
+          mailboxId: "other-mailbox",
+          requestId: randomUUID(),
+          targets: [
+            { messageIds: ["second"], threadId: "second-conversation" },
+          ],
+        },
+      })
+    ).rejects.toMatchObject({
+      code: "RATE_LIMITED",
+      data: { provider: "server" },
+      status: 429,
+    });
+    const replay = await applyMailPlacement(request);
+    expect(replay.targets).toContainEqual(
+      expect.objectContaining({ replayed: true, status: "applied" })
+    );
+    const receipts =
+      await fixture.client`select id from "mailPlacementOperation"`;
+    expect(receipts).toHaveLength(1);
+    const [untouched] = await fixture.client<
+      { mailboxState: string }[]
+    >`select "mailboxState" from "managedMailMessage" where id = 'second'`;
+    expect(untouched?.mailboxState).toBe("active");
+  });
+
+  test("does not accept a native target when canonical admission fails", async () => {
+    fixture.state.provider = "gmail";
+    fixture.state.messages = [
+      { id: "anchor", labelIds: ["INBOX"], threadId: "conversation" },
+    ];
+    fixture.state.beforeAdmission = async () => {
+      await Promise.resolve();
+      throw new Error("The canonical source could not be loaded.");
+    };
+    await expect(
+      applyMailPlacement({
+        context: { userId: "actor" },
+        input: {
+          command: { kind: "set-placement", placement: "done" },
+          mailboxId: "mailbox",
+          requestId: randomUUID(),
+          targets: [{ messageIds: ["anchor"], threadId: "conversation" }],
+        },
+      })
+    ).rejects.toBeInstanceOf(Error);
+    const receipts =
+      await fixture.client`select id from "mailPlacementOperation"`;
+    expect(receipts).toHaveLength(0);
+    expect(fixture.state.messages[0]?.labelIds).toContain("INBOX");
+    expect(fixture.state.providerWrites).toBe(0);
+  });
+
+  test("dispatches one native effect for concurrent copies of an accepted request", async () => {
+    fixture.state.provider = "gmail";
+    fixture.state.messages = [
+      {
+        id: "anchor",
+        internalDate: "1",
+        labelIds: ["INBOX"],
+        threadId: "conversation",
+      },
+    ];
+    const request = {
+      context: { userId: "actor" },
+      input: {
+        command: { kind: "set-placement", placement: "done" },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [{ messageIds: ["anchor"], threadId: "conversation" }],
+      },
+    } satisfies Parameters<typeof applyMailPlacement>[0];
+    const responses = await Promise.all([
+      applyMailPlacement(request),
+      applyMailPlacement(request),
+    ]);
+    expect(
+      responses.some((response) =>
+        response.targets.some((target) => target.replayed === true)
+      )
+    ).toBeTruthy();
+    expect(fixture.state.providerWrites).toBe(1);
+    expect(fixture.state.messages[0]?.labelIds).not.toContain("INBOX");
+    const receipts =
+      await fixture.client`select id from "mailPlacementOperation"`;
+    expect(receipts).toHaveLength(1);
   });
 
   test("handles incoming history through its anchor, preserves native metadata and leaves a newer reply in Inbox", async () => {
@@ -378,7 +595,7 @@ describe.skipIf(!fixture.enabled)("durable mail placement commands", () => {
 
   test("reports each bulk target independently when one conversation is unavailable", async () => {
     await seedManaged({ id: "anchor" });
-    const result = await applyMailPlacement({
+    const request = {
       context: { userId: "actor" },
       input: {
         command: { kind: "set-placement", placement: "done" },
@@ -389,7 +606,8 @@ describe.skipIf(!fixture.enabled)("durable mail placement commands", () => {
           { messageIds: ["missing"], threadId: "missing-conversation" },
         ],
       },
-    });
+    } satisfies Parameters<typeof applyMailPlacement>[0];
+    const result = await applyMailPlacement(request);
     expect(result.targets).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -406,6 +624,37 @@ describe.skipIf(!fixture.enabled)("durable mail placement commands", () => {
       { mailboxState: string }[]
     >`select "mailboxState" from "managedMailMessage" where id = 'anchor'`;
     expect(handled?.mailboxState).toBe("done");
+    await seedManaged({ id: "missing", threadId: "missing-conversation" });
+    const replay = await applyMailPlacement(request);
+    expect(replay.targets).toContainEqual(
+      expect.objectContaining({
+        replayed: true,
+        status: "failed",
+        threadId: "missing-conversation",
+      })
+    );
+    const [stillActive] = await fixture.client<
+      { mailboxState: string }[]
+    >`select "mailboxState" from "managedMailMessage" where id = 'missing'`;
+    expect(stillActive?.mailboxState).toBe("active");
+    const receipts =
+      await fixture.client`select id from "mailPlacementOperation"`;
+    expect(receipts).toHaveLength(1);
+    await expect(
+      applyMailPlacement({
+        ...request,
+        input: {
+          ...request.input,
+          targets: request.input.targets.map((target) => ({
+            ...target,
+            messageIds:
+              target.threadId === "missing-conversation"
+                ? ["another-missing-message"]
+                : target.messageIds,
+          })),
+        },
+      })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
   test("does not return mail after a newer native action moved it to Spam", async () => {
@@ -568,6 +817,74 @@ describe.skipIf(!fixture.enabled)("durable mail placement commands", () => {
     });
     fixture.state.messages[0]?.labelIds?.push("TRASH");
     releaseSnapshot.resolve(null);
+    const result = await pending;
+    expect(result.targets).toContainEqual(
+      expect.objectContaining({ code: "newer_intent", status: "failed" })
+    );
+    expect(fixture.state.messages[0]?.labelIds).toContain("TRASH");
+    expect(fixture.state.providerWrites).toBe(0);
+  });
+
+  test("orders a legacy placement after an in-flight canonical admission", async () => {
+    fixture.state.provider = "gmail";
+    fixture.state.messages = [
+      {
+        id: "anchor",
+        internalDate: "1",
+        labelIds: ["INBOX"],
+        threadId: "conversation",
+      },
+    ];
+    const admissionStarted = Promise.withResolvers<null>();
+    const releaseAdmission = Promise.withResolvers<null>();
+    const legacyFinished = Promise.withResolvers<null>();
+    fixture.state.beforeAdmission = async () => {
+      fixture.state.beforeAdmission = undefined;
+      admissionStarted.resolve(null);
+      await releaseAdmission.promise;
+    };
+    fixture.state.beforeSnapshot = async () => {
+      fixture.state.beforeSnapshot = undefined;
+      await legacyFinished.promise;
+    };
+    const pending = applyMailPlacement({
+      context: { userId: "actor" },
+      input: {
+        command: { kind: "set-placement", placement: "done" },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [{ messageIds: ["anchor"], threadId: "conversation" }],
+      },
+    });
+    await admissionStarted.promise;
+    const legacy = supersedePendingMailPlacement({
+      context: { userId: "actor" },
+      mailboxId: "mailbox",
+      threadIds: ["conversation"],
+    }).then(() => {
+      fixture.state.messages[0]?.labelIds?.push("TRASH");
+      legacyFinished.resolve(null);
+    });
+    try {
+      await vi.waitFor(async () => {
+        const [lock] = await fixture.client<{ waiting: boolean }[]>`
+          select exists (
+            select 1 from pg_stat_activity
+            where datname = current_database()
+              and wait_event_type = 'Lock'
+              and query like '%mailbox%'
+          ) as waiting
+        `;
+        expect(lock?.waiting).toBeTruthy();
+      });
+    } finally {
+      releaseAdmission.resolve(null);
+    }
+    try {
+      await legacy;
+    } finally {
+      legacyFinished.resolve(null);
+    }
     const result = await pending;
     expect(result.targets).toContainEqual(
       expect.objectContaining({ code: "newer_intent", status: "failed" })
