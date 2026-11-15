@@ -1731,6 +1731,26 @@ export const gmailUsefulDetailFeedback = pgTable(
   ]
 );
 
+export const mailboxAiAuthority = pgTable(
+  "mailboxAiAuthority",
+  {
+    automationPaused: boolean("automationPaused").notNull().default(false),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    readOnly: boolean("readOnly").notNull().default(false),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    updatedByUserId: text("updatedByUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    version: integer("version").notNull().default(0),
+  },
+  (table) => [
+    check("mailbox_ai_authority_version_check", sql`${table.version} >= 0`),
+  ]
+);
+
 export const mailboxAutomationSettings = pgTable("mailboxAutomationSettings", {
   autoLabelEnabled: boolean("autoLabelEnabled").notNull().default(false),
   createdAt: timestamp("createdAt").notNull(),
@@ -4129,6 +4149,7 @@ export const tables = {
   mailboxAgentRevision,
   mailboxAgentRun,
   mailboxAgentSetting,
+  mailboxAiAuthority,
   mailboxAutomationSettings,
   mailboxDivisionGrant,
   mailboxGrant,
@@ -4446,6 +4467,11 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailbox.id,
       to: r.mailboxAction.mailboxId,
     }),
+    aiAuthority: r.one.mailboxAiAuthority({
+      from: r.mailbox.id,
+      optional: true,
+      to: r.mailboxAiAuthority.mailboxId,
+    }),
     aiMemories: r.many.aiMemory({
       from: r.mailbox.id,
       to: r.aiMemory.mailboxId,
@@ -4691,6 +4717,18 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailboxActionStepRun.runId,
       optional: false,
       to: r.mailboxActionRun.id,
+    }),
+  },
+  mailboxAiAuthority: {
+    mailbox: r.one.mailbox({
+      from: r.mailboxAiAuthority.mailboxId,
+      optional: false,
+      to: r.mailbox.id,
+    }),
+    updatedBy: r.one.user({
+      from: r.mailboxAiAuthority.updatedByUserId,
+      optional: true,
+      to: r.user.id,
     }),
   },
   mailboxAutomationSettings: {
