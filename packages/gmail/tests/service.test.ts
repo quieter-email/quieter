@@ -9,6 +9,8 @@ import {
   getGmailProfile,
   getMailboxSyncDelta,
   getGmailMessageThreadAssociations,
+  getGmailCaptureMetadata,
+  getThreadWithDetails,
   mutateGmailMessage,
   mutateGmailThread,
   listGmailAddedMessageHistoryPage,
@@ -66,6 +68,63 @@ const setFetch = (
 ) => {
   Reflect.set(globalThis, "fetch", fetch);
 };
+
+describe("bounded conversation work", () => {
+  test("rejects a growing thread before body hydration and capture callbacks", async () => {
+    const originalFetch = globalThis.fetch;
+    const capture = vi.fn<() => void>();
+    setFetch(
+      async () =>
+        await resolveJson({
+          id: "conversation",
+          messages: Array.from({ length: 3 }, (_, index) => ({
+            id: `message-${index}`,
+            payload: {
+              body: { attachmentId: `body-${index}`, size: 100 },
+              mimeType: "text/plain",
+            },
+            threadId: "conversation",
+          })),
+        })
+    );
+    try {
+      await expect(
+        getThreadWithDetails(
+          "fixture-token",
+          "conversation",
+          undefined,
+          capture,
+          2
+        )
+      ).rejects.toMatchObject({ status: 413 });
+      expect(capture).not.toHaveBeenCalled();
+    } finally {
+      Reflect.set(globalThis, "fetch", originalFetch);
+    }
+  });
+
+  test("passes cancellation through the native eligibility read", async () => {
+    const originalFetch = globalThis.fetch;
+    const controller = new AbortController();
+    setFetch(async (_input, init) => {
+      await Promise.resolve();
+      controller.abort();
+      init?.signal?.throwIfAborted();
+      return Response.json({
+        historyId: "2",
+        id: "message",
+        labelIds: ["INBOX"],
+      });
+    });
+    try {
+      await expect(
+        getGmailCaptureMetadata("fixture-token", "message", controller.signal)
+      ).rejects.toBeInstanceOf(Error);
+    } finally {
+      Reflect.set(globalThis, "fetch", originalFetch);
+    }
+  });
+});
 
 describe(getMailboxSyncDelta, () => {
   test("reconciles the Done conversation list when a new Inbox reply arrives", async () => {

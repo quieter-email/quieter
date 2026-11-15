@@ -1630,6 +1630,26 @@ export const getGmailMessageThreadAssociations = async (
   );
 };
 
+export const getGmailThreadMessageCount = async (
+  accessToken: string,
+  threadId: string,
+  signal?: AbortSignal
+): Promise<number> => {
+  const thread = await requestGmail(
+    accessToken,
+    `/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}`,
+    gmailThreadSchema,
+    {
+      query: {
+        fields: "id,messages(id,threadId)",
+        format: "metadata",
+      },
+      signal,
+    }
+  );
+  return thread.messages?.length ?? 0;
+};
+
 const getGmailThreadsListMetadata = async (
   accessToken: string,
   threadIds: readonly string[],
@@ -2012,7 +2032,8 @@ export const getThreadWithDetails = async (
   accessToken: string,
   threadId: string,
   signal?: AbortSignal,
-  onSnapshot?: (snapshot: CapturedMailSnapshot) => void | Promise<void>
+  onSnapshot?: (snapshot: CapturedMailSnapshot) => void | Promise<void>,
+  maxMessages?: number
 ): Promise<ThreadMessagesResult> => {
   const thread = await requestGmail(
     accessToken,
@@ -2026,6 +2047,16 @@ export const getThreadWithDetails = async (
       signal,
     }
   );
+
+  if (
+    maxMessages !== undefined &&
+    (thread.messages?.length ?? 0) > maxMessages
+  ) {
+    throw createServiceError(
+      "This action includes too much conversation history. Choose fewer conversations and try again.",
+      413
+    );
+  }
 
   const [messageItems, draftIdEntries] = await Promise.all([
     Promise.all(
@@ -2908,7 +2939,8 @@ export const getGmailCapturedSnapshot = async (
 
 export const getGmailCaptureMetadata = async (
   accessToken: string,
-  messageId: string
+  messageId: string,
+  signal?: AbortSignal
 ) => {
   const message = await requestGmail(
     accessToken,
@@ -2916,6 +2948,7 @@ export const getGmailCaptureMetadata = async (
     gmailMessageMutationSchema,
     {
       query: { fields: "id,historyId,labelIds", format: "minimal" },
+      signal,
     }
   );
   if (!message.historyId || !/^\d+$/u.test(message.historyId)) {

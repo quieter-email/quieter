@@ -25,6 +25,8 @@ Each target returns `status`, optional `operationId`, the resolved `messageIds`,
 
 New requests consume an actor-wide budget weighted by their supplied message anchors. Canonical mailbox/thread associations are checked under the mailbox reservation lock before target receipts are inserted. Invalid targets return a failure without a receipt. When a mixed batch has accepted targets, their immutable hash covers the entire batch; replay keeps absent targets rejected even if they later become available. A fully rejected batch creates no accepted intent. Existing accepted identities replay without new source admission or budget charges. Accepted, submitting and uncertain identity evidence is retained so cleanup cannot permit a repeated native effect.
 
+A command processes at most 1,000 source messages across all its conversations. Expanded history consumes the same actor budget before body hydration, capture callbacks or native placement. A conversation that exceeds the remaining allowance fails without those effects, and later targets stop expanding. Earlier successful targets remain applied. Gmail checks the raw thread size again before hydration so a reply arriving after work admission cannot expand the capture fan-out. Provider reads and writes share a bounded cancellation signal.
+
 Request identities permit at most one application dispatch. Reuse the original identity only to inspect its receipt. A lost or uncertain result requires a source refresh before a fresh explicit action. Replayed receipts invalidate queries instead of applying an old optimistic transformation. The existing mailbox mutation coordinator orders overlapping client intents and keeps mailbox IDs in every cache write.
 
 ## Inbox and Done membership
@@ -38,6 +40,8 @@ Done uses the normal canonical list and enrichment path in both providers. Searc
 A durable operation receipt binds the actor, mailbox, immutable request hash, thread and resolved message set. Server sequence orders accepted placement intents. Newer intents supersede older reservations before dispatch. Legacy native placement actions invalidate pending reservations before their effects.
 
 Gmail cannot commit atomically with PostgreSQL and has no conditional label mutation or remote request identity. An ambiguous native effect is recorded as uncertain and never automatically redispatched. A request already accepted by Gmail can still finish after a process failure. Current source refresh and a new explicit user action provide recovery. Live behavior requires a dedicated test mailbox with exclusive watch and mutation ownership.
+
+Native eligibility metadata is read before the locked write transaction. The transaction rechecks current operation ordering before dispatch, so a newer in-app placement still fences an older read. External Gmail changes remain subject to the same remote race described above.
 
 ## Release order
 
