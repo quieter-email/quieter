@@ -86,6 +86,7 @@ describe("scheduled send execution", () => {
     row = {
       ...scope,
       createdAt: new Date(),
+      deliveryKind: "scheduled",
       draftRemovedAt: new Date(),
       errorMessage: null,
       leaseToken: null,
