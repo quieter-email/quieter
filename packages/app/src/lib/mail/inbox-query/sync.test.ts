@@ -558,6 +558,51 @@ describe(refreshLoadedMessagesPages, () => {
     expect(client.getQueryCache().getAll()).toHaveLength(0);
   });
 
+  test("keeps loading the next page when background synchronization finds no changes", async () => {
+    const client = new QueryClient();
+    const key = getMessagesQueryKey("mailbox", "inbox");
+    client.setQueryData<MessagesQueryData>(key, {
+      pageParams: [undefined],
+      pages: [
+        {
+          historyId: "current",
+          messages: [message("head")],
+          nextPageToken: "tail",
+        },
+      ],
+    });
+    const tail = Promise.withResolvers<ListMessagesPageResult>();
+    vi.mocked(rpc.mail.listThreads).mockReturnValueOnce(tail.promise);
+    vi.mocked(rpc.mail.syncMailbox).mockResolvedValueOnce({
+      hasChanges: false,
+      historyId: "current",
+      refreshFirstPage: false,
+      removedMessageIds: [],
+      requiresFullRefresh: false,
+      updatedMessages: [],
+    });
+    const observer = new InfiniteQueryObserver(
+      client,
+      messagesQueryOptions("mailbox", "inbox")
+    );
+    const unsubscribe = observer.subscribe(() => {});
+    const paging = observer.fetchNextPage();
+    await vi.waitFor(() => {
+      expect(rpc.mail.listThreads).toHaveBeenCalledOnce();
+    });
+    await syncMessages(client, "mailbox", "inbox");
+    tail.resolve({ messages: [message("next")] });
+    await paging;
+    const messages = observer
+      .getCurrentResult()
+      .data?.pages.flatMap((page) => page.messages.map((item) => item.id));
+    expect(messages).toContain("head");
+    expect(messages).toContain("next");
+    expect(observer.getCurrentResult().isFetchingNextPage).toBeFalsy();
+    unsubscribe();
+    client.clear();
+  });
+
   test("cancels pending pagination from the old chain before publishing fresh pages", async () => {
     const client = new QueryClient();
     const key = getMessagesQueryKey("mailbox", "inbox");

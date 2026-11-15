@@ -540,8 +540,6 @@ const syncOwnedMessages = async (
   );
 
   operation.assertCurrent();
-  await queryClient.cancelQueries({ exact: true, queryKey: messagesQueryKey });
-  operation.assertCurrent();
   if (syncDelta.requiresFullRefresh) {
     return await refreshMessagesPages(
       queryClient,
@@ -554,6 +552,18 @@ const syncOwnedMessages = async (
       },
       operation
     );
+  }
+
+  if (
+    syncDelta.updatedMessages.length > 0 ||
+    syncDelta.removedMessageIds.length > 0 ||
+    syncDelta.refreshFirstPage
+  ) {
+    await queryClient.cancelQueries({
+      exact: true,
+      queryKey: messagesQueryKey,
+    });
+    operation.assertCurrent();
   }
 
   await applyMailboxSyncDelta(
