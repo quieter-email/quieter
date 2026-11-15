@@ -270,37 +270,35 @@ export const ToolActivity = ({
           {current.title}
         </span>
       </CollapsibleTrigger>
-      <CollapsiblePanel keepMounted={false}>
-        <div className="min-h-0 space-y-3 ps-6 pt-2 pb-1">
-          <ol className="space-y-2">
+      <CollapsiblePanel keepMounted={false} variant="transcript">
+        <div className="min-h-0 space-y-3">
+          <ol className="space-y-3">
             {steps.map((step) => (
-              <li className="flex items-start gap-2" key={step.id}>
+              <li className="flex min-w-0 items-center gap-2" key={step.id}>
                 <Icon
                   aria-hidden
                   animation={step.phase === "running" ? "spin" : undefined}
-                  className="mt-0.5"
                   icon={
                     step.phase === "running"
                       ? Loading03Icon
                       : categoryIcons[step.category]
                   }
+                  size={14}
                   tone="muted"
                 />
-                <div className="min-w-0 space-y-0.5">
-                  <Text size="sm" tone="muted">
-                    {step.title}
-                  </Text>
-                  {step.context.map((context) => (
-                    <Text
-                      className="wrap-anywhere"
-                      key={context}
-                      size="caption"
-                      tone="muted"
-                    >
-                      {context}
-                    </Text>
-                  ))}
-                </div>
+                <Text
+                  as="span"
+                  className="min-w-0"
+                  size="caption"
+                  title={[step.title, ...step.context].join("\n")}
+                  tone="muted"
+                  truncate
+                >
+                  {step.title}
+                  {step.context.length > 0 ? (
+                    <span className="ms-2"> {step.context.join(" ")}</span>
+                  ) : null}
+                </Text>
               </li>
             ))}
           </ol>

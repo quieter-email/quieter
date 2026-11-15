@@ -47,9 +47,13 @@ export const CollapsibleTrigger = ({
 );
 
 export const CollapsiblePanel = ({
+  children,
   className,
+  variant = "default",
   ...props
-}: ComponentPropsWithoutRef<typeof CollapsiblePrimitive.Panel>) => (
+}: ComponentPropsWithoutRef<typeof CollapsiblePrimitive.Panel> & {
+  variant?: "default" | "transcript";
+}) => (
   <CollapsiblePrimitive.Panel
     className={cn(
       "h-(--collapsible-panel-height) overflow-hidden transition-[height,opacity] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-out) motion-reduce:transition-none",
@@ -59,5 +63,13 @@ export const CollapsiblePanel = ({
     )}
     keepMounted
     {...props}
-  />
+  >
+    {variant === "transcript" ? (
+      <div className="ms-2 mt-2 border-s border-border py-1 ps-4">
+        {children}
+      </div>
+    ) : (
+      children
+    )}
+  </CollapsiblePrimitive.Panel>
 );
