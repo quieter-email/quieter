@@ -21,7 +21,9 @@ Use `placement: "inbox"` for Return to Inbox. It restores handled incoming mail.
 
 The supplied message IDs are known conversation anchors. The server resolves incoming messages through the latest known anchor by provider receipt time, then persists that message set before dispatch. A new incoming reply remains outside the selected prefix and reopens the same conversation. Retrying a request never expands its message set.
 
-Each target returns `status`, `operationId`, the resolved `messageIds`, and optional `code`, `message` and `replayed`. Partial bulk failures leave successful targets applied. A duplicate request identity with changed command or targets conflicts. Duplicate receipts require current mailbox authorization.
+Each target returns `status`, optional `operationId`, the resolved `messageIds`, and optional `code`, `message` and `replayed`. Partial bulk failures leave successful targets applied. A duplicate accepted request identity with changed command or targets conflicts. Duplicate receipts require current mailbox authorization.
+
+New requests consume an actor-wide budget weighted by their supplied message anchors. Canonical mailbox/thread associations are checked under the mailbox reservation lock before target receipts are inserted. Invalid targets return a failure without a receipt. When a mixed batch has accepted targets, their immutable hash covers the entire batch; replay keeps absent targets rejected even if they later become available. A fully rejected batch creates no accepted intent. Existing accepted identities replay without new source admission or budget charges. Accepted, submitting and uncertain identity evidence is retained so cleanup cannot permit a repeated native effect.
 
 Request identities permit at most one application dispatch. Reuse the original identity only to inspect its receipt. A lost or uncertain result requires a source refresh before a fresh explicit action. Replayed receipts invalidate queries instead of applying an old optimistic transformation. The existing mailbox mutation coordinator orders overlapping client intents and keeps mailbox IDs in every cache write.
 
@@ -50,4 +52,4 @@ QUIETER_TEST_PLACEMENT_DATABASE_URL=postgresql://postgres:fixture-password@127.0
 vp test packages/orpc/tests/mail-placement-model.test.ts packages/gmail/tests/service.test.ts packages/app/src/lib/mail/inbox-query/actions.test.ts
 ```
 
-These fixtures cover receipt replay after a newer decision, actor and mailbox scope, partial bulk failure, an older pending intent, protected native state, ambiguous provider effects, and receipt-time message selection. They do not prove live Gmail behavior. Use the existing Gmail and managed preview personas for browser controls, search and responsive styling. Stop only the preview and fixture processes owned by the verification run.
+These fixtures cover receipt replay after a newer decision, actor and mailbox scope, weighted admission, rejected and partial batches, older pending intents, legacy placement during admission, protected native state, ambiguous provider effects, and receipt-time message selection. They do not prove live Gmail behavior. Use the existing Gmail and managed preview personas for browser controls, search and responsive styling. Stop only the preview and fixture processes owned by the verification run.

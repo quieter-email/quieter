@@ -10,6 +10,7 @@ import {
 import {
   batchModifyMessages,
   getGmailCaptureMetadata,
+  getGmailMessageThreadAssociations,
   getThreadWithDetails,
 } from "@quieter/gmail";
 import type {
@@ -19,6 +20,7 @@ import type {
 import { reportError } from "@quieter/observability";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
+import { consumeRateLimit } from "../abuse-protection";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
 import {
@@ -64,22 +66,29 @@ export const supersedePendingMailPlacement = async (input: {
     input.messageId === undefined
       ? inArray(mailPlacementOperation.threadId, input.threadIds ?? [])
       : sql`(${mailPlacementOperation.messageIds} @> ${JSON.stringify([input.messageId])}::jsonb or ${mailPlacementOperation.requestedMessageIds} @> ${JSON.stringify([input.messageId])}::jsonb)`;
-  await db
-    .update(mailPlacementOperation)
-    .set({
-      code: "newer_intent",
-      message:
-        "A newer action changed this conversation. Refresh to see its current state.",
-      status: "superseded",
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(mailPlacementOperation.mailboxId, input.mailboxId),
-        inArray(mailPlacementOperation.status, ["pending", "submitting"]),
-        targetCondition
-      )
-    );
+  await db.transaction(async (tx) => {
+    await tx
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(eq(mailbox.id, input.mailboxId))
+      .for("update");
+    await tx
+      .update(mailPlacementOperation)
+      .set({
+        code: "newer_intent",
+        message:
+          "A newer action changed this conversation. Refresh to see its current state.",
+        status: "superseded",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(mailPlacementOperation.mailboxId, input.mailboxId),
+          inArray(mailPlacementOperation.status, ["pending", "submitting"]),
+          targetCondition
+        )
+      );
+  });
 };
 
 const toPlacementResult = (
@@ -140,60 +149,160 @@ export const applyMailPlacement = async ({
     eq(mailPlacementOperation.mailboxId, input.mailboxId),
     eq(mailPlacementOperation.requestId, requestId)
   );
-  const now = new Date();
-  const { operations, ownedIds } = await db.transaction(async (tx) => {
-    await tx
-      .select({ id: mailbox.id })
-      .from(mailbox)
-      .where(eq(mailbox.id, input.mailboxId))
-      .for("update");
-    const existing = await tx
+  const readExistingRequest = async (database: Pick<typeof db, "select">) => {
+    const existing = await database
       .select()
       .from(mailPlacementOperation)
       .where(requestCondition);
-    if (existing.length > 0) {
-      if (
-        existing.some((operation) => operation.requestHash !== requestHash) ||
-        existing.length !== input.targets.length
-      ) {
-        throw new ORPCError("CONFLICT", {
-          message:
-            "This action identity was already used for a different request.",
+    if (existing.some((operation) => operation.requestHash !== requestHash)) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "This action identity was already used for a different request.",
+      });
+    }
+    return existing;
+  };
+  let operations = await readExistingRequest(db);
+  const ownedIds = new Set<string>();
+  if (operations.length === 0) {
+    const budget = await consumeRateLimit({
+      cost: input.targets.reduce(
+        (total, target) => total + Math.max(1, target.messageIds.length),
+        0
+      ),
+      key: `mail-placement:${context.userId}`,
+      limit: 10_000,
+      windowMs: 60 * 60_000,
+    });
+    if (budget.allowed) {
+      const reserve = async (accessToken?: string) =>
+        await db.transaction(async (tx) => {
+          context.signal?.throwIfAborted();
+          await tx
+            .select({ id: mailbox.id })
+            .from(mailbox)
+            .where(eq(mailbox.id, input.mailboxId))
+            .for("update");
+          const existing = await readExistingRequest(tx);
+          if (existing.length > 0) {
+            return { operations: existing, ownedIds: new Set<string>() };
+          }
+          const anchorIds = [
+            ...new Set(input.targets.flatMap((target) => target.messageIds)),
+          ];
+          let associations: { id: string; threadId: string }[];
+          if (selected.provider === "managed") {
+            associations = await tx
+              .select({
+                id: managedMailMessage.id,
+                threadId: managedMailMessage.threadId,
+              })
+              .from(managedMailMessage)
+              .where(
+                and(
+                  eq(managedMailMessage.mailboxId, input.mailboxId),
+                  inArray(managedMailMessage.id, anchorIds)
+                )
+              );
+          } else {
+            if (accessToken === undefined) {
+              throw new Error(
+                "Placement admission requires an authorized mailbox token."
+              );
+            }
+            const timeout = AbortSignal.timeout(15_000);
+            const signal = context.signal
+              ? AbortSignal.any([context.signal, timeout])
+              : timeout;
+            associations = await getGmailMessageThreadAssociations(
+              accessToken,
+              anchorIds,
+              signal
+            );
+            signal.throwIfAborted();
+          }
+          context.signal?.throwIfAborted();
+          const threadIdsByMessageId = new Map(
+            associations.map((message) => [message.id, message.threadId])
+          );
+          const admittedTargets = input.targets.filter(
+            (target) =>
+              target.messageIds.length > 0 &&
+              target.messageIds.every(
+                (id) => threadIdsByMessageId.get(id) === target.threadId
+              )
+          );
+          if (admittedTargets.length === 0) {
+            return { operations: [], ownedIds: new Set<string>() };
+          }
+          const now = new Date();
+          const inserted = await tx
+            .insert(mailPlacementOperation)
+            .values(
+              admittedTargets.map((target) => ({
+                actorUserId: context.userId,
+                createdAt: now,
+                id: randomUUID(),
+                mailboxId: input.mailboxId,
+                messageIds: [],
+                placement: input.command.placement,
+                requestHash,
+                requestId,
+                requestedMessageIds: [...new Set(target.messageIds)].toSorted(),
+                status: "pending" as const,
+                threadId: target.threadId,
+                updatedAt: now,
+              }))
+            )
+            .returning();
+          return {
+            operations: inserted,
+            ownedIds: new Set(inserted.map((operation) => operation.id)),
+          };
+        });
+      const reserved =
+        selected.provider === "gmail"
+          ? await callGmail(
+              context,
+              input.mailboxId,
+              async (accessToken) => await reserve(accessToken)
+            )
+          : await reserve();
+      ({ operations } = reserved);
+      for (const id of reserved.ownedIds) {
+        ownedIds.add(id);
+      }
+    } else {
+      operations = await readExistingRequest(db);
+      if (operations.length === 0) {
+        const retryAfter = Math.max(
+          1,
+          Math.ceil((budget.resetAt.getTime() - Date.now()) / 1000)
+        );
+        context.resHeaders?.set("retry-after", String(retryAfter));
+        throw new ORPCError("RATE_LIMITED", {
+          data: { provider: "server", retryAfter },
+          message: "Too many conversations were changed. Try again later.",
+          status: 429,
         });
       }
-      return { operations: existing, ownedIds: new Set<string>() };
     }
-    const inserted = await tx
-      .insert(mailPlacementOperation)
-      .values(
-        input.targets.map((target) => ({
-          actorUserId: context.userId,
-          createdAt: now,
-          id: randomUUID(),
-          mailboxId: input.mailboxId,
-          messageIds: [],
-          placement: input.command.placement,
-          requestHash,
-          requestId,
-          requestedMessageIds: [...new Set(target.messageIds)].toSorted(),
-          status: "pending" as const,
-          threadId: target.threadId,
-          updatedAt: now,
-        }))
-      )
-      .returning();
-    return {
-      operations: inserted,
-      ownedIds: new Set(inserted.map((operation) => operation.id)),
-    };
-  });
+  }
   const results: MailMutationTargetResult[] = [];
   for (const target of input.targets) {
     const operation = operations.find(
       (item) => item.threadId === target.threadId
     );
     if (operation === undefined) {
-      throw new ORPCError("INTERNAL_SERVER_ERROR");
+      results.push({
+        code: "invalid_target",
+        message:
+          "This conversation changed or is no longer available. Refresh and try again.",
+        replayed: operations.length > 0 && ownedIds.size === 0,
+        status: "failed",
+        threadId: target.threadId,
+      });
+      continue;
     }
     if (!ownedIds.has(operation.id)) {
       results.push(toPlacementResult(operation, true));

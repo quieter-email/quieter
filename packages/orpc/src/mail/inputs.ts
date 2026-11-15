@@ -93,6 +93,21 @@ export const mailInputSchemas = {
         }),
     })
     .superRefine((input, context) => {
+      if (
+        input.command.kind === "set-placement" &&
+        (input.mailboxId.length > 255 ||
+          input.targets.some(
+            (target) =>
+              target.threadId.length > 255 ||
+              target.messageIds.some((id) => id.length > 255)
+          ))
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "This conversation reference is invalid.",
+          path: ["targets"],
+        });
+      }
       if (input.command.kind === "set-placement" && !input.requestId) {
         context.addIssue({
           code: "custom",
