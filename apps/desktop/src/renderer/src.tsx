@@ -33,7 +33,6 @@ Sentry.init({
 
 configureAppRuntime({
   apiBaseURL: window.quieterDesktop.apiBaseURL,
-  keepMailUpdatesInBackground: true,
   openExternal: window.quieterDesktop.openExternal,
   platform: "desktop",
   reminderNotifications: window.quieterDesktop.reminderNotifications,

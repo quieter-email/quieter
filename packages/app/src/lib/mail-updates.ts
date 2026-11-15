@@ -13,12 +13,10 @@ import { useEffect } from "react";
 export const connectMailUpdates = (queryClient: QueryClient) => {
   let disposed = false;
   let suspended = true;
-  let keepBackground = false;
   let socket: WebSocket | undefined;
   let connecting = false;
   let handshake: AbortController | undefined;
   let generation = 0;
-  let backgroundTimer: ReturnType<typeof setTimeout> | undefined;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   let openTimer: ReturnType<typeof setTimeout> | undefined;
   let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
@@ -547,30 +545,25 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
       }
     }
   };
-  const activityChanged = () => {
-    const active =
-      keepBackground ||
-      (document.visibilityState === "visible" && document.hasFocus());
-    if (active && navigator.onLine) {
-      clearTimeout(backgroundTimer);
-      backgroundTimer = undefined;
-      const wasSuspended = suspended;
-      suspended = false;
-      if (wasSuspended) {
-        requestRefresh();
-      }
-      void connect();
-    } else {
-      suspended = true;
-      clearTimeout(refreshTimer);
-      refreshTimer = undefined;
-      clearTimeout(codeRefreshTimer);
-      codeRefreshTimer = undefined;
-      backgroundTimer ??= setTimeout(() => {
-        backgroundTimer = undefined;
-        disconnect();
-      }, 30_000);
+  const resume = () => {
+    if (!navigator.onLine) {
+      return;
     }
+    const wasSuspended = suspended;
+    suspended = false;
+    if (wasSuspended) {
+      requestRefresh();
+    }
+    void connect();
+  };
+  let wasVisible = document.visibilityState === "visible";
+  const visibilityChanged = () => {
+    const visible = document.visibilityState === "visible";
+    if (visible && !wasVisible && navigator.onLine) {
+      requestRefresh();
+      void connect();
+    }
+    wasVisible = visible;
   };
   const offline = () => {
     suspended = true;
@@ -580,51 +573,10 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     codeRefreshTimer = undefined;
     disconnect();
   };
-  const unsubscribeNotificationSettings =
-    appRuntime.keepMailUpdatesInBackground === true
-      ? queryClient.getQueryCache().subscribe((event) => {
-          const rawKey: unknown = event.query.queryKey;
-          if (!Array.isArray(rawKey)) {
-            return;
-          }
-          const key: readonly unknown[] = rawKey;
-          if (
-            event.type === "updated" &&
-            event.action.type === "success" &&
-            key[0] === "reminder-notifications"
-          ) {
-            keepBackground = event.query.state.data === "enabled";
-            activityChanged();
-          }
-        })
-      : undefined;
-  const loadNotificationStatus = async () => {
-    if (
-      !appRuntime.reminderNotifications ||
-      appRuntime.keepMailUpdatesInBackground !== true
-    ) {
-      return;
-    }
-    try {
-      const status = await appRuntime.reminderNotifications.getStatus();
-      if (!disposed) {
-        queryClient.setQueryData(["reminder-notifications"], status);
-      }
-    } catch (error) {
-      if (!disposed && !isExpectedClientError(error)) {
-        Sentry.captureException(error, {
-          tags: { boundary: "reminder-notification-status" },
-        });
-      }
-    }
-  };
-  void loadNotificationStatus();
-  window.addEventListener("focus", activityChanged);
-  window.addEventListener("blur", activityChanged);
-  window.addEventListener("online", activityChanged);
+  window.addEventListener("online", resume);
   window.addEventListener("offline", offline);
-  document.addEventListener("visibilitychange", activityChanged);
-  activityChanged();
+  document.addEventListener("visibilitychange", visibilityChanged);
+  resume();
   const recoveryTimer = setInterval(() => {
     if (
       document.visibilityState === "visible" &&
@@ -636,17 +588,13 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   }, 60_000);
   return () => {
     disposed = true;
-    unsubscribeNotificationSettings?.();
     disconnect();
-    clearTimeout(backgroundTimer);
     clearTimeout(refreshTimer);
     clearTimeout(codeRefreshTimer);
     clearInterval(recoveryTimer);
-    window.removeEventListener("focus", activityChanged);
-    window.removeEventListener("blur", activityChanged);
-    window.removeEventListener("online", activityChanged);
+    window.removeEventListener("online", resume);
     window.removeEventListener("offline", offline);
-    document.removeEventListener("visibilitychange", activityChanged);
+    document.removeEventListener("visibilitychange", visibilityChanged);
   };
 };
 

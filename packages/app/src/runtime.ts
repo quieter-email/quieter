@@ -31,7 +31,6 @@ type AppRuntime = {
   fetch?: typeof globalThis.fetch;
   openExternal?: (url: string) => void | Promise<void>;
   platform?: "desktop" | "web";
-  keepMailUpdatesInBackground?: boolean;
   reminderNotifications?: ReminderNotifications;
 };
 
@@ -41,7 +40,6 @@ export const configureAppRuntime = (options: AppRuntime) => {
   Object.assign(appRuntime, {
     apiBaseURL: options.apiBaseURL,
     fetch: options.fetch,
-    keepMailUpdatesInBackground: options.keepMailUpdatesInBackground,
     openExternal: options.openExternal,
     platform: options.platform,
     reminderNotifications: options.reminderNotifications,
