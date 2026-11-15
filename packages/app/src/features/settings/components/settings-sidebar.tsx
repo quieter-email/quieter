@@ -24,6 +24,7 @@ import {
   normalizeOrganizationRole,
 } from "@quieter/app/features/settings/components/organization-settings/domain";
 import { OrganizationFormDialog } from "@quieter/app/features/settings/components/organization-settings/organization-form-dialog";
+import { prefetchSettingsTab } from "@quieter/app/features/settings/components/settings-prefetch";
 import { useSettingsTeam } from "@quieter/app/features/settings/components/use-settings-team";
 import { isDemoModeAvailable } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import {
@@ -45,7 +46,7 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -87,6 +88,7 @@ export const SettingsSidebar = ({
   searchInput: ReactNode;
   searchResults?: ReactNode;
 }) => {
+  const queryClient = useQueryClient();
   const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
   const { tab, from, organizationView, organizationId } =
     settingsRouteApi.useSearch();
@@ -115,6 +117,21 @@ export const SettingsSidebar = ({
       className="justify-start text-left"
       nativeButton={false}
       onClick={onRequestClose}
+      onFocus={() => {
+        if (destination.tab === "billing") {
+          void prefetchSettingsTab(queryClient, "billing");
+        }
+      }}
+      onMouseEnter={() => {
+        if (destination.tab === "billing") {
+          void prefetchSettingsTab(queryClient, "billing");
+        }
+      }}
+      onPointerDown={() => {
+        if (destination.tab === "billing") {
+          void prefetchSettingsTab(queryClient, "billing");
+        }
+      }}
       // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders an anchor through its render slot.
       role="link"
       render={

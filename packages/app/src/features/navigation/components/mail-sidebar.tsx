@@ -9,6 +9,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
 import {
+  loadCalendarWorkspace,
   loadComposeWorkspace,
   loadSnippetWorkspace,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
@@ -19,12 +20,15 @@ import { SidebarLabelNav } from "@quieter/app/features/navigation/components/sid
 import { SidebarMailboxNav } from "@quieter/app/features/navigation/components/sidebar-mailbox-nav";
 import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
+import { calendarAccountsQueryOptions } from "@quieter/app/lib/calendar-query";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
+import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
 import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { SidebarFooterLinks } from "./sidebar-footer-links";
@@ -119,6 +123,16 @@ const SidebarInboxSection = ({
   | "selectedMailboxProvider"
   | "selectedView"
 >) => {
+  const queryClient = useQueryClient();
+  const preview = usePreviewPersona();
+  const preloadCalendar = () => {
+    void loadCalendarWorkspace();
+    if (userId !== "preview" && preview === null) {
+      void Promise.allSettled([
+        queryClient.query(calendarAccountsQueryOptions(userId)),
+      ]);
+    }
+  };
   const selectedMailboxGrantRole = groups
     .flatMap((group) => group.mailboxes)
     .find((mailbox) => mailbox.id === selectedMailboxId)?.grantRole;
@@ -189,6 +203,9 @@ const SidebarInboxSection = ({
                 workspace: "calendar",
               }}
               onClick={onRequestClose}
+              onFocus={preloadCalendar}
+              onMouseEnter={preloadCalendar}
+              onPointerDown={preloadCalendar}
               replace={false}
               size="sm"
               type="button"
