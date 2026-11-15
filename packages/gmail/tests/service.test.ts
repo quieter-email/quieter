@@ -1,7 +1,9 @@
+import type { MessageListItem } from "@quieter/mail/messages";
 import { describe, expect, test, vi } from "vite-plus/test";
 
 import {
   getMessageWithDetails,
+  listMessagesWithDetails,
   getGmailMessageMetadata,
   getGmailProfile,
   getMailboxSyncDelta,
@@ -65,6 +67,46 @@ const setFetch = (
 };
 
 describe(getMailboxSyncDelta, () => {
+  test("reconciles the Done conversation list when a new Inbox reply arrives", async () => {
+    const originalFetch = globalThis.fetch;
+    setFetch(async (input) => {
+      const url = getRequestUrl(input);
+      if (url.includes("/history?")) {
+        return await resolveJson({
+          history: [
+            {
+              messagesAdded: [
+                {
+                  message: {
+                    id: "new-reply",
+                    threadId: "handled-conversation",
+                  },
+                },
+              ],
+            },
+          ],
+          historyId: "20",
+        });
+      }
+      throw new Error(
+        "Done membership must refresh through the canonical thread list."
+      );
+    });
+    try {
+      const delta = await getMailboxSyncDelta("fixture-token", {
+        mailbox: "done",
+        startHistoryId: "10",
+      });
+      expect(delta).toMatchObject({
+        hasChanges: true,
+        requiresFullRefresh: true,
+      });
+      expect(delta.updatedMessages).toHaveLength(0);
+    } finally {
+      Reflect.set(globalThis, "fetch", originalFetch);
+    }
+  });
+
   test("retains complete attachment names when a changed message is not the one with attachments", async () => {
     const originalFetch = globalThis.fetch;
     const changedMessage = {
@@ -643,4 +685,68 @@ describe("OTP sending and extraction", () => {
       }
     }
   );
+});
+
+describe("Done conversation pagination", () => {
+  test("reaches handled mail after consecutive provider pages containing only reopened conversations", async () => {
+    const originalFetch = globalThis.fetch;
+    const pages = new Map([
+      ["", { id: "reopened-first", next: "second" }],
+      ["second", { id: "reopened-second", next: "third" }],
+      ["third", { id: "handled", next: undefined }],
+    ]);
+    setFetch(async (input, init) => {
+      const url = new URL(getRequestUrl(input));
+      if (url.pathname.endsWith("/threads")) {
+        const page = pages.get(url.searchParams.get("pageToken") ?? "");
+        if (!page) {
+          throw new Error("Unexpected fixture page.");
+        }
+        return await resolveJson({
+          nextPageToken: page.next,
+          threads: [{ id: page.id }],
+        });
+      }
+      const body = getRequestBody(init?.body);
+      const id = ["reopened-first", "reopened-second", "handled"].find(
+        (candidate) => body.includes(`/threads/${candidate}`)
+      );
+      if (id) {
+        const messages: MessageListItem[] = [
+          { id: `${id}-old`, internalDate: "1", labelIds: [], threadId: id },
+        ];
+        if (id !== "handled") {
+          messages.push({
+            id: `${id}-reply`,
+            internalDate: "2",
+            labelIds: ["INBOX"],
+            threadId: id,
+          });
+        }
+        return await resolveResponse(
+          new Response(
+            createIdentifiedBatchResponse("threads", [
+              {
+                body: { historyId: "30", id, messages },
+                contentId: "thread-0",
+              },
+            ]),
+            { headers: { "Content-Type": "multipart/mixed; boundary=threads" } }
+          )
+        );
+      }
+      throw new Error("Unexpected provider request.");
+    });
+    try {
+      const page = await listMessagesWithDetails("fixture-token", {
+        mailbox: "done",
+      });
+      expect(page.messages).toContainEqual(
+        expect.objectContaining({ id: "handled-old", threadId: "handled" })
+      );
+      expect(page.nextPageToken).toBeUndefined();
+    } finally {
+      Reflect.set(globalThis, "fetch", originalFetch);
+    }
+  });
 });

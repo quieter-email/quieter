@@ -312,6 +312,11 @@ const isMessageInMailbox = (
   mailbox: MailboxCategory,
   labelIds: string[] | undefined
 ): boolean => {
+  if (mailbox === "done") {
+    return !(labelIds ?? []).some((label) =>
+      ["INBOX", "SPAM", "TRASH", "DRAFT", "SENT"].includes(label)
+    );
+  }
   if (mailbox === "important") {
     return false;
   }
@@ -369,6 +374,15 @@ const getListMessagesQuery = (
   mailbox: MailboxCategory | undefined,
   query: string | undefined
 ): string | undefined => {
+  if (mailbox === "done") {
+    return appendGmailQueryTerms(query, [
+      "-in:inbox",
+      "-in:spam",
+      "-in:trash",
+      "-in:drafts",
+      "-in:sent",
+    ]);
+  }
   if (mailbox === "unread") {
     return appendGmailQueryTerms(query, ["-in:spam", "-in:trash"]);
   }
@@ -947,7 +961,7 @@ const toMessageListItem = async (
   signal?: AbortSignal
 ): Promise<MessageListItem> => {
   const includeBody = options.includeBody ?? false;
-  const labelIds = normalizeLabelIds(message.labelIds);
+  const labelIds = normalizeLabelIds(message.labelIds) ?? [];
   const content = includeBody
     ? await resolveMessageContent(accessToken, message, signal)
     : { html: undefined, text: undefined };
@@ -962,10 +976,9 @@ const toMessageListItem = async (
       includeBody || options.includeAttachmentMetadata === true
         ? extractMessageAttachments(message.payload, content.html)
         : undefined,
-    baseRevision:
-      labelIds?.includes(MAILBOX_LABELS.drafts) === true
-        ? message.id
-        : undefined,
+    baseRevision: labelIds?.includes(MAILBOX_LABELS.drafts)
+      ? message.id
+      : undefined,
     bcc: getHeader(message, "Bcc"),
     bodyHtml: content.html,
     bodyText: content.text,
@@ -1044,7 +1057,9 @@ const listMessages = async (
         fields: GMAIL_MESSAGE_LIST_FIELDS,
         includeSpamTrash: includesSpamTrash ? true : undefined,
         labelIds:
-          options?.mailbox !== undefined && options.mailbox !== "important"
+          options?.mailbox !== undefined &&
+          options.mailbox !== "important" &&
+          options.mailbox !== "done"
             ? [MAILBOX_LABELS[options.mailbox]]
             : undefined,
         maxResults: options?.maxResults ?? 20,
@@ -1077,7 +1092,9 @@ const listThreads = async (
         fields: GMAIL_THREAD_LIST_FIELDS,
         includeSpamTrash: includesSpamTrash ? true : undefined,
         labelIds:
-          options?.mailbox !== undefined && options.mailbox !== "important"
+          options?.mailbox !== undefined &&
+          options.mailbox !== "important" &&
+          options.mailbox !== "done"
             ? [MAILBOX_LABELS[options.mailbox]]
             : undefined,
         maxResults: options?.maxResults ?? 15,
@@ -1680,6 +1697,12 @@ export const listMessagesWithDetails = async (
     const messages = (thread.messages ?? []).filter(
       (message) => !hasDraftLabel(message.labelIds)
     );
+    if (
+      mailbox === "done" &&
+      messages.some((message) => message.labelIds?.includes("INBOX") === true)
+    ) {
+      return [];
+    }
     const matchingMessages = mailbox
       ? messages.filter((message) =>
           isMessageInMailbox(mailbox, normalizeLabelIds(message.labelIds))
@@ -1718,6 +1741,12 @@ export const listMessagesWithDetails = async (
       },
     ];
   });
+  if (mailbox === "done" && rows.length === 0 && list.nextPageToken) {
+    return await listMessagesWithDetails(accessToken, {
+      ...options,
+      pageToken: list.nextPageToken,
+    });
+  }
   let historyId = threads.find((thread) =>
     isNonEmptyString(thread?.historyId)
   )?.historyId;
@@ -1763,7 +1792,7 @@ export const listMessagesForAgent = async (
       return [];
     }
 
-    const labelIds = normalizeLabelIds(message.labelIds);
+    const labelIds = normalizeLabelIds(message.labelIds) ?? [];
     if (options?.mailbox && !isMessageInMailbox(options.mailbox, labelIds)) {
       return [];
     }
@@ -2401,7 +2430,7 @@ export const getMailboxSyncDelta = async (
   }
 ): Promise<MailboxSyncDelta> => {
   const mailboxLabel =
-    options.mailbox === "important"
+    options.mailbox === "important" || options.mailbox === "done"
       ? undefined
       : MAILBOX_LABELS[options.mailbox];
   const state: MailboxSyncDeltaState = {
@@ -2437,6 +2466,18 @@ export const getMailboxSyncDelta = async (
     }
 
     throw error;
+  }
+
+  if (options.mailbox === "done") {
+    const hasChanges = nextHistoryId !== options.startHistoryId;
+    return {
+      hasChanges,
+      historyId: nextHistoryId,
+      refreshFirstPage: hasChanges,
+      removedMessageIds: [],
+      requiresFullRefresh: hasChanges,
+      updatedMessages: [],
+    };
   }
 
   let updatedMessages: MessageListItem[] = [];
@@ -2478,7 +2519,7 @@ export const getMailboxSyncDelta = async (
 const toMessageMetadataUpdate = (
   message: z.infer<typeof gmailMessageMutationSchema>
 ) => {
-  const labelIds = normalizeLabelIds(message.labelIds);
+  const labelIds = normalizeLabelIds(message.labelIds) ?? [];
 
   return {
     id: message.id,

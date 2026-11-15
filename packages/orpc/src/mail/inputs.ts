@@ -37,6 +37,10 @@ export const mailInputSchemas = {
         z.object({ kind: z.literal("set-read"), read: z.boolean() }),
         z.object({ important: z.boolean(), kind: z.literal("set-importance") }),
         z.object({
+          kind: z.literal("set-placement"),
+          placement: z.enum(["done", "inbox"]),
+        }),
+        z.object({
           destination: z.enum(["inbox", "spam", "trash"]),
           kind: z.literal("move"),
         }),
@@ -64,6 +68,7 @@ export const mailInputSchemas = {
           ),
       ]),
       mailboxId: z.string().trim().min(1),
+      requestId: z.uuid().optional(),
       targets: z
         .array(
           z.object({
@@ -88,6 +93,24 @@ export const mailInputSchemas = {
         }),
     })
     .superRefine((input, context) => {
+      if (input.command.kind === "set-placement" && !input.requestId) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "This action needs a request identity. Refresh and try again.",
+          path: ["requestId"],
+        });
+      }
+      if (
+        new Set(input.targets.map((target) => target.threadId)).size !==
+        input.targets.length
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "A conversation can appear only once in an action.",
+          path: ["targets"],
+        });
+      }
       if (
         input.command.kind !== "set-importance" &&
         input.targets.some((target) => target.messageIds.length === 0)
@@ -193,7 +216,15 @@ export const mailInputSchemas = {
     message: composeMessageInputSchema,
   }),
   syncMailbox: z.object({
-    category: z.enum(["inbox", "important", "unread", "spam", "sent", "trash"]),
+    category: z.enum([
+      "inbox",
+      "done",
+      "important",
+      "unread",
+      "spam",
+      "sent",
+      "trash",
+    ]),
     mailboxId: z.string().trim().min(1),
     startHistoryId: z.string().min(1),
   }),

@@ -319,6 +319,7 @@ export const getManagedDemoMailboxes = () => ({
       kind: "organization" as const,
       mailboxes: [
         {
+          accessMode: "shared" as const,
           autoLabelEnabled: false,
           capabilities: getMailboxCapabilities({
             provider: "managed",
@@ -435,9 +436,13 @@ const store: DemoMessageStore = {
   },
 };
 export const createManagedDemoMailboxActions = (queryClient: QueryClient) =>
-  createDemoActions(store, async () => {
-    await invalidateManagedDemoMail(queryClient);
-  });
+  createDemoActions(
+    store,
+    async () => {
+      await invalidateManagedDemoMail(queryClient);
+    },
+    "shared"
+  );
 
 const composeActions = createDemoComposeActions({
   ...store,

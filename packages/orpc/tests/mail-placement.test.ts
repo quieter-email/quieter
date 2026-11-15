@@ -1,0 +1,578 @@
+/* oxlint-disable vitest/prefer-import-in-mock -- Only the authorized boundaries and provider transport are mocked around the real database command. */
+import { randomUUID } from "node:crypto";
+
+import { ORPCError } from "@orpc/server";
+import type { MessageListItem } from "@quieter/mail/messages";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from "vite-plus/test";
+
+import type { MailRequestContext } from "../src/gmail-request";
+import {
+  applyMailPlacement,
+  supersedePendingMailPlacement,
+} from "../src/mail/placement";
+
+const fixture = await vi.hoisted(async () => {
+  const databaseUrl = process.env.QUIETER_TEST_PLACEMENT_DATABASE_URL;
+  if (databaseUrl !== undefined) {
+    const url = new URL(databaseUrl);
+    if (
+      !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) ||
+      url.pathname !== "/placement_fixture"
+    ) {
+      throw new Error(
+        "Placement tests require a loopback placement_fixture database."
+      );
+    }
+  }
+  const [{ default: postgres }, { drizzle }] = await Promise.all([
+    import("postgres"),
+    import("drizzle-orm/postgres-js"),
+  ]);
+  const client = postgres(
+    databaseUrl ?? "postgresql://postgres@127.0.0.1:1/placement_fixture",
+    {
+      connect_timeout: 3,
+      max: 2,
+      onnotice: () => {},
+    }
+  );
+  const state: {
+    access: boolean;
+    ambiguousWrite: boolean;
+    beforeSnapshot?: () => Promise<void>;
+    messages: MessageListItem[];
+    provider: "gmail" | "managed";
+    providerWrites: number;
+    write: boolean;
+  } = {
+    access: true,
+    ambiguousWrite: false,
+    messages: [],
+    provider: "managed",
+    providerWrites: 0,
+    write: true,
+  };
+  return {
+    client,
+    database: drizzle({ client }),
+    enabled: databaseUrl !== undefined,
+    state,
+  };
+});
+
+vi.mock("@quieter/database/client", () => ({ db: fixture.database }));
+vi.mock("@quieter/observability", () => ({ reportError: vi.fn<() => void>() }));
+vi.mock("../src/mailbox/service", () => ({
+  assertAccessibleMailbox: async () => {
+    if (!fixture.state.access) {
+      throw new ORPCError("FORBIDDEN");
+    }
+    return await Promise.resolve({ provider: fixture.state.provider });
+  },
+}));
+vi.mock("../src/mailbox/access", () => ({
+  getAuthorizedManagedMailbox: async () => {
+    if (!fixture.state.write) {
+      throw new ORPCError("FORBIDDEN");
+    }
+    return await Promise.resolve({ role: "responder" });
+  },
+}));
+vi.mock("../src/gmail-request", () => ({
+  callGmail: async <Result>(
+    context: MailRequestContext,
+    _mailboxId: string,
+    run: (accessToken: string, signal?: AbortSignal) => Promise<Result>
+  ) => await run("placement-fixture-token", context.signal),
+}));
+vi.mock("../src/mail-capture", () => ({
+  refreshGmailCapturedMessageMetadata: async () => {},
+  writeGmailCapturedMessage: async () => {},
+}));
+vi.mock("@quieter/gmail", () => ({
+  batchModifyMessages: async (
+    _accessToken: string,
+    messageIds: readonly string[],
+    changes: { addLabelIds?: string[]; removeLabelIds?: string[] }
+  ) => {
+    fixture.state.providerWrites += 1;
+    for (const message of fixture.state.messages) {
+      if (!messageIds.includes(message.id)) {
+        continue;
+      }
+      const labels = new Set(message.labelIds);
+      for (const label of changes.removeLabelIds ?? []) {
+        labels.delete(label);
+      }
+      for (const label of changes.addLabelIds ?? []) {
+        labels.add(label);
+      }
+      message.labelIds = [...labels];
+    }
+    if (fixture.state.ambiguousWrite) {
+      throw new Error("Provider response was lost after accepting the write.");
+    }
+    await Promise.resolve();
+  },
+  getGmailCaptureMetadata: async (_accessToken: string, messageId: string) =>
+    await Promise.resolve({
+      labelIds:
+        fixture.state.messages.find((message) => message.id === messageId)
+          ?.labelIds ?? [],
+      providerRevision: "1",
+    }),
+  getThreadWithDetails: async (_accessToken: string, threadId: string) => {
+    const messages = structuredClone(
+      fixture.state.messages.filter((message) => message.threadId === threadId)
+    );
+    await fixture.state.beforeSnapshot?.();
+    return { messages, threadId };
+  },
+}));
+
+const seedManaged = async ({
+  direction = "inbound",
+  id,
+  mailboxId = "mailbox",
+  sentAt = 1,
+  receivedAt = sentAt,
+  state = "active",
+  threadId = "conversation",
+}: {
+  direction?: "inbound" | "outbound";
+  id: string;
+  mailboxId?: string;
+  receivedAt?: number;
+  sentAt?: number;
+  state?: "active" | "done" | "draft" | "spam" | "trash";
+  threadId?: string;
+}) => {
+  await fixture.client`
+    insert into "managedMailMessage" (id, "mailboxId", "threadId", direction, "mailboxState", "createdAt", "sentAt", "updatedAt", "bodyText", "isRead")
+    values (${id}, ${mailboxId}, ${threadId}, ${direction}, ${state}, ${new Date(receivedAt).toISOString()}, ${new Date(sentAt).toISOString()}, ${new Date(receivedAt).toISOString()}, ${`Original fixture body for ${id}`}, false)
+  `;
+};
+
+describe.skipIf(!fixture.enabled)("durable mail placement commands", () => {
+  beforeAll(async () => {
+    await fixture.client.unsafe(`
+      create table if not exists mailbox (
+        id text primary key,
+        "contentRevision" bigint not null default 0,
+        "updatedAt" timestamptz not null default now()
+      );
+      create table if not exists "managedMailMessage" (
+        id text primary key,
+        "mailboxId" text not null references mailbox(id),
+        "threadId" text not null,
+        direction text not null,
+        "mailboxState" text not null,
+        "createdAt" timestamptz not null,
+        "sentAt" timestamptz not null,
+        "updatedAt" timestamptz not null,
+        "bodyText" text not null,
+        "isRead" boolean not null
+      );
+      create table if not exists "mailPlacementOperation" (
+        id text primary key,
+        sequence bigserial not null unique,
+        "actorUserId" text not null,
+        "mailboxId" text not null references mailbox(id),
+        "requestId" text not null,
+        "requestHash" text not null,
+        "threadId" text not null,
+        "requestedMessageIds" jsonb not null,
+        "messageIds" jsonb not null,
+        placement text not null check (placement in ('done', 'inbox')),
+        status text not null check (status in ('pending', 'submitting', 'applied', 'failed', 'superseded', 'uncertain')),
+        code text,
+        message text,
+        "createdAt" timestamptz not null,
+        "updatedAt" timestamptz not null,
+        unique ("actorUserId", "mailboxId", "requestId", "threadId")
+      );
+    `);
+  });
+
+  beforeEach(async () => {
+    await fixture.client.unsafe(
+      'truncate "mailPlacementOperation", "managedMailMessage", mailbox restart identity cascade'
+    );
+    await fixture.client`insert into mailbox (id) values ('mailbox'), ('other-mailbox')`;
+    fixture.state.access = true;
+    fixture.state.write = true;
+    fixture.state.provider = "managed";
+    fixture.state.messages = [];
+    fixture.state.providerWrites = 0;
+    fixture.state.ambiguousWrite = false;
+    fixture.state.beforeSnapshot = undefined;
+  });
+
+  afterAll(async () => {
+    await fixture.client.end();
+  });
+
+  test("handles incoming history through its anchor, preserves native metadata and leaves a newer reply in Inbox", async () => {
+    await seedManaged({ id: "older-incoming" });
+    await seedManaged({ direction: "outbound", id: "sent-reply", sentAt: 2 });
+    await seedManaged({ id: "trash", sentAt: 3, state: "trash" });
+    await seedManaged({ id: "anchor", sentAt: 4 });
+    await seedManaged({ id: "new-reply", receivedAt: 5, sentAt: 0 });
+    const result = await applyMailPlacement({
+      context: { userId: "actor" },
+      input: {
+        command: { kind: "set-placement", placement: "done" },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [{ messageIds: ["anchor"], threadId: "conversation" }],
+      },
+    });
+    expect(result.targets).toContainEqual(
+      expect.objectContaining({
+        messageIds: ["older-incoming", "anchor"],
+        status: "applied",
+      })
+    );
+    const messages = await fixture.client<
+      { bodyText: string; id: string; isRead: boolean; mailboxState: string }[]
+    >`
+      select id, "mailboxState", "bodyText", "isRead" from "managedMailMessage" order by "sentAt"
+    `;
+    expect(messages).toStrictEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "older-incoming", mailboxState: "done" }),
+        expect.objectContaining({ id: "sent-reply", mailboxState: "active" }),
+        expect.objectContaining({ id: "trash", mailboxState: "trash" }),
+        expect.objectContaining({ id: "new-reply", mailboxState: "active" }),
+      ])
+    );
+    expect(
+      messages.every(
+        (message) =>
+          message.bodyText.includes("Original fixture body") && !message.isRead
+      )
+    ).toBeTruthy();
+  });
+
+  test("replays an earlier Done receipt without overriding a later return or handling newly received mail", async () => {
+    await seedManaged({ id: "anchor" });
+    const done = {
+      context: { userId: "actor" },
+      input: {
+        command: { kind: "set-placement", placement: "done" },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [{ messageIds: ["anchor"], threadId: "conversation" }],
+      },
+    } satisfies Parameters<typeof applyMailPlacement>[0];
+    await applyMailPlacement(done);
+    await applyMailPlacement({
+      ...done,
+      input: {
+        ...done.input,
+        command: { kind: "set-placement", placement: "inbox" },
+        requestId: randomUUID(),
+      },
+    });
+    await seedManaged({ id: "new-reply", sentAt: 2 });
+    const replay = await applyMailPlacement(done);
+    expect(replay.targets).toContainEqual(
+      expect.objectContaining({ replayed: true, status: "applied" })
+    );
+    const active = await fixture.client<
+      { id: string }[]
+    >`select id from "managedMailMessage" where "mailboxState" = 'active'`;
+    expect(active.map((message) => message.id)).toStrictEqual(
+      expect.arrayContaining(["anchor", "new-reply"])
+    );
+  });
+
+  test("rejects changed payloads and added targets under an existing request identity without adding receipts", async () => {
+    await seedManaged({ id: "anchor" });
+    await seedManaged({ id: "second", threadId: "second-conversation" });
+    const request = {
+      context: { userId: "actor" },
+      input: {
+        command: { kind: "set-placement", placement: "done" },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [{ messageIds: ["anchor"], threadId: "conversation" }],
+      },
+    } satisfies Parameters<typeof applyMailPlacement>[0];
+    await applyMailPlacement(request);
+    await expect(
+      applyMailPlacement({
+        ...request,
+        input: {
+          ...request.input,
+          command: { kind: "set-placement", placement: "inbox" },
+        },
+      })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(
+      applyMailPlacement({
+        ...request,
+        input: {
+          ...request.input,
+          targets: [
+            ...request.input.targets,
+            { messageIds: ["second"], threadId: "second-conversation" },
+          ],
+        },
+      })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    const operations = await fixture.client<
+      { threadId: string }[]
+    >`select "threadId" from "mailPlacementOperation"`;
+    expect(operations.map((operation) => operation.threadId)).toStrictEqual([
+      "conversation",
+    ]);
+    const [untouched] = await fixture.client<
+      { mailboxState: string }[]
+    >`select "mailboxState" from "managedMailMessage" where id = 'second'`;
+    expect(untouched?.mailboxState).toBe("active");
+  });
+
+  test("rechecks managed write permission before replay and isolates canonical targets to their mailbox", async () => {
+    await seedManaged({ id: "anchor" });
+    await seedManaged({ id: "foreign", mailboxId: "other-mailbox" });
+    const request = {
+      context: { userId: "actor" },
+      input: {
+        command: { kind: "set-placement", placement: "done" },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [{ messageIds: ["anchor"], threadId: "conversation" }],
+      },
+    } satisfies Parameters<typeof applyMailPlacement>[0];
+    await applyMailPlacement(request);
+    fixture.state.write = false;
+    await expect(applyMailPlacement(request)).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    fixture.state.write = true;
+    const foreign = await applyMailPlacement({
+      ...request,
+      input: {
+        ...request.input,
+        requestId: randomUUID(),
+        targets: [{ messageIds: ["foreign"], threadId: "conversation" }],
+      },
+    });
+    expect(foreign.targets).toContainEqual(
+      expect.objectContaining({ status: "failed" })
+    );
+    const [message] = await fixture.client<
+      { mailboxState: string }[]
+    >`select "mailboxState" from "managedMailMessage" where id = 'foreign'`;
+    expect(message?.mailboxState).toBe("active");
+  });
+
+  test("reports each bulk target independently when one conversation is unavailable", async () => {
+    await seedManaged({ id: "anchor" });
+    const result = await applyMailPlacement({
+      context: { userId: "actor" },
+      input: {
+        command: { kind: "set-placement", placement: "done" },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [
+          { messageIds: ["anchor"], threadId: "conversation" },
+          { messageIds: ["missing"], threadId: "missing-conversation" },
+        ],
+      },
+    });
+    expect(result.targets).toStrictEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "applied",
+          threadId: "conversation",
+        }),
+        expect.objectContaining({
+          status: "failed",
+          threadId: "missing-conversation",
+        }),
+      ])
+    );
+    const [handled] = await fixture.client<
+      { mailboxState: string }[]
+    >`select "mailboxState" from "managedMailMessage" where id = 'anchor'`;
+    expect(handled?.mailboxState).toBe("done");
+  });
+
+  test("does not return mail after a newer native action moved it to Spam", async () => {
+    fixture.state.provider = "gmail";
+    fixture.state.messages = [
+      {
+        id: "anchor",
+        internalDate: "1",
+        labelIds: [],
+        threadId: "conversation",
+      },
+    ];
+    fixture.state.beforeSnapshot = async () => {
+      fixture.state.beforeSnapshot = undefined;
+      fixture.state.messages[0]?.labelIds?.push("SPAM");
+      await Promise.resolve();
+    };
+    const result = await applyMailPlacement({
+      context: { userId: "actor" },
+      input: {
+        command: { kind: "set-placement", placement: "inbox" },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [{ messageIds: ["anchor"], threadId: "conversation" }],
+      },
+    });
+    expect(result.targets).toContainEqual(
+      expect.objectContaining({ code: "CONFLICT", status: "failed" })
+    );
+    expect(fixture.state.messages[0]?.labelIds).toContain("SPAM");
+    expect(fixture.state.providerWrites).toBe(0);
+  });
+
+  test("never redispatches an ambiguous Gmail write and permits a fresh explicit recovery", async () => {
+    fixture.state.provider = "gmail";
+    fixture.state.messages = [
+      {
+        bodyText: "Original Gmail fixture body",
+        id: "anchor",
+        internalDate: "1",
+        labelIds: ["INBOX", "UNREAD", "custom-label"],
+        threadId: "conversation",
+      },
+    ];
+    fixture.state.ambiguousWrite = true;
+    const request = {
+      context: { userId: "actor" },
+      input: {
+        command: { kind: "set-placement", placement: "done" },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [{ messageIds: ["anchor"], threadId: "conversation" }],
+      },
+    } satisfies Parameters<typeof applyMailPlacement>[0];
+    const uncertain = await applyMailPlacement(request);
+    expect(uncertain.targets).toContainEqual(
+      expect.objectContaining({ code: "placement_uncertain", status: "failed" })
+    );
+    expect(fixture.state.messages[0]?.labelIds).not.toContain("INBOX");
+    const acceptedWrites = fixture.state.providerWrites;
+    const replay = await applyMailPlacement(request);
+    expect(replay.targets).toContainEqual(
+      expect.objectContaining({ code: "placement_uncertain", replayed: true })
+    );
+    expect(fixture.state.providerWrites).toBe(acceptedWrites);
+    fixture.state.ambiguousWrite = false;
+    await applyMailPlacement({
+      ...request,
+      input: {
+        ...request.input,
+        command: { kind: "set-placement", placement: "inbox" },
+        requestId: randomUUID(),
+      },
+    });
+    expect(fixture.state.messages[0]?.bodyText).toContain(
+      "Original Gmail fixture body"
+    );
+    expect(fixture.state.messages[0]?.labelIds).toContain("INBOX");
+    expect(fixture.state.messages[0]?.labelIds).toContain("UNREAD");
+    expect(fixture.state.messages[0]?.labelIds).toContain("custom-label");
+  });
+
+  test("supersedes an older accepted intent while its provider snapshot is still outstanding", async () => {
+    fixture.state.provider = "gmail";
+    fixture.state.messages = [
+      {
+        id: "anchor",
+        internalDate: "1",
+        labelIds: ["INBOX"],
+        threadId: "conversation",
+      },
+    ];
+    const snapshotStarted = Promise.withResolvers<null>();
+    const releaseSnapshot = Promise.withResolvers<null>();
+    fixture.state.beforeSnapshot = async () => {
+      fixture.state.beforeSnapshot = undefined;
+      snapshotStarted.resolve(null);
+      await releaseSnapshot.promise;
+    };
+    const request = {
+      context: { userId: "actor" },
+      input: {
+        command: { kind: "set-placement", placement: "done" },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [{ messageIds: ["anchor"], threadId: "conversation" }],
+      },
+    } satisfies Parameters<typeof applyMailPlacement>[0];
+    const older = applyMailPlacement(request);
+    await snapshotStarted.promise;
+    await applyMailPlacement({
+      ...request,
+      input: {
+        ...request.input,
+        command: { kind: "set-placement", placement: "inbox" },
+        requestId: randomUUID(),
+      },
+    });
+    releaseSnapshot.resolve(null);
+    const result = await older;
+    expect(result.targets).toContainEqual(
+      expect.objectContaining({ code: "newer_intent", status: "failed" })
+    );
+    expect(fixture.state.messages[0]?.labelIds).toContain("INBOX");
+    expect(fixture.state.providerWrites).toBe(0);
+  });
+
+  test("fences a pending conversation action before a legacy placement write", async () => {
+    fixture.state.provider = "gmail";
+    fixture.state.messages = [
+      {
+        id: "anchor",
+        internalDate: "1",
+        labelIds: ["INBOX"],
+        threadId: "conversation",
+      },
+    ];
+    const snapshotStarted = Promise.withResolvers<null>();
+    const releaseSnapshot = Promise.withResolvers<null>();
+    fixture.state.beforeSnapshot = async () => {
+      fixture.state.beforeSnapshot = undefined;
+      snapshotStarted.resolve(null);
+      await releaseSnapshot.promise;
+    };
+    const request = {
+      context: { userId: "actor" },
+      input: {
+        command: { kind: "set-placement", placement: "done" },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [{ messageIds: ["anchor"], threadId: "conversation" }],
+      },
+    } satisfies Parameters<typeof applyMailPlacement>[0];
+    const pending = applyMailPlacement(request);
+    await snapshotStarted.promise;
+    await supersedePendingMailPlacement({
+      context: request.context,
+      mailboxId: "mailbox",
+      threadIds: ["conversation"],
+    });
+    fixture.state.messages[0]?.labelIds?.push("TRASH");
+    releaseSnapshot.resolve(null);
+    const result = await pending;
+    expect(result.targets).toContainEqual(
+      expect.objectContaining({ code: "newer_intent", status: "failed" })
+    );
+    expect(fixture.state.messages[0]?.labelIds).toContain("TRASH");
+    expect(fixture.state.providerWrites).toBe(0);
+  });
+});

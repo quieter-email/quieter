@@ -175,7 +175,7 @@ const listManagedHistory = async (
             and(
               eq(managedMailMessage.mailboxId, input.mailboxId),
               eq(managedMailMessage.direction, "inbound"),
-              eq(managedMailMessage.mailboxState, "active"),
+              inArray(managedMailMessage.mailboxState, ["active", "done"]),
               ne(managedMailMessage.id, input.message.id),
               senderMatch
             )
