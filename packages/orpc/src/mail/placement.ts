@@ -11,7 +11,9 @@ import {
   batchModifyMessages,
   getGmailCaptureMetadata,
   getGmailMessageThreadAssociations,
+  getGmailThreadMessageCount,
   getThreadWithDetails,
+  isGmailServiceError,
 } from "@quieter/gmail";
 import type {
   MailMutationResult,
@@ -112,7 +114,7 @@ const toPlacementResult = (
 });
 
 export const applyMailPlacement = async ({
-  context,
+  context: requestContext,
   input,
 }: {
   context: MailRequestContext;
@@ -120,6 +122,13 @@ export const applyMailPlacement = async ({
     command: { kind: "set-placement"; placement: "done" | "inbox" };
   };
 }): Promise<MailMutationResult> => {
+  const deadline = AbortSignal.timeout(30_000);
+  const context: MailRequestContext = {
+    ...requestContext,
+    signal: requestContext.signal
+      ? AbortSignal.any([requestContext.signal, deadline])
+      : deadline,
+  };
   const selected = await authorizePlacement(context, input.mailboxId);
   const { requestId } = input;
   if (requestId === undefined) {
@@ -162,17 +171,20 @@ export const applyMailPlacement = async ({
     }
     return existing;
   };
+  const workBudget = {
+    key: `mail-placement:${context.userId}`,
+    limit: 10_000,
+    windowMs: 60 * 60_000,
+  };
   let operations = await readExistingRequest(db);
   const ownedIds = new Set<string>();
   if (operations.length === 0) {
     const budget = await consumeRateLimit({
+      ...workBudget,
       cost: input.targets.reduce(
         (total, target) => total + Math.max(1, target.messageIds.length),
         0
       ),
-      key: `mail-placement:${context.userId}`,
-      limit: 10_000,
-      windowMs: 60 * 60_000,
     });
     if (budget.allowed) {
       const reserve = async (accessToken?: string) =>
@@ -289,6 +301,7 @@ export const applyMailPlacement = async ({
     }
   }
   const results: MailMutationTargetResult[] = [];
+  let remainingSourceMessages = 1000;
   for (const target of input.targets) {
     const operation = operations.find(
       (item) => item.threadId === target.threadId
@@ -311,7 +324,15 @@ export const applyMailPlacement = async ({
     let dispatched = false;
     try {
       context.signal?.throwIfAborted();
-      let messages: PlacementMessage[];
+      if (remainingSourceMessages === 0) {
+        throw new ORPCError("BAD_REQUEST", {
+          message:
+            "This action includes too much conversation history. Choose fewer conversations and try again.",
+        });
+      }
+      let source:
+        | { kind: "managed"; messages: PlacementMessage[] }
+        | { kind: "gmail"; messageCount: number };
       if (selected.provider === "managed") {
         const records = await db
           .select({
@@ -331,24 +352,79 @@ export const applyMailPlacement = async ({
           .orderBy(
             asc(managedMailMessage.createdAt),
             asc(managedMailMessage.id)
-          );
-        messages = records.map((message): PlacementMessage => {
-          let placement: PlacementMessage["placement"] = "protected";
-          if (message.direction === "inbound") {
-            if (message.mailboxState === "active") {
-              placement = "inbox";
-            } else if (message.mailboxState === "done") {
-              placement = "done";
+          )
+          .limit(remainingSourceMessages + 1);
+        source = {
+          kind: "managed",
+          messages: records.map((message): PlacementMessage => {
+            let placement: PlacementMessage["placement"] = "protected";
+            if (message.direction === "inbound") {
+              if (message.mailboxState === "active") {
+                placement = "inbox";
+              } else if (message.mailboxState === "done") {
+                placement = "done";
+              }
             }
-          }
-          return {
-            id: message.id,
-            placement,
-            receivedAt: message.createdAt.getTime(),
-            threadId: message.threadId,
-          };
-        });
+            return {
+              id: message.id,
+              placement,
+              receivedAt: message.createdAt.getTime(),
+              threadId: message.threadId,
+            };
+          }),
+        };
       } else {
+        source = {
+          kind: "gmail",
+          messageCount: await callGmail(
+            context,
+            input.mailboxId,
+            async (accessToken, signal) =>
+              await getGmailThreadMessageCount(
+                accessToken,
+                target.threadId,
+                signal
+              )
+          ),
+        };
+      }
+      const sourceMessageCount =
+        source.kind === "managed"
+          ? source.messages.length
+          : source.messageCount;
+      const additionalCost = Math.max(
+        0,
+        sourceMessageCount - target.messageIds.length
+      );
+      if (additionalCost > 0) {
+        const expandedBudget = await consumeRateLimit({
+          ...workBudget,
+          cost: additionalCost,
+        });
+        if (!expandedBudget.allowed) {
+          remainingSourceMessages = 0;
+          const retryAfter = Math.max(
+            1,
+            Math.ceil((expandedBudget.resetAt.getTime() - Date.now()) / 1000)
+          );
+          context.resHeaders?.set("retry-after", String(retryAfter));
+          throw new ORPCError("RATE_LIMITED", {
+            data: { provider: "server", retryAfter },
+            message: "Too many conversations were changed. Try again later.",
+            status: 429,
+          });
+        }
+      }
+      if (sourceMessageCount > remainingSourceMessages) {
+        remainingSourceMessages = 0;
+        throw new ORPCError("BAD_REQUEST", {
+          message:
+            "This action includes too much conversation history. Choose fewer conversations and try again.",
+        });
+      }
+      remainingSourceMessages -= sourceMessageCount;
+      let messages: PlacementMessage[];
+      if (source.kind === "gmail") {
         const thread = await callGmail(
           context,
           input.mailboxId,
@@ -358,12 +434,14 @@ export const applyMailPlacement = async ({
               target.threadId,
               signal,
               async (snapshot) => {
+                signal?.throwIfAborted();
                 await writeGmailCapturedMessage({
                   mailboxId: input.mailboxId,
                   snapshot,
                   source: "on_demand",
                 });
-              }
+              },
+              sourceMessageCount
             )
         );
         messages = thread.messages.map((message): PlacementMessage => {
@@ -384,6 +462,8 @@ export const applyMailPlacement = async ({
             threadId: message.threadId,
           };
         });
+      } else {
+        ({ messages } = source);
       }
       const messageIds = resolvePlacementMessageIds({
         messages,
@@ -420,6 +500,7 @@ export const applyMailPlacement = async ({
       }
       const commit = async (accessToken?: string) =>
         await db.transaction(async (tx) => {
+          context.signal?.throwIfAborted();
           const lockedMessages =
             selected.provider === "managed" && messageIds.length > 0
               ? await tx
@@ -460,6 +541,7 @@ export const applyMailPlacement = async ({
             )
             .orderBy(desc(mailPlacementOperation.sequence))
             .limit(1);
+          context.signal?.throwIfAborted();
           if (locked === undefined) {
             throw new ORPCError("NOT_FOUND");
           }
@@ -520,31 +602,6 @@ export const applyMailPlacement = async ({
                 "Placement dispatch requires an authorized mailbox token."
               );
             }
-            for (let offset = 0; offset < messageIds.length; offset += 4) {
-              const metadata = await Promise.all(
-                messageIds
-                  .slice(offset, offset + 4)
-                  .map(
-                    async (messageId) =>
-                      await getGmailCaptureMetadata(accessToken, messageId)
-                  )
-              );
-              if (
-                metadata.some(
-                  (message) =>
-                    message.labelIds.some((label) =>
-                      ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
-                    ) ||
-                    message.labelIds.includes("INBOX") !==
-                      (input.command.placement === "done")
-                )
-              ) {
-                throw new ORPCError("CONFLICT", {
-                  message:
-                    "This conversation changed. Refresh before trying again.",
-                });
-              }
-            }
             dispatched = true;
             await batchModifyMessages(
               accessToken,
@@ -575,7 +632,40 @@ export const applyMailPlacement = async ({
           ? await callGmail(
               context,
               input.mailboxId,
-              async (accessToken) => await commit(accessToken)
+              async (accessToken, signal) => {
+                for (let offset = 0; offset < messageIds.length; offset += 4) {
+                  signal?.throwIfAborted();
+                  const metadata = await Promise.all(
+                    messageIds
+                      .slice(offset, offset + 4)
+                      .map(
+                        async (messageId) =>
+                          await getGmailCaptureMetadata(
+                            accessToken,
+                            messageId,
+                            signal
+                          )
+                      )
+                  );
+                  if (
+                    metadata.some(
+                      (message) =>
+                        message.labelIds.some((label) =>
+                          ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
+                        ) ||
+                        message.labelIds.includes("INBOX") !==
+                          (input.command.placement === "done")
+                    )
+                  ) {
+                    throw new ORPCError("CONFLICT", {
+                      message:
+                        "This conversation changed. Refresh before trying again.",
+                    });
+                  }
+                }
+                signal?.throwIfAborted();
+                return await commit(accessToken);
+              }
             )
           : await commit();
       results.push(result);
@@ -589,25 +679,43 @@ export const applyMailPlacement = async ({
             accessToken,
             mailboxId: input.mailboxId,
             messageIds,
+            signal: context.signal,
           });
         }).catch((error: unknown) => {
-          reportError(error, { operation: "placement-refresh-metadata" });
+          if (context.signal?.aborted !== true) {
+            reportError(error, { operation: "placement-refresh-metadata" });
+          }
         });
       }
     } catch (error) {
+      const oversized = isGmailServiceError(error) && error.status === 413;
+      if (oversized) {
+        remainingSourceMessages = 0;
+      }
+      const placementError = oversized
+        ? new ORPCError("BAD_REQUEST", {
+            message:
+              "This action includes too much conversation history. Choose fewer conversations and try again.",
+          })
+        : error;
       if (
-        (!(error instanceof ORPCError) ||
-          typeof error.code !== "string" ||
+        (!(placementError instanceof ORPCError) ||
+          typeof placementError.code !== "string" ||
           ![
             "BAD_REQUEST",
             "CONFLICT",
             "FORBIDDEN",
             "NOT_FOUND",
+            "RATE_LIMITED",
             "UNAUTHORIZED",
-          ].includes(error.code)) &&
-        !(error instanceof Error && error.name === "AbortError")
+          ].includes(placementError.code)) &&
+        !(
+          placementError instanceof Error &&
+          placementError.name === "AbortError"
+        ) &&
+        context.signal?.aborted !== true
       ) {
-        reportError(error, { operation: "mail-placement" });
+        reportError(placementError, { operation: "mail-placement" });
       }
       let failure = {
         code: "placement_failed",
@@ -620,8 +728,14 @@ export const applyMailPlacement = async ({
           message:
             "This conversation may have changed. Refresh before trying again.",
         };
-      } else if (error instanceof ORPCError && typeof error.code === "string") {
-        failure = { code: error.code, message: error.message };
+      } else if (
+        placementError instanceof ORPCError &&
+        typeof placementError.code === "string"
+      ) {
+        failure = {
+          code: placementError.code,
+          message: placementError.message,
+        };
       }
       const [failed] = await db
         .update(mailPlacementOperation)
