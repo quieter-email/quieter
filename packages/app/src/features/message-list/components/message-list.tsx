@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  CheckmarkCircle02Icon,
+  InboxIcon,
   Flag01Icon,
   Delete01Icon,
   Delete02Icon,
@@ -287,10 +289,14 @@ const buildMessageListBulkActions = ({
   runActionThreads,
   actionThreads,
   canSetImportance,
+  canSetPlacement,
+  sharedPlacement,
   canMarkRead,
 }: {
   actionThreads: ThreadListEntry[];
   canSetImportance: boolean;
+  canSetPlacement: boolean;
+  sharedPlacement: boolean;
   canMarkRead: boolean;
   activeMailbox: MailboxCategory;
   mailboxActions: MessageListProps["mailboxActions"];
@@ -323,6 +329,27 @@ const buildMessageListBulkActions = ({
   }
 
   const actions: MessageListBulkAction[] = [];
+  if (
+    canSetPlacement &&
+    !["drafts", "sent", "spam", "trash"].includes(activeMailbox)
+  ) {
+    const returnToInbox = activeMailbox === "done";
+    actions.push({
+      icon: returnToInbox ? InboxIcon : CheckmarkCircle02Icon,
+      id: returnToInbox ? "return-threads-to-inbox" : "mark-threads-done",
+      label: `${returnToInbox ? "Return to Inbox" : "Done"}${sharedPlacement ? " for everyone" : ""}`,
+      onSelect: async () => {
+        await runActionThreads(
+          returnToInbox
+            ? mailboxActions.returnThreadsToInbox
+            : mailboxActions.markThreadsDone,
+          (threads) =>
+            `${formatConversationCount(threads.length)} ${returnToInbox ? "returned to Inbox" : "marked Done"}.`
+        );
+      },
+      promoted: true,
+    });
+  }
   if (canSetImportance) {
     const important =
       actionThreads.length > 0 &&
@@ -622,9 +649,30 @@ const useMessageListInteractions = ({
                 ?.mailboxActions ?? props.mailboxActions
             ).canSetImportance
         ) && props.mailboxActions.canSetImportance,
+      canSetPlacement:
+        getActionThreads(
+          selection.selectedThreads,
+          selection.focusedThread
+        ).every(
+          (thread) =>
+            (
+              props.mailboxContextsByThreadId?.get(thread.threadId)
+                ?.mailboxActions ?? props.mailboxActions
+            ).canSetPlacement
+        ) && props.mailboxActions.canSetPlacement,
       mailboxActions: props.mailboxActions,
       mailboxProvider: actionMailboxProvider,
       runActionThreads,
+      sharedPlacement: getActionThreads(
+        selection.selectedThreads,
+        selection.focusedThread
+      ).some(
+        (thread) =>
+          (
+            props.mailboxContextsByThreadId?.get(thread.threadId)
+              ?.mailboxActions ?? props.mailboxActions
+          ).placementScope === "shared"
+      ),
     }),
     bulkLabels,
     handleClearSelection: selection.clearSelection,
