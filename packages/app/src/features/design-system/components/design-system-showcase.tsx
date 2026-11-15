@@ -1325,6 +1325,40 @@ export const DesignSystemShowcase = () => {
               </CollapsiblePanel>
             </Collapsible>
           </Row>
+          <Row label="Activity transcript">
+            <Collapsible className="w-80 max-w-full">
+              <CollapsibleTrigger className="max-w-full" variant="text">
+                <Icon aria-hidden icon={Search01Icon} />
+                <span className="truncate">Searched mail, read an email</span>
+              </CollapsibleTrigger>
+              <CollapsiblePanel variant="transcript">
+                <ol className="space-y-3">
+                  <li className="flex min-w-0 items-center gap-2">
+                    <Icon
+                      aria-hidden
+                      icon={Search01Icon}
+                      size={14}
+                      tone="muted"
+                    />
+                    <Text as="span" size="caption" tone="muted" truncate>
+                      Searched mail for the project update
+                    </Text>
+                  </li>
+                  <li className="flex min-w-0 items-center gap-2">
+                    <Icon
+                      aria-hidden
+                      icon={Mail01Icon}
+                      size={14}
+                      tone="muted"
+                    />
+                    <Text as="span" size="caption" tone="muted" truncate>
+                      Read the project update
+                    </Text>
+                  </li>
+                </ol>
+              </CollapsiblePanel>
+            </Collapsible>
+          </Row>
         </Section>
 
         <Section title="Form controls">
