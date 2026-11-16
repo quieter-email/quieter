@@ -29,7 +29,10 @@ type Credential = Pick<
   Pick<
     typeof mailbox.$inferSelect,
     "emailAddress" | "id" | "ownerUserId" | "status"
-  >;
+  > & {
+    credentialCreatedAt: typeof gmailCredential.$inferSelect.createdAt;
+    mailboxCreatedAt: typeof mailbox.$inferSelect.createdAt;
+  };
 
 const fixtures = vi.hoisted(() => ({
   credentials: [] as Credential[],
@@ -43,7 +46,13 @@ const fixtures = vi.hoisted(() => ({
 vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
   const { drizzle } = await import("drizzle-orm/pg-proxy");
-  return { ...actual, db: drizzle(fixtures.query) };
+  const database = drizzle(fixtures.query);
+  Object.defineProperty(database, "transaction", {
+    value: async <Result>(
+      run: (transaction: typeof database) => Promise<Result>
+    ) => await run(database),
+  });
+  return { ...actual, db: database };
 });
 
 vi.mock(import("@quieter/env/server"), async (importOriginal) => {
@@ -95,11 +104,13 @@ describe("connector account authority", () => {
   beforeEach(() => {
     fixtures.credentials = ["first", "selected"].map((id): Credential => ({
       accessTokenExpiresAt: new Date(Date.now() + 3_600_000),
+      credentialCreatedAt: new Date("2026-01-02T00:00:00Z"),
       emailAddress: `${id}@example.test`,
       encryptedAccessToken: `${id}-access`,
       encryptedRefreshToken: `${id}-refresh`,
       googleSubject: `${id}-subject`,
       id: `mailbox-${id}`,
+      mailboxCreatedAt: new Date("2026-01-01T00:00:00Z"),
       ownerUserId: "owner",
       scopes: CALENDAR_SCOPES.join(" "),
       status: "connected",
@@ -147,10 +158,13 @@ describe("connector account authority", () => {
             .filter((record) => params.includes(record.id))
             .map((record) => [
               record.accessTokenExpiresAt,
+              record.credentialCreatedAt,
               record.emailAddress,
               record.encryptedAccessToken,
               record.encryptedRefreshToken,
+              record.googleSubject,
               record.id,
+              record.mailboxCreatedAt,
               record.scopes,
               record.status,
             ]),

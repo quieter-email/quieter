@@ -155,16 +155,52 @@ const getGmailRepairRequiredError = (record: {
     status: 409,
   });
 
+export const loadOwnedGmailCredential = async (
+  input: {
+    mailboxId: string;
+    userId: string;
+  },
+  database: Pick<typeof db, "select"> = db
+) => {
+  const [record] = await database
+    .select({
+      accessTokenExpiresAt: gmailCredential.accessTokenExpiresAt,
+      credentialCreatedAt: gmailCredential.createdAt,
+      emailAddress: mailbox.emailAddress,
+      encryptedAccessToken: gmailCredential.encryptedAccessToken,
+      encryptedRefreshToken: gmailCredential.encryptedRefreshToken,
+      googleSubject: gmailCredential.googleSubject,
+      id: mailbox.id,
+      mailboxCreatedAt: mailbox.createdAt,
+      scopes: gmailCredential.scopes,
+      status: mailbox.status,
+    })
+    .from(mailbox)
+    .innerJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
+    .where(
+      and(
+        eq(mailbox.id, input.mailboxId),
+        eq(mailbox.ownerUserId, input.userId),
+        eq(mailbox.provider, "gmail")
+      )
+    )
+    .limit(1);
+
+  if (record === undefined) {
+    throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
+  }
+  return { ...record, userId: input.userId };
+};
+
+type OwnedGmailCredential = Awaited<
+  ReturnType<typeof loadOwnedGmailCredential>
+>;
+
 const gmailTokenRefreshes = new Map<string, Promise<string>>();
 
-const performGmailAccessTokenRefresh = async (record: {
-  emailAddress: string;
-  encryptedAccessToken: string | null;
-  encryptedRefreshToken: string | null;
-  id: string;
-  scopes: string;
-}) => {
-  if (!record.encryptedRefreshToken) {
+const performGmailAccessTokenRefresh = async (record: OwnedGmailCredential) => {
+  const { encryptedRefreshToken } = record;
+  if (!encryptedRefreshToken) {
     await db
       .update(mailbox)
       .set({ status: "needs_reconnect", updatedAt: new Date() })
@@ -178,7 +214,7 @@ const performGmailAccessTokenRefresh = async (record: {
       client_id: config.clientId,
       client_secret: config.clientSecret,
       grant_type: "refresh_token",
-      refresh_token: decryptSecret(record.encryptedRefreshToken),
+      refresh_token: decryptSecret(encryptedRefreshToken),
     }),
     headers: { "content-type": "application/x-www-form-urlencoded" },
     method: "POST",
@@ -215,33 +251,74 @@ const performGmailAccessTokenRefresh = async (record: {
 
   const refreshed = googleRefreshResponseSchema.parse(await response.json());
   const now = new Date();
-  const [updatedCredential] = await db
-    .update(gmailCredential)
-    .set({
-      accessTokenExpiresAt: new Date(
-        now.getTime() + refreshed.expires_in * 1000
-      ),
-      encryptedAccessToken: encryptSecret(refreshed.access_token),
-      scopes: refreshed.scope ?? record.scopes,
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(gmailCredential.mailboxId, record.id),
-        record.encryptedAccessToken === null
-          ? isNull(gmailCredential.encryptedAccessToken)
-          : eq(
-              gmailCredential.encryptedAccessToken,
-              record.encryptedAccessToken
-            )
+  const encryptedAccessToken = encryptSecret(refreshed.access_token);
+  const updatedCredential = await db.transaction(async (transaction) => {
+    await transaction
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(eq(mailbox.id, record.id))
+      .for("update");
+    let current: OwnedGmailCredential;
+    try {
+      current = await loadOwnedGmailCredential(
+        { mailboxId: record.id, userId: record.userId },
+        transaction
+      );
+    } catch (error) {
+      if (error instanceof ORPCError && error.code === "NOT_FOUND") {
+        return false;
+      }
+      throw error;
+    }
+    if (
+      current.emailAddress !== record.emailAddress ||
+      current.googleSubject !== record.googleSubject ||
+      current.credentialCreatedAt.getTime() !==
+        record.credentialCreatedAt.getTime() ||
+      current.mailboxCreatedAt.getTime() !==
+        record.mailboxCreatedAt.getTime() ||
+      current.status !== record.status
+    ) {
+      return false;
+    }
+    const [updated] = await transaction
+      .update(gmailCredential)
+      .set({
+        accessTokenExpiresAt: new Date(
+          now.getTime() + refreshed.expires_in * 1000
+        ),
+        encryptedAccessToken,
+        scopes: refreshed.scope ?? record.scopes,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(gmailCredential.mailboxId, record.id),
+          eq(gmailCredential.createdAt, record.credentialCreatedAt),
+          eq(gmailCredential.scopes, record.scopes),
+          eq(gmailCredential.googleSubject, record.googleSubject),
+          eq(gmailCredential.encryptedRefreshToken, encryptedRefreshToken),
+          record.encryptedAccessToken === null
+            ? isNull(gmailCredential.encryptedAccessToken)
+            : eq(
+                gmailCredential.encryptedAccessToken,
+                record.encryptedAccessToken
+              )
+        )
       )
-    )
-    .returning({ mailboxId: gmailCredential.mailboxId });
-  if (updatedCredential !== undefined) {
-    await db
-      .update(mailbox)
-      .set({ status: "connected", updatedAt: now })
-      .where(eq(mailbox.id, record.id));
+      .returning({ mailboxId: gmailCredential.mailboxId });
+    if (updated === undefined) {
+      return false;
+    }
+    if (record.status !== "connected") {
+      await transaction
+        .update(mailbox)
+        .set({ status: "connected", updatedAt: now })
+        .where(eq(mailbox.id, record.id));
+    }
+    return true;
+  });
+  if (updatedCredential) {
     return refreshed.access_token;
   }
 
@@ -251,7 +328,13 @@ const performGmailAccessTokenRefresh = async (record: {
       encryptedAccessToken: gmailCredential.encryptedAccessToken,
     })
     .from(gmailCredential)
-    .where(eq(gmailCredential.mailboxId, record.id))
+    .where(
+      and(
+        eq(gmailCredential.mailboxId, record.id),
+        eq(gmailCredential.googleSubject, record.googleSubject),
+        eq(gmailCredential.encryptedRefreshToken, encryptedRefreshToken)
+      )
+    )
     .limit(1);
   if (
     currentCredential?.encryptedAccessToken &&
@@ -285,35 +368,12 @@ const refreshGmailAccessToken = async (
 };
 
 const getOwnedGmailCredential = async (mailboxId: string, userId: string) => {
-  const [record] = await db
-    .select({
-      accessTokenExpiresAt: gmailCredential.accessTokenExpiresAt,
-      emailAddress: mailbox.emailAddress,
-      encryptedAccessToken: gmailCredential.encryptedAccessToken,
-      encryptedRefreshToken: gmailCredential.encryptedRefreshToken,
-      id: mailbox.id,
-      scopes: gmailCredential.scopes,
-      status: mailbox.status,
-    })
-    .from(mailbox)
-    .innerJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
-    .where(
-      and(
-        eq(mailbox.id, mailboxId),
-        eq(mailbox.ownerUserId, userId),
-        eq(mailbox.provider, "gmail")
-      )
-    )
-    .limit(1);
-
-  if (record === undefined) {
-    throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
-  }
+  const record = await loadOwnedGmailCredential({ mailboxId, userId });
   const rotated = await rotateGmailCredentialSecrets(record);
   return rotated.record;
 };
 
-export const getAuthorizedGmailMailbox = async (input: {
+const getAuthorizedGmailMailboxRecord = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
@@ -340,12 +400,32 @@ export const getAuthorizedGmailMailbox = async (input: {
   };
 };
 
-export const refreshAuthorizedGmailAccessToken = async (input: {
+export const getAuthorizedGmailMailbox: (
+  input: Parameters<typeof getAuthorizedGmailMailboxRecord>[0]
+) => Promise<{
+  accessToken: string;
+  mailbox: Omit<
+    OwnedGmailCredential,
+    "credentialCreatedAt" | "googleSubject" | "mailboxCreatedAt" | "userId"
+  >;
+}> = getAuthorizedGmailMailboxRecord;
+
+const refreshAuthorizedGmailMailboxRecord = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
   const record = await getOwnedGmailCredential(input.mailboxId, input.userId);
-  return await refreshGmailAccessToken(record);
+  return {
+    accessToken: await refreshGmailAccessToken(record),
+    mailbox: record,
+  };
+};
+
+export const refreshAuthorizedGmailAccessToken = async (
+  input: Parameters<typeof refreshAuthorizedGmailMailboxRecord>[0]
+) => {
+  const result = await refreshAuthorizedGmailMailboxRecord(input);
+  return result.accessToken;
 };
 
 export const markGmailMailboxNeedsReconnect = async (mailboxId: string) => {
@@ -370,24 +450,27 @@ export const runAuthorizedGmailMailbox = async <TValue>(
     retryUnauthorized?: boolean;
     userId: string;
   },
-  runner: (accessToken: string) => Promise<TValue>
+  runner: (
+    accessToken: string,
+    authorizedMailbox?: Readonly<OwnedGmailCredential>
+  ) => Promise<TValue>
 ): Promise<TValue> => {
   const isUnauthorized = input.isUnauthorized ?? isGmailAuthError;
   const { accessToken, mailbox: authorizedMailbox } =
-    await getAuthorizedGmailMailbox(input);
+    await getAuthorizedGmailMailboxRecord(input);
 
   try {
-    return await runner(accessToken);
+    return await runner(accessToken, authorizedMailbox);
   } catch (error) {
     if (input.retryUnauthorized === false || !isUnauthorized(error)) {
       throw error;
     }
   }
 
-  const refreshedAccessToken = await refreshAuthorizedGmailAccessToken(input);
+  const refreshed = await refreshAuthorizedGmailMailboxRecord(input);
 
   try {
-    return await runner(refreshedAccessToken);
+    return await runner(refreshed.accessToken, refreshed.mailbox);
   } catch (error) {
     if (!isUnauthorized(error)) {
       throw error;
