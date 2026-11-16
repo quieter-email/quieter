@@ -19,7 +19,7 @@ export type NativeInstallOperation = {
   command: string;
   expectedExitCode?: number;
   kind: string;
-  timeoutMs?: 10_000 | 30_000;
+  timeoutMs?: 10_000 | 45_000;
   verbatim?: boolean;
 };
 export type RunNativeInstallOperation = (
@@ -146,7 +146,7 @@ export const createNativeInstallation = () => {
                 ],
                 command: "powershell.exe",
                 kind: "windows-os-inventory",
-                timeoutMs: 30_000,
+                timeoutMs: 45_000,
               })
             )
           )
@@ -192,7 +192,7 @@ export const createNativeInstallation = () => {
             ],
             command: "powershell.exe",
             kind: "windows-installation-preflight",
-            timeoutMs: 30_000,
+            timeoutMs: 45_000,
           })
         );
         z.strictObject({
@@ -225,7 +225,7 @@ export const createNativeInstallation = () => {
             ],
             command: "powershell.exe",
             kind: "windows-automatic-launch-preflight",
-            timeoutMs: 30_000,
+            timeoutMs: 45_000,
           })
         );
         assert.equal(
