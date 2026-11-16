@@ -208,5 +208,9 @@ export const useDraftRecovery = ({
         queryKey: ["local-draft-recovery", userId, mailboxId],
       });
     },
+    retainHeldDraft: () => {
+      completed.current = false;
+      checkpoint();
+    },
   };
 };

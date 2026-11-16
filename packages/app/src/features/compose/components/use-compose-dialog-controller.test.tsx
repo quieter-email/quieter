@@ -1071,6 +1071,200 @@ describe("compose controller", () => {
       expect(controller.form.state.values.subject).toBe("Current sender work");
     });
 
+    it("preserves the held source when its prepared sender handoff resumes", async () => {
+      await mount({
+        ...initial(),
+        assistantUnsaved: false,
+        draftId: "existing",
+        saveStatus: "saved",
+      });
+      const prepared = await act(
+        async () => await controller.prepareSenderSwitch()
+      );
+      if (!prepared) {
+        throw new Error("The sender switch was not prepared.");
+      }
+      const route = Promise.withResolvers<null>();
+      const commit = vi.fn<() => void>();
+      let handoff: Promise<boolean> | undefined;
+      await flush(() => {
+        handoff = (async () => {
+          await route.promise;
+          return await prepared.completeSenderSwitch(commit);
+        })();
+      });
+      const receipt = receiptFor();
+      await act(async () => {
+        await readCompose().applyHeldReceipt(receipt);
+        route.resolve(null);
+        await expect(handoff).resolves.toBeFalsy();
+        prepared.release();
+      });
+      expect(commit).not.toHaveBeenCalled();
+      expect(controller.state).toMatchObject({
+        draft: { sendUncertain: true },
+        open: true,
+      });
+      await vi.waitFor(async () => {
+        const records = await draftRecoveryJournal
+          .session("user", boundary.sessionId)
+          .list({ mailboxId: "mailbox", userId: "user" });
+        expect(
+          records.some((record) => {
+            const draft = restoreComposeDraft(record.payload, record.editorId);
+            return (
+              draft.sendOperationId === receipt.sendOperationId &&
+              draft.sendUncertain === true
+            );
+          })
+        ).toBeTruthy();
+      });
+    });
+
+    it("rejects a prepared sender handoff invalidated during recovery cleanup", async () => {
+      const session = draftRecoveryJournal.session("user", boundary.sessionId);
+      const cleanup = Promise.withResolvers<null>();
+      let deferCleanup = false;
+      vi.spyOn(draftRecoveryJournal, "session").mockReturnValue({
+        ...session,
+        list: async (scope) => {
+          if (deferCleanup) {
+            await cleanup.promise;
+          }
+          return await session.list(scope);
+        },
+      });
+      await mount({
+        ...initial(),
+        assistantUnsaved: false,
+        draftId: "existing",
+        saveStatus: "saved",
+      });
+      const prepared = await act(
+        async () => await controller.prepareSenderSwitch()
+      );
+      if (!prepared) {
+        throw new Error("The sender switch was not prepared.");
+      }
+      deferCleanup = true;
+      const commit = vi.fn<() => void>();
+      let handoff: Promise<boolean> | undefined;
+      await flush(() => {
+        handoff = prepared.completeSenderSwitch(commit);
+      });
+      const receipt = receiptFor();
+      await act(async () => {
+        await readCompose().applyHeldReceipt(receipt);
+        cleanup.resolve(null);
+        await expect(handoff).resolves.toBeFalsy();
+        prepared.release();
+      });
+      expect(commit).not.toHaveBeenCalled();
+      await vi.waitFor(async () => {
+        const records = await session.list({
+          mailboxId: "mailbox",
+          userId: "user",
+        });
+        expect(
+          records.some((record) => {
+            const draft = restoreComposeDraft(record.payload, record.editorId);
+            return (
+              draft.sendOperationId === receipt.sendOperationId &&
+              draft.sendUncertain === true
+            );
+          })
+        ).toBeTruthy();
+      });
+    });
+
+    it("retains held recovery admitted after sender cleanup completes but before commit", async () => {
+      await mount({
+        ...initial(),
+        assistantUnsaved: false,
+        draftId: "existing",
+        saveStatus: "saved",
+      });
+      const prepared = await act(
+        async () => await controller.prepareSenderSwitch()
+      );
+      if (!prepared) {
+        throw new Error("The sender switch was not prepared.");
+      }
+      const receipt = receiptFor();
+      const invalidate = client.invalidateQueries.bind(client);
+      let admission: Promise<void> | undefined;
+      let admitOnCleanup = true;
+      vi.spyOn(client, "invalidateQueries").mockImplementation(
+        async (filters, options) => {
+          await invalidate(filters, options);
+          if (
+            admitOnCleanup &&
+            filters?.queryKey?.[0] === "local-draft-recovery"
+          ) {
+            admitOnCleanup = false;
+            queueMicrotask(() => {
+              queueMicrotask(() => {
+                admission = readCompose().applyHeldReceipt(receipt);
+              });
+            });
+          }
+        }
+      );
+      const commit = vi.fn<() => void>();
+      await act(async () => {
+        await expect(
+          prepared.completeSenderSwitch(commit)
+        ).resolves.toBeFalsy();
+        await admission;
+        prepared.release();
+      });
+      expect(commit).not.toHaveBeenCalled();
+      expect(controller.state.draft.sendUncertain).toBeTruthy();
+      await vi.waitFor(async () => {
+        const records = await draftRecoveryJournal
+          .session("user", boundary.sessionId)
+          .list({ mailboxId: "mailbox", userId: "user" });
+        expect(
+          records.some((record) => {
+            const draft = restoreComposeDraft(record.payload, record.editorId);
+            return (
+              draft.sendOperationId === receipt.sendOperationId &&
+              draft.sendUncertain === true
+            );
+          })
+        ).toBeTruthy();
+      });
+    });
+
+    it.each([false, true])(
+      "commits a current sender handoff with proposal ownership %s",
+      async (assistantUnsaved) => {
+        await mount({
+          ...initial(),
+          assistantUnsaved,
+          draftId: "existing",
+          saveStatus: "saved",
+        });
+        const prepared = await act(
+          async () => await controller.prepareSenderSwitch()
+        );
+        if (!prepared) {
+          throw new Error("The sender switch was not prepared.");
+        }
+        expect(prepared.transferDraft.assistantUnsaved).toBe(assistantUnsaved);
+        const commit = vi.fn<() => void>();
+        await act(async () => {
+          await expect(
+            prepared.completeSenderSwitch(commit)
+          ).resolves.toBeTruthy();
+          prepared.release();
+        });
+        expect(commit).toHaveBeenCalledOnce();
+        expect(controller.state.isFinishing).toBeFalsy();
+        expect(boundary.saveDraft).not.toHaveBeenCalled();
+      }
+    );
+
     it("ignores a saved-tool receipt submitted before canonical Undo", async () => {
       await mount();
       const submitted = readCompose().read();
@@ -1184,12 +1378,9 @@ describe("compose controller", () => {
           },
         ],
       });
-      let transfer: Awaited<
-        ReturnType<ComposeDialogController["prepareSenderSwitch"]>
-      > = null;
-      await act(async () => {
-        transfer = await controller.prepareSenderSwitch();
-      });
+      const transfer = await act(
+        async () => await controller.prepareSenderSwitch()
+      );
       expect(transfer).toMatchObject({
         transferDraft: { assistantUnsaved: true },
       });
@@ -1202,6 +1393,7 @@ describe("compose controller", () => {
         expect.anything()
       );
       await act(async () => {
+        transfer?.release();
         await controller.form.handleSubmit();
       });
       expect(boundary.sendMessage).toHaveBeenCalledOnce();

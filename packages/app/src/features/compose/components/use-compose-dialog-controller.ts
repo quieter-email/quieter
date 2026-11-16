@@ -96,6 +96,14 @@ type ComposeActionToken = {
   draftRevision: number;
 };
 
+export type PreparedComposeSenderSwitch = {
+  currentDraft: ComposeDraftState;
+  transferDraft: ComposeDraftState;
+  isCurrent: () => boolean;
+  completeSenderSwitch: (commit: () => void) => Promise<boolean>;
+  release: () => void;
+};
+
 export type ComposeHeldReceipt = Pick<
   NonNullable<RouterOutputs["mail"]["getHeldSend"]>,
   "sendOperationId" | "status" | "canUndo" | "undoUntil"
@@ -1009,10 +1017,7 @@ export const useComposeDialogController = ({
 
   const prepareSenderSwitch = async (
     sourceUnavailable = false
-  ): Promise<{
-    currentDraft: ComposeDraftState;
-    transferDraft: ComposeDraftState;
-  } | null> => {
+  ): Promise<PreparedComposeSenderSwitch | null> => {
     if (
       finishingRef.current ||
       activeDraftRef.current.sendUncertain === true ||
@@ -1029,6 +1034,7 @@ export const useComposeDialogController = ({
     finishingActionRef.current = action;
     finishingRef.current = true;
     setState((current) => ({ ...current, isFinishing: true }));
+    let prepared = false;
     try {
       if (
         !sourceUnavailable &&
@@ -1056,8 +1062,34 @@ export const useComposeDialogController = ({
       const fresh = createEmptyComposeDraft();
       senderSourceUnavailableRef.current = sourceUnavailable;
       recovery.checkpoint();
+      const runtime = runtimeDraftRef.current;
+      const isCurrent = () =>
+        finishingActionRef.current === action && isCurrentComposeAction(action);
+      prepared = true;
       return {
+        completeSenderSwitch: async (commit) => {
+          if (!isCurrent()) {
+            return false;
+          }
+          if (sourceUnavailable || current.assistantUnsaved === true) {
+            recovery.checkpoint();
+          } else {
+            await recovery.complete(current, isCurrent);
+          }
+          if (!isCurrent()) {
+            recovery.checkpoint();
+            return false;
+          }
+          commit();
+          draftClosedRef.current = true;
+          clearComposeDraftRuntimeFiles(runtime);
+          return true;
+        },
         currentDraft: current,
+        isCurrent,
+        release: () => {
+          finishComposeAction(action);
+        },
         transferDraft: {
           ...fresh,
           assistantUnsaved: current.assistantUnsaved,
@@ -1083,7 +1115,9 @@ export const useComposeDialogController = ({
       }
       return null;
     } finally {
-      finishComposeAction(action);
+      if (!prepared) {
+        finishComposeAction(action);
+      }
     }
   };
 
@@ -1625,7 +1659,7 @@ export const useComposeDialogController = ({
       saveStatus: "idle",
       sendUncertain: true,
     });
-    recovery.checkpoint();
+    recovery.retainHeldDraft();
     void queryClient.invalidateQueries({
       queryKey: orpc.mail.getHeldSend.queryOptions({
         input: {
@@ -2411,17 +2445,6 @@ export const useComposeDialogController = ({
       senderRouteMailboxIdRef.current = null;
     },
     closeComposeDialog,
-    completeSenderSwitch: async () => {
-      if (
-        senderSourceUnavailableRef.current ||
-        activeDraftRef.current.assistantUnsaved === true
-      ) {
-        recovery.checkpoint();
-      } else {
-        await recovery.complete(activeDraftRef.current);
-      }
-      clearComposeDraftRuntimeFiles(runtimeDraftRef.current);
-    },
     discardActiveDraft,
     form,
     handleDialogOpenChange,
