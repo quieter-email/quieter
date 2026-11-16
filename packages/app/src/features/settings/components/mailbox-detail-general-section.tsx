@@ -21,6 +21,8 @@ import {
   SelectValue,
 } from "@quieter/ui/select";
 
+import { MailboxNewMailNotificationRow } from "./mailbox-new-mail-notification-row";
+
 const getGrantRoleDescription = (grantRole: MailboxGrantRole) => {
   if (grantRole === "manager") {
     return "You can configure this shared inbox and its access.";
@@ -174,6 +176,7 @@ export const MailboxDetailGeneralSection = ({
           mailboxId={mailbox.id}
         />
       )}
+      <MailboxNewMailNotificationRow key={mailbox.id} mailboxId={mailbox.id} />
     </SettingsRows>
   </SettingsSection>
 );

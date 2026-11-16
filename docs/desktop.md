@@ -55,3 +55,11 @@ Sender-logo URLs come from the web backend, using its `VITE_LOGO_DEV_PUBLISHABLE
 The desktop build workflow runs only when started manually from GitHub Actions. It produces platform artifacts without publishing a release. Signing, Apple notarization, and release distribution require separate release credentials and authorization. There is no updater endpoint configured. Before distributing a build, deploy the matching server Electron plugin, `/desktop/auth`, and `/api/desktop/session` through the protected web deployment workflow. The Electron plugin uses existing auth tables; no migration is needed.
 
 Packaged error reporting uses the public `VITE_SENTRY_DSN` at build time, supplied by the manual workflow's repository variable. Main-process failures and renderer errors use the shared privacy filters. Local development reporting stays disabled unless `VITE_QUIETER_LOCAL_TELEMETRY=true` is explicitly set.
+
+## New-mail notification preparation
+
+The desktop adapter provides account-bound, per-mailbox device preferences, off by default. These preferences are stored locally as hashes scoped to the backend, signed-in account and mailbox. A failed write does not enable the preference in memory. Account replacement, sign-out and a replaced window invalidate pending changes.
+
+The isolated `MailboxNewMailNotificationRow` uses the shared settings row and switch. Its parent mount remains a checked integration dependency. The control keeps saved opt-in separate from native notification support and always permits opting out. Native support does not prove operating-system permission. System settings may still block alerts.
+
+This preparation adds no popup delivery, receive-event producer or click navigation. New-mail delivery still requires the reviewed authoritative receive publisher, passive exact eligibility check, native delivery implementation and authorized settings mount. Those pieces must be joined and exercised before claiming notifications work.
