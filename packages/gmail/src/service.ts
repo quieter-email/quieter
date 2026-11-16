@@ -5,6 +5,7 @@ import {
 } from "@quieter/mail/capture";
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
+import { matchesHistoryCorrespondent } from "@quieter/mail/correspondent-history";
 import type { MailCategory as MailboxCategory } from "@quieter/mail/data-plane";
 import {
   decodePartBody,
@@ -271,10 +272,9 @@ const GMAIL_RATE_LIMIT_REASONS = new Set([
 const GMAIL_RATE_LIMIT_RETRY_AFTER_MS = 1000 * 60;
 const GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS =
   "headers(name,value),mimeType,filename,body(attachmentId,size),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size)))))";
-const GMAIL_THREAD_PAYLOAD_METADATA_FIELDS =
-  "headers(name,value),mimeType,filename,body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data)))))";
 const GMAIL_MESSAGE_METADATA_FIELDS = `id,threadId,labelIds,snippet,historyId,internalDate,payload(${GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS})`;
-const GMAIL_THREAD_DETAIL_MESSAGE_FIELDS = `id,threadId,labelIds,snippet,historyId,internalDate,payload(${GMAIL_THREAD_PAYLOAD_METADATA_FIELDS})`;
+const GMAIL_THREAD_DETAIL_MESSAGE_FIELDS =
+  "id,threadId,labelIds,snippet,historyId,internalDate,payload";
 const GMAIL_THREAD_DETAIL_FIELDS = `id,snippet,messages(${GMAIL_THREAD_DETAIL_MESSAGE_FIELDS})`;
 const GMAIL_THREAD_LIST_METADATA_FIELDS = `id,historyId,snippet,messages(id,threadId,labelIds,snippet,historyId,internalDate,payload(${GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS}))`;
 const GMAIL_MESSAGE_LIST_FIELDS =
@@ -312,6 +312,11 @@ const isMessageInMailbox = (
   mailbox: MailboxCategory,
   labelIds: string[] | undefined
 ): boolean => {
+  if (mailbox === "done") {
+    return !(labelIds ?? []).some((label) =>
+      ["INBOX", "SPAM", "TRASH", "DRAFT", "SENT"].includes(label)
+    );
+  }
   if (mailbox === "important") {
     return false;
   }
@@ -328,6 +333,31 @@ const isMessageInMailbox = (
     return false;
   }
   return true;
+};
+
+const getThreadMailboxMessages = ({
+  mailbox,
+  messages,
+}: {
+  mailbox?: MailboxCategory;
+  messages: GmailMessage[];
+}): GmailMessage[] => {
+  const publishedMessages = messages.filter(
+    (message) => !hasDraftLabel(message.labelIds)
+  );
+  if (
+    mailbox === "done" &&
+    publishedMessages.some(
+      (message) => message.labelIds?.includes("INBOX") === true
+    )
+  ) {
+    return [];
+  }
+  return mailbox
+    ? publishedMessages.filter((message) =>
+        isMessageInMailbox(mailbox, normalizeLabelIds(message.labelIds))
+      )
+    : publishedMessages;
 };
 
 const isNonEmptyString = (value: string | null | undefined): value is string =>
@@ -369,6 +399,15 @@ const getListMessagesQuery = (
   mailbox: MailboxCategory | undefined,
   query: string | undefined
 ): string | undefined => {
+  if (mailbox === "done") {
+    return appendGmailQueryTerms(query, [
+      "-in:inbox",
+      "-in:spam",
+      "-in:trash",
+      "-in:drafts",
+      "-in:sent",
+    ]);
+  }
   if (mailbox === "unread") {
     return appendGmailQueryTerms(query, ["-in:spam", "-in:trash"]);
   }
@@ -947,7 +986,7 @@ const toMessageListItem = async (
   signal?: AbortSignal
 ): Promise<MessageListItem> => {
   const includeBody = options.includeBody ?? false;
-  const labelIds = normalizeLabelIds(message.labelIds);
+  const labelIds = normalizeLabelIds(message.labelIds) ?? [];
   const content = includeBody
     ? await resolveMessageContent(accessToken, message, signal)
     : { html: undefined, text: undefined };
@@ -962,10 +1001,9 @@ const toMessageListItem = async (
       includeBody || options.includeAttachmentMetadata === true
         ? extractMessageAttachments(message.payload, content.html)
         : undefined,
-    baseRevision:
-      labelIds?.includes(MAILBOX_LABELS.drafts) === true
-        ? message.id
-        : undefined,
+    baseRevision: labelIds?.includes(MAILBOX_LABELS.drafts)
+      ? message.id
+      : undefined,
     bcc: getHeader(message, "Bcc"),
     bodyHtml: content.html,
     bodyText: content.text,
@@ -991,6 +1029,7 @@ const toMessageListItem = async (
       headers: message.payload?.headers ?? [],
     }),
     snippet: snippet === undefined ? undefined : decodeHTML(snippet),
+    sourceRevision: message.historyId,
     subject: getHeader(message, "Subject"),
     threadAttachmentCount: options.threadSummary?.attachmentCount,
     threadAttachmentNames: options.threadSummary?.attachmentNames,
@@ -1044,7 +1083,9 @@ const listMessages = async (
         fields: GMAIL_MESSAGE_LIST_FIELDS,
         includeSpamTrash: includesSpamTrash ? true : undefined,
         labelIds:
-          options?.mailbox !== undefined && options.mailbox !== "important"
+          options?.mailbox !== undefined &&
+          options.mailbox !== "important" &&
+          options.mailbox !== "done"
             ? [MAILBOX_LABELS[options.mailbox]]
             : undefined,
         maxResults: options?.maxResults ?? 20,
@@ -1077,7 +1118,9 @@ const listThreads = async (
         fields: GMAIL_THREAD_LIST_FIELDS,
         includeSpamTrash: includesSpamTrash ? true : undefined,
         labelIds:
-          options?.mailbox !== undefined && options.mailbox !== "important"
+          options?.mailbox !== undefined &&
+          options.mailbox !== "important" &&
+          options.mailbox !== "done"
             ? [MAILBOX_LABELS[options.mailbox]]
             : undefined,
         maxResults: options?.maxResults ?? 15,
@@ -1588,6 +1631,26 @@ export const getGmailMessageThreadAssociations = async (
   );
 };
 
+export const getGmailThreadMessageCount = async (
+  accessToken: string,
+  threadId: string,
+  signal?: AbortSignal
+): Promise<number> => {
+  const thread = await requestGmail(
+    accessToken,
+    `/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}`,
+    gmailThreadSchema,
+    {
+      query: {
+        fields: "id,messages(id,threadId)",
+        format: "metadata",
+      },
+      signal,
+    }
+  );
+  return thread.messages?.length ?? 0;
+};
+
 const getGmailThreadsListMetadata = async (
   accessToken: string,
   threadIds: readonly string[],
@@ -1659,6 +1722,8 @@ const getThreadListSummaries = async (
 export const listMessagesWithDetails = async (
   accessToken: string,
   options?: {
+    correspondentEmail?: string;
+    excludeProtected?: boolean;
     pageToken?: string;
     maxResults?: number;
     mailbox?: MailboxCategory;
@@ -1666,7 +1731,30 @@ export const listMessagesWithDetails = async (
     signal?: AbortSignal;
   }
 ): Promise<ListMessagesPageResult> => {
-  const list = await listThreads(accessToken, options);
+  const correspondentEmail = options?.correspondentEmail?.trim().toLowerCase();
+  const quotedCorrespondentEmail =
+    correspondentEmail === undefined
+      ? undefined
+      : JSON.stringify(correspondentEmail);
+  const list = await listThreads(
+    accessToken,
+    options?.excludeProtected === true || correspondentEmail !== undefined
+      ? {
+          ...options,
+          query: [
+            options?.query?.trim() ? `(${options.query.trim()})` : undefined,
+            quotedCorrespondentEmail === undefined
+              ? undefined
+              : `{from:${quotedCorrespondentEmail} to:${quotedCorrespondentEmail} cc:${quotedCorrespondentEmail} bcc:${quotedCorrespondentEmail}}`,
+            ...(options?.excludeProtected === true
+              ? ["-in:spam", "-in:trash", "-in:drafts"]
+              : []),
+          ]
+            .filter((term) => term !== undefined)
+            .join(" "),
+        }
+      : options
+  );
   const threads = await getGmailThreadsListMetadata(
     accessToken,
     list.threads.map((thread) => thread.id),
@@ -1680,13 +1768,28 @@ export const listMessagesWithDetails = async (
     const messages = (thread.messages ?? []).filter(
       (message) => !hasDraftLabel(message.labelIds)
     );
-    const matchingMessages = mailbox
-      ? messages.filter((message) =>
-          isMessageInMailbox(mailbox, normalizeLabelIds(message.labelIds))
-        )
-      : messages;
+    const matchingMessages = getThreadMailboxMessages({ mailbox, messages });
     let anchor: GmailMessage | undefined;
     for (const message of matchingMessages) {
+      if (
+        (options?.excludeProtected === true &&
+          message.labelIds?.some((label) =>
+            ["DRAFT", "SPAM", "TRASH"].includes(label)
+          ) === true) ||
+        (correspondentEmail !== undefined &&
+          !matchesHistoryCorrespondent(
+            {
+              bcc: getHeader(message, "Bcc"),
+              cc: getHeader(message, "Cc"),
+              from: getHeader(message, "From"),
+              labelIds: message.labelIds,
+              to: getHeader(message, "To"),
+            },
+            correspondentEmail
+          ))
+      ) {
+        continue;
+      }
       if (
         anchor === undefined ||
         Number(message.internalDate ?? 0) > Number(anchor.internalDate ?? 0)
@@ -1718,6 +1821,12 @@ export const listMessagesWithDetails = async (
       },
     ];
   });
+  if (mailbox === "done" && rows.length === 0 && list.nextPageToken) {
+    return await listMessagesWithDetails(accessToken, {
+      ...options,
+      pageToken: list.nextPageToken,
+    });
+  }
   let historyId = threads.find((thread) =>
     isNonEmptyString(thread?.historyId)
   )?.historyId;
@@ -1758,12 +1867,32 @@ export const listMessagesForAgent = async (
     list.messages.map((message) => message.id),
     options?.signal
   );
+  const doneThreads =
+    options?.mailbox === "done"
+      ? await getGmailThreadsListMetadata(
+          accessToken,
+          list.messages.map((message) => message.threadId),
+          options.signal
+        )
+      : null;
+  const doneMessageIds = doneThreads
+    ? new Set(
+        doneThreads.flatMap((thread) =>
+          thread
+            ? getThreadMailboxMessages({
+                mailbox: "done",
+                messages: thread.messages ?? [],
+              }).map((message) => message.id)
+            : []
+        )
+      )
+    : null;
   const messages = details.flatMap((message) => {
-    if (!message) {
+    if (!message || (doneMessageIds && !doneMessageIds.has(message.id))) {
       return [];
     }
 
-    const labelIds = normalizeLabelIds(message.labelIds);
+    const labelIds = normalizeLabelIds(message.labelIds) ?? [];
     if (options?.mailbox && !isMessageInMailbox(options.mailbox, labelIds)) {
       return [];
     }
@@ -1784,6 +1913,17 @@ export const listMessagesForAgent = async (
       },
     ];
   });
+
+  if (
+    options?.mailbox === "done" &&
+    messages.length === 0 &&
+    list.nextPageToken
+  ) {
+    return await listMessagesForAgent(accessToken, {
+      ...options,
+      pageToken: list.nextPageToken,
+    });
+  }
 
   return {
     messages,
@@ -1937,7 +2077,8 @@ export const getThreadWithDetails = async (
   accessToken: string,
   threadId: string,
   signal?: AbortSignal,
-  onSnapshot?: (snapshot: CapturedMailSnapshot) => void | Promise<void>
+  onSnapshot?: (snapshot: CapturedMailSnapshot) => void | Promise<void>,
+  maxMessages?: number
 ): Promise<ThreadMessagesResult> => {
   const thread = await requestGmail(
     accessToken,
@@ -1951,6 +2092,16 @@ export const getThreadWithDetails = async (
       signal,
     }
   );
+
+  if (
+    maxMessages !== undefined &&
+    (thread.messages?.length ?? 0) > maxMessages
+  ) {
+    throw createServiceError(
+      "This action includes too much conversation history. Choose fewer conversations and try again.",
+      413
+    );
+  }
 
   const [messageItems, draftIdEntries] = await Promise.all([
     Promise.all(
@@ -2401,7 +2552,7 @@ export const getMailboxSyncDelta = async (
   }
 ): Promise<MailboxSyncDelta> => {
   const mailboxLabel =
-    options.mailbox === "important"
+    options.mailbox === "important" || options.mailbox === "done"
       ? undefined
       : MAILBOX_LABELS[options.mailbox];
   const state: MailboxSyncDeltaState = {
@@ -2437,6 +2588,18 @@ export const getMailboxSyncDelta = async (
     }
 
     throw error;
+  }
+
+  if (options.mailbox === "done") {
+    const hasChanges = nextHistoryId !== options.startHistoryId;
+    return {
+      hasChanges,
+      historyId: nextHistoryId,
+      refreshFirstPage: hasChanges,
+      removedMessageIds: [],
+      requiresFullRefresh: hasChanges,
+      updatedMessages: [],
+    };
   }
 
   let updatedMessages: MessageListItem[] = [];
@@ -2478,7 +2641,7 @@ export const getMailboxSyncDelta = async (
 const toMessageMetadataUpdate = (
   message: z.infer<typeof gmailMessageMutationSchema>
 ) => {
-  const labelIds = normalizeLabelIds(message.labelIds);
+  const labelIds = normalizeLabelIds(message.labelIds) ?? [];
 
   return {
     id: message.id,
@@ -2821,7 +2984,8 @@ export const getGmailCapturedSnapshot = async (
 
 export const getGmailCaptureMetadata = async (
   accessToken: string,
-  messageId: string
+  messageId: string,
+  signal?: AbortSignal
 ) => {
   const message = await requestGmail(
     accessToken,
@@ -2829,6 +2993,7 @@ export const getGmailCaptureMetadata = async (
     gmailMessageMutationSchema,
     {
       query: { fields: "id,historyId,labelIds", format: "minimal" },
+      signal,
     }
   );
   if (!message.historyId || !/^\d+$/u.test(message.historyId)) {

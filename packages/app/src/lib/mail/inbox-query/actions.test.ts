@@ -165,6 +165,47 @@ describe("mail metadata cache updates", () => {
     }
   );
 
+  test("reading a handled conversation keeps its Done row and loaded message body", async () => {
+    const queryClient = new QueryClient();
+    const doneKey = getMessagesQueryKey("mailbox", "done");
+    const message: MessageListItem = {
+      bodyHtml: "<p>Retained history</p>",
+      id: "handled",
+      isUnread: true,
+      labelIds: ["UNREAD"],
+      threadId: "conversation",
+    };
+    queryClient.setQueryData<MessagesQueryData>(doneKey, {
+      pageParams: [undefined],
+      pages: [{ messages: [message] }],
+    });
+    vi.mocked(rpc.mail.markMessageAsRead).mockResolvedValue({
+      id: "handled",
+      isUnread: false,
+      labelIds: [],
+    });
+    await updateMessageInMailbox(
+      {
+        mailbox: "done",
+        mailboxId: "mailbox",
+        messageId: "handled",
+        queryClient,
+        searchQuery: undefined,
+      },
+      "read"
+    );
+    expect(
+      queryClient.getQueryData<MessagesQueryData>(doneKey)?.pages[0].messages
+    ).toContainEqual(
+      expect.objectContaining({
+        bodyHtml: "<p>Retained history</p>",
+        id: "handled",
+        isUnread: false,
+      })
+    );
+    queryClient.clear();
+  });
+
   test("reading one message updates unread views, retains loaded bodies and leaves its sibling and other mailbox alone", async () => {
     const {
       queryClient,

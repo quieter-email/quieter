@@ -9,6 +9,7 @@ import { useLayoutEffect, useRef } from "react";
 
 const MAILBOX_ROUTE_CATEGORIES = [
   "inbox",
+  "done",
   "important",
   "unread",
   "spam",

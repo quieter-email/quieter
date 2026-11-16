@@ -16,6 +16,7 @@ import type {
   ManagedMailMailboxState,
 } from "@quieter/database/schema";
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
+import { matchesHistoryCorrespondent } from "@quieter/mail/correspondent-history";
 import type {
   MailCommand,
   MailMutationTarget,
@@ -82,6 +83,29 @@ type ManagedMessagePresentationRecord = Pick<
 
 const MANAGED_MESSAGE_PAGE_SIZE = 15;
 
+const managedMessagePresentationSelection = {
+  bcc: managedMailMessage.bcc,
+  cc: managedMailMessage.cc,
+  createdAt: managedMailMessage.createdAt,
+  direction: managedMailMessage.direction,
+  from: managedMailMessage.from,
+  headers: managedMailMessage.headers,
+  id: managedMailMessage.id,
+  inReplyTo: managedMailMessage.inReplyTo,
+  isRead: managedMailMessage.isRead,
+  mailboxState: managedMailMessage.mailboxState,
+  messageHeaderId: managedMailMessage.messageHeaderId,
+  providerMessageId: managedMailMessage.providerMessageId,
+  references: managedMailMessage.references,
+  replyTo: managedMailMessage.replyTo,
+  sentAt: managedMailMessage.sentAt,
+  snippet: managedMailMessage.snippet,
+  subject: managedMailMessage.subject,
+  threadId: managedMailMessage.threadId,
+  to: managedMailMessage.to,
+  updatedAt: managedMailMessage.updatedAt,
+};
+
 const getManagedPrimarySystemLabelId = (message: {
   direction: "inbound" | "outbound";
   mailboxState: ManagedMailMailboxState;
@@ -94,6 +118,9 @@ const getManagedPrimarySystemLabelId = (message: {
   }
   if (message.mailboxState === "spam") {
     return MAILBOX_LABELS.spam;
+  }
+  if (message.direction === "inbound" && message.mailboxState === "done") {
+    return MAILBOX_LABELS.done;
   }
   return message.direction === "inbound"
     ? MAILBOX_LABELS.inbox
@@ -164,6 +191,7 @@ const toMessageListItem = async (
     headers: record.direction === "inbound" ? record.headers : [],
   }),
   snippet: record.snippet ?? undefined,
+  sourceRevision: record.updatedAt.toISOString(),
   subject: record.subject ?? undefined,
   threadAttachmentCount: options.attachmentCount,
   threadAttachmentNames: options.attachmentNames,
@@ -177,8 +205,15 @@ const getCategoryCondition = (category: MailboxCategory) => {
   if (category === "important") {
     return and(
       eq(managedMailMessage.direction, "inbound"),
-      eq(managedMailMessage.mailboxState, "active"),
-      sql`exists (select 1 from ${mailMessageImportance} i inner join ${managedMailMessage} m on m."mailboxId" = i."mailboxId" and m.id = i."messageId" where i."mailboxId" = ${managedMailMessage.mailboxId} and i."threadId" = ${managedMailMessage.threadId} and coalesce(i."manualImportant", i."aiImportant", false) and m.direction = 'inbound' and m."mailboxState" = 'active')`
+      inArray(managedMailMessage.mailboxState, ["active", "done"]),
+      sql`exists (select 1 from ${mailMessageImportance} i inner join ${managedMailMessage} m on m."mailboxId" = i."mailboxId" and m.id = i."messageId" where i."mailboxId" = ${managedMailMessage.mailboxId} and i."threadId" = ${managedMailMessage.threadId} and coalesce(i."manualImportant", i."aiImportant", false) and m.direction = 'inbound' and m."mailboxState" in ('active', 'done'))`
+    );
+  }
+  if (category === "done") {
+    return and(
+      eq(managedMailMessage.direction, "inbound"),
+      eq(managedMailMessage.mailboxState, "done"),
+      sql`not exists (select 1 from ${managedMailMessage} incoming where incoming."mailboxId" = ${managedMailMessage.mailboxId} and incoming."threadId" = ${managedMailMessage.threadId} and incoming.direction = 'inbound' and incoming."mailboxState" = 'active')`
     );
   }
   if (category === "inbox") {
@@ -191,7 +226,7 @@ const getCategoryCondition = (category: MailboxCategory) => {
     return and(
       eq(managedMailMessage.direction, "inbound"),
       eq(managedMailMessage.isRead, false),
-      eq(managedMailMessage.mailboxState, "active")
+      inArray(managedMailMessage.mailboxState, ["active", "done"])
     );
   }
   if (category === "sent") {
@@ -251,10 +286,12 @@ const encodeManagedPageCursor = (record: { id: string; sentAt: Date }) =>
 
 export const listManagedMessages = async (input: {
   category: MailboxCategory;
+  correspondentEmail?: string;
   mailboxId: string;
   maxResults?: number;
   pageToken?: string;
   query?: string;
+  scope?: "all_mail";
   userId: string;
 }): Promise<ListMessagesPageResult> => {
   const selectedMailbox = await getAuthorizedManagedMailbox({
@@ -262,42 +299,43 @@ export const listManagedMessages = async (input: {
     userId: input.userId,
   });
 
-  const categoryCondition = getCategoryCondition(input.category);
+  const categoryCondition =
+    input.scope === "all_mail"
+      ? inArray(managedMailMessage.mailboxState, ["active", "done"])
+      : getCategoryCondition(input.category);
   if (!categoryCondition) {
     return { messages: [], resultSizeEstimate: 0 };
   }
 
   const search = parseManagedSearchQuery(input.query);
   const searchCondition = createManagedSearchCondition(input.mailboxId, search);
+  const correspondentEmail = input.correspondentEmail?.trim().toLowerCase();
+  const correspondentCondition =
+    correspondentEmail === undefined
+      ? undefined
+      : createManagedSearchCondition(
+          input.mailboxId,
+          {
+            filters: (["from", "to", "cc", "bcc"] as const).map((type) => ({
+              type,
+              value: correspondentEmail,
+            })),
+            text: "",
+          },
+          { matchMode: "any" }
+        );
   const where = and(
     eq(managedMailMessage.mailboxId, input.mailboxId),
     categoryCondition,
-    searchCondition
+    searchCondition,
+    correspondentCondition
   );
   const limit = Math.min(input.maxResults ?? MANAGED_MESSAGE_PAGE_SIZE, 100);
   const matchedMessages = db
-    .selectDistinctOn([managedMailMessage.threadId], {
-      bcc: managedMailMessage.bcc,
-      cc: managedMailMessage.cc,
-      createdAt: managedMailMessage.createdAt,
-      direction: managedMailMessage.direction,
-      from: managedMailMessage.from,
-      headers: managedMailMessage.headers,
-      id: managedMailMessage.id,
-      inReplyTo: managedMailMessage.inReplyTo,
-      isRead: managedMailMessage.isRead,
-      mailboxState: managedMailMessage.mailboxState,
-      messageHeaderId: managedMailMessage.messageHeaderId,
-      providerMessageId: managedMailMessage.providerMessageId,
-      references: managedMailMessage.references,
-      replyTo: managedMailMessage.replyTo,
-      sentAt: managedMailMessage.sentAt,
-      snippet: managedMailMessage.snippet,
-      subject: managedMailMessage.subject,
-      threadId: managedMailMessage.threadId,
-      to: managedMailMessage.to,
-      updatedAt: managedMailMessage.updatedAt,
-    })
+    .selectDistinctOn(
+      [managedMailMessage.threadId],
+      managedMessagePresentationSelection
+    )
     .from(managedMailMessage)
     .where(where)
     .orderBy(
@@ -368,12 +406,7 @@ export const listManagedMessages = async (input: {
             )
             .groupBy(managedMailMessage.threadId),
           db
-            .select({
-              direction: managedMailMessage.direction,
-              isRead: managedMailMessage.isRead,
-              mailboxState: managedMailMessage.mailboxState,
-              threadId: managedMailMessage.threadId,
-            })
+            .select(managedMessagePresentationSelection)
             .from(managedMailMessage)
             .where(
               and(
@@ -405,13 +438,51 @@ export const listManagedMessages = async (input: {
   const attachmentSummaryByThreadId = new Map(
     aggregates.map((record) => [record.threadId, record])
   );
+  const exactAnchorsByThreadId = new Map<
+    string,
+    ManagedMessagePresentationRecord
+  >();
+  if (correspondentEmail !== undefined) {
+    for (const record of threadStates) {
+      if (
+        !matchesHistoryCorrespondent(
+          {
+            bcc: record.bcc ?? undefined,
+            cc: record.cc ?? undefined,
+            from: record.from,
+            labelIds: getManagedMessageLabelIds(record),
+            to: record.to ?? undefined,
+          },
+          correspondentEmail
+        )
+      ) {
+        continue;
+      }
+      const anchor = exactAnchorsByThreadId.get(record.threadId);
+      if (
+        anchor === undefined ||
+        record.sentAt.getTime() > anchor.sentAt.getTime() ||
+        (record.sentAt.getTime() === anchor.sentAt.getTime() &&
+          record.id > anchor.id)
+      ) {
+        exactAnchorsByThreadId.set(record.threadId, record);
+      }
+    }
+  }
+  const anchors =
+    correspondentEmail === undefined
+      ? pageRecords
+      : pageRecords.flatMap((record) => {
+          const anchor = exactAnchorsByThreadId.get(record.threadId);
+          return anchor === undefined ? [] : [anchor];
+        });
 
   return {
     historyId: String(selectedMailbox.contentRevision),
     messages: await hydrateMailImportance(
       input.mailboxId,
       await Promise.all(
-        pageRecords.map(
+        anchors.map(
           async (record) =>
             await toMessageListItem(record, {
               attachmentCount:
@@ -671,7 +742,7 @@ const updateManagedMessageState = async (input: {
 };
 
 export const applyManagedMessageChanges = async (input: {
-  command: Exclude<MailCommand, { kind: "set-importance" }>;
+  command: Exclude<MailCommand, { kind: "set-importance" | "set-placement" }>;
   mailboxId: string;
   targets: MailMutationTarget[];
   userId: string;

@@ -3,6 +3,8 @@
 import {
   ArrowLeft01Icon,
   ArrowRightDoubleIcon,
+  CheckmarkCircle02Icon,
+  InboxIcon,
   Edit01Icon,
   Flag01Icon,
   FlagOffIcon,
@@ -233,6 +235,14 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     supportsLabels: true,
     supportsUnsubscribe: mailboxProvider === "gmail",
   });
+  const canSetThreadPlacement =
+    mailboxActions.canSetPlacement &&
+    !["drafts", "sent", "spam", "trash"].includes(activeMailbox);
+  const returnThreadToInbox = !threadLabelIds.includes(MAILBOX_LABELS.inbox);
+  const sharedPlacement = mailboxActions.placementScope === "shared";
+  const placementLabel = returnThreadToInbox
+    ? `Return conversation to Inbox${sharedPlacement ? " for everyone" : ""}`
+    : `Mark conversation Done${sharedPlacement ? " for everyone" : ""}`;
   const canSetThreadImportance =
     mailboxProvider !== "api" &&
     threadActions.onSetImportance !== undefined &&
@@ -366,6 +376,30 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               mailboxId={mailboxId}
               message={hotkeyMessage}
             />
+          )}
+          {canSetThreadPlacement && (
+            <IconButtonTooltip label={placementLabel}>
+              <Button
+                chrome="toolbar"
+                aria-label={placementLabel}
+                disabled={isActionPending}
+                onClick={() => {
+                  void (
+                    returnThreadToInbox
+                      ? threadActions.onReturnToInbox
+                      : threadActions.onMarkDone
+                  )?.(message.threadId);
+                }}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <Icon
+                  aria-hidden
+                  icon={returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon}
+                />
+              </Button>
+            </IconButtonTooltip>
           )}
           {canSetThreadImportance && (
             <IconButtonTooltip label={importanceLabel}>
