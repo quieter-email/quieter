@@ -1,0 +1,7 @@
+{
+  "extends": "./packages/management-cli/tsconfig.json",
+  "include": [
+    "packages/management-cli/src/**/*.ts",
+    "packages/management-sdk/src/**/*.ts"
+  ]
+}
