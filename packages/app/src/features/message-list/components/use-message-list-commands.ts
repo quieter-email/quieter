@@ -19,6 +19,7 @@ export const useMessageListCommands = ({
   hasFocusedThread,
   isActive,
   isPending,
+  isSelecting,
   loadedCount,
   onClearSelection,
   onOpenFocusedThread,
@@ -34,6 +35,7 @@ export const useMessageListCommands = ({
   hasFocusedThread: boolean;
   isActive: boolean;
   isPending: boolean;
+  isSelecting: boolean;
   loadedCount: number;
   onClearSelection: () => void;
   onOpenFocusedThread: () => void;
@@ -66,7 +68,7 @@ export const useMessageListCommands = ({
       ? { execute: action.onSelect, state: "available" }
       : { reason: actionReason, state: "unavailable" }),
   }));
-  if (selectedCount > 0) {
+  if (isSelecting) {
     commands.push({
       group: "Mail",
       id: "focus-search",
