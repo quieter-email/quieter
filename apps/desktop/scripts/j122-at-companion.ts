@@ -878,7 +878,7 @@ const main = async (): Promise<void> => {
     await writeFile(path.join(output, "private.pa"), pulseText, {
       mode: 0o600,
     });
-    const dispatcherText = `CommunicationMethod unix_socket\nSocketPath "${temporary}/runtime/speechd.sock"\nLogLevel 4\nDefaultLanguage "en-US"\nDefaultModule espeak-ng\nAudioOutputMethod pulse\nAudioPulseDevice "j122"\nAddModule "espeak-ng" "${moduleExecutable}" "${moduleConfig}"\nDisableAutoSpawn\n`;
+    const dispatcherText = `CommunicationMethod unix_socket\nSocketPath "${temporary}/runtime/speechd.sock"\nLogLevel 4\nLogDir "default"\nDefaultLanguage "en-US"\nDefaultModule espeak-ng\nAudioOutputMethod pulse\nAudioPulseDevice "j122"\nAddModule "espeak-ng" "${moduleExecutable}" "${moduleConfig}"\nDisableAutoSpawn\n`;
     await writeFile(
       path.join(temporary, "dispatcher", "speechd.conf"),
       dispatcherText,
