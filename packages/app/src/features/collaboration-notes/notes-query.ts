@@ -173,6 +173,9 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
     threadId,
   ]);
 
+  const canWrite =
+    snapshot?.permissions.writeOwnNotes === true &&
+    page.data?.snapshot.permissions.writeOwnNotes !== false;
   const { attempt } = client;
   const validationKey = useMemo(
     () => [
@@ -243,11 +246,12 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
     }
     if (
       attempt !== null &&
-      attempt.kind !== "create" &&
-      (listedNote?.actions[attempt.kind] === false ||
-        (validation.isSuccess &&
-          (validation.data.note === null ||
-            !validation.data.note.actions[attempt.kind])))
+      (!canWrite ||
+        (attempt.kind !== "create" &&
+          (listedNote?.actions[attempt.kind] === false ||
+            (validation.isSuccess &&
+              (validation.data.note === null ||
+                !validation.data.note.actions[attempt.kind])))))
     ) {
       store.setState((current) =>
         current.attempt === attempt
@@ -303,6 +307,7 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
   }, [
     attempt,
     authorityKey,
+    canWrite,
     epoch,
     listedNote,
     loseAccess,
@@ -329,7 +334,7 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
     attempt !== null &&
     snapshot?.state.kind === "prepared" &&
     snapshot.state.cursor.contextId === attempt.expected.contextId &&
-    snapshot.permissions.writeOwnNotes &&
+    canWrite &&
     (attempt.kind === "create" ||
       (validation.isSuccess &&
         validation.data.note?.actions[attempt.kind] === true &&
@@ -562,9 +567,7 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
     canModerate:
       snapshot?.permissions.moderateNotes === true &&
       page.data?.snapshot.permissions.moderateNotes !== false,
-    canWrite:
-      snapshot?.permissions.writeOwnNotes === true &&
-      page.data?.snapshot.permissions.writeOwnNotes !== false,
+    canWrite,
     client,
     draftVisible,
     epoch,

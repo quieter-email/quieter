@@ -444,6 +444,66 @@ describe("internal notes client behavior", () => {
   });
 
   describe("current note actions", () => {
+    test("a reader page closes an existing create draft while authority still reports responder", async () => {
+      const responder: CollaborationState = {
+        ...snapshot,
+        permissions: { ...snapshot.permissions, moderateNotes: false },
+        role: "responder",
+      };
+      server.get.mockResolvedValue(responder);
+      server.notes.mockResolvedValue({
+        next: null,
+        notes: [note],
+        snapshot: responder,
+      });
+      const fixture = await mount();
+      await act(async () => {
+        await fixture.read().startCreate();
+      });
+      act(() => {
+        fixture.read().store.setState((current) =>
+          transitionNotesClient(current, {
+            body: "Draft from the previous write role",
+            kind: "change",
+          })
+        );
+      });
+      expect(fixture.read().draftVisible).toBeTruthy();
+      const reader: CollaborationState = {
+        ...responder,
+        permissions: {
+          ...responder.permissions,
+          claimSelf: false,
+          writeOwnNotes: false,
+        },
+        role: "reader",
+      };
+      server.notes.mockResolvedValue({
+        next: null,
+        notes: [{ ...note, actions: { edit: false, remove: false } }],
+        snapshot: reader,
+      });
+      await act(async () => {
+        await fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "private", "notes"],
+        });
+      });
+      await vi.waitFor(() => {
+        expect(fixture.read().client.attempt).toBeNull();
+      });
+      expect(fixture.read().snapshot?.role).toBe("responder");
+      expect(fixture.read().snapshot?.state).toMatchObject({ cursor });
+      expect(fixture.read().draftVisible).toBeFalsy();
+      expect(fixture.read().visible).toBeTruthy();
+      expect(fixture.read().page?.notes).toContainEqual(
+        expect.objectContaining({ body: note.body })
+      );
+      act(() => {
+        fixture.read().save();
+      });
+      expect(server.mutate).not.toHaveBeenCalled();
+    });
+
     test("a manager downgrade closes an off-page foreign-note removal at the same revision", async () => {
       const foreign = { ...note, actions: { edit: false, remove: true } };
       server.note.mockResolvedValue({ note: foreign, snapshot });
