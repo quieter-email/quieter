@@ -68,6 +68,7 @@ export const createHeldSendDatabase = async () => {
       CREATE TABLE "user" (id text PRIMARY KEY);
       CREATE TABLE mailbox (id text PRIMARY KEY);
       CREATE TABLE "scheduledMailSend" (
+        "cancellationOrigin" jsonb,
         "createdAt" timestamptz NOT NULL,
         "deliveryKind" text NOT NULL DEFAULT 'scheduled',
         "draftRemovedAt" timestamptz,
