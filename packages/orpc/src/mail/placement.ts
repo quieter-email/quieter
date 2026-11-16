@@ -194,6 +194,46 @@ const toPlacementResult = (
   threadId: operation.threadId,
 });
 
+export const hashMailPlacementRequest = ({
+  actorUserId,
+  input,
+  snooze,
+}: {
+  actorUserId: string;
+  snooze?: MailSnoozePlacement;
+  input: Pick<MailInputs["applyChanges"], "mailboxId" | "targets"> & {
+    command: { kind: "set-placement"; placement: "done" | "inbox" };
+  };
+}): string =>
+  createHash("sha256")
+    .update(
+      JSON.stringify({
+        actorUserId,
+        command: input.command,
+        mailboxId: input.mailboxId,
+        snooze:
+          snooze === undefined
+            ? undefined
+            : {
+                id: snooze.id,
+                kind: snooze.kind,
+                ...(snooze.kind === "snooze-return"
+                  ? { trigger: snooze.trigger }
+                  : {}),
+                version: snooze.version,
+              },
+        targets: input.targets
+          .map((target) => ({
+            messageIds: [...new Set(target.messageIds)].toSorted(),
+            threadId: target.threadId,
+          }))
+          .toSorted((left, right) =>
+            left.threadId.localeCompare(right.threadId)
+          ),
+      })
+    )
+    .digest("hex");
+
 export const applyMailPlacement = async ({
   context: requestContext,
   input,
@@ -219,34 +259,11 @@ export const applyMailPlacement = async ({
       message: "This action needs a request identity. Refresh and try again.",
     });
   }
-  const requestHash = createHash("sha256")
-    .update(
-      JSON.stringify({
-        actorUserId: context.userId,
-        command: input.command,
-        mailboxId: input.mailboxId,
-        snooze:
-          snooze === undefined
-            ? undefined
-            : {
-                id: snooze.id,
-                kind: snooze.kind,
-                ...(snooze.kind === "snooze-return"
-                  ? { trigger: snooze.trigger }
-                  : {}),
-                version: snooze.version,
-              },
-        targets: input.targets
-          .map((target) => ({
-            messageIds: [...new Set(target.messageIds)].toSorted(),
-            threadId: target.threadId,
-          }))
-          .toSorted((left, right) =>
-            left.threadId.localeCompare(right.threadId)
-          ),
-      })
-    )
-    .digest("hex");
+  const requestHash = hashMailPlacementRequest({
+    actorUserId: context.userId,
+    input,
+    snooze,
+  });
   if (snooze !== undefined && input.targets.length !== 1) {
     throw new ORPCError("BAD_REQUEST", {
       message: "Choose one conversation for this snooze.",

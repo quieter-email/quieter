@@ -17,8 +17,10 @@ import {
 import type { MailRequestContext } from "../src/gmail-request";
 import {
   applyMailPlacement,
+  hashMailPlacementRequest,
   supersedePendingMailPlacement,
 } from "../src/mail/placement";
+import type { MailSnoozePlacement } from "../src/mail/placement";
 import { reconcileMailSnoozes } from "../src/snooze/repair";
 import {
   applyMailSnooze,
@@ -279,6 +281,75 @@ const change = async (input: {
 const makeDue = async (id: string) => {
   await fixture.client`update "mailSnooze" set "returnAt" = now() - interval '1 minute', "nextWakeAt" = now() - interval '1 minute' where id = ${id}`;
 };
+
+describe("native placement request compatibility", () => {
+  test.each([
+    {
+      hash: "77a2d3755aba3d501303738585f929f9f272b3dc2c984bde1646eff8522ce37e",
+      placement: "done",
+      snooze: undefined,
+    },
+    {
+      hash: "a13c6d29db8bd4734a5c11b6089e797d550ebe8dff6e2efc231c50637592a839",
+      placement: "done",
+      snooze: {
+        id: "snooze",
+        kind: "snooze-hide",
+        leaseToken: null,
+        version: 1,
+      },
+    },
+    {
+      hash: "859121bfd3597b0100dc79b344dcedf106f6267a1a509e4238e38f7e1c437a75",
+      placement: "inbox",
+      snooze: {
+        id: "snooze",
+        kind: "snooze-return",
+        leaseToken: "old",
+        trigger: "manual",
+        version: 3,
+      },
+    },
+    {
+      hash: "2dfc1989feed98ffdb7e509adc3b7e26523c57aeda697bbff47b265b7a7c0478",
+      placement: "inbox",
+      snooze: {
+        id: "snooze",
+        kind: "snooze-return",
+        leaseToken: "new",
+        trigger: "due",
+        version: 3,
+      },
+    },
+  ] satisfies {
+    hash: string;
+    placement: "done" | "inbox";
+    snooze: MailSnoozePlacement | undefined;
+  }[])("preserves the persisted native request digest $hash", (item) => {
+    expect(
+      hashMailPlacementRequest({
+        actorUserId: "actor",
+        input: {
+          command: { kind: "set-placement", placement: item.placement },
+          mailboxId: "mailbox",
+          targets: [{ messageIds: ["b", "a", "a"], threadId: "thread" }],
+        },
+        snooze: item.snooze,
+      })
+    ).toBe(item.hash);
+    expect(
+      hashMailPlacementRequest({
+        actorUserId: "actor",
+        input: {
+          command: { kind: "set-placement", placement: item.placement },
+          mailboxId: "mailbox",
+          targets: [{ messageIds: ["a", "b"], threadId: "thread" }],
+        },
+        snooze: item.snooze && { ...item.snooze, leaseToken: "replacement" },
+      })
+    ).toBe(item.hash);
+  });
+});
 
 describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
   beforeAll(async () => {
@@ -1338,7 +1409,7 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
   });
 
   test.each(["current", "superseded"] as const)(
-    "an ambiguous Gmail hide retains its %s replay outcome",
+    "an ambiguous Gmail hide retains its %s replay outcome after repeated dispatch",
     async (phase) => {
       fixture.state.provider = "gmail";
       await fixture.client`update mailbox set provider='gmail' where id='mailbox'`;
@@ -1372,6 +1443,7 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
         input,
       });
       expect(first.targets[0]?.snooze?.status).toBe("uncertain");
+      const replacementRequestId = randomUUID();
       if (phase === "superseded") {
         const cancelled = await change({
           command: { kind: "cancel" },
@@ -1380,6 +1452,7 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
         fixture.state.messages[0].labelIds = ["INBOX"];
         await snooze({
           expectedVersion: cancelled.targets[0]?.snooze?.version,
+          requestId: replacementRequestId,
         });
       }
       const { writes } = fixture.state;
@@ -1390,6 +1463,14 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
         id: first.targets[0]?.snooze?.id ?? "",
         mailboxId: "mailbox",
       });
+      await dispatchMailSnooze({
+        id: first.targets[0]?.snooze?.id ?? "",
+        mailboxId: "mailbox",
+      });
+      const [confirmed] = await fixture.client<
+        { status: string }[]
+      >`select status from "mailSnoozeOperation" where "requestId"=${phase === "superseded" ? replacementRequestId : input.requestId}`;
+      expect(confirmed?.status).toBe("applied");
       const replay = await applyMailSnooze({
         context: { userId: "actor" },
         input,
@@ -1667,6 +1748,74 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
     expect(fixture.state.writes).toBe(writes);
   });
 
+  test("a later due return confirms without promoting an older uncertain manual journal", async () => {
+    fixture.state.provider = "gmail";
+    await fixture.client`update mailbox set provider='gmail' where id='mailbox'`;
+    fixture.state.messages = [
+      {
+        id: "anchor",
+        internalDate: "1",
+        labelIds: ["INBOX"],
+        threadId: "conversation",
+      },
+    ];
+    const first = await snooze();
+    const id = first.snooze?.id ?? "";
+    fixture.state.ambiguous = true;
+    const input = {
+      command: { kind: "return-now" },
+      requestId: randomUUID(),
+      version: first.snooze?.version ?? -1,
+    } satisfies Parameters<typeof change>[0];
+    const manual = await change(input);
+    expect(manual.targets[0]?.snooze?.status).toBe("uncertain");
+    const cancelled = await change({
+      command: { kind: "cancel" },
+      version: manual.targets[0]?.snooze?.version ?? -1,
+    });
+    fixture.state.ambiguous = false;
+    const second = await snooze({
+      expectedVersion: cancelled.targets[0]?.snooze?.version,
+    });
+    expect(second.snooze?.status).toBe("active");
+    await makeDue(id);
+    fixture.state.ambiguous = true;
+    await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+    const [due] = await fixture.client<
+      { status: string; nativeStatus: string }[]
+    >`select s.status, p.status as "nativeStatus" from "mailSnooze" s join "mailPlacementOperation" p on p.id=s."returnOperationId" where s.id=${id}`;
+    expect(due).toMatchObject({
+      nativeStatus: "uncertain",
+      status: "uncertain",
+    });
+    const { writes } = fixture.state;
+    const native = await fixture.client<
+      { id: string; requestId: string }[]
+    >`select id, "requestId" from "mailPlacementOperation" order by sequence`;
+    fixture.state.messages[0].labelIds = [];
+    await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+    fixture.state.messages[0].labelIds = ["INBOX"];
+    await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+    await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+    const replay = await change(input);
+    expect(replay.targets[0]).toMatchObject({
+      operationId: manual.targets[0]?.operationId,
+      replayed: true,
+      snooze: { status: "returned" },
+      status: "failed",
+    });
+    const [journal] = await fixture.client<
+      { status: string }[]
+    >`select status from "mailSnoozeOperation" where "requestId"=${input.requestId}`;
+    expect(journal?.status).toBe("uncertain");
+    await expect(
+      fixture.client<
+        { id: string; requestId: string }[]
+      >`select id, "requestId" from "mailPlacementOperation" order by sequence`
+    ).resolves.toStrictEqual(native);
+    expect(fixture.state.writes).toBe(writes);
+  });
+
   test.each(["failed", "uncertain"] as const)(
     "a fresh manual return recovers its reserved identity after a prior %s return receipt and an API stop",
     async (priorStatus) => {
@@ -1695,9 +1844,9 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
       const first = await snooze();
       const id = first.snooze?.id ?? "";
       if (priorStatus === "failed") {
-        fixture.state.beforeSnapshot = async () => {
+        fixture.state.beforeSnapshot = () => {
           fixture.state.beforeSnapshot = undefined;
-          return Promise.reject(new ORPCError("BAD_REQUEST"));
+          throw new ORPCError("BAD_REQUEST");
         };
       } else {
         fixture.state.ambiguous = true;

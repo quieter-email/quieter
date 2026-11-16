@@ -32,7 +32,10 @@ import { consumeRateLimit } from "../abuse-protection";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
 import { publishMailUpdate } from "../mail-updates";
-import { applyMailPlacement } from "../mail/placement";
+import {
+  applyMailPlacement,
+  hashMailPlacementRequest,
+} from "../mail/placement";
 import { authorizeMailPlacement } from "../mail/placement-access";
 import {
   loadMailPlacementAssociations,
@@ -822,6 +825,8 @@ const confirmObservedPlacement = async (input: {
       .where(
         and(
           eq(mailSnooze.id, input.row.id),
+          eq(mailSnooze.mailboxId, input.row.mailboxId),
+          eq(mailSnooze.threadId, input.row.threadId),
           eq(mailSnooze.version, input.row.version),
           eq(mailSnooze.leaseToken, input.leaseToken)
         )
@@ -841,10 +846,72 @@ const confirmObservedPlacement = async (input: {
     if (
       current === undefined ||
       latest?.id !== input.operation.id ||
-      latest.status === "superseded"
+      latest.status === "superseded" ||
+      current.actorUserId !== input.row.actorUserId ||
+      latest.actorUserId !== current.actorUserId ||
+      (input.phase === "hide"
+        ? !["preparing", "uncertain"].includes(current.status) ||
+          current.returnRequestId !== null ||
+          latest.requestId !== current.hideRequestId ||
+          latest.placement !== "done"
+        : !["returning", "uncertain"].includes(current.status) ||
+          current.returnRequestId === null ||
+          latest.requestId !== current.returnRequestId ||
+          latest.placement !== "inbox")
     ) {
       return false;
     }
+    const [journal] = await tx
+      .select()
+      .from(mailSnoozeOperation)
+      .where(
+        and(
+          eq(mailSnoozeOperation.snoozeId, current.id),
+          eq(mailSnoozeOperation.actorUserId, latest.actorUserId),
+          eq(mailSnoozeOperation.mailboxId, current.mailboxId),
+          eq(mailSnoozeOperation.threadId, current.threadId),
+          eq(
+            mailSnoozeOperation.kind,
+            input.phase === "hide" ? "snooze" : "return-now"
+          ),
+          inArray(mailSnoozeOperation.status, ["pending", "uncertain"])
+        )
+      )
+      .orderBy(sql`${mailSnoozeOperation.expectedVersion} desc nulls last`)
+      .limit(1);
+    const matchesJournal =
+      journal !== undefined &&
+      hashMailPlacementRequest({
+        actorUserId: latest.actorUserId,
+        input: {
+          command: {
+            kind: "set-placement",
+            placement: input.phase === "hide" ? "done" : "inbox",
+          },
+          mailboxId: current.mailboxId,
+          targets: [
+            {
+              messageIds: latest.requestedMessageIds,
+              threadId: current.threadId,
+            },
+          ],
+        },
+        snooze:
+          input.phase === "hide"
+            ? {
+                id: current.id,
+                kind: "snooze-hide",
+                leaseToken: null,
+                version: (journal.expectedVersion ?? 0) + 1,
+              }
+            : {
+                id: current.id,
+                kind: "snooze-return",
+                leaseToken: null,
+                trigger: "manual",
+                version: (journal.expectedVersion ?? 0) + 1,
+              },
+      }) === latest.requestHash;
     await tx
       .update(mailPlacementOperation)
       .set({
@@ -867,37 +934,23 @@ const confirmObservedPlacement = async (input: {
         version: current.version + 1,
       })
       .where(eq(mailSnooze.id, current.id));
-    const acceptedVersion =
-      current.status === "uncertain" ? current.version - 1 : current.version;
-    await tx
-      .update(mailSnoozeOperation)
-      .set({
-        code: null,
-        message: null,
-        resultingVersion: current.version + 1,
-        status: "applied",
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(mailSnoozeOperation.snoozeId, current.id),
-          eq(mailSnoozeOperation.actorUserId, input.operation.actorUserId),
-          eq(mailSnoozeOperation.mailboxId, current.mailboxId),
-          eq(mailSnoozeOperation.threadId, current.threadId),
-          eq(
-            mailSnoozeOperation.kind,
-            input.phase === "hide" ? "snooze" : "return-now"
-          ),
-          acceptedVersion === 1
-            ? isNull(mailSnoozeOperation.expectedVersion)
-            : eq(mailSnoozeOperation.expectedVersion, acceptedVersion - 1),
-          inArray(mailSnoozeOperation.resultingVersion, [
-            acceptedVersion,
-            acceptedVersion + 1,
-          ]),
-          inArray(mailSnoozeOperation.status, ["pending", "uncertain"])
-        )
-      );
+    if (matchesJournal) {
+      await tx
+        .update(mailSnoozeOperation)
+        .set({
+          code: null,
+          message: null,
+          resultingVersion: current.version + 1,
+          status: "applied",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(mailSnoozeOperation.id, journal.id),
+            inArray(mailSnoozeOperation.status, ["pending", "uncertain"])
+          )
+        );
+    }
     await tx
       .update(mailbox)
       .set({
@@ -1075,31 +1128,25 @@ export const dispatchMailSnooze = async (
   }
   let dispatchRow = claim.row;
   try {
-    const operationId = dispatchRow.returnRequestId
-      ? dispatchRow.returnOperationId
-      : dispatchRow.hideOperationId;
-    const [operation] =
-      operationId === null
-        ? await db
-            .select()
-            .from(mailPlacementOperation)
-            .where(
-              and(
-                eq(mailPlacementOperation.mailboxId, dispatchRow.mailboxId),
-                eq(mailPlacementOperation.threadId, dispatchRow.threadId),
-                eq(mailPlacementOperation.actorUserId, context.userId),
-                eq(
-                  mailPlacementOperation.requestId,
-                  dispatchRow.returnRequestId ?? dispatchRow.hideRequestId
-                )
-              )
-            )
-            .limit(1)
-        : await db
-            .select()
-            .from(mailPlacementOperation)
-            .where(eq(mailPlacementOperation.id, operationId))
-            .limit(1);
+    const [operation] = await db
+      .select()
+      .from(mailPlacementOperation)
+      .where(
+        and(
+          eq(mailPlacementOperation.mailboxId, dispatchRow.mailboxId),
+          eq(mailPlacementOperation.threadId, dispatchRow.threadId),
+          eq(mailPlacementOperation.actorUserId, context.userId),
+          eq(
+            mailPlacementOperation.requestId,
+            dispatchRow.returnRequestId ?? dispatchRow.hideRequestId
+          ),
+          eq(
+            mailPlacementOperation.placement,
+            dispatchRow.returnRequestId ? "inbox" : "done"
+          )
+        )
+      )
+      .limit(1);
     if (dispatchRow.status === "preparing" && operation === undefined) {
       await applyMailPlacement({
         context,
@@ -1135,6 +1182,8 @@ export const dispatchMailSnooze = async (
             and(
               eq(mailSnoozeOperation.snoozeId, dispatchRow.id),
               eq(mailSnoozeOperation.actorUserId, context.userId),
+              eq(mailSnoozeOperation.mailboxId, dispatchRow.mailboxId),
+              eq(mailSnoozeOperation.threadId, dispatchRow.threadId),
               eq(mailSnoozeOperation.kind, "return-now"),
               eq(mailSnoozeOperation.resultingVersion, dispatchRow.version),
               eq(mailSnoozeOperation.status, "pending")
@@ -1534,7 +1583,7 @@ export const handleSnoozeInbound = async (input: {
       .for("update");
     if (
       current === undefined ||
-      !["preparing", "active", "returning"].includes(current.status) ||
+      !MAIL_SNOOZE_LIVE_STATUSES.some((status) => status === current.status) ||
       current.knownIncomingMessageIds.includes(input.messageId)
     ) {
       return false;
