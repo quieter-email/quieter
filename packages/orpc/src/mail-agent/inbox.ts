@@ -11,16 +11,19 @@ import {
 } from "@quieter/database/schema";
 import { and, eq, sql } from "drizzle-orm";
 
+import { assertAiAuthority, captureAiOrigin } from "../ai-authority";
+import type { ReceiveStageOutcome } from "../mail-receive";
 import { publishMailUpdate } from "../mail-updates";
 import { assertPersonalAgentSettingAccess } from "./authority";
 import type { MailAgentIncomingMessage } from "./contracts";
 
 export const enqueueMailAgentMessage = async (
   input: MailAgentIncomingMessage
-): Promise<void> => {
+): Promise<ReceiveStageOutcome<"personal_actions">> => {
   if (!Number.isFinite(input.receivedAt.getTime())) {
-    return;
+    return { reason: "not_admitted", status: "skipped" };
   }
+  let admitted = 0;
   const settings = await db
     .select({ userId: mailboxPersonalAgentSetting.userId })
     .from(mailboxPersonalAgentSetting)
@@ -91,6 +94,15 @@ export const enqueueMailAgentMessage = async (
       }
       try {
         await assertPersonalAgentSettingAccess(active.setting, tx);
+        const origin = await captureAiOrigin(
+          {
+            mailboxId: input.mailboxId,
+            mode: "automation",
+            userId,
+          },
+          tx
+        );
+        await assertAiAuthority({ effect: "execute", origin }, tx);
       } catch (error) {
         if (
           error instanceof ORPCError &&
@@ -137,6 +149,7 @@ export const enqueueMailAgentMessage = async (
       return run !== undefined;
     });
     if (queued) {
+      admitted += 1;
       // oxlint-disable-next-line eslint/no-await-in-loop -- Deliver a private update after this owner's durable enqueue commits.
       await publishMailUpdate(
         {
@@ -148,4 +161,7 @@ export const enqueueMailAgentMessage = async (
       );
     }
   }
+  return admitted > 0
+    ? { admitted, status: "handed_off" }
+    : { reason: "not_admitted", status: "skipped" };
 };

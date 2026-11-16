@@ -20,7 +20,7 @@ export const deferAutoLabelAutomation = async (
   message: string
 ) => {
   const now = new Date();
-  await db
+  const [deferred] = await db
     .update(gmailAutoLabelEvent)
     .set({
       attemptCount: 0,
@@ -28,5 +28,10 @@ export const deferAutoLabelAutomation = async (
       nextAttemptAt: new Date(now.getTime() + AUTO_LABEL_BUDGET_RETRY_MS),
       updatedAt: now,
     })
-    .where(eq(gmailAutoLabelEvent.id, eventId));
+    .where(eq(gmailAutoLabelEvent.id, eventId))
+    .returning({ retryAt: gmailAutoLabelEvent.nextAttemptAt });
+  if (!deferred?.retryAt) {
+    throw new Error("Auto-label retry was not saved.");
+  }
+  return deferred.retryAt;
 };

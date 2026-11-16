@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { MailEffectAssertion } from "../gmail-request";
 import { runAuthorizedConnector } from "./runtime";
 import { boundTaskToolOutput, requestTaskProvider } from "./task-tools";
 import type { TaskToolDescriptor } from "./task-tools";
@@ -123,7 +124,9 @@ const taskOutput = (task: z.infer<typeof taskSchema>) => ({
 
 export const callTodoistTool = async (input: {
   arguments: Record<string, unknown>;
+  beforeEffect?: MailEffectAssertion;
   connectionId: string;
+  prepareEffect?: () => Promise<void>;
   signal?: AbortSignal;
   toolName: string;
   userId: string;
@@ -137,13 +140,15 @@ export const callTodoistTool = async (input: {
   }
   return await runAuthorizedConnector(
     {
+      beforeEffect: input.beforeEffect,
       connectionId: input.connectionId,
       mutates: tool.effect === "write",
+      prepareEffect: input.prepareEffect,
       provider: "todoist",
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken, signal) => {
+    async (accessToken, signal, beforeEffect) => {
       const request = async (
         path: string,
         method?: "GET" | "POST",
@@ -152,6 +157,7 @@ export const callTodoistTool = async (input: {
         await requestTaskProvider({
           accessToken,
           baseUrl: TODOIST_API_URL,
+          beforeEffect,
           body,
           method,
           path,

@@ -41,6 +41,14 @@ export const appRouter = {
         default: connectorsRouter,
       }))
   ),
+  correspondentHistory: lazy(
+    async () =>
+      await import("./correspondent-history").then(
+        ({ correspondentHistoryRouter }) => ({
+          default: correspondentHistoryRouter,
+        })
+      )
+  ),
   mail: lazy(
     async () =>
       await import("./mail").then(({ mailRouter }) => ({ default: mailRouter }))

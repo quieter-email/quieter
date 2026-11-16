@@ -32,7 +32,9 @@ const fixtures = vi.hoisted(() => {
   const messages: IncomingRecord[] = [];
   return {
     enqueue: vi.fn<typeof enqueueMailAgentMessage>(),
+    memory: vi.fn<typeof captureManagedMessageMemory>(),
     messages,
+    publish: vi.fn<typeof publishMailUpdate>(),
     snooze: vi.fn<typeof handleSnoozeInbound>(),
   };
 });
@@ -99,14 +101,14 @@ vi.mock(import("../src/snooze/service"), () => ({
   handleSnoozeInbound: fixtures.snooze,
 }));
 vi.mock(import("../src/ai-memory-capture"), () => ({
-  captureManagedMessageMemory: vi.fn<typeof captureManagedMessageMemory>(),
+  captureManagedMessageMemory: fixtures.memory,
 }));
 vi.mock(import("../src/mail-importance"), () => ({
   ensureMailImportanceWork: vi.fn<typeof ensureMailImportanceWork>(),
   processPendingMailImportance: vi.fn<typeof processPendingMailImportance>(),
 }));
 vi.mock(import("../src/mail-updates"), () => ({
-  publishMailUpdate: vi.fn<typeof publishMailUpdate>(),
+  publishMailUpdate: fixtures.publish,
 }));
 vi.mock(import("../src/verification-codes"), () => ({
   processMailVerificationCode: vi.fn<typeof processMailVerificationCode>(),
@@ -144,8 +146,37 @@ const input = {
 describe("durable managed mail action receive", () => {
   beforeEach(() => {
     fixtures.messages.length = 0;
-    fixtures.enqueue.mockReset().mockResolvedValue();
     fixtures.snooze.mockReset().mockResolvedValue();
+    fixtures.memory.mockReset().mockResolvedValue(null);
+    fixtures.publish.mockReset().mockResolvedValue();
+    fixtures.enqueue
+      .mockReset()
+      .mockResolvedValue({ admitted: 1, status: "handed_off" });
+  });
+
+  test("publishes persisted mail while slow context capture is still blocked", async () => {
+    const started = Promise.withResolvers<boolean>();
+    const release = Promise.withResolvers<boolean>();
+    const published = Promise.withResolvers<boolean>();
+    fixtures.memory.mockImplementation(async () => {
+      started.resolve(true);
+      await release.promise;
+      return null;
+    });
+    fixtures.publish.mockImplementation(async () => {
+      published.resolve(true);
+      await Promise.resolve();
+    });
+    let acknowledged = false;
+    const receipt = recordInboundManagedMessage(input).then((result) => {
+      acknowledged = true;
+      return result;
+    });
+    await Promise.all([started.promise, published.promise]);
+    expect(fixtures.messages).toHaveLength(1);
+    expect(acknowledged).toBeFalsy();
+    release.resolve(true);
+    await expect(receipt).resolves.toContain("mailbox");
   });
 
   test("withholds receive acknowledgement until the durable inbox write completes", async () => {
@@ -154,6 +185,7 @@ describe("durable managed mail action receive", () => {
     fixtures.enqueue.mockImplementation(async () => {
       started.resolve(true);
       await durable.promise;
+      return { admitted: 1, status: "handed_off" };
     });
     let acknowledged = false;
     const receipt = recordInboundManagedMessage(input).then((result) => {

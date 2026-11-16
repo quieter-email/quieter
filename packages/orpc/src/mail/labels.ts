@@ -33,6 +33,7 @@ export const labelsMailOperations = {
       return await createManagedLabel({
         autoLabel: input.autoLabel,
         color: input.color ?? "gray",
+        context,
         description: input.description,
         mailboxId: input.mailboxId,
         name: input.name,
@@ -42,16 +43,17 @@ export const labelsMailOperations = {
     return await callGmail(
       context,
       input.mailboxId,
-      async (accessToken, signal) => {
+      async (accessToken, signal, beforeEffect, gmailIdentity) => {
         const { upsertSyncedGmailLabel } = await import("../gmail-labels");
         const label = await upsertSyncedGmailLabel(
           input.mailboxId,
-          await createLabel(accessToken, input.name, signal),
+          await createLabel(accessToken, input.name, signal, beforeEffect),
           {
             autoLabel: input.autoLabel,
             color: input.color,
             description: input.description,
-          }
+          },
+          { ...context, gmailIdentity }
         );
         return {
           ...label,
@@ -76,6 +78,7 @@ export const labelsMailOperations = {
     });
     if (selectedMailbox.provider === "managed") {
       return await deleteManagedLabel({
+        context,
         labelId: input.labelId,
         mailboxId: input.mailboxId,
         userId: context.userId,
@@ -84,8 +87,13 @@ export const labelsMailOperations = {
     return await callGmail(
       context,
       input.mailboxId,
-      async (accessToken, signal) => {
-        const result = await deleteLabel(accessToken, input.labelId, signal);
+      async (accessToken, signal, beforeEffect) => {
+        const result = await deleteLabel(
+          accessToken,
+          input.labelId,
+          signal,
+          beforeEffect
+        );
         const { deleteSyncedGmailLabel } = await import("../gmail-labels");
         await deleteSyncedGmailLabel(input.mailboxId, input.labelId);
         return result;
@@ -143,6 +151,7 @@ export const labelsMailOperations = {
     if (selectedMailbox.provider === "managed") {
       return await updateManagedLabel({
         color: input.color,
+        context,
         description: input.description,
         labelId: input.labelId,
         mailboxId: input.mailboxId,
@@ -155,12 +164,19 @@ export const labelsMailOperations = {
     return await callGmail(
       context,
       input.mailboxId,
-      async (accessToken, signal) => {
+      async (accessToken, signal, beforeEffect, gmailIdentity) => {
         const { upsertSyncedGmailLabel } = await import("../gmail-labels");
         const label = await upsertSyncedGmailLabel(
           input.mailboxId,
-          await updateLabel(accessToken, input.labelId, input.name, signal),
-          { color: input.color, description: input.description }
+          await updateLabel(
+            accessToken,
+            input.labelId,
+            input.name,
+            signal,
+            beforeEffect
+          ),
+          { color: input.color, description: input.description },
+          { ...context, gmailIdentity }
         );
         return {
           ...label,
@@ -186,6 +202,7 @@ export const labelsMailOperations = {
     if (selectedMailbox.provider === "managed") {
       return await updateManagedLabel({
         autoLabel: input.autoLabel,
+        context,
         description: input.description,
         labelId: input.labelId,
         mailboxId: input.mailboxId,
@@ -193,7 +210,7 @@ export const labelsMailOperations = {
       });
     }
     const { saveGmailLabelDetails } = await import("../gmail-labels");
-    const updatedLabel = await saveGmailLabelDetails(input);
+    const updatedLabel = await saveGmailLabelDetails({ ...input, context });
     if (updatedLabel === undefined) {
       throw new ORPCError("NOT_FOUND", { message: "Label not found." });
     }

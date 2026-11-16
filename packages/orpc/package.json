@@ -8,6 +8,7 @@
     "./reminders/clock": "./src/reminders/clock.ts",
     "./reminders/service": "./src/reminders/service.ts",
     "./ai-mail-authorship": "./src/ai-mail-authorship.ts",
+    "./ai-authority": "./src/ai-authority.ts",
     "./ai-memory": "./src/ai-memory.ts",
     "./semantic-index": "./src/semantic-index.ts",
     "./ai-memory-capture": "./src/ai-memory-capture.ts",

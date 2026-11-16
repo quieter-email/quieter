@@ -1,10 +1,12 @@
 import type * as DatabaseClientModule from "@quieter/database/client";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
+import type { captureAiOrigin } from "../src/ai-authority";
 import { createAiChatResponse } from "../src/chat/service";
 import type { assertAccessibleMailbox } from "../src/mailbox/service";
 
 const mocks = vi.hoisted(() => ({
+  capture: vi.fn<typeof captureAiOrigin>(),
   query:
     vi.fn<
       (query: string, params: unknown[]) => Promise<{ rows: unknown[][] }>
@@ -41,6 +43,11 @@ vi.mock(import("../src/mailbox/service"), async () => {
   };
 });
 
+vi.mock(import("../src/ai-authority"), async (original) => ({
+  ...(await original()),
+  captureAiOrigin: mocks.capture,
+}));
+
 const threadId = "b44942c1-aeeb-40a9-9da8-5c054e9f6030";
 const foreground = {
   capabilities: ["navigate"],
@@ -53,6 +60,12 @@ const foreground = {
 describe("chat history isolation", () => {
   beforeEach(() => {
     mocks.query.mockReset();
+    mocks.capture
+      .mockReset()
+      .mockImplementation(
+        async (input) =>
+          await Promise.resolve({ ...input, kind: "ai", policyVersion: 2 })
+      );
   });
 
   test("hides an edit source that is unavailable in the user's mailbox", async () => {
@@ -124,6 +137,135 @@ describe("chat history isolation", () => {
         userId: "user",
       })
     ).rejects.toMatchObject({ status: 409 });
+  });
+
+  test.each([
+    undefined,
+    { kind: "human" },
+    {
+      kind: "ai",
+      mailboxId: "other-mailbox",
+      mode: "interactive",
+      policyVersion: 0,
+      userId: "user",
+    },
+    {
+      kind: "ai",
+      mailboxId: "mailbox",
+      mode: "interactive",
+      policyVersion: 0,
+      userId: "other-user",
+    },
+    {
+      kind: "ai",
+      mailboxId: "mailbox",
+      mode: "interactive",
+      policyVersion: "current",
+      userId: "user",
+    },
+  ])(
+    "an echoed client stamp cannot repair missing or invalid server authority %#",
+    async (origin) => {
+      const part = {
+        approval: { id: "approval" },
+        foreground,
+        input: {},
+        state: "approval-requested",
+        toolCallId: "tool",
+        type: "tool-modify_mail",
+      };
+      mocks.query.mockResolvedValueOnce({
+        rows: [[threadId, "mailbox", "Title", "user"]],
+      });
+      mocks.query.mockResolvedValueOnce({
+        rows: [
+          [
+            "2026-09-05T00:00:00Z",
+            foreground.exchangeId,
+            [
+              part,
+              ...(origin === undefined
+                ? []
+                : [{ origin, type: "data-ai-authority" }]),
+            ],
+            1,
+            "assistant",
+          ],
+        ],
+      });
+
+      await expect(
+        createAiChatResponse({
+          body: {
+            category: "inbox",
+            foreground,
+            mailboxId: "mailbox",
+            message: {
+              id: foreground.exchangeId,
+              parts: [
+                {
+                  ...part,
+                  approval: { approved: true, id: "approval" },
+                  state: "approval-responded",
+                },
+                {
+                  origin: {
+                    kind: "ai",
+                    mailboxId: "mailbox",
+                    mode: "interactive",
+                    policyVersion: 99,
+                    userId: "user",
+                  },
+                  type: "data-ai-authority",
+                },
+              ],
+              role: "assistant",
+            },
+            threadId,
+            trigger: "submit-message",
+          },
+          request: new Request("https://example.test/api/chat"),
+          userId: "user",
+        })
+      ).rejects.toMatchObject({ status: 409 });
+    }
+  );
+
+  test("an orphaned retry cannot capture fresh authority after policy changes", async () => {
+    mocks.query.mockResolvedValueOnce({
+      rows: [[threadId, "mailbox", "Title", "user"]],
+    });
+    mocks.query.mockResolvedValueOnce({
+      rows: [
+        [
+          "2026-09-05T00:00:00Z",
+          "original-user-message",
+          [{ text: "Send the reviewed email", type: "text" }],
+          0,
+          "user",
+        ],
+      ],
+    });
+
+    await expect(
+      createAiChatResponse({
+        body: {
+          category: "inbox",
+          foreground,
+          mailboxId: "mailbox",
+          message: {
+            id: "original-user-message",
+            parts: [{ text: "Send the reviewed email", type: "text" }],
+            role: "user",
+          },
+          threadId,
+          trigger: "submit-message",
+        },
+        request: new Request("https://example.test/api/chat"),
+        userId: "user",
+      })
+    ).rejects.toMatchObject({ status: 409 });
+    expect(mocks.capture).not.toHaveBeenCalled();
   });
 
   test("hides a chat owned by another user during continuation", async () => {

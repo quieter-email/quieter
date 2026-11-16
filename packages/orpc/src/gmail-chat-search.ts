@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import type {
   GmailAttachmentResult,
   GmailLabelListResult,
@@ -29,6 +30,7 @@ import {
 import type { MailboxCategory } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 
+import type { AiOrigin } from "./ai-authority";
 import {
   captureMailboxMessageMemory,
   queueMailboxMessageMemory,
@@ -36,9 +38,11 @@ import {
 import { syncGmailLabels } from "./gmail-labels";
 import {
   getAuthorizedGmailMailbox,
-  markGmailMailboxNeedsReconnect,
   refreshAuthorizedGmailAccessToken,
 } from "./gmail-mailbox-access";
+import type { PreparedGmailMailboxIdentity } from "./gmail-mailbox-access";
+import { assertMailEffectAllowed } from "./gmail-request";
+import type { MailEffectAssertion } from "./gmail-request";
 import { writeGmailCapturedMessage } from "./mail-capture";
 import { learnAiMemoryFromMailAction } from "./mail/feedback";
 import { filterMailSnoozeVisibility } from "./snooze/queries";
@@ -66,6 +70,9 @@ const trimMessageBody = (
 };
 
 type GmailChatRequest = {
+  beforeEffect?: MailEffectAssertion;
+  origin?: AiOrigin;
+  privateContext?: boolean;
   mailboxId: string;
   signal?: AbortSignal;
   userId: string;
@@ -76,27 +83,40 @@ const openAuthorizedGmailChatRequests = async (input: GmailChatRequest) => {
     mailboxId: input.mailboxId,
     userId: input.userId,
   });
-  let refresh: Promise<string> | undefined;
+  const gmailIdentity: PreparedGmailMailboxIdentity = {
+    googleSubject: mailbox.googleSubject,
+    mailboxId: mailbox.id,
+  };
+  let refresh: ReturnType<typeof refreshAuthorizedGmailAccessToken> | undefined;
   let reconnect: Promise<void> | undefined;
 
-  return async <T>(request: (token: string) => Promise<T>): Promise<T> => {
+  return async <T>(
+    request: (
+      token: string,
+      gmailIdentity: PreparedGmailMailboxIdentity
+    ) => Promise<T>
+  ): Promise<T> => {
     if (refresh === undefined) {
       try {
-        return await request(accessToken);
+        return await request(accessToken, gmailIdentity);
       } catch (error) {
         if (!isGmailAuthError(error)) {
           throw error;
         }
-        refresh ??= refreshAuthorizedGmailAccessToken(input);
+        refresh ??= refreshAuthorizedGmailAccessToken({
+          gmailIdentity,
+          mailboxId: input.mailboxId,
+          userId: input.userId,
+        });
       }
     }
 
-    const refreshedAccessToken = await refresh;
+    const refreshed = await refresh;
     try {
-      return await request(refreshedAccessToken);
+      return await request(refreshed.accessToken, gmailIdentity);
     } catch (retryError) {
       if (isGmailAuthError(retryError)) {
-        reconnect ??= markGmailMailboxNeedsReconnect(mailbox.id);
+        reconnect ??= refreshed.markNeedsReconnect();
         await reconnect;
       }
 
@@ -221,6 +241,7 @@ export const readGmailThreadForUser = async (
             actorUserId: input.userId,
             mailboxId: input.mailboxId,
             message,
+            origin: input.origin,
             source: "ai_read",
           })
       )
@@ -268,6 +289,7 @@ export const readGmailMessageForUser = async (
       actorUserId: input.userId,
       mailboxId: input.mailboxId,
       message,
+      origin: input.origin,
       source: "ai_read",
     });
     const body = trimMessageBody(message.bodyText, message.snippet);
@@ -308,6 +330,7 @@ export const readGmailMessagesForUser = async (
           actorUserId: input.userId,
           mailboxId: input.mailboxId,
           message,
+          origin: input.origin,
           source: "ai_read",
         });
         const body = trimMessageBody(message.bodyText, message.snippet);
@@ -372,6 +395,7 @@ export const readGmailAttachmentForUser = async (
       actorUserId: input.userId,
       mailboxId: input.mailboxId,
       message,
+      origin: input.origin,
       source: "ai_read",
     });
     const metadata = message.attachments?.find(
@@ -530,16 +554,24 @@ const recordGmailChatAction = async (
 ) => {
   const { action, mailboxId, userId } = input;
   try {
-    await queueMailboxMessageMemory({ mailboxId, messageIds, userId });
+    await queueMailboxMessageMemory({
+      mailboxId,
+      messageIds,
+      origin: input.origin,
+      userId,
+    });
     await learnAiMemoryFromMailAction({
       action,
       mailboxId,
       messageIds,
+      origin: input.origin,
       targetCount: messageIds.length,
       userId,
     });
   } catch (error) {
-    reportError(error, { operation: "mailbox-tool:record mail action" });
+    if (!(error instanceof ORPCError) || error.status >= 500) {
+      reportError(error, { operation: "mailbox-tool:record mail action" });
+    }
   }
 };
 
@@ -555,9 +587,20 @@ export const modifyMailForUser = async (
   const change = gmailChatMailChanges[action];
   const run = await openAuthorizedGmailChatRequests(input);
   const mutate = target === "thread" ? mutateGmailThread : mutateGmailMessage;
-  const receipt = await run(async (accessToken) => {
+  const receipt = await run(async (accessToken, gmailIdentity) => {
     signal?.throwIfAborted();
-    return await mutate(accessToken, id, change, signal);
+    return await mutate(accessToken, id, change, signal, async () => {
+      await assertMailEffectAllowed(
+        {
+          beforeEffect: input.beforeEffect,
+          gmailIdentity,
+          origin: input.origin,
+          privateContext: input.privateContext,
+          userId: input.userId,
+        },
+        input.mailboxId
+      );
+    });
   });
   const messageIds = await verifyGmailChatTarget(
     run,
@@ -596,10 +639,27 @@ export const modifyMailBatchForUser = async (
     signal?.throwIfAborted();
     let attempted = false;
     try {
-      await run(async (accessToken) => {
+      await run(async (accessToken, gmailIdentity) => {
         signal?.throwIfAborted();
-        attempted = true;
-        await batchModifyMessages(accessToken, ids, change, signal);
+        await batchModifyMessages(
+          accessToken,
+          ids,
+          change,
+          signal,
+          async () => {
+            await assertMailEffectAllowed(
+              {
+                beforeEffect: input.beforeEffect,
+                gmailIdentity,
+                origin: input.origin,
+                privateContext: input.privateContext,
+                userId: input.userId,
+              },
+              input.mailboxId
+            );
+            attempted = true;
+          }
+        );
       });
       for (
         let offset = 0;
@@ -654,10 +714,21 @@ export const modifyMailBatchForUser = async (
         group.map(async (id) => {
           let attempted = false;
           try {
-            const receipt = await run(async (accessToken) => {
+            const receipt = await run(async (accessToken, gmailIdentity) => {
               signal?.throwIfAborted();
-              attempted = true;
-              return await mutate(accessToken, id, change, signal);
+              return await mutate(accessToken, id, change, signal, async () => {
+                await assertMailEffectAllowed(
+                  {
+                    beforeEffect: input.beforeEffect,
+                    gmailIdentity,
+                    origin: input.origin,
+                    privateContext: input.privateContext,
+                    userId: input.userId,
+                  },
+                  input.mailboxId
+                );
+                attempted = true;
+              });
             });
             const messageIds = await verifyGmailChatTarget(
               run,

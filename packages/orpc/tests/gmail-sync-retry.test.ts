@@ -1,6 +1,7 @@
 import { setImmediate } from "node:timers/promises";
 
 import { ORPCError } from "@orpc/server";
+import { AUTO_LABEL_MODEL } from "@quieter/ai/classify-gmail-message";
 import type { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
 import { AiCreditAdmissionBusyError } from "@quieter/billing/ai-credit-errors";
 import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
@@ -19,6 +20,7 @@ import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import * as aiMemory from "../src/ai-memory";
 import * as aiMemoryCapture from "../src/ai-memory-capture";
+import { REQUIRED_GMAIL_SCOPES } from "../src/gmail-mailbox-access";
 import type { runAuthorizedGmailMailbox } from "../src/gmail-mailbox-access";
 import { processGmailMessage } from "../src/gmail-sync/message";
 import {
@@ -49,6 +51,7 @@ const fixtures = vi.hoisted(() => ({
   eventReadFailure: null as Error | null,
   getMessage: vi.fn<typeof getMessageWithDetails>(),
   history: vi.fn<typeof loadMailAutoLabelHistory>(),
+  labels: [] as Row[],
   listHistory: vi.fn<typeof listGmailAddedMessageHistoryPage>(),
   mailboxes: [] as Row[],
   mutate: vi.fn<typeof mutateGmailMessage>(),
@@ -103,6 +106,8 @@ vi.mock("drizzle-orm", async (importOriginal) => {
       },
     exists: (query: { matches: (outerRow: Row) => boolean }) => (row: Row) =>
       query.matches(row),
+    inArray: (column: { name: string }, values: unknown[]) => (row: Row) =>
+      values.includes(row[column.name]),
     isNotNull: (column: { name: string }) => (row: Row) =>
       row[column.name] !== null && row[column.name] !== undefined,
     isNull: (column: { name: string }) => (row: Row) =>
@@ -127,44 +132,67 @@ vi.mock("drizzle-orm", async (importOriginal) => {
 
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The fake implements only the query methods exercised here.
 vi.mock("@quieter/database/client", () => {
-  const client = {
-    db: {
-      insert: () => ({
-        values: () => ({ onConflictDoNothing: async () => {} }),
-      }),
-      select: (fields?: Record<string, { name: string }>) => {
-        let rows: Row[] = [];
-        let tableName: string | undefined;
-        const predicates: Predicate[] = [];
-        const query = {
-          from: (table: Parameters<typeof getTableName>[0]) => {
-            tableName = getTableName(table);
-            if (getTableName(table) === "gmailAutoLabelEvent") {
-              ({ rows } = fixtures);
-            } else if (getTableName(table) === "gmailWatchState") {
-              rows = fixtures.watchStates;
-            } else if (getTableName(table) === "mailbox") {
-              rows = fixtures.mailboxes;
-            } else {
-              rows = [];
-            }
-            return query;
-          },
-          innerJoin: (_table: unknown, predicate: Predicate) => {
-            predicates.push(predicate);
-            return query;
-          },
-          leftJoin: () => query,
-          limit: async (limit: number) => {
-            if (
-              tableName === "gmailAutoLabelEvent" &&
-              fixtures.eventReadFailure !== null
-            ) {
-              throw fixtures.eventReadFailure;
-            }
-            return rows
+  const database = {
+    insert: () => ({
+      values: () => ({ onConflictDoNothing: async () => {} }),
+    }),
+    select: (fields?: Record<string, { name: string }>) => {
+      let rows: Row[] = [];
+      let tableName: string | undefined;
+      const predicates: Predicate[] = [];
+      let rowLimit = Number.POSITIVE_INFINITY;
+      const query = {
+        for: () => query,
+        from: (table: Parameters<typeof getTableName>[0]) => {
+          tableName = getTableName(table);
+          if (getTableName(table) === "gmailAutoLabelEvent") {
+            ({ rows } = fixtures);
+          } else if (getTableName(table) === "gmailWatchState") {
+            rows = fixtures.watchStates;
+          } else if (getTableName(table) === "mailbox") {
+            rows = fixtures.mailboxes;
+          } else if (getTableName(table) === "mailboxAutomationSettings") {
+            ({ rows } = fixtures);
+          } else if (getTableName(table) === "gmailLabel") {
+            rows = fixtures.labels;
+          } else {
+            rows = [];
+          }
+          return query;
+        },
+        innerJoin: (_table: unknown, predicate: Predicate) => {
+          predicates.push(predicate);
+          return query;
+        },
+        leftJoin: () => query,
+        limit: (limit: number) => {
+          rowLimit = limit;
+          return query;
+        },
+        matches: (outerRow: Row) =>
+          rows.some((row) =>
+            predicates.every((predicate) => predicate(row, outerRow))
+          ),
+        orderBy: () => {
+          rows.sort(
+            (left, right) =>
+              Number(left.nextAttemptAt ?? -Infinity) -
+              Number(right.nextAttemptAt ?? -Infinity)
+          );
+          return query;
+        },
+        // oxlint-disable-next-line unicorn/no-thenable -- Drizzle executes a query when the builder is awaited.
+        then: (fulfilled: (values: Row[]) => unknown) => {
+          if (
+            tableName === "gmailAutoLabelEvent" &&
+            fixtures.eventReadFailure !== null
+          ) {
+            throw fixtures.eventReadFailure;
+          }
+          return fulfilled(
+            rows
               .filter((row) => predicates.every((predicate) => predicate(row)))
-              .slice(0, limit)
+              .slice(0, rowLimit)
               .map((row) =>
                 fields
                   ? Object.fromEntries(
@@ -174,45 +202,52 @@ vi.mock("@quieter/database/client", () => {
                       ])
                     )
                   : row
-              );
-          },
-          matches: (outerRow: Row) =>
-            rows.some((row) =>
-              predicates.every((predicate) => predicate(row, outerRow))
-            ),
-          orderBy: () => {
-            rows.sort(
-              (left, right) =>
-                Number(left.nextAttemptAt ?? -Infinity) -
-                Number(right.nextAttemptAt ?? -Infinity)
-            );
-            return query;
-          },
-          where: (predicate: Predicate) => {
-            predicates.push(predicate);
-            return query;
-          },
-        };
-        return query;
-      },
-      update: (table: Parameters<typeof getTableName>[0]) => ({
-        set: (values: Row) => ({
-          where: (predicate: Predicate) => {
-            const rows =
-              getTableName(table) === "gmailWatchState"
-                ? fixtures.watchStates
-                : fixtures.rows;
-            const updated = rows.filter((candidate) => predicate(candidate));
-            for (const row of updated) {
-              Object.assign(row, values);
-            }
-            return { returning: async () => updated };
-          },
-        }),
+              )
+          );
+        },
+        where: (predicate: Predicate) => {
+          predicates.push(predicate);
+          return query;
+        },
+      };
+      return query;
+    },
+    update: (table: Parameters<typeof getTableName>[0]) => ({
+      set: (values: Row) => ({
+        where: (predicate: Predicate) => {
+          const rows =
+            getTableName(table) === "gmailWatchState"
+              ? fixtures.watchStates
+              : fixtures.rows;
+          const updated = rows.filter((candidate) => predicate(candidate));
+          for (const row of updated) {
+            Object.assign(row, values);
+          }
+          return {
+            returning: async (fields?: Record<string, { name: string }>) =>
+              updated.map((row) =>
+                fields === undefined
+                  ? row
+                  : Object.fromEntries(
+                      Object.entries(fields).map(([key, column]) => [
+                        key,
+                        row[column.name],
+                      ])
+                    )
+              ),
+          };
+        },
       }),
+    }),
+  };
+  return {
+    db: {
+      ...database,
+      transaction: async <Result>(
+        run: (transaction: typeof database) => Promise<Result>
+      ) => await run(database),
     },
   };
-  return client;
 });
 
 vi.mock(import("../src/gmail-sync/work-store"), () => ({
@@ -272,11 +307,19 @@ vi.mock(import("../src/mail-capture"), () => ({
 vi.mock(import("../src/snooze/service"), () => ({
   handleSnoozeInbound: vi.fn<typeof handleSnoozeInbound>().mockResolvedValue(),
 }));
-vi.mock(import("../src/gmail-mailbox-access"), () => ({
+vi.mock(import("../src/gmail-mailbox-access"), async (original) => ({
+  ...(await original()),
   runAuthorizedGmailMailbox: async <T>(
-    _input: Parameters<typeof runAuthorizedGmailMailbox>[0],
-    operation: (accessToken: string) => Promise<T>
-  ) => await operation("fixture-token"),
+    input: Parameters<typeof runAuthorizedGmailMailbox>[0],
+    operation: (
+      accessToken: string,
+      identity: { googleSubject: string; mailboxId: string }
+    ) => Promise<T>
+  ) =>
+    await operation("fixture-token", {
+      googleSubject: "fixture-subject",
+      mailboxId: input.mailboxId,
+    }),
 }));
 
 vi.mock(import("../src/mail-automation/history"), () => ({
@@ -306,6 +349,7 @@ const input = {
     }),
     getBudgetStatus: fixtures.budget,
   },
+  identity: { googleSubject: "fixture-subject", mailboxId: "mailbox-1" },
   mailboxId: "mailbox-1",
   organizationId: "organization-1",
   userId: "user-1",
@@ -332,6 +376,14 @@ describe("Gmail automation retry recovery", () => {
     });
     fixtures.rows.length = 0;
     fixtures.mailboxes.length = 0;
+    fixtures.labels.length = 0;
+    fixtures.labels.push(
+      ...["work", "deterministic", "ai", "label-1"].map((labelId) => ({
+        autoLabel: null,
+        labelId,
+        mailboxId: input.mailboxId,
+      }))
+    );
     fixtures.watchStates.length = 0;
     fixtures.reported.mockReset();
     configureErrorReporter(fixtures.reported);
@@ -369,16 +421,20 @@ describe("Gmail automation retry recovery", () => {
     fixtures.rows.push({
       appliedAt: null,
       attemptCount: 0,
+      authorityVersion: 0,
       autoLabelEnabled: true,
       gmailMessageId: "deferred-message",
       id: "deferred-event",
       labelIds: null,
       lastError: "Budget unavailable",
       mailboxId: input.mailboxId,
+      model: null,
       nextAttemptAt: new Date(Date.now() + 60_000),
+      privateContextUserId: null,
     });
     fixtures.mailboxes.push({
       emailAddress: "mailbox@example.test",
+      googleSubject: "fixture-subject",
       historyPageToken: null,
       id: input.mailboxId,
       lastCapturedAt: new Date(),
@@ -393,6 +449,7 @@ describe("Gmail automation retry recovery", () => {
       providerRetryAt: null,
       recoveryAfter: null,
       recoveryPageToken: null,
+      scopes: REQUIRED_GMAIL_SCOPES.join(" "),
       status: "connected",
       watchExpirationAt: new Date(Date.now() + 7 * 24 * 60 * 60_000),
       watchRenewedAt: new Date(),
@@ -864,6 +921,48 @@ describe("Gmail automation retry recovery", () => {
     expect(failed.appliedAt).toBeNull();
     expect(classified.appliedAt).toBeNull();
     expect(otherMailbox.appliedAt).toBeNull();
+  });
+
+  test("revoked AI backlog cannot starve current admissions or proven deterministic retries", async () => {
+    const [base] = fixtures.rows;
+    if (base === undefined) {
+      throw new Error("Missing retry fixture.");
+    }
+    const due = new Date(Date.now() - 1000);
+    fixtures.rows.splice(
+      0,
+      fixtures.rows.length,
+      ...Array.from({ length: 25 }, (_, index) => ({
+        ...base,
+        authorityVersion: index % 2 === 0 ? null : 1,
+        gmailMessageId: `revoked-${index}`,
+        id: `revoked-event-${index}`,
+        model: AUTO_LABEL_MODEL,
+        nextAttemptAt: due,
+      })),
+      {
+        ...base,
+        gmailMessageId: "current-admission",
+        id: "current-event",
+        nextAttemptAt: due,
+      },
+      {
+        ...base,
+        authorityVersion: null,
+        gmailMessageId: "native-rule-retry",
+        id: "native-event",
+        labelIds: ["deterministic"],
+        model: null,
+        nextAttemptAt: due,
+      }
+    );
+    await retryPendingAutomationMessages(input);
+    const queued = fixtures.enqueueWork.mock.calls.flatMap(
+      ([job]) => job.messageIds
+    );
+    expect(queued).toContain("current-admission");
+    expect(queued).toContain("native-rule-retry");
+    expect(queued.some((id) => id.startsWith("revoked-"))).toBeFalsy();
   });
 
   test("keeps future deferrals pending while budget remains denied", async () => {

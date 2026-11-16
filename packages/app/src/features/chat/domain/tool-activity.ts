@@ -26,6 +26,7 @@ import {
   saveComposeDraftInputSchema,
   saveComposeDraftOutputSchema,
   sendMailOutputSchema,
+  heldSendStatusOutputSchema,
 } from "@quieter/ai/chat-tools";
 import {
   getToolName,
@@ -87,6 +88,17 @@ export type ChatActivitySegment =
       steps: [RoutineActivity, ...RoutineActivity[]];
     }
   | ExceptionalActivity;
+
+const sendStatusTitles = {
+  accepted: "Sent your email",
+  canceled: "Canceled sending your email",
+  dispatching: "Sending your email",
+  failed: "Sending failed",
+  held: "Held your email for sending",
+  preparing: "Preparing your email",
+  sent: "Sent your email",
+  uncertain: "Delivery is being confirmed",
+};
 
 const operations: Record<
   string,
@@ -174,6 +186,13 @@ const operations: Record<
     failed: "Couldn't load your reminder",
     pending: "Checking your reminder…",
     subject: "Reminder",
+  },
+  get_send_status: {
+    category: "draft",
+    complete: "Checked delivery",
+    failed: "Couldn't check delivery",
+    pending: "Checking delivery…",
+    subject: "Email",
   },
   get_workspace: {
     category: "workspace",
@@ -336,11 +355,25 @@ const operations: Record<
     pending: "Searching your mail…",
     subject: "Mail search",
   },
+  search_semantic_mail: {
+    category: "search",
+    complete: "Searched your mail by meaning",
+    failed: "Couldn't search your mail",
+    pending: "Searching your mail by meaning…",
+    subject: "Mail search",
+  },
   send_mail: {
     category: "draft",
-    complete: "Sent your email",
+    complete: "Held your email for sending",
     failed: "Couldn't send your email",
-    pending: "Sending your email…",
+    pending: "Preparing your email…",
+    subject: "Email",
+  },
+  undo_send: {
+    category: "draft",
+    complete: "Canceled sending your email",
+    failed: "Couldn't cancel sending",
+    pending: "Canceling sending…",
     subject: "Email",
   },
   update_calendar_event: {
@@ -353,6 +386,11 @@ const operations: Record<
 };
 
 const mailReadActivitySchema = z.object({
+  coverage: z
+    .object({
+      complete: z.boolean(),
+    })
+    .optional(),
   messages: z.array(
     z.object({
       from: z.string().optional(),
@@ -362,6 +400,7 @@ const mailReadActivitySchema = z.object({
     })
   ),
   nextPageToken: z.string().optional(),
+  retainedOnly: z.boolean().optional(),
   status: z.literal("success"),
   subject: z.string().optional(),
 });
@@ -563,17 +602,24 @@ const describeActivity = (
       break;
     }
     case "search_mail":
+    case "search_semantic_mail":
     case "read_mail_thread": {
       const result = mailReadActivitySchema.safeParse(part.output);
       if (result.success) {
         activity.phase = "complete";
         activity.title =
-          name === "search_mail" && result.data.messages.length === 0
+          name !== "read_mail_thread" && result.data.messages.length === 0
             ? "No matching emails"
             : operation.complete;
         activity.context = [
           ...(result.data.subject ? [result.data.subject] : []),
           ...(result.data.nextPageToken ? ["More matches are available."] : []),
+          ...(result.data.coverage?.complete === false
+            ? ["Search coverage is incomplete."]
+            : []),
+          ...(result.data.retainedOnly === true
+            ? ["Only retained mail was searched."]
+            : []),
         ];
         activity.sources = mailSources(result.data.messages);
       }
@@ -819,14 +865,57 @@ const describeActivity = (
       ).safeParse(part.output);
       const command = saveComposeDraftInputSchema.safeParse(part.input);
       if (result.success) {
-        activity.phase = "complete";
-        activity.title = operation.complete;
+        activity.phase =
+          result.data.status === "failed" || result.data.status === "uncertain"
+            ? "unavailable"
+            : "complete";
+        activity.title =
+          result.data.status === "draft_saved"
+            ? operation.complete
+            : sendStatusTitles[result.data.status];
         activity.context = command.success
           ? [command.data.draft.to, command.data.draft.subject].filter(
               (value): value is string =>
                 typeof value === "string" && value !== ""
             )
           : [];
+      }
+      break;
+    }
+    case "get_send_status": {
+      const result = heldSendStatusOutputSchema
+        .nullable()
+        .safeParse(part.output);
+      if (result.success) {
+        activity.phase =
+          result.data === null ||
+          result.data.status === "failed" ||
+          result.data.status === "uncertain"
+            ? "unavailable"
+            : "complete";
+        activity.title =
+          result.data === null
+            ? "No held send found"
+            : sendStatusTitles[result.data.status];
+        activity.context = result.data?.errorMessage
+          ? [result.data.errorMessage]
+          : [];
+      }
+      break;
+    }
+    case "undo_send": {
+      const result = z
+        .strictObject({
+          draftId: z.string().nullable(),
+          status: z.enum(["abandoned", "canceled"]),
+        })
+        .safeParse(part.output);
+      if (result.success) {
+        activity.phase = "complete";
+        activity.title =
+          result.data.status === "abandoned"
+            ? "Canceled the pending send attempt"
+            : operation.complete;
       }
       break;
     }

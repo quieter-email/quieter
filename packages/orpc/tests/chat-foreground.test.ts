@@ -1,8 +1,10 @@
+import { ORPCError } from "@orpc/server";
 import {
   foregroundComposeDraftSchema,
   foregroundSnapshotSchema,
 } from "@quieter/ai/chat-tools";
-import { describe, expect, test } from "vite-plus/test";
+import type { ChatMessagePart } from "@quieter/database/schema";
+import { describe, expect, test, vi } from "vite-plus/test";
 
 import {
   cancelForegroundExchangeParts,
@@ -11,6 +13,7 @@ import {
   normalizeExpiredChatParts,
 } from "../src/chat/continuation";
 import {
+  executeClaimedChatTool,
   resolveForegroundComposeDraftForPersistence,
   toForegroundComposeMessage,
   validateChatRequest,
@@ -22,6 +25,101 @@ const foreground = foregroundSnapshotSchema.parse({
   expiresAt: Date.now() + 60_000,
   generation: 1,
   tabId: "tab-1",
+});
+
+describe("claimed foreground tool failures", () => {
+  test("a denied claim preflight records that no domain operation started", async () => {
+    const execute = vi.fn<() => Promise<unknown>>();
+    const failures: { attempted: boolean; errorText: string }[] = [];
+    const denied = new ORPCError("FORBIDDEN", {
+      message: "Assistant permissions changed.",
+    });
+    await expect(
+      executeClaimedChatTool({
+        beforeExecution: async () => {
+          await Promise.resolve();
+          throw denied;
+        },
+        execute,
+        persistFailure: async (failure) => {
+          failures.push(failure);
+          await Promise.resolve();
+        },
+      })
+    ).rejects.toBe(denied);
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(failures).toContainEqual(
+      expect.objectContaining({ attempted: false })
+    );
+    expect(failures[0]?.errorText).toContain(denied.message);
+  });
+
+  test.each([
+    {
+      effectBeforeDenial: false,
+      name: "a deep preparation denial with no domain writes",
+    },
+    {
+      effectBeforeDenial: true,
+      name: "a denial after an Undo-like status change",
+    },
+  ])(
+    "$name retains the reason and conservative whole-operation evidence",
+    async ({ effectBeforeDenial }) => {
+      let effects = 0;
+      const denied = new ORPCError("FORBIDDEN", {
+        data: { aiAuthorityReason: "read_only", sendNotStarted: true },
+        message: "The assistant is read-only for this inbox.",
+      });
+      let persisted: ChatMessagePart[] = [
+        {
+          errorText: "Unconfirmed claim",
+          state: "output-error",
+          toolCallId: "operation",
+          type: "tool-send_mail",
+        },
+      ];
+      await expect(
+        executeClaimedChatTool({
+          beforeExecution: async () => {
+            await Promise.resolve();
+          },
+          execute: async () => {
+            await Promise.resolve();
+            if (effectBeforeDenial) {
+              effects += 1;
+            }
+            throw denied;
+          },
+          persistFailure: async (failure) => {
+            persisted = [
+              { ...persisted[0], ...failure, type: "tool-send_mail" },
+            ];
+            await Promise.resolve();
+          },
+        })
+      ).rejects.toMatchObject({ status: 403 });
+
+      const merged = interruptedChatParts({
+        errorText: "Reply interrupted.",
+        persistedParts: persisted,
+        retryable: true,
+        streamedParts: [
+          {
+            errorText: "Unconfirmed claim",
+            state: "output-error",
+            toolCallId: "operation",
+            type: "tool-send_mail",
+          },
+        ],
+      }).find((part) => part.toolCallId === "operation");
+      expect(effects).toBe(effectBeforeDenial ? 1 : 0);
+      expect(merged?.attempted).toBeTruthy();
+      expect(merged?.errorText).toContain(denied.message);
+      expect(merged?.errorText).toMatch(/could not be confirmed/iu);
+    }
+  );
 });
 
 describe("interrupted chat history", () => {
@@ -108,6 +206,32 @@ describe("interrupted chat history", () => {
     expect(
       result.some((part) => part.type === "data-foreground-failed")
     ).toBeFalsy();
+  });
+
+  test("interruption and retry retain the server authority instead of streamed metadata", () => {
+    const origin = {
+      kind: "ai",
+      mailboxId: "mailbox",
+      mode: "interactive",
+      policyVersion: 2,
+      userId: "owner",
+    };
+    const persisted = { origin, type: "data-ai-authority" };
+    for (const streamedParts of [
+      [],
+      [{ origin: { kind: "human" }, type: "data-ai-authority" }],
+      [{ text: "Partial reply", type: "text" }],
+    ]) {
+      const interrupted = interruptedChatParts({
+        errorText: "Interrupted.",
+        persistedParts: [persisted],
+        retryable: true,
+        streamedParts,
+      });
+      expect(
+        interrupted.filter((part) => part.type === "data-ai-authority")
+      ).toMatchObject([persisted]);
+    }
   });
 
   test("allows retry only when no answer or tool action was produced", () => {

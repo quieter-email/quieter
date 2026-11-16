@@ -370,9 +370,11 @@ export const queriesMailOperations = {
   getThread: async ({
     context,
     input,
+    recordActivity = true,
   }: {
     context: MailRequestContext;
     input: MailInputs["getThread"];
+    recordActivity?: boolean;
   }) => {
     if (isOrganizationApiMailboxId(input.mailboxId)) {
       return await getOrganizationApiMailThread({
@@ -397,9 +399,11 @@ export const queriesMailOperations = {
                 accessToken,
                 input.threadId,
                 signal,
-                (snapshot) => {
-                  snapshots.push(snapshot);
-                }
+                recordActivity
+                  ? (snapshot) => {
+                      snapshots.push(snapshot);
+                    }
+                  : undefined
               )
           ).catch((error: unknown) => {
             if (isGmailServiceError(error) && error.status === 404) {
@@ -420,6 +424,9 @@ export const queriesMailOperations = {
               context.resHeaders
             ),
           };
+    if (!recordActivity) {
+      return result;
+    }
     const capture = (async () => {
       try {
         await withRequestDatabaseClient(async () => {
@@ -520,6 +527,11 @@ export const queriesMailOperations = {
     input: MailInputs["listThreads"];
   }) => {
     if (isOrganizationApiMailboxId(input.mailboxId)) {
+      if (input.scope === "all_mail") {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "All mail history is unavailable for this mailbox.",
+        });
+      }
       return await listOrganizationApiMailMessages({
         ...input,
         userId: context.userId,
@@ -530,7 +542,11 @@ export const queriesMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
-    if (input.category === "later" && !input.query?.trim()) {
+    if (
+      input.scope !== "all_mail" &&
+      input.category === "later" &&
+      !input.query?.trim()
+    ) {
       return await listLaterMessages({
         ...input,
         contentRevision: selectedMailbox.contentRevision,
@@ -552,6 +568,9 @@ export const queriesMailOperations = {
           messages: page.messages,
           userId: context.userId,
         });
+        if (input.scope === "all_mail") {
+          return { ...page, messages };
+        }
         const visible = await filterMailSnoozeVisibility({
           category: input.category,
           mailboxId: input.mailboxId,
@@ -568,7 +587,7 @@ export const queriesMailOperations = {
       }
     }
 
-    if (input.category === "important") {
+    if (input.scope !== "all_mail" && input.category === "important") {
       const searchExpression = parseCapturedImportanceSearch(input.query);
       const pending: MailSearchExpression[] = searchExpression
         ? [searchExpression]
@@ -627,7 +646,7 @@ export const queriesMailOperations = {
         context,
         input.mailboxId,
         async (accessToken, signal) =>
-          input.category === "drafts"
+          input.scope !== "all_mail" && input.category === "drafts"
             ? await listDraftsWithDetails(accessToken, {
                 maxResults: input.maxResults,
                 pageToken: currentPageToken,
@@ -635,7 +654,10 @@ export const queriesMailOperations = {
                 signal,
               })
             : await listMessagesWithDetails(accessToken, {
-                mailbox: input.category,
+                correspondentEmail: input.correspondentEmail,
+                excludeProtected: input.scope === "all_mail",
+                mailbox:
+                  input.scope === "all_mail" ? undefined : input.category,
                 maxResults: input.maxResults,
                 pageToken: currentPageToken,
                 query: input.query?.trim() || undefined,
@@ -651,6 +673,15 @@ export const queriesMailOperations = {
         ),
         userId: context.userId,
       });
+      if (input.scope === "all_mail") {
+        return {
+          ...page,
+          historyId: page.historyId
+            ? `gmail:${page.historyId}:${selectedMailbox.contentRevision}`
+            : undefined,
+          messages,
+        };
+      }
       const visible = await filterMailSnoozeVisibility({
         category: input.category,
         mailboxId: input.mailboxId,

@@ -17,6 +17,7 @@ export const rotateLegacyGmailCredentials = async () => {
       .select({
         encryptedAccessToken: gmailCredential.encryptedAccessToken,
         encryptedRefreshToken: gmailCredential.encryptedRefreshToken,
+        googleSubject: gmailCredential.googleSubject,
         id: gmailCredential.mailboxId,
       })
       .from(gmailCredential)

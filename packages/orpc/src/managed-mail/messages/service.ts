@@ -16,6 +16,7 @@ import type {
   ManagedMailMailboxState,
 } from "@quieter/database/schema";
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
+import { matchesHistoryCorrespondent } from "@quieter/mail/correspondent-history";
 import type {
   MailCommand,
   MailMutationTarget,
@@ -45,6 +46,8 @@ import {
   sql,
 } from "drizzle-orm";
 
+import { assertMailEffectAllowed } from "../../gmail-request";
+import type { MailRequestContext } from "../../gmail-request";
 import { hydrateMailImportance } from "../../mail-importance";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
@@ -83,6 +86,29 @@ type ManagedMessagePresentationRecord = Pick<
   >;
 
 const MANAGED_MESSAGE_PAGE_SIZE = 15;
+
+const managedMessagePresentationSelection = {
+  bcc: managedMailMessage.bcc,
+  cc: managedMailMessage.cc,
+  createdAt: managedMailMessage.createdAt,
+  direction: managedMailMessage.direction,
+  from: managedMailMessage.from,
+  headers: managedMailMessage.headers,
+  id: managedMailMessage.id,
+  inReplyTo: managedMailMessage.inReplyTo,
+  isRead: managedMailMessage.isRead,
+  mailboxState: managedMailMessage.mailboxState,
+  messageHeaderId: managedMailMessage.messageHeaderId,
+  providerMessageId: managedMailMessage.providerMessageId,
+  references: managedMailMessage.references,
+  replyTo: managedMailMessage.replyTo,
+  sentAt: managedMailMessage.sentAt,
+  snippet: managedMailMessage.snippet,
+  subject: managedMailMessage.subject,
+  threadId: managedMailMessage.threadId,
+  to: managedMailMessage.to,
+  updatedAt: managedMailMessage.updatedAt,
+};
 
 const getManagedPrimarySystemLabelId = (message: {
   direction: "inbound" | "outbound";
@@ -170,6 +196,7 @@ const toMessageListItem = async (
     headers: record.direction === "inbound" ? record.headers : [],
   }),
   snippet: record.snippet ?? undefined,
+  sourceRevision: record.updatedAt.toISOString(),
   subject: record.subject ?? undefined,
   threadAttachmentCount: options.attachmentCount,
   threadAttachmentNames: options.attachmentNames,
@@ -283,11 +310,13 @@ const encodeManagedPageCursor = (record: { id: string; sentAt: Date }) =>
 
 export const listManagedMessages = async (input: {
   category: MailboxCategory;
+  correspondentEmail?: string;
   mailboxId: string;
   maxResults?: number;
   pageToken?: string;
   query?: string;
   threadIds?: string[];
+  scope?: "all_mail";
   userId: string;
 }): Promise<ListMessagesPageResult> => {
   const selectedMailbox = await getAuthorizedManagedMailbox({
@@ -295,45 +324,46 @@ export const listManagedMessages = async (input: {
     userId: input.userId,
   });
 
-  const categoryCondition = getCategoryCondition(input.category);
+  const categoryCondition =
+    input.scope === "all_mail"
+      ? inArray(managedMailMessage.mailboxState, ["active", "done"])
+      : getCategoryCondition(input.category);
   if (!categoryCondition) {
     return { messages: [], resultSizeEstimate: 0 };
   }
 
   const search = parseManagedSearchQuery(input.query);
   const searchCondition = createManagedSearchCondition(input.mailboxId, search);
+  const correspondentEmail = input.correspondentEmail?.trim().toLowerCase();
+  const correspondentCondition =
+    correspondentEmail === undefined
+      ? undefined
+      : createManagedSearchCondition(
+          input.mailboxId,
+          {
+            filters: (["from", "to", "cc", "bcc"] as const).map((type) => ({
+              type,
+              value: correspondentEmail,
+            })),
+            text: "",
+          },
+          { matchMode: "any" }
+        );
   const where = and(
     eq(managedMailMessage.mailboxId, input.mailboxId),
     categoryCondition,
     searchCondition,
     input.threadIds
       ? inArray(managedMailMessage.threadId, input.threadIds)
-      : undefined
+      : undefined,
+    correspondentCondition
   );
   const limit = Math.min(input.maxResults ?? MANAGED_MESSAGE_PAGE_SIZE, 100);
   const matchedMessages = db
-    .selectDistinctOn([managedMailMessage.threadId], {
-      bcc: managedMailMessage.bcc,
-      cc: managedMailMessage.cc,
-      createdAt: managedMailMessage.createdAt,
-      direction: managedMailMessage.direction,
-      from: managedMailMessage.from,
-      headers: managedMailMessage.headers,
-      id: managedMailMessage.id,
-      inReplyTo: managedMailMessage.inReplyTo,
-      isRead: managedMailMessage.isRead,
-      mailboxState: managedMailMessage.mailboxState,
-      messageHeaderId: managedMailMessage.messageHeaderId,
-      providerMessageId: managedMailMessage.providerMessageId,
-      references: managedMailMessage.references,
-      replyTo: managedMailMessage.replyTo,
-      sentAt: managedMailMessage.sentAt,
-      snippet: managedMailMessage.snippet,
-      subject: managedMailMessage.subject,
-      threadId: managedMailMessage.threadId,
-      to: managedMailMessage.to,
-      updatedAt: managedMailMessage.updatedAt,
-    })
+    .selectDistinctOn(
+      [managedMailMessage.threadId],
+      managedMessagePresentationSelection
+    )
     .from(managedMailMessage)
     .where(where)
     .orderBy(
@@ -404,13 +434,7 @@ export const listManagedMessages = async (input: {
             )
             .groupBy(managedMailMessage.threadId),
           db
-            .select({
-              direction: managedMailMessage.direction,
-              id: managedMailMessage.id,
-              isRead: managedMailMessage.isRead,
-              mailboxState: managedMailMessage.mailboxState,
-              threadId: managedMailMessage.threadId,
-            })
+            .select(managedMessagePresentationSelection)
             .from(managedMailMessage)
             .where(
               and(
@@ -449,13 +473,51 @@ export const listManagedMessages = async (input: {
   const attachmentSummaryByThreadId = new Map(
     aggregates.map((record) => [record.threadId, record])
   );
+  const exactAnchorsByThreadId = new Map<
+    string,
+    ManagedMessagePresentationRecord
+  >();
+  if (correspondentEmail !== undefined) {
+    for (const record of threadStates) {
+      if (
+        !matchesHistoryCorrespondent(
+          {
+            bcc: record.bcc ?? undefined,
+            cc: record.cc ?? undefined,
+            from: record.from,
+            labelIds: getManagedMessageLabelIds(record),
+            to: record.to ?? undefined,
+          },
+          correspondentEmail
+        )
+      ) {
+        continue;
+      }
+      const anchor = exactAnchorsByThreadId.get(record.threadId);
+      if (
+        anchor === undefined ||
+        record.sentAt.getTime() > anchor.sentAt.getTime() ||
+        (record.sentAt.getTime() === anchor.sentAt.getTime() &&
+          record.id > anchor.id)
+      ) {
+        exactAnchorsByThreadId.set(record.threadId, record);
+      }
+    }
+  }
+  const anchors =
+    correspondentEmail === undefined
+      ? pageRecords
+      : pageRecords.flatMap((record) => {
+          const anchor = exactAnchorsByThreadId.get(record.threadId);
+          return anchor === undefined ? [] : [anchor];
+        });
 
   return {
     historyId: String(selectedMailbox.contentRevision),
     messages: await hydrateMailImportance(
       input.mailboxId,
       await Promise.all(
-        pageRecords.map(
+        anchors.map(
           async (record) =>
             await toMessageListItem(record, {
               attachmentCount:
@@ -663,6 +725,7 @@ const resolveManagedMoveMailboxState = (
 };
 
 const updateManagedMessageState = async (input: {
+  context?: MailRequestContext;
   mailboxId: string;
   messageId: string;
   changes: { isRead: boolean } | { mailboxState: ManagedMailMailboxState };
@@ -674,6 +737,11 @@ const updateManagedMessageState = async (input: {
     userId: input.userId,
   });
   const { record, customLabels } = await db.transaction(async (tx) => {
+    await assertMailEffectAllowed(
+      input.context ?? { userId: input.userId },
+      input.mailboxId,
+      tx
+    );
     const [lockedRecord] = await tx
       .select({
         direction: managedMailMessage.direction,
@@ -727,6 +795,7 @@ const updateManagedMessageState = async (input: {
 };
 
 export const applyManagedMessageChanges = async (input: {
+  context?: MailRequestContext;
   command: Exclude<MailCommand, { kind: "set-importance" | "set-placement" }>;
   mailboxId: string;
   targets: MailMutationTarget[];
@@ -750,6 +819,11 @@ export const applyManagedMessageChanges = async (input: {
   }
 
   return await db.transaction(async (tx) => {
+    await assertMailEffectAllowed(
+      input.context ?? { userId: input.userId },
+      input.mailboxId,
+      tx
+    );
     const records = await tx
       .select({
         id: managedMailMessage.id,
@@ -879,6 +953,7 @@ export const applyManagedMessageChanges = async (input: {
 };
 
 const updateManagedThreadState = async (input: {
+  context?: MailRequestContext;
   mailboxId: string;
   changes: { isRead: boolean } | { mailboxState: ManagedMailMailboxState };
   threadId: string;
@@ -890,6 +965,11 @@ const updateManagedThreadState = async (input: {
     userId: input.userId,
   });
   const { records, customLabels } = await db.transaction(async (tx) => {
+    await assertMailEffectAllowed(
+      input.context ?? { userId: input.userId },
+      input.mailboxId,
+      tx
+    );
     const lockedRecords = await tx
       .select({
         direction: managedMailMessage.direction,
@@ -968,6 +1048,7 @@ const updateManagedThreadState = async (input: {
 };
 
 export const setManagedMessageReadState = async (input: {
+  context?: MailRequestContext;
   mailboxId: string;
   messageId: string;
   read: boolean;
@@ -979,6 +1060,7 @@ export const setManagedMessageReadState = async (input: {
   });
 
 export const setManagedThreadReadState = async (input: {
+  context?: MailRequestContext;
   mailboxId: string;
   read: boolean;
   threadId: string;
@@ -987,6 +1069,7 @@ export const setManagedThreadReadState = async (input: {
   await updateManagedThreadState({ ...input, changes: { isRead: input.read } });
 
 export const setManagedMessageMailboxState = async (input: {
+  context?: MailRequestContext;
   mailboxId: string;
   messageId: string;
   state: ManagedMailMailboxState;
@@ -998,6 +1081,7 @@ export const setManagedMessageMailboxState = async (input: {
   });
 
 export const setManagedThreadMailboxState = async (input: {
+  context?: MailRequestContext;
   mailboxId: string;
   state: ManagedMailMailboxState;
   threadId: string;

@@ -93,9 +93,16 @@ vi.mock(import("@quieter/gmail"), async (importOriginal) => ({
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The fake supplies an already authorized provider token without OAuth I/O.
 vi.mock("../src/gmail-mailbox-access", () => ({
   runAuthorizedGmailMailbox: async <Result>(
-    _input: unknown,
-    run: (token: string) => Promise<Result>
-  ) => await run("mail-token"),
+    input: { mailboxId: string },
+    run: (
+      token: string,
+      identity: { googleSubject: string; mailboxId: string }
+    ) => Promise<Result>
+  ) =>
+    await run("mail-token", {
+      googleSubject: "fixture-subject",
+      mailboxId: input.mailboxId,
+    }),
 }));
 vi.mock(import("../src/mail-agent/inbox"), () => ({
   enqueueMailAgentMessage: fixtures.enqueue,
@@ -147,7 +154,9 @@ describe("Gmail action receive acknowledgement", () => {
       recoveryBefore: null,
       recoveryPageToken: null,
     });
-    fixtures.enqueue.mockReset().mockResolvedValue();
+    fixtures.enqueue
+      .mockReset()
+      .mockResolvedValue({ admitted: 1, status: "handed_off" });
     fixtures.enqueueWork.mockReset().mockResolvedValue();
     fixtures.history.mockReset().mockResolvedValue({
       hasMore: false,
@@ -202,6 +211,10 @@ describe("Gmail action receive acknowledgement", () => {
           },
           extractCodes: false,
           gmailMessageId: messageId,
+          identity: {
+            googleSubject: "fixture-subject",
+            mailboxId: job.mailboxId,
+          },
           mailboxId: job.mailboxId,
           organizationId: null,
           triggerActions: job.triggerActions,
@@ -317,6 +330,7 @@ describe("Gmail action receive acknowledgement", () => {
         },
         extractCodes: false,
         gmailMessageId: snapshot.id,
+        identity: { googleSubject: "fixture-subject", mailboxId: "mailbox" },
         mailboxId: "mailbox",
         organizationId: null,
         triggerActions: false,

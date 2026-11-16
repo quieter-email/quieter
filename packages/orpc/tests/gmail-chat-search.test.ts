@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import * as gmail from "@quieter/gmail";
 import {
   afterEach,
@@ -17,22 +18,26 @@ import {
 } from "../src/gmail-chat-search";
 import type {
   getAuthorizedGmailMailbox,
-  markGmailMailboxNeedsReconnect,
+  refreshAuthorizedGmailAccessToken,
 } from "../src/gmail-mailbox-access";
+import type { assertMailEffectAllowed } from "../src/gmail-request";
 import type { learnAiMemoryFromMailAction } from "../src/mail/feedback";
 import type { filterMailSnoozeVisibility } from "../src/snooze/queries";
 
 const fixtures = vi.hoisted(() => ({
+  authorize: vi.fn<typeof assertMailEffectAllowed>(),
   getMailbox: vi.fn<typeof getAuthorizedGmailMailbox>(),
   queueMemory: vi.fn<() => Promise<void>>(),
-  refresh: vi.fn<() => Promise<string>>(),
+  reconnect: vi.fn<() => Promise<void>>(),
+  refresh: vi.fn<typeof refreshAuthorizedGmailAccessToken>(),
   visible: vi.fn<typeof filterMailSnoozeVisibility>(),
 }));
 
+vi.mock(import("../src/gmail-request"), () => ({
+  assertMailEffectAllowed: fixtures.authorize,
+}));
 vi.mock(import("../src/gmail-mailbox-access"), () => ({
   getAuthorizedGmailMailbox: fixtures.getMailbox,
-  markGmailMailboxNeedsReconnect:
-    vi.fn<typeof markGmailMailboxNeedsReconnect>(),
   refreshAuthorizedGmailAccessToken: fixtures.refresh,
 }));
 vi.mock(import("../src/ai-memory-capture"), () => ({
@@ -57,6 +62,7 @@ const trashPath = /\/messages\/(?<id>[^/]+)\/trash$/u;
 describe("Gmail chat search and batch actions", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    fixtures.authorize.mockResolvedValue();
     fixtures.getMailbox.mockResolvedValue({
       accessToken: "fixture-token",
       mailbox: {
@@ -64,16 +70,146 @@ describe("Gmail chat search and batch actions", () => {
         emailAddress: "test@example.test",
         encryptedAccessToken: null,
         encryptedRefreshToken: null,
+        googleSubject: "original-subject",
         id: mailbox.mailboxId,
         scopes: "",
         status: "connected",
       },
+      markNeedsReconnect: fixtures.reconnect,
     });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  test("a policy change during credential preparation prevents every unsent batch member", async () => {
+    const prepared =
+      Promise.withResolvers<
+        Awaited<ReturnType<typeof getAuthorizedGmailMailbox>>
+      >();
+    const authorized = await fixtures.getMailbox(mailbox);
+    fixtures.getMailbox.mockReturnValueOnce(prepared.promise);
+    const provider = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", provider);
+    const action = modifyMailBatchForUser({
+      ...mailbox,
+      action: "trash",
+      ids: ["first", "second", "third"],
+      target: "message",
+    });
+    fixtures.authorize.mockRejectedValue(
+      new ORPCError("FORBIDDEN", { message: "Assistant permissions changed." })
+    );
+    prepared.resolve(authorized);
+
+    const result = await action;
+    expect(result.status).toBe("error");
+    expect(
+      result.results.every((item) => item.status === "not_attempted")
+    ).toBeTruthy();
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test("a policy change during token refresh prevents a fresh provider write", async () => {
+    const refreshed =
+      Promise.withResolvers<
+        Awaited<ReturnType<typeof refreshAuthorizedGmailAccessToken>>
+      >();
+    const refreshStarted = Promise.withResolvers<boolean>();
+    fixtures.refresh.mockImplementation(async () => {
+      refreshStarted.resolve(true);
+      return await refreshed.promise;
+    });
+    let writes = 0;
+    const provider: typeof fetch = async () => {
+      writes += 1;
+      return await Promise.resolve(
+        Response.json(
+          { error: { message: "Invalid access", status: "UNAUTHENTICATED" } },
+          { status: 401 }
+        )
+      );
+    };
+    vi.stubGlobal("fetch", provider);
+    const action = modifyMailForUser({
+      ...mailbox,
+      action: "trash",
+      id: "mail",
+      target: "message",
+    });
+    await refreshStarted.promise;
+    fixtures.authorize.mockRejectedValue(
+      new ORPCError("FORBIDDEN", { message: "Assistant permissions changed." })
+    );
+    refreshed.resolve({
+      accessToken: "refreshed-token",
+      markNeedsReconnect: fixtures.reconnect,
+    });
+
+    await expect(action).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(writes).toBe(1);
+  });
+
+  test("a replacement account cannot reuse the original prepared mutation after token refresh", async () => {
+    const original = await fixtures.getMailbox(mailbox);
+    let currentSubject = original.mailbox.googleSubject;
+    fixtures.authorize.mockImplementation(async (context) => {
+      if (context.gmailIdentity?.googleSubject !== currentSubject) {
+        throw new ORPCError("FORBIDDEN", {
+          message: "The connected account changed.",
+        });
+      }
+      await Promise.resolve();
+    });
+    const refreshing = Promise.withResolvers<boolean>();
+    const token =
+      Promise.withResolvers<
+        Awaited<ReturnType<typeof refreshAuthorizedGmailAccessToken>>
+      >();
+    fixtures.refresh.mockImplementation(async () => {
+      refreshing.resolve(true);
+      return await token.promise;
+    });
+    let accepted = 0;
+    const provider: typeof fetch = async (_url, options) => {
+      if (
+        new Headers(options?.headers).get("authorization") ===
+        "Bearer fixture-token"
+      ) {
+        return await Promise.resolve(
+          Response.json(
+            { error: { message: "Invalid access", status: "UNAUTHENTICATED" } },
+            { status: 401 }
+          )
+        );
+      }
+      accepted += 1;
+      return await Promise.resolve(
+        Response.json({ id: "mail", labelIds: ["TRASH"] })
+      );
+    };
+    vi.stubGlobal("fetch", provider);
+    const action = modifyMailForUser({
+      ...mailbox,
+      action: "trash",
+      id: "mail",
+      target: "message",
+    });
+    await refreshing.promise;
+    currentSubject = "replacement-subject";
+    fixtures.getMailbox.mockResolvedValue({
+      ...original,
+      mailbox: { ...original.mailbox, googleSubject: currentSubject },
+    });
+    token.resolve({
+      accessToken: "replacement-token",
+      markNeedsReconnect: fixtures.reconnect,
+    });
+
+    await expect(action).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(accepted).toBe(0);
   });
 
   test("overlaps distinct trash requests and records confirmed successes when the provider interrupts a batch", async () => {
@@ -140,7 +276,10 @@ describe("Gmail chat search and batch actions", () => {
 
   test("retries only requests rejected by authentication after a shared token refresh", async () => {
     const successfulRequests: string[] = [];
-    fixtures.refresh.mockResolvedValue("refreshed-token");
+    fixtures.refresh.mockResolvedValue({
+      accessToken: "refreshed-token",
+      markNeedsReconnect: fixtures.reconnect,
+    });
     const provider: typeof fetch = async (url, options) => {
       const id = trashPath.exec(new URL(z.string().parse(url)).pathname)?.groups
         ?.id;
@@ -254,7 +393,10 @@ describe("Gmail chat search and batch actions", () => {
   });
 
   test("refreshes credentials for verification without repeating a mail change", async () => {
-    fixtures.refresh.mockResolvedValue("refreshed-token");
+    fixtures.refresh.mockResolvedValue({
+      accessToken: "refreshed-token",
+      markNeedsReconnect: fixtures.reconnect,
+    });
     const provider = vi.fn<typeof fetch>(async (request, options) => {
       const url = new URL(z.string().parse(request));
       if (options?.method === "POST" && trashPath.test(url.pathname)) {

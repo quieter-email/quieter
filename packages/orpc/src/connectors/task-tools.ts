@@ -19,6 +19,7 @@ const providerErrorMessages: Record<number, string> = {
 export const requestTaskProvider = async (input: {
   accessToken: string;
   baseUrl: string;
+  beforeEffect?: () => Promise<void>;
   body?: Record<string, unknown>;
   method?: "GET" | "POST" | "PUT";
   path: string;
@@ -29,6 +30,7 @@ export const requestTaskProvider = async (input: {
       ? [input.signal, AbortSignal.timeout(15_000)]
       : [AbortSignal.timeout(15_000)]
   );
+  await input.beforeEffect?.();
   const response = await fetch(new URL(input.path, input.baseUrl), {
     body: input.body === undefined ? undefined : JSON.stringify(input.body),
     headers: {

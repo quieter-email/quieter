@@ -43,6 +43,7 @@ export type MessageListItem = {
   threadAttachmentNames?: string[];
   draftId?: string;
   baseRevision?: string;
+  sourceRevision?: string;
   draftAnchor?: ComposeDraftAnchor;
   snippet?: string;
   subject?: string;
