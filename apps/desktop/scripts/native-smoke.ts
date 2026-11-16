@@ -32,8 +32,18 @@ import type {
 } from "./native-install.ts";
 
 const windowsURIReceipt = z.strictObject({
+  checks: z.strictObject({
+    currentUserCommandExact: z.literal(true),
+    ddeAbsent: z.literal(true),
+    delegateExecuteAbsent: z.literal(true),
+    effectiveCommandExact: z.literal(true),
+    urlProtocolPresent: z.literal(true),
+    userChoiceAllowed: z.literal(true),
+  }),
   handlerVerified: z.literal(true),
   launcherPid: z.number().int().positive(),
+  pathSpellingChanged: z.boolean(),
+  phase: z.literal("complete"),
   secondary: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("no-process-handle") }),
     z.strictObject({
@@ -555,6 +565,7 @@ const main = async (): Promise<void> => {
         return {
           associatedProcesses: app.getAppMetrics().length,
           electronVersion: process.versions.electron,
+          execPath: process.execPath,
           mailHandlerMenu:
             Menu.getApplicationMenu()?.getMenuItemById("default-mail-handler")
               ?.enabled === true,
@@ -736,6 +747,11 @@ const main = async (): Promise<void> => {
       );
       if (process.platform === "win32") {
         assert.ok(report.primaryPid !== null);
+        assert.equal(
+          await realpath(state.execPath),
+          await realpath(executable),
+          "The native executable differs from the owned installed candidate."
+        );
         assert.ok(
           await current.evaluate(({ app }) =>
             app.isDefaultProtocolClient(
@@ -758,7 +774,7 @@ const main = async (): Promise<void> => {
             "-Uri",
             uri,
             "-Executable",
-            executable,
+            state.execPath,
             "-UserData",
             state.userData,
             "-PrimaryPid",
