@@ -280,6 +280,7 @@ export const MailboxMessagesPanel = ({
         ) : null}
         {isMessageRouteOpen && !threadLoadFailed ? (
           <MessageDetail
+            selectionMode={messageId ? "message" : "thread"}
             isSharedManagedMailbox={isSharedManagedMailbox}
             onConversationOpened={recordOpened}
             showDesktopBack={onePanelDesktop}

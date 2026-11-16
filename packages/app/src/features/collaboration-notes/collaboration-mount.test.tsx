@@ -4,6 +4,8 @@ import { setTimeout } from "node:timers/promises";
 import { useMailboxListController } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-list-controller";
 import { useMailboxSearchActions } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import type { MailboxSearchPatch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
+import { MessageDetail } from "@quieter/app/features/message-thread/components/message-detail";
+import type { MessageViewProps } from "@quieter/app/features/message-thread/components/message-view-types";
 import type {
   MessageListItem,
   ThreadMessagesResult,
@@ -18,6 +20,9 @@ import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import type { rpc } from "@quieter/app/lib/orpc";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
+import type { CollaborationState } from "@quieter/mail/collaboration";
+import type { ButtonProps } from "@quieter/ui/button";
+import type { Field, FieldLabel } from "@quieter/ui/field";
 import {
   QueryClient,
   QueryClientProvider,
@@ -33,6 +38,7 @@ import {
   useBlocker,
 } from "@tanstack/react-router";
 import { act, useLayoutEffect } from "react";
+import type { ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
 import {
   afterEach,
@@ -44,8 +50,10 @@ import {
 } from "vite-plus/test";
 
 const server = vi.hoisted(() => ({
+  get: vi.fn<typeof rpc.collaboration.get>(),
   getThread: vi.fn<typeof rpc.mail.getThread>(),
   listThreads: vi.fn<typeof rpc.mail.listThreads>(),
+  notes: vi.fn<typeof rpc.collaboration.notes.list>(),
   syncMailbox: vi.fn<typeof rpc.mail.syncMailbox>(),
 }));
 
@@ -55,6 +63,11 @@ vi.mock(import("@quieter/app/lib/orpc"), async (importOriginal) => {
     ...actual,
     rpc: {
       ...actual.rpc,
+      collaboration: {
+        ...actual.rpc.collaboration,
+        get: server.get,
+        notes: { ...actual.rpc.collaboration.notes, list: server.notes },
+      },
       mail: {
         ...actual.rpc.mail,
         getThread: server.getThread,
@@ -67,6 +80,93 @@ vi.mock(import("@quieter/app/lib/orpc"), async (importOriginal) => {
 vi.mock(import("@quieter/app/lib/error-toast"), () => ({
   toastError: vi.fn<() => void>(),
 }));
+vi.mock(import("@quieter/ui/action-footer"), () => ({
+  ActionFooter: ({ children }: ComponentProps<"div">) => <div>{children}</div>,
+}));
+vi.mock(import("@quieter/ui/alert-dialog"), () => ({
+  AlertDialog: () => <span hidden />,
+  AlertDialogContent: () => <span hidden />,
+  AlertDialogDescription: () => <span hidden />,
+  AlertDialogTitle: () => <span hidden />,
+}));
+vi.mock(import("@quieter/ui/button"), () => ({
+  Button: ({ children, disabled, onClick }: ButtonProps) => (
+    <button
+      disabled={disabled}
+      onClick={(event) => {
+        onClick?.(Object.assign(event, { preventBaseUIHandler: () => {} }));
+      }}
+      type="button"
+    >
+      {children}
+    </button>
+  ),
+}));
+vi.mock(import("@quieter/ui/checkbox"), () => ({
+  Checkbox: () => <span hidden />,
+  CheckboxIndicator: () => <span hidden />,
+}));
+vi.mock(import("@quieter/ui/date-time-preferences"), () => ({
+  useDateTimePreferences: () => ({ timeFormat: "24h", weekStartsOn: 1 }),
+}));
+vi.mock(import("@quieter/ui/field"), () => ({
+  Field: ({ children }: ComponentProps<typeof Field>) => (
+    <div>{typeof children === "function" ? null : children}</div>
+  ),
+  FieldLabel: ({ children, htmlFor }: ComponentProps<typeof FieldLabel>) => (
+    <label htmlFor={htmlFor}>
+      {typeof children === "function" ? null : children}
+    </label>
+  ),
+}));
+vi.mock(import("@quieter/ui/icon"), () => ({ Icon: () => <span hidden /> }));
+vi.mock(import("@quieter/ui/input"), () => ({ Input: () => <span hidden /> }));
+vi.mock(import("@quieter/ui/popover"), () => ({
+  Popover: () => <span hidden />,
+  PopoverContent: () => <span hidden />,
+  PopoverTitle: () => <span hidden />,
+  PopoverTrigger: () => <span hidden />,
+}));
+vi.mock(import("@quieter/ui/surface"), () => ({
+  Surface: ({ children, ...props }: ComponentProps<"div">) => (
+    <div {...props}>{children}</div>
+  ),
+}));
+vi.mock(import("@quieter/ui/text"), () => ({
+  Text: ({ children }: ComponentProps<"div">) => <div>{children}</div>,
+}));
+vi.mock(import("@quieter/ui/textarea"), () => ({
+  Textarea: ({
+    disabled,
+    id,
+    maxLength,
+    onChange,
+    placeholder,
+    required,
+    value,
+  }: ComponentProps<"textarea">) => (
+    <textarea
+      disabled={disabled}
+      id={id}
+      maxLength={maxLength}
+      onChange={onChange}
+      placeholder={placeholder}
+      required={required}
+      value={value}
+    />
+  ),
+}));
+vi.mock(
+  import("@quieter/app/features/message-thread/components/message-view"),
+  async () => {
+    const { ThreadNotes } = await import("./thread-notes");
+    return {
+      MessageView: ({ mailboxId, message }: MessageViewProps) => (
+        <ThreadNotes mailboxId={mailboxId} threadId={message.threadId} />
+      ),
+    };
+  }
+);
 
 const settle = async () => {
   await act(async () => {
@@ -75,7 +175,7 @@ const settle = async () => {
 };
 
 const fixtures: { dispose: () => void }[] = [];
-const mount = async (url: string) => {
+const mount = async (url: string, withReader = false) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { gcTime: Infinity, retry: false } },
   });
@@ -106,7 +206,21 @@ const mount = async (url: string) => {
       enableBeforeUnload: false,
       shouldBlockFn: () => control.blocked,
     });
-    return <output>{data.selectedMessage?.bodyText ?? ""}</output>;
+    return withReader ? (
+      <MessageDetail
+        activeMailbox="inbox"
+        isSharedManagedMailbox
+        isPending={data.messagesPending}
+        mailboxActions={data.mailboxActions}
+        mailboxId={search.mailboxId ?? "shared-a"}
+        mailboxProvider="managed"
+        pendingActions={data.pendingActions}
+        selectedMessage={data.selectedMessage}
+        selectionMode={search.messageId ? "message" : "thread"}
+      />
+    ) : (
+      <output>{data.selectedMessage?.bodyText ?? ""}</output>
+    );
   };
   const rootRoute = createRootRoute({ component: Outlet });
   const appRoute = createRoute({
@@ -168,6 +282,29 @@ describe("canonical collaboration destinations", () => {
     vi.resetAllMocks();
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const snapshot: CollaborationState = {
+      href: "/?mailboxId=shared-a&threadId=thread",
+      mailboxId: "shared-a",
+      permissions: {
+        assignOthers: true,
+        claimSelf: true,
+        moderateNotes: true,
+        read: true,
+        writeOwnNotes: true,
+      },
+      role: "manager" as const,
+      state: {
+        cursor: {
+          contextId: "a8ce9de4-f393-44bb-9c8c-ef77e25c5d87",
+          revision: "1",
+        },
+        kind: "prepared" as const,
+      },
+      threadId: "thread",
+    };
+    server.get.mockResolvedValue(snapshot);
+    server.notes.mockResolvedValue({ next: null, notes: [], snapshot });
     server.getThread.mockImplementation(async ({ threadId }) => {
       await setTimeout(0);
       return {
@@ -243,6 +380,64 @@ describe("canonical collaboration destinations", () => {
     expect(app.router.state.location.search).not.toHaveProperty("messageId");
     await app.navigate({ messageId: "latest", threadId: "off-folder" });
     expect(app.read().selectedMessage).toMatchObject(enriched);
+  });
+
+  test("keeps an unsaved real notes form when the same thread gains another message", async () => {
+    const first: MessageListItem = {
+      bodyText: "First mail",
+      id: "first",
+      threadId: "thread",
+    };
+    server.getThread.mockResolvedValue({
+      messages: [first],
+      threadId: "thread",
+    });
+    const app = await mount("/?mailboxId=shared-a&threadId=thread", true);
+    await vi.waitFor(async () => {
+      await app.settle();
+      expect(
+        app.container.querySelector("[data-internal-notes] button")
+      ).not.toBeNull();
+    });
+    act(() => {
+      app.container
+        .querySelector<HTMLButtonElement>("[data-internal-notes] button")
+        ?.click();
+    });
+    await vi.waitFor(async () => {
+      await app.settle();
+      expect(app.container.querySelector("textarea")).not.toBeNull();
+    });
+    const textarea = app.container.querySelector("textarea");
+    if (!textarea) {
+      throw new Error("Note form is unavailable.");
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value"
+    );
+    act(() => {
+      descriptor?.set?.call(textarea, "Unsaved internal note");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => {
+      app.queryClient.setQueryData<ThreadMessagesResult>(
+        getThreadQueryKey("shared-a", "thread"),
+        {
+          messages: [
+            first,
+            { bodyText: "New incoming mail", id: "new", threadId: "thread" },
+          ],
+          threadId: "thread",
+        }
+      );
+    });
+    await vi.waitFor(async () => {
+      await app.settle();
+      expect(app.read().selectedMessage?.id).toBe("new");
+    });
+    expect(app.container.querySelector("textarea")).toBe(textarea);
+    expect(textarea.value).toContain("Unsaved internal note");
   });
 
   test("uses the existing reader seed for an all-draft thread without navigating to compose", async () => {

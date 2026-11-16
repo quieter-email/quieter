@@ -509,6 +509,12 @@ const MailboxWorkspaceContentInner = ({
     !isSnippetMailbox &&
     !isScheduledMailbox &&
     (selectedView === "inbox" || allInboxesActive);
+  const unavailableConversation =
+    mailViewActive &&
+    !messageId &&
+    !!routeThreadId &&
+    !!routeMailboxId &&
+    routeMailboxId !== selectedMailboxId;
   const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);
   const senderMailboxes = mailboxes
     .filter(
@@ -659,13 +665,7 @@ const MailboxWorkspaceContentInner = ({
     };
   }, []);
   let mailboxContent: ReactNode;
-  if (
-    mailViewActive &&
-    !messageId &&
-    routeThreadId &&
-    routeMailboxId &&
-    routeMailboxId !== selectedMailboxId
-  ) {
+  if (unavailableConversation) {
     mailboxContent = (
       <WorkspaceSection>
         <EmptyMessageState
@@ -1178,7 +1178,9 @@ const MailboxWorkspaceContentInner = ({
                           docked
                           visible={assistantOpen && assistantTab === "chat"}
                           activeMailbox={activeMailbox ?? "inbox"}
-                          mailContext={chatContext}
+                          mailContext={
+                            unavailableConversation ? undefined : chatContext
+                          }
                           chatId={chatId}
                           draftChatKey={draftChatKey}
                           mailboxId={selectedMailboxId}
