@@ -128,12 +128,6 @@ export const mailboxProcedures = {
       async ({ context, input }) =>
         await getManagedMailboxDetails({ ...input, userId: context.userId })
     ),
-  listExternalUnreadCounts: protectedProcedure
-    .route({ method: "GET" })
-    .handler(
-      async ({ context }) =>
-        await listAccessibleExternalUnreadCounts({ userId: context.userId })
-    ),
   listGmailThreadUsefulDetails: protectedProcedure
     .route({ method: "GET" })
     .input(
@@ -150,6 +144,12 @@ export const mailboxProcedures = {
         userId: context.userId,
       });
     }),
+  listGmailUnreadCounts: protectedProcedure
+    .route({ method: "GET" })
+    .handler(
+      async ({ context }) =>
+        await listAccessibleExternalUnreadCounts({ userId: context.userId })
+    ),
   listGmailUsefulDetails: protectedProcedure
     .route({ method: "GET" })
     .input(z.object({ mailboxId: mailboxIdSchema }))

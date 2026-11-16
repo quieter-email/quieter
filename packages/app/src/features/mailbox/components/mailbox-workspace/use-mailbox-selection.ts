@@ -65,7 +65,7 @@ const toMailboxGroup = (
   group: MailboxGroup,
   unreadCounts: ReadonlyMap<
     string,
-    RouterOutputs["mail"]["listExternalUnreadCounts"][number]
+    RouterOutputs["mail"]["listGmailUnreadCounts"][number]
   >
 ) => ({
   id: group.id,

@@ -46,7 +46,7 @@ export const gmailUnreadCountsQueryOptions = (enabled = true) =>
   queryOptions({
     enabled,
     queryFn: async ({ signal }) =>
-      await rpc.mail.listExternalUnreadCounts(undefined, { signal }),
+      await rpc.mail.listGmailUnreadCounts(undefined, { signal }),
     queryKey: getGmailUnreadCountsQueryKey(),
     refetchInterval: MAILBOX_ACCOUNT_HEALTH_CHECK_INTERVAL_MS,
     refetchIntervalInBackground: false,
