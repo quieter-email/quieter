@@ -32,6 +32,20 @@ Electron keeps sessions in the main process. Its storage is encrypted using the 
 
 Gmail connection, external connectors, checkout, legal pages, and passkey management open in the system browser. Returning to the desktop refreshes server state. Browser analytics and consent scripts are not initialized by the desktop entrypoint.
 
+## Native email links and windows
+
+Candidate installers advertise `mailto` support. The Windows installer and uninstaller require quieter to be closed. They stop with an error instead of terminating app processes. Use **File > Use quieter for email links** to request the operating system's default email-link association. Windows and Linux users can press Alt to reveal the application menu. The operating system may require a final choice in its default-app settings. Startup does not silently replace the current mail handler.
+
+Email links use the existing mailbox-scoped composer, including recipients, subject, and body. They do not send a message automatically. Content links use `com.quieter.desktop:/mail?mailboxId=<id>&threadId=<id>&messageId=<id>`. Desktop checks current account access before passing that complete identity to the existing mail view. It reads the thread only through the normal view after consuming the session-bound link. An unavailable mailbox cannot fall back to another account or mailbox.
+
+A link received while verified signed out can wait for sign-in and onboarding. Pending links are kept only in memory, with the latest pending link taking precedence. Explicit sign-out and account or session replacement discard old account intents. If authorization or navigation fails, the existing action error is shown and opening the link again retries after recovery.
+
+Another app instance or a native link restores a minimized window and reopens a closed main window when the desktop process is still running. Closing the last window quits on Windows and Linux. macOS keeps the process available until Quit. Unread badges and tray residency are deferred for the first release.
+
+On Windows, a launch with an explicit `--user-data-dir` preserves that profile in the custom-scheme handler and in email-link registration requested from the File menu. Electron scopes its single-instance lock to that directory. Launches without an explicit profile keep the existing registration behavior.
+
+These handlers and installer declarations require native Windows/macOS installation and OS-dispatch acceptance before a platform release claim. Event-handler tests, unpacked runtime checks, and successful artifact builds do not establish OS registration or default-app behavior.
+
 ## Reminder notifications
 
 Enable native notifications from the Reminders tab. The preference belongs to the signed-in account. Notifications contain generic text rather than reminder titles or mail content. Clicking one restores the app and opens its mailbox and reminder. Sign-out clears active notifications.
@@ -54,7 +68,35 @@ Sender-logo URLs come from the web backend, using its `VITE_LOGO_DEV_PUBLISHABLE
 
 The desktop build workflow runs only when started manually from GitHub Actions. It produces platform artifacts without publishing a release. Signing, Apple notarization, and release distribution require separate release credentials and authorization. There is no updater endpoint configured. Before distributing a build, deploy the matching server Electron plugin, `/desktop/auth`, and `/api/desktop/session` through the protected web deployment workflow. The Electron plugin uses existing auth tables; no migration is needed.
 
-Packaged error reporting uses the public `VITE_SENTRY_DSN` at build time, supplied by the manual workflow's repository variable. Main-process failures and renderer errors use the shared privacy filters. Local development reporting stays disabled unless `VITE_QUIETER_LOCAL_TELEMETRY=true` is explicitly set.
+Packaged error reporting uses the public `VITE_SENTRY_DSN` at build time. The manual artifact workflow leaves it empty so native fixture checks cannot report to production telemetry. A protected distribution build must configure its intended reporting separately. Main-process failures and renderer errors use the shared privacy filters. Local development reporting stays disabled unless `VITE_QUIETER_LOCAL_TELEMETRY=true` is explicitly set.
+
+## Native candidate checks
+
+The manual Desktop build workflow runs a signed-out native smoke check against its packaged candidate on each runner. It records startup, secure storage, the renderer boundary, real secondary-process window restoration, signed-out pending-link denial and owned-process cleanup. macOS also checks restoration after closing the main window. The fixture uses an isolated profile and loopback backend without accounts or provider writes. Evidence includes a safe screenshot and `native-smoke.json`.
+
+After building a clean checkout with telemetry disabled, run this from the repository root on Windows or macOS:
+
+```sh
+vp run @quieter/desktop#test:native --revision <full-SHA> --output <owned-evidence-directory>
+```
+
+Linux needs Xvfb, DBus, Openbox, xprop and GNOME Keyring. On an isolated test machine with the candidate DEB installed:
+
+```sh
+xvfb-run -a dbus-run-session -- vp run @quieter/desktop#test:native --revision <full-SHA> --output <owned-evidence-directory> --executable /opt/quieter/quieter
+```
+
+The check starts and stops its own window manager and Secret Service. It never selects the default mail handler. Local invocations without an explicit executable use an unpacked application.
+
+The manual workflow adds `--install-candidate` on Windows and macOS. On a fresh disposable runner, this installs the actual Windows NSIS candidate for its current user or copies the app from the actual read-only macOS DMG to an owned temporary location. The same smoke process owns installation, its private profile, the app and final cleanup. Linux CI installs its DEB before the existing smoke invocation.
+
+The report includes the installer hash, installation method, actual OS version, owned native process IDs and installation cleanup. Windows also invokes the actual installer and its exact uninstaller while its own app is open. Each must refuse while the same primary process stays alive. After the smoke stops the app, cleanup invokes only the exact owned uninstaller. Missing process-stop proof retains the installation and fails the check. macOS detaches its DMG before the smoke and removes only its owned app copy afterward.
+
+Installed Windows and macOS checks also dispatch a synthetic content URI through the OS. Windows first requires both the current-user and effective registry commands to name the exact installed executable and private profile, with no different user-selected handler. A fixed PowerShell script passes the URI as data to `Process.Start` with `UseShellExecute` and the `open` verb. It records the launcher PID and any returned secondary-process handle and clean exit. A shell broker may return no process handle, which the receipt records explicitly. macOS invokes `/usr/bin/open -a` with the exact owned app bundle. This checks AppleEvent delivery to the running candidate without testing the default app association.
+
+Both checks require the actual native event, one restored window, the same primary PID and private profile, and signed-out refusal to expose the link. The full content identity contains only synthetic mailbox, thread and message IDs. Directly launched tools receive the loopback fixture environment. The Windows OS-dispatched secondary must reach the same profile and exit through the singleton path before guarded app startup. This does not rely on a shell broker forwarding environment variables. The probe never requests a default-mail change. Linux keeps the existing installed-DEB and direct secondary-process checks.
+
+Windows CI can run a Server edition. Its recorded OS caption and product type do not establish Windows client support. The macOS copy does not establish Gatekeeper or notarization acceptance. A passing OS-dispatch case proves only the recorded signed-out installed candidate and its private profile. Default-app choice, real sign-in, notifications, signing, notarization, performance budgets and updates remain separate release gates.
 
 ## New-mail notification preparation
 

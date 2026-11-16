@@ -14,6 +14,7 @@ import { createRoot } from "react-dom/client";
 
 import { DESKTOP_TITLE_BAR_HEIGHT } from "../shared/bridge";
 import { DesktopShell } from "./desktop-shell";
+import { useNativeMailLinks } from "./native-links";
 import { router } from "./router";
 import { registerSignOutCleanup } from "./sign-out-cleanup";
 
@@ -49,6 +50,7 @@ document.documentElement.style.setProperty(
 const SessionEvents = () => {
   const { data, refetch } = authClient.useSession();
   const userId = data?.user.id ?? null;
+  useNativeMailLinks(userId);
   useEffect(() => {
     void (async () => {
       try {
