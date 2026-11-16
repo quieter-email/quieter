@@ -638,6 +638,17 @@ const rehideBinding = () => {
 };
 
 describe("Snooze semantic restoration", () => {
+  test("refuses Cancel Undo after an unrelated anchor advances the thread placement owner", () => {
+    const input = planning(snoozeOriginal("cancel"));
+    expect(planMailUndo(input).plan).not.toBeNull();
+    expect(
+      planMailUndo({
+        ...input,
+        latestPlacementSequence: "90071992547409931235",
+      })
+    ).toMatchObject({ items: [{ status: "changed" }], plan: null });
+  });
+
   test("rejects a directly installable legacy rehide plan before its new hide is acknowledged", () => {
     const original = snoozeOriginal("return-now");
     const { plan } = planMailUndo(planning(original));

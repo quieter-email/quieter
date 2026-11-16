@@ -908,6 +908,56 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
     expect(message?.state).toBe("active");
   });
 
+  test("Cancel followed by Done on another anchor loses the unchanged hidden schedule owner", async () => {
+    await seed({ id: "outside", state: "done" });
+    await seed({ id: "anchor" });
+    const first = await snooze();
+    const id = first.snooze?.id ?? "";
+    await change({
+      command: { kind: "cancel" },
+      version: first.snooze?.version ?? -1,
+    });
+    const [cancelled] = await fixture.client<
+      { version: number; hideOperationId: string }[]
+    >`select version, "hideOperationId" from "mailSnooze" where id=${id}`;
+    if (cancelled === undefined) {
+      throw new Error("Expected a cancelled schedule.");
+    }
+    const done = await applyMailPlacement({
+      context: { userId: "actor" },
+      input: {
+        command: { kind: "set-placement", placement: "done" },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [{ messageIds: ["outside"], threadId: "conversation" }],
+      },
+    });
+    expect(done.targets[0]?.status).toBe("applied");
+    const [unchanged] = await fixture.client<
+      { status: string; version: number; hideOperationId: string }[]
+    >`select status, version, "hideOperationId" from "mailSnooze" where id=${id}`;
+    expect(unchanged).toMatchObject({ ...cancelled, status: "cancelled" });
+    expect(done.targets[0]?.operationId).not.toBe(cancelled.hideOperationId);
+    const [hidden] = await fixture.client<
+      { state: string }[]
+    >`select "mailboxState" as state from "managedMailMessage" where id='anchor'`;
+    expect(hidden?.state).toBe("done");
+    await fixture.client`update "mailSnooze" set status='active', version=version+1 where id=${id}`;
+    await makeDue(id);
+    await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+    const [finished] = await fixture.client<
+      { status: string; code: string }[]
+    >`select status, code from "mailSnooze" where id=${id}`;
+    expect(finished).toMatchObject({
+      code: "predecessor_lost",
+      status: "suspended",
+    });
+    const [stillHidden] = await fixture.client<
+      { state: string }[]
+    >`select "mailboxState" as state from "managedMailMessage" where id='anchor'`;
+    expect(stillHidden?.state).toBe("done");
+  });
+
   test.each(["new", "historical"])(
     "a restored Return now schedule requires its %s hide owner at the actual due worker",
     async (ownership) => {
