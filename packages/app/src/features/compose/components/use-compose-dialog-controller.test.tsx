@@ -278,6 +278,7 @@ const mount = async (draft = initial(), initialDraftNeedsSave = false) => {
       initialDraftNeedsSave,
       mailboxId,
       normalizeHtml: (html) => html,
+      onUnresolvedSnippetFields: vi.fn<(fields: string[]) => void>(),
     });
     useLayoutEffect(() => {
       controller = value;
