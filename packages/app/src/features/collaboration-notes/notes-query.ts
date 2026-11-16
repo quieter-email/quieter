@@ -94,11 +94,12 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
       const active = store.get();
       if (!signal.aborted && active.epoch === epoch) {
         if (
-          active.authority.kind === "ready" &&
-          ((!active.authority.permissions.writeOwnNotes &&
-            result.permissions.writeOwnNotes) ||
-            (!active.authority.permissions.moderateNotes &&
-              result.permissions.moderateNotes))
+          active.authority.kind === "retry" ||
+          (active.authority.kind === "ready" &&
+            ((!active.authority.permissions.writeOwnNotes &&
+              result.permissions.writeOwnNotes) ||
+              (!active.authority.permissions.moderateNotes &&
+                result.permissions.moderateNotes)))
         ) {
           restart(true);
         } else {

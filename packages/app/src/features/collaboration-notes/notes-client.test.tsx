@@ -997,6 +997,77 @@ describe("internal notes client behavior", () => {
       expect(server.mutate).not.toHaveBeenCalled();
     });
 
+    test("retry recovery retires an older reader validation without losing the recovered edit", async () => {
+      const fixture = await edit();
+      act(() => {
+        fixture.read().store.setState((current) =>
+          transitionNotesClient(current, {
+            body: "Keep this recovered edit",
+            kind: "change",
+          })
+        );
+      });
+      const pending = Promise.withResolvers<CollaborationNoteResult>();
+      server.note.mockReturnValueOnce(pending.promise);
+      act(() => {
+        void fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "private", "attempt"],
+        });
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(
+          fixture.queryClient.isFetching({
+            queryKey: [...fixture.read().prefix, "private", "attempt"],
+          })
+        ).toBeGreaterThan(0);
+      });
+      server.notes.mockRejectedValueOnce(new Error("Temporary read failure"));
+      await act(async () => {
+        await fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "private", "notes"],
+        });
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(fixture.read().client.authority.kind).toBe("retry");
+      });
+      expect(fixture.read().draftVisible).toBeFalsy();
+      expect(fixture.read().client.attempt).toMatchObject({
+        body: "Keep this recovered edit",
+        expected: cursor,
+      });
+      await act(async () => {
+        await fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "authority"],
+        });
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(fixture.read().draftVisible).toBeTruthy();
+      });
+      await act(async () => {
+        pending.resolve({
+          note: { ...note, actions: { edit: false, remove: false } },
+          snapshot: readerSnapshot,
+        });
+        await pending.promise;
+      });
+      expect(fixture.read().client.attempt).toMatchObject({
+        body: "Keep this recovered edit",
+        expected: cursor,
+      });
+      expect(fixture.read().draftVisible).toBeTruthy();
+      expect(fixture.read().canWrite).toBeTruthy();
+      expect(server.mutate).not.toHaveBeenCalled();
+    });
+
     test("explicit reader evidence during retry cancels the draft and an older pending get", async () => {
       const fixture = await edit();
       act(() => {
