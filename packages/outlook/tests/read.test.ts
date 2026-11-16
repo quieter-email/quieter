@@ -6,6 +6,7 @@ import {
   getOutlookDeltaPage,
   getOutlookMessage,
   listOutlookConversationMessages,
+  listOutlookDraftMessages,
   OutlookGraphError,
 } from "../src/graph";
 import type { OutlookMessage, OutlookSystemFolders } from "../src/graph";
@@ -149,6 +150,124 @@ describe("Outlook read boundary", () => {
     await expect(
       listOutlookConversationMessages(context, {
         conversationId: "other-conversation",
+      })
+    ).rejects.toMatchObject({ code: "invalid_response" });
+  });
+
+  test("preserves separate drafts in one conversation and follows scoped search pages", async () => {
+    const query = '"subject:proposal"';
+    const next = new URL(
+      `https://graph.microsoft.com/v1.0/me/mailFolders/${folders.drafts}/messages`
+    );
+    next.searchParams.set("$search", query);
+    next.searchParams.set("$skiptoken", "opaque-drafts-page");
+    const drafts = ["first-draft", "second-draft"].map((id) => ({
+      ...message,
+      id,
+      isDraft: true,
+      parentFolderId: folders.drafts,
+    }));
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    fetch.mockImplementationOnce(async (resource) => {
+      const url = new URL(
+        typeof resource === "string" || resource instanceof URL
+          ? resource
+          : resource.url
+      );
+      expect(url.searchParams.get("$search")).toBe(query);
+      expect(url.searchParams.has("$orderby")).toBeFalsy();
+      return await Promise.resolve(
+        Response.json({ "@odata.nextLink": next.href, value: drafts })
+      );
+    });
+    fetch.mockResolvedValueOnce(Response.json({ value: [] }));
+    vi.stubGlobal("fetch", fetch);
+    const input = { folderId: folders.drafts, maxResults: 2, query };
+    const page = await listOutlookDraftMessages(context, input);
+    expect(page.values.map((draft) => draft.id)).toContain("first-draft");
+    expect(page.values.map((draft) => draft.id)).toContain("second-draft");
+    await expect(
+      listOutlookDraftMessages(context, { ...input, pageUrl: page.nextPageUrl })
+    ).resolves.toMatchObject({ values: [] });
+  });
+
+  test.each([
+    "https://outside.invalid/v1.0/me/mailFolders/DraftsId/messages?$skiptoken=opaque",
+    "https://graph.microsoft.com/v1.0/me/mailFolders/Other/messages?$skiptoken=opaque",
+    "https://graph.microsoft.com/v1.0/me/mailFolders/DraftsId/messages?$search=different",
+  ])(
+    "rejects a draft continuation outside its authorized scope",
+    async (pageUrl) => {
+      const fetch = vi.fn<typeof globalThis.fetch>();
+      vi.stubGlobal("fetch", fetch);
+      await expect(
+        listOutlookDraftMessages(context, {
+          folderId: folders.drafts,
+          maxResults: 2,
+          pageUrl,
+          query: '"subject:proposal"',
+        })
+      ).rejects.toMatchObject({ code: "invalid_response" });
+      expect(fetch).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each([
+    { ...message, isDraft: false, parentFolderId: folders.drafts },
+    { ...message, isDraft: true, parentFolderId: folders.inbox },
+  ])(
+    "rejects provider rows outside the requested Drafts folder",
+    async (draft) => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn<typeof globalThis.fetch>()
+          .mockResolvedValue(Response.json({ value: [draft] }))
+      );
+      await expect(
+        listOutlookDraftMessages(context, {
+          folderId: folders.drafts,
+          maxResults: 1,
+        })
+      ).rejects.toMatchObject({ code: "invalid_response" });
+    }
+  );
+
+  test("rejects a provider page that exceeds its requested budget", async () => {
+    const draft = { ...message, isDraft: true, parentFolderId: folders.drafts };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof globalThis.fetch>()
+        .mockResolvedValue(
+          Response.json({ value: [draft, { ...draft, id: "second-draft" }] })
+        )
+    );
+    await expect(
+      listOutlookDraftMessages(context, {
+        folderId: folders.drafts,
+        maxResults: 1,
+      })
+    ).rejects.toMatchObject({ code: "invalid_response" });
+  });
+
+  test("rejects a draft page that points back to its current request", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof globalThis.fetch>(
+        async (resource) =>
+          await Promise.resolve(
+            Response.json({
+              "@odata.nextLink": new Request(resource).url,
+              value: [],
+            })
+          )
+      )
+    );
+    await expect(
+      listOutlookDraftMessages(context, {
+        folderId: folders.drafts,
+        maxResults: 2,
       })
     ).rejects.toMatchObject({ code: "invalid_response" });
   });

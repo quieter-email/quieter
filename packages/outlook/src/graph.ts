@@ -502,6 +502,59 @@ export const listOutlookConversationMessages = async (
   return { nextPageUrl: page["@odata.nextLink"], values: page.value };
 };
 
+export const listOutlookDraftMessages = async (
+  context: OutlookReadContext,
+  input: {
+    folderId: string;
+    maxResults: number;
+    pageUrl?: string;
+    query?: string;
+  }
+): Promise<Page<OutlookMessage>> => {
+  if (
+    !Number.isSafeInteger(input.maxResults) ||
+    input.maxResults < 1 ||
+    input.maxResults > 100
+  ) {
+    throw new OutlookGraphError("invalid_response");
+  }
+  const resource: Resource = {
+    query: {
+      ...(input.query === undefined
+        ? { $orderby: "lastModifiedDateTime desc" }
+        : { $search: input.query }),
+      $select: MESSAGE_FIELDS,
+      $top: String(input.maxResults),
+    },
+    segments: ["v1.0", "me", "mailFolders", { id: input.folderId }, "messages"],
+  };
+  const page = await readGraphJson(
+    context,
+    resource,
+    messagePageSchema,
+    input.pageUrl
+  );
+  if (
+    page.value.length > input.maxResults ||
+    new Set(page.value.map((message) => message.id)).size !==
+      page.value.length ||
+    page.value.some(
+      (message) => !message.isDraft || message.parentFolderId !== input.folderId
+    )
+  ) {
+    throw new OutlookGraphError("invalid_response");
+  }
+  const nextPageUrl = page["@odata.nextLink"];
+  if (
+    nextPageUrl !== undefined &&
+    getReadUrl(resource, nextPageUrl).href ===
+      getReadUrl(resource, input.pageUrl).href
+  ) {
+    throw new OutlookGraphError("invalid_response");
+  }
+  return { nextPageUrl, values: page.value };
+};
+
 export const searchOutlookMessages = async (
   context: OutlookReadContext,
   input: { pageUrl?: string; query: string }

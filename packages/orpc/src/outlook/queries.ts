@@ -23,6 +23,7 @@ import {
   getOutlookMessage,
   listOutlookAttachments,
   listOutlookConversationMessages,
+  listOutlookDraftMessages,
   searchOutlookMessages,
 } from "@quieter/outlook/graph";
 import type {
@@ -112,6 +113,14 @@ const searchCursorSchema = z
 const cursorSchema = z.discriminatedUnion("kind", [
   listCursorSchema,
   searchCursorSchema,
+  z.object({
+    kind: z.literal("drafts"),
+    listed: z.number().int().nonnegative().max(1000),
+    pageUrl: z
+      .string()
+      .min(1)
+      .max(128 * 1024),
+  }),
 ]);
 
 const loadOutlookReadState = async (
@@ -232,6 +241,22 @@ const loadCompleteOutlookMessage = async (
   };
 };
 
+const hydrateOutlookMessageMetadata = async (
+  scope: OutlookCacheScope,
+  messages: MessageListItem[]
+) => {
+  const [importance, unsubscribe] = await Promise.all([
+    hydrateMailImportance(scope.mailboxId, messages),
+    hydrateUnsubscribeStatus(scope.mailboxId, messages),
+  ]);
+  return importance.map((message, index) => ({
+    ...message,
+    ...(unsubscribe[index]?.unsubscribeStatus === undefined
+      ? {}
+      : { unsubscribeStatus: unsubscribe[index].unsubscribeStatus }),
+  }));
+};
+
 const loadCompleteOutlookThread = async (
   context: OutlookReadContext,
   scope: OutlookCacheScope,
@@ -336,29 +361,17 @@ const loadCompleteOutlookThread = async (
         "This conversation changed while it was loading. Please try again.",
     });
   }
-  const [importance, unsubscribe] = await Promise.all([
-    hydrateMailImportance(scope.mailboxId, messages),
-    hydrateUnsubscribeStatus(scope.mailboxId, messages),
-  ]);
   return aggregateOutlookThread({
-    messages: importance.map((message, index) => ({
-      ...message,
-      ...(unsubscribe[index]?.unsubscribeStatus === undefined
-        ? {}
-        : { unsubscribeStatus: unsubscribe[index].unsubscribeStatus }),
-    })),
+    messages: await hydrateOutlookMessageMetadata(scope, messages),
     threadId,
   });
 };
 
 const categoryCondition = (
-  category: MailCategory,
+  category: Exclude<MailCategory, "drafts">,
   systemFolders: OutlookSystemFolders
 ): SQL => {
   const isEligible = sql`${outlookMessage.projection}->'message'->>'parentFolderId' not in (${systemFolders.spam}, ${systemFolders.trash})`;
-  if (category === "drafts") {
-    return sql`${outlookMessage.isDraft} and ${isEligible}`;
-  }
   if (category === "unread") {
     return sql`not ${outlookMessage.isRead} and ${isEligible}`;
   }
@@ -489,6 +502,78 @@ export const listOutlookThreads = async (
       }
       const cursor = parsedCursor?.data ?? null;
       const limit = Math.min(Math.max(input.maxResults ?? 15, 1), 100);
+      if (input.category === "drafts") {
+        if (cursor !== null && cursor.kind !== "drafts") {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "The message page is invalid. Refresh to continue.",
+          });
+        }
+        const alreadyListed = cursor?.listed ?? 0;
+        if (translated !== null && alreadyListed >= 1000) {
+          throw new ORPCError("BAD_REQUEST", {
+            message:
+              "The search page is unavailable. Refine the search to continue.",
+          });
+        }
+        const page = await listOutlookDraftMessages(context, {
+          folderId: state.systemFolders.drafts,
+          maxResults:
+            translated === null ? limit : Math.min(limit, 1000 - alreadyListed),
+          pageUrl: cursor?.pageUrl,
+          query: translated ?? undefined,
+        });
+        const drafts: MessageListItem[] = [];
+        let draftRevision = state.contentRevision;
+        for (const message of page.values) {
+          const previous = await getOutlookCachedMessage(scope, message.id);
+          const loaded = await loadCompleteOutlookMessage(
+            context,
+            scope,
+            state.systemFolders,
+            message.id,
+            message,
+            {
+              changeKey: previous?.message.changeKey ?? null,
+              contentRevision: draftRevision,
+            }
+          );
+          if (
+            !loaded.message.isDraft ||
+            loaded.message.parentFolderId !== state.systemFolders.drafts
+          ) {
+            throw new ORPCError("CONFLICT", {
+              message:
+                "This draft changed while it was loading. Refresh to continue.",
+            });
+          }
+          drafts.push(loaded.normalized);
+          draftRevision = loaded.contentRevision;
+        }
+        const listed =
+          translated === null ? 0 : alreadyListed + page.values.length;
+        const limited = translated !== null && listed >= 1000;
+        return {
+          coverage:
+            translated === null
+              ? { complete: state.coverageComplete, scope: "mailbox" }
+              : {
+                  complete: page.nextPageUrl === undefined && !limited,
+                  limited,
+                  scope: "search",
+                },
+          historyId: `outlook:${createHash("sha256").update(scope.mailboxId).digest("hex")}:${scope.generation}:${state.contentRevision}`,
+          messages: await hydrateOutlookMessageMetadata(scope, drafts),
+          nextPageToken:
+            page.nextPageUrl === undefined || limited
+              ? undefined
+              : await createOutlookReadCursor({
+                  expiresAt: new Date(Date.now() + 30 * 60_000),
+                  queryHash,
+                  scope,
+                  state: { kind: "drafts", listed, pageUrl: page.nextPageUrl },
+                }),
+        };
+      }
       const messages: MessageListItem[] = [];
       let nextPageToken: string | undefined;
       let coverage: OutlookReadCoverage;

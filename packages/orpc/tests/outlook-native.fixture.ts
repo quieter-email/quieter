@@ -332,6 +332,235 @@ afterAll(async () => {
 });
 
 describe("native Outlook storage and current authorization", () => {
+  it("cannot overwrite a newer cached draft with a stale provider page", async () => {
+    const scope = await createMailbox();
+    await hydrateMailbox(scope);
+    const older = createOutlookProjection({
+      attachments: [],
+      kind: "full",
+      message: {
+        ...projection({ folderId: systemFolders.drafts, id: "racing-draft" })
+          .message,
+        isDraft: true,
+      },
+    });
+    await cacheOutlookMessage({
+      expectedChangeKey: null,
+      expectedContentRevision: await readOutlookCacheRevision(scope),
+      projection: older,
+      scope,
+    });
+    const revision = await readOutlookCacheRevision(scope);
+    const entered = Promise.withResolvers<boolean>();
+    const release = Promise.withResolvers<boolean>();
+    const transport = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (resource, options) => {
+        const request = new Request(resource, options);
+        await request.arrayBuffer();
+        const url = new URL(request.url);
+        if (url.origin !== "https://graph.microsoft.com") {
+          throw new Error("Unexpected native draft race host.");
+        }
+        if (
+          url.pathname ===
+          `/v1.0/me/mailFolders/${systemFolders.drafts}/messages`
+        ) {
+          entered.resolve(true);
+          await release.promise;
+          return Response.json({ value: [older.message] });
+        }
+        if (
+          url.pathname === `/v1.0/me/messages/${older.message.id}/attachments`
+        ) {
+          return Response.json({ value: [] });
+        }
+        if (url.pathname === `/v1.0/me/messages/${older.message.id}`) {
+          return Response.json(older.message);
+        }
+        throw new Error("Unexpected native draft race request.");
+      });
+    const pending = listOutlookThreads({ ...scope, category: "drafts" });
+    const rejected = expect(pending).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
+    try {
+      await entered.promise;
+      const current = createOutlookProjection({
+        attachments: [],
+        kind: "full",
+        message: {
+          ...older.message,
+          changeKey: "opaque:newer-draft-revision",
+          subject: "Current draft content",
+        },
+      });
+      await cacheOutlookMessage({
+        expectedChangeKey: older.message.changeKey,
+        expectedContentRevision: revision,
+        projection: current,
+        scope,
+      });
+      release.resolve(true);
+      await rejected;
+      expect(
+        await getOutlookCachedMessage(scope, older.message.id)
+      ).toMatchObject({
+        message: {
+          changeKey: current.message.changeKey,
+          subject: current.message.subject,
+        },
+      });
+    } finally {
+      release.resolve(true);
+      await Promise.allSettled([pending]);
+      transport.mockRestore();
+    }
+  });
+
+  it("refreshes and pages individual upstream drafts sharing one conversation", async () => {
+    const scope = await createMailbox();
+    await hydrateMailbox(scope);
+    const drafts = ["first-draft", "second-draft"].map((id) => ({
+      ...projection({ folderId: systemFolders.drafts, id }).message,
+      isDraft: true,
+    }));
+    const transport = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (resource, options) => {
+        const request = new Request(resource, options);
+        await request.arrayBuffer();
+        const url = new URL(request.url);
+        if (url.origin !== "https://graph.microsoft.com") {
+          throw new Error("Unexpected native draft host.");
+        }
+        if (
+          url.pathname ===
+          `/v1.0/me/mailFolders/${systemFolders.drafts}/messages`
+        ) {
+          const offset = Number(url.searchParams.get("$skiptoken") ?? 0);
+          const limit = Number(url.searchParams.get("$top"));
+          const values = drafts.slice(offset, offset + limit);
+          const next = new URL(url);
+          next.searchParams.set("$skiptoken", String(offset + values.length));
+          return Response.json({
+            value: values,
+            ...(offset + values.length < drafts.length
+              ? { "@odata.nextLink": next.href }
+              : {}),
+          });
+        }
+        const draft = drafts.find(
+          (value) =>
+            url.pathname === `/v1.0/me/messages/${value.id}` ||
+            url.pathname === `/v1.0/me/messages/${value.id}/attachments`
+        );
+        if (draft === undefined) {
+          throw new Error("Unexpected native draft request.");
+        }
+        return Response.json(
+          url.pathname.endsWith("/attachments") ? { value: [] } : draft
+        );
+      });
+    try {
+      const first = await listOutlookThreads({
+        ...scope,
+        category: "drafts",
+        maxResults: 1,
+      });
+      expect(first.messages.map((value) => value.draftId)).toStrictEqual([
+        drafts[0]?.id,
+      ]);
+      expect(first.nextPageToken).toBeDefined();
+      expect(first.nextPageToken).not.toContain("graph.microsoft.com");
+      const second = await listOutlookThreads({
+        ...scope,
+        category: "drafts",
+        maxResults: 1,
+        pageToken: first.nextPageToken,
+      });
+      expect(second.messages.map((value) => value.draftId)).toStrictEqual([
+        drafts[1]?.id,
+      ]);
+      drafts.push({
+        ...projection({
+          folderId: systemFolders.drafts,
+          id: "new-upstream-draft",
+        }).message,
+        isDraft: true,
+      });
+      const refreshed = await listOutlookThreads({
+        ...scope,
+        category: "drafts",
+        maxResults: 100,
+      });
+      expect(refreshed.messages.map((value) => value.id)).toStrictEqual(
+        drafts.map((value) => value.id)
+      );
+      expect(
+        refreshed.messages.every(
+          (value) => value.threadId === drafts[0]?.conversationId
+        )
+      ).toBe(true);
+    } finally {
+      transport.mockRestore();
+    }
+  });
+
+  it("keeps each matching draft in search without expanding its conversation", async () => {
+    const scope = await createMailbox();
+    await hydrateMailbox(scope);
+    const drafts = ["matching-one", "matching-two", "nonmatching"].map(
+      (id) => ({
+        ...projection({ folderId: systemFolders.drafts, id }).message,
+        isDraft: true,
+      })
+    );
+    const transport = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (resource, options) => {
+        const request = new Request(resource, options);
+        await request.arrayBuffer();
+        const url = new URL(request.url);
+        if (url.origin !== "https://graph.microsoft.com") {
+          throw new Error("Unexpected native draft search host.");
+        }
+        if (
+          url.pathname ===
+            `/v1.0/me/mailFolders/${systemFolders.drafts}/messages` &&
+          url.searchParams.has("$search")
+        ) {
+          return Response.json({ value: drafts.slice(0, 2) });
+        }
+        const draft = drafts.find(
+          (value) =>
+            url.pathname === `/v1.0/me/messages/${value.id}` ||
+            url.pathname === `/v1.0/me/messages/${value.id}/attachments`
+        );
+        if (draft === undefined) {
+          throw new Error("Unexpected native draft search request.");
+        }
+        return Response.json(
+          url.pathname.endsWith("/attachments") ? { value: [] } : draft
+        );
+      });
+    try {
+      const page = await listOutlookThreads({
+        ...scope,
+        category: "drafts",
+        query: "subject:matching",
+      });
+      expect(page.messages.map((value) => value.id)).toStrictEqual(
+        drafts.slice(0, 2).map((value) => value.id)
+      );
+      expect(page.messages.some((value) => value.id === drafts[2]?.id)).toBe(
+        false
+      );
+    } finally {
+      transport.mockRestore();
+    }
+  });
+
   it("does not acknowledge a concurrent unseen arrival in a completed page token", async () => {
     const scope = await createMailbox();
     await hydrateMailbox(scope);
