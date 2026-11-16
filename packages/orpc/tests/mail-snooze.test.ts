@@ -972,6 +972,98 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
+  test("a new Inbox reply retires an access-suspended snooze while a known capture replay preserves it", async () => {
+    await seed({ id: "old-capture", state: "done" });
+    await seed({ id: "anchor", receivedAt: 2 });
+    const first = await snooze();
+    const id = first.snooze?.id ?? "";
+    fixture.state.writers.delete("actor");
+    await makeDue(id);
+    await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+    const [suspended] = await fixture.client<
+      { status: string; version: number; hidden: string[]; known: string[] }[]
+    >`select status, version, "hiddenMessageIds" as hidden, "knownIncomingMessageIds" as known from "mailSnooze" where id=${id}`;
+    expect(suspended).toMatchObject({
+      hidden: ["anchor"],
+      status: "suspended",
+    });
+    expect(suspended?.known).toContain("old-capture");
+    const native = await fixture.client<
+      { id: string; status: string }[]
+    >`select id, status from "mailPlacementOperation" order by sequence`;
+    expect(native).toHaveLength(1);
+    expect(native[0]?.status).toBe("applied");
+
+    await fixture.client`update "managedMailMessage" set "mailboxState"='active' where id='old-capture'`;
+    await handleSnoozeInbound({
+      mailboxId: "mailbox",
+      messageId: "old-capture",
+      threadId: "conversation",
+    });
+    const knownReplay = await getMailSnoozeStates({
+      mailboxId: "mailbox",
+      threadIds: ["conversation"],
+      userId: "other-actor",
+    });
+    expect(knownReplay.get("conversation")).toMatchObject({
+      status: "suspended",
+      version: suspended?.version,
+    });
+
+    await seed({ id: "new-reply", receivedAt: 3 });
+    await handleSnoozeInbound({
+      mailboxId: "mailbox",
+      messageId: "new-reply",
+      threadId: "conversation",
+    });
+    const states = await getMailSnoozeStates({
+      mailboxId: "mailbox",
+      threadIds: ["conversation"],
+      userId: "other-actor",
+    });
+    const retired = states.get("conversation");
+    expect(retired?.status).toBe("superseded");
+    await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+    const messages = await fixture.client<
+      { id: string; state: string }[]
+    >`select id, "mailboxState" as state from "managedMailMessage"`;
+    expect(messages).toContainEqual({ id: "anchor", state: "done" });
+    expect(messages).toContainEqual({ id: "new-reply", state: "active" });
+    await expect(
+      fixture.client<
+        { id: string; status: string }[]
+      >`select id, status from "mailPlacementOperation" order by sequence`
+    ).resolves.toStrictEqual(native);
+
+    const next = await applyMailSnooze({
+      context: { userId: "other-actor" },
+      input: {
+        command: {
+          kind: "snooze",
+          returnAt: new Date(Date.now() + 60_000).toISOString(),
+          timeZone: "UTC",
+        },
+        mailboxId: "mailbox",
+        requestId: randomUUID(),
+        targets: [
+          {
+            expectedVersion: retired?.version ?? -1,
+            messageIds: ["new-reply"],
+            threadId: "conversation",
+          },
+        ],
+      },
+    });
+    expect(next.targets[0]).toMatchObject({
+      snooze: { status: "active" },
+      status: "applied",
+    });
+    const [hiddenReply] = await fixture.client<
+      { state: string }[]
+    >`select "mailboxState" as state from "managedMailMessage" where id='new-reply'`;
+    expect(hiddenReply?.state).toBe("done");
+  });
+
   test("a stale authorization rejection cannot stop a newly authorized execution lease", async () => {
     await seed({ id: "anchor" });
     const first = await snooze();
@@ -1509,6 +1601,227 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
     ).resolves.toStrictEqual(original);
     expect(fixture.state.writes).toBe(writes);
   });
+
+  test("a manual native return replays its original journal after an unconfirmed recovery poll and later Inbox confirmation", async () => {
+    fixture.state.provider = "gmail";
+    await fixture.client`update mailbox set provider='gmail' where id='mailbox'`;
+    fixture.state.messages = [
+      {
+        id: "anchor",
+        internalDate: "1",
+        labelIds: ["INBOX"],
+        threadId: "conversation",
+      },
+    ];
+    const first = await snooze();
+    const id = first.snooze?.id ?? "";
+    fixture.state.ambiguous = true;
+    const input = {
+      command: { kind: "return-now" },
+      requestId: randomUUID(),
+      version: first.snooze?.version ?? -1,
+    } satisfies Parameters<typeof change>[0];
+    const returned = await change(input);
+    expect(returned.targets[0]?.snooze?.status).toBe("uncertain");
+    const { writes } = fixture.state;
+    const native = await fixture.client<
+      { id: string; requestId: string }[]
+    >`select id, "requestId" from "mailPlacementOperation" order by sequence`;
+    const [original] = await fixture.client<
+      { id: string; status: string }[]
+    >`select id, status from "mailSnoozeOperation" where "requestId"=${input.requestId}`;
+    expect(original).toMatchObject({
+      id: returned.targets[0]?.operationId,
+      status: "uncertain",
+    });
+
+    fixture.state.messages[0].labelIds = [];
+    await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+    const unconfirmed = await getMailSnoozeStates({
+      mailboxId: "mailbox",
+      threadIds: ["conversation"],
+      userId: "actor",
+    });
+    expect(unconfirmed.get("conversation")?.status).toBe("uncertain");
+    expect(fixture.state.writes).toBe(writes);
+
+    fixture.state.messages[0].labelIds = ["INBOX"];
+    await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+    const replay = await change(input);
+    expect(replay.targets[0]).toMatchObject({
+      operationId: original?.id,
+      replayed: true,
+      snooze: { status: "returned" },
+      status: "applied",
+    });
+    const [confirmed] = await fixture.client<
+      { id: string; status: string }[]
+    >`select id, status from "mailSnoozeOperation" where "requestId"=${input.requestId}`;
+    expect(confirmed).toMatchObject({ id: original?.id, status: "applied" });
+    await expect(
+      fixture.client<
+        { id: string; requestId: string }[]
+      >`select id, "requestId" from "mailPlacementOperation" order by sequence`
+    ).resolves.toStrictEqual(native);
+    expect(fixture.state.messages[0]?.labelIds).toContain("INBOX");
+    expect(fixture.state.writes).toBe(writes);
+  });
+
+  test.each(["failed", "uncertain"] as const)(
+    "a fresh manual return recovers its reserved identity after a prior %s return receipt and an API stop",
+    async (priorStatus) => {
+      fixture.state.provider = "gmail";
+      await fixture.client`update mailbox set provider='gmail' where id='mailbox'`;
+      fixture.state.messages = [
+        {
+          id: "already-done",
+          internalDate: "1",
+          labelIds: [],
+          threadId: "conversation",
+        },
+        {
+          id: "sibling",
+          internalDate: "2",
+          labelIds: ["INBOX"],
+          threadId: "conversation",
+        },
+        {
+          id: "anchor",
+          internalDate: "3",
+          labelIds: ["INBOX"],
+          threadId: "conversation",
+        },
+      ];
+      const first = await snooze();
+      const id = first.snooze?.id ?? "";
+      if (priorStatus === "failed") {
+        fixture.state.beforeSnapshot = async () => {
+          fixture.state.beforeSnapshot = undefined;
+          return Promise.reject(new ORPCError("BAD_REQUEST"));
+        };
+      } else {
+        fixture.state.ambiguous = true;
+      }
+      const priorRequestId = randomUUID();
+      const prior = await change({
+        command: { kind: "return-now" },
+        requestId: priorRequestId,
+        version: first.snooze?.version ?? -1,
+      });
+      expect(prior.targets[0]?.snooze?.status).toBe(priorStatus);
+      const [priorNative] = await fixture.client<
+        { id: string; requestId: string; status: string }[]
+      >`select p.id, p."requestId", p.status from "mailPlacementOperation" p join "mailSnooze" s on s."returnOperationId"=p.id where s.id=${id}`;
+      expect(priorNative?.status).toBe(priorStatus);
+      expect(priorNative?.id).toBeTruthy();
+      fixture.state.ambiguous = false;
+      for (const message of fixture.state.messages) {
+        message.labelIds = [];
+      }
+
+      const input = {
+        command: { kind: "return-now" },
+        requestId: randomUUID(),
+        version: prior.targets[0]?.snooze?.version ?? -1,
+      } satisfies Parameters<typeof change>[0];
+      const stopped = new Error(
+        "API stopped after reserving the accepted return."
+      );
+      fixture.state.afterCommit = async () => {
+        const [pending] = await fixture.client<
+          { id: string }[]
+        >`select id from "mailSnoozeOperation" where "requestId"=${input.requestId} and status='pending'`;
+        if (pending === undefined) {
+          return;
+        }
+        fixture.state.afterCommit = undefined;
+        throw stopped;
+      };
+      await expect(change(input)).rejects.toBe(stopped);
+      const [reserved] = await fixture.client<
+        {
+          status: string;
+          returnRequestId: string;
+          returnOperationId: string;
+          hidden: string[];
+        }[]
+      >`select status, "returnRequestId", "returnOperationId", "hiddenMessageIds" as hidden from "mailSnooze" where id=${id}`;
+      expect(reserved).toMatchObject({
+        hidden: ["sibling", "anchor"],
+        returnOperationId: priorNative?.id,
+        status: "returning",
+      });
+      expect(reserved?.returnRequestId).not.toBe(priorNative?.requestId);
+      const [accepted] = await fixture.client<
+        { id: string; status: string }[]
+      >`select id, status from "mailSnoozeOperation" where "requestId"=${input.requestId}`;
+      expect(accepted?.status).toBe("pending");
+      fixture.state.messages.push({
+        id: "new-reply",
+        internalDate: "4",
+        labelIds: ["INBOX"],
+        threadId: "conversation",
+      });
+      const { writes } = fixture.state;
+      await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+      const native = await fixture.client<
+        {
+          id: string;
+          requestId: string;
+          status: string;
+          messageIds: string[];
+        }[]
+      >`select id, "requestId", status, "messageIds" from "mailPlacementOperation" where placement='inbox' order by sequence`;
+      expect(native).toHaveLength(2);
+      expect(
+        native.find((operation) => operation.id !== priorNative?.id)
+      ).toMatchObject({
+        messageIds: ["sibling", "anchor"],
+        requestId: reserved?.returnRequestId,
+        status: "applied",
+      });
+      expect(
+        native.find((operation) => operation.id === priorNative?.id)
+      ).toMatchObject({
+        id: priorNative?.id,
+        requestId: priorNative?.requestId,
+        status: priorStatus,
+      });
+      expect(fixture.state.writes).toBe(writes + 1);
+      expect(
+        fixture.state.messages.find((message) => message.id === "already-done")
+          ?.labelIds
+      ).not.toContain("INBOX");
+      for (const messageId of ["sibling", "anchor", "new-reply"]) {
+        expect(
+          fixture.state.messages.find((message) => message.id === messageId)
+            ?.labelIds
+        ).toContain("INBOX");
+      }
+      const replay = await change(input);
+      expect(replay.targets[0]).toMatchObject({
+        operationId: accepted?.id,
+        replayed: true,
+        snooze: { status: "returned" },
+        status: "applied",
+      });
+      const [priorJournal] = await fixture.client<
+        { status: string }[]
+      >`select status from "mailSnoozeOperation" where "requestId"=${priorRequestId}`;
+      expect(priorJournal?.status).toBe(priorStatus);
+      await expect(
+        fixture.client<
+          {
+            id: string;
+            requestId: string;
+            status: string;
+            messageIds: string[];
+          }[]
+        >`select id, "requestId", status, "messageIds" from "mailPlacementOperation" where placement='inbox' order by sequence`
+      ).resolves.toStrictEqual(native);
+      expect(fixture.state.writes).toBe(writes + 1);
+    }
+  );
 
   test("source confirmation atomically finalizes a journal before a delayed API outcome", async () => {
     fixture.state.provider = "gmail";
