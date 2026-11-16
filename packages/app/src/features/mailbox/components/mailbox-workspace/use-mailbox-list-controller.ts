@@ -18,6 +18,7 @@ import { useCallback, useMemo, useState } from "react";
 type ListSelection = {
   scopeKey: string;
   observedMessageId: string | null;
+  observedThreadId: string | null;
   retainedMessage: RetainedListMessage | null;
   restoreSelection: boolean;
 };
@@ -53,6 +54,7 @@ export const useMailboxListController = ({
   ]);
   const [selection, setSelection] = useState<ListSelection>({
     observedMessageId: messageId,
+    observedThreadId: threadId,
     restoreSelection: true,
     retainedMessage: null,
     scopeKey,
@@ -60,17 +62,23 @@ export const useMailboxListController = ({
   if (selection.scopeKey !== scopeKey) {
     setSelection({
       observedMessageId: messageId,
+      observedThreadId: threadId,
       restoreSelection: false,
       retainedMessage: null,
       scopeKey,
     });
-  } else if (selection.observedMessageId !== messageId) {
+  } else if (
+    selection.observedMessageId !== messageId ||
+    selection.observedThreadId !== threadId
+  ) {
     setSelection({
       ...selection,
       observedMessageId: messageId,
+      observedThreadId: threadId,
       restoreSelection: messageId !== null,
       retainedMessage:
-        selection.retainedMessage?.message.id === messageId
+        selection.retainedMessage?.message.id === messageId &&
+        (!threadId || selection.retainedMessage.message.threadId === threadId)
           ? selection.retainedMessage
           : null,
     });
@@ -87,6 +95,22 @@ export const useMailboxListController = ({
     selectedMailboxId: mailboxId,
     threadId: threadId ?? undefined,
   });
+  const canRetainSelection =
+    data.selectedThreadError === null &&
+    (data.messagesPending || data.selectedMessage !== null);
+  if (
+    !canRetainSelection &&
+    (selection.retainedMessage !== null || selection.restoreSelection) &&
+    selection.scopeKey === scopeKey &&
+    selection.observedMessageId === messageId &&
+    selection.observedThreadId === threadId
+  ) {
+    setSelection({
+      ...selection,
+      restoreSelection: false,
+      retainedMessage: null,
+    });
+  }
   const { refreshMessages: refreshNativeMessages } = data;
   const {
     isMessageActionPending,
@@ -181,15 +205,16 @@ export const useMailboxListController = ({
   );
   const rawPages = data.listState.messages;
   const displayPages = useMemo(() => {
-    const snapshot =
-      selection.retainedMessage ??
-      (selection.restoreSelection && data.selectedMessage && messageId
-        ? captureListMessage(
-            [{ messages: [data.selectedMessage] }],
-            scopeKey,
-            messageId
-          )
-        : null);
+    const snapshot = canRetainSelection
+      ? (selection.retainedMessage ??
+        (selection.restoreSelection && data.selectedMessage && messageId
+          ? captureListMessage(
+              [{ messages: [data.selectedMessage] }],
+              scopeKey,
+              messageId
+            )
+          : null))
+      : null;
     return retainSelectedMessageInList({
       messageId,
       pages: rawPages,
@@ -199,6 +224,7 @@ export const useMailboxListController = ({
       selectedThreadMessages: data.selectedThreadMessages,
     });
   }, [
+    canRetainSelection,
     data.selectedMessage,
     data.selectedThreadMessages,
     messageId,

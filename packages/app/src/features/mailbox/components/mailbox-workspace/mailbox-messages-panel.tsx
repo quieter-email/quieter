@@ -33,6 +33,7 @@ type MailboxMessagesPanelProps = {
   focusOnOpen?: boolean;
   isDemoMode: boolean;
   isManagedDemoMode: boolean;
+  isSharedManagedMailbox?: boolean;
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";
   onComposeDraftRequested: (draft: ComposeDraftState) => void;
@@ -54,6 +55,7 @@ export const MailboxMessagesPanel = ({
   focusOnOpen,
   isDemoMode,
   isManagedDemoMode,
+  isSharedManagedMailbox = false,
   mailboxId,
   mailboxProvider,
   onComposeDraftRequested,
@@ -73,7 +75,8 @@ export const MailboxMessagesPanel = ({
   const setMailboxSearch = useMailboxSearchActions();
   const normalizedSearchQuery = searchQuery.trim();
   const isMessageRouteOpen =
-    activeMailbox !== "drafts" && (messageId?.trim() ?? "") !== "";
+    activeMailbox !== "drafts" &&
+    ((messageId?.trim() ?? "") !== "" || (threadId?.trim() ?? "") !== "");
   const [shouldFocusMessageView, setShouldFocusMessageView] = useState(false);
   const {
     activateListMessage,
@@ -277,6 +280,7 @@ export const MailboxMessagesPanel = ({
         ) : null}
         {isMessageRouteOpen && !threadLoadFailed ? (
           <MessageDetail
+            isSharedManagedMailbox={isSharedManagedMailbox}
             onConversationOpened={recordOpened}
             showDesktopBack={onePanelDesktop}
             activeMailbox={activeMailbox}

@@ -31,6 +31,7 @@ type MessageDetailProps = {
   focusOnOpen?: boolean;
   currentUserEmail?: string | null;
   isPending?: boolean;
+  isSharedManagedMailbox?: boolean;
   mailboxActions: MailboxActions;
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";
@@ -54,6 +55,7 @@ export const MessageDetail = ({
   focusOnOpen,
   currentUserEmail,
   isPending,
+  isSharedManagedMailbox = false,
   mailboxActions,
   onConversationOpened,
   onBackToList,
@@ -99,6 +101,7 @@ export const MessageDetail = ({
         }
       >
         <MessageView
+          isSharedManagedMailbox={isSharedManagedMailbox}
           activeMailbox={activeMailbox}
           detailOnly={detailOnly}
           showDesktopBack={showDesktopBack}
