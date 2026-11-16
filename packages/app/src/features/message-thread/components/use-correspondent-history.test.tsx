@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/client";
 import type { AssistantSidebarContext } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { toastError } from "@quieter/app/lib/error-toast";
 // @vitest-environment jsdom
@@ -438,22 +439,30 @@ describe("correspondent history", () => {
       expect(reportError).not.toHaveBeenCalled();
     });
 
-    test("restores ordinary dismissal focus intent when source navigation fails", async () => {
-      const { api, history, navigate, reportError } = setup();
-      const error = new Error("Navigation failed");
-      api.openSource.mockResolvedValueOnce(opened);
-      navigate.mockRejectedValueOnce(error);
+    test.each([
+      new Error("Navigation failed"),
+      new ORPCError("CONFLICT", {
+        message:
+          "The conversation did not open. Finish your draft or try again.",
+      }),
+    ])(
+      "retains a retryable source and ordinary dismissal focus when navigation fails, %s",
+      async (failure) => {
+        const { api, history, navigate, reportError } = setup();
+        api.openSource.mockResolvedValueOnce(opened);
+        navigate.mockRejectedValueOnce(failure);
 
-      await history.openSource(source, "mail");
+        await history.openSource(source, "mail");
 
-      expect(history.state.get().view).toMatchObject({
-        kind: "selected",
-        source: { kind: "failed" },
-      });
-      expect(reportError).toHaveBeenCalledExactlyOnceWith(error);
-      history.close();
-      expect(history.consumeFocusHandoff()).toBeFalsy();
-    });
+        expect(history.state.get().view).toMatchObject({
+          kind: "selected",
+          source: { kind: "failed" },
+        });
+        expect(reportError).toHaveBeenCalledExactlyOnceWith(failure);
+        history.close();
+        expect(history.consumeFocusHandoff()).toBeFalsy();
+      }
+    );
 
     test.each(["section", "correspondent", "close"])(
       "discards pending navigation focus intent on %s change",

@@ -367,6 +367,7 @@ export const createCorrespondentHistory = ({
           current.source.ticket === request.ticket
         );
       };
+      let failureDomain: "source" | "navigation" = "source";
       try {
         const opened = await api.openSource(
           {
@@ -403,6 +404,7 @@ export const createCorrespondentHistory = ({
         }
         queryClient.setQueryData(queryKey, opened.thread);
         focusHandoff.current = true;
+        failureDomain = "navigation";
         const navigation = onOpenConversation({
           mailboxId: owner.mailboxId,
           messageId: opened.messageId,
@@ -427,7 +429,11 @@ export const createCorrespondentHistory = ({
                   ...current,
                   view: {
                     ...current.view,
-                    source: { kind: failure, section, source },
+                    source: {
+                      kind: failureDomain === "navigation" ? "failed" : failure,
+                      section,
+                      source,
+                    },
                   },
                 }
               : current
