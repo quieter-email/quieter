@@ -715,6 +715,15 @@ app.on("open-url", (event, url) => {
   dispatchNativeURL(url);
 });
 
+const protocolLaunchArgs =
+  process.defaultApp && process.argv[1] ? [path.resolve(process.argv[1])] : [];
+if (
+  process.platform === "win32" &&
+  app.commandLine.getSwitchValue("user-data-dir") !== ""
+) {
+  protocolLaunchArgs.push(`--user-data-dir=${app.getPath("userData")}`);
+}
+
 const hasInstanceLock = app.requestSingleInstanceLock();
 if (hasInstanceLock) {
   app.on("second-instance", (_event, commandLine) => {
@@ -725,11 +734,11 @@ if (hasInstanceLock) {
       }
     }
   });
-  if (process.defaultApp && process.argv[1]) {
+  if (protocolLaunchArgs.length > 0) {
     app.setAsDefaultProtocolClient(
       DESKTOP_AUTH_PROTOCOL_SCHEME,
       process.execPath,
-      [path.resolve(process.argv[1])]
+      protocolLaunchArgs
     );
   } else {
     app.setAsDefaultProtocolClient(DESKTOP_AUTH_PROTOCOL_SCHEME);
@@ -759,11 +768,11 @@ const startApp = async (): Promise<void> => {
             void (async () => {
               try {
                 const registered =
-                  process.defaultApp && process.argv[1]
+                  protocolLaunchArgs.length > 0
                     ? app.setAsDefaultProtocolClient(
                         "mailto",
                         process.execPath,
-                        [path.resolve(process.argv[1])]
+                        protocolLaunchArgs
                       )
                     : app.setAsDefaultProtocolClient("mailto");
                 await dialog.showMessageBox({

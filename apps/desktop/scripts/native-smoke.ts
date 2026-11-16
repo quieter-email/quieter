@@ -8,6 +8,7 @@ import {
   mkdir,
   mkdtemp,
   readdir,
+  readFile,
   realpath,
   rm,
   writeFile,
@@ -20,6 +21,7 @@ import { parseArgs } from "node:util";
 
 import { _electron } from "playwright-core";
 import type { ElectronApplication } from "playwright-core";
+import { z } from "zod";
 
 import { createNativeInstallation } from "./native-install.ts";
 import type {
@@ -28,6 +30,19 @@ import type {
   NativeInstallOperation,
   RunNativeInstallOperation,
 } from "./native-install.ts";
+
+const windowsURIReceipt = z.strictObject({
+  handlerVerified: z.literal(true),
+  launcherPid: z.number().int().positive(),
+  secondary: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("no-process-handle") }),
+    z.strictObject({
+      exitCode: z.literal(0),
+      kind: z.literal("exited"),
+      pid: z.number().int().positive(),
+    }),
+  ]),
+});
 
 type SmokeReport = {
   kind: "packaged-native-smoke";
@@ -56,6 +71,9 @@ type SmokeReport = {
   electronVersion?: string;
   storageBackend?: string;
   associatedProcesses?: number;
+  osDispatch?:
+    | { kind: "windows-shell"; receipt: z.infer<typeof windowsURIReceipt> }
+    | { kind: "macos-apple-event"; launcherPid: number | null };
   cleanup: {
     applicationStopped: boolean;
     keyringStopped: boolean;
@@ -194,7 +212,7 @@ const main = async (): Promise<void> => {
         };
   const output = path.resolve(values.output);
   await mkdir(output, { recursive: true });
-  const profile = await mkdtemp(path.join(tmpdir(), "quieter-native-smoke-"));
+  const profile = await mkdtemp(path.join(tmpdir(), "quieter native smoke-"));
   await mkdir(path.join(profile, "runtime"), { mode: 0o700 });
   const report: SmokeReport = {
     architecture: process.arch,
@@ -287,6 +305,7 @@ const main = async (): Promise<void> => {
       XDG_RUNTIME_DIR: path.join(profile, "runtime"),
     });
     let executable: string;
+    let applicationBundle: string | null = null;
     if (selection.kind === "install") {
       const run: RunNativeInstallOperation = async (operation) => {
         const previousStage = report.stage;
@@ -327,6 +346,7 @@ const main = async (): Promise<void> => {
       const owner = createNativeInstallation({ environment });
       installed = { owner, run };
       ({
+        applicationBundle,
         collisionProbes,
         executable,
         metadata: report.installation,
@@ -483,9 +503,17 @@ const main = async (): Promise<void> => {
       }
     }
     const handoffs = await current.evaluateHandle(({ app }) => {
-      const received: string[][] = [];
+      const received: {
+        kind: "second-instance" | "open-url";
+        value: string;
+      }[] = [];
       app.on("second-instance", (_event, commandLine) => {
-        received.push(commandLine);
+        for (const value of commandLine) {
+          received.push({ kind: "second-instance", value });
+        }
+      });
+      app.on("open-url", (_event, value) => {
+        received.push({ kind: "open-url", value });
       });
       return received;
     });
@@ -509,7 +537,11 @@ const main = async (): Promise<void> => {
             (received, expected) =>
               received
                 .slice(expected.before)
-                .some((commandLine) => commandLine.includes(expected.input)),
+                .some(
+                  (entry) =>
+                    entry.kind === "second-instance" &&
+                    entry.value === expected.input
+                ),
             { before, input }
           );
         });
@@ -575,6 +607,147 @@ const main = async (): Promise<void> => {
       "A foreign URL replaced the app renderer."
     );
     report.cases.push("foreign-command-url-ignored");
+    if (installed) {
+      report.stage = "os-content-uri-dispatch";
+      const uri =
+        "com.quieter.desktop:/mail?mailboxId=native-smoke-mailbox&threadId=native-smoke-thread&messageId=native-smoke-message";
+      const before = await handoffs.evaluate((received) => received.length);
+      await current.evaluate(({ BrowserWindow }) => {
+        BrowserWindow.getAllWindows()[0]?.minimize();
+      });
+      await waitUntil(
+        async () =>
+          await current.evaluate(({ BrowserWindow }) => {
+            const [window] = BrowserWindow.getAllWindows();
+            return window !== undefined && window.isMinimized();
+          })
+      );
+      assert.ok(current.process().exitCode === null);
+      assert.equal(
+        await current.evaluate(({ app }) => app.getPath("userData")),
+        state.userData
+      );
+      if (process.platform === "win32") {
+        assert.ok(report.primaryPid !== null);
+        assert.ok(
+          await current.evaluate(({ app }) =>
+            app.isDefaultProtocolClient(
+              "com.quieter.desktop",
+              process.execPath,
+              [`--user-data-dir=${app.getPath("userData")}`]
+            )
+          ),
+          "The registered handler lost its exact executable or private profile."
+        );
+        const receipt = path.join(output, "windows-uri-launch.json");
+        await installed.run({
+          args: [
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            path.join(import.meta.dirname, "native-uri-windows.ps1"),
+            "-Uri",
+            uri,
+            "-Executable",
+            executable,
+            "-UserData",
+            state.userData,
+            "-PrimaryPid",
+            String(report.primaryPid),
+            "-Receipt",
+            receipt,
+          ],
+          command: "powershell.exe",
+          kind: "os-uri-shell-launcher",
+        });
+        const receiptSource = await readFile(receipt, "utf-8");
+        report.osDispatch = {
+          kind: "windows-shell",
+          receipt: windowsURIReceipt.parse(
+            JSON.parse(receiptSource.replace(/^\uFEFF/u, ""))
+          ),
+        };
+      } else {
+        assert.equal(process.platform, "darwin");
+        assert.ok(applicationBundle !== null);
+        await installed.run({
+          args: ["-a", applicationBundle, uri],
+          command: "/usr/bin/open",
+          kind: "os-uri-apple-event-launcher",
+        });
+        report.osDispatch = {
+          kind: "macos-apple-event",
+          launcherPid: report.installationProcesses.at(-1)?.pid ?? null,
+        };
+      }
+      await waitUntil(
+        async () =>
+          await handoffs.evaluate(
+            (received, expected) =>
+              received.slice(expected.before).some((entry) => {
+                if (entry.kind !== expected.kind) {
+                  return false;
+                }
+                try {
+                  const actual = new URL(entry.value);
+                  return (
+                    actual.protocol === "com.quieter.desktop:" &&
+                    actual.hostname === "" &&
+                    actual.pathname === "/mail" &&
+                    actual.hash === "" &&
+                    actual.searchParams.size === 3 &&
+                    actual.searchParams.get("mailboxId") ===
+                      "native-smoke-mailbox" &&
+                    actual.searchParams.get("threadId") ===
+                      "native-smoke-thread" &&
+                    actual.searchParams.get("messageId") ===
+                      "native-smoke-message"
+                  );
+                } catch {
+                  return false;
+                }
+              }),
+            {
+              before,
+              kind:
+                process.platform === "win32" ? "second-instance" : "open-url",
+            }
+          )
+      );
+      await waitUntil(
+        async () =>
+          await current.evaluate(({ app, BrowserWindow }, userData) => {
+            const [window] = BrowserWindow.getAllWindows();
+            return (
+              app.getPath("userData") === userData &&
+              BrowserWindow.getAllWindows().length === 1 &&
+              window !== undefined &&
+              window.isVisible() &&
+              !window.isMinimized()
+            );
+          }, state.userData)
+      );
+      assert.ok(
+        current.process().exitCode === null &&
+          current.process().pid === report.primaryPid
+      );
+      assert.equal(page.url(), previousURL);
+      assert.ok(
+        await page.evaluate(
+          async () =>
+            (await window.quieterDesktop.nativeLinks.read({
+              kind: "peek",
+              userId: "native-smoke-user",
+            })) === null
+        )
+      );
+      report.cases.push(
+        "os-content-uri-dispatch",
+        "os-content-signed-out-denial"
+      );
+    }
     await page.screenshot({ path: path.join(output, "signed-out.png") });
     if (process.platform === "darwin") {
       report.stage = "closed-window-restoration";

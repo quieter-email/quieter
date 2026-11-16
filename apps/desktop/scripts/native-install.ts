@@ -263,7 +263,12 @@ export const createNativeInstallation = ({
             },
           ]
         : [];
-      return { collisionProbes, executable, metadata };
+      return {
+        applicationBundle: windows ? null : path.join(root, "quieter.app"),
+        collisionProbes,
+        executable,
+        metadata,
+      };
     },
   };
 };
