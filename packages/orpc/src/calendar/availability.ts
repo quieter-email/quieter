@@ -11,6 +11,9 @@ import { listCalendarEventsForUser, listCalendarsForUser } from "./service";
 
 export const proposeCalendarAvailabilityForUser = async (
   input: CalendarAvailabilityInput & {
+    busyIntervals?: Parameters<
+      typeof calculateCalendarAvailability
+    >[0]["busyIntervals"];
     signal?: AbortSignal;
     userId: string;
   }
@@ -104,7 +107,11 @@ export const proposeCalendarAvailabilityForUser = async (
   return {
     candidates:
       status === "complete"
-        ? calculateCalendarAvailability({ calendars, input })
+        ? calculateCalendarAvailability({
+            busyIntervals: input.busyIntervals,
+            calendars,
+            input,
+          })
         : [],
     checkedAt: new Date().toISOString(),
     coverage,

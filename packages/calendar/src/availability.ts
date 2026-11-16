@@ -194,9 +194,11 @@ const getWorkingWindow = ({
 };
 
 export const calculateCalendarAvailability = ({
+  busyIntervals = [],
   calendars,
   input,
 }: {
+  busyIntervals?: readonly Pick<CalendarAvailabilityInput, "start" | "end">[];
   calendars: CalendarAvailabilitySnapshot[];
   input: CalendarAvailabilityInput;
 }): CalendarAvailabilityResult["candidates"] => {
@@ -206,6 +208,14 @@ export const calculateCalendarAvailability = ({
   const after = BigInt(preferences.bufferAfterMinutes) * minute;
   const duration = BigInt(preferences.durationMinutes) * minute;
   const occupied: Interval[] = [];
+  for (const interval of busyIntervals) {
+    const start = Temporal.Instant.from(interval.start).epochNanoseconds;
+    const end = Temporal.Instant.from(interval.end).epochNanoseconds;
+    if (end <= start) {
+      throw new RangeError("Busy intervals must end after they start.");
+    }
+    occupied.push({ end: end + before, start: start - after });
+  }
   for (const snapshot of calendars) {
     for (const event of snapshot.events) {
       if (

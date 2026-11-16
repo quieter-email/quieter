@@ -214,23 +214,53 @@ describe("authorized availability fixtures", () => {
           : respond(call);
       });
     vi.stubGlobal("fetch", request);
-    const partial = await proposeCalendarAvailabilityForUser({
+    const selection = {
       ...input,
+      busyIntervals: [
+        { end: "2027-01-11T11:15:00Z", start: "2027-01-11T11:00:00Z" },
+      ],
+      limit: 1,
       userId: "owner",
-    });
+    };
+    const partial = await proposeCalendarAvailabilityForUser(selection);
     expect(partial).toMatchObject({
       candidates: [],
       coverage: [{ status: "complete" }, { reason: "permission" }],
       status: "partial",
     });
     unavailable = false;
-    const recovered = await proposeCalendarAvailabilityForUser({
-      ...input,
-      userId: "owner",
-    });
+    const recovered = await proposeCalendarAvailabilityForUser(selection);
     expect(recovered.status).toBe("complete");
-    expect(recovered.candidates.length).toBeGreaterThan(0);
+    expect(recovered.candidates).toHaveLength(1);
+    expect(recovered.candidates[0]).toMatchObject({
+      end: "2027-01-11T12:00:00Z",
+      start: "2027-01-11T11:30:00Z",
+    });
   });
+
+  test.each([
+    { end: "2027-01-11T11:15:00Z", start: "not-an-instant" },
+    { end: "2027-01-11T10:00:00Z", start: "2027-01-11T11:00:00Z" },
+  ])(
+    "invalid trusted holds reject instead of implying availability",
+    async (interval) => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn<typeof fetch>()
+          .mockImplementation(async (url, init) =>
+            respond(new Request(url, init))
+          )
+      );
+      await expect(
+        proposeCalendarAvailabilityForUser({
+          ...input,
+          busyIntervals: [interval],
+          userId: "owner",
+        })
+      ).rejects.toThrow(RangeError);
+    }
+  );
 
   test("current scope loss requires permission repair before any event read", async () => {
     mocks.gmailScopes = "";

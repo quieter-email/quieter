@@ -116,6 +116,22 @@ describe("calendar availability", () => {
     ]);
   });
 
+  test("combines trusted holds with source events before limiting proposals", () => {
+    const candidates = calculateCalendarAvailability({
+      busyIntervals: [
+        { end: "2026-11-16T11:00:00Z", start: "2026-11-16T10:00:00Z" },
+        { end: "2026-11-16T10:15:00Z", start: "2026-11-16T09:30:00Z" },
+      ],
+      calendars: [{ calendar, events: [createEvent()] }],
+      input: createInput({ limit: 2 }),
+    });
+    expect(candidates).toHaveLength(2);
+    expect(candidates).toMatchObject([
+      { start: "2026-11-16T11:00:00Z" },
+      { start: "2026-11-16T11:30:00Z" },
+    ]);
+  });
+
   test("ignores free, cancelled and self-declined events while tentative and unanswered busy events block", () => {
     const candidates = calculateCalendarAvailability({
       calendars: [
@@ -174,37 +190,56 @@ describe("calendar availability", () => {
     expect(candidates).toHaveLength(1);
   });
 
-  test("allows touching half-open intervals and places different buffers on the correct side of the proposal", () => {
-    const candidates = calculateCalendarAvailability({
-      calendars: [
-        {
-          calendar,
-          events: [
-            createEvent({
-              time: {
-                end: "2026-11-16T11:00:00Z",
-                kind: "timed",
-                start: "2026-11-16T10:00:00Z",
-                timeZone: "UTC",
-              },
-            }),
-          ],
-        },
-      ],
-      input: createInput({
-        preferences: {
-          ...preferences,
-          bufferAfterMinutes: 30,
-          bufferBeforeMinutes: 15,
-          stepMinutes: 15,
-        },
-      }),
-    });
-    expect(candidates.map(({ start }) => start)).toStrictEqual([
-      "2026-11-16T09:00:00Z",
-      "2026-11-16T11:15:00Z",
-      "2026-11-16T11:30:00Z",
-    ]);
+  test.each(["source event", "trusted hold"])(
+    "allows touching half-open intervals and places different buffers on the correct side of the proposal for a %s",
+    (source) => {
+      const time = {
+        end: "2026-11-16T11:00:00Z",
+        kind: "timed",
+        start: "2026-11-16T10:00:00Z",
+        timeZone: "UTC",
+      } satisfies CalendarEvent["time"];
+      const candidates = calculateCalendarAvailability({
+        busyIntervals:
+          source === "trusted hold"
+            ? [{ end: time.end, start: time.start }]
+            : [],
+        calendars: [
+          {
+            calendar,
+            events: source === "source event" ? [createEvent({ time })] : [],
+          },
+        ],
+        input: createInput({
+          preferences: {
+            ...preferences,
+            bufferAfterMinutes: 30,
+            bufferBeforeMinutes: 15,
+            stepMinutes: 15,
+          },
+        }),
+      });
+      expect(candidates.map(({ start }) => start)).toStrictEqual([
+        "2026-11-16T09:00:00Z",
+        "2026-11-16T11:15:00Z",
+        "2026-11-16T11:30:00Z",
+      ]);
+    }
+  );
+
+  test.each([
+    { end: "2026-11-16T10:00:00Z", start: "not-an-instant" },
+    { end: "not-an-instant", start: "2026-11-16T09:00:00Z" },
+    { end: "2026-11-16T09:00:00Z", start: "2026-11-16T09:00:00Z" },
+    { end: "2026-11-16T08:00:00Z", start: "2026-11-16T09:00:00Z" },
+  ])("rejects invalid trusted holds from $start to $end", (interval) => {
+    expect(() =>
+      calculateCalendarAvailability({
+        busyIntervals: [interval],
+        calendars: [{ calendar, events: [] }],
+        input: createInput(),
+      })
+    ).toThrow(RangeError);
   });
 
   test.each([true, false])(
@@ -424,6 +459,17 @@ describe("calendar availability", () => {
 });
 
 describe("availability boundaries", () => {
+  test("rejects trusted busy intervals in public availability input", () => {
+    expect(
+      calendarAvailabilityInputSchema.safeParse({
+        ...createInput(),
+        busyIntervals: [
+          { end: "2026-11-16T10:00:00Z", start: "2026-11-16T09:00:00Z" },
+        ],
+      }).success
+    ).toBeFalsy();
+  });
+
   test("rejects reversed, empty, excessive and invalid instant ranges", () => {
     const input = createInput();
     for (const end of [
