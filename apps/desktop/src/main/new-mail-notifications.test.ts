@@ -494,7 +494,99 @@ describe("native new-mail delivery", () => {
     await expect(service.show(input, () => frameCurrent)).resolves.toBe(
       "inactive"
     );
+    await preferences.execute(
+      {
+        enabled: true,
+        kind: "set-enabled",
+        mailboxId: "mailbox-a",
+        userId: "user-a",
+      },
+      () => frameCurrent
+    );
+    await expect(service.show(input, () => frameCurrent)).resolves.toBe(
+      "inactive"
+    );
+    const fresh = await capture(service);
+    await expect(
+      service.show({ ...fresh, messageId: "message-b" }, () => frameCurrent)
+    ).resolves.toBe("shown");
   });
+
+  test.each([
+    {
+      capturedSession: { sessionId: "session-a", userId: "user-a" },
+      response: "the same owner",
+    },
+    {
+      capturedSession: { sessionId: "session-b", userId: "user-b" },
+      response: "a different owner",
+    },
+    { capturedSession: null, response: "sign-out" },
+  ])(
+    "keeps revoked consent inactive when a pending capture returns $response after re-enable",
+    async ({ capturedSession }) => {
+      const started = Promise.withResolvers<null>();
+      const release = Promise.withResolvers<null>();
+      let pause = false;
+      const owner = new NewMailNotificationPreferenceService({
+        filename: () => path.join(directory, "preferences.json"),
+        getSession: async () => {
+          if (pause) {
+            pause = false;
+            started.resolve(null);
+            await release.promise;
+            return capturedSession;
+          }
+          return session;
+        },
+        isSupported: () => true,
+        origin: "https://fixture.example.test",
+      });
+      const scope = { mailboxId: "mailbox-a", userId: "user-a" };
+      const otherScope = { mailboxId: "mailbox-b", userId: "user-a" };
+      await owner.execute(
+        { ...otherScope, enabled: true, kind: "set-enabled" },
+        () => frameCurrent
+      );
+      const service = createService({ preferences: owner });
+      const other = await service.capture(otherScope, () => frameCurrent);
+      pause = true;
+      const pending = service.capture(scope, () => frameCurrent);
+      await started.promise;
+      await expect(
+        owner.execute(
+          { ...scope, enabled: false, kind: "set-enabled" },
+          () => frameCurrent
+        )
+      ).resolves.toMatchObject({ enabled: false, kind: "ready" });
+      await expect(
+        owner.execute(
+          { ...scope, enabled: true, kind: "set-enabled" },
+          () => frameCurrent
+        )
+      ).resolves.toMatchObject({ enabled: true, kind: "ready" });
+      const current = await capture(service);
+      release.resolve(null);
+      await expect(pending).resolves.toMatchObject({ kind: "inactive" });
+      expect(popups).toHaveLength(0);
+      await expect(service.show(current, () => frameCurrent)).resolves.toBe(
+        "shown"
+      );
+      if (other.kind !== "enabled") {
+        throw new Error("Fixture could not capture the independent mailbox.");
+      }
+      await expect(
+        service.show(
+          {
+            ...current,
+            contextId: other.contextId,
+            mailboxId: otherScope.mailboxId,
+          },
+          () => frameCurrent
+        )
+      ).resolves.toBe("shown");
+    }
+  );
 
   test("hands clicks the original main-private owner and prevents a delayed handoff from adopting a replacement account", async () => {
     const started = Promise.withResolvers<null>();

@@ -29,6 +29,10 @@ export class NewMailNotificationPreferenceService {
   private generation = 0;
   private controller = new AbortController();
   private enabledMailboxes: Set<string> | undefined;
+  private readonly mailboxLifetimes = new Map<
+    string,
+    { issued: boolean; pending: number }
+  >();
   private operations: Promise<null> = Promise.resolve(null);
 
   constructor(options: {
@@ -43,6 +47,7 @@ export class NewMailNotificationPreferenceService {
   invalidate(): void {
     this.generation += 1;
     this.verifiedUserId = undefined;
+    this.mailboxLifetimes.clear();
     this.controller.abort();
     this.controller = new AbortController();
     for (const listener of this.invalidations) {
@@ -74,6 +79,12 @@ export class NewMailNotificationPreferenceService {
         JSON.stringify([this.options.origin, input.userId, input.mailboxId])
       )
       .digest("hex");
+    const lifetime = this.mailboxLifetimes.get(mailboxKey) ?? {
+      issued: false,
+      pending: 0,
+    };
+    this.mailboxLifetimes.set(mailboxKey, lifetime);
+    lifetime.pending += 1;
     try {
       if (generation !== this.generation || !isCurrent()) {
         return { kind: "inactive" };
@@ -82,6 +93,7 @@ export class NewMailNotificationPreferenceService {
         const status = await this.execute(input, isCurrent);
         if (
           generation !== this.generation ||
+          this.mailboxLifetimes.get(mailboxKey) !== lifetime ||
           !isCurrent() ||
           status.kind === "inactive"
         ) {
@@ -101,7 +113,11 @@ export class NewMailNotificationPreferenceService {
         return { kind: "disabled" };
       }
       const initial = await this.options.getSession(signal);
-      if (generation !== this.generation || !isCurrent()) {
+      if (
+        generation !== this.generation ||
+        this.mailboxLifetimes.get(mailboxKey) !== lifetime ||
+        !isCurrent()
+      ) {
         return { kind: "inactive" };
       }
       if (initial?.userId !== input.userId) {
@@ -117,9 +133,11 @@ export class NewMailNotificationPreferenceService {
       this.verifiedUserId = initial.userId;
       const currentLifetime = () =>
         generation === this.generation &&
+        this.mailboxLifetimes.get(mailboxKey) === lifetime &&
         !signal.aborted &&
         isCurrent() &&
         this.enabledMailboxes?.has(mailboxKey) === true;
+      lifetime.issued = true;
       return {
         accountKey: createHash("sha256")
           .update(JSON.stringify([this.options.origin, initial.userId]))
@@ -159,6 +177,15 @@ export class NewMailNotificationPreferenceService {
         return { kind: "inactive" };
       }
       throw error;
+    } finally {
+      lifetime.pending -= 1;
+      if (
+        !lifetime.issued &&
+        lifetime.pending === 0 &&
+        this.mailboxLifetimes.get(mailboxKey) === lifetime
+      ) {
+        this.mailboxLifetimes.delete(mailboxKey);
+      }
     }
   }
 
@@ -282,6 +309,7 @@ export class NewMailNotificationPreferenceService {
         await rename(temporary, filename);
         this.enabledMailboxes = next;
         if (!input.enabled) {
+          this.mailboxLifetimes.delete(key);
           for (const listener of this.invalidations) {
             listener(key);
           }
