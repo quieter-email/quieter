@@ -1,3 +1,4 @@
+import type { mailPlacementOperation } from "@quieter/database/schema";
 import { reminderTimeZoneSchema } from "@quieter/mail/reminders";
 import {
   mailUndoItemSchema,
@@ -16,6 +17,27 @@ const messageIdsSchema = z
   .array(sourceIdSchema)
   .max(1000)
   .refine((ids) => new Set(ids).size === ids.length, "Repeated message.");
+type NativePlacement = typeof mailPlacementOperation.$inferSelect;
+export const mailUndoNativePlacementSchema = z.strictObject({
+  actorUserId: sourceIdSchema,
+  mailboxId: sourceIdSchema,
+  operationId: z.uuid(),
+  placement: z.enum(["done", "inbox"]),
+  requestId: sourceIdSchema,
+  sequence: revisionSchema,
+  status: z.enum({
+    applied: "applied",
+    failed: "failed",
+    pending: "pending",
+    submitting: "submitting",
+    superseded: "superseded",
+    uncertain: "uncertain",
+  } satisfies { [Status in NativePlacement["status"]]: Status }),
+  threadId: sourceIdSchema,
+});
+const appliedNativePlacementSchema = mailUndoNativePlacementSchema.extend({
+  status: z.literal("applied"),
+});
 const namedTimeZoneSchema = reminderTimeZoneSchema.refine(
   (zone) => !zone.startsWith("+") && !zone.startsWith("-")
 );
@@ -134,6 +156,7 @@ const snoozeFields = {
     "uncertain",
     "failed",
   ]),
+  placementPredecessor: appliedNativePlacementSchema,
 };
 const snoozeProofSchema = z.discriminatedUnion("command", [
   z.strictObject({
@@ -311,7 +334,26 @@ export const mailUndoOriginalSchema = z
       return original;
     }
     const { proof } = original;
-    const { after } = proof;
+    const { after, placementPredecessor } = proof;
+    if (
+      placementPredecessor.mailboxId !== original.mailboxId ||
+      placementPredecessor.threadId !== original.threadId ||
+      placementPredecessor.operationId === original.operationId ||
+      placementPredecessor.placement !==
+        (proof.command === "return-now" ? "inbox" : "done") ||
+      (proof.command === "return-now"
+        ? placementPredecessor.operationId === after.hideOperationId ||
+          placementPredecessor.actorUserId !== original.actorUserId
+        : placementPredecessor.operationId !== after.hideOperationId ||
+          (proof.command === "snooze" &&
+            placementPredecessor.actorUserId !== original.actorUserId))
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "The native placement predecessor does not belong to this Snooze action.",
+      });
+    }
     if (
       after.hiddenMessageIds.some(
         (id) => !after.knownIncomingMessageIds.includes(id)
@@ -621,6 +663,7 @@ const snoozeRestorationSchema = z.discriminatedUnion("kind", [
 const snoozeUndoPlanSchema = z
   .strictObject({
     effects: z.array(inverseSchema).max(1000),
+    expectedPlacement: appliedNativePlacementSchema,
     expectedVersion: revisionSchema,
     kind: z.literal("snooze"),
     nextVersion: revisionSchema,
@@ -638,16 +681,23 @@ const snoozeUndoPlanSchema = z
     const { restoration } = plan;
     if (
       BigInt(plan.nextVersion) !== BigInt(plan.expectedVersion) + 1n ||
+      plan.expectedPlacement.mailboxId !== plan.scope.mailboxId ||
+      plan.expectedPlacement.threadId !== plan.scope.threadId ||
       new Set(ids).size !== ids.length ||
       plan.effects.some((effect) => effect.facet !== "destination") ||
       (restoration.kind === "restore" &&
         (plan.effects.length !== 0 ||
+          plan.expectedPlacement.placement !== "done" ||
+          restoration.schedule.hideOperationId !==
+            plan.expectedPlacement.operationId ||
           restoration.schedule.id !== plan.scheduleId ||
           restoration.schedule.hiddenMessageIds.some(
             (id) => !restoration.schedule.knownIncomingMessageIds.includes(id)
           ))) ||
       (restoration.kind === "retire" &&
         (plan.effects.length === 0 ||
+          plan.expectedPlacement.placement !== "done" ||
+          plan.expectedPlacement.actorUserId !== plan.scope.actorUserId ||
           plan.effects.some(
             (effect) =>
               effect.facet === "destination" &&
@@ -655,6 +705,10 @@ const snoozeUndoPlanSchema = z
           ))) ||
       (restoration.kind === "rehide" &&
         (ids.length === 0 ||
+          plan.expectedPlacement.placement !== "inbox" ||
+          plan.expectedPlacement.actorUserId !== plan.scope.actorUserId ||
+          plan.expectedPlacement.operationId ===
+            restoration.predecessorHideOperationId ||
           restoration.template.id !== plan.scheduleId ||
           !sameIds(ids, restoration.template.hiddenMessageIds) ||
           restoration.template.hiddenMessageIds.some(
@@ -688,6 +742,7 @@ export const mailUndoPlanSchema = z.discriminatedUnion("kind", [
 export type MailUndoPlan = z.infer<typeof mailUndoPlanSchema>;
 
 export const mailUndoRehideBindingSchema = z.strictObject({
+  latestPlacement: mailUndoNativePlacementSchema.nullable(),
   outcome: z.discriminatedUnion("status", [
     z.strictObject({
       acknowledgedMessageIds: messageIdsSchema.min(1),
@@ -697,6 +752,7 @@ export const mailUndoRehideBindingSchema = z.strictObject({
       placement: z.enum(["done", "inbox"]),
       requestId: sourceIdSchema,
       requestedMessageIds: messageIdsSchema.min(1),
+      sequence: revisionSchema,
       status: z.literal("acknowledged"),
       threadId: sourceIdSchema,
     }),
@@ -718,9 +774,13 @@ type RehideBinding = z.infer<typeof mailUndoRehideBindingSchema>;
 export const bindMailUndoRehide = (
   input: RehideBinding
 ):
-  | { kind: "bound"; schedule: z.infer<typeof restoredScheduleSchema> }
+  | {
+      expectedPlacement: z.infer<typeof appliedNativePlacementSchema>;
+      kind: "bound";
+      schedule: z.infer<typeof restoredScheduleSchema>;
+    }
   | { kind: "blocked"; reason: "unacknowledged" | "mismatched" } => {
-  const { plan, phase, outcome } = input;
+  const { plan, phase, outcome, latestPlacement } = input;
   if (outcome.status !== "acknowledged") {
     return { kind: "blocked", reason: "unacknowledged" };
   }
@@ -735,12 +795,24 @@ export const bindMailUndoRehide = (
     outcome.threadId !== scope.threadId ||
     outcome.placement !== "done" ||
     outcome.operationId === restoration.predecessorHideOperationId ||
+    outcome.operationId === plan.expectedPlacement.operationId ||
+    BigInt(outcome.sequence) <= BigInt(plan.expectedPlacement.sequence) ||
+    latestPlacement === null ||
+    latestPlacement.status !== "applied" ||
+    latestPlacement.operationId !== outcome.operationId ||
+    latestPlacement.sequence !== outcome.sequence ||
+    latestPlacement.actorUserId !== outcome.actorUserId ||
+    latestPlacement.mailboxId !== outcome.mailboxId ||
+    latestPlacement.threadId !== outcome.threadId ||
+    latestPlacement.requestId !== outcome.requestId ||
+    latestPlacement.placement !== outcome.placement ||
     !sameIds(ids, outcome.requestedMessageIds) ||
     !sameIds(ids, outcome.acknowledgedMessageIds)
   ) {
     return { kind: "blocked", reason: "mismatched" };
   }
   return {
+    expectedPlacement: { ...latestPlacement, status: "applied" },
     kind: "bound",
     schedule: {
       ...restoration.template,
@@ -773,7 +845,7 @@ export const mailUndoPlanningSchema = z.strictObject({
       threadId: sourceIdSchema,
     })
     .nullable(),
-  latestPlacementSequence: revisionSchema.nullable(),
+  latestPlacement: mailUndoNativePlacementSchema.nullable(),
   mailboxId: sourceIdSchema,
   now: instantSchema,
   original: mailUndoOriginalSchema,
@@ -914,7 +986,17 @@ export const planMailUndo = (
   if (
     original.kind === "placement" &&
     original.proof &&
-    input.latestPlacementSequence !== original.proof.acceptedSequence
+    (input.latestPlacement === null ||
+      input.latestPlacement.sequence !== original.proof.acceptedSequence ||
+      input.latestPlacement.operationId !== original.operationId ||
+      input.latestPlacement.actorUserId !== original.actorUserId ||
+      input.latestPlacement.mailboxId !== original.mailboxId ||
+      input.latestPlacement.threadId !== original.threadId ||
+      input.latestPlacement.status !== "applied" ||
+      original.proof.effects.some(
+        (effect) =>
+          placementValue(effect.after) !== input.latestPlacement?.placement
+      ))
   ) {
     return { items: [item("changed", messageIds)], plan: null };
   }
@@ -968,7 +1050,18 @@ export const planMailUndo = (
   }
   const { proof } = original;
   const current = input.currentSchedule;
+  const latest = input.latestPlacement;
+  const expected = proof.placementPredecessor;
   if (
+    latest === null ||
+    latest.operationId !== expected.operationId ||
+    latest.sequence !== expected.sequence ||
+    latest.status !== expected.status ||
+    latest.actorUserId !== expected.actorUserId ||
+    latest.mailboxId !== expected.mailboxId ||
+    latest.threadId !== expected.threadId ||
+    latest.requestId !== expected.requestId ||
+    latest.placement !== expected.placement ||
     !current ||
     current.mailboxId !== original.mailboxId ||
     current.threadId !== original.threadId ||
@@ -1046,6 +1139,7 @@ export const planMailUndo = (
     items: items.length ? items : [item("pending", [])],
     plan: {
       effects: inverses,
+      expectedPlacement: { ...expected },
       expectedVersion: proof.after.version,
       kind: "snooze",
       nextVersion: (BigInt(proof.after.version) + 1n).toString(),

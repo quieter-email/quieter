@@ -22,8 +22,15 @@ import {
 } from "../src/mail/placement";
 import type { MailSnoozePlacement } from "../src/mail/placement";
 import {
+  admitMailUndo,
   bindMailUndoRehide,
+  createMailUndoCutoff,
+  mailUndoAdmissionSchema,
+  mailUndoNativePlacementSchema,
+  mailUndoOriginalSchema,
+  mailUndoPlanningSchema,
   mailUndoRehideBindingSchema,
+  planMailUndo,
 } from "../src/mail/undo-model";
 import { reconcileMailSnoozes } from "../src/snooze/repair";
 import {
@@ -958,6 +965,193 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
     expect(stillHidden?.state).toBe("done");
   });
 
+  test.each(["retained", "changed"])(
+    "Cancel Undo with a %s native owner matches the due consumer contract",
+    async (ownership) => {
+      await seed({ id: "outside", state: "done" });
+      await seed({ id: "anchor" });
+      const first = await snooze();
+      const id = first.snooze?.id ?? "";
+      const [saved] = await fixture.client<
+        {
+          hiddenMessageIds: string[];
+          hideOperationId: string;
+          knownIncomingMessageIds: string[];
+          returnAt: string;
+          status: string;
+          timeZone: string;
+          version: string;
+        }[]
+      >`select "hiddenMessageIds", "hideOperationId", "knownIncomingMessageIds", "returnAt"::text as "returnAt", status, "timeZone", version::text as version from "mailSnooze" where id=${id}`;
+      if (saved === undefined) {
+        throw new Error("Expected the actual saved schedule.");
+      }
+      const previous = {
+        ...saved,
+        id,
+        returnAt: new Date(saved.returnAt).toISOString(),
+      };
+      const cancelled = await change({
+        command: { kind: "cancel" },
+        version: first.snooze?.version ?? -1,
+      });
+      const [target] = cancelled.targets;
+      if (
+        target?.status !== "applied" ||
+        !target.operationId ||
+        !target.snooze
+      ) {
+        throw new Error("Expected the actual Cancel receipt.");
+      }
+      const after = {
+        ...previous,
+        status: target.snooze.status,
+        version: target.snooze.version.toString(),
+      };
+      const [predecessorRow] =
+        await fixture.client`select id as "operationId", "actorUserId", "mailboxId", "threadId", "requestId", sequence::text as sequence, placement, status from "mailPlacementOperation" where id=${saved.hideOperationId}`;
+      const placementPredecessor =
+        mailUndoNativePlacementSchema.parse(predecessorRow);
+      const admittedAt = new Date().toISOString();
+      const intentToken = randomUUID();
+      const original = mailUndoOriginalSchema.parse({
+        actorUserId: "actor",
+        admittedAt,
+        cutoff: createMailUndoCutoff({
+          admittedAt,
+          previousReturnAt: previous.returnAt,
+        }),
+        kind: "snooze",
+        mailboxId: "mailbox",
+        operationId: target.operationId,
+        proof: {
+          after,
+          command: "cancel",
+          completion: "acknowledged",
+          guards: [
+            {
+              after: { kind: "managed", value: "done" },
+              before: { kind: "managed", value: "done" },
+              facet: "destination",
+              intentToken,
+              messageId: "anchor",
+              outcome: {
+                proof: { kind: "managed-revision", revision: "0" },
+                status: "acknowledged",
+              },
+              phaseId: saved.hideOperationId,
+            },
+          ],
+          placementPredecessor,
+          previous,
+        },
+        threadId: "conversation",
+      });
+      if (ownership === "changed") {
+        await applyMailPlacement({
+          context: { userId: "actor" },
+          input: {
+            command: { kind: "set-placement", placement: "done" },
+            mailboxId: "mailbox",
+            requestId: randomUUID(),
+            targets: [{ messageIds: ["outside"], threadId: "conversation" }],
+          },
+        });
+      }
+      const [latest] =
+        await fixture.client`select id as "operationId", "actorUserId", "mailboxId", "threadId", "requestId", sequence::text as sequence, placement, status from "mailPlacementOperation" where "mailboxId"='mailbox' and "threadId"='conversation' order by "mailPlacementOperation".sequence desc limit 1`;
+      const authority = {
+        actorUserId: "actor",
+        canWrite: true,
+        mailboxId: "mailbox",
+      };
+      const attempt = admitMailUndo(
+        mailUndoAdmissionSchema.parse({
+          actorUserId: "actor",
+          attemptId: randomUUID(),
+          authority,
+          existingAttempt: null,
+          mailboxId: "mailbox",
+          now: admittedAt,
+          original,
+          receiptId: `snooze:${target.operationId}`,
+        })
+      );
+      if (attempt.kind !== "accepted") {
+        throw new Error("Expected a newly accepted model attempt.");
+      }
+      const result = planMailUndo(
+        mailUndoPlanningSchema.parse({
+          actorUserId: "actor",
+          attempt: attempt.attempt,
+          authority,
+          currentMessages: [
+            {
+              destination: { kind: "managed", value: "done" },
+              destinationIntentToken: intentToken,
+              mailboxId: "mailbox",
+              messageId: "anchor",
+              read: false,
+              readIntentToken: null,
+              source: {
+                destinationRevision: "0",
+                kind: "managed-revision",
+                readRevision: "0",
+              },
+              threadId: "conversation",
+            },
+          ],
+          currentSchedule: {
+            incomingMessageIds: saved.knownIncomingMessageIds,
+            mailboxId: "mailbox",
+            schedule: after,
+            threadId: "conversation",
+          },
+          latestPlacement: latest,
+          mailboxId: "mailbox",
+          now: admittedAt,
+          original,
+        })
+      );
+      expect(result.plan === null).toBe(ownership === "changed");
+      expect(result.items[0]?.status).toBe(
+        ownership === "changed" ? "changed" : "pending"
+      );
+      const { plan } = result;
+      if (ownership === "retained") {
+        if (plan?.kind !== "snooze" || plan.restoration.kind !== "restore") {
+          throw new Error("Expected an unchanged-owner restore plan.");
+        }
+        await fixture.client`update "mailSnooze" set status=${plan.restoration.schedule.status}, version=${plan.nextVersion}, "hideOperationId"=${plan.restoration.schedule.hideOperationId} where id=${id}`;
+        await makeDue(id);
+        await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+      }
+      const [returned] = await fixture.client<
+        { status: string }[]
+      >`select status from "mailSnooze" where id=${id}`;
+      expect(returned?.status).toBe(
+        ownership === "retained" ? "returned" : "cancelled"
+      );
+      const messages = await fixture.client<
+        { id: string; state: string }[]
+      >`select id, "mailboxState" as state from "managedMailMessage" order by id`;
+      expect(messages.find((message) => message.id === "anchor")?.state).toBe(
+        ownership === "retained" ? "active" : "done"
+      );
+      expect(messages.find((message) => message.id === "outside")?.state).toBe(
+        "done"
+      );
+      const [count] = await fixture.client<
+        { count: number }[]
+      >`select count(*)::integer as count from "mailPlacementOperation"`;
+      await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+      const [duplicate] = await fixture.client<
+        { count: number }[]
+      >`select count(*)::integer as count from "mailPlacementOperation"`;
+      expect(duplicate?.count).toBe(count?.count);
+    }
+  );
+
   test.each(["new", "historical"])(
     "a restored Return now schedule requires its %s hide owner at the actual due worker",
     async (ownership) => {
@@ -987,6 +1181,9 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
       if (returned === undefined) {
         throw new Error("Expected a returned schedule.");
       }
+      const [returnRow] =
+        await fixture.client`select p.id as "operationId", p."actorUserId", p."mailboxId", p."threadId", p."requestId", p.sequence::text as sequence, p.placement, p.status from "mailSnooze" s join "mailPlacementOperation" p on p.id=s."returnOperationId" and p."requestId"=s."returnRequestId" where s.id=${id}`;
+      const expectedPlacement = mailUndoNativePlacementSchema.parse(returnRow);
       const requestId = randomUUID();
       const result = await applyMailPlacement({
         context: { userId: "actor" },
@@ -1007,13 +1204,17 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
           messageIds: string[];
           requestedMessageIds: string[];
           requestId: string;
+          sequence: string;
         }[]
-      >`select id, "messageIds", "requestedMessageIds", "requestId" from "mailPlacementOperation" where id=${target.operationId}`;
+      >`select id, "messageIds", "requestedMessageIds", "requestId", sequence::text as sequence from "mailPlacementOperation" where id=${target.operationId}`;
       if (receipt === undefined) {
         throw new Error("Expected the actual native receipt.");
       }
       const attemptId = randomUUID();
+      const [latestRow] =
+        await fixture.client`select id as "operationId", "actorUserId", "mailboxId", "threadId", "requestId", sequence::text as sequence, placement, status from "mailPlacementOperation" where "mailboxId"='mailbox' and "threadId"='conversation' order by "mailPlacementOperation".sequence desc limit 1`;
       const input = mailUndoRehideBindingSchema.parse({
+        latestPlacement: latestRow,
         outcome: {
           acknowledgedMessageIds: receipt.messageIds,
           actorUserId: "actor",
@@ -1022,6 +1223,7 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
           placement: "done",
           requestId: receipt.requestId,
           requestedMessageIds: receipt.requestedMessageIds,
+          sequence: receipt.sequence,
           status: "acknowledged",
           threadId: "conversation",
         },
@@ -1036,6 +1238,7 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
               sourceProof: { kind: "managed-revision", revision: "0" },
             },
           ],
+          expectedPlacement,
           expectedVersion: returned.version.toString(),
           kind: "snooze",
           nextVersion: (returned.version + 1).toString(),

@@ -8,6 +8,7 @@ import {
   getMailUndoReceipt,
   mailUndoAdmissionSchema,
   mailUndoAttemptSchema,
+  mailUndoNativePlacementSchema,
   mailUndoOriginalSchema,
   mailUndoPlanSchema,
   mailUndoRehideBindingSchema,
@@ -22,6 +23,23 @@ const phaseId = "00000000-0000-4000-8000-000000000003";
 const attemptId = "00000000-0000-4000-8000-000000000004";
 const scheduleId = "00000000-0000-4000-8000-000000000005";
 const newerIntent = "00000000-0000-4000-8000-000000000006";
+const returnPlacementId = "00000000-0000-4000-8000-000000000009";
+const nativePlacement = {
+  actorUserId: "actor",
+  mailboxId: "mailbox",
+  operationId,
+  placement: "done",
+  requestId: "native-forward-request",
+  sequence: "90071992547409931234",
+  status: "applied",
+  threadId: "thread",
+};
+const newHidePlacement = {
+  ...nativePlacement,
+  operationId: "00000000-0000-4000-8000-000000000007",
+  requestId: "00000000-0000-4000-8000-000000000008",
+  sequence: "90071992547409931239",
+};
 const admittedAt = "2026-11-16T12:00:00.000Z";
 const now = "2026-11-16T12:00:01.000Z";
 const authority = {
@@ -115,7 +133,20 @@ const planning = (original: MailUndoOriginal) => {
           threadId: "thread",
         }
       : null,
-    latestPlacementSequence: "90071992547409931234",
+    latestPlacement:
+      original.kind === "snooze" && original.proof
+        ? original.proof.placementPredecessor
+        : {
+            ...nativePlacement,
+            actorUserId: original.actorUserId,
+            mailboxId: original.mailboxId,
+            operationId: original.operationId,
+            sequence:
+              original.kind === "placement" && original.proof
+                ? original.proof.acceptedSequence
+                : nativePlacement.sequence,
+            threadId: original.threadId,
+          },
     mailboxId: "mailbox",
     now,
     original,
@@ -149,7 +180,16 @@ const snoozeOriginal = (
     }[command],
     version: "90071992547409931232",
   };
-  const common = { after, command, completion: "acknowledged" };
+  const common = {
+    after,
+    command,
+    completion: "acknowledged",
+    placementPredecessor: {
+      ...nativePlacement,
+      operationId: command === "return-now" ? returnPlacementId : phaseId,
+      placement: command === "return-now" ? "inbox" : "done",
+    },
+  };
   let proof;
   if (command === "snooze") {
     proof = { ...common, effects: [destinationEffect] };
@@ -585,7 +625,10 @@ describe("exact compensation ownership", () => {
     expect(
       planMailUndo({
         ...input,
-        latestPlacementSequence: "90071992547409931235",
+        latestPlacement: input.latestPlacement && {
+          ...input.latestPlacement,
+          sequence: "90071992547409931235",
+        },
       }).plan
     ).toBeNull();
   });
@@ -621,6 +664,7 @@ const rehideBinding = () => {
     planning(snoozeOriginal("return-now", "suspended"))
   );
   return mailUndoRehideBindingSchema.parse({
+    latestPlacement: newHidePlacement,
     outcome: {
       acknowledgedMessageIds: ["message"],
       actorUserId: "actor",
@@ -629,6 +673,7 @@ const rehideBinding = () => {
       placement: "done",
       requestId: "00000000-0000-4000-8000-000000000008",
       requestedMessageIds: ["message"],
+      sequence: newHidePlacement.sequence,
       status: "acknowledged",
       threadId: "thread",
     },
@@ -638,13 +683,215 @@ const rehideBinding = () => {
 };
 
 describe("Snooze semantic restoration", () => {
+  test.each(["snooze", "reschedule", "cancel", "return-now"] as const)(
+    "%s retains the full native predecessor and refuses every intervening native intent",
+    (command) => {
+      const input = planning(snoozeOriginal(command));
+      const { original } = input;
+      if (
+        original.kind !== "snooze" ||
+        !original.proof ||
+        input.latestPlacement === null
+      ) {
+        throw new Error("Expected a captured native predecessor.");
+      }
+      const { plan } = planMailUndo(input);
+      expect(plan).toMatchObject({
+        expectedPlacement: original.proof.placementPredecessor,
+      });
+      expect(mailUndoPlanSchema.safeParse(plan).success).toBeTruthy();
+      for (const status of [
+        "pending",
+        "submitting",
+        "applied",
+        "failed",
+        "uncertain",
+        "superseded",
+      ] as const) {
+        expect(
+          planMailUndo({
+            ...input,
+            latestPlacement: {
+              ...input.latestPlacement,
+              operationId: newerIntent,
+              sequence: (
+                BigInt(input.latestPlacement.sequence) + 1n
+              ).toString(),
+              status,
+            },
+          })
+        ).toMatchObject({ items: [{ status: "changed" }], plan: null });
+      }
+      for (const change of [
+        { operationId: newerIntent },
+        { sequence: "90071992547409931235" },
+        { actorUserId: "another-writer" },
+        { mailboxId: "another-mailbox" },
+        { threadId: "another-thread" },
+        { requestId: "another-native-request" },
+        { placement: command === "return-now" ? "done" : "inbox" },
+        { status: "failed" },
+      ]) {
+        const latestPlacement = mailUndoNativePlacementSchema.parse({
+          ...input.latestPlacement,
+          ...change,
+        });
+        expect(planMailUndo({ ...input, latestPlacement }).plan).toBeNull();
+      }
+      expect(planMailUndo({ ...input, latestPlacement: null }).plan).toBeNull();
+    }
+  );
+
+  test.each(["reschedule", "cancel"] as const)(
+    "%s preserves a currently authorized different writer's native hide owner",
+    (command) => {
+      for (const previousStatus of ["active", "suspended"] as const) {
+        const original = snoozeOriginal(command, previousStatus);
+        if (original.kind !== "snooze" || !original.proof) {
+          throw new Error("Expected Snooze proof.");
+        }
+        const captured = mailUndoOriginalSchema.parse({
+          ...original,
+          proof: {
+            ...original.proof,
+            placementPredecessor: {
+              ...original.proof.placementPredecessor,
+              actorUserId: "previous-authorized-writer",
+            },
+          },
+        });
+        const result = planMailUndo(planning(captured));
+        expect(result.plan).toMatchObject({
+          expectedPlacement: { actorUserId: "previous-authorized-writer" },
+          restoration: {
+            kind: "restore",
+            schedule: { hideOperationId: phaseId, status: previousStatus },
+          },
+        });
+        expect(mailUndoPlanSchema.safeParse(result.plan).success).toBeTruthy();
+      }
+    }
+  );
+
+  test("Return now uses its actual Inbox return predecessor rather than the historical hide", () => {
+    const input = planning(snoozeOriginal("return-now"));
+    expect(planMailUndo(input).plan).toMatchObject({
+      expectedPlacement: { operationId: returnPlacementId, placement: "inbox" },
+    });
+    if (input.latestPlacement === null) {
+      throw new Error("Expected actual return predecessor.");
+    }
+    expect(
+      planMailUndo({
+        ...input,
+        latestPlacement: { ...input.latestPlacement, operationId: phaseId },
+      }).plan
+    ).toBeNull();
+    const result = planMailUndo(input);
+    const attempt = mailUndoAttemptSchema.parse({
+      ...input.attempt,
+      items: result.items.map((item) => ({
+        ...item,
+        code: "unconfirmed",
+        message: "Await confirmation.",
+        status: "uncertain",
+      })),
+      state: "uncertain",
+    });
+    expect(
+      planMailUndo({ ...input, attempt, latestPlacement: null })
+    ).toMatchObject({
+      items: [{ replayed: true, status: "uncertain" }],
+      plan: null,
+    });
+  });
+
+  test("a retained plan keeps its predecessor when a parsed source projection is replaced", () => {
+    const input = planning(snoozeOriginal("cancel"));
+    const result = planMailUndo(input);
+    if (
+      result.plan?.kind !== "snooze" ||
+      input.original.kind !== "snooze" ||
+      !input.original.proof
+    ) {
+      throw new Error("Expected a retained Snooze plan.");
+    }
+    const captured = { ...result.plan.expectedPlacement };
+    input.original.proof.placementPredecessor.operationId = newerIntent;
+    input.original.proof.placementPredecessor.requestId =
+      "replaced-source-request";
+    expect(result.plan.expectedPlacement).toMatchObject(captured);
+    expect(mailUndoPlanSchema.safeParse(result.plan).success).toBeTruthy();
+  });
+
+  test.each(["snooze", "reschedule", "cancel", "return-now"] as const)(
+    "%s rejects missing or contradictory native proof and plan ownership",
+    (command) => {
+      const original = snoozeOriginal(command);
+      if (original.kind !== "snooze" || !original.proof) {
+        throw new Error("Expected Snooze proof.");
+      }
+      const { placementPredecessor, ...legacy } = original.proof;
+      expect(
+        mailUndoOriginalSchema.safeParse({ ...original, proof: legacy }).success
+      ).toBeFalsy();
+      for (const change of [
+        { mailboxId: "other" },
+        { threadId: "other" },
+        { operationId },
+        { status: "pending" },
+        { sequence: 9_007_199_254_740_992 },
+        { sequence: "01" },
+        { placement: command === "return-now" ? "done" : "inbox" },
+        ...(command === "return-now"
+          ? [{ operationId: phaseId }, { actorUserId: "other" }]
+          : []),
+      ]) {
+        expect(
+          mailUndoOriginalSchema.safeParse({
+            ...original,
+            proof: {
+              ...original.proof,
+              placementPredecessor: { ...placementPredecessor, ...change },
+            },
+          }).success
+        ).toBeFalsy();
+      }
+      const { plan } = planMailUndo(planning(original));
+      if (plan?.kind !== "snooze") {
+        throw new Error("Expected a complete Snooze plan.");
+      }
+      const { expectedPlacement, ...legacyPlan } = plan;
+      expect(mailUndoPlanSchema.safeParse(legacyPlan).success).toBeFalsy();
+      for (const change of [
+        { mailboxId: "other" },
+        { threadId: "other" },
+        { status: "uncertain" },
+        { placement: command === "return-now" ? "done" : "inbox" },
+        ...(plan.restoration.kind === "restore"
+          ? [{ operationId: newerIntent }]
+          : []),
+      ]) {
+        expect(
+          mailUndoPlanSchema.safeParse({
+            ...plan,
+            expectedPlacement: { ...expectedPlacement, ...change },
+          }).success
+        ).toBeFalsy();
+      }
+    }
+  );
+
   test("refuses Cancel Undo after an unrelated anchor advances the thread placement owner", () => {
     const input = planning(snoozeOriginal("cancel"));
     expect(planMailUndo(input).plan).not.toBeNull();
     expect(
       planMailUndo({
         ...input,
-        latestPlacementSequence: "90071992547409931235",
+        latestPlacement: input.latestPlacement && {
+          ...input.latestPlacement,
+          sequence: "90071992547409931235",
+        },
       })
     ).toMatchObject({ items: [{ status: "changed" }], plan: null });
   });
@@ -1110,6 +1357,81 @@ describe("Return now Undo hide ownership", () => {
         plan: { ...input.plan, expectedVersion: "broken" },
       }).success
     ).toBeFalsy();
+  });
+
+  test("rehide binding refuses a lost latest owner after the native acknowledgement", () => {
+    const input = rehideBinding();
+    expect(bindMailUndoRehide(input)).toMatchObject({
+      expectedPlacement: newHidePlacement,
+      kind: "bound",
+    });
+    for (const change of [
+      { operationId: newerIntent },
+      { sequence: "90071992547409931240" },
+      { actorUserId: "other" },
+      { mailboxId: "other" },
+      { threadId: "other" },
+      { requestId: "other" },
+      { placement: "inbox" },
+      { status: "pending" },
+      { status: "submitting" },
+      { status: "failed" },
+      { status: "uncertain" },
+      { status: "superseded" },
+    ]) {
+      const changed = mailUndoRehideBindingSchema.parse({
+        ...input,
+        latestPlacement: { ...input.latestPlacement, ...change },
+      });
+      expect(bindMailUndoRehide(changed)).toMatchObject({ kind: "blocked" });
+    }
+    expect(
+      bindMailUndoRehide({ ...input, latestPlacement: null })
+    ).toMatchObject({ kind: "blocked" });
+  });
+
+  test("a bound install guard keeps its receipt when the current projection is replaced", () => {
+    const input = rehideBinding();
+    const result = bindMailUndoRehide(input);
+    if (result.kind !== "bound" || input.latestPlacement === null) {
+      throw new Error("Expected a bound install guard.");
+    }
+    const captured = { ...result.expectedPlacement };
+    input.latestPlacement.operationId = newerIntent;
+    input.latestPlacement.requestId = "replaced-current-request";
+    expect(result.expectedPlacement).toMatchObject(captured);
+    expect(result.schedule.hideOperationId).toBe(captured.operationId);
+  });
+
+  test("rehide receipt must be newer than and distinct from both prior native owners", () => {
+    const input = rehideBinding();
+    if (input.outcome.status !== "acknowledged") {
+      throw new Error("Expected acknowledgement.");
+    }
+    for (const sequence of ["90071992547409931233", "90071992547409931234"]) {
+      const changed = mailUndoRehideBindingSchema.parse({
+        ...input,
+        latestPlacement: { ...input.latestPlacement, sequence },
+        outcome: { ...input.outcome, sequence },
+      });
+      expect(bindMailUndoRehide(changed)).toMatchObject({ kind: "blocked" });
+    }
+    for (const id of [phaseId, returnPlacementId]) {
+      const changed = mailUndoRehideBindingSchema.parse({
+        ...input,
+        latestPlacement: { ...input.latestPlacement, operationId: id },
+        outcome: { ...input.outcome, operationId: id },
+      });
+      expect(bindMailUndoRehide(changed)).toMatchObject({ kind: "blocked" });
+    }
+    for (const sequence of ["bad", "01", 9_007_199_254_740_992]) {
+      expect(
+        mailUndoRehideBindingSchema.safeParse({
+          ...input,
+          outcome: { ...input.outcome, sequence },
+        }).success
+      ).toBeFalsy();
+    }
   });
 
   test.each(["reschedule", "cancel"] as const)(
