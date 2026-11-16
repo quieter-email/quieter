@@ -255,7 +255,7 @@ const listManagedUnreadNonSpamCounts = async (mailboxIds: string[]) => {
         inArray(managedMailMessage.mailboxId, mailboxIds),
         eq(managedMailMessage.direction, "inbound"),
         eq(managedMailMessage.isRead, false),
-        eq(managedMailMessage.mailboxState, "active")
+        inArray(managedMailMessage.mailboxState, ["active", "done"])
       )
     )
     .groupBy(managedMailMessage.mailboxId);

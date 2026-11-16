@@ -1,10 +1,12 @@
 import type { ComposeDraftAnchor } from "./compose/schema";
 import type { MailCategory } from "./data-plane";
 import type { OtpToken } from "./otp-token";
+import type { MailSnoozeState } from "./snooze";
 
 export type { MailCategory as MailboxCategory } from "./data-plane";
 
 export const MAILBOX_LABELS = {
+  done: "DONE",
   drafts: "DRAFT",
   inbox: "INBOX",
   sent: "SENT",
@@ -27,6 +29,7 @@ export type MessagePart = {
 };
 
 export type MessageListItem = {
+  snooze?: MailSnoozeState;
   otpToken?: OtpToken;
   isImportant?: boolean;
   threadIsImportant?: boolean;
@@ -34,6 +37,7 @@ export type MessageListItem = {
   id: string;
   threadId: string;
   threadLabelIds?: string[];
+  threadInboxIncomingMessageIds?: string[];
   threadMessageCount?: number;
   threadAttachmentCount?: number;
   threadAttachmentNames?: string[];
@@ -107,6 +111,7 @@ export type ListMessagesPageResult = {
 };
 
 export type ThreadMessagesResult = {
+  snooze?: MailSnoozeState;
   threadId: string;
   snippet?: string;
   subject?: string;
@@ -128,7 +133,7 @@ export type MailboxSyncDelta = {
 const normalizeLabelIds = (
   labelIds: readonly string[] | undefined
 ): string[] | undefined => {
-  if (labelIds === undefined || labelIds.length === 0) {
+  if (labelIds === undefined) {
     return undefined;
   }
 
@@ -140,7 +145,7 @@ const normalizeLabelIds = (
       })
     ),
   ];
-  return normalized.length > 0 ? normalized : undefined;
+  return normalized;
 };
 
 export const removeUnreadLabel = (
@@ -197,10 +202,35 @@ export const isMessageInMailbox = (
     labelIds?: string[];
     isImportant?: boolean;
     threadIsImportant?: boolean;
+    snooze?: MailSnoozeState;
   },
   mailbox: MailCategory
 ): boolean => {
   const { labelIds } = message;
+  if (mailbox === "later") {
+    return (
+      message.snooze !== undefined &&
+      [
+        "preparing",
+        "active",
+        "returning",
+        "suspended",
+        "failed",
+        "uncertain",
+      ].includes(message.snooze.status) &&
+      labelIds?.some((label) =>
+        ["SPAM", "TRASH", "DRAFT", "SENT"].includes(label)
+      ) !== true
+    );
+  }
+  if (mailbox === "done") {
+    return (
+      labelIds !== undefined &&
+      !labelIds.some((label) =>
+        ["INBOX", "SPAM", "TRASH", "DRAFT", "SENT"].includes(label)
+      )
+    );
+  }
   if (mailbox === "important") {
     return (
       (message.threadIsImportant ?? message.isImportant ?? false) &&

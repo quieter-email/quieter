@@ -17,6 +17,7 @@ import type { inheritManagedThreadLabels } from "../src/managed-mail/labels/repo
 import { recordInboundManagedMessage } from "../src/managed-mail/messages/ingestion";
 import type { applyManagedRulesToMessage } from "../src/managed-mail/rules/evaluator";
 import type { observeReminderMail } from "../src/reminders/service";
+import type { handleSnoozeInbound } from "../src/snooze/service";
 import type {
   processMailVerificationCode,
   reportPendingMailboxVerificationCodeUsage,
@@ -29,7 +30,11 @@ type IncomingRecord = Pick<
 
 const fixtures = vi.hoisted(() => {
   const messages: IncomingRecord[] = [];
-  return { enqueue: vi.fn<typeof enqueueMailAgentMessage>(), messages };
+  return {
+    enqueue: vi.fn<typeof enqueueMailAgentMessage>(),
+    messages,
+    snooze: vi.fn<typeof handleSnoozeInbound>(),
+  };
 });
 
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The fake implements the ingestion database methods only.
@@ -90,6 +95,9 @@ vi.mock(import("../src/mail-agent/inbox"), () => ({
 vi.mock(import("../src/reminders/service"), () => ({
   observeReminderMail: vi.fn<typeof observeReminderMail>().mockResolvedValue(),
 }));
+vi.mock(import("../src/snooze/service"), () => ({
+  handleSnoozeInbound: fixtures.snooze,
+}));
 vi.mock(import("../src/ai-memory-capture"), () => ({
   captureManagedMessageMemory: vi.fn<typeof captureManagedMessageMemory>(),
 }));
@@ -137,6 +145,7 @@ describe("durable managed mail action receive", () => {
   beforeEach(() => {
     fixtures.messages.length = 0;
     fixtures.enqueue.mockReset().mockResolvedValue();
+    fixtures.snooze.mockReset().mockResolvedValue();
   });
 
   test("withholds receive acknowledgement until the durable inbox write completes", async () => {
@@ -174,6 +183,43 @@ describe("durable managed mail action receive", () => {
     expect(fixtures.messages).toHaveLength(1);
     expect(fixtures.enqueue).toHaveBeenLastCalledWith(
       expect.objectContaining({ receivedAt: arrival })
+    );
+  });
+
+  test("observes canonical persisted mail when the durable agent inbox is unavailable", async () => {
+    fixtures.enqueue.mockRejectedValue(new Error("Inbox unavailable"));
+    const observed: string[] = [];
+    // oxlint-disable-next-line eslint/require-await -- The observer double inspects already persisted fixture state.
+    fixtures.snooze.mockImplementation(async ({ messageId }) => {
+      if (!fixtures.messages.some((message) => message.id === messageId)) {
+        throw new Error("Message is not persisted.");
+      }
+      observed.push(messageId);
+    });
+
+    await expect(recordInboundManagedMessage(input)).rejects.toThrow(
+      "Inbox unavailable"
+    );
+
+    expect(observed).toStrictEqual(
+      fixtures.messages.map((message) => message.id)
+    );
+    expect(observed).toHaveLength(1);
+  });
+
+  test("retries a failed Snooze observer against the existing canonical message", async () => {
+    fixtures.snooze.mockRejectedValueOnce(new Error("Snooze unavailable"));
+
+    await expect(recordInboundManagedMessage(input)).rejects.toThrow(
+      "Snooze unavailable"
+    );
+    await expect(recordInboundManagedMessage(input)).resolves.toContain(
+      "mailbox"
+    );
+
+    expect(fixtures.messages).toHaveLength(1);
+    expect(fixtures.snooze).toHaveBeenLastCalledWith(
+      expect.objectContaining({ messageId: fixtures.messages[0]?.id })
     );
   });
 });

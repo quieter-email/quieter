@@ -1,6 +1,7 @@
 import type { MailboxActions } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
 import { toastError } from "@quieter/app/lib/error-toast";
 import type { MessageListItem } from "@quieter/app/lib/mail";
+import type { MailSnoozeCommand } from "@quieter/mail/snooze";
 
 export type LabelChanges = {
   addLabelIds?: string[];
@@ -8,6 +9,13 @@ export type LabelChanges = {
 };
 
 export type ThreadActionHandlers = {
+  onApplySnooze?: (
+    threadId: string,
+    command: MailSnoozeCommand
+  ) => void | Promise<void>;
+  placementScope?: MailboxActions["placementScope"];
+  onMarkDone?: (threadId: string) => void | Promise<void>;
+  onReturnToInbox?: (threadId: string) => void | Promise<void>;
   onSetImportance?: (
     threadId: string,
     important: boolean
@@ -44,6 +52,37 @@ export const createMailboxThreadMessageActionHandlers = ({
   supportsReadState?: boolean;
   supportsUnsubscribe?: boolean;
 }): ThreadActionHandlers => ({
+  placementScope: mailboxActions.placementScope,
+  ...(mailboxActions.canSetPlacement
+    ? {
+        onApplySnooze: async (threadId: string, command: MailSnoozeCommand) => {
+          try {
+            await mailboxActions.applyThreadSnooze(threadId, command);
+            if (command.kind === "return-now" || command.kind === "cancel") {
+              onBackToList?.();
+            }
+          } catch (error) {
+            toastError(error, { boundary: "mail-snooze" });
+          }
+        },
+        onMarkDone: async (threadId: string) => {
+          try {
+            await mailboxActions.markThreadDone(threadId);
+            onBackToList?.();
+          } catch (error) {
+            toastError(error, { boundary: "mail-placement" });
+          }
+        },
+        onReturnToInbox: async (threadId: string) => {
+          try {
+            await mailboxActions.returnThreadToInbox(threadId);
+            onBackToList?.();
+          } catch (error) {
+            toastError(error, { boundary: "mail-placement" });
+          }
+        },
+      }
+    : {}),
   ...(mailboxActions.canSetImportance
     ? {
         onSetImportance: async (threadId: string, important: boolean) => {

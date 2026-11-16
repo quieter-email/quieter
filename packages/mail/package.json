@@ -36,7 +36,10 @@
     "./capture": "./src/capture.ts",
     "./otp-token": "./src/otp-token.ts",
     "./scheduled-send": "./src/scheduled-send.ts",
-    "./scheduled-send-ticket": "./src/scheduled-send-ticket.ts"
+    "./scheduled-send-ticket": "./src/scheduled-send-ticket.ts",
+    "./snooze": "./src/snooze.ts",
+    "./snooze-ticket": "./src/snooze-ticket.ts",
+    "./undo": "./src/undo.ts"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",

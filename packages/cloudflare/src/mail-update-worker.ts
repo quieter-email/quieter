@@ -3,6 +3,7 @@ import { requestErrorResponse } from "./request-error";
 import { withSentryReporting } from "./worker-runtime";
 
 export { MailLiveUser } from "./mail-live-user";
+export { MailSnooze } from "./mail-snooze";
 export { ReminderMailbox } from "./reminder-mailbox";
 export { ScheduledSend } from "./scheduled-send";
 

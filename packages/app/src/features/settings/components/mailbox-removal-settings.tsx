@@ -59,7 +59,7 @@ export const MailboxRemovalSettings = ({
           >
             {isManaged
               ? "Delete this mailbox and its saved mail for everyone with access."
-              : "Remove this account's mail and calendar access from quieter."}
+              : "Remove this account's mail and calendar access from quieter. Snoozed conversations will not return automatically after disconnection."}
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>
@@ -80,7 +80,7 @@ export const MailboxRemovalSettings = ({
             <DialogDescription>
               {isManaged
                 ? "This permanently deletes the mailbox and cannot be undone."
-                : "You can reconnect this account later."}
+                : "Snoozed conversations will not return automatically. Reconnecting later does not restore their return times."}
             </DialogDescription>
           </DialogHeader>
           <DialogBody spacing="3">

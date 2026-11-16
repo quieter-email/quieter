@@ -39,6 +39,7 @@ import { Route as ApiConnectorsCallbackRouteImport } from './routes/api/connecto
 import { Route as ApiDesktopSessionRouteImport } from './routes/api/desktop.session'
 import { Route as ApiDomainConnectCallbackRouteImport } from './routes/api/domain-connect.callback'
 import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
+import { Route as ApiInternalMailSnoozeRouteImport } from './routes/api.internal.mail-snooze'
 import { Route as ApiInternalScheduledSendRouteImport } from './routes/api.internal.scheduled-send'
 import { Route as ApiMessagesMessageIdRouteImport } from './routes/api/messages.$messageId'
 import { Route as ApiOTokenRouteImport } from './routes/api/o.$token'
@@ -199,6 +200,11 @@ const ApiGmailCallbackRoute = ApiGmailCallbackRouteImport.update({
   path: '/api/gmail/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInternalMailSnoozeRoute = ApiInternalMailSnoozeRouteImport.update({
+  id: '/api/internal/mail-snooze',
+  path: '/api/internal/mail-snooze',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiInternalScheduledSendRoute =
   ApiInternalScheduledSendRouteImport.update({
     id: '/api/internal/scheduled-send',
@@ -262,6 +268,7 @@ export interface FileRoutesByFullPath {
   '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
+  '/api/internal/mail-snooze': typeof ApiInternalMailSnoozeRoute
   '/api/internal/scheduled-send': typeof ApiInternalScheduledSendRoute
   '/api/messages/$messageId': typeof ApiMessagesMessageIdRoute
   '/api/o/$token': typeof ApiOTokenRoute
@@ -298,6 +305,7 @@ export interface FileRoutesByTo {
   '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
+  '/api/internal/mail-snooze': typeof ApiInternalMailSnoozeRoute
   '/api/internal/scheduled-send': typeof ApiInternalScheduledSendRoute
   '/api/messages/$messageId': typeof ApiMessagesMessageIdRoute
   '/api/o/$token': typeof ApiOTokenRoute
@@ -337,6 +345,7 @@ export interface FileRoutesById {
   '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
+  '/api/internal/mail-snooze': typeof ApiInternalMailSnoozeRoute
   '/api/internal/scheduled-send': typeof ApiInternalScheduledSendRoute
   '/api/messages/$messageId': typeof ApiMessagesMessageIdRoute
   '/api/o/$token': typeof ApiOTokenRoute
@@ -375,6 +384,7 @@ export interface FileRouteTypes {
     | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
+    | '/api/internal/mail-snooze'
     | '/api/internal/scheduled-send'
     | '/api/messages/$messageId'
     | '/api/o/$token'
@@ -411,6 +421,7 @@ export interface FileRouteTypes {
     | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
+    | '/api/internal/mail-snooze'
     | '/api/internal/scheduled-send'
     | '/api/messages/$messageId'
     | '/api/o/$token'
@@ -449,6 +460,7 @@ export interface FileRouteTypes {
     | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
+    | '/api/internal/mail-snooze'
     | '/api/internal/scheduled-send'
     | '/api/messages/$messageId'
     | '/api/o/$token'
@@ -473,6 +485,7 @@ export interface RootRouteChildren {
   ApiDesktopSessionRoute: typeof ApiDesktopSessionRoute
   ApiDomainConnectCallbackRoute: typeof ApiDomainConnectCallbackRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
+  ApiInternalMailSnoozeRoute: typeof ApiInternalMailSnoozeRoute
   ApiInternalScheduledSendRoute: typeof ApiInternalScheduledSendRoute
   ApiMessagesMessageIdRoute: typeof ApiMessagesMessageIdRoute
   ApiOTokenRoute: typeof ApiOTokenRoute
@@ -693,6 +706,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGmailCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/internal/mail-snooze': {
+      id: '/api/internal/mail-snooze'
+      path: '/api/internal/mail-snooze'
+      fullPath: '/api/internal/mail-snooze'
+      preLoaderRoute: typeof ApiInternalMailSnoozeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/internal/scheduled-send': {
       id: '/api/internal/scheduled-send'
       path: '/api/internal/scheduled-send'
@@ -801,6 +821,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDesktopSessionRoute: ApiDesktopSessionRoute,
   ApiDomainConnectCallbackRoute: ApiDomainConnectCallbackRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
+  ApiInternalMailSnoozeRoute: ApiInternalMailSnoozeRoute,
   ApiInternalScheduledSendRoute: ApiInternalScheduledSendRoute,
   ApiMessagesMessageIdRoute: ApiMessagesMessageIdRoute,
   ApiOTokenRoute: ApiOTokenRoute,
