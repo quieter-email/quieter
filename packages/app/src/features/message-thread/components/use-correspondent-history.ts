@@ -160,8 +160,14 @@ export const createCorrespondentHistory = ({
       view.scope === scope
     );
   };
-  const retire = (nextView: { kind: "closed" | "choosing" }) => {
+  const retire = (
+    nextView: { kind: "closed" | "choosing" },
+    focusIntent: "restore-trigger" | "preserve-handoff" = "restore-trigger"
+  ) => {
     const { view } = state.get();
+    if (focusIntent === "restore-trigger") {
+      focusHandoff.current = false;
+    }
     if (view.kind === "selected") {
       view.scope.controller.abort();
       if (view.source.kind === "opening") {
@@ -176,6 +182,7 @@ export const createCorrespondentHistory = ({
     }
   };
   const stopSource = () => {
+    focusHandoff.current = false;
     const { view } = state.get();
     if (view.kind === "selected" && view.source.kind === "opening") {
       view.source.controller.abort();
@@ -207,7 +214,7 @@ export const createCorrespondentHistory = ({
       return () => {
         attachedOwner.controller.abort();
         if (owner === attachedOwner) {
-          retire({ kind: "closed" });
+          retire({ kind: "closed" }, "preserve-handoff");
         }
       };
     },
@@ -316,7 +323,7 @@ export const createCorrespondentHistory = ({
       }
       const requestOwner = owner;
       focusHandoff.current = true;
-      retire({ kind: "closed" });
+      retire({ kind: "closed" }, "preserve-handoff");
       try {
         await openReminders(trigger, owner.mailboxId, {
           kind: "detail",
@@ -403,13 +410,13 @@ export const createCorrespondentHistory = ({
         });
         await navigation;
         if (isCurrentRequest()) {
-          retire({ kind: "closed" });
+          retire({ kind: "closed" }, "preserve-handoff");
         }
       } catch (error) {
         if (!isCurrentRequest()) {
           return;
         }
-        focusHandoff.current = false;
+        stopSource();
         const failure = classifyFailure(error);
         if (failure === "denied") {
           retire({ kind: "closed" });

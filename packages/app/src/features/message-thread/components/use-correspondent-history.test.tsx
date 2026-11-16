@@ -455,6 +455,85 @@ describe("correspondent history", () => {
       expect(history.consumeFocusHandoff()).toBeFalsy();
     });
 
+    test.each(["section", "correspondent", "close"])(
+      "discards pending navigation focus intent on %s change",
+      async (change) => {
+        const { api, history, navigate, reportError } = setup();
+        const entered = Promise.withResolvers<null>();
+        const navigation = Promise.withResolvers<null>();
+        api.openSource.mockResolvedValueOnce(opened);
+        navigate.mockImplementationOnce(async () => {
+          entered.resolve(null);
+          await navigation.promise;
+        });
+        const operation = history.openSource(source, "mail");
+        await entered.promise;
+
+        switch (change) {
+          case "section": {
+            history.selectSection("memory");
+            break;
+          }
+          case "correspondent": {
+            history.selectCorrespondent("other@example.com");
+            break;
+          }
+          default: {
+            history.close();
+          }
+        }
+        navigation.reject(new Error("The superseded navigation failed"));
+        await operation;
+        history.close();
+
+        expect(history.consumeFocusHandoff()).toBeFalsy();
+        expect(reportError).not.toHaveBeenCalled();
+      }
+    );
+
+    test("keeps a later successful handoff when superseded navigation rejects", async () => {
+      const { api, history, navigate, reportError } = setup();
+      const entered = Promise.withResolvers<null>();
+      const navigation = Promise.withResolvers<null>();
+      api.openSource.mockResolvedValue(opened);
+      navigate.mockImplementationOnce(async () => {
+        entered.resolve(null);
+        await navigation.promise;
+      });
+      const first = history.openSource(source, "mail");
+      await entered.promise;
+      history.selectSection("memory");
+      history.selectSection("mail");
+
+      await history.openSource(source, "mail");
+      navigation.reject(new Error("The earlier navigation failed"));
+      await first;
+
+      expect(history.consumeFocusHandoff()).toBeTruthy();
+      expect(reportError).not.toHaveBeenCalled();
+    });
+
+    test("keeps destination focus when navigation unmounts its owner", async () => {
+      const { api, history, navigate, reportError } = setup();
+      const detach = history.attach();
+      const entered = Promise.withResolvers<null>();
+      const navigation = Promise.withResolvers<null>();
+      api.openSource.mockResolvedValueOnce(opened);
+      navigate.mockImplementationOnce(async () => {
+        entered.resolve(null);
+        await navigation.promise;
+      });
+      const operation = history.openSource(source, "mail");
+      await entered.promise;
+
+      detach();
+      navigation.resolve(null);
+      await operation;
+
+      expect(history.consumeFocusHandoff()).toBeTruthy();
+      expect(reportError).not.toHaveBeenCalled();
+    });
+
     test("does not seed or navigate when retired during canonical query cancellation", async () => {
       const { api, client, history, navigate, reportError } = setup();
       const cancellation = Promise.withResolvers<null>();
