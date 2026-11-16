@@ -1356,11 +1356,17 @@ const main = async (): Promise<void> => {
     ) {
       report.result = "cleanup-failure";
     }
+    process.off("SIGTERM", interrupted);
+    process.off("SIGINT", interrupted);
+    if (failure.message) {
+      report.error ??= failure.message;
+      if (report.result === "observed-pipeline-pass") {
+        report.result = "setup-failure";
+      }
+    }
     report.stage = finishedStage;
     report.finishedAt = Date.now();
     await save();
-    process.off("SIGTERM", interrupted);
-    process.off("SIGINT", interrupted);
     process.stdout.write(
       `AT companion ${report.result}, stage ${report.stage}.\n`
     );
