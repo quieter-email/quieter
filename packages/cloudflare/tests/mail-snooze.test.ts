@@ -1,5 +1,6 @@
 import { configureServerEnv } from "@quieter/env/server";
 import { readMailSnoozeTicket } from "@quieter/mail/snooze-ticket";
+import type { MailSnoozeScope } from "@quieter/mail/snooze-ticket";
 import { signMailPayload } from "@quieter/mail/updates";
 import {
   evictDurableObject,
@@ -10,6 +11,30 @@ import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
 import { handleMailUpdates } from "../src/mail-updates";
+
+const wakeSnoozeForAlarmTest = async (scope: MailSnoozeScope) => {
+  const stub = env.MailSnooze.get(
+    env.MailSnooze.idFromName(JSON.stringify([scope.mailboxId, scope.id]))
+  );
+  const status = await runInDurableObject(
+    stub,
+    async (instance, state) =>
+      await state.blockConcurrencyWhile(async () => {
+        configureServerEnv({ BETTER_AUTH_URL: "https://quieter.example" });
+        const response = await instance.fetch(
+          new Request("https://internal/mail-snooze/wake", {
+            body: JSON.stringify(scope),
+            method: "POST",
+          })
+        );
+        await expect(state.storage.getAlarm()).resolves.not.toBeNull();
+        await state.storage.setAlarm(Date.now() + 86_400_000);
+        return response.status;
+      })
+  );
+  expect(status).toBe(204);
+  return stub;
+};
 
 describe("durable mail Snooze", () => {
   afterEach(() => {
@@ -23,6 +48,7 @@ describe("durable mail Snooze", () => {
     };
     const returnAt = Date.now() + 86_400_000;
     let nextWakeAt: number | null = returnAt;
+    const dispatched = Promise.withResolvers<null>();
     vi.stubGlobal(
       "fetch",
       vi.fn<typeof fetch>(async (input, init) => {
@@ -39,6 +65,7 @@ describe("durable mail Snooze", () => {
           "mail-snooze-dispatch"
         );
         expect(authenticated).toMatchObject({ ok: true, ticket: scope });
+        dispatched.resolve(null);
         return Response.json({ nextWakeAt });
       })
     );
@@ -50,6 +77,9 @@ describe("durable mail Snooze", () => {
     const stub = env.MailSnooze.get(
       env.MailSnooze.idFromName(JSON.stringify([scope.mailboxId, scope.id]))
     );
+    await runInDurableObject(stub, () => {
+      configureServerEnv({ BETTER_AUTH_URL: "https://quieter.example" });
+    });
     const response = await handleMailUpdates(
       new Request("https://updates.example/mail/snooze/wake", {
         body,
@@ -61,6 +91,20 @@ describe("durable mail Snooze", () => {
       env
     );
     expect(response.status).toBe(204);
+    const scheduled = await runInDurableObject(
+      stub,
+      async (_instance, state) =>
+        await state.blockConcurrencyWhile(async () => {
+          if ((await state.storage.getAlarm()) === null) {
+            return false;
+          }
+          await state.storage.setAlarm(returnAt);
+          return true;
+        })
+    );
+    if (!scheduled) {
+      await dispatched.promise;
+    }
     await evictDurableObject(stub);
     await runInDurableObject(stub, () => {
       configureServerEnv({ BETTER_AUTH_URL: "https://quieter.example" });
@@ -149,16 +193,7 @@ describe("durable mail Snooze", () => {
       id: crypto.randomUUID(),
       mailboxId: "snooze-mailbox",
     };
-    const stub = env.MailSnooze.get(
-      env.MailSnooze.idFromName(JSON.stringify([scope.mailboxId, scope.id]))
-    );
-    await stub.fetch("https://internal/mail-snooze/wake", {
-      body: JSON.stringify(scope),
-      method: "POST",
-    });
-    await runInDurableObject(stub, () => {
-      configureServerEnv({ BETTER_AUTH_URL: "https://quieter.example" });
-    });
+    const stub = await wakeSnoozeForAlarmTest(scope);
     const started = Promise.withResolvers<null>();
     const finish = Promise.withResolvers<null>();
     const returnAt = Date.now() + 86_400_000;
@@ -178,14 +213,9 @@ describe("durable mail Snooze", () => {
     const originalAlarm = runDurableObjectAlarm(stub);
     await started.promise;
     let wakeAccepted = false;
-    const wake = env.MailSnooze.get(stub.id)
-      .fetch("https://internal/mail-snooze/wake", {
-        body: JSON.stringify(scope),
-        method: "POST",
-      })
-      .then((response) => {
-        wakeAccepted = response.status === 204;
-      });
+    const wake = wakeSnoozeForAlarmTest(scope).then(() => {
+      wakeAccepted = true;
+    });
     try {
       await vi.waitFor(() => {
         expect(wakeAccepted).toBeTruthy();
@@ -209,16 +239,7 @@ describe("durable mail Snooze", () => {
       id: crypto.randomUUID(),
       mailboxId: "snooze-mailbox",
     };
-    const stub = env.MailSnooze.get(
-      env.MailSnooze.idFromName(JSON.stringify([scope.mailboxId, scope.id]))
-    );
-    await stub.fetch("https://internal/mail-snooze/wake", {
-      body: JSON.stringify(scope),
-      method: "POST",
-    });
-    await runInDurableObject(stub, () => {
-      configureServerEnv({ BETTER_AUTH_URL: "https://quieter.example" });
-    });
+    const stub = await wakeSnoozeForAlarmTest(scope);
     vi.stubGlobal(
       "fetch",
       vi
@@ -240,14 +261,7 @@ describe("durable mail Snooze", () => {
       id: crypto.randomUUID(),
       mailboxId: "snooze-original-mailbox",
     };
-    const stub = env.MailSnooze.get(
-      env.MailSnooze.idFromName(JSON.stringify([scope.mailboxId, scope.id]))
-    );
-    const accepted = await stub.fetch("https://internal/mail-snooze/wake", {
-      body: JSON.stringify(scope),
-      method: "POST",
-    });
-    expect(accepted.status).toBe(204);
+    const stub = await wakeSnoozeForAlarmTest(scope);
     const rejected = await stub
       .fetch("https://internal/mail-snooze/wake", {
         body: JSON.stringify({ ...scope, mailboxId: "snooze-other-mailbox" }),
