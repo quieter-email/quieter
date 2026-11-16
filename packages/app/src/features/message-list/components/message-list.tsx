@@ -37,6 +37,8 @@ import { useQueries } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
 import { useState } from "react";
 
+import { useMessageListCommands } from "./use-message-list-commands";
+
 const buildDraftListEntry = (
   message: MessageListItem,
   useScopedThreadId: boolean
@@ -442,7 +444,11 @@ const useMessageListInteractions = ({
   userLabels: { type: string }[];
 }) => {
   const [isBulkLabelsOpen, setIsBulkLabelsOpen] = useState(false);
-  const isBulkActionPending = selection.selectedThreads.some((thread) => {
+  const actionThreads = getActionThreads(
+    selection.selectedThreads,
+    selection.focusedThread
+  );
+  const isBulkActionPending = actionThreads.some((thread) => {
     const pendingActions =
       props.mailboxContextsByThreadId?.get(thread.threadId)?.pendingActions ??
       props.pendingActions;
@@ -603,29 +609,55 @@ const useMessageListInteractions = ({
           })),
         };
 
-  return {
-    bulkActions: buildMessageListBulkActions({
-      actionThreads: getActionThreads(
+  const bulkActions = buildMessageListBulkActions({
+    actionThreads: getActionThreads(
+      selection.selectedThreads,
+      selection.focusedThread
+    ),
+    activeMailbox: props.activeMailbox,
+    canMarkRead,
+    canSetImportance:
+      getActionThreads(
         selection.selectedThreads,
         selection.focusedThread
-      ),
-      activeMailbox: props.activeMailbox,
-      canMarkRead,
-      canSetImportance:
-        getActionThreads(
-          selection.selectedThreads,
-          selection.focusedThread
-        ).every(
-          (thread) =>
-            (
-              props.mailboxContextsByThreadId?.get(thread.threadId)
-                ?.mailboxActions ?? props.mailboxActions
-            ).canSetImportance
-        ) && props.mailboxActions.canSetImportance,
-      mailboxActions: props.mailboxActions,
-      mailboxProvider: actionMailboxProvider,
-      runActionThreads,
-    }),
+      ).every(
+        (thread) =>
+          (
+            props.mailboxContextsByThreadId?.get(thread.threadId)
+              ?.mailboxActions ?? props.mailboxActions
+          ).canSetImportance
+      ) && props.mailboxActions.canSetImportance,
+    mailboxActions: props.mailboxActions,
+    mailboxProvider: actionMailboxProvider,
+    runActionThreads,
+  });
+  useMessageListCommands({
+    actions: bulkActions,
+    canEditLabels: bulkLabels !== null,
+    focusedSubject: selection.focusedThread?.subject ?? "",
+    hasFocusedThread: selection.focusedThread !== null,
+    isActive: (props.activeMessageId?.trim() ?? "") === "",
+    isPending: isBulkActionPending,
+    loadedCount: threadedMessages.length,
+    onClearSelection: selection.clearSelection,
+    onOpenFocusedThread: openFocusedThread,
+    onOpenLabels: openBulkLabels,
+    onSelectAll: () => {
+      selection.toggleAllLoadedThreads(true);
+    },
+    onToggleFocusedSelection: selection.toggleFocusedThreadSelection,
+    scopeKey: JSON.stringify([
+      props.mailboxId,
+      props.selectionScopeKey,
+      props.activeMailbox,
+      props.searchQuery,
+      selection.focusedThread?.threadId,
+      actionThreads.map((thread) => thread.threadId).toSorted(),
+    ]),
+    selectedCount: selection.selectedThreads.length,
+  });
+  return {
+    bulkActions,
     bulkLabels,
     handleClearSelection: selection.clearSelection,
     handleScrollListToTop: selection.scrollListToTop,

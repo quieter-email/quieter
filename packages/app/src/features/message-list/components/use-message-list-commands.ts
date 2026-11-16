@@ -66,6 +66,16 @@ export const useMessageListCommands = ({
       ? { execute: action.onSelect, state: "available" }
       : { reason: actionReason, state: "unavailable" }),
   }));
+  if (selectedCount > 0) {
+    commands.push({
+      group: "Mail",
+      id: "focus-search",
+      label: "Search mail",
+      reason: "Clear selection to search mail.",
+      shortcutId: "focus-search",
+      state: "unavailable",
+    });
+  }
   commands.push(
     {
       description: targetDescription,

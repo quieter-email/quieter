@@ -117,6 +117,7 @@ export const useMessageViewHotkeys = ({
     {
       enabled:
         !isActionPending &&
+        mailboxProvider !== "api" &&
         activeMailbox !== "drafts" &&
         activeMailbox !== "trash",
       execute: async () => {
@@ -183,6 +184,18 @@ export const useMessageViewHotkeys = ({
           : { reason: action.reason, state: "unavailable" }),
       },
     ];
+  });
+  commands.push({
+    group: "Navigation",
+    id: "detail-back",
+    label: "Back to list",
+    shortcutId: "detail-back",
+    ...(onBackToList === undefined
+      ? {
+          reason: "Open the conversation from a mail list first.",
+          state: "unavailable",
+        }
+      : { execute: onBackToList, state: "available" }),
   });
   useRegisterCommands(
     commands,

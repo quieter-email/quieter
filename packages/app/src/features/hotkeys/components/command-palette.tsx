@@ -1,5 +1,6 @@
 "use client";
 
+import { APP_SHORTCUT_BLOCKING_OVERLAY_SELECTOR } from "@quieter/app/features/hotkeys/domain/hotkey-guards";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { CommandMenu } from "@quieter/ui/command-menu";
 import {
@@ -68,9 +69,7 @@ export const CommandPalette = ({
       if (
         event.isComposing ||
         event.defaultPrevented ||
-        document.querySelector(
-          "[role='dialog'], [data-popup-open][aria-haspopup], [data-popup-open][role='combobox']"
-        )
+        document.querySelector(APP_SHORTCUT_BLOCKING_OVERLAY_SELECTOR)
       ) {
         return;
       }

@@ -1,4 +1,16 @@
 // @vitest-environment jsdom
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "@quieter/ui/alert-dialog";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@quieter/ui/context-menu";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -34,6 +46,128 @@ const ScopedCommands = ({
 };
 
 describe("scoped command execution", () => {
+  test("keeps an open context menu in charge without a popup button", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const showHelp = vi.fn<() => void>();
+    try {
+      act(() => {
+        root.render(
+          <HotkeysProvider>
+            <CommandPaletteProvider onShowKeyboardShortcuts={showHelp}>
+              <ContextMenu>
+                <ContextMenuTrigger id="fixture-context-target">
+                  Fixture conversation
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem>Fixture action</ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            </CommandPaletteProvider>
+          </HotkeysProvider>
+        );
+      });
+      const trigger = container.querySelector("#fixture-context-target");
+      if (trigger === null) {
+        throw new Error("The fixture did not mount.");
+      }
+      act(() => {
+        trigger.dispatchEvent(
+          new MouseEvent("contextmenu", {
+            bubbles: true,
+            button: 2,
+            clientX: 10,
+            clientY: 10,
+          })
+        );
+      });
+      await vi.waitFor(() => {
+        expect(
+          document.querySelector("[role='menu'][data-open]")
+        ).not.toBeNull();
+      });
+      act(() => {
+        document.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            bubbles: true,
+            ctrlKey: true,
+            key: "K",
+            shiftKey: true,
+          })
+        );
+      });
+      expect(document.querySelector("[role='combobox']")).toBeNull();
+    } finally {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  test("keeps a controlled confirmation in charge of keyboard input", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const showHelp = vi.fn<() => void>();
+    const render = (confirmationOpen: boolean) => {
+      root.render(
+        <HotkeysProvider>
+          <CommandPaletteProvider onShowKeyboardShortcuts={showHelp}>
+            <AlertDialog open={confirmationOpen}>
+              <AlertDialogContent>
+                <AlertDialogTitle>Fixture confirmation</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Review the current action.
+                </AlertDialogDescription>
+              </AlertDialogContent>
+            </AlertDialog>
+          </CommandPaletteProvider>
+        </HotkeysProvider>
+      );
+    };
+    try {
+      act(() => {
+        render(true);
+      });
+      expect(document.querySelector("[role='alertdialog']")).not.toBeNull();
+      act(() => {
+        document.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            bubbles: true,
+            ctrlKey: true,
+            key: "K",
+            shiftKey: true,
+          })
+        );
+      });
+      expect(document.querySelector("[role='combobox']")).toBeNull();
+      act(() => {
+        render(false);
+      });
+      await vi.waitFor(() => {
+        expect(document.querySelector("[role='alertdialog']")).toBeNull();
+      });
+      act(() => {
+        document.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            bubbles: true,
+            ctrlKey: true,
+            key: "K",
+            shiftKey: true,
+          })
+        );
+      });
+      expect(document.querySelector("[role='combobox']")).not.toBeNull();
+    } finally {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
   test("drops a pending action when its mailbox or selection changes before execution", async () => {
     const container = document.createElement("div");
     document.body.append(container);
