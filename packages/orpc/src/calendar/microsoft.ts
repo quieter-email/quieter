@@ -37,6 +37,7 @@ import {
   microsoftRecurrenceSchema,
   toMicrosoftRecurrence,
 } from "./microsoft-recurrence";
+import type { CalendarNativeLockPlan } from "./native-lock-plan";
 
 const emailSchema = z.object({
   address: z.string().optional(),
@@ -90,6 +91,7 @@ type MicrosoftEvent = z.infer<typeof eventSchema>;
 type UserRequest = {
   authorityMailboxId?: string;
   beforeEffect?: MailEffectAssertion;
+  calendarLockPlan?: CalendarNativeLockPlan;
   prepareEffect?: () => Promise<void>;
   userId: string;
   signal?: AbortSignal;

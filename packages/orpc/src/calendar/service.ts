@@ -22,7 +22,7 @@ import {
   mailbox,
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import type { z } from "zod";
 
 import type { GoogleCalendarEventDraft } from "../connectors/ical";
@@ -62,10 +62,14 @@ import {
   updateMicrosoftCalendarColorForUser,
   updateMicrosoftCalendarEventForUser,
 } from "./microsoft";
+import { lockCalendarNativeAccounts } from "./native-lock-plan";
+import type { CalendarNativeLockPlan } from "./native-lock-plan";
+import { lockCalendarBookingOwner } from "./owner-lock";
 
 type UserRequest = {
   authorityMailboxId?: string;
   beforeEffect?: MailEffectAssertion;
+  calendarLockPlan?: CalendarNativeLockPlan;
   prepareEffect?: () => Promise<void>;
   retryUnauthorized?: boolean;
   signal?: AbortSignal;
@@ -479,22 +483,16 @@ const withCalendar = async <T>(
                   }
                   signal?.throwIfAborted();
                   await db.transaction(async (transaction) => {
-                    const mailboxIds =
-                      input.authorityMailboxId === undefined
-                        ? [identity.mailboxId]
-                        : [
-                            ...new Set([
-                              input.authorityMailboxId,
-                              identity.mailboxId,
-                            ]),
-                          ];
-                    await transaction
-                      .select({ id: mailbox.id })
-                      .from(mailbox)
-                      .where(inArray(mailbox.id, mailboxIds))
-                      .orderBy(asc(mailbox.id))
-                      .for("update");
-                    await input.beforeEffect?.(transaction);
+                    await lockCalendarBookingOwner({
+                      executor: transaction,
+                      userId: input.userId,
+                    });
+                    await lockCalendarNativeAccounts({
+                      authorityMailboxId: input.authorityMailboxId,
+                      calendarLockPlan: input.calendarLockPlan,
+                      executor: transaction,
+                      googleMailboxId: identity.mailboxId,
+                    });
                     if (identity.mailboxId !== account.mailboxId) {
                       throw new ORPCError("FORBIDDEN", {
                         message:
@@ -509,6 +507,7 @@ const withCalendar = async <T>(
                       },
                       transaction
                     );
+                    await input.beforeEffect?.(transaction);
                   });
                   signal?.throwIfAborted();
                 },
