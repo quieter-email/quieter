@@ -6,6 +6,10 @@ const instantSchema = calendarAvailabilityInputSchema.shape.start.refine(
   (value) => !/\.\d{4}/u.test(value),
   "Choose a time with millisecond precision or less."
 );
+const availabilitySchema = calendarAvailabilityInputSchema.safeExtend({
+  end: instantSchema,
+  start: instantSchema,
+});
 const titleSchema = z.string().trim().min(1).max(120);
 const slotSchema = z
   .object({ end: instantSchema, start: instantSchema })
@@ -23,7 +27,7 @@ export const calendarBookingRequestIdSchema = z.uuid({ version: "v4" });
 
 export const calendarBookingCreateInputSchema = z
   .object({
-    availability: calendarAvailabilityInputSchema,
+    availability: availabilitySchema,
     destination: calendarRefSchema,
     expiresAt: instantSchema,
     title: titleSchema,
@@ -75,7 +79,7 @@ export const calendarBookingScopeSchema = z
       )
       .min(1)
       .max(10),
-    availability: calendarAvailabilityInputSchema,
+    availability: availabilitySchema,
     destination: calendarRefSchema,
     version: z.literal(1),
   })

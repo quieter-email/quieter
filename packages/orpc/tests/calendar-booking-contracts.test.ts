@@ -1,3 +1,4 @@
+import { calendarAvailabilityInputSchema } from "@quieter/calendar/availability";
 import { describe, expect, test } from "vite-plus/test";
 
 import {
@@ -84,6 +85,28 @@ const confirmedResult = {
 };
 
 describe("owner booking contracts", () => {
+  test.each(["start", "end"] as const)(
+    "rejects booking range %s precision that native persistence would truncate",
+    (field) => {
+      const availability = {
+        ...ownerInput.availability,
+        [field]: ownerInput.availability[field].replace("00+02", "00.0001+02"),
+      };
+      expect(
+        calendarAvailabilityInputSchema.safeParse(availability).success
+      ).toBeTruthy();
+      expect(
+        calendarBookingCreateInputSchema.safeParse({
+          ...ownerInput,
+          availability,
+        }).success
+      ).toBeFalsy();
+      expect(
+        calendarBookingScopeSchema.safeParse({ ...scope, availability }).success
+      ).toBeFalsy();
+    }
+  );
+
   test("preserves the complete availability contract and normalizes the title", () => {
     const parsed = calendarBookingCreateInputSchema.parse({
       ...ownerInput,
