@@ -12,7 +12,7 @@ import {
   managedMailRuleApplication,
   managedMailRuleRun,
 } from "@quieter/database/schema";
-import { composeMessageInputSchema } from "@quieter/mail/compose/schema";
+import { composeMessageEnvelopeSchema } from "@quieter/mail/compose/schema";
 import { managedMailboxRuleConditionGroupSchema } from "@quieter/mail/mailbox-organization";
 import type { ManagedMailboxRuleAction } from "@quieter/mail/mailbox-organization";
 import { parseRawMailAttachments } from "@quieter/mail/raw-message";
@@ -108,10 +108,11 @@ const createForwardMessage = async (input: {
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;")
   );
-  const attachments: z.infer<typeof composeMessageInputSchema>["attachments"] =
-    [];
+  const attachments: z.infer<
+    typeof composeMessageEnvelopeSchema
+  >["attachments"] = [];
   const inlineImages: z.infer<
-    typeof composeMessageInputSchema
+    typeof composeMessageEnvelopeSchema
   >["inlineImages"] = [];
   const originalAttachments = input.action.includeAttachments
     ? await parseRawMailAttachments(await readRawMailObject(input.message))
@@ -139,7 +140,7 @@ const createForwardMessage = async (input: {
       attachments.push({ ...metadata, isInline: false });
     }
   }
-  return composeMessageInputSchema.parse({
+  return composeMessageEnvelopeSchema.parse({
     attachments,
     bodyHtml: `<p>---------- Forwarded message ----------</p><p><strong>From:</strong> ${escapedFrom}<br><strong>Subject:</strong> ${escapedSubject}</p>${input.message.bodyHtml?.trim() || `<p>${escapedText.replaceAll("\n", "<br>")}</p>`}`,
     bodyText: [
