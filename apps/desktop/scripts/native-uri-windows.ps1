@@ -81,22 +81,13 @@ try {
       $secondary = $null
       throw "The OS returned the primary process handle."
     }
-    if (-not $secondary.HasExited) {
-      $image = $null
-      try {
-        $image = $secondary.MainModule.FileName
-      } catch {
-        if (-not $secondary.HasExited) { throw }
-      }
-      if (-not $secondary.HasExited -and -not [string]::Equals($image, $candidate.FullName, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "The OS returned a process outside the owned candidate."
-      }
-      $secondaryOwned = $null -ne $image -and [string]::Equals($image, $candidate.FullName, [StringComparison]::OrdinalIgnoreCase)
-    }
     $record.phase = "secondary-exit"
     $record.secondary = @{ kind = "running"; pid = $secondary.Id }
     $record | ConvertTo-Json -Depth 3 -Compress | Set-Content -LiteralPath $Receipt -Encoding UTF8
     if (-not $secondary.WaitForExit(20000)) {
+      $record.phase = "secondary-ownership"
+      $image = $secondary.MainModule.FileName
+      $secondaryOwned = $null -ne $image -and [string]::Equals($image, $candidate.FullName, [StringComparison]::OrdinalIgnoreCase)
       throw "The OS-launched secondary did not exit."
     }
     $secondary.Refresh()
