@@ -17,7 +17,8 @@
     "generate:icon": "node ../../scripts/generate-desktop-icon.ts",
     "preview": "electron-vite preview",
     "package": "vp run build && electron-builder --dir",
-    "dist": "vp run build && electron-builder --publish never"
+    "dist": "vp run build && electron-builder --publish never",
+    "release:size": "node scripts/release-size.ts"
   },
   "devDependencies": {
     "@better-auth/core": "catalog:",
