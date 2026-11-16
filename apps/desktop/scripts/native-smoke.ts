@@ -43,15 +43,29 @@ const windowsURIReceipt = z.strictObject({
     }),
   ]),
 });
+const installationProgressMarker = z.enum([
+  "script-entry",
+  "before-query",
+  "after-query",
+  "after-registry",
+  "after-json",
+]);
 
 type SmokeReport = {
   kind: "packaged-native-smoke";
   installation?: NativeInstallMetadata;
   installationCleanup?: NativeInstallCleanup;
   installationProcesses: {
+    elapsedMs: number;
     exitCode: number | null;
+    failureCode?: SmokeReport["failureCode"];
     kind: string;
     pid: number | null;
+    progress: {
+      elapsedMs: number;
+      marker: z.infer<typeof installationProgressMarker>;
+    }[];
+    signalCode: NodeJS.Signals | null;
     stopped: boolean;
   }[];
   checkoutRevision: string;
@@ -310,31 +324,121 @@ const main = async (): Promise<void> => {
     if (selection.kind === "install") {
       const run: RunNativeInstallOperation = async (operation) => {
         const previousStage = report.stage;
-        report.stage = `native-installation-${operation.kind}`;
+        report.stage = operation.kind;
+        const started = Date.now();
         const child = spawn(operation.command, operation.args, {
           detached: process.platform !== "win32",
           env: environment,
-          stdio: "ignore",
+          stdio: ["ignore", "pipe", "pipe"],
           windowsVerbatimArguments: operation.verbatim === true,
         });
         let failure: Error | undefined;
+        let failureCode: SmokeReport["failureCode"];
+        let closed = false;
+        let stdout = "";
+        let stdoutBytes = 0;
+        let stderrLine = "";
+        let stderrLineOverflow = false;
+        const progress: SmokeReport["installationProcesses"][number]["progress"] =
+          [];
         child.on("error", (error) => {
           failure = error;
         });
-        try {
-          await waitUntil(() => {
-            if (failure !== undefined) {
-              throw failure;
+        child.once("close", () => {
+          closed = true;
+        });
+        child.stdout.setEncoding("utf-8");
+        child.stdout.on("data", (chunk: string) => {
+          if (failure !== undefined) {
+            return;
+          }
+          stdoutBytes += Buffer.byteLength(chunk);
+          if (stdoutBytes > 65_536) {
+            failure = new Error(
+              "Owned installation output exceeded its limit."
+            );
+            return;
+          }
+          stdout += chunk;
+        });
+        child.stdout.on("error", (error) => {
+          failure = error;
+        });
+        child.stderr.setEncoding("utf-8");
+        child.stderr.on("data", (chunk: string) => {
+          for (const character of chunk) {
+            if (character === "\n") {
+              if (!stderrLineOverflow) {
+                const marker = installationProgressMarker.safeParse(
+                  stderrLine.replace(/\r$/u, "")
+                );
+                if (
+                  marker.success &&
+                  !progress.some((entry) => entry.marker === marker.data)
+                ) {
+                  progress.push({
+                    elapsedMs: Date.now() - started,
+                    marker: marker.data,
+                  });
+                }
+              }
+              stderrLine = "";
+              stderrLineOverflow = false;
+            } else if (!stderrLineOverflow) {
+              if (stderrLine.length + character.length > 64) {
+                stderrLine = "";
+                stderrLineOverflow = true;
+              } else {
+                stderrLine += character;
+              }
             }
-            return child.exitCode !== null || child.signalCode !== null;
-          }, 120_000);
+          }
+        });
+        child.stderr.on("error", (error) => {
+          failure = error;
+        });
+        try {
+          try {
+            await waitUntil(() => {
+              if (failure !== undefined) {
+                throw failure;
+              }
+              return closed;
+            }, operation.timeoutMs ?? 120_000);
+          } catch {
+            throw (
+              failure ??
+              Object.assign(
+                new Error("Owned installation operation timed out."),
+                { code: "ETIMEDOUT" }
+              )
+            );
+          }
           assert.equal(child.exitCode, operation.expectedExitCode ?? 0);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            "code" in error &&
+            (error.code === "ETIMEDOUT" ||
+              error.code === "ENOENT" ||
+              error.code === "EACCES" ||
+              error.code === "EPERM")
+          ) {
+            failureCode = error.code;
+          }
+          throw error;
         } finally {
           const stopped = await stopChild(child);
+          child.stdout.destroy();
+          child.stderr.destroy();
           report.installationProcesses.push({
+            elapsedMs: Date.now() - started,
             exitCode: child.exitCode,
+            failureCode,
             kind: operation.kind,
             pid: child.pid ?? null,
+            progress,
+            signalCode: child.signalCode,
             stopped,
           });
           if (!stopped) {
@@ -343,9 +447,10 @@ const main = async (): Promise<void> => {
           assert.ok(stopped, "Owned installation process did not stop.");
         }
         report.stage = previousStage;
+        return stdout;
       };
       report.stage = "installation-preparation";
-      const owner = createNativeInstallation({ environment });
+      const owner = createNativeInstallation();
       installed = { owner, run };
       ({
         applicationBundle,

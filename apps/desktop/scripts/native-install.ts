@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   createReadStream,
@@ -20,11 +19,12 @@ export type NativeInstallOperation = {
   command: string;
   expectedExitCode?: number;
   kind: string;
+  timeoutMs?: 10_000 | 30_000;
   verbatim?: boolean;
 };
 export type RunNativeInstallOperation = (
   operation: NativeInstallOperation
-) => Promise<void>;
+) => Promise<string>;
 export type NativeInstallCleanup =
   | { result: "removed"; method: "nsis-uninstall" | "owned-directory" }
   | { result: "retained"; reason: "app-not-stopped" | "cleanup-failed" };
@@ -37,9 +37,9 @@ const windowsOS = z.strictObject({
   version: z.string(),
 });
 const macOS = z.strictObject({
-  buildVersion: z.string(),
+  buildVersion: z.string().trim(),
   platform: z.literal("darwin"),
-  version: z.string(),
+  version: z.string().trim(),
 });
 export type NativeInstallMetadata = {
   architecture: string;
@@ -48,11 +48,7 @@ export type NativeInstallMetadata = {
   os: z.infer<typeof windowsOS> | z.infer<typeof macOS>;
 };
 
-export const createNativeInstallation = ({
-  environment,
-}: {
-  environment: Record<string, string>;
-}) => {
+export const createNativeInstallation = () => {
   const windows = process.platform === "win32";
   assert.ok(windows || process.platform === "darwin");
   const root = mkdtempSync(
@@ -133,30 +129,41 @@ export const createNativeInstallation = ({
       const os = windows
         ? windowsOS.parse(
             JSON.parse(
-              execFileSync(
-                "powershell.exe",
-                [
+              await run({
+                args: [
                   "-NoProfile",
                   "-NonInteractive",
                   "-Command",
-                  '$os = Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 10; @{ platform = "win32"; caption = $os.Caption; version = $os.Version; buildNumber = $os.BuildNumber; productType = [int]$os.ProductType } | ConvertTo-Json -Compress',
+                  [
+                    '$ErrorActionPreference = "Stop"',
+                    '[Console]::Error.WriteLine("script-entry")',
+                    '[Console]::Error.WriteLine("before-query")',
+                    "$os = Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 10 -ErrorAction Stop",
+                    '[Console]::Error.WriteLine("after-query")',
+                    '@{ platform = "win32"; caption = $os.Caption; version = $os.Version; buildNumber = $os.BuildNumber; productType = [int]$os.ProductType } | ConvertTo-Json -Compress',
+                    '[Console]::Error.WriteLine("after-json")',
+                  ].join("; "),
                 ],
-                { encoding: "utf-8", env: environment, timeout: 30_000 }
-              )
+                command: "powershell.exe",
+                kind: "windows-os-inventory",
+                timeoutMs: 30_000,
+              })
             )
           )
         : macOS.parse({
-            buildVersion: execFileSync("sw_vers", ["-buildVersion"], {
-              encoding: "utf-8",
-              env: environment,
-              timeout: 10_000,
-            }).trim(),
+            buildVersion: await run({
+              args: ["-buildVersion"],
+              command: "sw_vers",
+              kind: "macos-build-version",
+              timeoutMs: 10_000,
+            }),
             platform: "darwin",
-            version: execFileSync("sw_vers", ["-productVersion"], {
-              encoding: "utf-8",
-              env: environment,
-              timeout: 10_000,
-            }).trim(),
+            version: await run({
+              args: ["-productVersion"],
+              command: "sw_vers",
+              kind: "macos-product-version",
+              timeoutMs: 10_000,
+            }),
           });
       const metadata: NativeInstallMetadata = {
         architecture: arch(),
@@ -166,16 +173,27 @@ export const createNativeInstallation = ({
       };
       if (windows) {
         const safeToInstall: unknown = JSON.parse(
-          execFileSync(
-            "powershell.exe",
-            [
+          await run({
+            args: [
               "-NoProfile",
               "-NonInteractive",
               "-Command",
-              '@{ active = @(Get-CimInstance Win32_Process -Filter "Name = \'quieter.exe\'" -OperationTimeoutSec 10).Count; registered = (Test-Path -LiteralPath "Registry::HKEY_CURRENT_USER\\Software\\Classes\\com.quieter.desktop") -or (Test-Path -LiteralPath "Registry::HKEY_LOCAL_MACHINE\\Software\\Classes\\com.quieter.desktop") } | ConvertTo-Json -Compress',
+              [
+                '$ErrorActionPreference = "Stop"',
+                '[Console]::Error.WriteLine("script-entry")',
+                '[Console]::Error.WriteLine("before-query")',
+                "$active = @(Get-CimInstance Win32_Process -Filter \"Name = 'quieter.exe'\" -OperationTimeoutSec 10 -ErrorAction Stop).Count",
+                '[Console]::Error.WriteLine("after-query")',
+                '$registered = (Test-Path -LiteralPath "Registry::HKEY_CURRENT_USER\\Software\\Classes\\com.quieter.desktop") -or (Test-Path -LiteralPath "Registry::HKEY_LOCAL_MACHINE\\Software\\Classes\\com.quieter.desktop")',
+                '[Console]::Error.WriteLine("after-registry")',
+                "@{ active = $active; registered = $registered } | ConvertTo-Json -Compress",
+                '[Console]::Error.WriteLine("after-json")',
+              ].join("; "),
             ],
-            { encoding: "utf-8", env: environment, timeout: 30_000 }
-          )
+            command: "powershell.exe",
+            kind: "windows-installation-preflight",
+            timeoutMs: 30_000,
+          })
         );
         z.strictObject({
           active: z.literal(0),
@@ -190,16 +208,25 @@ export const createNativeInstallation = ({
         });
         installer = "verifying";
         const automaticLaunches: unknown = JSON.parse(
-          execFileSync(
-            "powershell.exe",
-            [
+          await run({
+            args: [
               "-NoProfile",
               "-NonInteractive",
               "-Command",
-              "@(Get-CimInstance Win32_Process -Filter \"Name = 'quieter.exe'\" -OperationTimeoutSec 10).Count | ConvertTo-Json -Compress",
+              [
+                '$ErrorActionPreference = "Stop"',
+                '[Console]::Error.WriteLine("script-entry")',
+                '[Console]::Error.WriteLine("before-query")',
+                "$active = @(Get-CimInstance Win32_Process -Filter \"Name = 'quieter.exe'\" -OperationTimeoutSec 10 -ErrorAction Stop).Count",
+                '[Console]::Error.WriteLine("after-query")',
+                "$active | ConvertTo-Json -Compress",
+                '[Console]::Error.WriteLine("after-json")',
+              ].join("; "),
             ],
-            { encoding: "utf-8", env: environment, timeout: 30_000 }
-          )
+            command: "powershell.exe",
+            kind: "windows-automatic-launch-preflight",
+            timeoutMs: 30_000,
+          })
         );
         assert.equal(
           z.number().int().nonnegative().parse(automaticLaunches),
