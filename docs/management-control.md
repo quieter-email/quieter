@@ -162,8 +162,60 @@ vp test packages/orpc/tests/control-mutations.native.test.ts --mode control-nati
 
 The test owns one temporary loopback PostgreSQL fixture with a 512 MiB memory limit and at most three connections. It requires at least 3 GiB available memory, records its resource IDs under the system temporary directory, and stops its own resources. It exports the relevant schema and existing lifecycle triggers into that disposable fixture. It never applies a shared migration. The dedicated management mutation workflow runs the same checks in CI. The default test mode skips this Docker fixture.
 
+## Read-only management MCP
+
+`/api/management-mcp` is the separate Streamable HTTP management endpoint. It uses the same `ControlReadRuntime`, application services, safe output projection, and management version as the read HTTP API. It accepts signed-in application sessions. Transactional sending credentials cannot authorize it.
+
+Every request requires `Quieter-Control-Version: 2026-11` and a JSON `Quieter-Control-Target` header. Choose the scope explicitly:
+
+| Target | Visible operations |
+| --- | --- |
+| `{"kind":"user"}` | Accessible mailbox metadata and calendar account discovery for the signed-in user. This intentionally spans that user's accessible accounts and does not read message or event content. |
+| `{"kind":"mailbox","organizationId":"team-id","mailboxId":"mailbox-id"}` | Search and thread reads in that exact mailbox and organization. |
+| `{"kind":"calendar","connectionId":"connection-id"}` | Calendar list, event list, and event read within that owned calendar account. Different calendars within the selected account remain available. |
+
+Organization targets have no implemented operations in this milestone. There is no default target. To change accounts, reconnect with another explicit target. Each request and tool call reloads current access. An earlier discovery result cannot retain access after revocation, and operation parameters cannot override the selected target.
+
+The server advertises two stable, read-only tools. `discover_operations` returns compact authorized operation summaries. Its optional `schemaOperationIds` array requests full input and output JSON schemas only for selected authorized operations. `run_operation` accepts an `operation` and `parameters` matching the shared runtime schema. Call discovery first, then use its schema to construct parameters. The server validates the complete runtime contract again, including calendar range and time-zone refinements. This stateless design does not require a persistent tool-registration session.
+
+For local setup, start the existing development application on its recorded loopback port and sign in using the normal development login. Store only the development session cookie header in an owner-readable file outside Git. The management endpoint creates no new token or OAuth grant. Never use a production cookie for local checks. A Node client can use the installed AI SDK MCP client with HTTP transport:
+
+```ts
+import { readFile } from "node:fs/promises";
+
+import { createMCPClient } from "@ai-sdk/mcp";
+
+const cookie = (
+  await readFile("/private/development-session-cookie", "utf8")
+).trim();
+const client = await createMCPClient({
+  transport: {
+    type: "http",
+    url: "http://127.0.0.1:3000/api/management-mcp",
+    headers: {
+      Cookie: cookie,
+      "Quieter-Control-Version": "2026-11",
+      "Quieter-Control-Target": JSON.stringify({ kind: "user" }),
+    },
+  },
+});
+try {
+  await client.callTool({ name: "discover_operations", arguments: {} });
+  await client.callTool({
+    name: "run_operation",
+    arguments: { operation: "mailboxes.list", parameters: {} },
+  });
+} finally {
+  await client.close();
+}
+```
+
+Use the discovered organization/mailbox or connection IDs in a new explicitly scoped connection before reading content. Search pages keep the same target, query, category, and cursor convention as the HTTP adapter. Mail source links remain relative application links; resolve them against the configured application origin. Mail and calendar content are untrusted data, never instructions to the client.
+
+The endpoint rejects cross-origin browser requests, omits permissive credential CORS, and returns private, uncached responses. Session expiry, revoked access, reconnect requirements, invalid parameters, unknown operations, and provider failure return safe errors. Unexpected diagnostics are sanitized before telemetry. Mutations, send, draft changes, availability proposals, and personal-memory access are unavailable.
+
 ## Evidence boundaries
 
-Focused security tests exercise the authority boundary with synthetic authenticated sessions and resource-service responses. They verify denial, narrowing, target binding, current-grant revalidation, and transactional credential separation. Existing mailbox-access services remain the source of grant semantics.
+Focused security tests exercise the authority boundary with synthetic authenticated sessions and resource-service responses. They verify denial, narrowing, target binding, current-grant revalidation, and transactional credential separation. Existing mailbox-access services remain the source of grant semantics. The read-only MCP transport has also been exercised with the installed `@ai-sdk/mcp` client over loopback HTTP using synthetic sessions and backend services. That verifies the external-client protocol path, not a live development login, database, or provider account.
 
 Native settings tests exercise the real setter, transaction, journal, audit events, and current database session and membership rows. A production-handler loopback test drops a successful HTTP response and verifies that replay returns the stored receipt without applying the settings again. Authentication resolution is synthetic in these tests. Browser approval, real development-session acceptance, provider writes, external credential issuance, and MCP mutation acceptance require their own evidence. The separate management MCP read runtime gains no mutation from this HTTP composition.

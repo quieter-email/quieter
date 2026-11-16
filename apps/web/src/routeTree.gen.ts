@@ -26,6 +26,7 @@ import { Route as PublicImprintRouteImport } from './routes/_public/imprint'
 import { Route as PublicPrivacyRouteImport } from './routes/_public/privacy'
 import { Route as PublicTermsRouteImport } from './routes/_public/terms'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiManagementMcpRouteImport } from './routes/api/management-mcp'
 import { Route as ApiMcpRouteImport } from './routes/api/mcp'
 import { Route as ApiOpenapiRouteImport } from './routes/api/openapi'
 import { Route as ApiPreviewPersonaRouteImport } from './routes/api/preview-persona'
@@ -133,6 +134,11 @@ const PublicTermsRoute = PublicTermsRouteImport.update({
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiManagementMcpRoute = ApiManagementMcpRouteImport.update({
+  id: '/api/management-mcp',
+  path: '/api/management-mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMcpRoute = ApiMcpRouteImport.update({
@@ -261,6 +267,7 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PublicPrivacyRoute
   '/terms': typeof PublicTermsRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/management-mcp': typeof ApiManagementMcpRoute
   '/api/mcp': typeof ApiMcpRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
@@ -299,6 +306,7 @@ export interface FileRoutesByTo {
   '/privacy': typeof PublicPrivacyRoute
   '/terms': typeof PublicTermsRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/management-mcp': typeof ApiManagementMcpRoute
   '/api/mcp': typeof ApiMcpRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
@@ -339,6 +347,7 @@ export interface FileRoutesById {
   '/_public/privacy': typeof PublicPrivacyRoute
   '/_public/terms': typeof PublicTermsRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/management-mcp': typeof ApiManagementMcpRoute
   '/api/mcp': typeof ApiMcpRoute
   '/api/openapi': typeof ApiOpenapiRoute
   '/api/preview-persona': typeof ApiPreviewPersonaRoute
@@ -380,6 +389,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/terms'
     | '/api/chat'
+    | '/api/management-mcp'
     | '/api/mcp'
     | '/api/openapi'
     | '/api/preview-persona'
@@ -418,6 +428,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/terms'
     | '/api/chat'
+    | '/api/management-mcp'
     | '/api/mcp'
     | '/api/openapi'
     | '/api/preview-persona'
@@ -457,6 +468,7 @@ export interface FileRouteTypes {
     | '/_public/privacy'
     | '/_public/terms'
     | '/api/chat'
+    | '/api/management-mcp'
     | '/api/mcp'
     | '/api/openapi'
     | '/api/preview-persona'
@@ -485,6 +497,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   PublicRoute: typeof PublicRouteWithChildren
   ApiChatRoute: typeof ApiChatRoute
+  ApiManagementMcpRoute: typeof ApiManagementMcpRoute
   ApiMcpRoute: typeof ApiMcpRoute
   ApiOpenapiRoute: typeof ApiOpenapiRoute
   ApiPreviewPersonaRoute: typeof ApiPreviewPersonaRoute
@@ -625,6 +638,13 @@ declare module '@tanstack/react-router' {
       path: '/api/chat'
       fullPath: '/api/chat'
       preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/management-mcp': {
+      id: '/api/management-mcp'
+      path: '/api/management-mcp'
+      fullPath: '/api/management-mcp'
+      preLoaderRoute: typeof ApiManagementMcpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/mcp': {
@@ -830,6 +850,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   PublicRoute: PublicRouteWithChildren,
   ApiChatRoute: ApiChatRoute,
+  ApiManagementMcpRoute: ApiManagementMcpRoute,
   ApiMcpRoute: ApiMcpRoute,
   ApiOpenapiRoute: ApiOpenapiRoute,
   ApiPreviewPersonaRoute: ApiPreviewPersonaRoute,
