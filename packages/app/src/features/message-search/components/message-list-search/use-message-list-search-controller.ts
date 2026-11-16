@@ -46,6 +46,7 @@ import { toast } from "@quieter/ui/toast";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
+  useCallback,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -58,6 +59,8 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
   SetStateAction,
 } from "react";
+
+import { useRegisterCommands } from "../../../hotkeys/components/command-palette-context";
 
 const initialSearchOverlayState: SearchOverlayState = {
   activeDateFilterIndex: null,
@@ -110,6 +113,21 @@ export const useMessageListSearchController = ({
   searchMailboxes,
 }: MessageListSearchProps) => {
   const fieldRef = useRef<HTMLDivElement>(null);
+  const subscribeToSearchVisibility = useCallback((onChange: () => void) => {
+    const field = fieldRef.current;
+    const observer = new ResizeObserver(onChange);
+    if (field !== null) {
+      observer.observe(field);
+    }
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+  const isSearchVisible = useSyncExternalStore(
+    subscribeToSearchVisibility,
+    () => (fieldRef.current?.getClientRects().length ?? 0) > 0,
+    () => false
+  );
   const textInputRef = useRef<HTMLInputElement>(null);
   const segmentRefs = useRef<(HTMLElement | null)[]>([]);
   const dateTokenRefs = useRef(new Map<number, HTMLDivElement>());
@@ -1048,16 +1066,39 @@ export const useMessageListSearchController = ({
     };
   };
 
+  const focusSearch = () => {
+    openSearchDropdown();
+    focusTextInput({ toEnd: true });
+  };
+
+  useRegisterCommands(
+    [
+      {
+        group: "Mail",
+        id: "focus-search",
+        label: "Search mail",
+        shortcutId: "focus-search",
+        ...(isSearchVisible
+          ? { execute: focusSearch, state: "available" }
+          : {
+              reason: "Return to the conversation list to search mail.",
+              state: "unavailable",
+            }),
+      },
+    ],
+    mailboxId
+  );
+
   useHotkey(
     "Mod+K",
     (event) => {
       if (shouldIgnoreAppShortcut(event)) {
         return;
       }
-      openSearchDropdown();
-      focusTextInput({ toEnd: true });
+      focusSearch();
     },
     {
+      enabled: isSearchVisible,
       ignoreInputs: true,
     }
   );

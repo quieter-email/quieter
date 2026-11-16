@@ -55,7 +55,7 @@ const isEditableShortcutTarget = (target: EventTarget | null) => {
 
 const hasOpenBlockingDialog = () =>
   !!document.querySelector(
-    "[role='dialog']:not([data-keyboard-shortcuts-dialog]), [data-popup-open]:not([data-keyboard-shortcuts-dialog])"
+    "[role='dialog']:not([data-keyboard-shortcuts-dialog]), [data-popup-open][aria-haspopup]:not([data-keyboard-shortcuts-dialog]), [data-popup-open][role='combobox']"
   );
 
 export const shouldIgnoreAppShortcut = (event: KeyboardEvent) =>

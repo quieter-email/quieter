@@ -47,6 +47,7 @@ import {
   CollapsibleTrigger,
 } from "@quieter/ui/collapsible";
 import { useColorMode } from "@quieter/ui/color-mode";
+import { CommandMenu } from "@quieter/ui/command-menu";
 import {
   ComposerActionBar,
   ComposerDictationControl,
@@ -614,6 +615,7 @@ export const DesignSystemShowcase = () => {
   const [entrancePreview, setEntrancePreview] = useState(0);
   const [successPulse, setSuccessPulse] = useState(false);
   const [checked, setChecked] = useState(true);
+  const [commandIndex, setCommandIndex] = useState(0);
   const [tokenFieldValue, setTokenFieldValue] = useState(
     "When it's a bug, use @Tracker to file it."
   );
@@ -662,6 +664,43 @@ export const DesignSystemShowcase = () => {
             <ThemePicker />
           </div>
         </header>
+
+        <Section
+          description="Dialog commands use the same options as editor suggestions, with shortcuts and reasons for unavailable actions."
+          title="Command menu"
+        >
+          <CommandMenu
+            activeIndex={commandIndex}
+            chrome="dialog"
+            id="showcase-commands"
+            items={[
+              {
+                group: "Mail",
+                id: "compose",
+                label: "Compose",
+                shortcut: <Kbd>C</Kbd>,
+              },
+              {
+                disabledReason: "Select a conversation first.",
+                group: "Mail",
+                id: "reply",
+                label: "Reply",
+                shortcut: <Kbd>R</Kbd>,
+              },
+              {
+                group: "Mail",
+                id: "trash",
+                label: "Move to Trash",
+                tone: "destructive",
+              },
+            ]}
+            onHighlight={setCommandIndex}
+            onSelect={() => {
+              toast("Example command selected");
+            }}
+            selectionHint="select"
+          />
+        </Section>
 
         <Section
           description="A quiet map for long threads. Move toward the marks to feel the pull, then get closer to preview a message."

@@ -43,6 +43,7 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
   {
     items: [
       { id: "show-keyboard-shortcuts" },
+      { id: "show-command-palette" },
       { id: "compose" },
       { id: "focus-search" },
       { context: "Compose", id: "compose-send" },
@@ -141,7 +142,9 @@ const ShortcutKeys = ({ shortcut }: { shortcut: KeyboardShortcut }) => (
 const ShortcutRow = ({ item }: { item: ShortcutViewItem }) => {
   const shortcut = getShortcutById(item.id);
   const context =
-    item.context ?? (shortcut.status === "coming-soon" ? "Later" : null);
+    item.context ??
+    shortcut.description ??
+    (shortcut.status === "coming-soon" ? "Later" : null);
 
   return (
     <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 sm:px-6">

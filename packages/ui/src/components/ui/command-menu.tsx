@@ -7,14 +7,18 @@ import { popupSurfaceClassName } from "./popup-surface";
 
 export type CommandMenuItem = {
   description?: string;
+  disabledReason?: string;
   group: string;
   icon?: ReactNode;
   id: string;
   label: string;
+  shortcut?: ReactNode;
+  tone?: "destructive";
 };
 
 export const CommandMenu = ({
   activeIndex,
+  chrome = "popup",
   id,
   items,
   label = "Insert or format",
@@ -24,6 +28,7 @@ export const CommandMenu = ({
   status,
 }: {
   activeIndex: number;
+  chrome?: "dialog" | "popup";
   id: string;
   items: CommandMenuItem[];
   label?: string;
@@ -34,8 +39,12 @@ export const CommandMenu = ({
 }) => (
   <div
     className={cn(
-      popupSurfaceClassName,
-      "z-50 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl"
+      "overflow-hidden",
+      chrome === "popup" ? popupSurfaceClassName : undefined,
+      {
+        "w-full": chrome === "dialog",
+        "z-50 w-72 max-w-[calc(100vw-2rem)] rounded-xl": chrome === "popup",
+      }
     )}
   >
     <div
@@ -58,17 +67,31 @@ export const CommandMenu = ({
             </p>
           ) : null}
           <button
+            aria-disabled={item.disabledReason === undefined ? undefined : true}
+            aria-describedby={
+              (item.disabledReason ?? item.description)
+                ? `${id}-${index}-description`
+                : undefined
+            }
             aria-selected={index === activeIndex}
             className={cn(
               "flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left",
               {
-                "bg-muted text-fg": index === activeIndex,
-                "text-muted-fg": index !== activeIndex,
+                "bg-muted": index === activeIndex,
+                "text-destructive":
+                  item.tone === "destructive" &&
+                  item.disabledReason === undefined,
+                "text-fg": index === activeIndex && item.tone !== "destructive",
+                "text-muted-fg":
+                  item.disabledReason !== undefined ||
+                  (index !== activeIndex && item.tone !== "destructive"),
               }
             )}
             id={`${id}-${index}`}
             onClick={() => {
-              onSelect(index);
+              if (item.disabledReason === undefined) {
+                onSelect(index);
+              }
             }}
             onMouseDown={(event) => {
               event.preventDefault();
@@ -88,12 +111,18 @@ export const CommandMenu = ({
               <span className="block truncate text-caption font-medium">
                 {item.label}
               </span>
-              {item.description ? (
-                <span className="block truncate text-micro text-muted-fg">
-                  {item.description}
+              {(item.disabledReason ?? item.description) ? (
+                <span
+                  className={cn("block text-micro text-muted-fg", {
+                    truncate: item.disabledReason === undefined,
+                  })}
+                  id={`${id}-${index}-description`}
+                >
+                  {item.disabledReason ?? item.description}
                 </span>
               ) : null}
             </span>
+            {item.shortcut}
           </button>
         </div>
       ))}
