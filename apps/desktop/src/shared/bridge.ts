@@ -1,4 +1,7 @@
-import type { ReminderNotifications } from "@quieter/app/runtime";
+import type {
+  NewMailNotificationPreferences,
+  ReminderNotifications,
+} from "@quieter/app/runtime";
 import { z } from "zod";
 
 export const reminderNotificationEvent = z.strictObject({
@@ -26,6 +29,38 @@ export const reminderNotificationResult = z.enum([
   "blocked",
 ]);
 
+const newMailNotificationScope = z.strictObject({
+  mailboxId: z.string().min(1).max(500),
+  userId: z.string().min(1).max(500),
+});
+
+export const newMailNotificationPreferenceRequest = z.discriminatedUnion(
+  "kind",
+  [
+    newMailNotificationScope.extend({ kind: z.literal("get-status") }),
+    newMailNotificationScope.extend({
+      enabled: z.boolean(),
+      kind: z.literal("set-enabled"),
+    }),
+  ]
+);
+
+export const newMailNotificationPreferenceStatus = z.discriminatedUnion(
+  "kind",
+  [
+    z.strictObject({
+      enabled: z.boolean(),
+      kind: z.literal("ready"),
+      supported: z.boolean(),
+    }),
+    z.strictObject({ kind: z.literal("inactive") }),
+  ]
+);
+
+export type NewMailNotificationPreferenceRequest = z.infer<
+  typeof newMailNotificationPreferenceRequest
+>;
+
 export const signOutCleanupCommand = z.object({
   phase: z.enum(["capture", "cleanup", "release"]),
   requestId: z.uuid(),
@@ -49,6 +84,7 @@ export type DesktopBridge = Readonly<{
   ) => () => void;
   platform: string;
   reminderNotifications: ReminderNotifications;
+  newMailNotificationPreferences: NewMailNotificationPreferences;
   setReminderNotificationUser: (userId: string | null) => Promise<void>;
   openExternal: (url: string) => Promise<void>;
   setTitleBarColors: (colors: {
