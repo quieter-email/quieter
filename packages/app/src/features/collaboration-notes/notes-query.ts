@@ -174,12 +174,32 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
   ]);
 
   const { attempt } = client;
+  const validationKey = useMemo(
+    () => [
+      ...prefix,
+      "private",
+      "attempt",
+      epoch,
+      attempt?.noteId,
+      attempt?.expected.contextId,
+      attempt?.expected.revision,
+      snapshot?.role,
+    ],
+    [
+      attempt?.expected.contextId,
+      attempt?.expected.revision,
+      attempt?.noteId,
+      epoch,
+      prefix,
+      snapshot?.role,
+    ]
+  );
   const validation = useQuery({
     enabled:
       client.available &&
       client.authority === "ready" &&
       attempt !== null &&
-      (attempt.kind === "edit" ||
+      (attempt.kind !== "create" ||
         (attempt.kind === "create" && attempt.status === "uncertain")),
     queryFn: async ({ signal }) => {
       if (attempt === null) {
@@ -195,15 +215,8 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
         { signal }
       );
     },
-    queryKey: [
-      ...prefix,
-      "private",
-      "attempt",
-      epoch,
-      attempt?.noteId,
-      attempt?.expected.contextId,
-      attempt?.expected.revision,
-    ],
+    queryKey: validationKey,
+    refetchInterval: 6000,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
     retry: false,
@@ -211,27 +224,45 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
   });
 
   useEffect(() => {
-    if (validation.isError) {
-      const failure = collaborationFailure(validation.error);
-      if (failure === "lost") {
-        loseAccess({ mailboxId, threadId });
-      }
+    void queryClient.invalidateQueries(
+      { exact: true, queryKey: validationKey },
+      { cancelRefetch: false }
+    );
+  }, [authority.dataUpdatedAt, page.dataUpdatedAt, queryClient, validationKey]);
+
+  const listedNote = page.data?.notes.find(
+    (note) => note.id === attempt?.noteId
+  );
+  useEffect(() => {
+    if (
+      validation.isError &&
+      collaborationFailure(validation.error) === "lost"
+    ) {
+      loseAccess({ mailboxId, threadId });
       return;
     }
     if (
+      attempt !== null &&
+      attempt.kind !== "create" &&
+      (listedNote?.actions[attempt.kind] === false ||
+        (validation.isSuccess &&
+          (validation.data.note === null ||
+            !validation.data.note.actions[attempt.kind])))
+    ) {
+      store.setState((current) =>
+        current.attempt === attempt
+          ? transitionNotesClient(current, { kind: "cancel" })
+          : current
+      );
+      return;
+    }
+    if (
+      validation.isError ||
       validation.data === undefined ||
       attempt === null ||
       attempt.kind === "remove"
     ) {
       return;
-    }
-    if (
-      attempt.kind === "edit" &&
-      (validation.data.note === null || !validation.data.note.actions.edit)
-    ) {
-      store.setState((current) =>
-        transitionNotesClient(current, { kind: "cancel" })
-      );
     }
     if (
       attempt.kind === "create" &&
@@ -273,6 +304,7 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
     attempt,
     authorityKey,
     epoch,
+    listedNote,
     loseAccess,
     mailboxId,
     prefix,
@@ -283,7 +315,25 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
     validation.data,
     validation.error,
     validation.isError,
+    validation.isSuccess,
   ]);
+
+  const visible =
+    client.available &&
+    client.authority === "ready" &&
+    snapshot !== undefined &&
+    !authority.isError &&
+    !page.isError;
+  const draftVisible =
+    visible &&
+    attempt !== null &&
+    snapshot?.state.kind === "prepared" &&
+    snapshot.state.cursor.contextId === attempt.expected.contextId &&
+    snapshot.permissions.writeOwnNotes &&
+    (attempt.kind === "create" ||
+      (validation.isSuccess &&
+        validation.data.note?.actions[attempt.kind] === true &&
+        listedNote?.actions[attempt.kind] !== false));
 
   const writing = useMutation({
     mutationFn: async ({
@@ -430,8 +480,10 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
     const pending = active.attempt;
     if (
       pending === null ||
+      pending !== attempt ||
       pending.status === "saving" ||
-      active.authority !== "ready"
+      active.authority !== "ready" ||
+      !draftVisible
     ) {
       return;
     }
@@ -470,7 +522,10 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
         noteId: active.attempt.noteId,
         threadId,
       });
-      if (store.get().epoch !== active.epoch) {
+      if (
+        store.get().epoch !== active.epoch ||
+        store.get().attempt !== active.attempt
+      ) {
         return;
       }
       queryClient.setQueryData(authorityKey, result.snapshot);
@@ -484,21 +539,13 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
         );
         return;
       }
-      queryClient.setQueryData(
-        [
-          ...prefix,
-          "private",
-          "attempt",
-          active.epoch,
-          result.note.id,
-          result.snapshot.state.cursor.contextId,
-          result.snapshot.state.cursor.revision,
-        ],
-        result
-      );
+      queryClient.setQueryData(validationKey, result);
       startEdit(result.note, result.snapshot.state.cursor);
     } catch (error) {
-      if (store.get().epoch !== active.epoch) {
+      if (
+        store.get().epoch !== active.epoch ||
+        store.get().attempt !== active.attempt
+      ) {
         return;
       }
       toastError(error, { boundary: "internal-note-reload" });
@@ -510,20 +557,6 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
     }
   };
 
-  const visible =
-    client.available &&
-    client.authority === "ready" &&
-    snapshot !== undefined &&
-    !authority.isError &&
-    !page.isError;
-  const draftVisible =
-    visible &&
-    attempt !== null &&
-    snapshot?.state.kind === "prepared" &&
-    snapshot.state.cursor.contextId === attempt.expected.contextId &&
-    snapshot.permissions.writeOwnNotes &&
-    (attempt.kind !== "edit" ||
-      (validation.isSuccess && validation.data.note?.actions.edit === true));
   return {
     after,
     canModerate:

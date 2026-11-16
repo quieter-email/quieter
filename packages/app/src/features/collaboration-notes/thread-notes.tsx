@@ -323,7 +323,9 @@ const ThreadNotesScope = ({ mailboxId, threadId }: CollaborationScope) => {
                 </ActionFooter>
               </form>
             ) : null}
-            {attempt?.kind === "edit" && !notes.draftVisible ? (
+            {attempt !== null &&
+            attempt.kind !== "create" &&
+            !notes.draftVisible ? (
               <div className="space-y-2">
                 <Text size="sm" tone="muted">
                   {notes.validationFailed
@@ -401,7 +403,7 @@ const ThreadNotesScope = ({ mailboxId, threadId }: CollaborationScope) => {
           </div>
         )}
         <AlertDialog
-          open={notes.visible && attempt?.kind === "remove"}
+          open={notes.draftVisible && attempt?.kind === "remove"}
           onOpenChange={(open) => {
             if (!open && !notes.writing) {
               notes.store.setState((state) =>

@@ -123,11 +123,11 @@ const MentionsScope = ({
           new Set([...current, ...failures.map((mailbox) => mailbox.mailboxId)])
       );
       for (const mailbox of failures) {
+        const index = mailboxes.indexOf(mailbox);
         if (
-          collaborationFailure(
-            heads[mailboxes.indexOf(mailbox)]?.error ??
-              pages[mailboxes.indexOf(mailbox)]?.error
-          ) === "lost"
+          [heads[index]?.error, pages[index]?.error].some(
+            (error) => collaborationFailure(error) === "lost"
+          )
         ) {
           loseAccess({ mailboxId: mailbox.mailboxId });
         }
