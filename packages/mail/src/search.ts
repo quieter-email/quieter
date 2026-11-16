@@ -34,7 +34,7 @@ export const structuredMailSearchSchema = z.object({
 });
 
 export type StructuredMailSearch = z.infer<typeof structuredMailSearchSchema>;
-export type MailboxProvider = "api" | "gmail" | "managed";
+export type MailboxProvider = "api" | "gmail" | "managed" | "outlook";
 
 const GMAIL_FILTER_TYPES = new Set<MailSearchFilterType>([
   "after",
@@ -48,6 +48,19 @@ const GMAIL_FILTER_TYPES = new Set<MailSearchFilterType>([
   "label",
   "newer_than",
   "older_than",
+  "to",
+]);
+
+const OUTLOOK_FILTER_TYPES = new Set<MailSearchFilterType>([
+  "after",
+  "before",
+  "bcc",
+  "cc",
+  "content",
+  "filename",
+  "from",
+  "has",
+  "subject",
   "to",
 ]);
 
@@ -70,8 +83,12 @@ const REPEATABLE_FILTER_TYPES = new Set<MailSearchFilterType>([
 
 export const getSupportedMailSearchFilterTypes = (
   provider: MailboxProvider
-): Set<MailSearchFilterType> =>
-  provider === "managed" ? MANAGED_FILTER_TYPES : GMAIL_FILTER_TYPES;
+): Set<MailSearchFilterType> => {
+  if (provider === "outlook") {
+    return OUTLOOK_FILTER_TYPES;
+  }
+  return provider === "managed" ? MANAGED_FILTER_TYPES : GMAIL_FILTER_TYPES;
+};
 
 export const isMailSearchFilterSupported = (
   provider: MailboxProvider,
@@ -81,6 +98,9 @@ export const isMailSearchFilterSupported = (
     return false;
   }
 
+  if (provider === "outlook" && filter.type === "has") {
+    return filter.value.toLocaleLowerCase() === "attachment";
+  }
   return !(
     provider === "gmail" &&
     filter.type === "is" &&

@@ -26,9 +26,14 @@ import type {
 } from "@quieter/mail/messages";
 import { parseOtpTokenHeaders } from "@quieter/mail/otp-token";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
-import { getUnsubscribeKey } from "@quieter/mail/unsubscribe";
+import {
+  extractListUnsubscribeTargets,
+  getUnsubscribeKey,
+} from "@quieter/mail/unsubscribe";
 import { decodeHTML } from "entities";
 import { z } from "zod";
+
+export { extractListUnsubscribeTargets } from "@quieter/mail/unsubscribe";
 
 const headerSchema = z.object({
   name: z.string(),
@@ -818,50 +823,6 @@ const decodeRawMessageText = (raw: string | undefined): string | undefined => {
   }
 
   return new TextDecoder().decode(decodeBase64UrlToBytes(raw));
-};
-
-export const extractListUnsubscribeTargets = (value: string | undefined) => {
-  const normalized = decodeMimeHeaderValue(value)?.trim();
-  let mailto: string | undefined;
-  let url: string | undefined;
-
-  for (const candidate of normalized
-    ?.match(/<[^>]+>|[^,]+/gu)
-    ?.map((entry) => entry.trim().replaceAll(/^<|>$/gu, "").trim())
-    .filter(Boolean) ?? []) {
-    const normalizedCandidate = candidate.toLowerCase();
-    if (
-      !normalizedCandidate.startsWith("mailto:") &&
-      !normalizedCandidate.startsWith("http://") &&
-      !normalizedCandidate.startsWith("https://")
-    ) {
-      continue;
-    }
-
-    try {
-      const parsedUrl = new URL(candidate);
-
-      if (mailto === undefined && parsedUrl.protocol === "mailto:") {
-        const pathname = decodeURIComponent(parsedUrl.pathname).trim();
-        const queryTo = parsedUrl.searchParams.get("to")?.trim();
-
-        if (pathname !== "" || (queryTo !== undefined && queryTo !== "")) {
-          mailto = candidate;
-        }
-      }
-
-      if (
-        url === undefined &&
-        (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:")
-      ) {
-        url = candidate;
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return { mailto, url };
 };
 
 export const getMessageAttachment = async (

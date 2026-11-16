@@ -1,0 +1,22 @@
+{
+  "name": "@quieter/outlook",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./graph": "./src/graph.ts",
+    "./messages": "./src/messages.ts",
+    "./oauth": "./src/oauth.ts"
+  },
+  "dependencies": {
+    "@quieter/mail": "workspace:*",
+    "jose": "6.2.12",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@quieter/config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

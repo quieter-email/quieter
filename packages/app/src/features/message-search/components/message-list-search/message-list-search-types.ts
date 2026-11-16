@@ -1,14 +1,16 @@
+import type { MailboxProvider } from "@quieter/mail/search";
+
 export type MessageListSearchProps = {
   isRefreshing: boolean;
   mailboxId: string;
-  mailboxProvider: "api" | "gmail" | "managed";
+  mailboxProvider: MailboxProvider;
   onRefresh: () => void | Promise<void>;
   onScrollToTop: () => boolean | Promise<boolean>;
   onSearch: (query: string) => void;
   searchQuery: string;
   searchMailboxes?: readonly {
     mailboxId: string;
-    mailboxProvider: "gmail" | "managed";
+    mailboxProvider: Exclude<MailboxProvider, "api">;
   }[];
 };
 

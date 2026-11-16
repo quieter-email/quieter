@@ -36,6 +36,7 @@ import {
   recordLabelFeedback,
 } from "./feedback";
 import type { MailInputs } from "./inputs";
+import { assertMailWriteProvider } from "./provider";
 
 type MetadataOperation =
   | "read"
@@ -120,6 +121,7 @@ const mutateMessage = async (
     mailboxId: input.mailboxId,
     userId: context.userId,
   });
+  assertMailWriteProvider(selectedMailbox.provider);
   if (selectedMailbox.provider === "managed") {
     const authorizedInput = { ...input, userId: context.userId };
     if (operation === "read" || operation === "unread") {
@@ -203,6 +205,7 @@ const mutateThread = async (
     mailboxId: input.mailboxId,
     userId: context.userId,
   });
+  assertMailWriteProvider(selectedMailbox.provider);
   if (selectedMailbox.provider === "managed") {
     const authorizedInput = { ...input, userId: context.userId };
     if (operation === "read" || operation === "unread") {
@@ -291,6 +294,7 @@ export const mutationsMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    assertMailWriteProvider(selectedMailbox.provider);
     if (input.command.kind === "set-importance") {
       let { targets } = input;
       if (selectedMailbox.provider === "gmail") {

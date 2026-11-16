@@ -4,14 +4,18 @@ import {
   gmailComposeOperation,
   scheduledMailSend,
 } from "@quieter/database/schema";
+import type { MailboxProvider } from "@quieter/mail/search";
 import { and, eq, inArray, or } from "drizzle-orm";
 
+import { assertMailWriteProvider } from "../mail/provider";
+
 export const resolveComposeSourceDraftId = async (input: {
-  provider: "gmail" | "managed";
+  provider: MailboxProvider;
   mailboxId: string;
   localId: string;
   draftId?: string | null;
 }) => {
+  assertMailWriteProvider(input.provider);
   if (input.draftId) {
     return input.draftId;
   }
