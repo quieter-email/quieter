@@ -25,11 +25,33 @@ jobs:
       - name: Setup repository
         uses: ./.github/actions/setup
       - name: Package application
+        id: package
         run: vp run @quieter/desktop#dist
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+          VITE_SENTRY_DSN: ""
+      - name: Prepare Linux native services and install candidate
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y dbus-x11 gnome-keyring openbox x11-utils xvfb ./apps/desktop/release/*.deb
+      - name: Check Linux native candidate
+        if: runner.os == 'Linux'
+        shell: bash
+        run: xvfb-run -a dbus-run-session -- vp run @quieter/desktop#test:native --revision "${{ github.sha }}" --output "$GITHUB_WORKSPACE/.scratch/desktop-native-evidence" --executable /opt/quieter/quieter
+      - name: Check Windows or macOS native candidate
+        if: runner.os != 'Linux'
+        shell: bash
+        run: vp run @quieter/desktop#test:native --revision "${{ github.sha }}" --output "$GITHUB_WORKSPACE/.scratch/desktop-native-evidence"
+      - name: Upload native smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-native-${{ matrix.os }}
+          path: .scratch/desktop-native-evidence/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
+        if: always() && steps.package.outcome == 'success'
         with:
           name: quieter-${{ matrix.os }}
           path: |

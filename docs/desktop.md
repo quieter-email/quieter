@@ -32,6 +32,18 @@ Electron keeps sessions in the main process. Its storage is encrypted using the 
 
 Gmail connection, external connectors, checkout, legal pages, and passkey management open in the system browser. Returning to the desktop refreshes server state. Browser analytics and consent scripts are not initialized by the desktop entrypoint.
 
+## Native email links and windows
+
+Candidate installers advertise `mailto` support. Use **File > Use quieter for email links** to request the operating system's default email-link association. Windows and Linux users can press Alt to reveal the application menu. The operating system may require a final choice in its default-app settings. Startup does not silently replace the current mail handler.
+
+Email links use the existing mailbox-scoped composer, including recipients, subject, and body. They do not send a message automatically. Content links use `com.quieter.desktop:/mail?mailboxId=<id>&threadId=<id>&messageId=<id>`. Desktop checks current account access before passing that complete identity to the existing mail view. It reads the thread only through the normal view after consuming the session-bound link. An unavailable mailbox cannot fall back to another account or mailbox.
+
+A link received while verified signed out can wait for sign-in and onboarding. Pending links are kept only in memory, with the latest pending link taking precedence. Explicit sign-out and account or session replacement discard old account intents. If authorization or navigation fails, the existing action error is shown and opening the link again retries after recovery.
+
+Another app instance or a native link restores a minimized window and reopens a closed main window when the desktop process is still running. Closing the last window quits on Windows and Linux. macOS keeps the process available until Quit. Unread badges and tray residency are deferred for the first release.
+
+These handlers and installer declarations require native Windows/macOS installation and OS-dispatch acceptance before a platform release claim. Event-handler tests, unpacked runtime checks, and successful artifact builds do not establish OS registration or default-app behavior.
+
 ## Reminder notifications
 
 Enable native notifications from the Reminders tab. The preference belongs to the signed-in account. Notifications contain generic text rather than reminder titles or mail content. Clicking one restores the app and opens its mailbox and reminder. Sign-out clears active notifications.
@@ -54,4 +66,22 @@ Sender-logo URLs come from the web backend, using its `VITE_LOGO_DEV_PUBLISHABLE
 
 The desktop build workflow runs only when started manually from GitHub Actions. It produces platform artifacts without publishing a release. Signing, Apple notarization, and release distribution require separate release credentials and authorization. There is no updater endpoint configured. Before distributing a build, deploy the matching server Electron plugin, `/desktop/auth`, and `/api/desktop/session` through the protected web deployment workflow. The Electron plugin uses existing auth tables; no migration is needed.
 
-Packaged error reporting uses the public `VITE_SENTRY_DSN` at build time, supplied by the manual workflow's repository variable. Main-process failures and renderer errors use the shared privacy filters. Local development reporting stays disabled unless `VITE_QUIETER_LOCAL_TELEMETRY=true` is explicitly set.
+Packaged error reporting uses the public `VITE_SENTRY_DSN` at build time. The manual artifact workflow leaves it empty so native fixture checks cannot report to production telemetry. A protected distribution build must configure its intended reporting separately. Main-process failures and renderer errors use the shared privacy filters. Local development reporting stays disabled unless `VITE_QUIETER_LOCAL_TELEMETRY=true` is explicitly set.
+
+## Native candidate checks
+
+The manual Desktop build workflow runs a signed-out native smoke check against its packaged candidate on each runner. It records startup, secure storage, the renderer boundary, real secondary-process window restoration, signed-out pending-link denial and owned-process cleanup. macOS also checks restoration after closing the main window. The fixture uses an isolated profile and loopback backend without accounts or provider writes. Evidence includes a safe screenshot and `native-smoke.json`.
+
+After building a clean checkout with telemetry disabled, run this from the repository root on Windows or macOS:
+
+```sh
+vp run @quieter/desktop#test:native --revision <full-SHA> --output <owned-evidence-directory>
+```
+
+Linux needs Xvfb, DBus, Openbox, xprop and GNOME Keyring. On an isolated test machine with the candidate DEB installed:
+
+```sh
+xvfb-run -a dbus-run-session -- vp run @quieter/desktop#test:native --revision <full-SHA> --output <owned-evidence-directory> --executable /opt/quieter/quieter
+```
+
+The check starts and stops its own window manager and Secret Service. It never selects the default mail handler. Windows and macOS checks use unpacked applications; Linux CI installs the DEB on its disposable runner. These checks do not establish OS link dispatch, normal Windows/macOS installation, real sign-in, notifications, signing, notarization, performance budgets or updates. Those release gates remain separate.

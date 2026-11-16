@@ -29,9 +29,12 @@ const userSchema = z.object({
   needsOnboarding: z.boolean(),
 });
 
-const loadUser = async (): Promise<SessionUser | null> => {
+export const loadDesktopUser = async (
+  signal?: AbortSignal
+): Promise<SessionUser | null> => {
   const response = await fetch(
-    `${window.quieterDesktop.apiBaseURL}/api/desktop/session`
+    `${window.quieterDesktop.apiBaseURL}/api/desktop/session`,
+    { signal }
   );
   if (!response.ok) {
     throw new Error("Unable to reach your account. Please try again.");
@@ -61,7 +64,7 @@ const authRoute = createRoute({
   component: DesktopAuthScreen,
   getParentRoute: () => appRoute,
   loader: async () => {
-    const user = await loadUser();
+    const user = await loadDesktopUser();
     if (user) {
       throw redirect({ to: user.needsOnboarding ? "/onboarding" : "/" });
     }
@@ -77,7 +80,7 @@ const inboxRoute = createRoute({
   ),
   getParentRoute: () => appRoute,
   loader: async ({ location }) => {
-    const user = await loadUser();
+    const user = await loadDesktopUser();
     if (!user) {
       throw redirect({ search: { returnTo: location.href }, to: "/auth" });
     }
@@ -102,7 +105,7 @@ const settingsRoute = createRoute({
   ),
   getParentRoute: () => appRoute,
   loader: async () => {
-    const user = await loadUser();
+    const user = await loadDesktopUser();
     if (!user) {
       throw redirect({ to: "/auth" });
     }
@@ -124,7 +127,7 @@ const onboardingRoute = createRoute({
   ),
   getParentRoute: () => appRoute,
   loader: async () => {
-    const user = await loadUser();
+    const user = await loadDesktopUser();
     if (!user) {
       throw redirect({ to: "/auth" });
     }

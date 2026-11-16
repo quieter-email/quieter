@@ -13,6 +13,9 @@ protocols:
   - name: quieter sign in
     schemes:
       - com.quieter.desktop
+  - name: Email links
+    schemes:
+      - mailto
 mac:
   extendInfo:
     NSMicrophoneUsageDescription: quieter uses your microphone to transcribe messages when you record audio.
