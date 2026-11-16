@@ -92,6 +92,23 @@ describe("connector final effect authority", () => {
     state.providerAccountId = "account-owned";
     state.transactionActive = false;
     state.query.mockReset().mockImplementation(async (query, parameters) => {
+      if (query.includes("pg_advisory_xact_lock")) {
+        return { rows: [] };
+      }
+      if (query.includes('from "user"')) {
+        return {
+          rows: parameters.includes(operation.userId)
+            ? [[operation.userId]]
+            : [],
+        };
+      }
+      if (query.includes('select "id" from "connectorCredential"')) {
+        return {
+          rows: parameters.includes(operation.connectionId)
+            ? [[operation.connectionId]]
+            : [],
+        };
+      }
       if (
         !parameters.includes(operation.connectionId) ||
         !parameters.includes(operation.userId) ||
@@ -305,6 +322,42 @@ describe("connector final effect authority", () => {
     expect(
       request.mock.calls.some(([, init]) => init?.method !== undefined)
     ).toBeFalsy();
+  });
+
+  test("a replaced Microsoft target denies before the transaction callback", async () => {
+    state.scopes = "User.Read Calendars.ReadWrite";
+    const beforeEffect = vi.fn<() => Promise<void>>();
+    const request = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () =>
+        Response.json({ canEdit: true, id: "calendar-owned", name: "Calendar" })
+      );
+    vi.stubGlobal("fetch", request);
+    await expect(
+      createMicrosoftCalendarEventForUser({
+        beforeEffect,
+        calendarId: "calendar-owned",
+        calendarLockPlan: { googleMailboxIds: [], microsoftConnectionIds: [] },
+        connectionId: operation.connectionId,
+        event: calendarEventDraftSchema.parse({
+          time: {
+            endDate: "2026-11-18",
+            kind: "all-day",
+            startDate: "2026-11-17",
+          },
+          title: "Planning",
+        }),
+        operationId: "3d9971cf-eab2-4546-a2c9-22cc926be69d",
+        prepareEffect: async () => {
+          state.providerAccountId = "replacement-account";
+        },
+        userId: operation.userId,
+      })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(beforeEffect).not.toHaveBeenCalled();
+    expect(
+      request.mock.calls.every(([, init]) => init?.method === undefined)
+    ).toBeTruthy();
   });
 
   test("a registered POST search stays a read under a blocked write guard", async () => {

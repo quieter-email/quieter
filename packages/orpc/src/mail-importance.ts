@@ -72,6 +72,7 @@ import {
   serializeAiAgentContext,
 } from "./ai-memory";
 import { getMailboxMemoryActor } from "./ai-memory-capture";
+import type { MailEffectAssertion } from "./gmail-request";
 import { assertAgentMailboxAccess } from "./mail-agent/access";
 import { getMailAutomationAiBudgetStatus } from "./mail-automation/ai-budget";
 import { publishMailUpdate } from "./mail-updates";
@@ -399,7 +400,7 @@ export const hydrateMailImportance = async <T extends MessageListItem>(
 
 export const setMailImportance = async (input: {
   actorUserId: string;
-  beforeEffect?: (database?: Pick<typeof db, "select">) => Promise<void>;
+  beforeEffect?: MailEffectAssertion;
   origin?: AiOperationOrigin;
   mailboxId: string;
   targets: MailMutationTarget[];

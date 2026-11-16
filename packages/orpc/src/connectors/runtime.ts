@@ -5,6 +5,9 @@ import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { lockCalendarNativeAccounts } from "../calendar/native-lock-plan";
+import type { CalendarNativeLockPlan } from "../calendar/native-lock-plan";
+import { lockCalendarBookingOwner } from "../calendar/owner-lock";
 import {
   decryptGmailCredentialSecret,
   encryptGmailCredentialSecret,
@@ -23,7 +26,9 @@ export { LINEAR_SCOPES } from "./oauth-provider";
 export const LINEAR_MCP_URL = "https://mcp.linear.app/mcp";
 
 type ConnectorAuthorizationInput = {
+  authorityMailboxId?: string;
   beforeEffect?: MailEffectAssertion;
+  calendarLockPlan?: CalendarNativeLockPlan;
   connectionId?: string;
   prepareEffect?: () => Promise<void>;
   provider: ConnectorProvider;
@@ -356,14 +361,35 @@ export const runAuthorizedConnector = async <Result>(
           await input.prepareEffect?.();
           input.signal?.throwIfAborted();
           await db.transaction(async (transaction) => {
+            if (input.provider === "microsoft_calendar") {
+              await lockCalendarBookingOwner({
+                executor: transaction,
+                userId: input.userId,
+              });
+              await lockCalendarNativeAccounts({
+                authorityMailboxId: input.authorityMailboxId,
+                calendarLockPlan: input.calendarLockPlan,
+                executor: transaction,
+                microsoftConnectionId: connection.connectionId,
+              });
+              await assertConnectorWriteAccess(
+                {
+                  ...authorization,
+                  providerAccountId: connection.providerAccountId,
+                },
+                transaction
+              );
+            }
             await input.beforeEffect?.(transaction);
-            await assertConnectorWriteAccess(
-              {
-                ...authorization,
-                providerAccountId: connection.providerAccountId,
-              },
-              transaction
-            );
+            if (input.provider !== "microsoft_calendar") {
+              await assertConnectorWriteAccess(
+                {
+                  ...authorization,
+                  providerAccountId: connection.providerAccountId,
+                },
+                transaction
+              );
+            }
           });
           input.signal?.throwIfAborted();
         }

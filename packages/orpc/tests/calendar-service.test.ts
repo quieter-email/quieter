@@ -125,6 +125,15 @@ describe("calendar account isolation and mutations", () => {
     mocks.scopes = CALENDAR_SCOPES.join(" ");
     mocks.status = "connected";
     mocks.query.mockReset().mockImplementation(async (query) => {
+      if (query.includes('from "user"')) {
+        return { rows: [[reference.userId]] };
+      }
+      if (query.includes('select "id" from "mailbox"')) {
+        return { rows: [[reference.connectionId]] };
+      }
+      if (query.includes('select "mailboxId" from "gmailCredential"')) {
+        return { rows: [[reference.connectionId]] };
+      }
       if (query.includes('from "connectorCredential"')) {
         return { rows: [] };
       }
@@ -402,6 +411,38 @@ describe("calendar account isolation and mutations", () => {
       ).toHaveLength(0);
     }
   );
+
+  test("a replaced native account denies before the transaction callback and recovery", async () => {
+    const beforeEffect = vi.fn<() => Promise<void>>();
+    const request = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (url) =>
+        Response.json(
+          new Request(url).url.includes("calendarList") ? calendar : event
+        )
+      );
+    vi.stubGlobal("fetch", request);
+    await expect(
+      createCalendarEventForUser({
+        ...reference,
+        authorityMailboxId: "assistant-inbox",
+        beforeEffect,
+        calendarLockPlan: { googleMailboxIds: [], microsoftConnectionIds: [] },
+        event: draft,
+        operationId: "d2d2a899-ed59-475e-a806-c8e42b847e9a",
+        prepareEffect: async () => {
+          mocks.googleSubject = "replacement-subject";
+        },
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(beforeEffect).not.toHaveBeenCalled();
+    expect(request.mock.calls.every(([, init]) => !init?.method)).toBeTruthy();
+    expect(
+      request.mock.calls.some(([url]) =>
+        new Request(url).url.includes("/events/")
+      )
+    ).toBeFalsy();
+  });
 
   test("an attempted ambiguous calendar create can recover the matching prior event", async () => {
     const storedEventSchema = z.object({

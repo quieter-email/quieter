@@ -18,7 +18,7 @@ import { assertPrivateMailContext } from "./mail/private-context";
 import type { ComposeSnippetQuoteProof } from "./mail/snippet-quote-provenance";
 
 export type MailEffectAssertion = (
-  database?: Pick<typeof db, "select">
+  database?: DatabaseTransaction
 ) => Promise<void>;
 
 export type MailRequestContext = Pick<

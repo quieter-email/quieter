@@ -45,7 +45,14 @@ const fixture = vi.hoisted(() => {
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The provider boundary receives a real query executor without database I/O in this fixture.
 vi.mock("@quieter/database/client", async () => {
   const { drizzle } = await import("drizzle-orm/pg-proxy");
-  return { db: drizzle(fixture.query) };
+  const database = drizzle(fixture.query);
+  return {
+    db: Object.assign(database, {
+      transaction: async <Result>(
+        run: (transaction: typeof database) => Promise<Result>
+      ) => await run(database),
+    }),
+  };
 });
 vi.mock(import("../src/mailbox/service"), () => ({
   assertAccessibleMailbox: fixture.access,
@@ -149,7 +156,9 @@ describe("captured snippet provenance at final compose dispatch", () => {
     fixture.send.mockImplementation(async ({ context, message }) => {
       await Promise.resolve();
       fixture.state.beforeDispatch?.(message);
-      await context?.beforeEffect?.(db);
+      await db.transaction(async (executor) => {
+        await context?.beforeEffect?.(executor);
+      });
       fixture.state.writes += 1;
       return {
         draftCleanupHandled: true,
